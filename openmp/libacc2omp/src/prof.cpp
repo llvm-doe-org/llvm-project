@@ -833,16 +833,18 @@ typedef void (*acc_register_library_t)(acc_prof_reg reg, acc_prof_reg unref,
 #endif
 
 /*****************************************************************************
- * acc2omp_ompt_start_tool, which is meant to be called by ompt_start_tool to
- * enable OpenACC Profiling Interface support.
- *
- * See header comments in acc2omp-backend.h for an explanation of how
- * acc2omp_ompt_start_tool is intended to be used by OMPT support in an OpenMP
- * runtime, LLVM's in particular.
+ * OpenMP runtime handler for OpenACC Profiling Interface callback registration.
+ * Documentation appears on \c acc2omp_ompt_start_tool_t in acc2omp-handlers.h.
  ****************************************************************************/
 
 extern "C" ompt_start_tool_result_t *
 acc2omp_ompt_start_tool(unsigned int omp_version, const char *runtime_version) {
+  // Check that the typedef declaration matches the definition.  Keep the
+  // assignment separate from the declaration to avoid an unused variable
+  // warning.
+  acc2omp_ompt_start_tool_t FnPtr;
+  FnPtr = acc2omp_ompt_start_tool;
+
   // Call all acc_register_library functions.
   acc_register_library(acc_prof_register_enqueue, acc_prof_unregister_enqueue,
                        /*acc_query_fn_name=*/NULL);

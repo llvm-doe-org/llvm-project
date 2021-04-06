@@ -1921,8 +1921,8 @@ above.
 
 Further details on how Clacc's OpenACC runtime might one day interact
 with OpenMP runtimes from other OpenMP implementations can currently
-be found in the comments in the source file
-`openmp/libacc2omp/src/include/acc2omp-backend.h.var`.
+be found in the comments in the source files `acc2omp-handlers.h.var`
+and `acc2omp-backend.h.var` in `openmp/libacc2omp/src/include`.
 
 OpenACC Profiling Interface
 ===========================

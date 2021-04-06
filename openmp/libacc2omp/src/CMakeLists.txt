@@ -15,13 +15,14 @@ libacc2omp_say("Building OpenACC runtime libraries.")
 # Configure libacc2omp.
 configure_file(config.h.cmake config.h @ONLY)
 
-# Configure the OpenACC standard headers and acc2omp-backend.h.
+# Configure the OpenACC standard headers and libacc2omp headers.
 #
 # Similar to LLVM's OpenMP headers (such as omp-tools.h), there may currently be
 # no substitutions in some headers, but there may be one day, and this at least
 # ensures headers are all consistently placed in the build directory.
 configure_file(include/openacc.h.var openacc.h @ONLY)
 configure_file(include/acc_prof.h.var acc_prof.h @ONLY)
+configure_file(include/acc2omp-handlers.h.var acc2omp-handlers.h @ONLY)
 configure_file(include/acc2omp-backend.h.var acc2omp-backend.h @ONLY)
 
 # Build libacc2omp library with libdl and libomp dependencies.
@@ -55,11 +56,12 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../runtime/src)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../runtime/src)
 
-# Install the OpenACC standard headers and acc2omp-backend.h.
+# Install the OpenACC standard headers and libacc2omp headers.
 install(
   FILES
     ${CMAKE_CURRENT_BINARY_DIR}/openacc.h
     ${CMAKE_CURRENT_BINARY_DIR}/acc_prof.h
+    ${CMAKE_CURRENT_BINARY_DIR}/acc2omp-handlers.h
     ${CMAKE_CURRENT_BINARY_DIR}/acc2omp-backend.h
   DESTINATION
     include
@@ -68,6 +70,7 @@ install(
   FILES
     ${CMAKE_CURRENT_BINARY_DIR}/openacc.h
     ${CMAKE_CURRENT_BINARY_DIR}/acc_prof.h
+    ${CMAKE_CURRENT_BINARY_DIR}/acc2omp-handlers.h
     ${CMAKE_CURRENT_BINARY_DIR}/acc2omp-backend.h
   DESTINATION
     "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_INCLUDE_SUBDIR}"

@@ -15,6 +15,7 @@
 #define ACC2OMP_INTERNAL_H
 
 #include "config.h"
+#include "acc2omp-handlers.h"
 #include "backend-internal.h"
 
 /// The value used for acc_prof_info's version field.

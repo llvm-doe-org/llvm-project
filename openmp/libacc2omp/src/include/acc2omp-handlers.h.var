@@ -1,0 +1,76 @@
+/*
+ * acc2omp-handlers.h -- Interface for functions that are implemented in
+ * libacc2omp and that must be called by the OpenMP runtime for correct OpenACC
+ * handling of certain OpenMP runtime events.
+ *
+ * Because libacc2omp isn't necessarily linked when OpenACC support isn't
+ * desired, the OpenMP runtime uses dlsym to find the functions in this
+ * interface, so this header provides typedefs for them rather than prototypes.
+ *
+ * (For a discussion of OpenMP runtime entry points that libacc2omp must call,
+ * see acc2omp-backend.h.)
+ */
+
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef ACC2OMP_HANDLERS_H
+#define ACC2OMP_HANDLERS_H
+
+#include <omp-tools.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/// Type for \c acc2omp_ompt_start_tool, which handles OpenACC Profiling
+/// Interface callback registration.
+///
+/// \c acc2omp_ompt_start_tool is meant to be called by OMPT's
+/// \c ompt_start_tool and has the same function type.
+/// \c acc2omp_ompt_start_tool calls the various \c acc_register_library
+/// functions it finds linked or listed in the environment variable
+/// \c ACC_PROFLIB and then returns a result appropriate for the calling
+/// \c omp_start_tool to return.  The result is \c NULL if no
+/// \c acc_register_library registered any callbacks.  That way, a calling
+/// \c ompt_start_tool can determine whether it's necessary to enable OMPT
+/// support, look for another \c ompt_start_tool, etc.
+///
+/// Normally, the calling \c ompt_start_tool is the one defined in LLVM's
+/// OpenMP runtime.  It has the \c weak attribute, so it and thus all
+/// \c acc_register_library definitions might be ignored if another
+/// \c ompt_start_tool is linked.  Otherwise, it indeed calls
+/// \c acc2omp_ompt_start_tool and then, if the result is \c NULL, uses \c dlsym
+/// to search for another \c ompt_start_tool.
+///
+/// If the user wants to ensure his \c acc_register_library functions are
+/// called, perhaps when using a different OpenMP runtime that doesn't call
+/// \c acc2omp_ompt_start_tool, he can define:
+///
+/// \code
+/// ompt_start_tool_result_t *ompt_start_tool(unsigned int omp_version,
+///                                           const char *runtime_version) {
+///   return acc2omp_ompt_start_tool(omp_version, runtime_version);
+/// }
+/// \endcode
+///
+/// However, to avoid collisions between this \c ompt_start_tool and others, the
+/// user should consider whether it's better to build this \c ompt_start_tool as
+/// part of a different library than his libacc2omp backend, especially if his
+/// libacc2omp backend is compiled as part of his OpenMP runtime.
+///
+/// TODO: It might be convenient for LLVM to provide a library with just that
+/// definition, and the user could link it only when desired.
+typedef ompt_start_tool_result_t *(*acc2omp_ompt_start_tool_t)(unsigned int,
+                                                               const char *);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
+
+#endif // ACC2OMP_HANDLERS_H

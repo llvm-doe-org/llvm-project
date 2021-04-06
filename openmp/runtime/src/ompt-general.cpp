@@ -28,6 +28,7 @@
  * ompt include files
  ****************************************************************************/
 
+#include "acc2omp-handlers.h"
 #include "ompt-specific.cpp"
 
 /*****************************************************************************
@@ -150,8 +151,8 @@ ompt_start_tool(unsigned int omp_version, const char *runtime_version) {
   // If acc2omp_ompt_start_tool is available, assume it's the LLVM OpenACC
   // runtime's wrapper around ompt_start_tool for supporting the OpenACC
   // Profiling Interface.
-  ompt_start_tool_t acc2omp_ompt_start_tool =
-      (ompt_start_tool_t)dlsym(RTLD_DEFAULT, "acc2omp_ompt_start_tool");
+  acc2omp_ompt_start_tool_t acc2omp_ompt_start_tool =
+      (acc2omp_ompt_start_tool_t)dlsym(RTLD_DEFAULT, "acc2omp_ompt_start_tool");
   if (acc2omp_ompt_start_tool) {
     ret = acc2omp_ompt_start_tool(omp_version, runtime_version);
     if (ret)

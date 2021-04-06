@@ -15,8 +15,7 @@
  * though they may utilize facilities that already exist in most OpenMP
  * runtimes.  Thus, they are likely to be handled differently by different
  * OpenMP runtimes for the foreseeable future.  The functions declared in this
- * header provide a unified "backend" interface that libacc2omp requires to
- * access such entry points.
+ * header provide a unified "backend" interface for such entry points.
  *
  * For example, both the OpenMP runtime and the application sometimes must
  * report diagnostics at run time.  However, it does not seem reasonable for the
@@ -33,6 +32,10 @@
  * and print it to a runtime-determined log file or stream).  Thus, to report
  * runtime diagnostics, libacc2omp calls functions like \c acc2omp_fatal, which
  * is declared in this header and should be implemented per OpenMP runtime.
+ *
+ * (The reverse is also true: libacc2omp provides functions that the OpenMP
+ * runtime must call in order to fully support OpenACC.  See acc2omp-handlers.h
+ * for that interface.)
  *
  * libacc2omp backend
  * ------------------
@@ -68,41 +71,6 @@
  * libacc2omp.so.  Otherwise, OpenACC Runtime Library device management routines
  * might malfunction.  We have not observed this problem in practice, but, like
  * acc_device_t, omp_device_t is intended to be implementation-specific.
- *
- * OMPT's ompt_start_tool for the OpenACC Profiling Interface
- * ----------------------------------------------------------
- *
- * libacc2omp exports acc2omp_ompt_start_tool, which is meant to be called by
- * OMPT's ompt_start_tool to enable OpenACC Profiling Interface support.
- * acc2omp_ompt_start_tool calls the various acc_register_library functions it
- * finds linked or listed in ACC_PROFLIB and then returns a result appropriate
- * for the calling omp_start_tool to return.  The result is NULL if no
- * acc_register_library registered any callbacks.  That way, a calling
- * ompt_start_tool can determine whether it's necessary to enable OMPT support,
- * look for another ompt_start_tool, etc.
- *
- * Normally, the calling ompt_start_tool is the one defined in the LLVM OpenMP
- * runtime.  It has the weak attribute, so it and thus all acc_register_library
- * definitions might be ignored if another ompt_start_tool is linked.
- * Otherwise, it indeed calls acc2omp_ompt_start_tool and then, if the result is
- * NULL, uses dlsym to search for another ompt_start_tool.
- *
- * If the user wants to ensure his acc_register_library functions are called,
- * perhaps when using a different OpenMP runtime that doesn't call
- * acc2omp_ompt_start_tool, he can define:
- *
- *   ompt_start_tool_result_t *ompt_start_tool(unsigned int omp_version,
- *                                             const char *runtime_version) {
- *     return acc2omp_ompt_start_tool(omp_version, runtime_version);
- *   }
- *
- * However, to avoid collisions between this ompt_start_tool and others, the
- * user should consider whether it's better to build this ompt_start_tool as
- * part of a different library than his libacc2omp backend, especially if his
- * libacc2omp backend is compiled as part of his OpenMP runtime.
- *
- * TODO: It might be convenient for LLVM to provide a library with just that
- * definition, and the user could link it only when desired.
  */
 
 //===----------------------------------------------------------------------===//
