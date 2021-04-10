@@ -11,14 +11,15 @@ Ridge National Laboratory](https://www.ornl.gov/).  Please contact
 
 Clacc's main branch can be found at:
 
-> <https://github.com/llvm-doe-org/llvm-project/tree/clacc/master>
+> <https://github.com/llvm-doe-org/llvm-project/tree/clacc/main>
 
-That is the `clacc/master` branch within the [LLVM DOE
-Fork](https://github.com/llvm-doe-org/llvm-project) maintained by [Oak
-Ridge National Laboratory](https://www.ornl.gov/) as a fork of [LLVM's
-github repo](https://github.com/llvm/llvm-project).  All other
-branches and tags for Clacc within the LLVM DOE Fork will also appear
-in the `clacc/` namespace.
+That is the `clacc/main` branch within the LLVM DOE Fork maintained by
+[Oak Ridge National Laboratory](https://www.ornl.gov/) as a fork of
+[LLVM's github repo](https://github.com/llvm/llvm-project).  As for
+any project hosted by the LLVM DOE Fork, links to all Clacc branches,
+issues, etc. can be found in the wiki:
+
+> <https://github.com/llvm-doe-org/llvm-project/wiki>
 
 ## Building and Testing
 
