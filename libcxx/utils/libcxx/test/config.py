@@ -131,7 +131,6 @@ class Configuration(object):
         self.configure_link_flags()
         self.configure_env()
         self.configure_debug_mode()
-        self.configure_warnings()
         self.configure_sanitizer()
         self.configure_coverage()
         self.configure_modules()
@@ -266,14 +265,31 @@ class Configuration(object):
             self.config.available_features.add('libcxx_gdb')
             self.cxx.libcxx_gdb = libcxx_gdb
 
+        target_triple = getattr(self.config, 'target_triple', None)
+        if target_triple:
+            if re.match(r'^x86_64.*-apple', target_triple):
+                self.config.available_features.add('x86_64-apple')
+            if re.match(r'^x86_64.*-linux', target_triple):
+                self.config.available_features.add('x86_64-linux')
+            if re.match(r'^i.86.*', target_triple):
+                self.config.available_features.add('target-x86')
+            elif re.match(r'^x86_64.*', target_triple):
+                self.config.available_features.add('target-x86_64')
+            elif re.match(r'^aarch64.*', target_triple):
+                self.config.available_features.add('target-aarch64')
+            elif re.match(r'^arm.*', target_triple):
+                self.config.available_features.add('target-arm')
+
     def configure_compile_flags(self):
         self.configure_default_compile_flags()
         # Configure extra flags
         compile_flags_str = self.get_lit_conf('compile_flags', '')
         self.cxx.compile_flags += shlex.split(compile_flags_str)
         if self.target_info.is_windows():
-            # FIXME: Can we remove this?
             self.cxx.compile_flags += ['-D_CRT_SECURE_NO_WARNINGS']
+            # Don't warn about using common but nonstandard unprefixed functions
+            # like chdir, fileno.
+            self.cxx.compile_flags += ['-D_CRT_NONSTDC_NO_WARNINGS']
             # Required so that tests using min/max don't fail on Windows,
             # and so that those tests don't have to be changed to tolerate
             # this insanity.
@@ -317,6 +333,12 @@ class Configuration(object):
         # which is not relevant for non-shipped flavors of libc++.
         if not self.use_system_cxx_lib:
             self.cxx.compile_flags += ['-D_LIBCPP_DISABLE_AVAILABILITY']
+
+        # On GCC, the libc++ headers cause errors due to throw() decorators
+        # on operator new clashing with those from the test suite, so we
+        # don't enable warnings in system headers on GCC.
+        if self.cxx.type != 'gcc':
+            self.cxx.compile_flags += ['-D_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER']
 
         # Add includes for the PSTL headers
         pstl_src_root = self.get_lit_conf('pstl_src_root')
@@ -487,36 +509,6 @@ class Configuration(object):
             self.lit_config.fatal('Invalid value for debug_level "%s".'
                                   % debug_level)
         self.cxx.compile_flags += ['-D_LIBCPP_DEBUG=%s' % debug_level]
-
-    def configure_warnings(self):
-        # Turn on warnings by default for Clang based compilers
-        default_enable_warnings = self.cxx.type in ['clang', 'apple-clang']
-        enable_warnings = self.get_lit_bool('enable_warnings',
-                                            default_enable_warnings)
-        self.cxx.useWarnings(enable_warnings)
-        self.cxx.warning_flags += ['-Werror', '-Wall', '-Wextra']
-        # On GCC, the libc++ headers cause errors due to throw() decorators
-        # on operator new clashing with those from the test suite, so we
-        # don't enable warnings in system headers on GCC.
-        if self.cxx.type != 'gcc':
-            self.cxx.warning_flags += ['-D_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER']
-        self.cxx.addWarningFlagIfSupported('-Wshadow')
-        self.cxx.addWarningFlagIfSupported('-Wno-unused-command-line-argument')
-        self.cxx.addWarningFlagIfSupported('-Wno-attributes')
-        self.cxx.addWarningFlagIfSupported('-Wno-pessimizing-move')
-        self.cxx.addWarningFlagIfSupported('-Wno-c++11-extensions')
-        self.cxx.addWarningFlagIfSupported('-Wno-user-defined-literals')
-        self.cxx.addWarningFlagIfSupported('-Wno-noexcept-type')
-        self.cxx.addWarningFlagIfSupported('-Wno-aligned-allocation-unavailable')
-        self.cxx.addWarningFlagIfSupported('-Wno-atomic-alignment')
-        # These warnings should be enabled in order to support the MSVC
-        # team using the test suite; They enable the warnings below and
-        # expect the test suite to be clean.
-        self.cxx.addWarningFlagIfSupported('-Wsign-compare')
-        self.cxx.addWarningFlagIfSupported('-Wunused-variable')
-        self.cxx.addWarningFlagIfSupported('-Wunused-parameter')
-        self.cxx.addWarningFlagIfSupported('-Wunreachable-code')
-        self.cxx.addWarningFlagIfSupported('-Wno-unused-local-typedef')
 
     def configure_sanitizer(self):
         san = self.get_lit_conf('use_sanitizer', '').strip()

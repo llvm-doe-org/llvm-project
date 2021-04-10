@@ -1,7 +1,9 @@
 add_mlir_dialect_library(MLIRStandardOpsTransforms
   Bufferize.cpp
   ExpandAtomic.cpp
+  ExpandMemRefReshape.cpp
   ExpandTanh.cpp
+  FuncBufferize.cpp
   FuncConversions.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -13,6 +15,7 @@ add_mlir_dialect_library(MLIRStandardOpsTransforms
   LINK_LIBS PUBLIC
   MLIRIR
   MLIRPass
+  MLIRSCF
   MLIRStandard
   MLIRTransforms
   )

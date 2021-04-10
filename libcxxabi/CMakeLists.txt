@@ -48,6 +48,23 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR LIBCXXABI_STANDALONE_B
   include(HandleOutOfTreeLLVM)
 endif()
 
+if (LIBCXXABI_STANDALONE_BUILD)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(NOT Python3_Interpreter_FOUND)
+    message(WARNING "Python3 not found, using python2 as a fallback")
+    find_package(Python2 COMPONENTS Interpreter REQUIRED)
+    if(Python2_VERSION VERSION_LESS 2.7)
+      message(SEND_ERROR "Python 2.7 or newer is required")
+    endif()
+
+    # Treat python2 as python3
+    add_executable(Python3::Interpreter IMPORTED)
+    set_target_properties(Python3::Interpreter PROPERTIES
+      IMPORTED_LOCATION ${Python2_EXECUTABLE})
+    set(Python3_EXECUTABLE ${Python2_EXECUTABLE})
+  endif()
+endif()
+
 # Require out of source build.
 include(MacroEnsureOutOfSourceBuild)
 MACRO_ENSURE_OUT_OF_SOURCE_BUILD(
@@ -87,13 +104,10 @@ When the dynamic_cast would normally fail, this option will cause the \
 library to try comparing the type_info names to see if they are equal \
 instead." OFF)
 
-# FIXME: This option should default to off. Unfortunatly GCC 4.9 fails to link
-# programs to due undefined references to new/delete in libc++abi. Once this
-# has been fixed or worked around the default value should be changed.
-# See https://reviews.llvm.org/D68269 for more details.
 option(LIBCXXABI_ENABLE_NEW_DELETE_DEFINITIONS
-    "Build libc++abi with definitions for operator new/delete. Normally libc++
-    provides these definitions" ON)
+  "Build libc++abi with definitions for operator new/delete. These are normally
+   defined in libc++abi, but it is also possible to define them in libc++, in
+   which case the definition in libc++abi should be turned off." ON)
 option(LIBCXXABI_BUILD_32_BITS "Build 32 bit libc++abi." ${LLVM_BUILD_32_BITS})
 option(LIBCXXABI_INCLUDE_TESTS "Generate build targets for the libc++abi unit tests." ${LLVM_INCLUDE_TESTS})
 set(LIBCXXABI_LIBDIR_SUFFIX "${LLVM_LIBDIR_SUFFIX}" CACHE STRING
@@ -268,9 +282,20 @@ endif()
 # library.
 add_definitions(-D_LIBCXXABI_BUILDING_LIBRARY)
 
+# libcxxabi needs to, for various reasons, include the libcpp headers as if
+# it is being built as part of libcxx.
+add_definitions(-D_LIBCPP_BUILDING_LIBRARY)
+
 # Disable DLL annotations on Windows for static builds.
 if (WIN32 AND LIBCXXABI_ENABLE_STATIC AND NOT LIBCXXABI_ENABLE_SHARED)
-  add_definitions(-D_LIBCXXABI_DISABLE_VISIBILITY_ANNOTATIONS)
+  if (LIBCXX_ENABLE_SHARED AND LIBCXX_ENABLE_STATIC_ABI_LIBRARY)
+    # Building libcxxabi statically, but intending for it to be statically
+    # linked into a shared libcxx; keep dllexport enabled within libcxxabi,
+    # as the symbols will need to be exported from libcxx.
+  else()
+    # Regular static build; disable dllexports.
+    add_definitions(-D_LIBCXXABI_DISABLE_VISIBILITY_ANNOTATIONS)
+  endif()
 endif()
 
 add_compile_flags_if_supported(-Werror=return-type)
@@ -340,10 +365,6 @@ else()
   if (NOT uppercase_CMAKE_BUILD_TYPE STREQUAL "RELEASE")
     list(APPEND LIBCXXABI_COMPILE_FLAGS -DNDEBUG)
   endif()
-endif()
-# Static library
-if (NOT LIBCXXABI_ENABLE_SHARED)
-  list(APPEND LIBCXXABI_COMPILE_FLAGS -D_LIBCPP_BUILD_STATIC)
 endif()
 
 # Threading

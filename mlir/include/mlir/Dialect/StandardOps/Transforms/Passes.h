@@ -25,6 +25,9 @@ class OwningRewritePatternList;
 /// Creates an instance of the ExpandAtomic pass.
 std::unique_ptr<Pass> createExpandAtomicPass();
 
+void populateExpandMemRefReshapePattern(OwningRewritePatternList &patterns,
+                                        MLIRContext *ctx);
+
 void populateExpandTanhPattern(OwningRewritePatternList &patterns,
                                MLIRContext *ctx);
 
@@ -34,6 +37,9 @@ void populateStdBufferizePatterns(MLIRContext *context,
 
 /// Creates an instance of std bufferization pass.
 std::unique_ptr<Pass> createStdBufferizePass();
+
+/// Creates an instance of func bufferization pass.
+std::unique_ptr<Pass> createFuncBufferizePass();
 
 //===----------------------------------------------------------------------===//
 // Registration

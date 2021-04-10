@@ -14,6 +14,7 @@
 #include "SyncAPI.h"
 #include "TestFS.h"
 #include "TestTU.h"
+#include "TestWorkspace.h"
 #include "URI.h"
 #include "index/CanonicalIncludes.h"
 #include "index/FileIndex.h"
@@ -426,6 +427,33 @@ TEST(FileIndexTest, Relations) {
   EXPECT_EQ(Results, 1u);
 }
 
+TEST(FileIndexTest, RelationsMultiFile) {
+  TestWorkspace Workspace;
+  Workspace.addSource("Base.h", "class Base {};");
+  Workspace.addMainFile("A.cpp", R"cpp(
+    #include "Base.h"
+    class A : public Base {};
+  )cpp");
+  Workspace.addMainFile("B.cpp", R"cpp(
+    #include "Base.h"
+    class B : public Base {};
+  )cpp");
+
+  auto Index = Workspace.index();
+  FuzzyFindRequest FFReq;
+  FFReq.Query = "Base";
+  FFReq.AnyScope = true;
+  SymbolID Base;
+  Index->fuzzyFind(FFReq, [&](const Symbol &S) { Base = S.ID; });
+
+  RelationsRequest Req;
+  Req.Subjects.insert(Base);
+  Req.Predicate = RelationKind::BaseOf;
+  uint32_t Results = 0;
+  Index->relations(Req, [&](const SymbolID &, const Symbol &) { ++Results; });
+  EXPECT_EQ(Results, 2u);
+}
+
 TEST(FileIndexTest, ReferencesInMainFileWithPreamble) {
   TestTU TU;
   TU.HeaderCode = "class Foo{};";
@@ -672,9 +700,9 @@ TEST(FileIndexTest, Profile) {
               UnorderedElementsAre(Pair("preamble", _), Pair("main_file", _)));
 
   ASSERT_THAT(MT.child("preamble").children(),
-              UnorderedElementsAre(Pair("index", _), Pair("symbols", _)));
+              UnorderedElementsAre(Pair("index", _), Pair("slabs", _)));
   ASSERT_THAT(MT.child("main_file").children(),
-              UnorderedElementsAre(Pair("index", _), Pair("symbols", _)));
+              UnorderedElementsAre(Pair("index", _), Pair("slabs", _)));
 
   ASSERT_THAT(MT.child("preamble").child("index").total(), Gt(0U));
   ASSERT_THAT(MT.child("main_file").child("index").total(), Gt(0U));

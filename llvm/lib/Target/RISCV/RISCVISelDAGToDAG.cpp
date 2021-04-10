@@ -284,44 +284,6 @@ bool RISCVDAGToDAGISel::SelectSROI(SDValue N, SDValue &RS1, SDValue &Shamt) {
   return false;
 }
 
-// Check that it is a RORI (Rotate Right Immediate). We first check that
-// it is the right node tree:
-//
-//  (ROTL RS1, VC)
-//
-// The compiler translates immediate rotations to the right given by the call
-// to the rotateright32/rotateright64 intrinsics as rotations to the left.
-// Since the rotation to the left can be easily emulated as a rotation to the
-// right by negating the constant, there is no encoding for ROLI.
-// We then select the immediate left rotations as RORI by the complementary
-// constant:
-//
-//  Shamt == XLen - VC
-
-bool RISCVDAGToDAGISel::SelectRORI(SDValue N, SDValue &RS1, SDValue &Shamt) {
-  MVT XLenVT = Subtarget->getXLenVT();
-  if (N.getOpcode() == ISD::ROTL) {
-    if (isa<ConstantSDNode>(N.getOperand(1))) {
-      if (XLenVT == MVT::i64) {
-        uint64_t VC = N.getConstantOperandVal(1);
-        Shamt = CurDAG->getTargetConstant((64 - VC), SDLoc(N),
-                                          N.getOperand(1).getValueType());
-        RS1 = N.getOperand(0);
-        return true;
-      }
-      if (XLenVT == MVT::i32) {
-        uint32_t VC = N.getConstantOperandVal(1);
-        Shamt = CurDAG->getTargetConstant((32 - VC), SDLoc(N),
-                                          N.getOperand(1).getValueType());
-        RS1 = N.getOperand(0);
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-
 // Check that it is a SLLIUW (Shift Logical Left Immediate Unsigned i32
 // on RV64).
 // SLLIUW is the same as SLLI except for the fact that it clears the bits
@@ -427,8 +389,8 @@ bool RISCVDAGToDAGISel::SelectSROIW(SDValue N, SDValue &RS1, SDValue &Shamt) {
 // Check that it is a RORIW (i32 Right Rotate Immediate on RV64).
 // We first check that it is the right node tree:
 //
-//  (SIGN_EXTEND_INREG (OR (SHL (AsserSext RS1, i32), VC2),
-//                         (SRL (AND (AssertSext RS2, i32), VC3), VC1)))
+//  (SIGN_EXTEND_INREG (OR (SHL RS1, VC2),
+//                         (SRL (AND RS1, VC3), VC1)))
 //
 // Then we check that the constant operands respect these constraints:
 //
@@ -444,13 +406,18 @@ bool RISCVDAGToDAGISel::SelectRORIW(SDValue N, SDValue &RS1, SDValue &Shamt) {
       cast<VTSDNode>(N.getOperand(1))->getVT() == MVT::i32) {
     if (N.getOperand(0).getOpcode() == ISD::OR) {
       SDValue Or = N.getOperand(0);
-      if (Or.getOperand(0).getOpcode() == ISD::SHL &&
-          Or.getOperand(1).getOpcode() == ISD::SRL) {
-        SDValue Shl = Or.getOperand(0);
-        SDValue Srl = Or.getOperand(1);
+      SDValue Shl = Or.getOperand(0);
+      SDValue Srl = Or.getOperand(1);
+
+      // OR is commutable so canonicalize SHL to LHS.
+      if (Srl.getOpcode() == ISD::SHL)
+        std::swap(Shl, Srl);
+
+      if (Shl.getOpcode() == ISD::SHL && Srl.getOpcode() == ISD::SRL) {
         if (Srl.getOperand(0).getOpcode() == ISD::AND) {
           SDValue And = Srl.getOperand(0);
-          if (isa<ConstantSDNode>(Srl.getOperand(1)) &&
+          if (And.getOperand(0) == Shl.getOperand(0) &&
+              isa<ConstantSDNode>(Srl.getOperand(1)) &&
               isa<ConstantSDNode>(Shl.getOperand(1)) &&
               isa<ConstantSDNode>(And.getOperand(1))) {
             uint32_t VC1 = Srl.getConstantOperandVal(1);

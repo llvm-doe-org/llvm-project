@@ -36,8 +36,11 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SHA1.h"
 #include "llvm/Support/ScopedPrinter.h"
+#include "llvm/Support/raw_ostream.h"
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -617,6 +620,7 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
                    ExecuteCommandParams::CLANGD_APPLY_TWEAK}},
              }},
             {"typeHierarchyProvider", true},
+            {"memoryUsageProvider", true}, // clangd extension.
         }}}};
   if (Opts.Encoding)
     Result["offsetEncoding"] = *Opts.Encoding;
@@ -989,12 +993,24 @@ void ClangdLSPServer::onCodeAction(const CodeActionParams &Params,
   if (!Code)
     return Reply(llvm::make_error<LSPError>(
         "onCodeAction called for non-added file", ErrorCode::InvalidParams));
+
+  // Checks whether a particular CodeActionKind is included in the response.
+  auto KindAllowed = [Only(Params.context.only)](llvm::StringRef Kind) {
+    if (Only.empty())
+      return true;
+    return llvm::any_of(Only, [&](llvm::StringRef Base) {
+      return Kind.consume_front(Base) && (Kind.empty() || Kind.startswith("."));
+    });
+  };
+
   // We provide a code action for Fixes on the specified diagnostics.
   std::vector<CodeAction> FixIts;
-  for (const Diagnostic &D : Params.context.diagnostics) {
-    for (auto &F : getFixes(File.file(), D)) {
-      FixIts.push_back(toCodeAction(F, Params.textDocument.uri));
-      FixIts.back().diagnostics = {D};
+  if (KindAllowed(CodeAction::QUICKFIX_KIND)) {
+    for (const Diagnostic &D : Params.context.diagnostics) {
+      for (auto &F : getFixes(File.file(), D)) {
+        FixIts.push_back(toCodeAction(F, Params.textDocument.uri));
+        FixIts.back().diagnostics = {D};
+      }
     }
   }
 
@@ -1034,14 +1050,10 @@ void ClangdLSPServer::onCodeAction(const CodeActionParams &Params,
         }
         return Reply(llvm::json::Array(Commands));
       };
-
   Server->enumerateTweaks(
       File.file(), Params.range,
-      [&](const Tweak &T) {
-        if (!Opts.TweakFilter(T))
-          return false;
-        // FIXME: also consider CodeActionContext.only
-        return true;
+      [this, KindAllowed(std::move(KindAllowed))](const Tweak &T) {
+        return Opts.TweakFilter(T) && KindAllowed(T.kind());
       },
       std::move(ConsumeActions));
 }
@@ -1383,6 +1395,14 @@ void ClangdLSPServer::onSemanticTokensDelta(
       });
 }
 
+void ClangdLSPServer::onMemoryUsage(const NoParams &,
+                                    Callback<MemoryTree> Reply) {
+  llvm::BumpPtrAllocator DetailAlloc;
+  MemoryTree MT(&DetailAlloc);
+  profile(MT);
+  Reply(std::move(MT));
+}
+
 ClangdLSPServer::ClangdLSPServer(class Transport &Transp,
                                  const ThreadsafeFS &TFS,
                                  const ClangdLSPServer::Options &Opts)
@@ -1425,6 +1445,7 @@ ClangdLSPServer::ClangdLSPServer(class Transport &Transp,
   MsgHandler->bind("textDocument/documentLink", &ClangdLSPServer::onDocumentLink);
   MsgHandler->bind("textDocument/semanticTokens/full", &ClangdLSPServer::onSemanticTokens);
   MsgHandler->bind("textDocument/semanticTokens/full/delta", &ClangdLSPServer::onSemanticTokensDelta);
+  MsgHandler->bind("$/memoryUsage", &ClangdLSPServer::onMemoryUsage);
   if (Opts.FoldingRanges)
     MsgHandler->bind("textDocument/foldingRange", &ClangdLSPServer::onFoldingRange);
   // clang-format on

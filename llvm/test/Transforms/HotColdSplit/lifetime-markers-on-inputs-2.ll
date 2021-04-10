@@ -34,15 +34,16 @@ declare void @use(i8*)
 ;          \      /
 ;            exit
 ;          (lt.end)
-define void @only_lifetime_start_is_cold() "hot-cold-split" {
+define void @only_lifetime_start_is_cold() {
 ; CHECK-LABEL: @only_lifetime_start_is_cold(
 ; CHECK-NEXT:  entry:
-; CHECK-NEXT:    [[LOCAL1:%.*]] = alloca i256, align 8
+; CHECK-NEXT:    [[LOCAL1:%.*]] = alloca i256
 ; CHECK-NEXT:    [[LOCAL1_CAST:%.*]] = bitcast i256* [[LOCAL1]] to i8*
 ; CHECK-NEXT:    br i1 undef, label [[CODEREPL:%.*]], label [[NO_EXTRACT1:%.*]]
 ; CHECK:       codeRepl:
-; CHECK-NEXT:    call void @llvm.lifetime.start.p0i256(i64 -1, i256* [[LOCAL1]])
-; CHECK-NEXT:    [[TARGETBLOCK:%.*]] = call i1 @only_lifetime_start_is_cold.cold.1(i8* [[LOCAL1_CAST]]) [[ATTR4:#.*]]
+; CHECK-NEXT:    [[LT_CAST:%.*]] = bitcast i256* [[LOCAL1]] to i8*
+; CHECK-NEXT:    call void @llvm.lifetime.start.p0i8(i64 -1, i8* [[LT_CAST]])
+; CHECK-NEXT:    [[TARGETBLOCK:%.*]] = call i1 @only_lifetime_start_is_cold.cold.1(i8* [[LOCAL1_CAST]]) #3
 ; CHECK-NEXT:    br i1 [[TARGETBLOCK]], label [[NO_EXTRACT1]], label [[EXIT:%.*]]
 ; CHECK:       no-extract1:
 ; CHECK-NEXT:    br label [[EXIT]]
@@ -94,10 +95,10 @@ exit:
 ;    (lt.end)
 ;        \         /
 ;            exit
-define void @only_lifetime_end_is_cold() "hot-cold-split" {
+define void @only_lifetime_end_is_cold() {
 ; CHECK-LABEL: @only_lifetime_end_is_cold(
 ; CHECK-NEXT:  entry:
-; CHECK-NEXT:    [[LOCAL1:%.*]] = alloca i256, align 8
+; CHECK-NEXT:    [[LOCAL1:%.*]] = alloca i256
 ; CHECK-NEXT:    [[LOCAL1_CAST:%.*]] = bitcast i256* [[LOCAL1]] to i8*
 ; CHECK-NEXT:    call void @llvm.lifetime.start.p0i8(i64 1, i8* [[LOCAL1_CAST]])
 ; CHECK-NEXT:    br i1 undef, label [[NO_EXTRACT1:%.*]], label [[CODEREPL:%.*]]
@@ -105,7 +106,7 @@ define void @only_lifetime_end_is_cold() "hot-cold-split" {
 ; CHECK-NEXT:    call void @llvm.lifetime.end.p0i8(i64 1, i8* [[LOCAL1_CAST]])
 ; CHECK-NEXT:    br label [[EXIT:%.*]]
 ; CHECK:       codeRepl:
-; CHECK-NEXT:    call void @only_lifetime_end_is_cold.cold.1(i8* [[LOCAL1_CAST]]) [[ATTR4]]
+; CHECK-NEXT:    call void @only_lifetime_end_is_cold.cold.1(i8* [[LOCAL1_CAST]]) #3
 ; CHECK-NEXT:    br label [[EXIT]]
 ; CHECK:       exit:
 ; CHECK-NEXT:    ret void
@@ -134,10 +135,10 @@ exit:
 
 ; In this CFG, splitting will extract the blocks extract{1,2,3}. Lifting the
 ; lifetime.end marker would be a miscompile.
-define void @do_not_lift_lifetime_end() "hot-cold-split" {
+define void @do_not_lift_lifetime_end() {
 ; CHECK-LABEL: @do_not_lift_lifetime_end(
 ; CHECK-NEXT:  entry:
-; CHECK-NEXT:    [[LOCAL1:%.*]] = alloca i256, align 8
+; CHECK-NEXT:    [[LOCAL1:%.*]] = alloca i256
 ; CHECK-NEXT:    [[LOCAL1_CAST:%.*]] = bitcast i256* [[LOCAL1]] to i8*
 ; CHECK-NEXT:    call void @llvm.lifetime.start.p0i8(i64 1, i8* [[LOCAL1_CAST]])
 ; CHECK-NEXT:    br label [[HEADER:%.*]]
@@ -145,7 +146,7 @@ define void @do_not_lift_lifetime_end() "hot-cold-split" {
 ; CHECK-NEXT:    call void @use(i8* [[LOCAL1_CAST]])
 ; CHECK-NEXT:    br i1 undef, label [[EXIT:%.*]], label [[CODEREPL:%.*]]
 ; CHECK:       codeRepl:
-; CHECK-NEXT:    [[TARGETBLOCK:%.*]] = call i1 @do_not_lift_lifetime_end.cold.1(i8* [[LOCAL1_CAST]]) [[ATTR4]]
+; CHECK-NEXT:    [[TARGETBLOCK:%.*]] = call i1 @do_not_lift_lifetime_end.cold.1(i8* [[LOCAL1_CAST]]) #3
 ; CHECK-NEXT:    br i1 [[TARGETBLOCK]], label [[HEADER]], label [[EXIT]]
 ; CHECK:       exit:
 ; CHECK-NEXT:    ret void

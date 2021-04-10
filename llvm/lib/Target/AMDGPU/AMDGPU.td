@@ -886,6 +886,13 @@ def FeatureISAVersion9_0_9 : FeatureSet<
    FeatureXNACK,
    FeatureImageGather4D16Bug]>;
 
+def FeatureISAVersion9_0_C : FeatureSet<
+  [FeatureGFX9,
+   FeatureMadMixInsts,
+   FeatureLDSBankCount32,
+   FeatureXNACK,
+   FeatureImageGather4D16Bug]>;
+
 // TODO: Organize more features into groups.
 def FeatureGroup {
   // Bugs present on gfx10.1.
@@ -1137,6 +1144,9 @@ def HasScalarFlatScratchInsts : Predicate<"Subtarget->hasScalarFlatScratchInsts(
 def HasD16LoadStore : Predicate<"Subtarget->hasD16LoadStore()">,
   AssemblerPredicate<(all_of FeatureGFX9Insts)>;
 
+def HasFlatScratchSTMode : Predicate<"Subtarget->hasFlatScratchSTMode()">,
+  AssemblerPredicate<(any_of FeatureGFX10_3Insts)>;
+
 def HasGFX10_BEncoding : Predicate<"Subtarget->hasGFX10_BEncoding()">,
   AssemblerPredicate<(all_of FeatureGFX10_BEncoding)>;
 
@@ -1266,11 +1276,11 @@ def HasPkFmacF16Inst : Predicate<"Subtarget->hasPkFmacF16Inst()">,
 def HasMadMacF32Insts : Predicate<"Subtarget->hasMadMacF32Insts()">,
   AssemblerPredicate<(all_of FeatureMadMacF32Insts)>;
 
+def HasFmaLegacy32 : Predicate<"Subtarget->hasGFX10_3Insts()">,
+  AssemblerPredicate<(any_of FeatureGFX10_3Insts)>;
+
 def HasAtomicFaddInsts : Predicate<"Subtarget->hasAtomicFaddInsts()">,
   AssemblerPredicate<(all_of FeatureAtomicFaddInsts)>;
-
-def HasNoMadMacF32Insts : Predicate<"!Subtarget->hasMadMacF32Insts()">,
-  AssemblerPredicate<(all_of (not FeatureMadMacF32Insts))>;
 
 def HasDsSrc2Insts : Predicate<"!Subtarget->hasDsSrc2Insts()">,
   AssemblerPredicate<(all_of FeatureDsSrc2Insts)>;
@@ -1280,6 +1290,10 @@ def HasOffset3fBug : Predicate<"!Subtarget->hasOffset3fBug()">,
 
 def EnableLateCFGStructurize : Predicate<
   "EnableLateStructurizeCFG">;
+
+def EnableFlatScratch : Predicate<"Subtarget->enableFlatScratch()">;
+
+def DisableFlatScratch : Predicate<"!Subtarget->enableFlatScratch()">;
 
 // Include AMDGPU TD files
 include "SISchedule.td"

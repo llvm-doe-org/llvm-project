@@ -12,7 +12,8 @@ target triple = "x86_64-apple-macosx10.14.0"
 ; CHECK-NEXT:  ]
 ;
 ; CHECK:  codeRepl:
-; CHECK:         lifetime.start
+; CHECK-NEXT:    bitcast
+; CHECK-NEXT:    lifetime.start
 ; CHECK-NEXT:    call void @pluto.cold.1(i1* %tmp8.ce.loc)
 ; CHECK-NEXT:    %tmp8.ce.reload = load i1, i1* %tmp8.ce.loc
 ; CHECK-NEXT:    lifetime.end
@@ -28,7 +29,7 @@ target triple = "x86_64-apple-macosx10.14.0"
 ; CHECK: call {{.*}}@sideeffect(i32 3)
 ; CHECK: call {{.*}}@sideeffect(i32 4)
 ; CHECK: call {{.*}}@sideeffect(i32 5)
-define void @pluto() "hot-cold-split" {
+define void @pluto() {
 bb:
   switch i8 undef, label %bb1 [
     i8 0, label %bb7

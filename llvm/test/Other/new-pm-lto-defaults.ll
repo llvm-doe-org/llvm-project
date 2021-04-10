@@ -66,6 +66,7 @@
 ; CHECK-O2-NEXT: Running pass: ModuleInlinerWrapperPass
 ; CHECK-O2-NEXT: Running analysis: InlineAdvisorAnalysis
 ; CHECK-O2-NEXT: Starting llvm::Module pass manager run.
+; CHECK-O2-NEXT: Running pass: AlwaysInlinerPass
 ; CHECK-O2-NEXT: Starting CGSCC pass manager run.
 ; CHECK-O2-NEXT: Running pass: InlinerPass
 ; CHECK-O2-NEXT: Finished CGSCC pass manager run.
@@ -100,7 +101,6 @@
 ; CHECK-O2-NEXT: Running pass: CrossDSOCFIPass
 ; CHECK-O2-NEXT: Running pass: LowerTypeTestsPass
 ; CHECK-O-NEXT: Running pass: LowerTypeTestsPass
-; CHECK-O2-NEXT: Running pass: HotColdSplittingPass
 ; CHECK-O2-NEXT: Running pass: SimplifyCFGPass
 ; CHECK-O2-NEXT: Running pass: EliminateAvailableExternallyPass
 ; CHECK-O2-NEXT: Running pass: GlobalDCEPass

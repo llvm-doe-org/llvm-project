@@ -280,13 +280,6 @@
 ; GCN-O1-NEXT:       Warn about non-applied transformations
 ; GCN-O1-NEXT:       Alignment from assumptions
 ; GCN-O1-NEXT:     Strip Unused Function Prototypes
-; GCN-O1-NEXT:     Hot Cold Splitting
-; GCN-O1-NEXT:       FunctionPass Manager
-; GCN-O1-NEXT:         Dominator Tree Construction
-; GCN-O1-NEXT:         Natural Loop Information
-; GCN-O1-NEXT:         Post-Dominator Tree Construction
-; GCN-O1-NEXT:         Branch Probability Analysis
-; GCN-O1-NEXT:         Block Frequency Analysis
 ; GCN-O1-NEXT:     Call Graph Profile
 ; GCN-O1-NEXT:       FunctionPass Manager
 ; GCN-O1-NEXT:         Dominator Tree Construction
@@ -520,9 +513,10 @@
 ; GCN-O2-NEXT:       Lazy Value Information Analysis
 ; GCN-O2-NEXT:       Jump Threading
 ; GCN-O2-NEXT:       Value Propagation
+; GCN-O2-NEXT:       Post-Dominator Tree Construction
+; GCN-O2-NEXT:       Aggressive Dead Code Elimination
 ; GCN-O2-NEXT:       Basic Alias Analysis (stateless AA impl)
 ; GCN-O2-NEXT:       Function Alias Analysis Results
-; GCN-O2-NEXT:       Post-Dominator Tree Construction
 ; GCN-O2-NEXT:       Memory SSA
 ; GCN-O2-NEXT:       Dead Store Elimination
 ; GCN-O2-NEXT:       Natural Loop Information
@@ -535,8 +529,6 @@
 ; GCN-O2-NEXT:       Lazy Block Frequency Analysis
 ; GCN-O2-NEXT:       Loop Pass Manager
 ; GCN-O2-NEXT:         Loop Invariant Code Motion
-; GCN-O2-NEXT:       Post-Dominator Tree Construction
-; GCN-O2-NEXT:       Aggressive Dead Code Elimination
 ; GCN-O2-NEXT:       Simplify the CFG
 ; GCN-O2-NEXT:       Dominator Tree Construction
 ; GCN-O2-NEXT:       Basic Alias Analysis (stateless AA impl)
@@ -645,13 +637,6 @@
 ; GCN-O2-NEXT:     Strip Unused Function Prototypes
 ; GCN-O2-NEXT:     Dead Global Elimination
 ; GCN-O2-NEXT:     Merge Duplicate Global Constants
-; GCN-O2-NEXT:     Hot Cold Splitting
-; GCN-O2-NEXT:       FunctionPass Manager
-; GCN-O2-NEXT:         Dominator Tree Construction
-; GCN-O2-NEXT:         Natural Loop Information
-; GCN-O2-NEXT:         Post-Dominator Tree Construction
-; GCN-O2-NEXT:         Branch Probability Analysis
-; GCN-O2-NEXT:         Block Frequency Analysis
 ; GCN-O2-NEXT:     Call Graph Profile
 ; GCN-O2-NEXT:       FunctionPass Manager
 ; GCN-O2-NEXT:         Dominator Tree Construction
@@ -890,9 +875,10 @@
 ; GCN-O3-NEXT:       Lazy Value Information Analysis
 ; GCN-O3-NEXT:       Jump Threading
 ; GCN-O3-NEXT:       Value Propagation
+; GCN-O3-NEXT:       Post-Dominator Tree Construction
+; GCN-O3-NEXT:       Aggressive Dead Code Elimination
 ; GCN-O3-NEXT:       Basic Alias Analysis (stateless AA impl)
 ; GCN-O3-NEXT:       Function Alias Analysis Results
-; GCN-O3-NEXT:       Post-Dominator Tree Construction
 ; GCN-O3-NEXT:       Memory SSA
 ; GCN-O3-NEXT:       Dead Store Elimination
 ; GCN-O3-NEXT:       Natural Loop Information
@@ -905,8 +891,6 @@
 ; GCN-O3-NEXT:       Lazy Block Frequency Analysis
 ; GCN-O3-NEXT:       Loop Pass Manager
 ; GCN-O3-NEXT:         Loop Invariant Code Motion
-; GCN-O3-NEXT:       Post-Dominator Tree Construction
-; GCN-O3-NEXT:       Aggressive Dead Code Elimination
 ; GCN-O3-NEXT:       Simplify the CFG
 ; GCN-O3-NEXT:       Dominator Tree Construction
 ; GCN-O3-NEXT:       Basic Alias Analysis (stateless AA impl)
@@ -1015,13 +999,6 @@
 ; GCN-O3-NEXT:     Strip Unused Function Prototypes
 ; GCN-O3-NEXT:     Dead Global Elimination
 ; GCN-O3-NEXT:     Merge Duplicate Global Constants
-; GCN-O3-NEXT:     Hot Cold Splitting
-; GCN-O3-NEXT:       FunctionPass Manager
-; GCN-O3-NEXT:         Dominator Tree Construction
-; GCN-O3-NEXT:         Natural Loop Information
-; GCN-O3-NEXT:         Post-Dominator Tree Construction
-; GCN-O3-NEXT:         Branch Probability Analysis
-; GCN-O3-NEXT:         Block Frequency Analysis
 ; GCN-O3-NEXT:     Call Graph Profile
 ; GCN-O3-NEXT:       FunctionPass Manager
 ; GCN-O3-NEXT:         Dominator Tree Construction

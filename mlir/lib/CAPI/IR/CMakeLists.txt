@@ -1,8 +1,10 @@
 # Main API.
 add_mlir_library(MLIRCAPIIR
+  AffineExpr.cpp
   AffineMap.cpp
   Diagnostics.cpp
   IR.cpp
+  Pass.cpp
   StandardAttributes.cpp
   StandardTypes.cpp
   Support.cpp

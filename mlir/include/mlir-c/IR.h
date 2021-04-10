@@ -50,14 +50,18 @@ extern "C" {
 DEFINE_C_API_STRUCT(MlirContext, void);
 DEFINE_C_API_STRUCT(MlirDialect, void);
 DEFINE_C_API_STRUCT(MlirOperation, void);
+DEFINE_C_API_STRUCT(MlirOpPrintingFlags, void);
 DEFINE_C_API_STRUCT(MlirBlock, void);
 DEFINE_C_API_STRUCT(MlirRegion, void);
 
-DEFINE_C_API_STRUCT(MlirValue, const void);
 DEFINE_C_API_STRUCT(MlirAttribute, const void);
-DEFINE_C_API_STRUCT(MlirType, const void);
+DEFINE_C_API_STRUCT(MlirIdentifier, const void);
 DEFINE_C_API_STRUCT(MlirLocation, const void);
 DEFINE_C_API_STRUCT(MlirModule, const void);
+DEFINE_C_API_STRUCT(MlirType, const void);
+DEFINE_C_API_STRUCT(MlirValue, const void);
+
+#undef DEFINE_C_API_STRUCT
 
 /** Named MLIR attribute.
  *
@@ -174,6 +178,9 @@ MlirModule mlirModuleCreateParse(MlirContext context, const char *module);
 /** Gets the context that a module was created with. */
 MlirContext mlirModuleGetContext(MlirModule module);
 
+/** Gets the body of the module, i.e. the only block it contains. */
+MlirBlock mlirModuleGetBody(MlirModule module);
+
 /** Checks whether a module is null. */
 static inline int mlirModuleIsNull(MlirModule module) { return !module.ptr; }
 
@@ -229,6 +236,42 @@ void mlirOperationStateAddAttributes(MlirOperationState *state, intptr_t n,
                                      MlirNamedAttribute *attributes);
 
 /*============================================================================*/
+/* Op Printing flags API.                                                     */
+/* While many of these are simple settings that could be represented in a     */
+/* struct, they are wrapped in a heap allocated object and accessed via       */
+/* functions to maximize the possibility of compatibility over time.          */
+/*============================================================================*/
+
+/** Creates new printing flags with defaults, intended for customization.
+ * Must be freed with a call to mlirOpPrintingFlagsDestroy(). */
+MlirOpPrintingFlags mlirOpPrintingFlagsCreate();
+
+/** Destroys printing flags created with mlirOpPrintingFlagsCreate. */
+void mlirOpPrintingFlagsDestroy(MlirOpPrintingFlags flags);
+
+/** Enables the elision of large elements attributes by printing a lexically
+ * valid but otherwise meaningless form instead of the element data. The
+ * `largeElementLimit` is used to configure what is considered to be a "large"
+ * ElementsAttr by providing an upper limit to the number of elements. */
+void mlirOpPrintingFlagsElideLargeElementsAttrs(MlirOpPrintingFlags flags,
+                                                intptr_t largeElementLimit);
+
+/** Enable printing of debug information. If 'prettyForm' is set to true,
+ * debug information is printed in a more readable 'pretty' form. Note: The
+ * IR generated with 'prettyForm' is not parsable. */
+void mlirOpPrintingFlagsEnableDebugInfo(MlirOpPrintingFlags flags,
+                                        int prettyForm);
+
+/** Always print operations in the generic form. */
+void mlirOpPrintingFlagsPrintGenericOpForm(MlirOpPrintingFlags flags);
+
+/** Use local scope when printing the operation. This allows for using the
+ * printer in a more localized and thread-safe setting, but may not
+ * necessarily be identical to what the IR will look like when dumping
+ * the full module. */
+void mlirOpPrintingFlagsUseLocalScope(MlirOpPrintingFlags flags);
+
+/*============================================================================*/
 /* Operation API.                                                             */
 /*============================================================================*/
 
@@ -240,6 +283,21 @@ void mlirOperationDestroy(MlirOperation op);
 
 /** Checks whether the underlying operation is null. */
 static inline int mlirOperationIsNull(MlirOperation op) { return !op.ptr; }
+
+/** Checks whether two operation handles point to the same operation. This does
+ * not perform deep comparison. */
+int mlirOperationEqual(MlirOperation op, MlirOperation other);
+
+/** Gets the name of the operation as an identifier. */
+MlirIdentifier mlirOperationGetName(MlirOperation op);
+
+/** Gets the block that owns this operation, returning null if the operation is
+ * not owned. */
+MlirBlock mlirOperationGetBlock(MlirOperation op);
+
+/** Gets the operation that owns this operation, returning null if the operation
+ * is not owned. */
+MlirOperation mlirOperationGetParentOperation(MlirOperation op);
 
 /** Returns the number of regions attached to the given operation. */
 intptr_t mlirOperationGetNumRegions(MlirOperation op);
@@ -293,6 +351,11 @@ int mlirOperationRemoveAttributeByName(MlirOperation op, const char *name);
  * several times with consecutive chunks of the string. */
 void mlirOperationPrint(MlirOperation op, MlirStringCallback callback,
                         void *userData);
+
+/** Same as mlirOperationPrint but accepts flags controlling the printing
+ * behavior. */
+void mlirOperationPrintWithFlags(MlirOperation op, MlirOpPrintingFlags flags,
+                                 MlirStringCallback callback, void *userData);
 
 /** Prints an operation to stderr. */
 void mlirOperationDump(MlirOperation op);
@@ -348,12 +411,19 @@ void mlirBlockDestroy(MlirBlock block);
 /** Checks whether a block is null. */
 static inline int mlirBlockIsNull(MlirBlock block) { return !block.ptr; }
 
+/** Checks whether two blocks handles point to the same block. This does not
+ * perform deep comparison. */
+int mlirBlockEqual(MlirBlock block, MlirBlock other);
+
 /** Returns the block immediately following the given block in its parent
  * region. */
 MlirBlock mlirBlockGetNextInRegion(MlirBlock block);
 
 /** Returns the first operation in the block. */
 MlirOperation mlirBlockGetFirstOperation(MlirBlock block);
+
+/** Returns the terminator operation in the block or null if no terminator. */
+MlirOperation mlirBlockGetTerminator(MlirBlock block);
 
 /** Takes an operation owned by the caller and appends it to the block. */
 void mlirBlockAppendOwnedOperation(MlirBlock block, MlirOperation operation);
@@ -397,8 +467,35 @@ void mlirBlockPrint(MlirBlock block, MlirStringCallback callback,
 /** Returns whether the value is null. */
 static inline int mlirValueIsNull(MlirValue value) { return !value.ptr; }
 
+/** Returns 1 if the value is a block argument, 0 otherwise. */
+int mlirValueIsABlockArgument(MlirValue value);
+
+/** Returns 1 if the value is an operation result, 0 otherwise. */
+int mlirValueIsAOpResult(MlirValue value);
+
+/** Returns the block in which this value is defined as an argument. Asserts if
+ * the value is not a block argument. */
+MlirBlock mlirBlockArgumentGetOwner(MlirValue value);
+
+/** Returns the position of the value in the argument list of its block. */
+intptr_t mlirBlockArgumentGetArgNumber(MlirValue value);
+
+/** Sets the type of the block argument to the given type. */
+void mlirBlockArgumentSetType(MlirValue value, MlirType type);
+
+/** Returns an operation that produced this value as its result. Asserts if the
+ * value is not an op result. */
+MlirOperation mlirOpResultGetOwner(MlirValue value);
+
+/** Returns the position of the value in the list of results of the operation
+ * that produced it. */
+intptr_t mlirOpResultGetResultNumber(MlirValue value);
+
 /** Returns the type of the value. */
 MlirType mlirValueGetType(MlirValue value);
+
+/** Prints the value to the standard error stream. */
+void mlirValueDump(MlirValue value);
 
 /** Prints a value by sending chunks of the string representation and
  * forwarding `userData to `callback`. Note that the callback may be called
@@ -460,6 +557,19 @@ void mlirAttributeDump(MlirAttribute attr);
 
 /** Associates an attribute with the name. Takes ownership of neither. */
 MlirNamedAttribute mlirNamedAttributeGet(const char *name, MlirAttribute attr);
+
+/*============================================================================*/
+/* Identifier API.                                                            */
+/*============================================================================*/
+
+/** Gets an identifier with the given string value. */
+MlirIdentifier mlirIdentifierGet(MlirContext context, MlirStringRef str);
+
+/** Checks whether two identifiers are the same. */
+int mlirIdentifierEqual(MlirIdentifier ident, MlirIdentifier other);
+
+/** Gets the string value of the identifier. */
+MlirStringRef mlirIdentifierStr(MlirIdentifier ident);
 
 #ifdef __cplusplus
 }

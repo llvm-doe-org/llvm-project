@@ -405,14 +405,9 @@ std::optional<DummyArgument> DummyArgument::FromActual(
             }
           },
           [&](const auto &) {
-            if (auto type{expr.GetType()}) {
-              if (auto shape{GetShape(context, expr)}) {
-                return std::make_optional<DummyArgument>(std::move(name),
-                    DummyDataObject{TypeAndShape{*type, std::move(*shape)}});
-              } else {
-                return std::make_optional<DummyArgument>(
-                    std::move(name), DummyDataObject{TypeAndShape{*type}});
-              }
+            if (auto type{TypeAndShape::Characterize(expr, context)}) {
+              return std::make_optional<DummyArgument>(
+                  std::move(name), DummyDataObject{std::move(*type)});
             } else {
               return std::optional<DummyArgument>{};
             }
@@ -445,6 +440,26 @@ void DummyArgument::SetOptional(bool value) {
                  },
                  [](AlternateReturn &) { DIE("cannot set optional"); },
              },
+      u);
+}
+
+void DummyArgument::SetIntent(common::Intent intent) {
+  std::visit(common::visitors{
+                 [intent](DummyDataObject &data) { data.intent = intent; },
+                 [intent](DummyProcedure &proc) { proc.intent = intent; },
+                 [](AlternateReturn &) { DIE("cannot set intent"); },
+             },
+      u);
+}
+
+common::Intent DummyArgument::GetIntent() const {
+  return std::visit(common::visitors{
+                        [](const DummyDataObject &data) { return data.intent; },
+                        [](const DummyProcedure &proc) { return proc.intent; },
+                        [](const AlternateReturn &) -> common::Intent {
+                          DIE("Alternate return have no intent");
+                        },
+                    },
       u);
 }
 

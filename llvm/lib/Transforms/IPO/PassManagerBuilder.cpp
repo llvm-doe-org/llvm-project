@@ -104,6 +104,9 @@ static cl::opt<bool>
     EnablePerformThinLTO("perform-thinlto", cl::init(false), cl::Hidden,
                          cl::desc("Enable performing ThinLTO."));
 
+cl::opt<bool> EnableHotColdSplit("hot-cold-split", cl::init(false),
+    cl::ZeroOrMore, cl::desc("Enable hot-cold splitting pass"));
+
 static cl::opt<bool> UseLoopVersioningLICM(
     "enable-loop-versioning-licm", cl::init(false), cl::Hidden,
     cl::desc("Enable the experimental Loop Versioning LICM pass"));
@@ -479,6 +482,11 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
   if (OptLevel > 1) {
     MPM.add(createJumpThreadingPass());         // Thread jumps
     MPM.add(createCorrelatedValuePropagationPass());
+  }
+  MPM.add(createAggressiveDCEPass()); // Delete dead instructions
+
+  // TODO: Investigate if this is too expensive at O1.
+  if (OptLevel > 1) {
     MPM.add(createDeadStoreEliminationPass());  // Delete dead stores
     MPM.add(createLICMPass(LicmMssaOptCap, LicmMssaNoAccForPromotionCap));
   }
@@ -488,8 +496,6 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
   if (RerollLoops)
     MPM.add(createLoopRerollPass());
 
-  // TODO: Investigate if this is too expensive at O1.
-  MPM.add(createAggressiveDCEPass());         // Delete dead instructions
   MPM.add(createCFGSimplificationPass()); // Merge & remove BBs
   // Clean up after everything.
   MPM.add(createInstructionCombiningPass());
@@ -862,7 +868,7 @@ void PassManagerBuilder::populateModulePassManager(
 
   // See comment in the new PM for justification of scheduling splitting at
   // this stage (\ref buildModuleSimplificationPipeline).
-  if (!(PrepareForLTO || PrepareForThinLTO))
+  if (EnableHotColdSplit && !(PrepareForLTO || PrepareForThinLTO))
     MPM.add(createHotColdSplittingPass());
 
   if (MergeFunctions)
@@ -1086,7 +1092,8 @@ void PassManagerBuilder::addLateLTOOptimizationPasses(
     legacy::PassManagerBase &PM) {
   // See comment in the new PM for justification of scheduling splitting at
   // this stage (\ref buildLTODefaultPipeline).
-  PM.add(createHotColdSplittingPass());
+  if (EnableHotColdSplit)
+    PM.add(createHotColdSplittingPass());
 
   // Delete basic blocks, which optimization passes may have killed.
   PM.add(createCFGSimplificationPass());

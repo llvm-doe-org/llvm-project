@@ -56,13 +56,13 @@ static void ompt_dispatch_callback_target_data_op(const char *DirKind,
 #endif
 
 EXTERN int omp_get_num_devices(void) {
-  RTLsMtx->lock();
-  size_t Devices_size = Devices.size();
-  RTLsMtx->unlock();
+  PM->RTLsMtx.lock();
+  size_t DevicesSize = PM->Devices.size();
+  PM->RTLsMtx.unlock();
 
-  DP("Call to omp_get_num_devices returning %zd\n", Devices_size);
+  DP("Call to omp_get_num_devices returning %zd\n", DevicesSize);
 
-  return Devices_size;
+  return DevicesSize;
 }
 
 EXTERN int omp_get_initial_device(void) {
@@ -123,7 +123,7 @@ EXTERN void *omp_target_alloc(size_t size, int device_num) {
   }
   OMPT_CLEAR_DIRECTIVE_INFO();
 
-  rc = Devices[device_num].allocData(size);
+  rc = PM->Devices[device_num].allocData(size);
 #if OMPT_SUPPORT
   DeviceAllocSizes[rc] = size;
   OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP(alloc, /*SrcPtr=*/NULL,
@@ -174,7 +174,7 @@ EXTERN void omp_target_free(void *device_ptr, int device_num) {
                                         DeviceAllocSizes[device_ptr]);
   DeviceAllocSizes.erase(device_ptr);
 #endif
-  Devices[device_num].deleteData(device_ptr);
+  PM->Devices[device_num].deleteData(device_ptr);
   DP("omp_target_free deallocated device ptr\n");
 }
 
@@ -192,16 +192,16 @@ EXTERN int omp_target_is_present(void *ptr, int device_num) {
     return true;
   }
 
-  RTLsMtx->lock();
-  size_t Devices_size = Devices.size();
-  RTLsMtx->unlock();
-  if (Devices_size <= (size_t)device_num) {
+  PM->RTLsMtx.lock();
+  size_t DevicesSize = PM->Devices.size();
+  PM->RTLsMtx.unlock();
+  if (DevicesSize <= (size_t)device_num) {
     DP("Call to omp_target_is_present with invalid device ID, returning "
         "false\n");
     return false;
   }
 
-  DeviceTy& Device = Devices[device_num];
+  DeviceTy &Device = PM->Devices[device_num];
   bool IsLast; // not used
   bool IsHostPtr;
   void *TgtPtr = Device.getTgtPtrBegin(ptr, 0, IsLast, /*UpdateRefCount=*/false,
@@ -211,7 +211,7 @@ EXTERN int omp_target_is_present(void *ptr, int device_num) {
   // getTgtPtrBegin() function which means that there is no device
   // corresponding point for ptr. This function should return false
   // in that situation.
-  if (RTLs->RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY)
+  if (PM->RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY)
     rc = !IsHostPtr;
   DP("Call to omp_target_is_present returns %d\n", rc);
   return rc;
@@ -254,16 +254,16 @@ EXTERN int omp_target_is_accessible(const void *ptr, size_t size,
     return true;
   }
 
-  RTLsMtx->lock();
-  size_t Devices_size = Devices.size();
-  RTLsMtx->unlock();
+  PM->RTLsMtx.lock();
+  size_t Devices_size = PM->Devices.size();
+  PM->RTLsMtx.unlock();
   if (Devices_size <= (size_t)device_num) {
     DP("Call to omp_target_is_accessible with invalid device ID, returning "
        "false\n");
     return false;
   }
 
-  DeviceTy &Device = Devices[device_num];
+  DeviceTy &Device = PM->Devices[device_num];
   bool IsLast;    // not used
   bool IsHostPtr; // not used
   // TODO: How does the spec intend for the size=0 case to be handled?
@@ -298,15 +298,15 @@ EXTERN void *omp_get_mapped_ptr(const void *ptr, int device_num) {
     return const_cast<void *>(ptr);
   }
 
-  RTLsMtx->lock();
-  size_t Devices_size = Devices.size();
-  RTLsMtx->unlock();
+  PM->RTLsMtx.lock();
+  size_t Devices_size = PM->Devices.size();
+  PM->RTLsMtx.unlock();
   if (Devices_size <= (size_t)device_num) {
     DP("Call to omp_get_mapped_ptr with invalid device ID, returning NULL\n");
     return NULL;
   }
 
-  DeviceTy &Device = Devices[device_num];
+  DeviceTy &Device = PM->Devices[device_num];
   bool IsLast; // not used
   bool IsHostPtr;
   void *TgtPtr = Device.getTgtPtrBegin(const_cast<void *>(ptr), /*Size=*/0,
@@ -345,16 +345,16 @@ EXTERN void *omp_get_mapped_hostptr(const void *ptr, int device_num) {
     return const_cast<void *>(ptr);
   }
 
-  RTLsMtx->lock();
-  size_t Devices_size = Devices.size();
-  RTLsMtx->unlock();
+  PM->RTLsMtx.lock();
+  size_t Devices_size = PM->Devices.size();
+  PM->RTLsMtx.unlock();
   if (Devices_size <= (size_t)device_num) {
     DP("Call to omp_get_mapped_hostptr with invalid device ID, returning "
        "NULL\n");
     return NULL;
   }
 
-  DeviceTy &Device = Devices[device_num];
+  DeviceTy &Device = PM->Devices[device_num];
   // TODO: This returns nullptr in the case of unified shared memory.  This is
   // for consistency with the current omp_get_mapped_ptr implementation.
   void *HostPtr = Device.lookupHostPtr(const_cast<void *>(ptr));
@@ -379,9 +379,9 @@ EXTERN size_t omp_get_accessible_buffer(
     return SIZE_MAX;
   }
 
-  RTLsMtx->lock();
-  size_t Devices_size = Devices.size();
-  RTLsMtx->unlock();
+  PM->RTLsMtx.lock();
+  size_t Devices_size = PM->Devices.size();
+  PM->RTLsMtx.unlock();
   if (Devices_size <= (size_t)device_num) {
     DP("Call to omp_get_accessible_buffer with invalid device ID, returning "
        "0\n");
@@ -401,7 +401,7 @@ EXTERN size_t omp_get_accessible_buffer(
     return SIZE_MAX;
   }
 
-  DeviceTy &Device = Devices[device_num];
+  DeviceTy &Device = PM->Devices[device_num];
   size_t BufferSize = Device.getAccessibleBuffer(const_cast<void *>(ptr),
                                                  /*Size=*/size, buffer_host,
                                                  buffer_device);
@@ -460,16 +460,16 @@ EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
       rc = OFFLOAD_FAIL;
   } else if (src_device == omp_get_initial_device()) {
     DP("copy from host to device\n");
-    DeviceTy& DstDev = Devices[dst_device];
+    DeviceTy &DstDev = PM->Devices[dst_device];
     rc = DstDev.submitData(dstAddr, srcAddr, length, nullptr);
   } else if (dst_device == omp_get_initial_device()) {
     DP("copy from device to host\n");
-    DeviceTy& SrcDev = Devices[src_device];
+    DeviceTy &SrcDev = PM->Devices[src_device];
     rc = SrcDev.retrieveData(dstAddr, srcAddr, length, nullptr);
   } else {
     DP("copy from device to device\n");
-    DeviceTy &SrcDev = Devices[src_device];
-    DeviceTy &DstDev = Devices[dst_device];
+    DeviceTy &SrcDev = PM->Devices[src_device];
+    DeviceTy &DstDev = PM->Devices[dst_device];
     // First try to use D2D memcpy which is more efficient. If fails, fall back
     // to unefficient way.
     if (SrcDev.isDataExchangable(DstDev)) {
@@ -569,7 +569,7 @@ EXTERN int omp_target_associate_ptr(void *host_ptr, void *device_ptr,
     return OFFLOAD_FAIL;
   }
 
-  DeviceTy& Device = Devices[device_num];
+  DeviceTy &Device = PM->Devices[device_num];
   void *device_addr = (void *)((uint64_t)device_ptr + (uint64_t)device_offset);
   // OpenMP 5.0 sec. 3.6.6 p. 404 L32:
   // "The target-data-associate event occurs when a thread associates data on a
@@ -606,7 +606,7 @@ EXTERN int omp_target_disassociate_ptr(void *host_ptr, int device_num) {
     return OFFLOAD_FAIL;
   }
 
-  DeviceTy& Device = Devices[device_num];
+  DeviceTy &Device = PM->Devices[device_num];
   void *TgtPtrBegin;
   int64_t Size;
   int rc = Device.disassociatePtr(host_ptr, TgtPtrBegin, Size);
@@ -696,16 +696,16 @@ EXTERN omp_device_t omp_get_device_type(int device_num) {
     return omp_device_host;
   }
 
-  RTLsMtx->lock();
-  size_t Devices_size = Devices.size();
-  RTLsMtx->unlock();
+  PM->RTLsMtx.lock();
+  size_t Devices_size = PM->Devices.size();
+  PM->RTLsMtx.unlock();
 
   if (Devices_size <= (size_t)device_num) {
     DP("omp_get_device_type returns omp_device_none for invalid device ID %d\n",
        device_num);
     return omp_device_none;
   }
-  omp_device_t DeviceType = Devices[device_num].RTL->DeviceType;
+  omp_device_t DeviceType = PM->Devices[device_num].RTL->DeviceType;
   DP("omp_get_device_type returns %s=%d for device ID %d\n",
      deviceTypeToString(DeviceType), DeviceType, device_num);
   return DeviceType;
@@ -721,9 +721,9 @@ EXTERN int omp_get_num_devices_of_type(omp_device_t device_type) {
     return 1;
   }
 
-  RTLsMtx->lock();
-  RTLInfoTy *RTL = RTLs->AllRTLMap[device_type];
-  RTLsMtx->unlock();
+  PM->RTLsMtx.lock();
+  RTLInfoTy *RTL = PM->RTLs.AllRTLMap[device_type];
+  PM->RTLsMtx.unlock();
 
   if (!RTL) {
     DP("omp_get_num_devices_of_type returns 0 for %s=%d, which has no mapped "
@@ -749,16 +749,16 @@ EXTERN int omp_get_typed_device_num(int device_num) {
     return 0;
   }
 
-  RTLsMtx->lock();
-  size_t Devices_size = Devices.size();
-  RTLsMtx->unlock();
+  PM->RTLsMtx.lock();
+  size_t Devices_size = PM->Devices.size();
+  PM->RTLsMtx.unlock();
 
   if (Devices_size <= (size_t)device_num) {
     DP("omp_get_typed_device_num returns -1 for invalid device ID %d\n",
        device_num);
     return -1;
   }
-  int TypedDeviceNum = Devices[device_num].RTLDeviceID;
+  int TypedDeviceNum = PM->Devices[device_num].RTLDeviceID;
   DP("omp_get_typed_device_num returns %d for device ID %d\n",
      TypedDeviceNum, device_num);
   return TypedDeviceNum;
@@ -781,9 +781,9 @@ EXTERN int omp_get_device_of_type(omp_device_t device_type,
     return -1;
   }
 
-  RTLsMtx->lock();
-  RTLInfoTy *RTL = RTLs->AllRTLMap[device_type];
-  RTLsMtx->unlock();
+  PM->RTLsMtx.lock();
+  RTLInfoTy *RTL = PM->RTLs.AllRTLMap[device_type];
+  PM->RTLsMtx.unlock();
 
   if (!RTL) {
     DP("omp_get_device_of_type returns -1 for %s=%d, which has no mapped "

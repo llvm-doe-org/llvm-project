@@ -1234,7 +1234,8 @@ Currently, only the following parameter attributes are defined:
     size of the pointee type. The ``nonnull`` attribute does not imply
     dereferenceability (consider a pointer to one element past the end of an
     array), however ``dereferenceable(<n>)`` does imply ``nonnull`` in
-    ``addrspace(0)`` (which is the default address space).
+    ``addrspace(0)`` (which is the default address space), except if the
+    ``null_pointer_is_valid`` function attribute is present.
 
 ``dereferenceable_or_null(<n>)``
     This indicates that the parameter or return value isn't both
@@ -1824,6 +1825,22 @@ example:
     undefined behavior, the undefined behavior may be observed even
     if the call site is dead code.
 
+``nossp``
+    This attribute indicates the function should not emit a stack smashing
+    protector. This is useful for code that intentionally manipulates the stack
+    canary, such as operating system kernel code that must save/restore such
+    canary values on context switch.
+
+    If a function with the ``nossp`` attribute calls a callee function that has
+    a stack protector function attribute, such as ``ssp``, ``sspreq``, or
+    ``sspstrong`` (or vice-versa), then the callee will not be inline
+    substituted into the caller. Even when the callee is ``alwaysinline``, the
+    above holds.
+
+    Such inlining might break assumptions in the function that was built
+    without stack protection. This permits the functions that would have stack
+    protection to retain their stack protector.
+
 ``ssp``
     This attribute indicates that the function should emit a stack
     smashing protector. It is in the form of a "canary" --- a random value
@@ -1958,6 +1975,18 @@ example:
     the function. The instrumentation checks that the return address for the
     function has not changed between the function prolog and epilog. It is
     currently x86_64-specific.
+``mustprogress``
+    This attribute indicates that the function is required to return, unwind,
+    or interact with the environment in an observable way e.g. via a volatile
+    memory access, I/O, or other synchronization.  The ``mustprogress``
+    attribute is intended to model the requirements of the first section of
+    [intro.progress] of the C++ Standard. As a consequence, a loop in a
+    function with the `mustprogress` attribute can be assumed to terminate if
+    it does not interact with the environment in an observable way, and
+    terminating loops without side-effects can be removed. If a `mustprogress`
+    function does not satisfy this contract, the behavior is undefined.  This
+    attribute does not apply transitively to callees, but does apply to call
+    sites within the function. Note that `willreturn` implies `mustprogress`. 
 
 Call Site Attributes
 ----------------------
@@ -15474,8 +15503,8 @@ This is an overloaded intrinsic.
 
 ::
 
-      declare void @llvm.test.set.loop.iterations.i32(i32)
-      declare void @llvm.test.set.loop.iterations.i64(i64)
+      declare i1 @llvm.test.set.loop.iterations.i32(i32)
+      declare i1 @llvm.test.set.loop.iterations.i64(i64)
 
 Overview:
 """""""""
@@ -15499,6 +15528,7 @@ The '``llvm.test.set.loop.iterations.*``' intrinsics do not perform any
 arithmetic on their operand. It's a hint to the backend that can use this to
 set up the hardware-loop count with a target specific instruction, usually a
 move of this value to a special register or a hardware-loop instruction.
+The result is the conditional value of whether the given count is not zero.
 
 '``llvm.loop.decrement.reg.*``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -15650,12 +15680,15 @@ The first argument to this intrinsic is a scalar start value for the reduction.
 The type of the start value matches the element-type of the vector input.
 The second argument must be a vector of floating-point values.
 
+To ignore the start value, negative zero (``-0.0``) can be used, as it is
+the neutral value of floating point addition.
+
 Examples:
 """""""""
 
 ::
 
-      %unord = call reassoc float @llvm.vector.reduce.fadd.v4f32(float 0.0, <4 x float> %input) ; relaxed reduction
+      %unord = call reassoc float @llvm.vector.reduce.fadd.v4f32(float -0.0, <4 x float> %input) ; relaxed reduction
       %ord = call float @llvm.vector.reduce.fadd.v4f32(float %start_value, <4 x float> %input) ; sequential reduction
 
 
@@ -15720,6 +15753,9 @@ Arguments:
 The first argument to this intrinsic is a scalar start value for the reduction.
 The type of the start value matches the element-type of the vector input.
 The second argument must be a vector of floating-point values.
+
+To ignore the start value, one (``1.0``) can be used, as it is the neutral
+value of floating point multiplication.
 
 Examples:
 """""""""
@@ -20326,7 +20362,9 @@ Lowering:
 
 In the most general case call to the '``llvm.memcpy.element.unordered.atomic.*``' is
 lowered to a call to the symbol ``__llvm_memcpy_element_unordered_atomic_*``. Where '*'
-is replaced with an actual element size.
+is replaced with an actual element size. See :ref:`RewriteStatepointsForGC intrinsic
+lowering <RewriteStatepointsForGC_intrinsic_lowering>` for details on GC specific
+lowering.
 
 Optimizer is allowed to inline memory copy when it's profitable to do so.
 
@@ -20403,7 +20441,9 @@ Lowering:
 In the most general case call to the
 '``llvm.memmove.element.unordered.atomic.*``' is lowered to a call to the symbol
 ``__llvm_memmove_element_unordered_atomic_*``. Where '*' is replaced with an
-actual element size.
+actual element size. See :ref:`RewriteStatepointsForGC intrinsic lowering
+<RewriteStatepointsForGC_intrinsic_lowering>` for details on GC specific
+lowering.
 
 The optimizer is allowed to inline the memory copy when it's profitable to do so.
 
