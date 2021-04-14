@@ -45,7 +45,7 @@ class VETargetLowering : public TargetLowering {
 
   void initRegisterClasses();
   void initSPUActions();
-  // TODO void initVPUActions();
+  void initVPUActions();
 
 public:
   VETargetLowering(const TargetMachine &TM, const VESubtarget &STI);
@@ -125,6 +125,15 @@ public:
   bool allowsMisalignedMemoryAccesses(EVT VT, unsigned AS, unsigned Align,
                                       MachineMemOperand::Flags Flags,
                                       bool *Fast) const override;
+
+  /// Inline Assembly {
+
+  ConstraintType getConstraintType(StringRef Constraint) const override;
+  std::pair<unsigned, const TargetRegisterClass *>
+  getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
+                               StringRef Constraint, MVT VT) const override;
+
+  /// } Inline Assembly
 
   /// Target Optimization {
 

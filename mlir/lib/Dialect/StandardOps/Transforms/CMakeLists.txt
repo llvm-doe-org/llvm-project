@@ -1,7 +1,6 @@
 add_mlir_dialect_library(MLIRStandardOpsTransforms
   Bufferize.cpp
-  ExpandAtomic.cpp
-  ExpandMemRefReshape.cpp
+  ExpandOps.cpp
   ExpandTanh.cpp
   FuncBufferize.cpp
   FuncConversions.cpp

@@ -345,6 +345,7 @@ void writeRefs(const SymbolID &ID, llvm::ArrayRef<Ref> Refs,
   for (const auto &Ref : Refs) {
     OS.write(static_cast<unsigned char>(Ref.Kind));
     writeLocation(Ref.Location, Strings, OS);
+    OS << Ref.Container.raw();
   }
 }
 
@@ -356,6 +357,7 @@ readRefs(Reader &Data, llvm::ArrayRef<llvm::StringRef> Strings) {
   for (auto &Ref : Result.second) {
     Ref.Kind = static_cast<RefKind>(Data.consume8());
     Ref.Location = readLocation(Data, Strings);
+    Ref.Container = Data.consumeID();
   }
   return Result;
 }
@@ -416,7 +418,7 @@ readCompileCommand(Reader CmdReader, llvm::ArrayRef<llvm::StringRef> Strings) {
 // The current versioning scheme is simple - non-current versions are rejected.
 // If you make a breaking change, bump this version number to invalidate stored
 // data. Later we may want to support some backward compatibility.
-constexpr static uint32_t Version = 13;
+constexpr static uint32_t Version = 14;
 
 llvm::Expected<IndexFileIn> readRIFF(llvm::StringRef Data) {
   auto RIFF = riff::readFile(Data);

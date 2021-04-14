@@ -442,6 +442,7 @@ void __kmp_abort_process() {
     raise(SIGABRT);
     _exit(3); // Just in case, if signal ignored, exit anyway.
   } else {
+    __kmp_unregister_library();
     abort();
   }
 
@@ -6246,6 +6247,7 @@ void __kmp_internal_end_library(int gtid_req) {
       if (__kmp_root[gtid]->r.r_active) {
         __kmp_global.g.g_abort = -1;
         TCW_SYNC_4(__kmp_global.g.g_done, TRUE);
+        __kmp_unregister_library();
         KA_TRACE(10,
                  ("__kmp_internal_end_library: root still active, abort T#%d\n",
                   gtid));
@@ -6607,6 +6609,25 @@ void __kmp_register_library_startup(void) {
 } // func __kmp_register_library_startup
 
 void __kmp_unregister_library(void) {
+  // Skip unregistering if we never registered.
+  //
+  // This matters because, when an application is compiled without offloading,
+  // registration isn't performed before main, so an OpenACC routine's fatal
+  // error (which calls __kmp_fatal) can land us here before registration.  (I
+  // have not found a way to make that happen using OpenMP alone.)  If the
+  // /dev/shm file we're looking for happens to exist anyway, shm_open below
+  // will succeed.  Then, the subsequent __kmp_registration_flag assertion will
+  // be reached, fail, and hang where it calls __kmp_fatal because the
+  // __kmp_abort_process called by both __kmp_fatal invocations has a lock.
+  //
+  // FIXME: The /dev/shm file might exist due to poor cleanup by a previous
+  // OpenMP application that failed with FATAL_MESSAGE0 instead of __kmp_fatal.
+  // That was the case that led us to add the following check, and that case
+  // should probably be fixed.  Regardless, the file could be created by other
+  // means, and the following check makes sense anyway, so the following check
+  // should be kept.
+  if (__kmp_registration_flag == 0)
+    return;
 
   char *name = __kmp_reg_status_name();
   char *value = NULL;

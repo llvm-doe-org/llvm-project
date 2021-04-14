@@ -191,6 +191,10 @@ private:
 
 static llvm::ManagedStatic<TrueMatcherImpl> TrueMatcherInstance;
 
+bool ASTMatchFinder::isTraversalAsIs() const {
+  return getASTContext().getParentMapContext().getTraversalKind() == TK_AsIs;
+}
+
 DynTypedMatcher
 DynTypedMatcher::constructVariadic(DynTypedMatcher::VariadicOperator Op,
                                    ASTNodeKind SupportedKind,
@@ -284,9 +288,8 @@ bool DynTypedMatcher::matches(const DynTypedNode &DynNode,
   TraversalKindScope RAII(Finder->getASTContext(),
                           Implementation->TraversalKind());
 
-  if (Finder->getASTContext().getParentMapContext().getTraversalKind() ==
-          TK_IgnoreUnlessSpelledInSource &&
-      Finder->isMatchingInImplicitTemplateInstantiation())
+  if (!Finder->isTraversalAsIs() &&
+      Finder->IsMatchingInTemplateInstantiationNotSpelledInSource())
     return false;
 
   auto N =
@@ -309,9 +312,8 @@ bool DynTypedMatcher::matchesNoKindCheck(const DynTypedNode &DynNode,
   TraversalKindScope raii(Finder->getASTContext(),
                           Implementation->TraversalKind());
 
-  if (Finder->getASTContext().getParentMapContext().getTraversalKind() ==
-          TK_IgnoreUnlessSpelledInSource &&
-      Finder->isMatchingInImplicitTemplateInstantiation())
+  if (!Finder->isTraversalAsIs() &&
+      Finder->IsMatchingInTemplateInstantiationNotSpelledInSource())
     return false;
 
   auto N =

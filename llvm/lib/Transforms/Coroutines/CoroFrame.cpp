@@ -135,10 +135,10 @@ struct SuspendCrossingInfo {
 
     BasicBlock *UseBB = I->getParent();
 
-    // As a special case, treat uses by an llvm.coro.suspend.retcon
-    // as if they were uses in the suspend's single predecessor: the
-    // uses conceptually occur before the suspend.
-    if (isa<CoroSuspendRetconInst>(I)) {
+    // As a special case, treat uses by an llvm.coro.suspend.retcon or an
+    // llvm.coro.suspend.async as if they were uses in the suspend's single
+    // predecessor: the uses conceptually occur before the suspend.
+    if (isa<CoroSuspendRetconInst>(I) || isa<CoroSuspendAsyncInst>(I)) {
       UseBB = UseBB->getSinglePredecessor();
       assert(UseBB && "should have split coro.suspend into its own block");
     }
@@ -788,6 +788,18 @@ static StructType *buildFrameType(Function &F, coro::Shape &Shape,
          B.getStructAlign() <= Id->getStorageAlignment());
     break;
   }
+  case coro::ABI::Async: {
+    Shape.AsyncLowering.FrameOffset =
+        alignTo(Shape.AsyncLowering.ContextHeaderSize, Shape.FrameAlign);
+    Shape.AsyncLowering.ContextSize =
+        Shape.AsyncLowering.FrameOffset + Shape.FrameSize;
+    if (Shape.AsyncLowering.getContextAlignment() < Shape.FrameAlign) {
+      report_fatal_error(
+          "The alignment requirment of frame variables cannot be higher than "
+          "the alignment of the async function context");
+    }
+    break;
+  }
   }
 
   return FrameTy;
@@ -1143,7 +1155,8 @@ static Instruction *insertSpills(const FrameDataInfo &FrameData,
   Shape.AllocaSpillBlock = SpillBlock;
 
   // retcon and retcon.once lowering assumes all uses have been sunk.
-  if (Shape.ABI == coro::ABI::Retcon || Shape.ABI == coro::ABI::RetconOnce) {
+  if (Shape.ABI == coro::ABI::Retcon || Shape.ABI == coro::ABI::RetconOnce ||
+      Shape.ABI == coro::ABI::Async) {
     // If we found any allocas, replace all of their remaining uses with Geps.
     Builder.SetInsertPoint(&SpillBlock->front());
     for (const auto &P : FrameData.Allocas) {
@@ -1178,19 +1191,51 @@ static Instruction *insertSpills(const FrameDataInfo &FrameData,
       continue;
     auto *G = GetFramePointer(Alloca);
     G->setName(Alloca->getName() + Twine(".reload.addr"));
+
+    SmallPtrSet<BasicBlock *, 4> SeenDbgBBs;
     TinyPtrVector<DbgDeclareInst *> DIs = FindDbgDeclareUses(Alloca);
-    if (!DIs.empty())
-      DIBuilder(*Alloca->getModule(),
-                /*AllowUnresolved*/ false)
-          .insertDeclare(G, DIs.front()->getVariable(),
-                         DIs.front()->getExpression(),
-                         DIs.front()->getDebugLoc(), DIs.front());
+    DIBuilder DIB(*Alloca->getModule(), /*AllowUnresolved*/ false);
+    Instruction *FirstDbgDecl = nullptr;
+
+    if (!DIs.empty()) {
+      FirstDbgDecl = DIB.insertDeclare(G, DIs.front()->getVariable(),
+                                       DIs.front()->getExpression(),
+                                       DIs.front()->getDebugLoc(), DIs.front());
+      SeenDbgBBs.insert(DIs.front()->getParent());
+    }
     for (auto *DI : FindDbgDeclareUses(Alloca))
       DI->eraseFromParent();
     replaceDbgUsesWithUndef(Alloca);
 
-    for (Instruction *I : UsersToUpdate)
+    for (Instruction *I : UsersToUpdate) {
       I->replaceUsesOfWith(Alloca, G);
+
+      // After cloning, transformations might not guarantee that all uses
+      // of this alloca are dominated by the already existing dbg.declare's,
+      // compromising the debug quality. Instead of writing another
+      // transformation to patch each clone, go ahead and early populate
+      // basic blocks that use such allocas with more debug info.
+      if (SeenDbgBBs.count(I->getParent()))
+        continue;
+
+      // If there isn't a prior dbg.declare for this alloca, it probably
+      // means the state hasn't changed prior to one of the relevant suspend
+      // point for this frame access.
+      if (!FirstDbgDecl)
+        continue;
+
+      // These instructions are all dominated by the alloca, insert the
+      // dbg.value in the beginning of the BB to enhance debugging
+      // experience and allow values to be inspected as early as possible.
+      // Prefer dbg.value over dbg.declare since it better sets expectations
+      // that control flow can be later changed by other passes.
+      auto *DI = cast<DbgDeclareInst>(FirstDbgDecl);
+      BasicBlock *CurrentBlock = I->getParent();
+      DIB.insertDbgValueIntrinsic(G, DI->getVariable(), DI->getExpression(),
+                                  DI->getDebugLoc(),
+                                  &*CurrentBlock->getFirstInsertionPt());
+      SeenDbgBBs.insert(CurrentBlock);
+    }
   }
   Builder.SetInsertPoint(FramePtr->getNextNode());
   for (const auto &A : FrameData.Allocas) {
@@ -1866,7 +1911,8 @@ static void sinkSpillUsesAfterCoroBegin(Function &F,
     for (User *U : Def->users()) {
       auto Inst = cast<Instruction>(U);
       if (Inst->getParent() != CoroBegin->getParent() ||
-          Dom.dominates(CoroBegin, Inst))
+          Dom.dominates(CoroBegin, Inst) ||
+          isa<CoroIdAsyncInst>(Inst) /*'fake' use of async context argument*/)
         continue;
       if (ToMove.insert(Inst))
         Worklist.push_back(Inst);
@@ -2162,7 +2208,8 @@ void coro::buildCoroutineFrame(Function &F, Shape &Shape) {
       }
   }
   LLVM_DEBUG(dumpSpills("Spills", FrameData.Spills));
-  if (Shape.ABI == coro::ABI::Retcon || Shape.ABI == coro::ABI::RetconOnce)
+  if (Shape.ABI == coro::ABI::Retcon || Shape.ABI == coro::ABI::RetconOnce ||
+      Shape.ABI == coro::ABI::Async)
     sinkSpillUsesAfterCoroBegin(F, FrameData, Shape.CoroBegin);
   Shape.FrameTy = buildFrameType(F, Shape, FrameData);
   // Add PromiseAlloca to Allocas list so that it is processed in insertSpills.

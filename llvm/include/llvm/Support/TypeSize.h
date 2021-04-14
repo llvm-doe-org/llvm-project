@@ -117,16 +117,11 @@ public:
 // StackOffset - Represent an offset with named fixed and scalable components.
 //===----------------------------------------------------------------------===//
 
-namespace NewStackOffset {
 class StackOffset;
-} // end namespace NewStackOffset
-
-template <> struct LinearPolyBaseTypeTraits<NewStackOffset::StackOffset> {
+template <> struct LinearPolyBaseTypeTraits<StackOffset> {
   using ScalarTy = int64_t;
   static constexpr unsigned Dimensions = 2;
 };
-
-namespace NewStackOffset {
 
 /// StackOffset is a class to represent an offset with 2 dimensions,
 /// named fixed and scalable, respectively. This class allows a value for both
@@ -151,9 +146,6 @@ public:
   ScalarTy getScalable() const { return this->getValue(1); }
 };
 
-} // end namespace NewStackOffset
-
-
 //===----------------------------------------------------------------------===//
 // UnivariateLinearPolyBase - a base class for linear polynomials with multiple
 // dimensions, but where only one dimension can be set at any time.
@@ -177,7 +169,7 @@ protected:
   ScalarTy Value;         // The value at the univeriate dimension.
   unsigned UnivariateDim; // The univeriate dimension.
 
-  UnivariateLinearPolyBase(ScalarTy &Val, unsigned UnivariateDim)
+  UnivariateLinearPolyBase(ScalarTy Val, unsigned UnivariateDim)
       : Value(Val), UnivariateDim(UnivariateDim) {
     assert(UnivariateDim < Dimensions && "Dimension out of range");
   }
@@ -237,6 +229,18 @@ public:
   ScalarTy getValue(unsigned Dim) const {
     return Dim == UnivariateDim ? Value : 0;
   }
+
+  /// Add \p RHS to the value at the univariate dimension.
+  LeafTy getWithIncrement(ScalarTy RHS) {
+    return static_cast<LeafTy>(
+        UnivariateLinearPolyBase(Value + RHS, UnivariateDim));
+  }
+
+  /// Subtract \p RHS from the value at the univariate dimension.
+  LeafTy getWithDecrement(ScalarTy RHS) {
+    return static_cast<LeafTy>(
+        UnivariateLinearPolyBase(Value - RHS, UnivariateDim));
+  }
 };
 
 
@@ -255,6 +259,11 @@ public:
 /// fixed-sized or it is scalable-sized, but it cannot be both.
 template <typename LeafTy>
 class LinearPolySize : public UnivariateLinearPolyBase<LeafTy> {
+  // Make the parent class a friend, so that it can access the protected
+  // conversion/copy-constructor for UnivariatePolyBase<LeafTy> ->
+  // LinearPolySize<LeafTy>.
+  friend class UnivariateLinearPolyBase<LeafTy>;
+
 public:
   using ScalarTy = typename UnivariateLinearPolyBase<LeafTy>::ScalarTy;
   enum Dims : unsigned { FixedDim = 0, ScalableDim = 1 };
@@ -263,7 +272,11 @@ protected:
   LinearPolySize(ScalarTy MinVal, Dims D)
       : UnivariateLinearPolyBase<LeafTy>(MinVal, D) {}
 
+  LinearPolySize(const UnivariateLinearPolyBase<LeafTy> &V)
+      : UnivariateLinearPolyBase<LeafTy>(V) {}
+
 public:
+
   static LeafTy getFixed(ScalarTy MinVal) {
     return static_cast<LeafTy>(LinearPolySize(MinVal, FixedDim));
   }

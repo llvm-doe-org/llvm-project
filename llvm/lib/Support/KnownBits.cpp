@@ -280,8 +280,8 @@ KnownBits KnownBits::computeForMul(const KnownBits &LHS, const KnownBits &RHS) {
   // Where C5, C6 describe the known bits of %a, %b
   // C1, C2 describe the known bottom bits of %a, %b.
   // C7 describes the mask of the known bits of the result.
-  APInt Bottom0 = LHS.One;
-  APInt Bottom1 = RHS.One;
+  const APInt &Bottom0 = LHS.One;
+  const APInt &Bottom1 = RHS.One;
 
   // How many times we'd be able to divide each argument by 2 (shr by 1).
   // This gives us the number of trailing zeros on the multiplication result.
@@ -304,6 +304,75 @@ KnownBits KnownBits::computeForMul(const KnownBits &LHS, const KnownBits &RHS) {
   Res.Zero |= (~BottomKnown).getLoBits(ResultBitsKnown);
   Res.One = BottomKnown.getLoBits(ResultBitsKnown);
   return Res;
+}
+
+KnownBits KnownBits::udiv(const KnownBits &LHS, const KnownBits &RHS) {
+  unsigned BitWidth = LHS.getBitWidth();
+  assert(!LHS.hasConflict() && !RHS.hasConflict());
+  KnownBits Known(BitWidth);
+
+  // For the purposes of computing leading zeros we can conservatively
+  // treat a udiv as a logical right shift by the power of 2 known to
+  // be less than the denominator.
+  unsigned LeadZ = LHS.countMinLeadingZeros();
+  unsigned RHSMaxLeadingZeros = RHS.countMaxLeadingZeros();
+
+  if (RHSMaxLeadingZeros != BitWidth)
+    LeadZ = std::min(BitWidth, LeadZ + BitWidth - RHSMaxLeadingZeros - 1);
+
+  Known.Zero.setHighBits(LeadZ);
+  return Known;
+}
+
+KnownBits KnownBits::urem(const KnownBits &LHS, const KnownBits &RHS) {
+  unsigned BitWidth = LHS.getBitWidth();
+  assert(!LHS.hasConflict() && !RHS.hasConflict());
+  KnownBits Known(BitWidth);
+
+  if (RHS.isConstant() && RHS.getConstant().isPowerOf2()) {
+    // The upper bits are all zero, the lower ones are unchanged.
+    APInt LowBits = RHS.getConstant() - 1;
+    Known.Zero = LHS.Zero | ~LowBits;
+    Known.One = LHS.One & LowBits;
+    return Known;
+  }
+
+  // Since the result is less than or equal to either operand, any leading
+  // zero bits in either operand must also exist in the result.
+  uint32_t Leaders =
+      std::max(LHS.countMinLeadingZeros(), RHS.countMinLeadingZeros());
+  Known.Zero.setHighBits(Leaders);
+  return Known;
+}
+
+KnownBits KnownBits::srem(const KnownBits &LHS, const KnownBits &RHS) {
+  unsigned BitWidth = LHS.getBitWidth();
+  assert(!LHS.hasConflict() && !RHS.hasConflict());
+  KnownBits Known(BitWidth);
+
+  if (RHS.isConstant() && RHS.getConstant().isPowerOf2()) {
+    // The low bits of the first operand are unchanged by the srem.
+    APInt LowBits = RHS.getConstant() - 1;
+    Known.Zero = LHS.Zero & LowBits;
+    Known.One = LHS.One & LowBits;
+
+    // If the first operand is non-negative or has all low bits zero, then
+    // the upper bits are all zero.
+    if (LHS.isNonNegative() || LowBits.isSubsetOf(LHS.Zero))
+      Known.Zero |= ~LowBits;
+
+    // If the first operand is negative and not all low bits are zero, then
+    // the upper bits are all one.
+    if (LHS.isNegative() && LowBits.intersects(LHS.One))
+      Known.One |= ~LowBits;
+    return Known;
+  }
+
+  // The sign bit is the LHS's sign bit, except when the result of the
+  // remainder is zero. If it's known zero, our sign bit is also zero.
+  if (LHS.isNonNegative())
+    Known.makeNonNegative();
+  return Known;
 }
 
 KnownBits &KnownBits::operator&=(const KnownBits &RHS) {

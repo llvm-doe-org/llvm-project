@@ -11,15 +11,15 @@
 
 include "mlir/Pass/PassBase.td"
 
-def ExpandAtomic : FunctionPass<"expand-atomic"> {
-  let summary = "Expands AtomicRMWOp into GenericAtomicRMWOp.";
-  let constructor = "mlir::createExpandAtomicPass()";
-}
-
 def StdBufferize : FunctionPass<"std-bufferize"> {
   let summary = "Bufferize the std dialect";
   let constructor = "mlir::createStdBufferizePass()";
   let dependentDialects = ["scf::SCFDialect"];
+}
+
+def StdExpandOps : FunctionPass<"std-expand"> {
+  let summary = "Legalize std operations to be convertible to LLVM.";
+  let constructor = "mlir::createStdExpandOpsPass()";
 }
 
 def FuncBufferize : Pass<"func-bufferize", "ModuleOp"> {
