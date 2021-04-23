@@ -9037,12 +9037,13 @@ Sema::CheckAssignmentConstraints(QualType LHSType, ExprResult &RHS,
     }
 
     // Allow assignments between fixed-length and sizeless SVE vectors.
-    if (((LHSType->isSizelessBuiltinType() && RHSType->isVectorType()) ||
-         (LHSType->isVectorType() && RHSType->isSizelessBuiltinType())) &&
-        Context.areCompatibleSveTypes(LHSType, RHSType)) {
-      Kind = CK_BitCast;
-      return Compatible;
-    }
+    if ((LHSType->isSizelessBuiltinType() && RHSType->isVectorType()) ||
+        (LHSType->isVectorType() && RHSType->isSizelessBuiltinType()))
+      if (Context.areCompatibleSveTypes(LHSType, RHSType) ||
+          Context.areLaxCompatibleSveTypes(LHSType, RHSType)) {
+        Kind = CK_BitCast;
+        return Compatible;
+      }
 
     return Incompatible;
   }
@@ -19007,7 +19008,7 @@ ExprResult RebuildUnknownAnyExpr::resolveDecl(Expr *E, ValueDecl *VD) {
             S.Context, FD->getDeclContext(), Loc, Loc,
             FD->getNameInfo().getName(), DestType, FD->getTypeSourceInfo(),
             SC_None, false /*isInlineSpecified*/, FD->hasPrototype(),
-            /*ConstexprKind*/ CSK_unspecified);
+            /*ConstexprKind*/ ConstexprSpecKind::Unspecified);
 
         if (FD->getQualifier())
           NewFD->setQualifierInfo(FD->getQualifierLoc());

@@ -394,6 +394,12 @@ static void acc_ompt_callback_target(
       event_type = acc_ev_compute_construct_end;
       acc_cb = acc_ev_compute_construct_end_callback;
       break;
+    case ompt_scope_beginend:
+      // OpenMP 5.1 does not specify ompt_scope_beginend for
+      // ompt_callback_target.
+      ACC2OMP_UNREACHABLE("unexpected ompt_scope_beginend for "
+                          "ompt_callback_target");
+      break;
     }
     break;
   case ompt_target_region_enter_data:
@@ -408,6 +414,12 @@ static void acc_ompt_callback_target(
     case ompt_scope_end:
       event_type = acc_ev_enter_data_end;
       acc_cb = acc_ev_enter_data_end_callback;
+      break;
+    case ompt_scope_beginend:
+      // OpenMP 5.1 does not specify ompt_scope_beginend for
+      // ompt_callback_target.
+      ACC2OMP_UNREACHABLE("unexpected ompt_scope_beginend for "
+                          "ompt_callback_target");
       break;
     }
     break;
@@ -424,6 +436,12 @@ static void acc_ompt_callback_target(
       event_type = acc_ev_exit_data_end;
       acc_cb = acc_ev_exit_data_end_callback;
       break;
+    case ompt_scope_beginend:
+      // OpenMP 5.1 does not specify ompt_scope_beginend for
+      // ompt_callback_target.
+      ACC2OMP_UNREACHABLE("unexpected ompt_scope_beginend for "
+                          "ompt_callback_target");
+      break;
     }
     break;
   case ompt_target_update:
@@ -436,7 +454,21 @@ static void acc_ompt_callback_target(
       event_type = acc_ev_update_end;
       acc_cb = acc_ev_update_end_callback;
       break;
+    case ompt_scope_beginend:
+      // OpenMP 5.1 does not specify ompt_scope_beginend for
+      // ompt_callback_target.
+      ACC2OMP_UNREACHABLE("unexpected ompt_scope_beginend for "
+                          "ompt_callback_target");
+      break;
     }
+    break;
+  case ompt_target_nowait:
+  case ompt_target_enter_data_nowait:
+  case ompt_target_exit_data_nowait:
+  case ompt_target_update_nowait:
+    // TODO: Our OMPT support does not yet implement these, and our OpenACC
+    // support does not yet implement features that would dispatch them.
+    ACC2OMP_UNREACHABLE("unexpected ompt_callback_target nowait kind");
     break;
   }
   if (!sub_region && endpoint == ompt_scope_begin)
@@ -566,6 +598,14 @@ static void acc_ompt_callback_target_data_op(
                                   bytes, dest_addr, src_addr, &pi, &ei, &ai);
       acc_ev_enqueue_download_end_callback(&pi, &ei, &ai);
     }
+    break;
+  case ompt_target_data_alloc_async:
+  case ompt_target_data_transfer_to_device_async:
+  case ompt_target_data_transfer_from_device_async:
+  case ompt_target_data_delete_async:
+    // TODO: Our OMPT support does not yet implement these, and our OpenACC
+    // support does not yet implement features that would dispatch them.
+    ACC2OMP_UNREACHABLE("unexpected ompt_callback_target_data_op async optype");
     break;
   }
 }

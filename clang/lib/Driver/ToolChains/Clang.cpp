@@ -6242,6 +6242,11 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   HandleAmdgcnLegacyOptions(D, Args, CmdArgs);
+  if (Triple.isAMDGPU()) {
+    if (Args.hasFlag(options::OPT_munsafe_fp_atomics,
+                     options::OPT_mno_unsafe_fp_atomics))
+      CmdArgs.push_back("-munsafe-fp-atomics");
+  }
 
   // For all the host OpenMP offloading compile jobs we need to pass the targets
   // information using -fopenmp-targets= option.
@@ -6390,11 +6395,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (Args.hasFlag(options::OPT_faddrsig, options::OPT_fno_addrsig,
                    (TC.getTriple().isOSBinFormatELF() ||
                     TC.getTriple().isOSBinFormatCOFF()) &&
-                      !TC.getTriple().isPS4() &&
-                      !TC.getTriple().isOSNetBSD() &&
-                      !Distro(D.getVFS(), TC.getTriple()).IsGentoo() &&
-                      !TC.getTriple().isAndroid() &&
-                       TC.useIntegratedAs()))
+                       !TC.getTriple().isPS4() && !TC.getTriple().isVE() &&
+                       !TC.getTriple().isOSNetBSD() &&
+                       !Distro(D.getVFS(), TC.getTriple()).IsGentoo() &&
+                       !TC.getTriple().isAndroid() && TC.useIntegratedAs()))
     CmdArgs.push_back("-faddrsig");
 
   if (Arg *A = Args.getLastArg(options::OPT_fsymbol_partition_EQ)) {
@@ -7212,9 +7216,16 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back(Input.getFilename());
 
   const char *Exec = getToolChain().getDriver().getClangProgramPath();
-  C.addCommand(std::make_unique<Command>(JA, *this,
-                                         ResponseFileSupport::AtFileUTF8(),
-                                         Exec, CmdArgs, Inputs, Output));
+  if (D.CC1Main && !D.CCGenDiagnostics) {
+    // Invoke cc1as directly in this process.
+    C.addCommand(std::make_unique<CC1Command>(JA, *this,
+                                              ResponseFileSupport::AtFileUTF8(),
+                                              Exec, CmdArgs, Inputs, Output));
+  } else {
+    C.addCommand(std::make_unique<Command>(JA, *this,
+                                           ResponseFileSupport::AtFileUTF8(),
+                                           Exec, CmdArgs, Inputs, Output));
+  }
 }
 
 // Begin OffloadBundler

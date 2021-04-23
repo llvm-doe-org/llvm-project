@@ -166,6 +166,37 @@ static bool eliminateConstraints(Function &F, DominatorTree &DT) {
     auto *Br = dyn_cast<BranchInst>(BB.getTerminator());
     if (!Br || !Br->isConditional())
       continue;
+
+    // If the condition is an OR of 2 compares and the false successor only has
+    // the current block as predecessor, queue both negated conditions for the
+    // false successor.
+    if (match(Br->getCondition(), m_Or(m_Cmp(), m_Cmp()))) {
+      BasicBlock *FalseSuccessor = Br->getSuccessor(1);
+      if (FalseSuccessor->getSinglePredecessor()) {
+        auto *OrI = cast<Instruction>(Br->getCondition());
+        WorkList.emplace_back(DT.getNode(FalseSuccessor),
+                              cast<CmpInst>(OrI->getOperand(0)), true);
+        WorkList.emplace_back(DT.getNode(FalseSuccessor),
+                              cast<CmpInst>(OrI->getOperand(1)), true);
+      }
+      continue;
+    }
+
+    // If the condition is an AND of 2 compares and the true successor only has
+    // the current block as predecessor, queue both conditions for the true
+    // successor.
+    if (match(Br->getCondition(), m_And(m_Cmp(), m_Cmp()))) {
+      BasicBlock *TrueSuccessor = Br->getSuccessor(0);
+      if (TrueSuccessor->getSinglePredecessor()) {
+        auto *AndI = cast<Instruction>(Br->getCondition());
+        WorkList.emplace_back(DT.getNode(TrueSuccessor),
+                              cast<CmpInst>(AndI->getOperand(0)), false);
+        WorkList.emplace_back(DT.getNode(TrueSuccessor),
+                              cast<CmpInst>(AndI->getOperand(1)), false);
+      }
+      continue;
+    }
+
     auto *CmpI = dyn_cast<CmpInst>(Br->getCondition());
     if (!CmpI)
       continue;

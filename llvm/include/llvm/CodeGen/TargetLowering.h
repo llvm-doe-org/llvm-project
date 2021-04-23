@@ -1318,6 +1318,10 @@ public:
             getIndexedMaskedStoreAction(IdxMode, VT.getSimpleVT()) == Custom);
   }
 
+  // Returns true if VT is a legal index type for masked gathers/scatters
+  // on this target
+  virtual bool shouldRemoveExtendFromGSIndex(EVT VT) const { return false; }
+
   /// Return how the condition code should be treated: either it is legal, needs
   /// to be expanded to some other code sequence, or the target has a custom
   /// expander for it.
@@ -4509,6 +4513,10 @@ public:
   // fact that this can be implemented as a ctlz/srl pair, so that the dag
   // combiner can fold the new nodes.
   SDValue lowerCmpEqZeroToCtlzSrl(SDValue Op, SelectionDAG &DAG) const;
+
+  /// Give targets the chance to reduce the number of distinct addresing modes.
+  ISD::MemIndexType getCanonicalIndexType(ISD::MemIndexType IndexType,
+                                          EVT MemVT, SDValue Offsets) const;
 
 private:
   SDValue foldSetCCWithAnd(EVT VT, SDValue N0, SDValue N1, ISD::CondCode Cond,

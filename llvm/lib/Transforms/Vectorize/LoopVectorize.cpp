@@ -469,7 +469,7 @@ public:
                             VPTransformState &State);
 
   /// Widen a single select instruction within the innermost loop.
-  void widenSelectInstruction(SelectInst &I, VPUser &Operands,
+  void widenSelectInstruction(SelectInst &I, VPValue *VPDef, VPUser &Operands,
                               bool InvariantCond, VPTransformState &State);
 
   /// Fix the vectorized code, taking care of header phi's, live-outs, and more.
@@ -485,8 +485,8 @@ public:
 
   /// Vectorize a single GetElementPtrInst based on information gathered and
   /// decisions taken during planning.
-  void widenGEP(GetElementPtrInst *GEP, VPUser &Indices, unsigned UF,
-                ElementCount VF, bool IsPtrLoopInvariant,
+  void widenGEP(GetElementPtrInst *GEP, VPValue *VPDef, VPUser &Indices,
+                unsigned UF, ElementCount VF, bool IsPtrLoopInvariant,
                 SmallBitVector &IsIndexLoopInvariant, VPTransformState &State);
 
   /// Vectorize a single PHINode in a block. This method handles the induction
@@ -1065,7 +1065,7 @@ public:
 
   /// \return An upper bound for the vectorization factor, or None if
   /// vectorization and interleaving should be avoided up front.
-  Optional<unsigned> computeMaxVF(unsigned UserVF, unsigned UserIC);
+  Optional<ElementCount> computeMaxVF(ElementCount UserVF, unsigned UserIC);
 
   /// \return True if runtime checks are required for vectorization, and false
   /// otherwise.
@@ -1442,7 +1442,7 @@ private:
   /// \return An upper bound for the vectorization factor, a power-of-2 larger
   /// than zero. One is returned if vectorization should best be avoided due
   /// to cost.
-  unsigned computeFeasibleMaxVF(unsigned ConstTripCount);
+  ElementCount computeFeasibleMaxVF(unsigned ConstTripCount);
 
   /// The vectorization cost is a combination of the cost itself and a boolean
   /// indicating whether any of the contributing operations will actually
@@ -4288,9 +4288,9 @@ void InnerLoopVectorizer::fixNonInductionPHIs() {
   }
 }
 
-void InnerLoopVectorizer::widenGEP(GetElementPtrInst *GEP, VPUser &Operands,
-                                   unsigned UF, ElementCount VF,
-                                   bool IsPtrLoopInvariant,
+void InnerLoopVectorizer::widenGEP(GetElementPtrInst *GEP, VPValue *VPDef,
+                                   VPUser &Operands, unsigned UF,
+                                   ElementCount VF, bool IsPtrLoopInvariant,
                                    SmallBitVector &IsIndexLoopInvariant,
                                    VPTransformState &State) {
   // Construct a vector GEP by widening the operands of the scalar GEP as
@@ -4686,7 +4686,7 @@ void InnerLoopVectorizer::widenCallInstruction(CallInst &I, VPValue *Def,
   }
 }
 
-void InnerLoopVectorizer::widenSelectInstruction(SelectInst &I,
+void InnerLoopVectorizer::widenSelectInstruction(SelectInst &I, VPValue *VPDef,
                                                  VPUser &Operands,
                                                  bool InvariantCond,
                                                  VPTransformState &State) {
@@ -4705,7 +4705,7 @@ void InnerLoopVectorizer::widenSelectInstruction(SelectInst &I,
     Value *Op0 = State.get(Operands.getOperand(1), Part);
     Value *Op1 = State.get(Operands.getOperand(2), Part);
     Value *Sel = Builder.CreateSelect(Cond, Op0, Op1);
-    VectorLoopValueMap.setVectorValue(&I, Part, Sel);
+    State.set(VPDef, &I, Sel, Part);
     addMetadata(Sel, &I);
   }
 }
@@ -5214,8 +5214,8 @@ bool LoopVectorizationCostModel::runtimeChecksRequired() {
   return false;
 }
 
-Optional<unsigned> LoopVectorizationCostModel::computeMaxVF(unsigned UserVF,
-                                                            unsigned UserIC) {
+Optional<ElementCount>
+LoopVectorizationCostModel::computeMaxVF(ElementCount UserVF, unsigned UserIC) {
   if (Legal->getRuntimePointerChecking()->Need && TTI.hasBranchDivergence()) {
     // TODO: It may by useful to do since it's still likely to be dynamically
     // uniform if the target can skip.
@@ -5273,9 +5273,13 @@ Optional<unsigned> LoopVectorizationCostModel::computeMaxVF(unsigned UserVF,
     InterleaveInfo.invalidateGroupsRequiringScalarEpilogue();
   }
 
-  unsigned MaxVF = UserVF ? UserVF : computeFeasibleMaxVF(TC);
-  assert((UserVF || isPowerOf2_32(MaxVF)) && "MaxVF must be a power of 2");
-  unsigned MaxVFtimesIC = UserIC ? MaxVF * UserIC : MaxVF;
+  ElementCount MaxVF = UserVF ? UserVF : computeFeasibleMaxVF(TC);
+  assert(!MaxVF.isScalable() &&
+         "Scalable vectors do not yet support tail folding");
+  assert((UserVF.isNonZero() || isPowerOf2_32(MaxVF.getFixedValue())) &&
+         "MaxVF must be a power of 2");
+  unsigned MaxVFtimesIC =
+      UserIC ? MaxVF.getFixedValue() * UserIC : MaxVF.getFixedValue();
   if (TC > 0 && TC % MaxVFtimesIC == 0) {
     // Accept MaxVF if we do not have a tail.
     LLVM_DEBUG(dbgs() << "LV: No tail will remain for any chosen VF.\n");
@@ -5321,7 +5325,7 @@ Optional<unsigned> LoopVectorizationCostModel::computeMaxVF(unsigned UserVF,
   return None;
 }
 
-unsigned
+ElementCount
 LoopVectorizationCostModel::computeFeasibleMaxVF(unsigned ConstTripCount) {
   MinBWs = computeMinimumValueSizes(TheLoop->getBlocks(), *DB, &TTI);
   unsigned SmallestType, WidestType;
@@ -5350,7 +5354,7 @@ LoopVectorizationCostModel::computeFeasibleMaxVF(unsigned ConstTripCount) {
   if (MaxVectorSize == 0) {
     LLVM_DEBUG(dbgs() << "LV: The target has no vector registers.\n");
     MaxVectorSize = 1;
-    return MaxVectorSize;
+    return ElementCount::getFixed(MaxVectorSize);
   } else if (ConstTripCount && ConstTripCount < MaxVectorSize &&
              isPowerOf2_32(ConstTripCount)) {
     // We need to clamp the VF to be the ConstTripCount. There is no point in
@@ -5358,7 +5362,7 @@ LoopVectorizationCostModel::computeFeasibleMaxVF(unsigned ConstTripCount) {
     LLVM_DEBUG(dbgs() << "LV: Clamping the MaxVF to the constant trip count: "
                       << ConstTripCount << "\n");
     MaxVectorSize = ConstTripCount;
-    return MaxVectorSize;
+    return ElementCount::getFixed(MaxVectorSize);
   }
 
   unsigned MaxVF = MaxVectorSize;
@@ -5396,7 +5400,7 @@ LoopVectorizationCostModel::computeFeasibleMaxVF(unsigned ConstTripCount) {
       }
     }
   }
-  return MaxVF;
+  return ElementCount::getFixed(MaxVF);
 }
 
 VectorizationFactor
@@ -5789,9 +5793,6 @@ LoopVectorizationCostModel::calculateRegisterUsage(ArrayRef<ElementCount> VFs) {
   unsigned MaxSafeDepDist = -1U;
   if (Legal->getMaxSafeDepDistBytes() != -1U)
     MaxSafeDepDist = Legal->getMaxSafeDepDistBytes() * 8;
-  unsigned WidestRegister =
-      std::min(TTI.getRegisterBitWidth(true), MaxSafeDepDist);
-  const DataLayout &DL = TheFunction->getParent()->getDataLayout();
 
   SmallVector<RegisterUsage, 8> RUs(VFs.size());
   SmallVector<SmallMapVector<unsigned, unsigned, 4>, 8> MaxUsages(VFs.size());
@@ -5799,13 +5800,11 @@ LoopVectorizationCostModel::calculateRegisterUsage(ArrayRef<ElementCount> VFs) {
   LLVM_DEBUG(dbgs() << "LV(REG): Calculating max register usage:\n");
 
   // A lambda that gets the register usage for the given type and VF.
-  auto GetRegUsage = [&DL, WidestRegister](Type *Ty, ElementCount VF) {
-    if (Ty->isTokenTy())
+  const auto &TTICapture = TTI;
+  auto GetRegUsage = [&TTICapture](Type *Ty, ElementCount VF) {
+    if (Ty->isTokenTy() || !VectorType::isValidElementType(Ty))
       return 0U;
-    unsigned TypeSize = DL.getTypeSizeInBits(Ty->getScalarType());
-    assert(!VF.isScalable() && "scalable vectors not yet supported.");
-    return std::max<unsigned>(1, VF.getKnownMinValue() * TypeSize /
-                                     WidestRegister);
+    return TTICapture.getRegUsageForType(VectorType::get(Ty, VF));
   };
 
   for (unsigned int i = 0, s = IdxToInstr.size(); i < s; ++i) {
@@ -6411,11 +6410,7 @@ void LoopVectorizationCostModel::setCostBasedWideningDecision(ElementCount VF) {
       if (isa<StoreInst>(&I) && isScalarWithPredication(&I))
         NumPredStores++;
 
-      if (Legal->isUniform(Ptr) &&
-          // Conditional loads and stores should be scalarized and predicated.
-          // isScalarWithPredication cannot be used here since masked
-          // gather/scatters are not considered scalar with predication.
-          !Legal->blockNeedsPredication(I.getParent())) {
+      if (Legal->isUniformMemOp(I)) {
         // TODO: Avoid replicating loads and stores instead of
         // relying on instcombine to remove them.
         // Load: Scalar load + broadcast
@@ -6984,8 +6979,7 @@ Optional<VectorizationFactor>
 LoopVectorizationPlanner::plan(ElementCount UserVF, unsigned UserIC) {
   assert(!UserVF.isScalable() && "scalable vectorization not yet handled");
   assert(OrigLoop->isInnermost() && "Inner loop expected.");
-  Optional<unsigned> MaybeMaxVF =
-      CM.computeMaxVF(UserVF.getKnownMinValue(), UserIC);
+  Optional<ElementCount> MaybeMaxVF = CM.computeMaxVF(UserVF, UserIC);
   if (!MaybeMaxVF) // Cases that should not to be vectorized nor interleaved.
     return None;
 
@@ -7016,7 +7010,7 @@ LoopVectorizationPlanner::plan(ElementCount UserVF, unsigned UserIC) {
     return {{UserVF, 0}};
   }
 
-  ElementCount MaxVF = ElementCount::getFixed(MaybeMaxVF.getValue());
+  ElementCount MaxVF = MaybeMaxVF.getValue();
   assert(MaxVF.isNonZero() && "MaxVF is zero.");
 
   for (ElementCount VF = ElementCount::getFixed(1);
@@ -7633,16 +7627,8 @@ void LoopVectorizationPlanner::buildVPlansWithVPRecipes(ElementCount MinVF,
 
   // If the tail is to be folded by masking, the primary induction variable, if
   // exists needs to be represented in VPlan for it to model early-exit masking.
-  // Also, both the Phi and the live-out instruction of each reduction are
-  // required in order to introduce a select between them in VPlan.
-  if (CM.foldTailByMasking()) {
-    if (Legal->getPrimaryInduction())
-      NeedDef.insert(Legal->getPrimaryInduction());
-    for (auto &Reduction : Legal->getReductionVars()) {
-      NeedDef.insert(Reduction.first);
-      NeedDef.insert(Reduction.second.getLoopExitInstr());
-    }
-  }
+  if (CM.foldTailByMasking() && Legal->getPrimaryInduction())
+    NeedDef.insert(Legal->getPrimaryInduction());
 
   // Collect instructions from the original loop that will become trivially dead
   // in the vectorized loop. We don't need to vectorize these instructions. For
@@ -7855,8 +7841,8 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
     for (auto &Reduction : Legal->getReductionVars()) {
       if (CM.isInLoopReduction(Reduction.first))
         continue;
-      VPValue *Phi = Plan->getVPValue(Reduction.first);
-      VPValue *Red = Plan->getVPValue(Reduction.second.getLoopExitInstr());
+      VPValue *Phi = Plan->getOrAddVPValue(Reduction.first);
+      VPValue *Red = Plan->getOrAddVPValue(Reduction.second.getLoopExitInstr());
       Builder.createNaryOp(Instruction::Select, {Cond, Red, Phi});
     }
   }
@@ -8000,7 +7986,8 @@ void VPWidenCallRecipe::execute(VPTransformState &State) {
 }
 
 void VPWidenSelectRecipe::execute(VPTransformState &State) {
-  State.ILV->widenSelectInstruction(Ingredient, *this, InvariantCond, State);
+  State.ILV->widenSelectInstruction(*cast<SelectInst>(getUnderlyingInstr()),
+                                    this, *this, InvariantCond, State);
 }
 
 void VPWidenRecipe::execute(VPTransformState &State) {
@@ -8008,7 +7995,8 @@ void VPWidenRecipe::execute(VPTransformState &State) {
 }
 
 void VPWidenGEPRecipe::execute(VPTransformState &State) {
-  State.ILV->widenGEP(GEP, *this, State.UF, State.VF, IsPtrLoopInvariant,
+  State.ILV->widenGEP(cast<GetElementPtrInst>(getUnderlyingInstr()), this,
+                      *this, State.UF, State.VF, IsPtrLoopInvariant,
                       IsIndexLoopInvariant, State);
 }
 

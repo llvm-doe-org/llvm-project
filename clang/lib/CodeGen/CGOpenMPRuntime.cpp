@@ -7172,6 +7172,7 @@ public:
     std::pair<unsigned /*FieldIndex*/, Address /*Pointer*/> HighestElem = {
         0, Address::invalid()};
     Address Base = Address::invalid();
+    bool IsArraySection = false;
   };
 
 private:
@@ -7838,7 +7839,8 @@ private:
           break;
         }
         llvm::Value *Size = getExprTypeSize(I->getAssociatedExpression());
-        if (!IsMemberPointerOrAddr) {
+        if (!IsMemberPointerOrAddr ||
+            (Next == CE && MapType != OMPC_MAP_unknown)) {
           CombinedInfo.addExpr(I->getAssociatedExpression(), CGF.getContext());
           CombinedInfo.BasePointers.push_back(BP.getPointer());
           CombinedInfo.Pointers.push_back(LB.getPointer());
@@ -7906,6 +7908,10 @@ private:
             PartialStruct.HighestElem = {FieldIndex, LB};
           }
         }
+
+        // Need to emit combined struct for array sections.
+        if (IsFinalArraySection || IsNonContiguous)
+          PartialStruct.IsArraySection = true;
 
         // If we have a final array section, we are done with this expression.
         if (IsFinalArraySection)
@@ -8242,6 +8248,10 @@ public:
                          MapFlagsArrayTy &CurTypes,
                          const StructRangeInfoTy &PartialStruct,
                          bool NotTargetParams = false) const {
+    if (CurTypes.size() == 1 &&
+        ((CurTypes.back() & OMP_MAP_MEMBER_OF) != OMP_MAP_MEMBER_OF) &&
+        !PartialStruct.IsArraySection)
+      return;
     CombinedInfo.addExpr();
     // Base is the base of the struct
     CombinedInfo.BasePointers.push_back(PartialStruct.Base.getPointer());
@@ -8269,8 +8279,9 @@ public:
           return Type & OMP_MAP_PRESENT;
         }))
       CombinedInfo.Types.back() |= OMP_MAP_PRESENT;
-    // Remove TARGET_PARAM flag from the first element
-    CurTypes.front() &= ~OMP_MAP_TARGET_PARAM;
+    // Remove TARGET_PARAM flag from the first element if any.
+    if (!CurTypes.empty())
+      CurTypes.front() &= ~OMP_MAP_TARGET_PARAM;
 
     // All other current entries will be MEMBER_OF the combined entry
     // (except for PTR_AND_OBJ entries which do not have a placeholder value
@@ -10041,7 +10052,7 @@ void CGOpenMPRuntime::emitTargetCall(
           MappedVarSet.insert(CI->getCapturedVar());
         else
           MappedVarSet.insert(nullptr);
-        if (CurInfo.BasePointers.empty())
+        if (CurInfo.BasePointers.empty() && !PartialStruct.Base.isValid())
           MEHandler.generateDefaultMapInfo(*CI, **RI, *CV, CurInfo);
         // Generate correct mapping for variables captured by reference in
         // lambdas.
@@ -10050,7 +10061,7 @@ void CGOpenMPRuntime::emitTargetCall(
                                                   CurInfo, LambdaPointers);
       }
       // We expect to have at least an element of information for this capture.
-      assert(!CurInfo.BasePointers.empty() &&
+      assert((!CurInfo.BasePointers.empty() || PartialStruct.Base.isValid()) &&
              "Non-existing map pointer for capture!");
       assert(CurInfo.BasePointers.size() == CurInfo.Pointers.size() &&
              CurInfo.BasePointers.size() == CurInfo.Sizes.size() &&

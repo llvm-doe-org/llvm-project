@@ -191,8 +191,9 @@ private:
 
 static llvm::ManagedStatic<TrueMatcherImpl> TrueMatcherInstance;
 
-bool ASTMatchFinder::isTraversalAsIs() const {
-  return getASTContext().getParentMapContext().getTraversalKind() == TK_AsIs;
+bool ASTMatchFinder::isTraversalIgnoringImplicitNodes() const {
+  return getASTContext().getParentMapContext().getTraversalKind() ==
+         TK_IgnoreUnlessSpelledInSource;
 }
 
 DynTypedMatcher
@@ -288,8 +289,8 @@ bool DynTypedMatcher::matches(const DynTypedNode &DynNode,
   TraversalKindScope RAII(Finder->getASTContext(),
                           Implementation->TraversalKind());
 
-  if (!Finder->isTraversalAsIs() &&
-      Finder->IsMatchingInTemplateInstantiationNotSpelledInSource())
+  if (Finder->isTraversalIgnoringImplicitNodes() &&
+      Finder->IsMatchingInASTNodeNotSpelledInSource())
     return false;
 
   auto N =
@@ -312,8 +313,8 @@ bool DynTypedMatcher::matchesNoKindCheck(const DynTypedNode &DynNode,
   TraversalKindScope raii(Finder->getASTContext(),
                           Implementation->TraversalKind());
 
-  if (!Finder->isTraversalAsIs() &&
-      Finder->IsMatchingInTemplateInstantiationNotSpelledInSource())
+  if (Finder->isTraversalIgnoringImplicitNodes() &&
+      Finder->IsMatchingInASTNodeNotSpelledInSource())
     return false;
 
   auto N =
@@ -630,13 +631,10 @@ bool HasNameMatcher::matchesNodeFullSlow(const NamedDecl &Node) const {
     llvm::SmallString<128> NodeName = StringRef("::");
     llvm::raw_svector_ostream OS(NodeName);
 
-    if (SkipUnwritten) {
-      PrintingPolicy Policy = Node.getASTContext().getPrintingPolicy();
-      Policy.SuppressUnwrittenScope = true;
-      Node.printQualifiedName(OS, Policy);
-    } else {
-      Node.printQualifiedName(OS);
-    }
+    PrintingPolicy Policy = Node.getASTContext().getPrintingPolicy();
+    Policy.SuppressUnwrittenScope = SkipUnwritten;
+    Policy.SuppressInlineNamespace = SkipUnwritten;
+    Node.printQualifiedName(OS, Policy);
 
     const StringRef FullName = OS.str();
 

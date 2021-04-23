@@ -562,7 +562,6 @@ Error WasmObjectFile::parseLinkingSectionSymtab(ReadContext &Ctx) {
           Info.Name = Import.Field;
         }
         GlobalType = &Import.Global;
-        Info.ImportName = Import.Field;
         if (!Import.Module.empty()) {
           Info.ImportModule = Import.Module;
         }
@@ -855,6 +854,7 @@ Error WasmObjectFile::parseRelocSection(StringRef Name, ReadContext &Ctx) {
     case wasm::R_WASM_MEMORY_ADDR_SLEB:
     case wasm::R_WASM_MEMORY_ADDR_I32:
     case wasm::R_WASM_MEMORY_ADDR_REL_SLEB:
+    case wasm::R_WASM_MEMORY_ADDR_TLS_SLEB:
       if (!isValidDataSymbol(Reloc.Index))
         return make_error<GenericBinaryError>("Bad relocation data index",
                                               object_error::parse_failed);
@@ -874,6 +874,12 @@ Error WasmObjectFile::parseRelocSection(StringRef Name, ReadContext &Ctx) {
         return make_error<GenericBinaryError>("Bad relocation function index",
                                               object_error::parse_failed);
       Reloc.Addend = readVarint32(Ctx);
+      break;
+    case wasm::R_WASM_FUNCTION_OFFSET_I64:
+      if (!isValidFunctionSymbol(Reloc.Index))
+        return make_error<GenericBinaryError>("Bad relocation function index",
+                                              object_error::parse_failed);
+      Reloc.Addend = readVarint64(Ctx);
       break;
     case wasm::R_WASM_SECTION_OFFSET_I32:
       if (!isValidSectionSymbol(Reloc.Index))
@@ -902,7 +908,8 @@ Error WasmObjectFile::parseRelocSection(StringRef Name, ReadContext &Ctx) {
         Reloc.Type == wasm::R_WASM_GLOBAL_INDEX_I32)
       Size = 4;
     if (Reloc.Type == wasm::R_WASM_TABLE_INDEX_I64 ||
-        Reloc.Type == wasm::R_WASM_MEMORY_ADDR_I64)
+        Reloc.Type == wasm::R_WASM_MEMORY_ADDR_I64 ||
+        Reloc.Type == wasm::R_WASM_FUNCTION_OFFSET_I64)
       Size = 8;
     if (Reloc.Offset + Size > EndOffset)
       return make_error<GenericBinaryError>("Bad relocation offset",
