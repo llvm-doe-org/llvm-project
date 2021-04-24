@@ -405,20 +405,17 @@ int32_t __tgt_rtl_run_target_team_region(
   // There's nothing to actually enqueue as we're about to call the task
   // directly, so we just dispatch these callbacks back to back.
   //
-  // FIXME: We don't yet need the host_op_id argument for OpenACC support, so we
-  // haven't bothered to implement it yet.
-  //
-  // FIXME: Passing target_id as target_data is a hack for OpenACC support until
-  // we implement ompt_get_target_info_t.
+  // FIXME: We don't yet need the target_data or host_op_id argument for OpenACC
+  // support, so we haven't bothered to implement it yet.
   if (ompt_api->ompt_get_enabled().ompt_callback_target_submit_emi) {
     ompt_api->ompt_get_callbacks().ompt_callback(
-        ompt_callback_target_submit_emi)(
-        ompt_scope_begin, (ompt_data_t *)/*target_data=*/ompt_api->target_id,
-        /*host_op_id=*/NULL, /*requested_num_teams=*/team_num);
+        ompt_callback_target_submit_emi)(ompt_scope_begin, /*target_data=*/NULL,
+                                         /*host_op_id=*/NULL,
+                                         /*requested_num_teams=*/team_num);
     ompt_api->ompt_get_callbacks().ompt_callback(
-        ompt_callback_target_submit_emi)(
-        ompt_scope_end, (ompt_data_t *)/*target_data=*/ompt_api->target_id,
-        /*host_op_id=*/NULL, /*requested_num_teams=*/team_num);
+        ompt_callback_target_submit_emi)(ompt_scope_end, /*target_data=*/NULL,
+                                         /*host_op_id=*/NULL,
+                                         /*requested_num_teams=*/team_num);
   }
 #endif
 

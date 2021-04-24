@@ -98,7 +98,7 @@ const char *ompt_data_expression = NULL;
 static unsigned ompt_device_inits_capacity = 0;
 static unsigned ompt_device_inits_size = 0;
 static int32_t *ompt_device_inits = NULL;
-bool ompt_in_device_target_region = false;
+static uint64_t ompt_target_device = UINT64_MAX;
 
 /*****************************************************************************
  * forward declarations
@@ -489,9 +489,11 @@ void ompt_record_device_init(int32_t device_num) {
   ompt_device_inits[ompt_device_inits_size++] = device_num;
 }
 
-void ompt_toggle_in_device_target_region() {
-  ompt_in_device_target_region = !ompt_in_device_target_region;
+void ompt_set_target_info(uint64_t device_num) {
+  ompt_target_device = device_num;
 }
+
+void ompt_clear_target_info() { ompt_target_device = UINT64_MAX; }
 
 const char *ompt_index_data_expressions(uint32_t i) {
   if (!ompt_data_expressions)
@@ -827,10 +829,17 @@ OMPT_API_ROUTINE void ompt_finalize_tool(void) { __kmp_internal_end_atexit(); }
  * Target
  ****************************************************************************/
 
-OMPT_API_ROUTINE int ompt_get_target_info(uint64_t *device_num,
-                                          ompt_id_t *target_id,
-                                          ompt_id_t *host_op_id) {
-  return 0; // thread is not in a target region
+// FIXME: We also need to declare this one in ompt-internal.h, so we drop the
+// OMPT_API_ROUTINE, which makes it static.  Should we?
+int ompt_get_target_info(uint64_t *device_num, ompt_id_t *target_id,
+                         ompt_id_t *host_op_id) {
+  if (ompt_target_device == UINT64_MAX)
+    return 0; // thread is not in a target region
+  if (device_num)
+    *device_num = ompt_target_device;
+  // FIXME: We haven't implemented target_id and host_op_id yet because we
+  // don't yet need them for OpenACC support.
+  return 1;
 }
 
 OMPT_API_ROUTINE int ompt_get_num_devices(void) {

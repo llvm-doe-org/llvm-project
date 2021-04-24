@@ -104,7 +104,6 @@ typedef struct {
 } ompt_thread_info_t;
 
 extern ompt_callbacks_internal_t ompt_callbacks;
-extern bool ompt_in_device_target_region;
 
 #if OMPT_SUPPORT && OMPT_OPTIONAL
 #if USE_FAST_MEMORY
@@ -134,7 +133,10 @@ ompt_callbacks_active_t ompt_get_enabled(void) OMPT_LIBOMPTARGET_WEAK;
 ompt_callbacks_internal_t ompt_get_callbacks(void) OMPT_LIBOMPTARGET_WEAK;
 uint64_t ompt_get_unique_id(void) OMPT_LIBOMPTARGET_WEAK;
 void ompt_record_device_init(int32_t device_num) OMPT_LIBOMPTARGET_WEAK;
-void ompt_toggle_in_device_target_region() OMPT_LIBOMPTARGET_WEAK;
+int ompt_get_target_info(uint64_t *device_num, ompt_id_t *target_id,
+                         ompt_id_t *host_op_id) OMPT_LIBOMPTARGET_WEAK;
+void ompt_set_target_info(uint64_t device_num) OMPT_LIBOMPTARGET_WEAK;
+void ompt_clear_target_info() OMPT_LIBOMPTARGET_WEAK;
 const char *ompt_index_data_expressions(uint32_t) OMPT_LIBOMPTARGET_WEAK;
 void ompt_set_data_expression(const char *) OMPT_LIBOMPTARGET_WEAK;
 extern bool ompt_has_user_source_info;
@@ -142,12 +144,12 @@ extern ompt_directive_info_t ompt_directive_info;
 extern const char * const *ompt_data_expressions;
 int omp_get_initial_device(void) OMPT_LIBOMPTARGET_WEAK;
 
-// This struct is passed into target plugins where they require target_id,
-// global_device_id, or OMPT functions from libomp.so.  Target plugins must call
-// such functions via this struct rather than depend on weak linking of them
-// (above), or else openmp/libomptarget/test/offloading/dynamic_module_load.c
-// will fail.  However, weak linking of the above functions is still required so
-// that libomptarget.so can see them and assign the fields of this struct.
+// This struct is passed into target plugins where they require global_device_id
+// or OMPT functions from libomp.so.  Target plugins must call such functions
+// via this struct rather than depend on weak linking of them (above), or else
+// openmp/libomptarget/test/offloading/dynamic_module_load.c will fail.
+// However, weak linking of the above functions is still required so that
+// libomptarget.so can see them and assign the fields of this struct.
 //
 // The issue is that, target plugins successfully link against such libomp.so
 // functions when the OpenMP application and thus libomp.so and libomptarget.so
@@ -157,7 +159,6 @@ int omp_get_initial_device(void) OMPT_LIBOMPTARGET_WEAK;
 //
 // TODO: Is there a better way to do this?
 typedef struct {
-  ompt_id_t target_id;
   int32_t global_device_id;
   ompt_callbacks_active_t (*ompt_get_enabled)(void);
   ompt_callbacks_internal_t (*ompt_get_callbacks)(void);

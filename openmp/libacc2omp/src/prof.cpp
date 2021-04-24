@@ -64,12 +64,9 @@
  * FIXME: Access is not thread-safe.  Does it need to be?
  ****************************************************************************/
 
-// Map from target_id to device_num as passed to ompt_callback_target.  Entries
-// are inserted/erased as target regions begin/end.
-static std::map<ompt_id_t, int> acc_ompt_target_device_map;
-
 // OMPT entry points previously looked up.
 static ompt_set_callback_t acc_ompt_set_callback = NULL;
+static ompt_get_target_info_t acc_ompt_get_target_info = NULL;
 static ompt_get_directive_info_t acc_ompt_get_directive_info = NULL;
 static ompt_get_data_expression_t acc_ompt_get_data_expression = NULL;
 
@@ -382,7 +379,6 @@ static void acc_ompt_callback_target(
     ompt_data_t *task_data, ompt_id_t target_id, const void *codeptr_ra) {
   acc_event_t event_type;
   acc_prof_callback acc_cb = nullptr;
-  bool sub_region = false;
   switch (kind) {
   case ompt_target:
     switch (endpoint) {
@@ -403,8 +399,6 @@ static void acc_ompt_callback_target(
     }
     break;
   case ompt_target_region_enter_data:
-    sub_region = true;
-    KMP_FALLTHROUGH();
   case ompt_target_enter_data:
     switch (endpoint) {
     case ompt_scope_begin:
@@ -424,8 +418,6 @@ static void acc_ompt_callback_target(
     }
     break;
   case ompt_target_region_exit_data:
-    sub_region = true;
-    KMP_FALLTHROUGH();
   case ompt_target_exit_data:
     switch (endpoint) {
     case ompt_scope_begin:
@@ -471,16 +463,12 @@ static void acc_ompt_callback_target(
     ACC2OMP_UNREACHABLE("unexpected ompt_callback_target nowait kind");
     return;
   }
-  if (!sub_region && endpoint == ompt_scope_begin)
-    acc_ompt_target_device_map[target_id] = device_num;
   if (acc_cb) {
     acc_prof_info pi = acc_get_prof_info(event_type, device_num);
     acc_event_info ei = acc_get_other_event_info(event_type);
     acc_api_info ai = acc_get_api_info(device_num);
     acc_cb(&pi, &ei, &ai);
   }
-  if (!sub_region && endpoint == ompt_scope_end)
-    acc_ompt_target_device_map.erase(target_id);
 }
 
 static unsigned acc_ompt_callback_target_submit_emi_reg_counter = 0;
@@ -506,12 +494,11 @@ static void acc_ompt_callback_target_submit_emi(
     return;
   }
   if (acc_cb) {
-    // FIXME: Use ompt_get_target_info_t instead of this hack.  Fix callers too.
-    ompt_id_t target_id = (ompt_id_t)target_data;
-    auto itr = acc_ompt_target_device_map.find(target_id);
-    ACC2OMP_ASSERT(itr != acc_ompt_target_device_map.end(),
-                   "unexpected target_id");
-    int device_num = itr->second;
+    uint64_t device_num;
+    bool in_target = acc_ompt_get_target_info(&device_num, NULL, NULL);
+    ACC2OMP_ASSERT(in_target,
+                   "expected omp_get_target_info to indicate target region "
+                   "during ompt_callback_target_submit_emi callback");
     acc_prof_info pi = acc_get_prof_info(event_type, device_num);
     acc_event_info ei = acc_get_launch_event_info(event_type);
     acc_api_info ai = acc_get_api_info(device_num);
@@ -681,8 +668,6 @@ static bool acc_event_callback(
     *ompt_events = ompt_event_arr;                                        \
     return 0;                                                             \
   }
-  // ompt_callback_target is needed for many events in order to associate the
-  // target_id with the device_num.
   ACC_EVENT_CASE(acc_ev_device_init_start,       ompt_callback_device_initialize_start)
   ACC_EVENT_CASE(acc_ev_device_init_end,         ompt_callback_device_initialize)
   ACC_EVENT_CASE(acc_ev_device_shutdown_start,   ompt_callback_device_finalize_start)
@@ -699,8 +684,8 @@ static bool acc_event_callback(
   ACC_EVENT_CASE(acc_ev_update_end,              ompt_callback_target)
   ACC_EVENT_CASE(acc_ev_compute_construct_start, ompt_callback_target)
   ACC_EVENT_CASE(acc_ev_compute_construct_end,   ompt_callback_target)
-  ACC_EVENT_CASE(acc_ev_enqueue_launch_start,    ompt_callback_target, ompt_callback_target_submit_emi)
-  ACC_EVENT_CASE(acc_ev_enqueue_launch_end,      ompt_callback_target, ompt_callback_target_submit_emi)
+  ACC_EVENT_CASE(acc_ev_enqueue_launch_start,    ompt_callback_target_submit_emi)
+  ACC_EVENT_CASE(acc_ev_enqueue_launch_end,      ompt_callback_target_submit_emi)
   ACC_EVENT_CASE(acc_ev_enqueue_upload_start,    ompt_callback_target_data_op_emi)
   ACC_EVENT_CASE(acc_ev_enqueue_upload_end,      ompt_callback_target_data_op_emi)
   ACC_EVENT_CASE(acc_ev_enqueue_download_start,  ompt_callback_target_data_op_emi)
@@ -879,6 +864,8 @@ static void acc_prof_unregister_enqueue(
 static int acc_ompt_initialize(ompt_function_lookup_t lookup,
                                int initial_device_num, ompt_data_t *tool_data) {
   acc_ompt_set_callback = (ompt_set_callback_t)lookup("ompt_set_callback");
+  acc_ompt_get_target_info =
+      (ompt_get_target_info_t)lookup("ompt_get_target_info");
   acc_ompt_get_directive_info =
       (ompt_get_directive_info_t)lookup("ompt_get_directive_info");
   acc_ompt_get_data_expression =

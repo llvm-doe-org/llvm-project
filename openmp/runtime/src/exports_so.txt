@@ -30,7 +30,8 @@ VERSION {
         ompt_get_callbacks;
         ompt_get_unique_id;
         ompt_record_device_init;
-        ompt_toggle_in_device_target_region;
+        ompt_set_target_info;
+        ompt_clear_target_info;
         ompt_index_data_expressions;
         ompt_set_data_expression;
 

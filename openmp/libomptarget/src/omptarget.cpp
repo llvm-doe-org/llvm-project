@@ -793,21 +793,17 @@ void ompt_dispatch_callback_target(ompt_target_t kind,
                                    DeviceTy &Device) {
   bool SubRegion = kind == ompt_target_region_enter_data ||
                    kind == ompt_target_region_exit_data;
-  if (!SubRegion && endpoint == ompt_scope_begin) {
-    Device.OmptApi.target_id = ompt_get_unique_id();
-    ompt_toggle_in_device_target_region();
-  }
-  // FIXME: We don't yet need the NULL arguments for OpenACC support, so we
-  // haven't bothered to implement them yet.
+  if (!SubRegion && endpoint == ompt_scope_begin)
+    ompt_set_target_info(Device.DeviceID);
+  // FIXME: We don't yet need the task_data, target_id, or codeptr_ra argument
+  // for OpenACC support, so we haven't bothered to implement them yet.
   if (Device.OmptApi.ompt_get_enabled().ompt_callback_target) {
     Device.OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target)(
-        kind, endpoint, Device.DeviceID, /*task_data*/ NULL,
-        Device.OmptApi.target_id, /*codeptr_ra*/ NULL);
+        kind, endpoint, Device.DeviceID, /*task_data=*/NULL,
+        /*target_id=*/ompt_id_none, /*codeptr_ra=*/NULL);
   }
-  if (!SubRegion && endpoint == ompt_scope_end) {
-    Device.OmptApi.target_id = ompt_id_none;
-    ompt_toggle_in_device_target_region();
-  }
+  if (!SubRegion && endpoint == ompt_scope_end)
+    ompt_clear_target_info();
 }
 #endif
 

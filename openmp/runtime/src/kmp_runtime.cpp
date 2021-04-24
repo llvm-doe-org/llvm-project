@@ -1397,8 +1397,6 @@ void __kmp_serialized_parallel(ident_t *loc, kmp_int32 global_tid) {
 
 #if OMPT_SUPPORT
 
-static ompt_id_t target_id = ompt_id_none;
-
 // OpenMP 5.0 sec. 2.12.5 p. 173 L24:
 // "The target-begin event occurs when a thread enters a target region."
 // OpenMP 5.0 sec. 2.12.5 p. 173 L25:
@@ -1416,8 +1414,9 @@ static ompt_id_t target_id = ompt_id_none;
 //   are never reached.
 // - When offloading to other devices (e.g., x86_64-unknown-linux-gnu), the
 //   "target" function still dispatches ompt_callback_target, but the following
-//   ompt_dispatch_callback_target's callers are also reached, so the "target"
-//   function sets ompt_in_device_target_region so we know not to make the
+//   ompt_dispatch_callback_target's callers are also reached.  Thus, the
+//   following ompt_dispatch_callback_target checks ompt_get_target_info to see
+//   if we've already entered a target region and thus don't need to make the
 //   callback here.
 // - When offloading to the host, either because host was selected or because
 //   offloading is disabled, only the following ompt_dispatch_callback_target's
@@ -1435,16 +1434,21 @@ static ompt_id_t target_id = ompt_id_none;
 static void ompt_dispatch_callback_target(ompt_scope_endpoint_t endpoint,
                                           bool is_parallel_league,
                                           unsigned int team_size = 0) {
-  if (!is_parallel_league || ompt_in_device_target_region)
+  if (!is_parallel_league)
+    return;
+  uint64_t device_num;
+  if (ompt_get_target_info(&device_num, NULL, NULL) &&
+      device_num != omp_get_initial_device())
     return;
   if (endpoint == ompt_scope_begin)
-    target_id = ompt_get_unique_id();
+    ompt_set_target_info(omp_get_initial_device());
   if (ompt_enabled.ompt_callback_target) {
-    // FIXME: We don't yet need the NULL arguments for OpenACC support, so we
-    // haven't bothered to implement them yet.
+    // FIXME: We don't yet need the task_data, target_id, and codeptr_ra
+    // arguments for OpenACC support, so we haven't bothered to implement them
+    // yet.
     ompt_get_callbacks().ompt_callback(ompt_callback_target)(
         ompt_target, endpoint, omp_get_initial_device(), /*task_data=*/NULL,
-        /*target_id=*/target_id, /*codeptr_ra=*/NULL);
+        /*target_id=*/ompt_id_none, /*codeptr_ra=*/NULL);
   }
   if (endpoint == ompt_scope_begin) {
     // OpenMP 5.1, sec. 2.14.5 "target Construct", p. 201, L17-20:
@@ -1464,20 +1468,19 @@ static void ompt_dispatch_callback_target(ompt_scope_endpoint_t endpoint,
     // There's nothing to actually enqueue as we're about to call the task
     // directly, so we just dispatch these callbacks back to back.
     //
-    // FIXME: We don't yet need the host_op_id argument for OpenACC support, so
-    // we haven't bothered to implement it yet.
-    //
-    // FIXME: Passing target_id as target_data is a hack for OpenACC support
-    // until we implement ompt_get_target_info_t.
+    // FIXME: We don't yet need the target_data or host_op_id arguments for
+    // OpenACC support, so we haven't bothered to implement them yet.
     if (ompt_enabled.ompt_callback_target_submit_emi) {
       ompt_get_callbacks().ompt_callback(ompt_callback_target_submit_emi)(
-          ompt_scope_begin, (ompt_data_t *)/*target_data=*/target_id,
-          /*host_op_id=*/NULL, /*requested_num_teams=*/team_size);
+          ompt_scope_begin, /*target_data=*/NULL, /*host_op_id=*/NULL,
+          /*requested_num_teams=*/team_size);
       ompt_get_callbacks().ompt_callback(ompt_callback_target_submit_emi)(
-          ompt_scope_end, (ompt_data_t *)/*target_data=*/target_id,
-          /*host_op_id=*/NULL, /*requested_num_teams=*/team_size);
+          ompt_scope_end, /*target_data=*/NULL, /*host_op_id=*/NULL,
+          /*requested_num_teams=*/team_size);
     }
   }
+  if (endpoint == ompt_scope_end)
+    ompt_clear_target_info();
 }
 #endif
 

@@ -53,7 +53,6 @@ DeviceTy::DeviceTy(RTLInfoTy *RTL)
       ShadowPtrMap(), DataMapMtx(), PendingGlobalsMtx(), ShadowMtx(),
       MemoryManager(nullptr) {
 #if OMPT_SUPPORT
-  OmptApi.target_id = ompt_id_none;
   OmptApi.global_device_id = DeviceID;
   OmptApi.ompt_get_enabled = ompt_get_enabled;
   OmptApi.ompt_get_callbacks = ompt_get_callbacks;
