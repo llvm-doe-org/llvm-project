@@ -396,7 +396,7 @@ static void setDeviceNumAndType(int dev_num, acc_device_t dev_type,
   case SetOmpDefaultDevice:
     ACC2OMP_UNREACHABLE(
         "unexpected device type from acc2omp_set_omp_default_device");
-    break;
+    return;
   }
 }
 

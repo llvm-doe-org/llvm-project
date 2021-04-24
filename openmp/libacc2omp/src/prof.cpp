@@ -399,7 +399,7 @@ static void acc_ompt_callback_target(
       // ompt_callback_target.
       ACC2OMP_UNREACHABLE("unexpected ompt_scope_beginend for "
                           "ompt_callback_target");
-      break;
+      return;
     }
     break;
   case ompt_target_region_enter_data:
@@ -420,7 +420,7 @@ static void acc_ompt_callback_target(
       // ompt_callback_target.
       ACC2OMP_UNREACHABLE("unexpected ompt_scope_beginend for "
                           "ompt_callback_target");
-      break;
+      return;
     }
     break;
   case ompt_target_region_exit_data:
@@ -441,7 +441,7 @@ static void acc_ompt_callback_target(
       // ompt_callback_target.
       ACC2OMP_UNREACHABLE("unexpected ompt_scope_beginend for "
                           "ompt_callback_target");
-      break;
+      return;
     }
     break;
   case ompt_target_update:
@@ -459,7 +459,7 @@ static void acc_ompt_callback_target(
       // ompt_callback_target.
       ACC2OMP_UNREACHABLE("unexpected ompt_scope_beginend for "
                           "ompt_callback_target");
-      break;
+      return;
     }
     break;
   case ompt_target_nowait:
@@ -469,7 +469,7 @@ static void acc_ompt_callback_target(
     // TODO: Our OMPT support does not yet implement these, and our OpenACC
     // support does not yet implement features that would dispatch them.
     ACC2OMP_UNREACHABLE("unexpected ompt_callback_target nowait kind");
-    break;
+    return;
   }
   if (!sub_region && endpoint == ompt_scope_begin)
     acc_ompt_target_device_map[target_id] = device_num;
@@ -606,7 +606,7 @@ static void acc_ompt_callback_target_data_op(
     // TODO: Our OMPT support does not yet implement these, and our OpenACC
     // support does not yet implement features that would dispatch them.
     ACC2OMP_UNREACHABLE("unexpected ompt_callback_target_data_op async optype");
-    break;
+    return;
   }
 }
 
@@ -687,7 +687,7 @@ static void acc_ompt_event_callback(ompt_callbacks_t ompt_event,
 #undef OMPT_EVENT_CASE
   default:
     ACC2OMP_UNREACHABLE("unexpected ompt_callbacks_t");
-    break;
+    return;
   }
 }
 
