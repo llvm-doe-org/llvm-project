@@ -60,11 +60,6 @@
 // ompt_callback_target seems reasonable when not offloading because target
 // constructs still execute on the host.  However, the others might not make
 // sense because there's no need to allocate, associate, and transfer data.
-// FIXME: ompt_callback_target_data_op with optype as ompt_target_data_alloc,
-// ompt_target_data_delete, ompt_target_data_associate, or
-// ompt_target_data_disassociate isn't implemented yet for omp_target_alloc,
-// omp_target_free, omp_target_associate_ptr, or omp_target_disassociate_ptr
-// because we don't need those yet for OpenACC support.
 #define ompt_callback_target_implemented ompt_event_MAY_ALWAYS
 #define ompt_callback_target_emi_implemented ompt_event_UNIMPLEMENTED
 #define ompt_callback_target_data_op_implemented ompt_event_MAY_ALWAYS
