@@ -376,7 +376,7 @@ static void acc_ompt_callback_device_finalize(int device_num) {
   acc_ev_device_shutdown_end_callback(&pi, &ei, &ai);
 }
 
-static unsigned acc_ompt_callback_target_reg_counter = 0 ;
+static unsigned acc_ompt_callback_target_reg_counter = 0;
 static void acc_ompt_callback_target(
     ompt_target_t kind, ompt_scope_endpoint_t endpoint, int device_num,
     ompt_data_t *task_data, ompt_id_t target_id, const void *codeptr_ra) {
@@ -483,7 +483,7 @@ static void acc_ompt_callback_target(
     acc_ompt_target_device_map.erase(target_id);
 }
 
-static unsigned acc_ompt_callback_target_submit_reg_counter = 0 ;
+static unsigned acc_ompt_callback_target_submit_reg_counter = 0;
 static void acc_ompt_callback_target_submit(
     ompt_id_t target_id, ompt_id_t host_op_id,
     unsigned int requested_num_teams) {
@@ -498,7 +498,7 @@ static void acc_ompt_callback_target_submit(
   acc_ev_enqueue_launch_start_callback(&pi, &ei, &ai);
 }
 
-static unsigned acc_ompt_callback_target_submit_end_reg_counter = 0 ;
+static unsigned acc_ompt_callback_target_submit_end_reg_counter = 0;
 static void acc_ompt_callback_target_submit_end(
     ompt_id_t target_id, ompt_id_t host_op_id,
     unsigned int requested_num_teams) {
@@ -513,7 +513,7 @@ static void acc_ompt_callback_target_submit_end(
   acc_ev_enqueue_launch_end_callback(&pi, &ei, &ai);
 }
 
-static unsigned acc_ompt_callback_target_data_op_reg_counter = 0 ;
+static unsigned acc_ompt_callback_target_data_op_reg_counter = 0;
 static void acc_ompt_callback_target_data_op(
     ompt_id_t target_id, ompt_id_t host_op_id, ompt_target_data_op_t optype,
     void *src_addr, int src_device_num, void *dest_addr, int dest_device_num,
