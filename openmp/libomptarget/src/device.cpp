@@ -358,32 +358,60 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
     IsNew = true;
     uintptr_t tp = (uintptr_t)allocData(Size, HstPtrBegin);
 #if OMPT_SUPPORT
-    // OpenMP 5.0 sec. 3.6.1 p. 398 L18:
-    // "The target-data-allocation event occurs when a thread allocates data
-    // on a target device."
-    // OpenMP 5.0 sec. 3.6.6 p. 404 L32:
-    // "The target-data-associate event occurs when a thread associates data
-    // on a target device."
-    // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
-    // "A registered ompt_callback_target_data_op callback is dispatched when
-    // device memory is allocated or freed, as well as when data is copied to
-    // or from a device."
-    // The callbacks must dispatch after the allocation succeeds because they
-    // require the device address.  Similarly, the callback for
-    // ompt_target_data_associate should follow the callback for
-    // ompt_target_data_alloc to reflect the order in which these events must
-    // occur.
-    if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
+    // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
+    // "The target-data-op-begin event occurs before a thread initiates a data
+    // operation on a target device.  The target-data-op-end event occurs after
+    // a thread initiates a data operation on a target device."
+    //
+    // OpenMP 5.1, sec. 3.8.1 "omp_target_alloc", p. 413, L14-15:
+    // "The target-data-allocation-begin event occurs before a thread initiates
+    // a data allocation on a target device.  The target-data-allocation-end
+    // event occurs after a thread initiates a data allocation on a target
+    // device."
+    //
+    // OpenMP 5.1, sec. 3.8.9, p. 428, L10-17:
+    // "The target-data-associate event occurs before a thread initiates a
+    // device pointer association on a target device."
+    // "A thread dispatches a registered ompt_callback_target_data_op callback,
+    // or a registered ompt_callback_target_data_op_emi callback with
+    // ompt_scope_beginend as its endpoint argument for each occurrence of a
+    // target-data-associate event in that thread. These callbacks have type
+    // signature ompt_callback_target_data_op_t or
+    // ompt_callback_target_data_op_emi_t, respectively."
+    //
+    // OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t and
+    // ompt_callback_target_data_op_t", p. 536, L25-27:
+    // "A thread dispatches a registered ompt_callback_target_data_op_emi or
+    // ompt_callback_target_data_op callback when device memory is allocated or
+    // freed, as well as when data is copied to or from a device."
+    //
+    // Contrary to the above specification, we assume the ompt_scope_end
+    // callback for ompt_target_data_alloc must dispatch after the allocation
+    // succeeds so it can include the device address.  We assume the associated
+    // ompt_scope_begin callback cannot possibly include the device address
+    // under any reasonable interpretation.
+    //
+    // TODO: We have not implemented the ompt_scope_begin callback because we
+    // don't need it for OpenACC support.
+    //
+    // The callback for ompt_target_data_associate should follow the callback
+    // for ompt_target_data_alloc to reflect the order in which these events
+    // must occur.
+    if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op_emi) {
       // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
       // OpenACC support, so we haven't bothered to implement them yet.
-      OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-          OmptApi.target_id, /*host_op_id=*/ompt_id_none,
-          ompt_target_data_alloc, HstPtrBegin, omp_get_initial_device(),
-          (void *)tp, DeviceID, Size, /*codeptr_ra=*/NULL);
-      OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-          OmptApi.target_id, /*host_op_id=*/ompt_id_none,
-          ompt_target_data_associate, HstPtrBegin, omp_get_initial_device(),
-          (void *)tp, DeviceID, Size, /*codeptr_ra=*/NULL);
+      OmptApi.ompt_get_callbacks().ompt_callback(
+          ompt_callback_target_data_op_emi)(
+          ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
+          /*host_op_id=*/NULL, ompt_target_data_alloc, HstPtrBegin,
+          omp_get_initial_device(), (void *)tp, DeviceID, Size,
+          /*codeptr_ra=*/NULL);
+      OmptApi.ompt_get_callbacks().ompt_callback(
+          ompt_callback_target_data_op_emi)(
+          ompt_scope_beginend, /*target_task_data=*/NULL, /*target_data=*/NULL,
+          /*host_op_id=*/NULL, ompt_target_data_associate, HstPtrBegin,
+          omp_get_initial_device(), (void *)tp, DeviceID, Size,
+          /*codeptr_ra=*/NULL);
     }
 #endif
     DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", "
@@ -478,37 +506,53 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
       DP("Deleting tgt data " DPxMOD " of size %" PRId64 "\n",
           DPxPTR(HT.TgtPtrBegin), Size);
 #if OMPT_SUPPORT
-      // OpenMP 5.0 sec. 3.6.7 p. 405 L27:
-      // "The target-data-disassociate event occurs when a thread disassociates
-      // data on a target device."
-      // OpenMP 5.0 sec. 3.6.2 p. 399 L19:
-      // "The target-data-free event occurs when a thread frees data on a
-      // target device."
-      // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
-      // "A registered ompt_callback_target_data_op callback is dispatched when
-      // device memory is allocated or freed, as well as when data is copied to
-      // or from a device."
-      // We assume the callbacks should dispatch before the free so that the
-      // device address is still valid.  Similarly, we assume the callback for
-      // ompt_target_data_disassociate should precede the callback for
-      // ompt_target_data_delete to reflect the order in which these events
-      // logically occur, even if that's not how the underlying actions are
-      // coded here.  Moreover, this ordering is for symmetry with
+      // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
+      // "The target-data-op-begin event occurs before a thread initiates a data
+      // operation on a target device.  The target-data-op-end event occurs
+      // after a thread initiates a data operation on a target device."
+      //
+      // OpenMP 5.1, sec. 3.8.10, p. 430, L2-9:
+      // "The target-data-disassociate event occurs before a thread initiates a
+      // device pointer disassociation on a target device."
+      // "A thread dispatches a registered ompt_callback_target_data_op
+      // callback, or a registered ompt_callback_target_data_op_emi callback
+      // with ompt_scope_beginend as its endpoint argument for each occurrence
+      // of a target-data-disassociate event in that thread. These callbacks
+      // have type signature ompt_callback_target_data_op_t or
+      // ompt_callback_target_data_op_emi_t, respectively."
+      //
+      // OpenMP 5.1, sec. 3.8.2 "omp_target_free", p. 415, L11-12:
+      // "The target-data-free-begin event occurs before a thread initiates a
+      // data free on a target device.  The target-data-free-end event occurs
+      // after a thread initiates a data free on a target device."
+      //
+      // OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t and
+      // ompt_callback_target_data_op_t", p. 536, L25-27:
+      // "A thread dispatches a registered ompt_callback_target_data_op_emi or
+      // ompt_callback_target_data_op callback when device memory is allocated
+      // or freed, as well as when data is copied to or from a device."
+      //
+      // We assume the callback for ompt_target_data_disassociate should precede
+      // the callback for ompt_target_data_delete to reflect the order in which
+      // these events logically occur, even if that's not how the underlying
+      // actions are coded here.  Moreover, this ordering is for symmetry with
       // ompt_target_data_alloc and ompt_target_data_associate.
-      if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op) {
+      if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op_emi) {
         // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
         // OpenACC support, so we haven't bothered to implement them yet.
         OmptApi.ompt_get_callbacks().ompt_callback(
-            ompt_callback_target_data_op)(
-            OmptApi.target_id, /*host_op_id=*/ompt_id_none,
+            ompt_callback_target_data_op_emi)(
+            ompt_scope_beginend, /*target_task_data=*/NULL,
+            /*target_data=*/NULL, /*host_op_id=*/NULL,
             ompt_target_data_disassociate, HstPtrBegin,
             omp_get_initial_device(), (void *)HT.TgtPtrBegin, DeviceID, Size,
             /*codeptr_ra=*/NULL);
         OmptApi.ompt_get_callbacks().ompt_callback(
-            ompt_callback_target_data_op)(
-            OmptApi.target_id, /*host_op_id=*/ompt_id_none,
-            ompt_target_data_delete, HstPtrBegin, omp_get_initial_device(),
-            (void *)HT.TgtPtrBegin, DeviceID, Size, /*codeptr_ra=*/NULL);
+            ompt_callback_target_data_op_emi)(
+            ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
+            /*host_op_id=*/NULL, ompt_target_data_delete, HstPtrBegin,
+            omp_get_initial_device(), (void *)HT.TgtPtrBegin, DeviceID, Size,
+            /*codeptr_ra=*/NULL);
       }
 #endif
       deleteData((void *)HT.TgtPtrBegin);

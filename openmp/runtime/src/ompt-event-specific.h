@@ -62,10 +62,10 @@
 // sense because there's no need to allocate, associate, and transfer data.
 #define ompt_callback_target_implemented ompt_event_MAY_ALWAYS
 #define ompt_callback_target_emi_implemented ompt_event_UNIMPLEMENTED
-#define ompt_callback_target_data_op_implemented ompt_event_MAY_ALWAYS
-#define ompt_callback_target_data_op_emi_implemented ompt_event_UNIMPLEMENTED
-#define ompt_callback_target_submit_implemented ompt_event_MAY_ALWAYS
-#define ompt_callback_target_submit_emi_implemented ompt_event_UNIMPLEMENTED
+#define ompt_callback_target_data_op_implemented ompt_event_UNIMPLEMENTED
+#define ompt_callback_target_data_op_emi_implemented ompt_event_MAY_ALWAYS
+#define ompt_callback_target_submit_implemented ompt_event_UNIMPLEMENTED
+#define ompt_callback_target_submit_emi_implemented ompt_event_MAY_ALWAYS
 
 #define ompt_callback_control_tool_implemented ompt_event_MAY_ALWAYS
 
@@ -123,6 +123,5 @@
 // just mimicking whatever above event they extend.
 #define ompt_callback_device_initialize_start_implemented ompt_event_MAY_ALWAYS
 #define ompt_callback_device_finalize_start_implemented ompt_event_MAY_ALWAYS
-#define ompt_callback_target_submit_end_implemented ompt_event_MAY_ALWAYS
 
 #endif

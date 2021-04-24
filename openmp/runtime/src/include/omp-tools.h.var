@@ -174,8 +174,7 @@
                                                                                                                          \
     /* Extension Events */                                                                                               \
     macro (ompt_callback_device_initialize_start, ompt_callback_device_initialize_t, 100) /* device initialize start  */ \
-    macro (ompt_callback_device_finalize_start,   ompt_callback_device_finalize_t,   101) /* device finalize end      */ \
-    macro (ompt_callback_target_submit_end,       ompt_callback_target_submit_t,     102) /* target submit end        */
+    macro (ompt_callback_device_finalize_start,   ompt_callback_device_finalize_t,   101) /* device finalize end      */
 
 /*****************************************************************************
  * implementation specific types
@@ -231,8 +230,7 @@ typedef enum ompt_callbacks_t {
   ompt_callback_target_map_emi           = 36,
   ompt_callback_error                    = 37,
   ompt_callback_device_initialize_start  = 100,
-  ompt_callback_device_finalize_start    = 101,
-  ompt_callback_target_submit_end        = 102
+  ompt_callback_device_finalize_start    = 101
 } ompt_callbacks_t;
 
 typedef enum ompt_record_t {
@@ -302,10 +300,7 @@ typedef enum ompt_target_data_op_t {
   ompt_target_data_alloc_async                = 17,
   ompt_target_data_transfer_to_device_async   = 18,
   ompt_target_data_transfer_from_device_async = 19,
-  ompt_target_data_delete_async               = 20,
-  /* Extension Ops */
-  ompt_target_data_transfer_to_device_end     = 100,
-  ompt_target_data_transfer_from_device_end   = 101
+  ompt_target_data_delete_async               = 20
 } ompt_target_data_op_t;
 
 typedef enum ompt_work_t {

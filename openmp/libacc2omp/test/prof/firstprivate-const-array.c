@@ -3,8 +3,8 @@
 // 1. acc_ev_create triggers before the first kernel even if that kernel
 //    doesn't access the array.  However, acc_ev_enqueue_upload_{start,end}
 //    doesn't trigger until the kernel that accesses the array.  (This
-//    acc_ev_create is triggered by the ompt_callback_target_data_op callback
-//    with optype=ompt_target_data_associate that is dispatched within
+//    acc_ev_create is triggered by the ompt_callback_target_data_op_emi
+//    callback with optype=ompt_target_data_associate that is dispatched within
 //    omptarget.cpp's InitLibrary.  This test case is important for covering
 //    that dispatch.)
 // 2. When offloading, the array's host address as seen on the host

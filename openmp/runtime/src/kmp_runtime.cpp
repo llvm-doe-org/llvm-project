@@ -1447,19 +1447,35 @@ static void ompt_dispatch_callback_target(ompt_scope_endpoint_t endpoint,
         /*target_id=*/target_id, /*codeptr_ra=*/NULL);
   }
   if (endpoint == ompt_scope_begin) {
+    // OpenMP 5.1, sec. 2.14.5 "target Construct", p. 201, L17-20:
+    // "The target-submit-begin event occurs prior to initiating creation of an
+    // initial task on a target device for a target region.  The
+    // target-submit-end event occurs after initiating creation of an initial
+    // task on a target device for a target region."
+    //
+    // OpenMP 5.1, sec. 4.5.2.28 "ompt_callback_target_submit_emi_t and
+    // ompt_callback_target_submit_t", p. 543, L2-6:
+    // "A thread dispatches a registered ompt_callback_target_submit_emi or
+    // ompt_callback_target_submit callback on the host before and after a
+    // target task initiates creation of an initial task on a device."
+    // "The endpoint argument indicates that the callback signals the beginning
+    // or end of a scope."
+    //
     // There's nothing to actually enqueue as we're about to call the task
     // directly, so we just dispatch these callbacks back to back.
-    // FIXME: We don't yet need the host_op_id argument for OpenACC support,
-    // so we haven't bothered to implement it yet.
-    if (ompt_enabled.ompt_callback_target_submit) {
-      ompt_get_callbacks().ompt_callback(ompt_callback_target_submit)(
-          /*target_id=*/target_id, /*host_op_id=*/ompt_id_none,
-          /*requested_num_teams=*/team_size);
-    }
-    if (ompt_enabled.ompt_callback_target_submit_end) {
-      ompt_get_callbacks().ompt_callback(ompt_callback_target_submit_end)(
-          /*target_id=*/target_id, /*host_op_id=*/ompt_id_none,
-          /*requested_num_teams=*/team_size);
+    //
+    // FIXME: We don't yet need the host_op_id argument for OpenACC support, so
+    // we haven't bothered to implement it yet.
+    //
+    // FIXME: Passing target_id as target_data is a hack for OpenACC support
+    // until we implement ompt_get_target_info_t.
+    if (ompt_enabled.ompt_callback_target_submit_emi) {
+      ompt_get_callbacks().ompt_callback(ompt_callback_target_submit_emi)(
+          ompt_scope_begin, (ompt_data_t *)/*target_data=*/target_id,
+          /*host_op_id=*/NULL, /*requested_num_teams=*/team_size);
+      ompt_get_callbacks().ompt_callback(ompt_callback_target_submit_emi)(
+          ompt_scope_end, (ompt_data_t *)/*target_data=*/target_id,
+          /*host_op_id=*/NULL, /*requested_num_teams=*/team_size);
     }
   }
 }

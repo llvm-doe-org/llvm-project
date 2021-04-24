@@ -268,30 +268,39 @@ int32_t __tgt_rtl_data_submit(
     int32_t device_id, void *tgt_ptr, void *hst_ptr, int64_t size
     OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
 #if OMPT_SUPPORT
-  // OpenMP 5.0 sec. 2.19.7.1 p. 321 L15:
-  // "The target-data-op event occurs when a thread initiates a data operation
-  // on a target device."
-  // OpenMP 5.0 sec. 3.6.4 p. 401 L24:
-  // "The target-data-op event occurs when a thread transfers data on a target
-  // device."
-  // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
-  // "A registered ompt_callback_target_data_op callback is dispatched when
-  // device memory is allocated or freed, as well as when data is copied to or
-  // from a device."
+  // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
+  // "The target-data-op-begin event occurs before a thread initiates a data
+  // operation on a target device.  The target-data-op-end event occurs after a
+  // thread initiates a data operation on a target device."
+  //
+  // OpenMP 5.1, sec. 3.8.5 "omp_target_memcpy", p. 419, L4-5:
+  // "The target-data-op-begin event occurs before a thread initiates a data
+  // transfer.  The target-data-op-end event occurs after a thread initiated a
+  // data transfer."
+  //
+  // OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t and
+  // ompt_callback_target_data_op_t", p. 535, L25-27:
+  // "A thread dispatches a registered ompt_callback_target_data_op_emi or
+  // ompt_callback_target_data_op callback when device memory is allocated or
+  // freed, as well as when data is copied to or from a device."
   //
   // There's nothing to actually enqueue as we're about to perform the copy
   // synchronously, so we just dispatch these callbacks back to back.
   //
-  // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
-  // OpenACC support, so we haven't bothered to implement them yet.
-  if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op) {
-    ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-        ompt_api->target_id, /*host_op_id=*/ompt_id_none,
-        ompt_target_data_transfer_to_device, hst_ptr, omp_get_initial_device(),
-        tgt_ptr, ompt_api->global_device_id, size, /*codeptr_ra=*/NULL);
-    ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-        ompt_api->target_id, /*host_op_id=*/ompt_id_none,
-        ompt_target_data_transfer_to_device_end, hst_ptr,
+  // FIXME: We don't yet need the target_task_data, target_data, host_op_id, and
+  // codeptr_ra arguments for OpenACC support, so we haven't bothered to
+  // implement them yet.
+  if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op_emi) {
+    ompt_api->ompt_get_callbacks().ompt_callback(
+        ompt_callback_target_data_op_emi)(
+        ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
+        /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, hst_ptr,
+        omp_get_initial_device(), tgt_ptr, ompt_api->global_device_id, size,
+        /*codeptr_ra=*/NULL);
+    ompt_api->ompt_get_callbacks().ompt_callback(
+        ompt_callback_target_data_op_emi)(
+        ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
+        /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, hst_ptr,
         omp_get_initial_device(), tgt_ptr, ompt_api->global_device_id, size,
         /*codeptr_ra=*/NULL);
   }
@@ -304,31 +313,39 @@ int32_t __tgt_rtl_data_retrieve(
     int32_t device_id, void *hst_ptr, void *tgt_ptr, int64_t size
     OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
 #if OMPT_SUPPORT
-  // OpenMP 5.0 sec. 2.19.7.1 p. 321 L15:
-  // "The target-data-op event occurs when a thread initiates a data operation
-  // on a target device."
-  // OpenMP 5.0 sec. 3.6.4 p. 401 L24:
-  // "The target-data-op event occurs when a thread transfers data on a target
-  // device."
-  // OpenMP 5.0 sec. 4.5.2.25 p. 489 L26-27:
-  // "A registered ompt_callback_target_data_op callback is dispatched when
-  // device memory is allocated or freed, as well as when data is copied to or
-  // from a device."
+  // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
+  // "The target-data-op-begin event occurs before a thread initiates a data
+  // operation on a target device.  The target-data-op-end event occurs after a
+  // thread initiates a data operation on a target device."
+  //
+  // OpenMP 5.1, sec. 3.8.5 "omp_target_memcpy", p. 419, L4-5:
+  // "The target-data-op-begin event occurs before a thread initiates a data
+  // transfer.  The target-data-op-end event occurs after a thread initiated a
+  // data transfer."
+  //
+  // OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t and
+  // ompt_callback_target_data_op_t", p. 535, L25-27:
+  // "A thread dispatches a registered ompt_callback_target_data_op_emi or
+  // ompt_callback_target_data_op callback when device memory is allocated or
+  // freed, as well as when data is copied to or from a device."
   //
   // There's nothing to actually enqueue as we're about to perform the copy
   // synchronously, so we just dispatch these callbacks back to back.
   //
-  // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
-  // OpenACC support, so we haven't bothered to implement them yet.
-  if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op) {
-    ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-        ompt_api->target_id, /*host_op_id=*/ompt_id_none,
-        ompt_target_data_transfer_from_device, tgt_ptr,
+  // FIXME: We don't yet need the target_task_data, target_data, host_op_id, and
+  // codeptr_ra arguments for OpenACC support, so we haven't bothered to
+  // implement them yet.
+  if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op_emi) {
+    ompt_api->ompt_get_callbacks().ompt_callback(
+        ompt_callback_target_data_op_emi)(
+        ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
+        /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, tgt_ptr,
         ompt_api->global_device_id, hst_ptr, omp_get_initial_device(), size,
         /*codeptr_ra=*/NULL);
-    ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op)(
-        ompt_api->target_id, /*host_op_id=*/ompt_id_none,
-        ompt_target_data_transfer_from_device_end, tgt_ptr,
+    ompt_api->ompt_get_callbacks().ompt_callback(
+        ompt_callback_target_data_op_emi)(
+        ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
+        /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, tgt_ptr,
         ompt_api->global_device_id, hst_ptr, omp_get_initial_device(), size,
         /*codeptr_ra=*/NULL);
   }
@@ -371,22 +388,37 @@ int32_t __tgt_rtl_run_target_team_region(
     return OFFLOAD_FAIL;
 
 #if OMPT_SUPPORT
+  // OpenMP 5.1, sec. 2.14.5 "target Construct", p. 201, L17-20:
+  // "The target-submit-begin event occurs prior to initiating creation of an
+  // initial task on a target device for a target region.  The target-submit-end
+  // event occurs after initiating creation of an initial task on a target
+  // device for a target region."
+  //
+  // OpenMP 5.1, sec. 4.5.2.28 "ompt_callback_target_submit_emi_t and
+  // ompt_callback_target_submit_t", p. 543, L2-6:
+  // "A thread dispatches a registered ompt_callback_target_submit_emi or
+  // ompt_callback_target_submit callback on the host before and after a target
+  // task initiates creation of an initial task on a device."
+  // "The endpoint argument indicates that the callback signals the beginning or
+  // end of a scope."
+  //
   // There's nothing to actually enqueue as we're about to call the task
   // directly, so we just dispatch these callbacks back to back.
-  // FIXME: We don't yet need the host_op_id argument for OpenACC support,
-  // so we haven't bothered to implement it yet.
-  if (ompt_api->ompt_get_enabled().ompt_callback_target_submit) {
-    ompt_api->ompt_get_callbacks().ompt_callback(ompt_callback_target_submit)(
-        /*target_id*/ ompt_api->target_id,
-        /*host_op_id*/ ompt_id_none,
-        /*requested_num_teams*/ team_num);
-  }
-  if (ompt_api->ompt_get_enabled().ompt_callback_target_submit_end) {
+  //
+  // FIXME: We don't yet need the host_op_id argument for OpenACC support, so we
+  // haven't bothered to implement it yet.
+  //
+  // FIXME: Passing target_id as target_data is a hack for OpenACC support until
+  // we implement ompt_get_target_info_t.
+  if (ompt_api->ompt_get_enabled().ompt_callback_target_submit_emi) {
     ompt_api->ompt_get_callbacks().ompt_callback(
-        ompt_callback_target_submit_end)(
-        /*target_id*/ ompt_api->target_id,
-        /*host_op_id*/ ompt_id_none,
-        /*requested_num_teams*/ team_num);
+        ompt_callback_target_submit_emi)(
+        ompt_scope_begin, (ompt_data_t *)/*target_data=*/ompt_api->target_id,
+        /*host_op_id=*/NULL, /*requested_num_teams=*/team_num);
+    ompt_api->ompt_get_callbacks().ompt_callback(
+        ompt_callback_target_submit_emi)(
+        ompt_scope_end, (ompt_data_t *)/*target_data=*/ompt_api->target_id,
+        /*host_op_id=*/NULL, /*requested_num_teams=*/team_num);
   }
 #endif
 

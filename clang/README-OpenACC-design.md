@@ -2127,10 +2127,10 @@ support and that are not specified by OpenMP 5.0 are shown in
 | `acc_ev_device_shutdown_start`    | **`ompt_callback_device_finalize_start`**                                                                           |                                                                 |
 | `acc_ev_device_shutdown_end`      | `ompt_callback_device_finalize`                                                                                     |                                                                 |
 | `acc_ev_runtime_shutdown`         | `finalize` set by `ompt_start_tool`                                                                                 |                                                                 |
-| `acc_ev_create`                   | `ompt_callback_target_data_op(optype=ompt_target_data_associate)`                                                   |                                                                 |
-| `acc_ev_delete`                   | `ompt_callback_target_data_op(optype=ompt_target_data_disassociate)`                                                |                                                                 |
-| `acc_ev_alloc`                    | `ompt_callback_target_data_op(optype=ompt_target_data_alloc)`                                                       |                                                                 |
-| `acc_ev_free`                     | `ompt_callback_target_data_op(optype=ompt_target_data_delete)`                                                      |                                                                 |
+| `acc_ev_create`                   | `ompt_callback_target_data_op_emi(optype=ompt_target_data_associate, endpoint=ompt_scope_beginend)`                 |                                                                 |
+| `acc_ev_delete`                   | `ompt_callback_target_data_op_emi(optype=ompt_target_data_disassociate, endpoint=ompt_scope_beginend)`              |                                                                 |
+| `acc_ev_alloc`                    | `ompt_callback_target_data_op_emi(optype=ompt_target_data_alloc, endpoint=ompt_scope_end)`                          |                                                                 |
+| `acc_ev_free`                     | `ompt_callback_target_data_op_emi(optype=ompt_target_data_delete, endpoint=ompt_scope_begin)`                       |                                                                 |
 | `acc_ev_enter_data_start`         | `ompt_callback_target(kind=ompt_target_enter_data|`**`ompt_target_region_enter_data`**`, endpoint=ompt_scope_begin)`|                                                                 |
 | `acc_ev_enter_data_end`           | `ompt_callback_target(kind=ompt_target_enter_data|`**`ompt_target_region_enter_data`**`, endpoint=ompt_scope_end)`  |                                                                 |
 | `acc_ev_exit_data_start`          | `ompt_callback_target(kind=ompt_target_exit_data|`**`ompt_target_region_exit_data`**`, endpoint=ompt_scope_begin)`  |                                                                 |
@@ -2139,12 +2139,12 @@ support and that are not specified by OpenMP 5.0 are shown in
 | `acc_ev_update_end`               | `ompt_callback_target(kind=ompt_target_update, endpoint=ompt_scope_end)`                                            |                                                                 |
 | `acc_ev_compute_construct_start`  | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_begin)`                                                 |                                                                 |
 | `acc_ev_compute_construct_end`    | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_end)`                                                   |                                                                 |
-| `acc_ev_enqueue_launch_start`     | `ompt_callback_target_submit`                                                                                       | `ompt_callback_target(kind=ompt_target)`                        |
-| `acc_ev_enqueue_launch_end`       | **`ompt_callback_target_submit_end`**                                                                               | `ompt_callback_target(kind=ompt_target)`                        |
-| `acc_ev_enqueue_upload_start`     | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_to_device)`                                          |                                                                 |
-| `acc_ev_enqueue_upload_end`       | `ompt_callback_target_data_op(optype=`**`ompt_target_data_transfer_to_device_end`**`)`                              |                                                                 |
-| `acc_ev_enqueue_download_start`   | `ompt_callback_target_data_op(optype=ompt_target_data_transfer_from_device)`                                        |                                                                 |
-| `acc_ev_enqueue_download_end`     | `ompt_callback_target_data_op(optype=`**`ompt_target_data_transfer_from_device_end`**`)`                            |                                                                 |
+| `acc_ev_enqueue_launch_start`     | `ompt_callback_target_submit_emi(endpoint=ompt_scope_begin)`                                                        | `ompt_callback_target(kind=ompt_target)`                        |
+| `acc_ev_enqueue_launch_end`       | `ompt_callback_target_submit_emi(endpoint=ompt_scope_end)`                                                          | `ompt_callback_target(kind=ompt_target)`                        |
+| `acc_ev_enqueue_upload_start`     | `ompt_callback_target_data_op_emi(optype=ompt_target_data_transfer_to_device, endpoint=ompt_scope_begin)`           |                                                                 |
+| `acc_ev_enqueue_upload_end`       | `ompt_callback_target_data_op_emi(optype=ompt_target_data_transfer_to_device, endpoint=ompt_scope_end)`             |                                                                 |
+| `acc_ev_enqueue_download_start`   | `ompt_callback_target_data_op_emi(optype=ompt_target_data_transfer_from_device, endpoint=ompt_scope_begin)`         |                                                                 |
+| `acc_ev_enqueue_download_end`     | `ompt_callback_target_data_op_emi(optype=ompt_target_data_transfer_from_device, endpoint=ompt_scope_end)`           |                                                                 |
 | `acc_ev_wait_start`               | *unimplemented*                                                                                                     |                                                                 |
 | `acc_ev_wait_end`                 | *unimplemented*                                                                                                     |                                                                 |
 
@@ -2178,16 +2178,16 @@ unregister it from the OpenMP runtime.
 
 In some cases, the precise timing required for an OMPT event relative
 to a set of related OpenMP runtime actions was not immediately obvious
-to us when reading the OpenMP 5.0 specification.  This timing is
-particularly important when such a set corresponds to multiple OpenACC
-events but to only one OMPT event.  In that case, identifying that
-timing is key to identifying what OpenACC event the OMPT event's
+to us when reading the OpenMP 5.0 or 5.1 specification.  This timing
+is particularly important when such a set corresponds to multiple
+OpenACC events but to only one OMPT event.  In that case, identifying
+that timing is key to identifying what OpenACC event the OMPT event's
 callback should trigger and what OMPT extension events are needed to
 trigger the remaining OpenACC events.  The following list explains
 Clacc's rationale for such cases:
 
 * `ompt_callback_device_initialize`
-    * OpenMP sec. 2.12.1 p. 160 L3-7:
+    * OpenMP 5.0 sec. 2.12.1 p. 160 L3-7:
 
         > The device-initialize event occurs in a thread that
         > encounters the first target, target data, or target enter
@@ -2197,7 +2197,7 @@ Clacc's rationale for such cases:
         > OpenMP initialization, which may include device-side tool
         > initialization, completes.
 
-    * OpenMP sec. 4.5.2.19 p. 482 L24-25:
+    * OpenMP 5.0 sec. 4.5.2.19 p. 482 L24-25:
 
          > The OpenMP implementation invokes this callback after
          > OpenMP is initialized for the device but before execution
@@ -2246,43 +2246,64 @@ Clacc's rationale for such cases:
       actually been implemented in LLVM's OpenMP runtime, so these
       events are actually triggered back to back at the moment.)
 
-* `ompt_callback_target_submit`
-    * OpenMP 5.0 sec. 2.12.5 p. 173 L26-27:
+* `ompt_callback_target_data_op_emi(optype=ompt_target_data_alloc)`
+    * OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
 
-        > The target-submit event occurs prior to creating an initial
-        > task on a target device for a target region.
-
-    * Based on the word "prior", Clacc's implementation of this
-      callback triggers `acc_ev_enqueue_launch_start` not
-      `acc_ev_enqueue_launch_end`.
-
-* `ompt_callback_target_data_op(optype=ompt_target_data_transfer_to_device)`
-    * OpenMP 5.0 sec. 2.19.7.1 p. 321 L15:
-
-        > The target-data-op event occurs when a thread initiates a
+        > The target-data-op-begin event occurs before a thread
+        > initiates a data operation on a target device.  The
+        > target-data-op-end event occurs after a thread initiates a
         > data operation on a target device.
 
-    * Based on the word "initiate", Clacc's implementation of this
-      callback should trigger either `acc_ev_enqueue_upload_start` or
-      `acc_ev_enqueue_upload_end`.  That is, this callback indicates
-      when the transfer starts not when it completes.
-    * In OpenMP 5.0, we have not found an indication of whether this
-      callback should be dispatched before or after enqueuing the data
-      transfer, so we have arbitrarily chosen before.
-    * Clacc's implementation of this callback thus triggers
-      `acc_ev_enqueue_upload_start`, and Clacc's implementation of the
-      corresponding end extension callback triggers
-      `acc_ev_enqueue_upload_end`.
-    * Data transfer actions can be implemented synchronously.  In some
-      cases in LLVM's OpenMP implementation, there is still an enqueue
-      stage followed by synchronization, so the distinction between
-      these events is then still meaningful.  In other cases, there is
-      no enqueue stage (`memcpy` is used), so these two callbacks are
-      just dispatched back to back.
+    * OpenMP 5.1, sec. 3.8.1 "omp_target_alloc", p. 413, L14-15:
 
-* `ompt_callback_target_data_op(optype=ompt_target_data_transfer_from_device)`
-    * Clacc's rationale for the timing of this callback is the same as
-      for the previous one.
+        > The target-data-allocation-begin event occurs before a
+        > thread initiates a data allocation on a target device.  The
+        > target-data-allocation-end event occurs after a thread
+        > initiates a data allocation on a target device.
+
+    * OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t
+      and ompt_callback_target_data_op_t", p. 537, L11:
+
+        > The dest_addr argument indicates the data address after the
+        > operation.
+
+    * Clacc assumes `dest_addr` is the address of the allocation on
+      the device.  However, it's unclear how any information from
+      after the allocation can be obtained if the callbacks are
+      dispatched upon initiation of the allocation.  This point seems
+      undeniable in the case of *target-data-allocation-begin*, but it
+      is less clear for *target-data-allocation-end*.
+    * Clacc assumes *target-data-allocation-end* should actually occur
+      after the destination/device address is known, so Clacc
+      dispatches the associated `ompt_scope_end` callback after the
+      allocation has completed in order to pass it to the callback for
+      `acc_ev_alloc`.
+
+* `ompt_callback_target_data_op_emi(optype=ompt_target_data_delete)`
+    * OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
+
+        > The target-data-op-begin event occurs before a thread
+        > initiates a data operation on a target device.  The
+        > target-data-op-end event occurs after a thread initiates a
+        > data operation on a target device.
+
+    * OpenMP 5.1, sec. 3.8.2 "omp_target_free", p. 415, L11-12:
+
+        > The target-data-free-begin event occurs before a thread
+        > initiates a data free on a target device.  The
+        > target-data-free-end event occurs after a thread initiates a
+        > data free on a target device.
+
+    * OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t
+      and ompt_callback_target_data_op_t", p. 537, L11:
+
+        > The dest_addr argument indicates the data address after the
+        > operation.
+
+    * To the callback for `acc_ev_free`, Clacc passes the `dest_addr`
+      from the `ompt_scope_begin` callback instead of the
+      `ompt_scope_end` callback so that the device allocation is still
+      valid.
 
 ### OpenACC to OpenMP Mapping: Profiling Data ###
 
@@ -2360,12 +2381,13 @@ information about the directive or OpenMP runtime library routine
 associated with the callback, and `ompt_directive_info_t` is designed
 so that null-initialization of all fields logically indicates the case
 when the callback is not associated with a directive or runtime
-library routine.  If the callback is `ompt_callback_target_data_op`,
-`ompt_get_data_expression` returns an expression identifying the data
-on which the operation associated with the callback is performed, and
-it otherwise returns `NULL`.  Often the expression is just a variable
-name, but it can also include a more complex expression, such as an
-array section, if specified in an explicit `map` clause.
+library routine.  If the callback is `ompt_callback_target_data_op` or
+`ompt_callback_target_data_op_emi`, `ompt_get_data_expression` returns
+an expression identifying the data on which the operation associated
+with the callback is performed, and it otherwise returns `NULL`.
+Often the expression is just a variable name, but it can also include
+a more complex expression, such as an array section, if specified in
+an explicit `map` clause.
 
 The OMPT callback functions that Clacc's OpenACC runtime implements
 call these entry points to retrieve information to pass to OpenACC

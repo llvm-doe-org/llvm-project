@@ -1,5 +1,5 @@
 // Check registration/unregistration scenarios involving OpenACC events that
-// share ompt_callback_target_data_op.
+// share ompt_callback_target_data_op_emi.
 
 // RUN: %data events {
 // RUN:   (event=NONE)
@@ -57,7 +57,7 @@ enum {
 
 void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
                           acc_prof_lookup lookup) {
-  // These events share ompt_callback_target_data_op as a triggering OMPT
+  // These events share ompt_callback_target_data_op_emi as a triggering OMPT
   // callback and are distinguished by the optype parameter in that callback
   // except that, within the pairs acc_ev_enqueue_upload_{start,end}_callback
   // and acc_ev_enqueue_download_{start,end}_callback, optype does not
