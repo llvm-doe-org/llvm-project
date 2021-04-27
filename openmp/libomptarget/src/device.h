@@ -34,6 +34,8 @@ struct __tgt_target_table;
 struct __tgt_async_info;
 class MemoryManagerTy;
 
+using map_var_info_t = void *;
+
 // enum for OMP_TARGET_OFFLOAD; keep in sync with kmp.h definition
 enum kmp_target_offload_kind {
   tgt_disabled = 0,
@@ -47,6 +49,7 @@ struct HostDataToTargetTy {
   uintptr_t HstPtrBase; // host info.
   uintptr_t HstPtrBegin;
   uintptr_t HstPtrEnd; // non-inclusive.
+  map_var_info_t HstPtrName; // Optional source name of mapped variable.
 
   uintptr_t TgtPtrBegin; // target info.
 
@@ -60,9 +63,10 @@ private:
 
 public:
   HostDataToTargetTy(uintptr_t BP, uintptr_t B, uintptr_t E, uintptr_t TB,
-                     bool UseHoldRefCount, bool IsINF)
-      : HstPtrBase(BP), HstPtrBegin(B), HstPtrEnd(E), TgtPtrBegin(TB),
-        RefCount(IsINF ? INFRefCount : !UseHoldRefCount),
+                     bool UseHoldRefCount, map_var_info_t Name = nullptr,
+                     bool IsINF = false)
+      : HstPtrBase(BP), HstPtrBegin(B), HstPtrEnd(E), HstPtrName(Name),
+        TgtPtrBegin(TB), RefCount(IsINF ? INFRefCount : !UseHoldRefCount),
         HoldRefCount(UseHoldRefCount) {}
 
   /// Get the total reference count.
@@ -207,10 +211,10 @@ struct DeviceTy {
   size_t getAccessibleBuffer(void *Ptr, int64_t Size, void **BufferHost,
                              void **BufferDevice);
   void *getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, int64_t Size,
-                         bool &IsNew, bool &IsHostPtr, bool IsImplicit,
-                         bool UpdateRefCount, bool HasCloseModifier,
-                         bool HasPresentModifier, bool HasNoAllocModifier,
-                         bool HasHoldModifier);
+                         map_var_info_t HstPtrName, bool &IsNew,
+                         bool &IsHostPtr, bool IsImplicit, bool UpdateRefCount,
+                         bool HasCloseModifier, bool HasPresentModifier,
+                         bool HasNoAllocModifier, bool HasHoldModifier);
   void *getTgtPtrBegin(void *HstPtrBegin, int64_t Size);
   void *getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
                        bool UpdateRefCount, bool UseHoldRefCount,

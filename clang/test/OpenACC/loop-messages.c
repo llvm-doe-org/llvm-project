@@ -1717,6 +1717,67 @@ void fn() {
   }
 
   //--------------------------------------------------
+  // nesting of acc loops: very deeply nested
+  //
+  // At one time, Clang OpenACC analyses failed assertions when resizing arrays
+  // based on the number of levels of nested loops.
+  //--------------------------------------------------
+
+#if !CMB
+  #pragma acc parallel
+#endif
+  {
+    #pragma acc CMB_PAR loop
+    for (int i0 = 0; i0 < 5; ++i0) {
+      #pragma acc loop
+      for (int i1 = 0; i1 < 5; ++i1) {
+        #pragma acc loop
+        for (int i2 = 0; i2 < 5; ++i2) {
+          #pragma acc loop
+          for (int i3 = 0; i3 < 5; ++i3) {
+            #pragma acc loop
+            for (int i4 = 0; i4 < 5; ++i4) {
+              #pragma acc loop
+              for (int i5 = 0; i5 < 5; ++i5) {
+                #pragma acc loop
+                for (int i6 = 0; i6 < 5; ++i6) {
+                  #pragma acc loop
+                  for (int i7 = 0; i7 < 5; ++i7) {
+                    #pragma acc loop
+                    for (int i8 = 0; i8 < 5; ++i8) {
+                      #pragma acc loop
+                      for (int i9 = 0; i9 < 5; ++i9) {
+                        #pragma acc loop
+                        for (int i10 = 0; i10 < 5; ++i10) {
+                          #pragma acc loop
+                          for (int i11 = 0; i11 < 5; ++i11) {
+                            #pragma acc loop
+                            for (int i12 = 0; i12 < 5; ++i12) {
+                              #pragma acc loop
+                              for (int i13 = 0; i13 < 5; ++i13) {
+                                #pragma acc loop
+                                for (int i14 = 0; i14 < 5; ++i14) {
+                                  #pragma acc loop
+                                  for (int i15 = 0; i15 < 5; ++i15)
+                                    ;
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  //--------------------------------------------------
   // We sprinkle seq, auto, independent, gang, worker, and vector clauses
   // throughout the following tests as the validation of the private,
   // reduction, and data clauses should be independent of those clauses.  The

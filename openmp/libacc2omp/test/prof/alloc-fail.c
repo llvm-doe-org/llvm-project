@@ -73,7 +73,7 @@ int main() {
 // ERR-OFF-POST-ENV-NEXT:Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
 //                       # FIXME: getOrAllocTgtPtr is meaningless to users.
 // ERR-OFF-POST-ENV-NEXT:Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
-// ERR-OFF-POST-ENV-NEXT:Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-targetpointer maps
+// ERR-OFF-POST-ENV-NEXT:Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-target pointer maps
 // ERR-OFF-POST-ENV-NEXT:Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                       # An abort message usually follows.
 //  ERR-OFF-POST-ENV-NOT:Libomptarget

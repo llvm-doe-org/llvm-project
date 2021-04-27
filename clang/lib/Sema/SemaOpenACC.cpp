@@ -941,8 +941,11 @@ public:
     Visit(E->getBase());
   }
   void VisitACCExecutableDirective(ACCExecutableDirective *D) {
-    // Push space for local definitions in this construct.
-    LocalDefinitions.emplace_back(LocalDefinitions.back());
+    // Push space for local definitions in this construct.  It's important to
+    // force a copy construct call here so that, if the vector is resized, the
+    // pass-by-reference parameter isn't invalidated before it's copied.
+    LocalDefinitions.emplace_back(
+        llvm::DenseSet<const Decl *>(LocalDefinitions.back()));
 
     // Do reductions here imply copy clauses because we're computing implicit
     // clauses for an acc parallel and this is a gang-partitioned acc loop?
@@ -1156,8 +1159,11 @@ public:
       }
     }
 
-    // Push space for local definitions in this construct.
-    LocalDefinitions.emplace_back(LocalDefinitions.back());
+    // Push space for local definitions in this construct.  It's important to
+    // force a copy construct call here so that, if the vector is resized, the
+    // pass-by-reference parameter isn't invalidated before it's copied.
+    LocalDefinitions.emplace_back(
+        llvm::DenseSet<const Decl *>(LocalDefinitions.back()));
 
     // Record variables privatized by this directive as local definitions so
     // that they are skipped while computing gang reductions implied by
@@ -1214,8 +1220,11 @@ class NestedReductionChecker : public StmtVisitor<NestedReductionChecker> {
 
 public:
   void VisitACCExecutableDirective(ACCExecutableDirective *D) {
-    // Push space for privates in this construct.
-    Privates.emplace_back(Privates.back());
+    // Push space for privates in this construct.  It's important to force a
+    // copy construct call here so that, if the vector is resized, the
+    // pass-by-reference parameter isn't invalidated before it's copied.
+    Privates.emplace_back(
+        llvm::DenseMap<VarDecl *, ReductionVar>(Privates.back()));
 
     // Record variables privatized by this directive, and complain for any
     // reduction conflicting with its immediately enclosing reduction.

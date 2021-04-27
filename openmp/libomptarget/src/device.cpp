@@ -92,7 +92,7 @@ int DeviceTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size) {
                               (uintptr_t) HstPtrBegin /*HstPtrBegin*/,
                               (uintptr_t) HstPtrBegin + Size /*HstPtrEnd*/,
                               (uintptr_t) TgtPtrBegin /*TgtPtrBegin*/,
-                              false /*UseHoldRefCount*/,
+                              false /*UseHoldRefCount*/, nullptr /*Name*/,
                               true /*IsRefCountINF*/);
 
   DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", HstEnd="
@@ -278,9 +278,10 @@ size_t DeviceTy::getAccessibleBuffer(void *Ptr, int64_t Size, void **BufferHost,
 // If NULL is returned, then either data allocation failed or the user tried
 // to do an illegal mapping.
 void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
-                                 int64_t Size, bool &IsNew, bool &IsHostPtr,
-                                 bool IsImplicit, bool UpdateRefCount,
-                                 bool HasCloseModifier, bool HasPresentModifier,
+                                 int64_t Size, map_var_info_t HstPtrName,
+                                 bool &IsNew, bool &IsHostPtr, bool IsImplicit,
+                                 bool UpdateRefCount, bool HasCloseModifier,
+                                 bool HasPresentModifier,
                                  bool HasNoAllocModifier,
                                  bool HasHoldModifier) {
   void *rc = NULL;
@@ -305,10 +306,11 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
     INFO(DeviceID,
          "Mapping exists%s with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD
          ", "
-         "Size=%" PRId64 ",%s RefCount=%s\n",
+         "Size=%" PRId64 ",%s RefCount=%s, Name=%s\n",
          (IsImplicit ? " (implicit)" : ""), DPxPTR(HstPtrBegin), DPxPTR(tp),
          Size, (UpdateRefCount ? " updated" : ""),
-         HT.isRefCountInf() ? "INF" : std::to_string(HT.getRefCount()).c_str());
+         HT.isRefCountInf() ? "INF" : std::to_string(HT.getRefCount()).c_str(),
+         (HstPtrName) ? getNameFromMapping(HstPtrName).c_str() : "(null)");
     rc = (void *)tp;
   } else if ((lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) && !IsImplicit) {
     DP("Explicit extension not allowed: host address specified is " DPxMOD " (%"
@@ -420,7 +422,7 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
     HostDataToTargetMap.emplace(
         HostDataToTargetTy((uintptr_t)HstPtrBase, (uintptr_t)HstPtrBegin,
                            (uintptr_t)HstPtrBegin + Size, tp, HasHoldModifier,
-                           /*IsINF=*/false));
+                           HstPtrName, /*IsINF=*/false));
     rc = (void *)tp;
   }
 

@@ -138,7 +138,8 @@ static int InitLibrary(DeviceTy& Device) {
             (uintptr_t)CurrHostEntry->addr /*HstPtrBegin*/,
             (uintptr_t)CurrHostEntry->addr + CurrHostEntry->size /*HstPtrEnd*/,
             (uintptr_t)CurrDeviceEntry->addr /*TgtPtrBegin*/,
-            false /*UseHoldRefCount*/, true /*IsRefCountINF*/);
+            false /*UseHoldRefCount*/, nullptr /*Name*/,
+            true /*IsRefCountINF*/);
 #if OMPT_SUPPORT
         // FIXME: In our experiments so far, this callback describes the
         // association of a const array's host and device addresses because it
@@ -202,8 +203,8 @@ static int InitLibrary(DeviceTy& Device) {
         DP("Has pending ctors... call now\n");
         for (auto &entry : lib.second.PendingCtors) {
           void *ctor = entry;
-          int rc = target(device_id, ctor, 0, NULL, NULL, NULL, NULL, NULL, 1,
-              1, true /*team*/);
+          int rc = target(device_id, ctor, 0, nullptr, nullptr, nullptr,
+                          nullptr, nullptr, nullptr, 1, 1, true /*team*/);
           if (rc != OFFLOAD_SUCCESS) {
             REPORT("Running ctor " DPxMOD " failed.\n", DPxPTR(ctor));
             Device.PendingGlobalsMtx.unlock();
@@ -301,7 +302,7 @@ int targetDataMapper(DeviceTy &Device, void *arg_base, void *arg,
   int rc = target_data_function(Device, MapperComponents.Components.size(),
                                 MapperArgsBase.data(), MapperArgs.data(),
                                 MapperArgSizes.data(), MapperArgTypes.data(),
-                                /*arg_mappers*/ nullptr,
+                                /*arg_names*/ nullptr, /*arg_mappers*/ nullptr,
                                 /*__tgt_async_info*/ nullptr);
 
   return rc;
@@ -310,7 +311,8 @@ int targetDataMapper(DeviceTy &Device, void *arg_base, void *arg,
 /// Internal function to do the mapping and transfer the data to the device
 int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
                     void **args, int64_t *arg_sizes, int64_t *arg_types,
-                    void **arg_mappers, __tgt_async_info *async_info_ptr) {
+                    map_var_info_t *arg_names, void **arg_mappers,
+                    __tgt_async_info *async_info_ptr) {
   // process each input.
   for (int32_t i = 0; i < arg_num; ++i) {
 #if OMPT_SUPPORT
@@ -346,6 +348,7 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
     void *HstPtrBegin = args[i];
     void *HstPtrBase = args_base[i];
     int64_t data_size = arg_sizes[i];
+    map_var_info_t HstPtrName = (!arg_names) ? nullptr : arg_names[i];
 
     // Adjust for proper alignment if this is a combined entry (for structs).
     // Look at the next argument - if that is MEMBER_OF this one, then this one
@@ -401,9 +404,9 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
       // TODO: Does HasHoldModifier matter here or is the reference count always
       // already infinite?
       PointerTgtPtrBegin = Device.getOrAllocTgtPtr(
-          HstPtrBase, HstPtrBase, sizeof(void *), Pointer_IsNew, IsHostPtr,
-          IsImplicit, UpdateRef, HasCloseModifier, HasPresentModifier,
-          HasNoAllocModifier, HasHoldModifier);
+          HstPtrBase, HstPtrBase, sizeof(void *), HstPtrName, Pointer_IsNew,
+          IsHostPtr, IsImplicit, UpdateRef, HasCloseModifier,
+          HasPresentModifier, HasNoAllocModifier, HasHoldModifier);
       if (!PointerTgtPtrBegin) {
         REPORT("Call to getOrAllocTgtPtr returned null pointer (%s).\n",
                HasPresentModifier ? "'present' map type modifier"
@@ -423,9 +426,9 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
     }
 
     void *TgtPtrBegin = Device.getOrAllocTgtPtr(
-        HstPtrBegin, HstPtrBase, data_size, IsNew, IsHostPtr, IsImplicit,
-        UpdateRef, HasCloseModifier, HasPresentModifier, HasNoAllocModifier,
-        HasHoldModifier);
+        HstPtrBegin, HstPtrBase, data_size, HstPtrName, IsNew, IsHostPtr,
+        IsImplicit, UpdateRef, HasCloseModifier, HasPresentModifier,
+        HasNoAllocModifier, HasHoldModifier);
     // If data_size==0, then the argument could be a zero-length pointer to
     // NULL, so getOrAlloc() returning NULL is not an error.
     if (!TgtPtrBegin && (data_size || HasPresentModifier)) {
@@ -547,7 +550,8 @@ struct DeallocTgtPtrInfo {
 /// Internal function to undo the mapping and retrieve the data from the device.
 int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
                   void **Args, int64_t *ArgSizes, int64_t *ArgTypes,
-                  void **ArgMappers, __tgt_async_info *AsyncInfo) {
+                  map_var_info_t *ArgNames, void **ArgMappers,
+                  __tgt_async_info *AsyncInfo) {
   int Ret;
   std::vector<DeallocTgtPtrInfo> DeallocTgtPtrs;
   // process each input.
@@ -820,9 +824,10 @@ void ompt_dispatch_callback_target(ompt_target_t kind,
 /// Internal function to pass data to/from the target.
 // async_info_ptr is currently unused, added here so target_data_update has the
 // same signature as targetDataBegin and targetDataEnd.
-int target_data_update(DeviceTy &Device, int32_t arg_num,
-    void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types,
-    void **arg_mappers, __tgt_async_info *async_info_ptr) {
+int target_data_update(DeviceTy &Device, int32_t arg_num, void **args_base,
+                       void **args, int64_t *arg_sizes, int64_t *arg_types,
+                       map_var_info_t *arg_names, void **arg_mappers,
+                       __tgt_async_info *async_info_ptr) {
 #if OMPT_SUPPORT
   ompt_dispatch_callback_target(ompt_target_update, ompt_scope_begin, Device);
 #endif
@@ -1057,11 +1062,16 @@ class PrivateArgumentManagerTy {
     const char *DataExpression;
 #endif
 
+    /// Host pointer name
+    const map_var_info_t HstPtrName = nullptr;
+
     FirstPrivateArgInfoTy(int Index, const void *HstPtr, int64_t Size
-                          OMPT_SUPPORT_IF(, const char *DataExpression))
+                          OMPT_SUPPORT_IF(, const char *DataExpression),
+                          const map_var_info_t HstPtrName = nullptr)
         : Index(Index), HstPtrBegin(reinterpret_cast<const char *>(HstPtr)),
           HstPtrEnd(HstPtrBegin + Size), AlignedSize(Size + Size % Alignment)
-          OMPT_SUPPORT_IF(, DataExpression(DataExpression)) {}
+          OMPT_SUPPORT_IF(, DataExpression(DataExpression)),
+          HstPtrName(HstPtrName) {}
   };
 
   /// Info on the allocations we actually created for first-private arguments.
@@ -1102,10 +1112,11 @@ public:
   PrivateArgumentManagerTy(DeviceTy &Dev, __tgt_async_info *AsyncInfo)
       : Device(Dev), AsyncInfo(AsyncInfo) {}
 
-  /// A a private argument
+  /// Add a private argument
   int addArg(void *HstPtr, int64_t ArgSize, int64_t ArgOffset,
              bool IsFirstPrivate, void *&TgtPtr, int TgtArgsIndex
-             OMPT_SUPPORT_IF(, const char *DataExpression)) {
+             OMPT_SUPPORT_IF(, const char *DataExpression),
+             const map_var_info_t HstPtrName = nullptr) {
     // If the argument is not first-private, or its size is greater than a
     // predefined threshold, we will allocate memory and issue the transfer
     // immediately.
@@ -1208,7 +1219,8 @@ public:
       // Placeholder value
       TgtPtr = nullptr;
       FirstPrivateArgInfo.emplace_back(TgtArgsIndex, HstPtr, ArgSize
-                                       OMPT_SUPPORT_IF(, DataExpression));
+                                       OMPT_SUPPORT_IF(, DataExpression),
+                                       HstPtrName);
       FirstPrivateArgSize += FirstPrivateArgInfo.back().AlignedSize;
     }
 
@@ -1412,14 +1424,14 @@ public:
 /// variables.
 int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
                       void **ArgBases, void **Args, int64_t *ArgSizes,
-                      int64_t *ArgTypes, void **ArgMappers,
-                      std::vector<void *> &TgtArgs,
+                      int64_t *ArgTypes, map_var_info_t *ArgNames,
+                      void **ArgMappers, std::vector<void *> &TgtArgs,
                       std::vector<ptrdiff_t> &TgtOffsets,
                       PrivateArgumentManagerTy &PrivateArgumentManager,
                       __tgt_async_info *AsyncInfo) {
   DeviceTy &Device = PM->Devices[DeviceId];
   int Ret = targetDataBegin(Device, ArgNum, ArgBases, Args, ArgSizes, ArgTypes,
-                            ArgMappers, AsyncInfo);
+                            ArgNames, ArgMappers, AsyncInfo);
   if (Ret != OFFLOAD_SUCCESS) {
     REPORT("Call to targetDataBegin failed, abort target.\n");
     return OFFLOAD_FAIL;
@@ -1485,6 +1497,7 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
     void *HstPtrBegin = Args[I];
     void *HstPtrBase = ArgBases[I];
     void *TgtPtrBegin;
+    map_var_info_t HstPtrName = (!ArgNames) ? nullptr : ArgNames[I];
     ptrdiff_t TgtBaseOffset;
     bool IsLast, IsHostPtr; // unused.
     if (ArgTypes[I] & OMP_TGT_MAPTYPE_LITERAL) {
@@ -1498,10 +1511,9 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
       // depend on this one.
       const bool IsFirstPrivate =
           (I >= ArgNum - 1 || !(ArgTypes[I + 1] & OMP_TGT_MAPTYPE_MEMBER_OF));
-      Ret = PrivateArgumentManager.addArg(HstPtrBegin, ArgSizes[I],
-                                          TgtBaseOffset, IsFirstPrivate,
-                                          TgtPtrBegin, TgtArgs.size()
-                                          OMPT_SUPPORT_IF(, DataExpression));
+      Ret = PrivateArgumentManager.addArg(
+          HstPtrBegin, ArgSizes[I], TgtBaseOffset, IsFirstPrivate, TgtPtrBegin,
+          TgtArgs.size() OMPT_SUPPORT_IF(, DataExpression), HstPtrName);
       if (Ret != OFFLOAD_SUCCESS) {
         REPORT("Failed to process %sprivate argument " DPxMOD "\n",
                (IsFirstPrivate ? "first-" : ""), DPxPTR(HstPtrBegin));
@@ -1545,14 +1557,15 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
 /// host if needed and deallocating target memory of (first-)private variables.
 int processDataAfter(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
                      void **ArgBases, void **Args, int64_t *ArgSizes,
-                     int64_t *ArgTypes, void **ArgMappers,
+                     int64_t *ArgTypes, map_var_info_t *ArgNames,
+                     void **ArgMappers,
                      PrivateArgumentManagerTy &PrivateArgumentManager,
                      __tgt_async_info *AsyncInfo) {
   DeviceTy &Device = PM->Devices[DeviceId];
 
   // Move data from device.
   int Ret = targetDataEnd(Device, ArgNum, ArgBases, Args, ArgSizes, ArgTypes,
-                          ArgMappers, AsyncInfo);
+                          ArgNames, ArgMappers, AsyncInfo);
   if (Ret != OFFLOAD_SUCCESS) {
     REPORT("Call to targetDataEnd failed, abort target.\n");
     return OFFLOAD_FAIL;
@@ -1605,8 +1618,9 @@ int processDataAfter(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
 // questions about the right places.  See the fixme on
 // ompt_dispatch_callback_target there.
 int target(int64_t DeviceId, void *HostPtr, int32_t ArgNum, void **ArgBases,
-           void **Args, int64_t *ArgSizes, int64_t *ArgTypes, void **ArgMappers,
-           int32_t TeamNum, int32_t ThreadLimit, int IsTeamConstruct) {
+           void **Args, int64_t *ArgSizes, int64_t *ArgTypes,
+           map_var_info_t *ArgNames, void **ArgMappers, int32_t TeamNum,
+           int32_t ThreadLimit, int IsTeamConstruct) {
   DeviceTy &Device = PM->Devices[DeviceId];
 
 #if OMPT_SUPPORT
@@ -1647,7 +1661,7 @@ int target(int64_t DeviceId, void *HostPtr, int32_t ArgNum, void **ArgBases,
                                 Device);
 #endif
   int Ret = processDataBefore(DeviceId, HostPtr, ArgNum, ArgBases, Args,
-                              ArgSizes, ArgTypes, ArgMappers, TgtArgs,
+                              ArgSizes, ArgTypes, ArgNames, ArgMappers, TgtArgs,
                               TgtOffsets, PrivateArgumentManager, &AsyncInfo);
 #if OMPT_SUPPORT
   ompt_dispatch_callback_target(ompt_target_region_enter_data, ompt_scope_end,
@@ -1692,7 +1706,7 @@ int target(int64_t DeviceId, void *HostPtr, int32_t ArgNum, void **ArgBases,
                                 Device);
 #endif
   Ret = processDataAfter(DeviceId, HostPtr, ArgNum, ArgBases, Args, ArgSizes,
-                         ArgTypes, ArgMappers, PrivateArgumentManager,
+                         ArgTypes, ArgNames, ArgMappers, PrivateArgumentManager,
                          &AsyncInfo);
 #if OMPT_SUPPORT
   ompt_dispatch_callback_target(ompt_target_region_exit_data, ompt_scope_end,

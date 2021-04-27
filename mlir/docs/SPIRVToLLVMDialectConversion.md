@@ -618,7 +618,7 @@ As well as:
 *   spv.GLSL.SSign
 *   spv.GLSL.FSign
 *   spv.MemoryBarrier
-*   spv._reference_of
+*   spv.mlir.referenceof
 *   spv.SMod
 *   spv.specConstant
 *   spv.SubgroupBallotKHR
@@ -665,7 +665,7 @@ spv.selection {
   spv.Branch ^merge                                     llvm.br ^merge
 
 ^merge:                                               ^merge:
-  spv._merge                                            llvm.br ^continue
+  spv.mlir.merge                                            llvm.br ^continue
 }
 // Remaining code																			^continue:
                                                         // Remaining code
@@ -690,7 +690,7 @@ spv.loop {
   spv.Branch ^header                                    llvm.br ^header
 
 ^merge:                                               ^merge:
-  spv._merge                                            llvm.br ^remaining
+  spv.mlir.merge                                            llvm.br ^remaining
 }
 // Remaining code                                     ^remaining:
                                                         // Remaining code

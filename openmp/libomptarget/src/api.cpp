@@ -658,7 +658,9 @@ EXTERN void *omp_target_map_to(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_TO;
   int64_t s = size;
   OMPT_SET_DIRECTIVE_INFO();
-  __tgt_target_data_begin(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
+  static ident_t ident = {0, 0, 0, 0, ";;omp_target_map_to;0;0;;"};
+  __tgt_target_data_begin_mapper(&ident, device_num, 1, &ptr, &ptr, &s,
+                                 &tgt_map_type, NULL, NULL);
   OMPT_CLEAR_DIRECTIVE_INFO();
   return omp_get_mapped_ptr(ptr, device_num);
 }
@@ -667,7 +669,9 @@ EXTERN void *omp_target_map_alloc(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_NONE;
   int64_t s = size;
   OMPT_SET_DIRECTIVE_INFO();
-  __tgt_target_data_begin(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
+  static ident_t ident = {0, 0, 0, 0, ";;omp_target_map_alloc;0;0;;"};
+  __tgt_target_data_begin_mapper(&ident, device_num, 1, &ptr, &ptr, &s,
+                                 &tgt_map_type, NULL, NULL);
   OMPT_CLEAR_DIRECTIVE_INFO();
   return omp_get_mapped_ptr(ptr, device_num);
 }
@@ -676,7 +680,9 @@ EXTERN void omp_target_map_from(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_FROM;
   int64_t s = size;
   OMPT_SET_DIRECTIVE_INFO();
-  __tgt_target_data_end(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
+  static ident_t ident = {0, 0, 0, 0, ";;omp_target_map_from;0;0;;"};
+  __tgt_target_data_end_mapper(&ident, device_num, 1, &ptr, &ptr, &s,
+                               &tgt_map_type, NULL, NULL);
   OMPT_CLEAR_DIRECTIVE_INFO();
 }
 
@@ -684,7 +690,9 @@ EXTERN void omp_target_map_from_delete(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_FROM | OMP_TGT_MAPTYPE_DELETE;
   int64_t s = size;
   OMPT_SET_DIRECTIVE_INFO();
-  __tgt_target_data_end(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
+  static ident_t ident = {0, 0, 0, 0, ";;omp_target_map_from_delete;0;0;;"};
+  __tgt_target_data_end_mapper(&ident, device_num, 1, &ptr, &ptr, &s,
+                               &tgt_map_type, NULL, NULL);
   OMPT_CLEAR_DIRECTIVE_INFO();
 }
 
@@ -692,7 +700,9 @@ EXTERN void omp_target_map_release(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_NONE;
   int64_t s = size;
   OMPT_SET_DIRECTIVE_INFO();
-  __tgt_target_data_end(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
+  static ident_t ident = {0, 0, 0, 0, ";;omp_target_map_release;0;0;;"};
+  __tgt_target_data_end_mapper(&ident, device_num, 1, &ptr, &ptr, &s,
+                               &tgt_map_type, NULL, NULL);
   OMPT_CLEAR_DIRECTIVE_INFO();
 }
 
@@ -700,7 +710,9 @@ EXTERN void omp_target_map_delete(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_DELETE;
   int64_t s = size;
   OMPT_SET_DIRECTIVE_INFO();
-  __tgt_target_data_end(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
+  static ident_t ident = {0, 0, 0, 0, ";;omp_target_map_delete;0;0;;"};
+  __tgt_target_data_end_mapper(&ident, device_num, 1, &ptr, &ptr, &s,
+                               &tgt_map_type, NULL, NULL);
   OMPT_CLEAR_DIRECTIVE_INFO();
 }
 
@@ -708,7 +720,9 @@ EXTERN void omp_target_update_to(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_TO | OMP_TGT_MAPTYPE_PRESENT;
   int64_t s = size;
   OMPT_SET_DIRECTIVE_INFO();
-  __tgt_target_data_update(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
+  static ident_t ident = {0, 0, 0, 0, ";;omp_target_update_to;0;0;;"};
+  __tgt_target_data_update_mapper(&ident, device_num, 1, &ptr, &ptr, &s,
+                                  &tgt_map_type, NULL, NULL);
   OMPT_CLEAR_DIRECTIVE_INFO();
 }
 
@@ -716,7 +730,9 @@ EXTERN void omp_target_update_from(void *ptr, size_t size, int device_num) {
   int64_t tgt_map_type = OMP_TGT_MAPTYPE_FROM | OMP_TGT_MAPTYPE_PRESENT;
   int64_t s = size;
   OMPT_SET_DIRECTIVE_INFO();
-  __tgt_target_data_update(device_num, 1, &ptr, &ptr, &s, &tgt_map_type);
+  static ident_t ident = {0, 0, 0, 0, ";;omp_target_update_from;0;0;;"};
+  __tgt_target_data_update_mapper(&ident, device_num, 1, &ptr, &ptr, &s,
+                                  &tgt_map_type, NULL, NULL);
   OMPT_CLEAR_DIRECTIVE_INFO();
 }
 
