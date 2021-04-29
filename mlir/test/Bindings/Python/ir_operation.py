@@ -215,6 +215,38 @@ def testOperationOperandsSlice():
 run(testOperationOperandsSlice)
 
 
+# CHECK-LABEL: TEST: testOperationOperandsSet
+def testOperationOperandsSet():
+  with Context() as ctx, Location.unknown(ctx):
+    ctx.allow_unregistered_dialects = True
+    module = Module.parse(r"""
+      func @f1() {
+        %0 = "test.producer0"() : () -> i64
+        %1 = "test.producer1"() : () -> i64
+        %2 = "test.producer2"() : () -> i64
+        "test.consumer"(%0) : (i64) -> ()
+        return
+      }""")
+    func = module.body.operations[0]
+    entry_block = func.regions[0].blocks[0]
+    producer1 = entry_block.operations[1]
+    producer2 = entry_block.operations[2]
+    consumer = entry_block.operations[3]
+    assert len(consumer.operands) == 1
+    type = consumer.operands[0].type
+
+    # CHECK: test.producer1
+    consumer.operands[0] = producer1.result
+    print(consumer.operands[0])
+
+    # CHECK: test.producer2
+    consumer.operands[-1] = producer2.result
+    print(consumer.operands[0])
+
+
+run(testOperationOperandsSet)
+
+
 # CHECK-LABEL: TEST: testDetachedOperation
 def testDetachedOperation():
   ctx = Context()
@@ -601,3 +633,16 @@ def testOperationName():
     print(op.operation.name)
 
 run(testOperationName)
+
+# CHECK-LABEL: TEST: testCapsuleConversions
+def testCapsuleConversions():
+  ctx = Context()
+  ctx.allow_unregistered_dialects = True
+  with Location.unknown(ctx):
+    m = Operation.create("custom.op1").operation
+    m_capsule = m._CAPIPtr
+    assert '"mlir.ir.Operation._CAPIPtr"' in repr(m_capsule)
+    m2 = Operation._CAPICreate(m_capsule)
+    assert m2 is m
+
+run(testCapsuleConversions)

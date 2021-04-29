@@ -67,12 +67,12 @@ def SImm5Plus1AsmOperand : AsmOperandClass {
 }
 
 def simm5_plus1 : Operand<XLenVT>, ImmLeaf<XLenVT,
-                                           [{return isInt<5>(Imm - 1);}]> {
+  [{return (isInt<5>(Imm) && Imm != -16) || Imm == 16;}]> {
   let ParserMatchClass = SImm5Plus1AsmOperand;
   let MCOperandPredicate = [{
     int64_t Imm;
     if (MCOp.evaluateAsConstantImm(Imm))
-      return isInt<5>(Imm - 1);
+      return (isInt<5>(Imm) && Imm != -16) || Imm == 16;
     return MCOp.isBareSymbolRef();
   }];
 }
@@ -88,6 +88,7 @@ class VUnitStrideLoadMask<string opcodestr>
                 (outs VR:$vd),
                 (ins GPR:$rs1), opcodestr, "$vd, (${rs1})"> {
   let vm = 1;
+  let RVVConstraint = NoConstraint;
 }
 
 // load vd, (rs1), vm
@@ -662,10 +663,10 @@ def PseudoVMSGEU_VX_M : Pseudo<(outs VRNoV0:$vd),
 def PseudoVMSGE_VX_M : Pseudo<(outs VRNoV0:$vd),
                               (ins VR:$vs2, GPR:$rs1, VMaskOp:$vm),
                               [], "vmsge.vx", "$vd, $vs2, $rs1$vm">;
-def PseudoVMSGEU_VX_M_T : Pseudo<(outs VMV0:$vd, VR:$scratch),
+def PseudoVMSGEU_VX_M_T : Pseudo<(outs VR:$vd, VRNoV0:$scratch),
                                  (ins VR:$vs2, GPR:$rs1, VMaskOp:$vm),
                                  [], "vmsgeu.vx", "$vd, $vs2, $rs1$vm, $scratch">;
-def PseudoVMSGE_VX_M_T : Pseudo<(outs VMV0:$vd, VR:$scratch),
+def PseudoVMSGE_VX_M_T : Pseudo<(outs VR:$vd, VRNoV0:$scratch),
                                 (ins VR:$vs2, GPR:$rs1, VMaskOp:$vm),
                                 [], "vmsge.vx", "$vd, $vs2, $rs1$vm, $scratch">;
 }
@@ -818,6 +819,8 @@ defm VFSGNJX_V : VALU_FV_V_F<"vfsgnjx", 0b001010>;
 
 def : InstAlias<"vfneg.v $vd, $vs$vm",
                 (VFSGNJN_VV VR:$vd, VR:$vs, VR:$vs, VMaskOp:$vm)>;
+def : InstAlias<"vfabs.v $vd, $vs$vm",
+                (VFSGNJX_VV VR:$vd, VR:$vs, VR:$vs, VMaskOp:$vm)>;
 
 // Vector Floating-Point Compare Instructions
 let RVVConstraint = NoConstraint in {

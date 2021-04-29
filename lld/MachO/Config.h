@@ -16,9 +16,9 @@
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Support/GlobPattern.h"
 #include "llvm/Support/VersionTuple.h"
-#include "llvm/TextAPI/MachO/Architecture.h"
-#include "llvm/TextAPI/MachO/Platform.h"
-#include "llvm/TextAPI/MachO/Target.h"
+#include "llvm/TextAPI/Architecture.h"
+#include "llvm/TextAPI/Platform.h"
+#include "llvm/TextAPI/Target.h"
 
 #include <vector>
 
@@ -33,6 +33,7 @@ using SectionRenameMap = llvm::DenseMap<NamePair, NamePair>;
 using SegmentRenameMap = llvm::DenseMap<llvm::StringRef, llvm::StringRef>;
 
 struct PlatformInfo {
+  llvm::MachO::Target target;
   llvm::VersionTuple minimum;
   llvm::VersionTuple sdk;
 };
@@ -48,6 +49,12 @@ enum class UndefinedSymbolTreatment {
   warning,
   suppress,
   dynamic_lookup,
+};
+
+struct SegmentProtection {
+  llvm::StringRef name;
+  uint32_t maxProt;
+  uint32_t initProt;
 };
 
 class SymbolPatterns {
@@ -82,6 +89,8 @@ struct Configuration {
   bool saveTemps = false;
   bool adhocCodesign = false;
   bool emitFunctionStarts = false;
+  bool emitBitcodeBundle = false;
+  bool emitEncryptionInfo = false;
   bool timeTraceEnabled = false;
   uint32_t headerPad;
   uint32_t dylibCompatibilityVersion = 0;
@@ -92,8 +101,8 @@ struct Configuration {
   llvm::StringRef mapFile;
   llvm::StringRef outputFile;
   llvm::StringRef ltoObjPath;
+  llvm::StringRef thinLTOJobs;
   bool demangle = false;
-  llvm::MachO::Target target;
   PlatformInfo platformInfo;
   NamespaceKind namespaceKind = NamespaceKind::twolevel;
   UndefinedSymbolTreatment undefinedSymbolTreatment =
@@ -103,7 +112,11 @@ struct Configuration {
   std::vector<llvm::StringRef> librarySearchPaths;
   std::vector<llvm::StringRef> frameworkSearchPaths;
   std::vector<llvm::StringRef> runtimePaths;
+  std::vector<std::string> astPaths;
   std::vector<Symbol *> explicitUndefineds;
+  // There are typically very few custom segmentProtections, so use a vector
+  // instead of a map.
+  std::vector<SegmentProtection> segmentProtections;
 
   llvm::DenseMap<llvm::StringRef, SymbolPriorityEntry> priorities;
   SectionRenameMap sectionRenameMap;
@@ -111,6 +124,12 @@ struct Configuration {
 
   SymbolPatterns exportedSymbols;
   SymbolPatterns unexportedSymbols;
+
+  llvm::MachO::Architecture arch() const { return platformInfo.target.Arch; }
+
+  llvm::MachO::PlatformKind platform() const {
+    return platformInfo.target.Platform;
+  }
 };
 
 // The symbol with the highest priority should be ordered first in the output

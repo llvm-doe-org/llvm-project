@@ -64,6 +64,7 @@ public:
 
   Attribute::AttrKind getKindAsEnum() const;
   uint64_t getValueAsInt() const;
+  bool getValueAsBool() const;
 
   StringRef getKindAsString() const;
   StringRef getValueAsString() const;
@@ -258,6 +259,7 @@ public:
   Type *getStructRetType() const;
   Type *getByRefType() const;
   Type *getPreallocatedType() const;
+  Type *getInAllocaType() const;
 
   using iterator = const Attribute *;
 

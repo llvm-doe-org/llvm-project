@@ -13,6 +13,7 @@
 // RUN:   | FileCheck --check-prefix=CHECK-BASIC-LIBCXX-SYSROOT %s
 // CHECK-BASIC-LIBCXX-SYSROOT: "{{[^"]*}}clang{{[^"]*}}" "-cc1"
 // CHECK-BASIC-LIBCXX-SYSROOT: "-isysroot" "[[SYSROOT:[^"]+]]"
+// CHECK-BASIC-LIBCXX-SYSROOT: "-internal-isystem" "[[SYSROOT]]/usr/include/x86_64-unknown-linux-gnu/c++/v1"
 // CHECK-BASIC-LIBCXX-SYSROOT: "-internal-isystem" "[[SYSROOT]]/usr/include/c++/v1"
 // CHECK-BASIC-LIBCXX-SYSROOT: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // RUN: %clang -no-canonical-prefixes %s -### -fsyntax-only 2>&1 \
@@ -25,6 +26,7 @@
 // RUN:   | FileCheck --check-prefix=CHECK-BASIC-LIBCXX-INSTALL %s
 // CHECK-BASIC-LIBCXX-INSTALL: "{{[^"]*}}clang{{[^"]*}}" "-cc1"
 // CHECK-BASIC-LIBCXX-INSTALL: "-isysroot" "[[SYSROOT:[^"]+]]"
+// CHECK-BASIC-LIBCXX-INSTALL: "-internal-isystem" "[[SYSROOT]]/usr/bin/../include/x86_64-unknown-linux-gnu/c++/v1"
 // CHECK-BASIC-LIBCXX-INSTALL: "-internal-isystem" "[[SYSROOT]]/usr/bin/../include/c++/v1"
 // CHECK-BASIC-LIBCXX-INSTALL: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 //
@@ -38,6 +40,7 @@
 // RUN:   | FileCheck --check-prefix=CHECK-BASIC-LIBCXXV2-SYSROOT %s
 // CHECK-BASIC-LIBCXXV2-SYSROOT: "{{[^"]*}}clang{{[^"]*}}" "-cc1"
 // CHECK-BASIC-LIBCXXV2-SYSROOT: "-isysroot" "[[SYSROOT:[^"]+]]"
+// CHECK-BASIC-LIBCXXV2-SYSROOT: "-internal-isystem" "[[SYSROOT]]/usr/include/x86_64-unknown-linux-gnu/c++/v2"
 // CHECK-BASIC-LIBCXXV2-SYSROOT: "-internal-isystem" "[[SYSROOT]]/usr/include/c++/v2"
 // CHECK-BASIC-LIBCXXV2-SYSROOT: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // RUN: %clang -no-canonical-prefixes %s -### -fsyntax-only 2>&1 \
@@ -50,6 +53,7 @@
 // RUN:   | FileCheck --check-prefix=CHECK-BASIC-LIBCXXV2-INSTALL %s
 // CHECK-BASIC-LIBCXXV2-INSTALL: "{{[^"]*}}clang{{[^"]*}}" "-cc1"
 // CHECK-BASIC-LIBCXXV2-INSTALL: "-isysroot" "[[SYSROOT:[^"]+]]"
+// CHECK-BASIC-LIBCXXV2-INSTALL: "-internal-isystem" "[[SYSROOT]]/usr/bin/../include/x86_64-unknown-linux-gnu/c++/v2"
 // CHECK-BASIC-LIBCXXV2-INSTALL: "-internal-isystem" "[[SYSROOT]]/usr/bin/../include/c++/v2"
 // CHECK-BASIC-LIBCXXV2-INSTALL: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 //
@@ -64,6 +68,7 @@
 // RUN:   | FileCheck --check-prefix=CHECK-BASIC-LIBSTDCXX-LIBCXXV2-SYSROOT %s
 // CHECK-BASIC-LIBSTDCXX-LIBCXXV2-SYSROOT: "{{[^"]*}}clang{{[^"]*}}" "-cc1"
 // CHECK-BASIC-LIBSTDCXX-LIBCXXV2-SYSROOT: "-isysroot" "[[SYSROOT:[^"]+]]"
+// CHECK-BASIC-LIBSTDCXX-LIBCXXV2-SYSROOT: "-internal-isystem" "[[SYSROOT]]/usr/include/x86_64-unknown-linux-gnu/c++/v2"
 // CHECK-BASIC-LIBSTDCXX-LIBCXXV2-SYSROOT: "-internal-isystem" "[[SYSROOT]]/usr/include/c++/v2"
 // CHECK-BASIC-LIBSTDCXX-LIBCXXV2-SYSROOT: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 
@@ -80,8 +85,8 @@
 // CHECK-GENTOO-4-6-2: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.6.2/include/g++-v4"
 // CHECK-GENTOO-4-6-2: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.6.2/include/g++-v4/x86_64-pc-linux-gnu"
 // CHECK-GENTOO-4-6-2: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.6.2/include/g++-v4/backward"
-// CHECK-GENTOO-4-6-2: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-6-2: "-internal-isystem" "[[RESOURCE_DIR]]{{/|\\\\}}include"
+// CHECK-GENTOO-4-6-2: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-6-2: "-internal-externc-isystem" "[[SYSROOT]]/include"
 // CHECK-GENTOO-4-6-2: "-internal-externc-isystem" "[[SYSROOT]]/usr/include"
 // RUN: %clang -no-canonical-prefixes %s -### -fsyntax-only 2>&1 \
@@ -95,8 +100,8 @@
 // CHECK-GENTOO-4-6-4: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.6.4/include/g++-v4.6"
 // CHECK-GENTOO-4-6-4: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.6.4/include/g++-v4.6/x86_64-pc-linux-gnu"
 // CHECK-GENTOO-4-6-4: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.6.4/include/g++-v4.6/backward"
-// CHECK-GENTOO-4-6-4: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-6-4: "-internal-isystem" "[[RESOURCE_DIR]]{{/|\\\\}}include"
+// CHECK-GENTOO-4-6-4: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-6-4: "-internal-externc-isystem" "[[SYSROOT]]/include"
 // CHECK-GENTOO-4-6-4: "-internal-externc-isystem" "[[SYSROOT]]/usr/include"
 // RUN: %clang -no-canonical-prefixes %s -### -fsyntax-only 2>&1 \
@@ -110,8 +115,8 @@
 // CHECK-GENTOO-4-9-3: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.3/include/g++-v4.9.3"
 // CHECK-GENTOO-4-9-3: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.3/include/g++-v4.9.3/x86_64-pc-linux-gnu"
 // CHECK-GENTOO-4-9-3: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.3/include/g++-v4.9.3/backward"
-// CHECK-GENTOO-4-9-3: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-9-3: "-internal-isystem" "[[RESOURCE_DIR]]{{/|\\\\}}include"
+// CHECK-GENTOO-4-9-3: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-9-3: "-internal-externc-isystem" "[[SYSROOT]]/include"
 // CHECK-GENTOO-4-9-3: "-internal-externc-isystem" "[[SYSROOT]]/usr/include"
 //
@@ -136,8 +141,8 @@
 // CHECK-GENTOO-4-9-3-X32: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.3/include/g++-v4.9.3"
 // CHECK-GENTOO-4-9-3-X32: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.3/include/g++-v4.9.3/x86_64-pc-linux-gnu/x32"
 // CHECK-GENTOO-4-9-3-X32: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.3/include/g++-v4.9.3/backward"
-// CHECK-GENTOO-4-9-3-X32: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-9-3-X32: "-internal-isystem" "[[RESOURCE_DIR]]{{/|\\\\}}include"
+// CHECK-GENTOO-4-9-3-X32: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-9-3-X32: "-internal-externc-isystem" "[[SYSROOT]]/include"
 // CHECK-GENTOO-4-9-3-X32: "-internal-externc-isystem" "[[SYSROOT]]/usr/include"
 //
@@ -152,8 +157,8 @@
 // CHECK-GENTOO-4-9-3-32: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.3/include/g++-v4.9.3"
 // CHECK-GENTOO-4-9-3-32: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.3/include/g++-v4.9.3/x86_64-pc-linux-gnu/32"
 // CHECK-GENTOO-4-9-3-32: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.3/include/g++-v4.9.3/backward"
-// CHECK-GENTOO-4-9-3-32: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-9-3-32: "-internal-isystem" "[[RESOURCE_DIR]]{{/|\\\\}}include"
+// CHECK-GENTOO-4-9-3-32: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-9-3-32: "-internal-externc-isystem" "[[SYSROOT]]/include"
 // CHECK-GENTOO-4-9-3-32: "-internal-externc-isystem" "[[SYSROOT]]/usr/include"
 //
@@ -173,8 +178,8 @@
 // CHECK-GENTOO-4-9-X: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.x/include/g++-v4.9.3"
 // CHECK-GENTOO-4-9-X: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.x/include/g++-v4.9.3/x86_64-pc-linux-gnu"
 // CHECK-GENTOO-4-9-X: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.x/include/g++-v4.9.3/backward"
-// CHECK-GENTOO-4-9-X: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-9-X: "-internal-isystem" "[[RESOURCE_DIR]]{{/|\\\\}}include"
+// CHECK-GENTOO-4-9-X: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-9-X: "-internal-externc-isystem" "[[SYSROOT]]/include"
 // CHECK-GENTOO-4-9-X: "-internal-externc-isystem" "[[SYSROOT]]/usr/include"
 //
@@ -189,8 +194,8 @@
 // CHECK-GENTOO-4-9-X-X32: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.x/include/g++-v4.9.3"
 // CHECK-GENTOO-4-9-X-X32: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.x/include/g++-v4.9.3/x86_64-pc-linux-gnu/x32"
 // CHECK-GENTOO-4-9-X-X32: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.x/include/g++-v4.9.3/backward"
-// CHECK-GENTOO-4-9-X-X32: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-9-X-X32: "-internal-isystem" "[[RESOURCE_DIR]]{{/|\\\\}}include"
+// CHECK-GENTOO-4-9-X-X32: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-9-X-X32: "-internal-externc-isystem" "[[SYSROOT]]/include"
 // CHECK-GENTOO-4-9-X-X32: "-internal-externc-isystem" "[[SYSROOT]]/usr/include"
 //
@@ -205,8 +210,8 @@
 // CHECK-GENTOO-4-9-X-32: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.x/include/g++-v4.9.3"
 // CHECK-GENTOO-4-9-X-32: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.x/include/g++-v4.9.3/x86_64-pc-linux-gnu/32"
 // CHECK-GENTOO-4-9-X-32: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/x86_64-pc-linux-gnu/4.9.x/include/g++-v4.9.3/backward"
-// CHECK-GENTOO-4-9-X-32: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-9-X-32: "-internal-isystem" "[[RESOURCE_DIR]]{{/|\\\\}}include"
+// CHECK-GENTOO-4-9-X-32: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-GENTOO-4-9-X-32: "-internal-externc-isystem" "[[SYSROOT]]/include"
 // CHECK-GENTOO-4-9-X-32: "-internal-externc-isystem" "[[SYSROOT]]/usr/include"
 //
@@ -222,8 +227,8 @@
 // CHECK-MIPS64-GNUABI: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/mips64-linux-gnuabi64/4.9/../../../../include/c++/4.9"
 // CHECK-MIPS64-GNUABI: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/mips64-linux-gnuabi64/4.9/../../../../include/c++/4.9/mips64-linux-gnuabi64"
 // CHECK-MIPS64-GNUABI: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/mips64-linux-gnuabi64/4.9/../../../../include/c++/4.9/backward"
-// CHECK-MIPS64-GNUABI: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-MIPS64-GNUABI: "-internal-isystem" "[[RESOURCE_DIR]]{{/|\\\\}}include"
+// CHECK-MIPS64-GNUABI: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-MIPS64-GNUABI: "-internal-externc-isystem" "[[SYSROOT]]/usr/include/mips64-linux-gnuabi64"
 // CHECK-MIPS64-GNUABI: "-internal-externc-isystem" "[[SYSROOT]]/include"
 // CHECK-MIPS64-GNUABI: "-internal-externc-isystem" "[[SYSROOT]]/usr/include"
@@ -240,8 +245,8 @@
 // CHECK-MIPS64EL-GNUABI: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/mips64el-linux-gnuabi64/4.9/../../../../include/c++/4.9"
 // CHECK-MIPS64EL-GNUABI: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/mips64el-linux-gnuabi64/4.9/../../../../include/c++/4.9/mips64el-linux-gnuabi64"
 // CHECK-MIPS64EL-GNUABI: "-internal-isystem" "[[SYSROOT]]/usr/lib/gcc/mips64el-linux-gnuabi64/4.9/../../../../include/c++/4.9/backward"
-// CHECK-MIPS64EL-GNUABI: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-MIPS64EL-GNUABI: "-internal-isystem" "[[RESOURCE_DIR]]{{/|\\\\}}include"
+// CHECK-MIPS64EL-GNUABI: "-internal-isystem" "[[SYSROOT]]/usr/local/include"
 // CHECK-MIPS64EL-GNUABI: "-internal-externc-isystem" "[[SYSROOT]]/usr/include/mips64el-linux-gnuabi64"
 // CHECK-MIPS64EL-GNUABI: "-internal-externc-isystem" "[[SYSROOT]]/include"
 // CHECK-MIPS64EL-GNUABI: "-internal-externc-isystem" "[[SYSROOT]]/usr/include"

@@ -37,11 +37,8 @@ static cl::opt<bool>
     EnableIfConversion("enable-if-conversion", cl::init(true), cl::Hidden,
                        cl::desc("Enable if-conversion during vectorization."));
 
-static cl::opt<unsigned> PragmaVectorizeMemoryCheckThreshold(
-    "pragma-vectorize-memory-check-threshold", cl::init(128), cl::Hidden,
-    cl::desc("The maximum allowed number of runtime memory checks with a "
-             "vectorize(enable) pragma."));
-
+// TODO: Move size-based thresholds out of legality checking, make cost based
+// decisions instead of hard thresholds.
 static cl::opt<unsigned> VectorizeSCEVCheckThreshold(
     "vectorize-scev-check-threshold", cl::init(16), cl::Hidden,
     cl::desc("The maximum number of SCEV checks allowed."));
@@ -60,7 +57,7 @@ bool LoopVectorizeHints::Hint::validate(unsigned Val) {
   switch (Kind) {
   case HK_WIDTH:
     return isPowerOf2_32(Val) && Val <= VectorizerParams::MaxVectorWidth;
-  case HK_UNROLL:
+  case HK_INTERLEAVE:
     return isPowerOf2_32(Val) && Val <= MaxInterleaveFactor;
   case HK_FORCE:
     return (Val <= 1);
@@ -76,7 +73,7 @@ LoopVectorizeHints::LoopVectorizeHints(const Loop *L,
                                        bool InterleaveOnlyWhenForced,
                                        OptimizationRemarkEmitter &ORE)
     : Width("vectorize.width", VectorizerParams::VectorizationFactor, HK_WIDTH),
-      Interleave("interleave.count", InterleaveOnlyWhenForced, HK_UNROLL),
+      Interleave("interleave.count", InterleaveOnlyWhenForced, HK_INTERLEAVE),
       Force("vectorize.enable", FK_Undefined, HK_FORCE),
       IsVectorized("isvectorized", 0, HK_ISVECTORIZED),
       Predicate("vectorize.predicate.enable", FK_Undefined, HK_PREDICATE),
@@ -94,8 +91,8 @@ LoopVectorizeHints::LoopVectorizeHints(const Loop *L,
     // consider the loop to have been already vectorized because there's
     // nothing more that we can do.
     IsVectorized.Value =
-        getWidth() == ElementCount::getFixed(1) && Interleave.Value == 1;
-  LLVM_DEBUG(if (InterleaveOnlyWhenForced && Interleave.Value == 1) dbgs()
+        getWidth() == ElementCount::getFixed(1) && getInterleave() == 1;
+  LLVM_DEBUG(if (InterleaveOnlyWhenForced && getInterleave() == 1) dbgs()
              << "LV: Interleaving disabled by the pass manager\n");
 }
 
@@ -168,8 +165,8 @@ void LoopVectorizeHints::emitRemarkWithHints() const {
         R << " (Force=" << NV("Force", true);
         if (Width.Value != 0)
           R << ", Vector Width=" << NV("VectorWidth", getWidth());
-        if (Interleave.Value != 0)
-          R << ", Interleave Count=" << NV("InterleaveCount", Interleave.Value);
+        if (getInterleave() != 0)
+          R << ", Interleave Count=" << NV("InterleaveCount", getInterleave());
         R << ")";
       }
       return R;
@@ -244,32 +241,6 @@ void LoopVectorizeHints::setHint(StringRef Name, Metadata *Arg) {
       break;
     }
   }
-}
-
-bool LoopVectorizationRequirements::doesNotMeet(
-    Function *F, Loop *L, const LoopVectorizeHints &Hints) {
-  const char *PassName = Hints.vectorizeAnalysisPassName();
-  bool Failed = false;
-
-  // Test if runtime memcheck thresholds are exceeded.
-  bool PragmaThresholdReached =
-      NumRuntimePointerChecks > PragmaVectorizeMemoryCheckThreshold;
-  bool ThresholdReached =
-      NumRuntimePointerChecks > VectorizerParams::RuntimeMemoryCheckThreshold;
-  if ((ThresholdReached && !Hints.allowReordering()) ||
-      PragmaThresholdReached) {
-    ORE.emit([&]() {
-      return OptimizationRemarkAnalysisAliasing(PassName, "CantReorderMemOps",
-                                                L->getStartLoc(),
-                                                L->getHeader())
-             << "loop not vectorized: cannot prove it is safe to reorder "
-                "memory operations";
-    });
-    LLVM_DEBUG(dbgs() << "LV: Too many memory checks needed.\n");
-    Failed = true;
-  }
-
-  return Failed;
 }
 
 // Return true if the inner loop \p Lp is uniform with regard to the outer loop

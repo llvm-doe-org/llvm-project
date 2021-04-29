@@ -983,7 +983,7 @@ private:
     } else {
       FSet.removeLock(FactMan, !Cp);
       FSet.addLock(FactMan,
-                   std::make_unique<LockableFactEntry>(Cp, kind, loc));
+                   std::make_unique<LockableFactEntry>(Cp, kind, loc, true));
     }
   }
 
@@ -2051,15 +2051,11 @@ void BuildLockset::VisitCallExpr(const CallExpr *Exp) {
 
     if (ME && MD) {
       if (ME->isArrow()) {
-        if (MD->isConst())
-          checkPtAccess(CE->getImplicitObjectArgument(), AK_Read);
-        else // FIXME -- should be AK_Written
-          checkPtAccess(CE->getImplicitObjectArgument(), AK_Read);
+        // Should perhaps be AK_Written if !MD->isConst().
+        checkPtAccess(CE->getImplicitObjectArgument(), AK_Read);
       } else {
-        if (MD->isConst())
-          checkAccess(CE->getImplicitObjectArgument(), AK_Read);
-        else     // FIXME -- should be AK_Written
-          checkAccess(CE->getImplicitObjectArgument(), AK_Read);
+        // Should perhaps be AK_Written if !MD->isConst().
+        checkAccess(CE->getImplicitObjectArgument(), AK_Read);
       }
     }
 
@@ -2211,27 +2207,25 @@ void ThreadSafetyAnalyzer::intersectAndWarn(FactSet &FSet1,
 
   // Find locks in FSet2 that conflict or are not in FSet1, and warn.
   for (const auto &Fact : FSet2) {
-    const FactEntry *LDat1 = nullptr;
-    const FactEntry *LDat2 = &FactMan[Fact];
-    FactSet::iterator Iter1  = FSet1.findLockIter(FactMan, *LDat2);
-    if (Iter1 != FSet1.end()) LDat1 = &FactMan[*Iter1];
+    const FactEntry &LDat2 = FactMan[Fact];
 
-    if (LDat1) {
-      if (LDat1->kind() != LDat2->kind()) {
-        Handler.handleExclusiveAndShared("mutex", LDat2->toString(),
-                                         LDat2->loc(), LDat1->loc());
-        if (Modify && LDat1->kind() != LK_Exclusive) {
+    FactSet::iterator Iter1 = FSet1.findLockIter(FactMan, LDat2);
+    if (Iter1 != FSet1.end()) {
+      const FactEntry &LDat1 = FactMan[*Iter1];
+      if (LDat1.kind() != LDat2.kind()) {
+        Handler.handleExclusiveAndShared("mutex", LDat2.toString(), LDat2.loc(),
+                                         LDat1.loc());
+        if (Modify && LDat1.kind() != LK_Exclusive) {
           // Take the exclusive lock, which is the one in FSet2.
           *Iter1 = Fact;
         }
-      }
-      else if (Modify && LDat1->asserted() && !LDat2->asserted()) {
+      } else if (Modify && LDat1.asserted() && !LDat2.asserted()) {
         // The non-asserted lock in FSet2 is the one we want to track.
         *Iter1 = Fact;
       }
     } else {
-      LDat2->handleRemovalFromIntersection(FSet2, FactMan, JoinLoc, LEK1,
-                                           Handler);
+      LDat2.handleRemovalFromIntersection(FSet2, FactMan, JoinLoc, LEK1,
+                                          Handler);
     }
   }
 

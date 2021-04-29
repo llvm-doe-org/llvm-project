@@ -15,8 +15,8 @@ using namespace llvm;
 
 #define DEBUG_TYPE "riscvtti"
 
-int RISCVTTIImpl::getIntImmCost(const APInt &Imm, Type *Ty,
-                                TTI::TargetCostKind CostKind) {
+InstructionCost RISCVTTIImpl::getIntImmCost(const APInt &Imm, Type *Ty,
+                                            TTI::TargetCostKind CostKind) {
   assert(Ty->isIntegerTy() &&
          "getIntImmCost can only estimate cost of materialising integers");
 
@@ -30,10 +30,10 @@ int RISCVTTIImpl::getIntImmCost(const APInt &Imm, Type *Ty,
                                     getST()->is64Bit());
 }
 
-int RISCVTTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx,
-                                    const APInt &Imm, Type *Ty,
-                                    TTI::TargetCostKind CostKind,
-                                    Instruction *Inst) {
+InstructionCost RISCVTTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx,
+                                                const APInt &Imm, Type *Ty,
+                                                TTI::TargetCostKind CostKind,
+                                                Instruction *Inst) {
   assert(Ty->isIntegerTy() &&
          "getIntImmCost can only estimate cost of materialising integers");
 
@@ -88,9 +88,10 @@ int RISCVTTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx,
   return TTI::TCC_Free;
 }
 
-int RISCVTTIImpl::getIntImmCostIntrin(Intrinsic::ID IID, unsigned Idx,
-                                      const APInt &Imm, Type *Ty,
-                                      TTI::TargetCostKind CostKind) {
+InstructionCost
+RISCVTTIImpl::getIntImmCostIntrin(Intrinsic::ID IID, unsigned Idx,
+                                  const APInt &Imm, Type *Ty,
+                                  TTI::TargetCostKind CostKind) {
   // Prevent hoisting in unknown cases.
   return TTI::TCC_Free;
 }
@@ -141,7 +142,7 @@ Optional<unsigned> RISCVTTIImpl::getMaxVScale() const {
   return BaseT::getMaxVScale();
 }
 
-unsigned RISCVTTIImpl::getGatherScatterOpCost(
+InstructionCost RISCVTTIImpl::getGatherScatterOpCost(
     unsigned Opcode, Type *DataTy, const Value *Ptr, bool VariableMask,
     Align Alignment, TTI::TargetCostKind CostKind, const Instruction *I) {
   if (CostKind != TTI::TCK_RecipThroughput)
@@ -162,7 +163,7 @@ unsigned RISCVTTIImpl::getGatherScatterOpCost(
 
   auto *VTy = cast<FixedVectorType>(DataTy);
   unsigned NumLoads = VTy->getNumElements();
-  unsigned MemOpCost =
+  InstructionCost MemOpCost =
       getMemoryOpCost(Opcode, VTy->getElementType(), Alignment, 0, CostKind, I);
   return NumLoads * MemOpCost;
 }

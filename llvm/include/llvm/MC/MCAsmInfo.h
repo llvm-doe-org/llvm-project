@@ -130,6 +130,14 @@ protected:
   /// at the beginning of statements. Defaults to false.
   bool RestrictCommentStringToStartOfStatement = false;
 
+  /// This indicates whether to allow additional "comment strings" to be lexed
+  /// as a comment. Setting this attribute to true, will ensure that C-style
+  /// line comments (// ..), C-style block comments (/* .. */), and "#" are
+  /// all treated as comments in addition to the string specified by the
+  /// CommentString attribute.
+  /// Default is true.
+  bool AllowAdditionalComments = true;
+
   /// This is appended to emitted labels.  Defaults to ":"
   const char *LabelSuffix;
 
@@ -173,9 +181,33 @@ protected:
   /// Defaults to false.
   bool AllowAtInName = false;
 
-  /// This is true if the assembler allows $ @ ? characters at the start of
-  /// symbol names. Defaults to false.
-  bool AllowSymbolAtNameStart = false;
+  /// This is true if the assembler allows the "?" character at the start of
+  /// of a string to be lexed as an AsmToken::Identifier.
+  /// If the AsmLexer determines that the string can be lexed as a possible
+  /// comment, setting this option will have no effect, and the string will
+  /// still be lexed as a comment.
+  bool AllowQuestionAtStartOfIdentifier = false;
+
+  /// This is true if the assembler allows the "$" character at the start of
+  /// of a string to be lexed as an AsmToken::Identifier.
+  /// If the AsmLexer determines that the string can be lexed as a possible
+  /// comment, setting this option will have no effect, and the string will
+  /// still be lexed as a comment.
+  bool AllowDollarAtStartOfIdentifier = false;
+
+  /// This is true if the assembler allows the "@" character at the start of
+  /// a string to be lexed as an AsmToken::Identifier.
+  /// If the AsmLexer determines that the string can be lexed as a possible
+  /// comment, setting this option will have no effect, and the string will
+  /// still be lexed as a comment.
+  bool AllowAtAtStartOfIdentifier = false;
+
+  /// This is true if the assembler allows the "#" character at the start of
+  /// a string to be lexed as an AsmToken::Identifier.
+  /// If the AsmLexer determines that the string can be lexed as a possible
+  /// comment, setting this option will have no effect, and the string will
+  /// still be lexed as a comment.
+  bool AllowHashAtStartOfIdentifier = false;
 
   /// If this is true, symbol names with invalid characters will be printed in
   /// quotes.
@@ -316,6 +348,10 @@ protected:
   /// argument and how it is interpreted.  Defaults to NoAlignment.
   LCOMM::LCOMMType LCOMMDirectiveAlignmentType = LCOMM::NoAlignment;
 
+  /// True if the target only has basename for .file directive. False if the
+  /// target also needs the directory along with the basename. Default to true.
+  bool HasBasenameOnlyForFileDirective = true;
+
   // True if the target allows .align directives on functions. This is true for
   // most targets, so defaults to true.
   bool HasFunctionAlignment = true;
@@ -449,6 +485,9 @@ protected:
   // %hi(), and similar unary operators.
   bool HasMipsExpressions = false;
 
+  // If true, use Motorola-style integers in Assembly (ex. $0ac).
+  bool UseMotorolaIntegers = false;
+
   // If true, emit function descriptor symbol on AIX.
   bool NeedsFunctionDescriptors = false;
 
@@ -564,6 +603,7 @@ public:
   bool getRestrictCommentStringToStartOfStatement() const {
     return RestrictCommentStringToStartOfStatement;
   }
+  bool shouldAllowAdditionalComments() const { return AllowAdditionalComments; }
   const char *getLabelSuffix() const { return LabelSuffix; }
 
   bool useAssignmentForEHBegin() const { return UseAssignmentForEHBegin; }
@@ -588,7 +628,18 @@ public:
   const char *getCode64Directive() const { return Code64Directive; }
   unsigned getAssemblerDialect() const { return AssemblerDialect; }
   bool doesAllowAtInName() const { return AllowAtInName; }
-  bool doesAllowSymbolAtNameStart() const { return AllowSymbolAtNameStart; }
+  bool doesAllowQuestionAtStartOfIdentifier() const {
+    return AllowQuestionAtStartOfIdentifier;
+  }
+  bool doesAllowAtAtStartOfIdentifier() const {
+    return AllowAtAtStartOfIdentifier;
+  }
+  bool doesAllowDollarAtStartOfIdentifier() const {
+    return AllowDollarAtStartOfIdentifier;
+  }
+  bool doesAllowHashAtStartOfIdentifier() const {
+    return AllowHashAtStartOfIdentifier;
+  }
   bool supportsNameQuoting() const { return SupportsQuotedNames; }
 
   bool doesSupportDataRegionDirectives() const {
@@ -629,6 +680,9 @@ public:
     return LCOMMDirectiveAlignmentType;
   }
 
+  bool hasBasenameOnlyForFileDirective() const {
+    return HasBasenameOnlyForFileDirective;
+  }
   bool hasFunctionAlignment() const { return HasFunctionAlignment; }
   bool hasDotTypeDotSizeDirective() const { return HasDotTypeDotSizeDirective; }
   bool hasSingleParameterDotFile() const { return HasSingleParameterDotFile; }
@@ -740,6 +794,7 @@ public:
   void setRelaxELFRelocations(bool V) { RelaxELFRelocations = V; }
   bool hasMipsExpressions() const { return HasMipsExpressions; }
   bool needsFunctionDescriptors() const { return NeedsFunctionDescriptors; }
+  bool shouldUseMotorolaIntegers() const { return UseMotorolaIntegers; }
 };
 
 } // end namespace llvm

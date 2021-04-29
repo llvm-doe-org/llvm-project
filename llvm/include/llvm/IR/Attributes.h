@@ -114,6 +114,7 @@ public:
   static Attribute getWithStructRetType(LLVMContext &Context, Type *Ty);
   static Attribute getWithByRefType(LLVMContext &Context, Type *Ty);
   static Attribute getWithPreallocatedType(LLVMContext &Context, Type *Ty);
+  static Attribute getWithInAllocaType(LLVMContext &Context, Type *Ty);
 
   /// For a typed attribute, return the equivalent attribute with the type
   /// changed to \p ReplacementTy.
@@ -160,12 +161,16 @@ public:
   bool hasAttribute(StringRef Val) const;
 
   /// Return the attribute's kind as an enum (Attribute::AttrKind). This
-  /// requires the attribute to be an enum or integer attribute.
+  /// requires the attribute to be an enum, integer, or type attribute.
   Attribute::AttrKind getKindAsEnum() const;
 
   /// Return the attribute's value as an integer. This requires that the
   /// attribute be an integer attribute.
   uint64_t getValueAsInt() const;
+
+  /// Return the attribute's value as a boolean. This requires that the
+  /// attribute be a string attribute.
+  bool getValueAsBool() const;
 
   /// Return the attribute's kind as a string. This requires the
   /// attribute to be a string attribute.
@@ -206,6 +211,9 @@ public:
   /// The Attribute is converted to a string of equivalent mnemonic. This
   /// is, presumably, for writing out the mnemonics for the assembly writer.
   std::string getAsString(bool InAttrGrp = false) const;
+
+  /// Return true if this attribute belongs to the LLVMContext.
+  bool hasParentContext(LLVMContext &C) const;
 
   /// Equality and non-equality operators.
   bool operator==(Attribute A) const { return pImpl == A.pImpl; }
@@ -325,9 +333,13 @@ public:
   Type *getStructRetType() const;
   Type *getByRefType() const;
   Type *getPreallocatedType() const;
+  Type *getInAllocaType() const;
   std::pair<unsigned, Optional<unsigned>> getAllocSizeArgs() const;
   std::pair<unsigned, unsigned> getVScaleRangeArgs() const;
   std::string getAsString(bool InAttrGrp = false) const;
+
+  /// Return true if this attribute set belongs to the LLVMContext.
+  bool hasParentContext(LLVMContext &C) const;
 
   using iterator = const Attribute *;
 
@@ -672,6 +684,9 @@ public:
   /// Return the alignment for the specified function parameter.
   MaybeAlign getParamAlignment(unsigned ArgNo) const;
 
+  /// Return the stack alignment for the specified function parameter.
+  MaybeAlign getParamStackAlignment(unsigned ArgNo) const;
+
   /// Return the byval type for the specified function parameter.
   Type *getParamByValType(unsigned ArgNo) const;
 
@@ -683,6 +698,9 @@ public:
 
   /// Return the preallocated type for the specified function parameter.
   Type *getParamPreallocatedType(unsigned ArgNo) const;
+
+  /// Return the inalloca type for the specified function parameter.
+  Type *getParamInAllocaType(unsigned ArgNo) const;
 
   /// Get the stack alignment.
   MaybeAlign getStackAlignment(unsigned Index) const;
@@ -716,6 +734,9 @@ public:
   /// Return the attributes at the index as a string.
   std::string getAsString(unsigned Index, bool InAttrGrp = false) const;
 
+  /// Return true if this attribute list belongs to the LLVMContext.
+  bool hasParentContext(LLVMContext &C) const;
+
   //===--------------------------------------------------------------------===//
   // AttributeList Introspection
   //===--------------------------------------------------------------------===//
@@ -742,6 +763,8 @@ public:
 
   /// Return true if there are no attributes.
   bool isEmpty() const { return pImpl == nullptr; }
+
+  void print(raw_ostream &O) const;
 
   void dump() const;
 };
@@ -791,6 +814,7 @@ class AttrBuilder {
   Type *StructRetType = nullptr;
   Type *ByRefType = nullptr;
   Type *PreallocatedType = nullptr;
+  Type *InAllocaType = nullptr;
 
 public:
   AttrBuilder() = default;
@@ -885,6 +909,9 @@ public:
   /// Retrieve the preallocated type.
   Type *getPreallocatedType() const { return PreallocatedType; }
 
+  /// Retrieve the inalloca type.
+  Type *getInAllocaType() const { return InAllocaType; }
+
   /// Retrieve the allocsize args, if the allocsize attribute exists.  If it
   /// doesn't exist, pair(0, 0) is returned.
   std::pair<unsigned, Optional<unsigned>> getAllocSizeArgs() const;
@@ -943,6 +970,9 @@ public:
 
   /// This turns a preallocated type into the form used internally in Attribute.
   AttrBuilder &addPreallocatedAttr(Type *Ty);
+
+  /// This turns an inalloca type into the form used internally in Attribute.
+  AttrBuilder &addInAllocaAttr(Type *Ty);
 
   /// Add an allocsize attribute, using the representation returned by
   /// Attribute.getIntValue().

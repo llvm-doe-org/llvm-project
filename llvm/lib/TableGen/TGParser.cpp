@@ -258,6 +258,9 @@ bool TGParser::AddSubClass(Record *CurRec, SubClassReference &SubClass) {
                        ") of parent class '" + SC->getNameInitAsString() + "'");
   }
 
+  // Copy the subclass record's assertions to the new record.
+  CurRec->appendAssertions(SC);
+
   Init *Name;
   if (CurRec->isClass())
     Name =
@@ -336,27 +339,37 @@ bool TGParser::AddSubMultiClass(MultiClass *CurMC,
   return resolve(SMC->Entries, TemplateArgs, false, &CurMC->Entries);
 }
 
-/// Add a record or foreach loop to the current context (global record keeper,
-/// current inner-most foreach loop, or multiclass).
+/// Add a record, foreach loop, or assertion to the current context.
 bool TGParser::addEntry(RecordsEntry E) {
-  assert(!E.Rec || !E.Loop);
+  assert((!!E.Rec + !!E.Loop + !!E.Assertion) == 1 &&
+         "RecordsEntry has invalid number of items");
 
+  // If we are parsing a loop, add it to the loop's entries.
   if (!Loops.empty()) {
     Loops.back()->Entries.push_back(std::move(E));
     return false;
   }
 
+  // If it is a loop, then resolve and perform the loop.
   if (E.Loop) {
     SubstStack Stack;
     return resolve(*E.Loop, Stack, CurMultiClass == nullptr,
                    CurMultiClass ? &CurMultiClass->Entries : nullptr);
   }
 
+  // If we are parsing a multiclass, add it to the multiclass's entries.
   if (CurMultiClass) {
     CurMultiClass->Entries.push_back(std::move(E));
     return false;
   }
 
+  // If it is an assertion, then it's a top-level one, so check it.
+  if (E.Assertion) {
+    CheckAssert(E.Assertion->Loc, E.Assertion->Condition, E.Assertion->Message);
+    return false;
+  }
+
+  // It must be a record, so finish it off.
   return addDefOne(std::move(E.Rec));
 }
 
@@ -411,6 +424,20 @@ bool TGParser::resolve(const std::vector<RecordsEntry> &Source,
   for (auto &E : Source) {
     if (E.Loop) {
       Error = resolve(*E.Loop, Substs, Final, Dest);
+
+    } else if (E.Assertion) {
+      MapResolver R;
+      for (const auto &S : Substs)
+        R.set(S.first, S.second);
+      Init *Condition = E.Assertion->Condition->resolveReferences(R);
+      Init *Message = E.Assertion->Message->resolveReferences(R);
+
+      if (Dest)
+        Dest->push_back(std::make_unique<Record::AssertionInfo>(
+            E.Assertion->Loc, Condition, Message));
+      else
+        CheckAssert(E.Assertion->Loc, Condition, Message);
+
     } else {
       auto Rec = std::make_unique<Record>(*E.Rec);
       if (Loc)
@@ -448,14 +475,15 @@ bool TGParser::addDefOne(std::unique_ptr<Record> Rec) {
   Rec->resolveReferences(NewName);
   checkConcrete(*Rec);
 
-  CheckRecordAsserts(*Rec);
-
   if (!isa<StringInit>(Rec->getNameInit())) {
     PrintError(Rec->getLoc(), Twine("record name '") +
                                   Rec->getNameInit()->getAsString() +
                                   "' could not be fully resolved");
     return true;
   }
+
+  // Check the assertions.
+  Rec->checkRecordAssertions();
 
   // If ObjectBody has template arguments, it's an error.
   assert(Rec->getTemplateArgs().empty() && "How'd this get template args?");
@@ -1480,6 +1508,9 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
   case tgtok::XSubstr:
     return ParseOperationSubstr(CurRec, ItemType);
 
+  case tgtok::XFind:
+    return ParseOperationFind(CurRec, ItemType);
+
   case tgtok::XCond:
     return ParseOperationCond(CurRec, ItemType);
 
@@ -1716,6 +1747,94 @@ Init *TGParser::ParseOperationSubstr(Record *CurRec, RecTy *ItemType) {
     TypedInit *RHSt = dyn_cast<TypedInit>(RHS);
     if (!RHSt && !isa<UnsetInit>(RHS)) {
       TokError("could not determine type of the length in !substr");
+      return nullptr;
+    }
+    if (RHSt && !isa<IntRecTy>(RHSt->getType())) {
+      TokError(Twine("expected int, got type '") +
+               RHSt->getType()->getAsString() + "'");
+      return nullptr;
+    }
+  }
+
+  return (TernOpInit::get(Code, LHS, MHS, RHS, Type))->Fold(CurRec);
+}
+
+/// Parse the !find operation. Return null on error.
+///
+/// Substr ::= !find(string, string [, start-int]) => int
+Init *TGParser::ParseOperationFind(Record *CurRec, RecTy *ItemType) {
+  TernOpInit::TernaryOp Code = TernOpInit::FIND;
+  RecTy *Type = IntRecTy::get();
+
+  Lex.Lex(); // eat the operation
+
+  if (!consume(tgtok::l_paren)) {
+    TokError("expected '(' after !find operator");
+    return nullptr;
+  }
+
+  Init *LHS = ParseValue(CurRec);
+  if (!LHS)
+    return nullptr;
+
+  if (!consume(tgtok::comma)) {
+    TokError("expected ',' in !find operator");
+    return nullptr;
+  }
+
+  SMLoc MHSLoc = Lex.getLoc();
+  Init *MHS = ParseValue(CurRec);
+  if (!MHS)
+    return nullptr;
+
+  SMLoc RHSLoc = Lex.getLoc();
+  Init *RHS;
+  if (consume(tgtok::comma)) {
+    RHSLoc = Lex.getLoc();
+    RHS = ParseValue(CurRec);
+    if (!RHS)
+      return nullptr;
+  } else {
+    RHS = IntInit::get(0);
+  }
+
+  if (!consume(tgtok::r_paren)) {
+    TokError("expected ')' in !find operator");
+    return nullptr;
+  }
+
+  if (ItemType && !Type->typeIsConvertibleTo(ItemType)) {
+    Error(RHSLoc, Twine("expected value of type '") +
+                  ItemType->getAsString() + "', got '" +
+                  Type->getAsString() + "'");
+  }
+
+  TypedInit *LHSt = dyn_cast<TypedInit>(LHS);
+  if (!LHSt && !isa<UnsetInit>(LHS)) {
+    TokError("could not determine type of the source string in !find");
+    return nullptr;
+  }
+  if (LHSt && !isa<StringRecTy>(LHSt->getType())) {
+    TokError(Twine("expected string, got type '") +
+             LHSt->getType()->getAsString() + "'");
+    return nullptr;
+  }
+
+  TypedInit *MHSt = dyn_cast<TypedInit>(MHS);
+  if (!MHSt && !isa<UnsetInit>(MHS)) {
+    TokError("could not determine type of the target string in !find");
+    return nullptr;
+  }
+  if (MHSt && !isa<StringRecTy>(MHSt->getType())) {
+    Error(MHSLoc, Twine("expected string, got type '") +
+                      MHSt->getType()->getAsString() + "'");
+    return nullptr;
+  }
+
+  if (RHS) {
+    TypedInit *RHSt = dyn_cast<TypedInit>(RHS);
+    if (!RHSt && !isa<UnsetInit>(RHS)) {
+      TokError("could not determine type of the start position in !find");
       return nullptr;
     }
     if (RHSt && !isa<IntRecTy>(RHSt->getType())) {
@@ -2028,8 +2147,6 @@ Init *TGParser::ParseSimpleValue(Record *CurRec, RecTy *ItemType,
 
     // Loop through the arguments that were not specified and make sure
     // they have a complete value.
-    // TODO: If we just keep a required argument count, we can do away
-    //       with this checking.
     ArrayRef<Init *> TArgs = Class->getTemplateArgs();
     for (unsigned I = Args.size(), E = TArgs.size(); I < E; ++I) {
       RecordVal *Arg = Class->getValue(TArgs[I]);
@@ -2256,7 +2373,8 @@ Init *TGParser::ParseSimpleValue(Record *CurRec, RecTy *ItemType,
   case tgtok::XForEach:
   case tgtok::XFilter:
   case tgtok::XSubst:
-  case tgtok::XSubstr: { // Value ::= !ternop '(' Value ',' Value ',' Value ')'
+  case tgtok::XSubstr:
+  case tgtok::XFind: { // Value ::= !ternop '(' Value ',' Value ',' Value ')'
     return ParseOperation(CurRec, ItemType);
   }
   }
@@ -2535,9 +2653,9 @@ bool TGParser::ParseTemplateArgValueList(SmallVectorImpl<Init *> &Result,
 
     if (consume(tgtok::greater)) // end of argument list?
       return false;
-    if (!consume(tgtok::comma)) // must be comma
-      return true;
-    ++ArgIndex; 
+    if (!consume(tgtok::comma))
+      return TokError("Expected comma before next argument");
+    ++ArgIndex;
   }
 }
 
@@ -2696,8 +2814,8 @@ VarInit *TGParser::ParseForeachDeclaration(Init *&ForeachListValue) {
 
 /// ParseTemplateArgList - Read a template argument list, which is a non-empty
 /// sequence of template-declarations in <>'s.  If CurRec is non-null, these are
-/// template args for a class, which may or may not be in a multiclass. If null,
-/// these are the template args for a multiclass.
+/// template args for a class. If null, these are the template args for a
+/// multiclass.
 ///
 ///    TemplateArgList ::= '<' Declaration (',' Declaration)* '>'
 ///
@@ -2739,6 +2857,7 @@ bool TGParser::ParseTemplateArgList(Record *CurRec) {
 ///   BodyItem ::= LET ID OptionalBitList '=' Value ';'
 ///   BodyItem ::= Defvar
 ///   BodyItem ::= Assert
+///
 bool TGParser::ParseBodyItem(Record *CurRec) {
   if (Lex.getCode() == tgtok::Assert)
     return ParseAssert(nullptr, CurRec);
@@ -2838,9 +2957,14 @@ bool TGParser::ApplyLetStack(Record *CurRec) {
   return false;
 }
 
+/// Apply the current let bindings to the RecordsEntry.
 bool TGParser::ApplyLetStack(RecordsEntry &Entry) {
   if (Entry.Rec)
     return ApplyLetStack(Entry.Rec.get());
+
+  // Let bindings are not applied to assertions.
+  if (Entry.Assertion)
+    return false;
 
   for (auto &E : Entry.Loop->Entries) {
     if (ApplyLetStack(E))
@@ -2885,8 +3009,8 @@ bool TGParser::ParseObjectBody(Record *CurRec) {
   return ParseBody(CurRec);
 }
 
-/// ParseDef - Parse and return a top level or multiclass def, return the record
-/// corresponding to it.  This returns null on error.
+/// ParseDef - Parse and return a top level or multiclass record definition.
+/// Return false if okay, true if error.
 ///
 ///   DefInst ::= DEF ObjectName ObjectBody
 ///
@@ -3180,14 +3304,11 @@ bool TGParser::ParseAssert(MultiClass *CurMultiClass, Record *CurRec) {
   if (!consume(tgtok::semi))
     return TokError("expected ';'");
 
-  if (CurMultiClass) {
-    assert(false && "assert in multiclass not yet supported");
-  } else if (CurRec) {
+  if (CurRec)
     CurRec->addAssertion(ConditionLoc, Condition, Message);
-  } else { // at top level
-    CheckAssert(ConditionLoc, Condition, Message);
-  }
- 
+  else
+    addEntry(std::make_unique<Record::AssertionInfo>(ConditionLoc, Condition,
+                                                     Message));
   return false;
 }
 
@@ -3323,9 +3444,12 @@ bool TGParser::ParseTopLevelLet(MultiClass *CurMultiClass) {
 ///
 ///  MultiClassInst ::= MULTICLASS ID TemplateArgList?
 ///                     ':' BaseMultiClassList '{' MultiClassObject+ '}'
+///  MultiClassObject ::= Assert
 ///  MultiClassObject ::= DefInst
-///  MultiClassObject ::= MultiClassInst
 ///  MultiClassObject ::= DefMInst
+///  MultiClassObject ::= Defvar
+///  MultiClassObject ::= Foreach
+///  MultiClassObject ::= If
 ///  MultiClassObject ::= LETCommand '{' ObjectList '}'
 ///  MultiClassObject ::= LETCommand Object
 ///
@@ -3392,9 +3516,8 @@ bool TGParser::ParseMultiClass() {
       default:
         return TokError("expected 'assert', 'def', 'defm', 'defvar', "
                         "'foreach', 'if', or 'let' in multiclass body");
-      case tgtok::Assert:
-        return TokError("an assert statement in a multiclass is not yet supported");
 
+      case tgtok::Assert:
       case tgtok::Def:
       case tgtok::Defm:
       case tgtok::Defvar:
@@ -3560,7 +3683,7 @@ bool TGParser::ParseObject(MultiClass *MC) {
   default:
     return TokError(
                "Expected assert, class, def, defm, defset, foreach, if, or let");
-  case tgtok::Assert:  return ParseAssert(MC, nullptr);
+  case tgtok::Assert:  return ParseAssert(MC);
   case tgtok::Def:     return ParseDef(MC);
   case tgtok::Defm:    return ParseDefm(MC);
   case tgtok::Defvar:  return ParseDefvar();
@@ -3638,37 +3761,6 @@ bool TGParser::CheckTemplateArgValues(SmallVectorImpl<llvm::Init *> &Values,
   }
 
   return false;
-}
-
-// Check an assertion: Obtain the condition value and be sure it is true.
-// If not, print a nonfatal error along with the message.
-void TGParser::CheckAssert(SMLoc Loc, Init *Condition, Init *Message) {
-  auto *CondValue = dyn_cast_or_null<IntInit>(
-                        Condition->convertInitializerTo(IntRecTy::get()));
-  if (CondValue) {
-    if (!CondValue->getValue()) {
-      PrintError(Loc, "assertion failed");
-      if (auto *MessageInit = dyn_cast<StringInit>(Message))
-        PrintNote(MessageInit->getValue());
-      else
-        PrintNote("(assert message is not a string)");
-    }
-  } else {
-    PrintError(Loc, "assert condition must of type bit, bits, or int.");
-  }
-}
-
-// Check all record assertions: For each one, resolve the condition
-// and message, then call CheckAssert().
-void TGParser::CheckRecordAsserts(Record &Rec) {
-  RecordResolver R(Rec);
-  R.setFinal(true);
-
-  for (auto Assertion : Rec.getAssertions()) {
-    Init *Condition = std::get<1>(Assertion)->resolveReferences(R);
-    Init *Message = std::get<2>(Assertion)->resolveReferences(R);
-    CheckAssert(std::get<0>(Assertion), Condition, Message);
-  }
 }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)

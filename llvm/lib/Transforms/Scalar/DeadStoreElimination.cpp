@@ -402,9 +402,9 @@ isOverwrite(const Instruction *LaterI, const Instruction *EarlierI,
   }
 
   // If we hit a partial alias we may have a full overwrite
-  if (AAR == AliasResult::PartialAlias) {
-    int64_t Off = AA.getClobberOffset(Later, Earlier).getValueOr(0);
-    if (Off > 0 && (uint64_t)Off + EarlierSize <= LaterSize)
+  if (AAR == AliasResult::PartialAlias && AAR.hasOffset()) {
+    int32_t Off = AAR.getOffset();
+    if (Off >= 0 && (uint64_t)Off + EarlierSize <= LaterSize)
       return OW_Complete;
   }
 
@@ -996,8 +996,8 @@ struct DSEState {
 
   DSEState(Function &F, AliasAnalysis &AA, MemorySSA &MSSA, DominatorTree &DT,
            PostDominatorTree &PDT, const TargetLibraryInfo &TLI)
-      : F(F), AA(AA), BatchAA(AA, /*CacheOffsets =*/true), MSSA(MSSA), DT(DT),
-        PDT(PDT), TLI(TLI), DL(F.getParent()->getDataLayout()) {}
+      : F(F), AA(AA), BatchAA(AA), MSSA(MSSA), DT(DT), PDT(PDT), TLI(TLI),
+        DL(F.getParent()->getDataLayout()) {}
 
   static DSEState get(Function &F, AliasAnalysis &AA, MemorySSA &MSSA,
                       DominatorTree &DT, PostDominatorTree &PDT,
@@ -1770,6 +1770,25 @@ struct DSEState {
   bool storeIsNoop(MemoryDef *Def, const MemoryLocation &DefLoc,
                    const Value *DefUO) {
     StoreInst *Store = dyn_cast<StoreInst>(Def->getMemoryInst());
+    MemSetInst *MemSet = dyn_cast<MemSetInst>(Def->getMemoryInst());
+    Constant *StoredConstant = nullptr;
+    if (Store)
+      StoredConstant = dyn_cast<Constant>(Store->getOperand(0));
+    if (MemSet)
+      StoredConstant = dyn_cast<Constant>(MemSet->getValue());
+
+    if (StoredConstant && StoredConstant->isNullValue()) {
+      auto *DefUOInst = dyn_cast<Instruction>(DefUO);
+      if (DefUOInst && isCallocLikeFn(DefUOInst, &TLI)) {
+        auto *UnderlyingDef = cast<MemoryDef>(MSSA.getMemoryAccess(DefUOInst));
+        // If UnderlyingDef is the clobbering access of Def, no instructions
+        // between them can modify the memory location.
+        auto *ClobberDef =
+            MSSA.getSkipSelfWalker()->getClobberingMemoryAccess(Def);
+        return UnderlyingDef == ClobberDef;
+      }
+    }
+
     if (!Store)
       return false;
 
@@ -1817,18 +1836,6 @@ struct DSEState {
       }
     }
 
-    Constant *StoredConstant = dyn_cast<Constant>(Store->getOperand(0));
-    if (StoredConstant && StoredConstant->isNullValue()) {
-      auto *DefUOInst = dyn_cast<Instruction>(DefUO);
-      if (DefUOInst && isCallocLikeFn(DefUOInst, &TLI)) {
-        auto *UnderlyingDef = cast<MemoryDef>(MSSA.getMemoryAccess(DefUOInst));
-        // If UnderlyingDef is the clobbering access of Def, no instructions
-        // between them can modify the memory location.
-        auto *ClobberDef =
-            MSSA.getSkipSelfWalker()->getClobberingMemoryAccess(Def);
-        return UnderlyingDef == ClobberDef;
-      }
-    }
     return false;
   }
 };

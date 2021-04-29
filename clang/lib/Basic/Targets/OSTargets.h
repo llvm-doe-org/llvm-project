@@ -13,7 +13,6 @@
 #define LLVM_CLANG_LIB_BASIC_TARGETS_OSTARGETS_H
 
 #include "Targets.h"
-#include "llvm/MC/MCSectionMachO.h"
 
 namespace clang {
 namespace targets {
@@ -112,15 +111,6 @@ public:
     }
 
     this->MCountName = "\01mcount";
-  }
-
-  llvm::Error isValidSectionSpecifier(StringRef SR) const override {
-    // Let MCSectionMachO validate this.
-    StringRef Segment, Section;
-    unsigned TAA, StubSize;
-    bool HasTAA;
-    return llvm::MCSectionMachO::ParseSectionSpecifier(SR, Segment, Section,
-                                                       TAA, HasTAA, StubSize);
   }
 
   const char *getStaticInitSectionSpecifier() const override {
@@ -794,6 +784,7 @@ public:
   ZOSTargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts)
       : OSTargetInfo<Target>(Triple, Opts) {
     this->WCharType = TargetInfo::UnsignedInt;
+    this->MaxAlignedAttribute = 128;
     this->UseBitFieldTypeAlignment = false;
     this->UseZeroLengthBitfieldAlignment = true;
     this->UseLeadingZeroLengthBitfield = false;

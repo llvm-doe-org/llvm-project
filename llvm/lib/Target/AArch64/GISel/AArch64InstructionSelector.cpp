@@ -18,6 +18,7 @@
 #include "AArch64RegisterInfo.h"
 #include "AArch64Subtarget.h"
 #include "AArch64TargetMachine.h"
+#include "AArch64GlobalISelUtils.h"
 #include "MCTargetDesc/AArch64AddressingModes.h"
 #include "MCTargetDesc/AArch64MCTargetDesc.h"
 #include "llvm/ADT/Optional.h"
@@ -1796,7 +1797,7 @@ bool AArch64InstructionSelector::selectVectorAshrLshr(
     NegOpc = AArch64::NEGv8i16;
   } else if (Ty == LLT::vector(16, 8)) {
     Opc = IsASHR ? AArch64::SSHLv16i8 : AArch64::USHLv16i8;
-    NegOpc = AArch64::NEGv8i16;
+    NegOpc = AArch64::NEGv16i8;
   } else if (Ty == LLT::vector(8, 8)) {
     Opc = IsASHR ? AArch64::SSHLv8i8 : AArch64::USHLv8i8;
     NegOpc = AArch64::NEGv8i8;
@@ -2667,18 +2668,14 @@ bool AArch64InstructionSelector::select(MachineInstr &I) {
 
     auto &MemOp = **I.memoperands_begin();
     uint64_t MemSizeInBytes = MemOp.getSize();
-    if (MemOp.isAtomic()) {
-      // For now we just support s8 acquire loads to be able to compile stack
-      // protector code.
-      if (MemOp.getOrdering() == AtomicOrdering::Acquire &&
-          MemSizeInBytes == 1) {
-        I.setDesc(TII.get(AArch64::LDARB));
-        return constrainSelectedInstRegOperands(I, TII, TRI, RBI);
-      }
-      LLVM_DEBUG(dbgs() << "Atomic load/store not fully supported yet\n");
-      return false;
-    }
     unsigned MemSizeInBits = MemSizeInBytes * 8;
+    AtomicOrdering Order = MemOp.getOrdering();
+
+    // Need special instructions for atomics that affect ordering.
+    if (Order != AtomicOrdering::NotAtomic &&
+        Order != AtomicOrdering::Unordered &&
+        Order != AtomicOrdering::Monotonic)
+      return false;
 
 #ifndef NDEBUG
     const Register PtrReg = I.getOperand(1).getReg();
@@ -3379,7 +3376,10 @@ bool AArch64InstructionSelector::selectTLSGlobalValue(
   MachineFunction &MF = *I.getParent()->getParent();
   MF.getFrameInfo().setAdjustsStack(true);
 
-  const GlobalValue &GV = *I.getOperand(1).getGlobal();
+  const auto &GlobalOp = I.getOperand(1);
+  assert(GlobalOp.getOffset() == 0 &&
+         "Shouldn't have an offset on TLS globals!");
+  const GlobalValue &GV = *GlobalOp.getGlobal();
   MachineIRBuilder MIB(I);
 
   auto LoadGOT =
@@ -4577,37 +4577,10 @@ MachineInstr *AArch64InstructionSelector::tryFoldIntegerCompare(
   //
   // cmn z, y
 
-  // Helper lambda to detect the subtract followed by the compare.
-  // Takes in the def of the LHS or RHS, and checks if it's a subtract from 0.
-  auto IsCMN = [&](MachineInstr *DefMI, const AArch64CC::CondCode &CC) {
-    if (!DefMI || DefMI->getOpcode() != TargetOpcode::G_SUB)
-      return false;
-
-    // Need to make sure NZCV is the same at the end of the transformation.
-    if (CC != AArch64CC::EQ && CC != AArch64CC::NE)
-      return false;
-
-    // We want to match against SUBs.
-    if (DefMI->getOpcode() != TargetOpcode::G_SUB)
-      return false;
-
-    // Make sure that we're getting
-    // x = G_SUB 0, y
-    auto ValAndVReg =
-        getConstantVRegValWithLookThrough(DefMI->getOperand(1).getReg(), MRI);
-    if (!ValAndVReg || ValAndVReg->Value != 0)
-      return false;
-
-    // This can safely be represented as a CMN.
-    return true;
-  };
-
   // Check if the RHS or LHS of the G_ICMP is defined by a SUB
   MachineInstr *LHSDef = getDefIgnoringCopies(LHS.getReg(), MRI);
   MachineInstr *RHSDef = getDefIgnoringCopies(RHS.getReg(), MRI);
-  CmpInst::Predicate P = (CmpInst::Predicate)Predicate.getPredicate();
-  const AArch64CC::CondCode CC = changeICMPPredToAArch64CC(P);
-
+  auto P = static_cast<CmpInst::Predicate>(Predicate.getPredicate());
   // Given this:
   //
   // x = G_SUB 0, y
@@ -4616,7 +4589,7 @@ MachineInstr *AArch64InstructionSelector::tryFoldIntegerCompare(
   // Produce this:
   //
   // cmn y, z
-  if (IsCMN(LHSDef, CC))
+  if (isCMN(LHSDef, P, MRI))
     return emitCMN(LHSDef->getOperand(2), RHS, MIRBuilder);
 
   // Same idea here, but with the RHS of the compare instead:
@@ -4629,7 +4602,7 @@ MachineInstr *AArch64InstructionSelector::tryFoldIntegerCompare(
   // Produce this:
   //
   // cmn z, y
-  if (IsCMN(RHSDef, CC))
+  if (isCMN(RHSDef, P, MRI))
     return emitCMN(LHS, RHSDef->getOperand(2), MIRBuilder);
 
   // Given this:

@@ -2,7 +2,8 @@ add_header_library(
   common
   HDRS
     common.h
-    sanitizer_annotations.h
+    endian.h
+    sanitizer.h
 )
 
 add_header_library(

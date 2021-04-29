@@ -819,6 +819,7 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
     FPToI.minScalar(1, S32);
 
   FPToI.minScalar(0, S32)
+       .widenScalarToNextPow2(0, 32)
        .scalarize(0)
        .lower();
 
@@ -1291,12 +1292,14 @@ AMDGPULegalizerInfo::AMDGPULegalizerInfo(const GCNSubtarget &ST_,
     Atomics.legalFor({{S32, FlatPtr}, {S64, FlatPtr}});
   }
 
+  auto &Atomic = getActionDefinitionsBuilder(G_ATOMICRMW_FADD);
   if (ST.hasLDSFPAtomics()) {
-    auto &Atomic = getActionDefinitionsBuilder(G_ATOMICRMW_FADD)
-      .legalFor({{S32, LocalPtr}, {S32, RegionPtr}});
+    Atomic.legalFor({{S32, LocalPtr}, {S32, RegionPtr}});
     if (ST.hasGFX90AInsts())
       Atomic.legalFor({{S64, LocalPtr}});
   }
+  if (ST.hasAtomicFaddInsts())
+    Atomic.legalFor({{S32, GlobalPtr}});
 
   // BUFFER/FLAT_ATOMIC_CMP_SWAP on GCN GPUs needs input marshalling, and output
   // demarshalling
@@ -2827,18 +2830,6 @@ void AMDGPULegalizerInfo::legalizeUDIV_UREM32Impl(MachineIRBuilder &B,
     B.buildSelect(DstReg, Cond, B.buildAdd(S32, Q, One), Q);
   else
     B.buildSelect(DstReg, Cond, B.buildSub(S32, R, Y), R);
-}
-
-bool AMDGPULegalizerInfo::legalizeUDIV_UREM32(MachineInstr &MI,
-                                              MachineRegisterInfo &MRI,
-                                              MachineIRBuilder &B) const {
-  const bool IsDiv = MI.getOpcode() == AMDGPU::G_UDIV;
-  Register DstReg = MI.getOperand(0).getReg();
-  Register Num = MI.getOperand(1).getReg();
-  Register Den = MI.getOperand(2).getReg();
-  legalizeUDIV_UREM32Impl(B, DstReg, Num, Den, IsDiv);
-  MI.eraseFromParent();
-  return true;
 }
 
 // Build integer reciprocal sequence arounud V_RCP_IFLAG_F32

@@ -44,16 +44,21 @@
 #include <vector>
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Option/Arg.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Option/Option.h"
 #include "llvm/Support/Errno.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "JSONUtils.h"
 #include "LLDBUtils.h"
+#include "OutputRedirector.h"
 
 #if defined(_WIN32)
 #ifndef PATH_MAX
@@ -371,7 +376,8 @@ void ProgressEventThreadFunction() {
         const char *message = lldb::SBDebugger::GetProgressFromEvent(
             event, progress_id, completed, total, is_debugger_specific);
         if (message)
-          g_vsc.SendProgressEvent(progress_id, message, completed, total);
+          g_vsc.SendProgressEvent(
+              ProgressEvent(progress_id, message, completed, total));
       }
     }
   }
@@ -566,6 +572,8 @@ void request_attach(const llvm::json::Object &request) {
   llvm::StringRef core_file = GetString(arguments, "coreFile");
   g_vsc.stop_at_entry =
       core_file.empty() ? GetBoolean(arguments, "stopOnEntry", false) : true;
+  std::vector<std::string> postRunCommands =
+      GetStrings(arguments, "postRunCommands");
   const llvm::StringRef debuggerRoot = GetString(arguments, "debuggerRoot");
 
   // This is a hack for loading DWARF in .o files on Mac where the .o files
@@ -634,12 +642,14 @@ void request_attach(const llvm::json::Object &request) {
   if (error.Fail()) {
     response["success"] = llvm::json::Value(false);
     EmplaceSafeString(response, "message", std::string(error.GetCString()));
+  } else {
+    g_vsc.RunLLDBCommands("Running postRunCommands:", postRunCommands);
   }
+
   g_vsc.SendJSON(llvm::json::Value(std::move(response)));
   if (error.Success()) {
     SendProcessEvent(Attach);
     g_vsc.SendJSON(CreateEventObject("initialized"));
-    // SendThreadStoppedEvent();
   }
 }
 
@@ -1604,6 +1614,8 @@ void request_launch(const llvm::json::Object &request) {
   g_vsc.exit_commands = GetStrings(arguments, "exitCommands");
   g_vsc.terminate_commands = GetStrings(arguments, "terminateCommands");
   auto launchCommands = GetStrings(arguments, "launchCommands");
+  std::vector<std::string> postRunCommands =
+      GetStrings(arguments, "postRunCommands");
   g_vsc.stop_at_entry = GetBoolean(arguments, "stopOnEntry", false);
   const llvm::StringRef debuggerRoot = GetString(arguments, "debuggerRoot");
 
@@ -1685,7 +1697,10 @@ void request_launch(const llvm::json::Object &request) {
   if (error.Fail()) {
     response["success"] = llvm::json::Value(false);
     EmplaceSafeString(response, "message", std::string(error.GetCString()));
+  } else {
+    g_vsc.RunLLDBCommands("Running postRunCommands:", postRunCommands);
   }
+
   g_vsc.SendJSON(llvm::json::Value(std::move(response)));
 
   if (g_vsc.is_attach)
@@ -2702,7 +2717,9 @@ void request_setVariable(const llvm::json::Object &request) {
   // This is a reference to the containing variable/scope
   const auto variablesReference =
       GetUnsigned(arguments, "variablesReference", 0);
-  const auto name = GetString(arguments, "name");
+  llvm::StringRef name = GetString(arguments, "name");
+  bool is_duplicated_variable_name = name.find(" @") != llvm::StringRef::npos;
+
   const auto value = GetString(arguments, "value");
   // Set success to false just in case we don't find the variable by name
   response.try_emplace("success", false);
@@ -2744,14 +2761,10 @@ void request_setVariable(const llvm::json::Object &request) {
       break;
     }
 
-    // Find the variable by name in the correct scope and hope we don't have
-    // multiple variables with the same name. We search backwards because
-    // the list of variables has the top most variables first and variables
-    // in deeper scopes are last. This means we will catch the deepest
-    // variable whose name matches which is probably what the user wants.
     for (int64_t i = end_idx - 1; i >= start_idx; --i) {
-      auto curr_variable = g_vsc.variables.GetValueAtIndex(i);
-      llvm::StringRef variable_name(curr_variable.GetName());
+      lldb::SBValue curr_variable = g_vsc.variables.GetValueAtIndex(i);
+      std::string variable_name = CreateUniqueVariableNameForDisplay(
+          curr_variable, is_duplicated_variable_name);
       if (variable_name == name) {
         variable = curr_variable;
         if (curr_variable.MightHaveChildren())
@@ -2760,6 +2773,9 @@ void request_setVariable(const llvm::json::Object &request) {
       }
     }
   } else {
+    // This is not under the globals or locals scope, so there are no duplicated
+    // names.
+
     // We have a named item within an actual variable so we need to find it
     // withing the container variable by name.
     const int64_t var_idx = VARREF_TO_VARIDX(variablesReference);
@@ -2796,6 +2812,8 @@ void request_setVariable(const llvm::json::Object &request) {
       EmplaceSafeString(body, "message", std::string(error.GetCString()));
     }
     response["success"] = llvm::json::Value(success);
+  } else {
+    response["success"] = llvm::json::Value(false);
   }
 
   response.try_emplace("body", std::move(body));
@@ -2911,12 +2929,26 @@ void request_variables(const llvm::json::Object &request) {
       break;
     }
     const int64_t end_idx = start_idx + ((count == 0) ? num_children : count);
+
+    // We first find out which variable names are duplicated
+    llvm::DenseMap<const char *, int> variable_name_counts;
     for (auto i = start_idx; i < end_idx; ++i) {
       lldb::SBValue variable = g_vsc.variables.GetValueAtIndex(i);
       if (!variable.IsValid())
         break;
-      variables.emplace_back(
-          CreateVariable(variable, VARIDX_TO_VARREF(i), i, hex));
+      variable_name_counts[variable.GetName()]++;
+    }
+
+    // Now we construct the result with unique display variable names
+    for (auto i = start_idx; i < end_idx; ++i) {
+      lldb::SBValue variable = g_vsc.variables.GetValueAtIndex(i);
+      const char *name = variable.GetName();
+
+      if (!variable.IsValid())
+        break;
+      variables.emplace_back(CreateVariable(variable, VARIDX_TO_VARREF(i), i,
+                                            hex,
+                                            variable_name_counts[name] > 1));
     }
   } else {
     // We are expanding a variable that has children, so we will return its
@@ -3077,7 +3109,46 @@ void LaunchRunInTerminalTarget(llvm::opt::Arg &target_arg,
 #endif
 }
 
+/// used only by TestVSCode_redirection_to_console.py
+void redirection_test() {
+  printf("stdout message\n");
+  fprintf(stderr, "stderr message\n");
+  fflush(stdout);
+  fflush(stderr);
+}
+
+/// Redirect stdout and stderr fo the IDE's console output.
+///
+/// Errors in this operation will be printed to the log file and the IDE's
+/// console output as well.
+///
+/// \return
+///     A fd pointing to the original stdout.
+int SetupStdoutStderrRedirection() {
+  int new_stdout_fd = dup(fileno(stdout));
+  auto stdout_err_redirector_callback = [&](llvm::StringRef data) {
+    g_vsc.SendOutput(OutputType::Console, data);
+  };
+
+  for (int fd : {fileno(stdout), fileno(stderr)}) {
+    if (llvm::Error err = RedirectFd(fd, stdout_err_redirector_callback)) {
+      std::string error_message = llvm::toString(std::move(err));
+      if (g_vsc.log)
+        *g_vsc.log << error_message << std::endl;
+      stdout_err_redirector_callback(error_message);
+    }
+  }
+
+  /// used only by TestVSCode_redirection_to_console.py
+  if (getenv("LLDB_VSCODE_TEST_STDOUT_STDERR_REDIRECTION") != nullptr)
+    redirection_test();
+  return new_stdout_fd;
+}
+
 int main(int argc, char *argv[]) {
+  llvm::InitLLVM IL(argc, argv, /*InstallPipeSignalExitHandler=*/false);
+  llvm::PrettyStackTraceProgram X(argc, argv);
+
   llvm::SmallString<256> program_path(argv[0]);
   llvm::sys::fs::make_absolute(program_path);
   g_vsc.debug_adaptor_path = program_path.str().str();
@@ -3086,6 +3157,11 @@ int main(int argc, char *argv[]) {
   unsigned MAI, MAC;
   llvm::ArrayRef<const char *> ArgsArr = llvm::makeArrayRef(argv + 1, argc);
   llvm::opt::InputArgList input_args = T.ParseArgs(ArgsArr, MAI, MAC);
+
+  if (input_args.hasArg(OPT_help)) {
+    printHelp(T, llvm::sys::path::filename(argv[0]));
+    return EXIT_SUCCESS;
+  }
 
   if (llvm::opt::Arg *target_arg = input_args.getLastArg(OPT_launch_target)) {
     if (llvm::opt::Arg *comm_file = input_args.getLastArg(OPT_comm_file)) {
@@ -3100,21 +3176,23 @@ int main(int argc, char *argv[]) {
     } else {
       llvm::errs() << "\"--launch-target\" requires \"--comm-file\" to be "
                       "specified\n";
-      exit(EXIT_FAILURE);
+      return EXIT_FAILURE;
     }
   }
+
+  // stdout/stderr redirection to the IDE's console
+  int new_stdout_fd = SetupStdoutStderrRedirection();
 
   // Initialize LLDB first before we do anything.
   lldb::SBDebugger::Initialize();
 
+  // Terminate the debugger before the C++ destructor chain kicks in.
+  auto terminate_debugger =
+      llvm::make_scope_exit([] { lldb::SBDebugger::Terminate(); });
+
   RegisterRequestCallbacks();
 
   int portno = -1;
-
-  if (input_args.hasArg(OPT_help)) {
-    printHelp(T, llvm::sys::path::filename(argv[0]));
-    return 0;
-  }
 
   if (auto *arg = input_args.getLastArg(OPT_port)) {
     auto optarg = arg->getValue();
@@ -3122,7 +3200,7 @@ int main(int argc, char *argv[]) {
     portno = strtol(optarg, &remainder, 0);
     if (remainder == optarg || *remainder != '\0') {
       fprintf(stderr, "'%s' is not a valid port number.\n", optarg);
-      exit(1);
+      return EXIT_FAILURE;
     }
   }
 
@@ -3139,13 +3217,13 @@ int main(int argc, char *argv[]) {
       g_vsc.input.descriptor = StreamDescriptor::from_socket(socket_fd, true);
       g_vsc.output.descriptor = StreamDescriptor::from_socket(socket_fd, false);
     } else {
-      exit(1);
+      return EXIT_FAILURE;
     }
   } else {
     g_vsc.input.descriptor = StreamDescriptor::from_file(fileno(stdin), false);
-    g_vsc.output.descriptor =
-        StreamDescriptor::from_file(fileno(stdout), false);
+    g_vsc.output.descriptor = StreamDescriptor::from_file(new_stdout_fd, false);
   }
+
   uint32_t packet_idx = 0;
   while (!g_vsc.sent_terminated_event) {
     llvm::json::Object object;
@@ -3160,8 +3238,5 @@ int main(int argc, char *argv[]) {
     ++packet_idx;
   }
 
-  // We must terminate the debugger in a thread before the C++ destructor
-  // chain messes everything up.
-  lldb::SBDebugger::Terminate();
-  return 0;
+  return EXIT_SUCCESS;
 }

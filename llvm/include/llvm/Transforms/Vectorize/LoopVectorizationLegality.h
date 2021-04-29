@@ -46,7 +46,7 @@ namespace llvm {
 class LoopVectorizeHints {
   enum HintKind {
     HK_WIDTH,
-    HK_UNROLL,
+    HK_INTERLEAVE,
     HK_FORCE,
     HK_ISVECTORIZED,
     HK_PREDICATE,
@@ -111,7 +111,15 @@ public:
   ElementCount getWidth() const {
     return ElementCount::get(Width.Value, isScalable());
   }
-  unsigned getInterleave() const { return Interleave.Value; }
+  unsigned getInterleave() const {
+    if (Interleave.Value)
+      return Interleave.Value;
+    // If interleaving is not explicitly set, assume that if we do not want
+    // unrolling, we also don't want any interleaving.
+    if (llvm::hasUnrollTransformation(TheLoop) & TM_Disable)
+      return 1;
+    return 0;
+  }
   unsigned getIsVectorized() const { return IsVectorized.Value; }
   unsigned getPredicate() const { return Predicate.Value; }
   enum ForceKind getForce() const {
@@ -177,8 +185,6 @@ private:
 /// followed by a non-expert user.
 class LoopVectorizationRequirements {
 public:
-  LoopVectorizationRequirements(OptimizationRemarkEmitter &ORE) : ORE(ORE) {}
-
   /// Track the 1st floating-point instruction that can not be reassociated.
   void addExactFPMathInst(Instruction *I) {
     if (I && !ExactFPMathInst)
@@ -187,19 +193,19 @@ public:
 
   void addRuntimePointerChecks(unsigned Num) { NumRuntimePointerChecks = Num; }
 
-  bool doesNotMeet(Function *F, Loop *L, const LoopVectorizeHints &Hints);
 
   Instruction *getExactFPInst() { return ExactFPMathInst; }
   bool canVectorizeFPMath(const LoopVectorizeHints &Hints) const {
     return !ExactFPMathInst || Hints.allowReordering();
   }
 
+  unsigned getNumRuntimePointerChecks() const {
+    return NumRuntimePointerChecks;
+  }
+
 private:
   unsigned NumRuntimePointerChecks = 0;
   Instruction *ExactFPMathInst = nullptr;
-
-  /// Interface to emit optimization remarks.
-  OptimizationRemarkEmitter &ORE;
 };
 
 /// LoopVectorizationLegality checks if it is legal to vectorize a loop, and

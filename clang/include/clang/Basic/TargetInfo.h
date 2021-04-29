@@ -40,7 +40,6 @@
 
 namespace llvm {
 struct fltSemantics;
-class DataLayout;
 }
 
 namespace clang {
@@ -165,6 +164,10 @@ protected:
   /// If non-zero, specifies a fixed alignment value for bitfields that follow
   /// zero length bitfield, regardless of the zero length bitfield type.
   unsigned ZeroLengthBitfieldBoundary;
+
+  /// If non-zero, specifies a maximum alignment to truncate alignment
+  /// specified in the aligned attribute of a static variable to this value.
+  unsigned MaxAlignedAttribute;
 };
 
 /// OpenCL type kinds.
@@ -201,7 +204,8 @@ protected:
 
   unsigned char MaxAtomicPromoteWidth, MaxAtomicInlineWidth;
   unsigned short SimdDefaultAlign;
-  std::unique_ptr<llvm::DataLayout> DataLayout;
+  std::string DataLayoutString;
+  const char *UserLabelPrefix;
   const char *MCountName;
   unsigned char RegParmMax, SSERegParmMax;
   TargetCXXABI TheCXXABI;
@@ -234,7 +238,9 @@ protected:
   // TargetInfo Constructor.  Default initializes all fields.
   TargetInfo(const llvm::Triple &T);
 
-  void resetDataLayout(StringRef DL);
+  // UserLabelPrefix must match DL's getGlobalPrefix() when interpreted
+  // as a DataLayout object.
+  void resetDataLayout(StringRef DL, const char *UserLabelPrefix = "");
 
 public:
   /// Construct a target for the given options.
@@ -608,8 +614,8 @@ public:
   }
 
   /// Return the largest alignment for which a suitably-sized allocation with
-  /// '::operator new(size_t)' is guaranteed to produce a correctly-aligned
-  /// pointer.
+  /// '::operator new(size_t)' or 'malloc' is guaranteed to produce a
+  /// correctly-aligned pointer.
   unsigned getNewAlign() const {
     return NewAlign ? NewAlign : std::max(LongDoubleAlign, LongLongAlign);
   }
@@ -743,6 +749,12 @@ public:
     return PointerWidth;
   }
 
+  /// \brief Returns the default value of the __USER_LABEL_PREFIX__ macro,
+  /// which is the prefix given to user symbols by default.
+  ///
+  /// On most platforms this is "", but it is "_" on some.
+  const char *getUserLabelPrefix() const { return UserLabelPrefix; }
+
   /// Returns the name of the mcount instrumentation function.
   const char *getMCountName() const {
     return MCountName;
@@ -783,6 +795,10 @@ public:
   unsigned getZeroLengthBitfieldBoundary() const {
     return ZeroLengthBitfieldBoundary;
   }
+
+  /// Get the maximum alignment in bits for a static variable with
+  /// aligned attribute.
+  unsigned getMaxAlignedAttribute() const { return MaxAlignedAttribute; }
 
   /// Check whether explicit bitfield alignment attributes should be
   //  honored, as in "__attribute__((aligned(2))) int b : 1;".
@@ -1088,9 +1104,9 @@ public:
   /// Returns the target ID if supported.
   virtual llvm::Optional<std::string> getTargetID() const { return llvm::None; }
 
-  const llvm::DataLayout &getDataLayout() const {
-    assert(DataLayout && "Uninitialized DataLayout!");
-    return *DataLayout;
+  const char *getDataLayoutString() const {
+    assert(!DataLayoutString.empty() && "Uninitialized DataLayout!");
+    return DataLayoutString.c_str();
   }
 
   struct GCCRegAlias {
@@ -1122,19 +1138,13 @@ public:
            getTriple().isWindowsItaniumEnvironment() || getTriple().isPS4CPU();
   }
 
-  /// An optional hook that targets can implement to perform semantic
-  /// checking on attribute((section("foo"))) specifiers.
-  ///
-  /// In this case, "foo" is passed in to be checked.  If the section
-  /// specifier is invalid, the backend should return an Error that indicates
-  /// the problem.
-  ///
-  /// This hook is a simple quality of implementation feature to catch errors
-  /// and give good diagnostics in cases when the assembler or code generator
-  /// would otherwise reject the section specifier.
-  ///
-  virtual llvm::Error isValidSectionSpecifier(StringRef SR) const {
-    return llvm::Error::success();
+  // Does this target have PS4 specific dllimport/export handling?
+  virtual bool hasPS4DLLImportExport() const {
+    return getTriple().isPS4CPU() ||
+           // Windows Itanium support allows for testing the SCEI flavour of
+           // dllimport/export handling on a Windows system.
+           (getTriple().isWindowsItaniumEnvironment() &&
+            getTriple().getVendor() == llvm::Triple::SCEI);
   }
 
   /// Set forced language options.
@@ -1207,6 +1217,12 @@ public:
   /// \return False on error (invalid unit name).
   virtual bool setFPMath(StringRef Name) {
     return false;
+  }
+
+  /// Check if target has a given feature enabled
+  virtual bool hasFeatureEnabled(const llvm::StringMap<bool> &Features,
+                                 StringRef Name) const {
+    return Features.lookup(Name);
   }
 
   /// Enable or disable a specific target feature;
@@ -1456,7 +1472,8 @@ public:
   virtual void setSupportedOpenCLOpts() {}
 
   virtual void supportAllOpenCLOpts(bool V = true) {
-#define OPENCLEXTNAME(Ext) getTargetOpts().OpenCLFeaturesMap[#Ext] = V;
+#define OPENCLEXTNAME(Ext)                                                     \
+  setFeatureEnabled(getTargetOpts().OpenCLFeaturesMap, #Ext, V);
 #include "clang/Basic/OpenCLExtensions.def"
   }
 
@@ -1475,10 +1492,6 @@ public:
       getTargetOpts().OpenCLFeaturesMap[Name] = V;
     }
   }
-
-  /// Define OpenCL macros based on target settings and language version
-  void getOpenCLFeatureDefines(const LangOptions &Opts,
-                               MacroBuilder &Builder) const;
 
   /// Get supported OpenCL extensions and optional core features.
   llvm::StringMap<bool> &getSupportedOpenCLOpts() {
@@ -1519,10 +1532,15 @@ public:
     return true;
   }
 
+  /// Check that OpenCL target has valid options setting based on OpenCL
+  /// version.
+  virtual bool validateOpenCLTarget(const LangOptions &Opts,
+                                    DiagnosticsEngine &Diags) const;
+
   virtual void setAuxTarget(const TargetInfo *Aux) {}
 
-  /// Whether target allows debuginfo types for decl only variables.
-  virtual bool allowDebugInfoForExternalVar() const { return false; }
+  /// Whether target allows debuginfo types for decl only variables/functions.
+  virtual bool allowDebugInfoForExternalRef() const { return false; }
 
 protected:
   /// Copy type and layout related info.

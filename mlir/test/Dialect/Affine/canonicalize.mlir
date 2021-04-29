@@ -93,11 +93,8 @@ func @compose_affine_maps_1dto2d_with_symbols() {
 // CHECK-DAG: #[[$MAP8:.*]] = affine_map<(d0, d1) -> (d1 + (d0 ceildiv 4) * 4 - (d1 floordiv 4) * 4)>
 // CHECK-DAG: #[[$MAP8a:.*]] = affine_map<(d0, d1) -> (d1 + (d0 ceildiv 8) * 8 - (d1 floordiv 8) * 8)>
 
-// CHECK-LABEL: func @compose_affine_maps_2d_tile() {
-func @compose_affine_maps_2d_tile() {
-  %0 = memref.alloc() : memref<16x32xf32>
-  %1 = memref.alloc() : memref<16x32xf32>
-
+// CHECK-LABEL: func @compose_affine_maps_2d_tile
+func @compose_affine_maps_2d_tile(%0: memref<16x32xf32>, %1: memref<16x32xf32>) {
   %c4 = constant 4 : index
   %c8 = constant 8 : index
 
@@ -221,7 +218,7 @@ func @compose_affine_maps_multiple_symbols(%arg0: index, %arg1: index) -> index 
 // -----
 
 // CHECK-LABEL: func @arg_used_as_dim_and_symbol
-func @arg_used_as_dim_and_symbol(%arg0: memref<100x100xf32>, %arg1: index, %arg2: f32) {
+func @arg_used_as_dim_and_symbol(%arg0: memref<100x100xf32>, %arg1: index, %arg2: f32) -> (memref<100x100xf32, 1>, memref<1xi32>) {
   %c9 = constant 9 : index
   %1 = memref.alloc() : memref<100x100xf32, 1>
   %2 = memref.alloc() : memref<1xi32>
@@ -235,7 +232,7 @@ func @arg_used_as_dim_and_symbol(%arg0: memref<100x100xf32>, %arg1: index, %arg2
       memref.store %arg2, %1[%4, %arg1] : memref<100x100xf32, 1>
     }
   }
-  return
+  return %1, %2 : memref<100x100xf32, 1>, memref<1xi32>
 }
 
 // -----
@@ -883,4 +880,24 @@ func @dont_merge_affine_max_if_not_single_sym(%i0: index, %i1: index, %i2: index
   %0 = affine.max affine_map<()[s0] -> (s0 + 16, s0 * 8)> ()[%i0]
   %1 = affine.max affine_map<()[s0, s1] -> (s0 + 4, 7 + s1)> ()[%0, %i2]
   return %1: index
+}
+
+// -----
+
+// Ensure bounding maps of affine.for are composed.
+
+// CHECK-DAG: #[[$MAP0]] = affine_map<()[s0] -> (s0 - 2)>
+// CHECK-DAG: #[[$MAP1]] = affine_map<()[s0] -> (s0 + 2)>
+
+// CHECK-LABEL: func @compose_affine_for_bounds
+// CHECK-SAME:   %[[N:.*]]: index)
+// CHECK: affine.for %{{.*}} = #[[$MAP0]]()[%[[N]]] to #[[$MAP1]]()[%[[N]]] {
+
+func @compose_affine_for_bounds(%N: index) {
+  %u = affine.apply affine_map<(d0) -> (d0 + 2)>(%N)
+  %l = affine.apply affine_map<(d0) -> (d0 - 2)>(%N)
+  affine.for %i = %l to %u {
+    "foo"() : () -> ()
+  }
+  return
 }

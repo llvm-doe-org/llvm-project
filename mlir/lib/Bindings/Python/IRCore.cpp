@@ -14,6 +14,8 @@
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/BuiltinTypes.h"
+#include "mlir-c/Debug.h"
+#include "mlir-c/IR.h"
 #include "mlir-c/Registration.h"
 #include "llvm/ADT/SmallVector.h"
 #include <pybind11/stl.h>
@@ -129,7 +131,7 @@ equivalent to printing the operation that produced it.
 // Utilities.
 //------------------------------------------------------------------------------
 
-// Helper for creating an @classmethod.
+/// Helper for creating an @classmethod.
 template <class Func, typename... Args>
 py::object classmethod(Func f, Args... args) {
   py::object cf = py::cpp_function(f, args...);
@@ -152,6 +154,20 @@ createCustomDialectWrapper(const std::string &dialectNamespace,
 static MlirStringRef toMlirStringRef(const std::string &s) {
   return mlirStringRefCreate(s.data(), s.size());
 }
+
+/// Wrapper for the global LLVM debugging flag.
+struct PyGlobalDebugFlag {
+  static void set(py::object &o, bool enable) { mlirEnableGlobalDebug(enable); }
+
+  static bool get(py::object) { return mlirIsGlobalDebugEnabled(); }
+
+  static void bind(py::module &m) {
+    // Debug flags.
+    py::class_<PyGlobalDebugFlag>(m, "_GlobalDebug")
+        .def_property_static("flag", &PyGlobalDebugFlag::get,
+                             &PyGlobalDebugFlag::set, "LLVM-wide debug flag");
+  }
+};
 
 //------------------------------------------------------------------------------
 // Collections.
@@ -868,6 +884,19 @@ PyBlock PyOperation::getBlock() {
   return PyBlock{std::move(parentOperation), block};
 }
 
+py::object PyOperation::getCapsule() {
+  return py::reinterpret_steal<py::object>(mlirPythonOperationToCapsule(get()));
+}
+
+py::object PyOperation::createFromCapsule(py::object capsule) {
+  MlirOperation rawOperation = mlirPythonCapsuleToOperation(capsule.ptr());
+  if (mlirOperationIsNull(rawOperation))
+    throw py::error_already_set();
+  MlirContext rawCtxt = mlirOperationGetContext(rawOperation);
+  return forOperation(PyMlirContext::forContext(rawCtxt), rawOperation)
+      .releaseObject();
+}
+
 py::object PyOperation::create(
     std::string name, llvm::Optional<std::vector<PyType *>> results,
     llvm::Optional<std::vector<PyValue *>> operands,
@@ -1439,6 +1468,27 @@ PyType PyType::createFromCapsule(py::object capsule) {
 // PyValue and subclases.
 //------------------------------------------------------------------------------
 
+pybind11::object PyValue::getCapsule() {
+  return py::reinterpret_steal<py::object>(mlirPythonValueToCapsule(get()));
+}
+
+PyValue PyValue::createFromCapsule(pybind11::object capsule) {
+  MlirValue value = mlirPythonCapsuleToValue(capsule.ptr());
+  if (mlirValueIsNull(value))
+    throw py::error_already_set();
+  MlirOperation owner;
+  if (mlirValueIsAOpResult(value))
+    owner = mlirOpResultGetOwner(value);
+  if (mlirValueIsABlockArgument(value))
+    owner = mlirBlockGetParentOperation(mlirBlockArgumentGetOwner(value));
+  if (mlirOperationIsNull(owner))
+    throw py::error_already_set();
+  MlirContext ctx = mlirOperationGetContext(owner);
+  PyOperationRef ownerRef =
+      PyOperation::forOperation(PyMlirContext::forContext(ctx), owner);
+  return PyValue(ownerRef, value);
+}
+
 namespace {
 /// CRTP base class for Python MLIR values that subclass Value and should be
 /// castable from it. The value hierarchy is one level deep and is not supposed
@@ -1516,7 +1566,7 @@ public:
           mlirOperationEqual(self.getParentOperation()->get(),
                              mlirOpResultGetOwner(self.get())) &&
           "expected the owner of the value in Python to match that in the IR");
-      return self.getParentOperation();
+      return self.getParentOperation().getObject();
     });
     c.def_property_readonly("result_number", [](PyOpResult &self) {
       return mlirOpResultGetResultNumber(self.get());
@@ -1588,6 +1638,15 @@ public:
 
   PyOpOperandList slice(intptr_t startIndex, intptr_t length, intptr_t step) {
     return PyOpOperandList(operation, startIndex, length, step);
+  }
+
+  void dunderSetItem(intptr_t index, PyValue value) {
+    index = wrapIndex(index);
+    mlirOperationSetOperand(operation->get(), index, value.get());
+  }
+
+  static void bindDerived(ClassTy &c) {
+    c.def("__setitem__", &PyOpOperandList::dunderSetItem);
   }
 
 private:
@@ -1700,7 +1759,7 @@ private:
 
 void mlir::python::populateIRCore(py::module &m) {
   //----------------------------------------------------------------------------
-  // Mapping of MlirContext
+  // Mapping of MlirContext.
   //----------------------------------------------------------------------------
   py::class_<PyMlirContext>(m, "Context")
       .def(py::init<>(&PyMlirContext::createNewContextForInit))
@@ -1752,7 +1811,16 @@ void mlir::python::populateIRCore(py::module &m) {
           },
           [](PyMlirContext &self, bool value) {
             mlirContextSetAllowUnregisteredDialects(self.get(), value);
-          });
+          })
+      .def("enable_multithreading",
+           [](PyMlirContext &self, bool enable) {
+             mlirContextEnableMultithreading(self.get(), enable);
+           })
+      .def("is_registered_operation",
+           [](PyMlirContext &self, std::string &name) {
+             return mlirContextIsRegisteredOperation(
+                 self.get(), MlirStringRef{name.data(), name.size()});
+           });
 
   //----------------------------------------------------------------------------
   // Mapping of PyDialectDescriptor
@@ -2026,6 +2094,9 @@ void mlir::python::populateIRCore(py::module &m) {
                   py::arg("successors") = py::none(), py::arg("regions") = 0,
                   py::arg("loc") = py::none(), py::arg("ip") = py::none(),
                   kOperationCreateDocstring)
+      .def_property_readonly(MLIR_PYTHON_CAPI_PTR_ATTR,
+                             &PyOperation::getCapsule)
+      .def(MLIR_PYTHON_CAPI_FACTORY_ATTR, &PyOperation::createFromCapsule)
       .def_property_readonly("name",
                              [](PyOperation &self) {
                                MlirOperation operation = self.get();
@@ -2313,6 +2384,8 @@ void mlir::python::populateIRCore(py::module &m) {
   // Mapping of Value.
   //----------------------------------------------------------------------------
   py::class_<PyValue>(m, "Value")
+      .def_property_readonly(MLIR_PYTHON_CAPI_PTR_ATTR, &PyValue::getCapsule)
+      .def(MLIR_PYTHON_CAPI_FACTORY_ATTR, &PyValue::createFromCapsule)
       .def_property_readonly(
           "context",
           [](PyValue &self) { return self.getParentOperation()->getContext(); },
@@ -2354,4 +2427,7 @@ void mlir::python::populateIRCore(py::module &m) {
   PyOpResultList::bind(m);
   PyRegionIterator::bind(m);
   PyRegionList::bind(m);
+
+  // Debug bindings.
+  PyGlobalDebugFlag::bind(m);
 }

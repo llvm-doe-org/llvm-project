@@ -19,6 +19,8 @@
 #include "flang/Semantics/tools.h"
 #include "flang/Semantics/type.h"
 #include <algorithm>
+#include <map>
+#include <string>
 
 namespace Fortran::semantics {
 
@@ -100,6 +102,7 @@ private:
     }
   }
   bool IsResultOkToDiffer(const FunctionResult &);
+  void CheckBindCName(const Symbol &);
 
   SemanticsContext &context_;
   evaluate::FoldingContext &foldingContext_{context_.foldingContext()};
@@ -112,6 +115,8 @@ private:
   // Cache of calls to Procedure::Characterize(Symbol)
   std::map<SymbolRef, std::optional<Procedure>, SymbolAddressCompare>
       characterizeCache_;
+  // Collection of symbols with BIND(C) names
+  std::map<std::string, SymbolRef> bindC_;
 };
 
 class DistinguishabilityHelper {
@@ -195,6 +200,7 @@ void CheckHelper::Check(const Symbol &symbol) {
   if (symbol.attrs().test(Attr::VOLATILE)) {
     CheckVolatile(symbol, derived);
   }
+  CheckBindCName(symbol);
   if (isDone) {
     return; // following checks do not apply
   }
@@ -484,6 +490,14 @@ void CheckHelper::CheckObjectEntity(
             "non-POINTER dummy argument of pure subroutine must have INTENT() or VALUE attribute"_err_en_US);
       }
     }
+  } else if (symbol.attrs().test(Attr::INTENT_IN) ||
+      symbol.attrs().test(Attr::INTENT_OUT) ||
+      symbol.attrs().test(Attr::INTENT_INOUT)) {
+    messages_.Say("INTENT attributes may apply only to a dummy "
+                  "argument"_err_en_US); // C843
+  } else if (IsOptional(symbol)) {
+    messages_.Say("OPTIONAL attribute may apply only to a dummy "
+                  "argument"_err_en_US); // C849
   }
   if (IsStaticallyInitialized(symbol, true /* ignore DATA inits */)) { // C808
     CheckPointerInitialization(symbol);
@@ -612,8 +626,9 @@ void CheckHelper::CheckArraySpec(
   } else if (isAssumedRank) { // C837
     msg = "Assumed-rank array '%s' must be a dummy argument"_err_en_US;
   } else if (isImplied) {
-    if (!IsNamedConstant(symbol)) { // C836
-      msg = "Implied-shape array '%s' must be a named constant"_err_en_US;
+    if (!IsNamedConstant(symbol)) { // C835, C836
+      msg = "Implied-shape array '%s' must be a named constant or a "
+            "dummy argument"_err_en_US;
     }
   } else if (IsNamedConstant(symbol)) {
     if (!isExplicit && !isImplied) {
@@ -658,6 +673,14 @@ void CheckHelper::CheckProcEntity(
       // function SIN as an actual argument.
       messages_.Say("A dummy procedure may not be ELEMENTAL"_err_en_US);
     }
+  } else if (symbol.attrs().test(Attr::INTENT_IN) ||
+      symbol.attrs().test(Attr::INTENT_OUT) ||
+      symbol.attrs().test(Attr::INTENT_INOUT)) {
+    messages_.Say("INTENT attributes may apply only to a dummy "
+                  "argument"_err_en_US); // C843
+  } else if (IsOptional(symbol)) {
+    messages_.Say("OPTIONAL attribute may apply only to a dummy "
+                  "argument"_err_en_US); // C849
   } else if (symbol.owner().IsDerivedType()) {
     if (!symbol.attrs().test(Attr::POINTER)) { // C756
       const auto &name{symbol.name()};
@@ -1652,6 +1675,35 @@ void CheckHelper::CheckGenericOps(const Scope &scope) {
     }
   }
   helper.Check(scope);
+}
+
+static const std::string *DefinesBindCName(const Symbol &symbol) {
+  const auto *subp{symbol.detailsIf<SubprogramDetails>()};
+  if ((subp && !subp->isInterface()) || symbol.has<ObjectEntityDetails>()) {
+    // Symbol defines data or entry point
+    return symbol.GetBindName();
+  } else {
+    return nullptr;
+  }
+}
+
+// Check that BIND(C) names are distinct
+void CheckHelper::CheckBindCName(const Symbol &symbol) {
+  if (const std::string * name{DefinesBindCName(symbol)}) {
+    auto pair{bindC_.emplace(*name, symbol)};
+    if (!pair.second) {
+      const Symbol &other{*pair.first->second};
+      if (DefinesBindCName(other) && !context_.HasError(other)) {
+        if (auto *msg{messages_.Say(
+                "Two symbols have the same BIND(C) name '%s'"_err_en_US,
+                *name)}) {
+          msg->Attach(other.name(), "Conflicting symbol"_en_US);
+        }
+        context_.SetError(symbol);
+        context_.SetError(other);
+      }
+    }
+  }
 }
 
 void SubprogramMatchHelper::Check(

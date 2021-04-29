@@ -200,6 +200,16 @@ FileSpec ProcessProperties::GetPythonOSPluginPath() const {
   return m_collection_sp->GetPropertyAtIndexAsFileSpec(nullptr, idx);
 }
 
+uint32_t ProcessProperties::GetVirtualAddressableBits() const {
+  const uint32_t idx = ePropertyVirtualAddressableBits;
+  return m_collection_sp->GetPropertyAtIndexAsUInt64(
+      nullptr, idx, g_process_properties[idx].default_uint_value);
+}
+
+void ProcessProperties::SetVirtualAddressableBits(uint32_t bits) {
+  const uint32_t idx = ePropertyVirtualAddressableBits;
+  m_collection_sp->SetPropertyAtIndexAsUInt64(nullptr, idx, bits);
+}
 void ProcessProperties::SetPythonOSPluginPath(const FileSpec &file) {
   const uint32_t idx = ePropertyPythonOSPluginPath;
   m_collection_sp->SetPropertyAtIndexAsFileSpec(nullptr, idx, file);
@@ -236,6 +246,18 @@ bool ProcessProperties::GetStopOnSharedLibraryEvents() const {
 void ProcessProperties::SetStopOnSharedLibraryEvents(bool stop) {
   const uint32_t idx = ePropertyStopOnSharedLibraryEvents;
   m_collection_sp->SetPropertyAtIndexAsBoolean(nullptr, idx, stop);
+}
+
+bool ProcessProperties::GetDisableLangRuntimeUnwindPlans() const {
+  const uint32_t idx = ePropertyDisableLangRuntimeUnwindPlans;
+  return m_collection_sp->GetPropertyAtIndexAsBoolean(
+      nullptr, idx, g_process_properties[idx].default_uint_value != 0);
+}
+
+void ProcessProperties::SetDisableLangRuntimeUnwindPlans(bool disable) {
+  const uint32_t idx = ePropertyDisableLangRuntimeUnwindPlans;
+  m_collection_sp->SetPropertyAtIndexAsBoolean(nullptr, idx, disable);
+  m_process->Flush();
 }
 
 bool ProcessProperties::GetDetachKeepsStopped() const {
@@ -800,8 +822,12 @@ bool Process::HandleProcessStateChangedEvent(const EventSP &event_sp,
             case eStopReasonWatchpoint:
             case eStopReasonException:
             case eStopReasonExec:
+            case eStopReasonFork:
+            case eStopReasonVFork:
+            case eStopReasonVForkDone:
             case eStopReasonThreadExiting:
             case eStopReasonInstrumentation:
+            case eStopReasonProcessorTrace:
               if (!other_thread)
                 other_thread = thread;
               break;
@@ -2852,8 +2878,10 @@ void Process::CompleteAttach() {
       ProcessInstanceInfo process_info;
       GetProcessInfo(process_info);
       const ArchSpec &process_arch = process_info.GetArchitecture();
+      const ArchSpec &target_arch = GetTarget().GetArchitecture();
       if (process_arch.IsValid() &&
-          !GetTarget().GetArchitecture().IsExactMatch(process_arch)) {
+          target_arch.IsCompatibleMatch(process_arch) &&
+          !target_arch.IsExactMatch(process_arch)) {
         GetTarget().SetArchitecture(process_arch);
         LLDB_LOGF(log,
                   "Process::%s switching architecture to %s based on info "
@@ -5532,6 +5560,26 @@ void Process::Flush() {
   m_queue_list_stop_id = 0;
 }
 
+lldb::addr_t Process::GetCodeAddressMask() {
+  if (m_code_address_mask == 0) {
+    if (uint32_t number_of_addressable_bits = GetVirtualAddressableBits()) {
+      lldb::addr_t address_mask = ~((1ULL << number_of_addressable_bits) - 1);
+      SetCodeAddressMask(address_mask);
+    }
+  }
+  return m_code_address_mask;
+}
+
+lldb::addr_t Process::GetDataAddressMask() {
+  if (m_data_address_mask == 0) {
+    if (uint32_t number_of_addressable_bits = GetVirtualAddressableBits()) {
+      lldb::addr_t address_mask = ~((1ULL << number_of_addressable_bits) - 1);
+      SetDataAddressMask(address_mask);
+    }
+  }
+  return m_data_address_mask;
+}
+
 void Process::DidExec() {
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
   LLDB_LOGF(log, "Process::%s()", __FUNCTION__);
@@ -5765,10 +5813,8 @@ Process::AdvanceAddressToNextBranchInstruction(Address default_stop_addr,
 
   const char *plugin_name = nullptr;
   const char *flavor = nullptr;
-  const bool prefer_file_cache = true;
   disassembler_sp = Disassembler::DisassembleRange(
-      target.GetArchitecture(), plugin_name, flavor, GetTarget(), range_bounds,
-      prefer_file_cache);
+      target.GetArchitecture(), plugin_name, flavor, GetTarget(), range_bounds);
   if (disassembler_sp)
     insn_list = &disassembler_sp->GetInstructionList();
 
@@ -5958,7 +6004,7 @@ UtilityFunction *Process::GetLoadImageUtilityFunction(
   return m_dlopen_utility_func_up.get();
 }
 
-llvm::Expected<TraceTypeInfo> Process::GetSupportedTraceType() {
+llvm::Expected<TraceSupportedResponse> Process::TraceSupported() {
   if (!IsLiveDebugSession())
     return llvm::createStringError(llvm::inconvertibleErrorCode(),
                                    "Can't trace a non-live process.");

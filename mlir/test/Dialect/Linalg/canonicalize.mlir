@@ -18,6 +18,31 @@ func @memref_cast(%a: index, %b: index) -> memref<?x?xf32> {
 
 // -----
 
+#map = affine_map<(d0)[s0, s1] -> (d0 * s1 + s0)>
+
+// CHECK-LABEL: func @memref_cast_into_tiled_loop(
+func @memref_cast_into_tiled_loop(%arg0: memref<192xf32>)  {
+  %0 = memref.cast %arg0
+    : memref<192xf32> to memref<192xf32, #map>
+  %cst = constant 0.000000e+00 : f32
+  %c24 = constant 24 : index
+  %c0 = constant 0 : index
+  %c192 = constant 192 : index
+  // CHECK: linalg.tiled_loop
+  // CHECK-SAME: outs (%{{.*}} = %{{.*}}: memref<192xf32>)
+  linalg.tiled_loop (%arg3) = (%c0) to (%c192) step (%c24)
+    outs (%out = %0: memref<192xf32, #map>) {
+    %14 = affine.min affine_map<(d0) -> (-d0 + 192, 24)>(%arg3)
+    %16 = memref.subview %out[%arg3] [%14] [1]
+      : memref<192xf32, #map> to memref<?xf32, #map>
+    linalg.fill(%16, %cst) : memref<?xf32, #map>, f32
+    linalg.yield
+  }
+  return
+}
+
+// -----
+
 func @collapsing_tensor_reshapes(%arg0 : tensor<?x?x?x?x?xf32>) -> tensor<?x?xf32>
 {
   %0 = linalg.tensor_reshape %arg0
@@ -404,12 +429,13 @@ func @init_tensor_dynamic_dim2(%arg0 : index, %arg1 : index) -> (index, index) {
 
 func @remove_dim_result_uses
   (%arg0 : tensor<?x?xf32>, %arg1 : tensor<?x?xf32>,
-   %arg2 : tensor<?x?xf32>) -> (index) {
+   %arg2 : tensor<?x?xf32>) -> (index, index) {
   %c0 = constant 0 : index
+  %c1 = constant 1 : index
   %0 = linalg.generic
     {indexing_maps = [affine_map<(d0, d1, d2) -> (d0, d2)>,
                       affine_map<(d0, d1, d2) -> (d2, d1)>,
-                      affine_map<(d0, d1, d2) -> (d0 + d1, d1)>],
+                      affine_map<(d0, d1, d2) -> (d0 + d1, d1 - d0)>],
      iterator_types = ["parallel", "parallel", "reduction"]}
     ins(%arg0, %arg1 : tensor<?x?xf32>, tensor<?x?xf32>)
     outs(%arg2 : tensor<?x?xf32>) {
@@ -419,9 +445,11 @@ func @remove_dim_result_uses
       linalg.yield %2 : f32
     } -> tensor<?x?xf32>
   %3 = memref.dim %0, %c0 : tensor<?x?xf32>
-  return %3 : index
+  %4 = memref.dim %0, %c1 : tensor<?x?xf32>
+  return %3, %4 : index, index
 }
-//       CHECK: #[[MAP:.+]] = affine_map<()[s0, s1] -> (s0 + s1)>
+//       CHECK: #[[MAP0:.+]] = affine_map<()[s0, s1] -> (s0 + s1)>
+//       CHECK: #[[MAP1:.+]] = affine_map<()[s0, s1] -> (-s0 + s1)>
 //       CHECK: func @remove_dim_result_uses
 //  CHECK-SAME:   %[[ARG0:[a-zA-Z0-9_]+]]: tensor<?x?xf32>
 //  CHECK-SAME:   %[[ARG1:[a-zA-Z0-9_]+]]: tensor<?x?xf32>
@@ -430,8 +458,11 @@ func @remove_dim_result_uses
 //   CHECK-DAG:   %[[C1:.+]] = constant 1 : index
 //   CHECK-DAG:   %[[T0:.+]] = memref.dim %[[ARG0]], %[[C0]]
 //   CHECK-DAG:   %[[T1:.+]] = memref.dim %[[ARG1]], %[[C1]]
-//       CHECK:   %[[T2:.+]] = affine.apply #[[MAP]]()[%[[T0]], %[[T1]]]
-//       CHECK:   return %[[T2]]
+//       CHECK:   %[[T2:.+]] = affine.apply #[[MAP0]]()[%[[T0]], %[[T1]]]
+//   CHECK-DAG:   %[[T3:.+]] = memref.dim %[[ARG0]], %[[C0]]
+//   CHECK-DAG:   %[[T4:.+]] = memref.dim %[[ARG1]], %[[C1]]
+//       CHECK:   %[[T5:.+]] = affine.apply #[[MAP1]]()[%[[T3]], %[[T4]]]
+//       CHECK:   return %[[T2]], %[[T5]]
 
 // -----
 
@@ -821,43 +852,117 @@ func @fold_fill_reshape() -> tensor<6x4xf32> {
 
 // -----
 
-#map0 = affine_map<(d0) -> (24, -d0 + 192)>
-#map1 = affine_map<(d0, d1)[s0] -> (d0 * 192 + s0 + d1)>
-#map2 = affine_map<(d0) -> (16, -d0 + 192)>
+//       CHECK: func @fold_fill_reshape_dynamic
+//  CHECK-SAME:   %[[ARG0:.+]]: tensor<?x?x?x?x?xf32>
+func @fold_fill_reshape_dynamic(%arg0 : tensor<?x?x?x?x?xf32>) -> tensor<?x?xf32> {
+  %zero = constant 0.0 : f32
+  // CHECK: %[[RESHAPE:.+]] = linalg.tensor_reshape %[[ARG0]]
+  %0 = linalg.fill(%arg0, %zero) : tensor<?x?x?x?x?xf32>, f32 -> tensor<?x?x?x?x?xf32>
+  // CHECK: %[[RESULT:.+]] = linalg.fill(%[[RESHAPE]], %{{.+}})
+  %1 = linalg.tensor_reshape %0
+      [affine_map<(d0, d1, d2, d3, d4) -> (d0, d1, d2)>,
+       affine_map<(d0, d1, d2, d3, d4) -> (d3, d4)>]
+      : tensor<?x?x?x?x?xf32> into tensor<?x?xf32>
+  // CHECK: return %[[RESULT]]
+  return %1 : tensor<?x?xf32>
+}
 
-func private @foo(%A: memref<192x192xf32>, %B: memref<192x192xf32>,
-                  %C: memref<192x192xf32>) -> ()
 
-func @fold_tiled_loop_results(%A: memref<192x192xf32>, %B: memref<192x192xf32>,
-                              %C: memref<192x192xf32>,
-                              %C_tensor: tensor<192x192xf32>) {
-  %cst = constant 0.000000e+00 : f32
-  %c24 = constant 24 : index
-  %c16 = constant 16 : index
+// -----
+
+func private @foo(%A: memref<48xf32>, %B: tensor<48xf32>,
+                  %C: memref<48xf32>) -> (tensor<48xf32>)
+
+func @fold_tiled_loop_results(%A: memref<48xf32>, %B: tensor<48xf32>,
+    %C: memref<48xf32>, %C_tensor: tensor<48xf32>) -> tensor<48xf32> {
   %c0 = constant 0 : index
-  %c192 = constant 192 : index
-  %useless = linalg.tiled_loop (%i, %j) = (%c0, %c0) to (%c192, %c192)
-      step (%c24, %c16)
-      ins (%A, %B: memref<192x192xf32>, memref<192x192xf32>)
-      outs (%C_tensor, %C :tensor<192x192xf32>, memref<192x192xf32>) {
-        call @foo(%A, %B, %C) : (memref<192x192xf32>, memref<192x192xf32>, memref<192x192xf32>)-> ()
-    linalg.yield %C_tensor : tensor<192x192xf32>
+  %c24 = constant 24 : index
+  %c48 = constant 48 : index
+  %useful, %useless = linalg.tiled_loop (%i) = (%c0) to (%c48) step (%c24)
+      ins (%A_ = %A: memref<48xf32>)
+      outs (%B_ = %B: tensor<48xf32>,
+            %CT_ = %C_tensor: tensor<48xf32>,
+            %C_ = %C: memref<48xf32>) {
+        %result = call @foo(%A_, %B_, %C_)
+          : (memref<48xf32>, tensor<48xf32>, memref<48xf32>)-> (tensor<48xf32>)
+    linalg.yield %result, %CT_ : tensor<48xf32>, tensor<48xf32>
   }
-  return
+  return %useful : tensor<48xf32>
 }
 
 // CHECK-LABEL: func @fold_tiled_loop_results(
-// CHECK-SAME:    %[[A:.*]]: [[TY:.*]], %[[B:.*]]: [[TY]], %[[C:.*]]: [[TY]],
-// CHECK-SAME:    %[[C_TENSOR:.*]]: tensor<{{.*}}>) {
-// CHECK:  %[[C24:.*]] = constant 24 : index
-// CHECK:  %[[C16:.*]] = constant 16 : index
+// CHECK-SAME:   %[[A:.*]]: [[BUF_TY:memref<48xf32>]], %[[B:.*]]: [[TY:tensor<48xf32>]],
+// CHECK-SAME:   %[[C:.*]]: [[BUF_TY]],  %[[C_TENSOR:.*]]: [[TY]]) -> [[TY]] {
+
 // CHECK:  %[[C0:.*]] = constant 0 : index
-// CHECK:  %[[C192:.*]] = constant 192 : index
+// CHECK:  %[[C24:.*]] = constant 24 : index
+// CHECK:  %[[C48:.*]] = constant 48 : index
 
 // CHECK-NOT: %{{.*}} = linalg.tiled_loop
-// CHECK:  linalg.tiled_loop (%{{.*}}, %{{.*}}) = (%[[C0]], %[[C0]])
-// CHECK-SAME: to (%[[C192]], %[[C192]]) step (%[[C24]], %[[C16]])
-// CHECK-SAME: ins (%[[A]], %[[B]]: memref<192x192xf32>, memref<192x192xf32>)
-// CHECK-SAME: outs (%[[C]]:memref<192x192xf32>) {
-// CHECK-NEXT:   call @foo(%[[A]], %[[B]], %[[C]])
-// CHECK-NEXT:   linalg.yield
+// CHECK:  %[[RESULT:.*]] = linalg.tiled_loop (%{{.*}}) = (%[[C0]])
+// CHECK-SAME: to (%[[C48]]) step (%[[C24]])
+// CHECK-SAME: ins (%[[A_:.*]] = %[[A]]: [[BUF_TY]])
+// CHECK-SAME: outs (%[[B_:.*]] = %[[B]]: [[TY]], %[[C_:.*]] = %[[C]]: [[BUF_TY]]) {
+// CHECK-NEXT:   %[[RES:.*]] = call @foo(%[[A_]], %[[B_]], %[[C_]])
+// CHECK-NEXT:   linalg.yield %[[RES]] :
+
+// CHECK: return %[[RESULT]]
+
+// -----
+
+func private @foo(%A: memref<192xf32>, %B: tensor<192xf32>) -> tensor<192xf32>
+
+func @fold_tiled_loop_inputs(%A: memref<192xf32>, %A_tensor: tensor<192xf32>,
+                             %B_tensor: tensor<192xf32>) -> tensor<192xf32> {
+  %c0 = constant 0 : index
+  %c24 = constant 24 : index
+  %c192 = constant 192 : index
+  %result = linalg.tiled_loop (%i) = (%c0) to (%c192) step (%c24)
+      ins (%A_ = %A: memref<192xf32>, %AT_ = %A_tensor: tensor<192xf32>)
+      outs (%BT_ = %B_tensor: tensor<192xf32>) {
+    %0 = call @foo(%A_, %BT_) : (memref<192xf32>, tensor<192xf32>) -> tensor<192xf32>
+    linalg.yield %0 : tensor<192xf32>
+  }
+  return %result : tensor<192xf32>
+}
+
+// CHECK-LABEL: func @fold_tiled_loop_inputs
+// CHECK: %[[RESULT:.*]] = linalg.tiled_loop
+// CHECK-SAME: ins (%{{.*}} = %{{.*}}: memref<192xf32>)
+
+// CHECK: return %[[RESULT]]
+
+// -----
+
+func @dim_of_pad_op(%arg0 : tensor<2x?x?xf32>, %arg1 : index, %arg2 : index,
+    %arg3: f32) -> (index, index, index)
+{
+   %c0 = constant 0 : index
+   %c1 = constant 1 : index
+   %c2 = constant 2 : index
+   %c3 = constant 3 : index
+   %c4 = constant 4 : index
+   %c5 = constant 5 : index
+   %0 = linalg.pad_tensor %arg0 low[%c3, %arg1, %c4] high[7, %c5, %arg2] {
+     ^bb0(%arg4: index, %arg5: index, %arg6: index):
+       linalg.yield %arg3 : f32
+   } : tensor<2x?x?xf32> to tensor<?x?x?xf32>
+   %1 = memref.dim %0, %c0 : tensor<?x?x?xf32>
+   %2 = memref.dim %0, %c1 : tensor<?x?x?xf32>
+   %3 = memref.dim %0, %c2 : tensor<?x?x?xf32>
+   return %1, %2, %3 : index, index, index
+}
+//  CHECK-DAG: #[[MAP0:.+]] = affine_map<()[s0, s1] -> (s0 + s1 + 5)>
+//  CHECK-DAG: #[[MAP1:.+]] = affine_map<()[s0, s1] -> (s0 + s1 + 4)>
+//      CHECK: func @dim_of_pad_op
+// CHECK-SAME:   %[[ARG0:[A-Za-z0-9_]+]]: tensor<2x?x?xf32>
+// CHECK-SAME:   %[[ARG1:[A-Za-z0-9_]+]]: index
+// CHECK-SAME:   %[[ARG2:[A-Za-z0-9_]+]]: index
+//  CHECK-DAG:   %[[C1:.+]] = constant 1 : index
+//  CHECK-DAG:   %[[C2:.+]] = constant 2 : index
+//  CHECK-DAG:   %[[C12:.+]] = constant 12 : index
+//      CHECK:   %[[IN_DIM1:.+]] = memref.dim %[[ARG0]], %[[C1]]
+//      CHECK:   %[[OUT_DIM1:.+]] = affine.apply #[[MAP0]]()[%[[ARG1]], %[[IN_DIM1]]]
+//      CHECK:   %[[IN_DIM2:.+]] = memref.dim %[[ARG0]], %[[C2]]
+//      CHECK:   %[[OUT_DIM2:.+]] = affine.apply #[[MAP1]]()[%[[ARG2]], %[[IN_DIM2]]]
+//      CHECK:   return %[[C12]], %[[OUT_DIM1]], %[[OUT_DIM2]]

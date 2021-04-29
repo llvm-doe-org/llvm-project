@@ -41,8 +41,42 @@ class TargetLowering;
 class TargetPassConfig;
 class TargetRegisterInfo;
 class TargetRegisterClass;
+class ConstantInt;
 class ConstantFP;
 class APFloat;
+
+// Convenience macros for dealing with vector reduction opcodes.
+#define GISEL_VECREDUCE_CASES_ALL                                              \
+  case TargetOpcode::G_VECREDUCE_SEQ_FADD:                                     \
+  case TargetOpcode::G_VECREDUCE_SEQ_FMUL:                                     \
+  case TargetOpcode::G_VECREDUCE_FADD:                                         \
+  case TargetOpcode::G_VECREDUCE_FMUL:                                         \
+  case TargetOpcode::G_VECREDUCE_FMAX:                                         \
+  case TargetOpcode::G_VECREDUCE_FMIN:                                         \
+  case TargetOpcode::G_VECREDUCE_ADD:                                          \
+  case TargetOpcode::G_VECREDUCE_MUL:                                          \
+  case TargetOpcode::G_VECREDUCE_AND:                                          \
+  case TargetOpcode::G_VECREDUCE_OR:                                           \
+  case TargetOpcode::G_VECREDUCE_XOR:                                          \
+  case TargetOpcode::G_VECREDUCE_SMAX:                                         \
+  case TargetOpcode::G_VECREDUCE_SMIN:                                         \
+  case TargetOpcode::G_VECREDUCE_UMAX:                                         \
+  case TargetOpcode::G_VECREDUCE_UMIN:
+
+#define GISEL_VECREDUCE_CASES_NONSEQ                                           \
+  case TargetOpcode::G_VECREDUCE_FADD:                                         \
+  case TargetOpcode::G_VECREDUCE_FMUL:                                         \
+  case TargetOpcode::G_VECREDUCE_FMAX:                                         \
+  case TargetOpcode::G_VECREDUCE_FMIN:                                         \
+  case TargetOpcode::G_VECREDUCE_ADD:                                          \
+  case TargetOpcode::G_VECREDUCE_MUL:                                          \
+  case TargetOpcode::G_VECREDUCE_AND:                                          \
+  case TargetOpcode::G_VECREDUCE_OR:                                           \
+  case TargetOpcode::G_VECREDUCE_XOR:                                          \
+  case TargetOpcode::G_VECREDUCE_SMAX:                                         \
+  case TargetOpcode::G_VECREDUCE_SMIN:                                         \
+  case TargetOpcode::G_VECREDUCE_UMAX:                                         \
+  case TargetOpcode::G_VECREDUCE_UMIN:
 
 /// Try to constrain Reg to the specified register class. If this fails,
 /// create a new virtual register in the correct class.
@@ -156,6 +190,8 @@ getConstantVRegValWithLookThrough(Register VReg, const MachineRegisterInfo &MRI,
                                   bool LookThroughInstrs = true,
                                   bool HandleFConstants = true,
                                   bool LookThroughAnyExt = false);
+const ConstantInt *getConstantIntVRegVal(Register VReg,
+                                         const MachineRegisterInfo &MRI);
 const ConstantFP* getConstantFPVRegVal(Register VReg,
                                        const MachineRegisterInfo &MRI);
 
@@ -347,5 +383,10 @@ int64_t getICmpTrueVal(const TargetLowering &TLI, bool IsVector, bool IsFP);
 /// Returns true if the given block should be optimized for size.
 bool shouldOptForSize(const MachineBasicBlock &MBB, ProfileSummaryInfo *PSI,
                       BlockFrequencyInfo *BFI);
+
+/// \returns the intrinsic ID for a G_INTRINSIC or G_INTRINSIC_W_SIDE_EFFECTS
+/// instruction \p MI.
+unsigned getIntrinsicID(const MachineInstr &MI);
+
 } // End namespace llvm.
 #endif

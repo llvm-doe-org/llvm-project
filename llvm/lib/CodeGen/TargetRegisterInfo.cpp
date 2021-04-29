@@ -225,6 +225,23 @@ TargetRegisterInfo::getMinimalPhysRegClass(MCRegister reg, MVT VT) const {
   return BestRC;
 }
 
+const TargetRegisterClass *
+TargetRegisterInfo::getMinimalPhysRegClassLLT(MCRegister reg, LLT Ty) const {
+  assert(Register::isPhysicalRegister(reg) &&
+         "reg must be a physical register");
+
+  // Pick the most sub register class of the right type that contains
+  // this physreg.
+  const TargetRegisterClass *BestRC = nullptr;
+  for (const TargetRegisterClass *RC : regclasses()) {
+    if ((!Ty.isValid() || isTypeLegalForClass(*RC, Ty)) && RC->contains(reg) &&
+        (!BestRC || BestRC->hasSubClass(RC)))
+      BestRC = RC;
+  }
+
+  return BestRC;
+}
+
 /// getAllocatableSetForRC - Toggle the bits that represent allocatable
 /// registers for the specific register class.
 static void getAllocatableSetForRC(const MachineFunction &MF,
@@ -461,21 +478,13 @@ bool TargetRegisterInfo::canRealignStack(const MachineFunction &MF) const {
   return !MF.getFunction().hasFnAttribute("no-realign-stack");
 }
 
-bool TargetRegisterInfo::needsStackRealignment(
-    const MachineFunction &MF) const {
+bool TargetRegisterInfo::shouldRealignStack(const MachineFunction &MF) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
   const Function &F = MF.getFunction();
-  Align StackAlign = TFI->getStackAlign();
-  bool requiresRealignment = ((MFI.getMaxAlign() > StackAlign) ||
-                              F.hasFnAttribute(Attribute::StackAlignment));
-  if (F.hasFnAttribute("stackrealign") || requiresRealignment) {
-    if (canRealignStack(MF))
-      return true;
-    LLVM_DEBUG(dbgs() << "Can't realign function's stack: " << F.getName()
-                      << "\n");
-  }
-  return false;
+  return F.hasFnAttribute("stackrealign") ||
+         (MFI.getMaxAlign() > TFI->getStackAlign()) ||
+         F.hasFnAttribute(Attribute::StackAlignment);
 }
 
 bool TargetRegisterInfo::regmaskSubsetEqual(const uint32_t *mask0,

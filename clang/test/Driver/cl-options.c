@@ -118,7 +118,8 @@
 // RUN: %clang_cl /imsvcmyincludedir -### -- %s 2>&1 | FileCheck -check-prefix=SLASH_imsvc %s
 // RUN: %clang_cl /imsvc myincludedir -### -- %s 2>&1 | FileCheck -check-prefix=SLASH_imsvc %s
 // Clang's resource header directory should be first:
-// SLASH_imsvc: "-internal-isystem" "{{[^"]*}}lib{{(64)?/|\\\\}}clang{{[^"]*}}include"
+// SLASH_imsvc: "-resource-dir" "[[RESOURCE_DIR:[^"]+]]"
+// SLASH_imsvc: "-internal-isystem" "[[RESOURCE_DIR]]{{[/\\]+}}include"
 // SLASH_imsvc: "-internal-isystem" "myincludedir"
 
 // RUN: %clang_cl /J -### -- %s 2>&1 | FileCheck -check-prefix=J %s
@@ -298,6 +299,10 @@
 // RUN: %clang_cl /d1PP -### -- %s 2>&1 | FileCheck -check-prefix=d1PP %s
 // d1PP: -dD
 
+// RUN: %clang_cl --target=i686-pc-windows-msvc /c /QIntel-jcc-erratum -### -- %s 2>&1 | FileCheck -check-prefix=jcceratum %s
+// jcceratum: "-mllvm" "-x86-branches-within-32B-boundaries"
+
+
 // We forward any unrecognized -W diagnostic options to cc1.
 // RUN: %clang_cl -Wunused-pragmas -### -- %s 2>&1 | FileCheck -check-prefix=WJoined %s
 // WJoined: "-cc1"
@@ -466,7 +471,6 @@
 // RUN:     /openmp:experimental \
 // RUN:     /Qfast_transcendentals \
 // RUN:     /QIfist \
-// RUN:     /QIntel-jcc-erratum \
 // RUN:     /Qimprecise_fwaits \
 // RUN:     /Qpar \
 // RUN:     /Qpar-report:1 \

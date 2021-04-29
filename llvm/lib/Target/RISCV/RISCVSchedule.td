@@ -105,24 +105,6 @@ def WriteFST16        : SchedWrite;    // Floating point sp store
 def WriteFST32        : SchedWrite;    // Floating point sp store
 def WriteFST64        : SchedWrite;    // Floating point dp store
 
-// Zba extension
-def WriteSHXADD      : SchedWrite; // sh1add/sh2add/sh3add
-def WriteSHXADD32    : SchedWrite; // sh1add.uw/sh2add.uw/sh3add.uw
-
-// Zbb extension
-def WriteRotateImm   : SchedWrite;
-def WriteRotateImm32 : SchedWrite;
-def WriteRotateReg   : SchedWrite;
-def WriteRotateReg32 : SchedWrite;
-def WriteCLZ         : SchedWrite;
-def WriteCLZ32       : SchedWrite;
-def WriteCTZ         : SchedWrite;
-def WriteCTZ32       : SchedWrite;
-def WriteCPOP        : SchedWrite;
-def WriteCPOP32      : SchedWrite;
-def WriteREV8        : SchedWrite;
-def WriteORCB        : SchedWrite;
-
 /// Define scheduler resources associated with use operands.
 def ReadJmp         : SchedRead;
 def ReadJalr        : SchedRead;
@@ -200,60 +182,51 @@ def ReadFClass16         : SchedRead;
 def ReadFClass32         : SchedRead;
 def ReadFClass64         : SchedRead;
 
-// Zba extension
-def ReadSHXADD      : SchedRead; // sh1add/sh2add/sh3add
-def ReadSHXADD32    : SchedRead; // sh1add.uw/sh2add.uw/sh3add.uw
-
-// Zbb extension
-def ReadRotateImm   : SchedRead;
-def ReadRotateImm32 : SchedRead;
-def ReadRotateReg   : SchedRead;
-def ReadRotateReg32 : SchedRead;
-def ReadCLZ         : SchedRead;
-def ReadCLZ32       : SchedRead;
-def ReadCTZ         : SchedRead;
-def ReadCTZ32       : SchedRead;
-def ReadCPOP        : SchedRead;
-def ReadCPOP32      : SchedRead;
-def ReadREV8        : SchedRead;
-def ReadORCB        : SchedRead;
-
-multiclass UnsupportedSchedZba {
+multiclass UnsupportedSchedZfh {
 let Unsupported = true in {
-def : WriteRes<WriteSHXADD, []>;
-def : WriteRes<WriteSHXADD32, []>;
+def : WriteRes<WriteFALU16, []>;
+def : WriteRes<WriteFClass16, []>;
+def : WriteRes<WriteFCvtF16ToF64, []>;
+def : WriteRes<WriteFCvtF64ToF16, []>;
+def : WriteRes<WriteFCvtI64ToF16, []>;
+def : WriteRes<WriteFCvtF32ToF16, []>;
+def : WriteRes<WriteFCvtI32ToF16, []>;
+def : WriteRes<WriteFCvtF16ToI64, []>;
+def : WriteRes<WriteFCvtF16ToF32, []>;
+def : WriteRes<WriteFCvtF16ToI32, []>;
+def : WriteRes<WriteFDiv16, []>;
+def : WriteRes<WriteFCmp16, []>;
+def : WriteRes<WriteFLD16, []>;
+def : WriteRes<WriteFMA16, []>;
+def : WriteRes<WriteFMinMax16, []>;
+def : WriteRes<WriteFMul16, []>;
+def : WriteRes<WriteFMovI16ToF16, []>;
+def : WriteRes<WriteFMovF16ToI16, []>;
+def : WriteRes<WriteFSGNJ16, []>;
+def : WriteRes<WriteFST16, []>;
+def : WriteRes<WriteFSqrt16, []>;
 
-def : ReadAdvance<ReadSHXADD, 0>;
-def : ReadAdvance<ReadSHXADD32, 0>;
-}
+def : ReadAdvance<ReadFALU16, 0>;
+def : ReadAdvance<ReadFClass16, 0>;
+def : ReadAdvance<ReadFCvtF16ToF64, 0>;
+def : ReadAdvance<ReadFCvtF64ToF16, 0>;
+def : ReadAdvance<ReadFCvtI64ToF16, 0>;
+def : ReadAdvance<ReadFCvtF32ToF16, 0>;
+def : ReadAdvance<ReadFCvtI32ToF16, 0>;
+def : ReadAdvance<ReadFCvtF16ToI64, 0>;
+def : ReadAdvance<ReadFCvtF16ToF32, 0>;
+def : ReadAdvance<ReadFCvtF16ToI32, 0>;
+def : ReadAdvance<ReadFDiv16, 0>;
+def : ReadAdvance<ReadFCmp16, 0>;
+def : ReadAdvance<ReadFMA16, 0>;
+def : ReadAdvance<ReadFMinMax16, 0>;
+def : ReadAdvance<ReadFMul16, 0>;
+def : ReadAdvance<ReadFMovI16ToF16, 0>;
+def : ReadAdvance<ReadFMovF16ToI16, 0>;
+def : ReadAdvance<ReadFSGNJ16, 0>;
+def : ReadAdvance<ReadFSqrt16, 0>;
+} // Unsupported = true
 }
 
-multiclass UnsupportedSchedZbb {
-let Unsupported = true in {
-def : WriteRes<WriteRotateImm, []>;
-def : WriteRes<WriteRotateImm32, []>;
-def : WriteRes<WriteRotateReg, []>;
-def : WriteRes<WriteRotateReg32, []>;
-def : WriteRes<WriteCLZ, []>;
-def : WriteRes<WriteCLZ32, []>;
-def : WriteRes<WriteCTZ, []>;
-def : WriteRes<WriteCTZ32, []>;
-def : WriteRes<WriteCPOP, []>;
-def : WriteRes<WriteCPOP32, []>;
-def : WriteRes<WriteREV8, []>;
-def : WriteRes<WriteORCB, []>;
-
-def : ReadAdvance<ReadRotateImm, 0>;
-def : ReadAdvance<ReadRotateImm32, 0>;
-def : ReadAdvance<ReadRotateReg, 0>;
-def : ReadAdvance<ReadRotateReg32, 0>;
-def : ReadAdvance<ReadCLZ, 0>;
-def : ReadAdvance<ReadCLZ32, 0>;
-def : ReadAdvance<ReadCTZ, 0>;
-def : ReadAdvance<ReadCTZ32, 0>;
-def : ReadAdvance<ReadCPOP, 0>;
-def : ReadAdvance<ReadCPOP32, 0>;
-def : ReadAdvance<ReadREV8, 0>;
-def : ReadAdvance<ReadORCB, 0>;
-}
-}
+// Include the scheduler resources for other instruction extensions.
+include "RISCVScheduleB.td"

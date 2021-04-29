@@ -21,6 +21,8 @@
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Parser.h"
 
+#include "llvm/Support/Debug.h"
+
 using namespace mlir;
 
 //===----------------------------------------------------------------------===//
@@ -58,6 +60,14 @@ intptr_t mlirContextGetNumLoadedDialects(MlirContext context) {
 MlirDialect mlirContextGetOrLoadDialect(MlirContext context,
                                         MlirStringRef name) {
   return wrap(unwrap(context)->getOrLoadDialect(unwrap(name)));
+}
+
+bool mlirContextIsRegisteredOperation(MlirContext context, MlirStringRef name) {
+  return unwrap(context)->isOperationRegistered(unwrap(name));
+}
+
+void mlirContextEnableMultithreading(MlirContext context, bool enable) {
+  return unwrap(context)->enableMultithreading(enable);
 }
 
 //===----------------------------------------------------------------------===//
@@ -339,6 +349,11 @@ intptr_t mlirOperationGetNumOperands(MlirOperation op) {
 
 MlirValue mlirOperationGetOperand(MlirOperation op, intptr_t pos) {
   return wrap(unwrap(op)->getOperand(static_cast<unsigned>(pos)));
+}
+
+void mlirOperationSetOperand(MlirOperation op, intptr_t pos,
+                             MlirValue newValue) {
+  unwrap(op)->setOperand(static_cast<unsigned>(pos), unwrap(newValue));
 }
 
 intptr_t mlirOperationGetNumResults(MlirOperation op) {

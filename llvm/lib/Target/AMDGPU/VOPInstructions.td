@@ -140,7 +140,13 @@ class VOP3P_Pseudo <string opName, VOPProfile P, list<dag> pattern = []> :
   let VOP3P = 1;
 }
 
+class VOP_Real<VOP_Pseudo ps> {
+  Instruction Opcode = !cast<Instruction>(NAME);
+  bit IsSingle = ps.Pfl.IsSingle;
+}
+
 class VOP3_Real <VOP_Pseudo ps, int EncodingFamily> :
+  VOP_Real <ps>,
   InstSI <ps.OutOperandList, ps.InOperandList, ps.Mnemonic # ps.AsmOperands, []>,
   SIMCInstr <ps.PseudoInstr, EncodingFamily> {
 
@@ -411,8 +417,8 @@ class VOP_SDWAe<VOPProfile P> : Enc64 {
   bits<1> clamp;
 
   let Inst{39-32} = !if(P.HasSrc0, src0{7-0}, 0);
-  let Inst{42-40} = !if(P.EmitDst, dst_sel{2-0}, 0);
-  let Inst{44-43} = !if(P.EmitDst, dst_unused{1-0}, 0);
+  let Inst{42-40} = !if(P.EmitDstSel, dst_sel{2-0}, 0);
+  let Inst{44-43} = !if(P.EmitDstSel, dst_unused{1-0}, 0);
   let Inst{45}    = !if(P.HasSDWAClamp, clamp{0}, 0);
   let Inst{50-48} = !if(P.HasSrc0, src0_sel{2-0}, 0);
   let Inst{51}    = !if(P.HasSrc0IntMods, src0_modifiers{0}, 0);
@@ -462,8 +468,8 @@ class VOP_SDWA9Ae<VOPProfile P> : VOP_SDWA9e<P> {
   bits<1> clamp;
   bits<2> omod;
 
-  let Inst{42-40} = !if(P.EmitDst, dst_sel{2-0}, 0);
-  let Inst{44-43} = !if(P.EmitDst, dst_unused{1-0}, 0);
+  let Inst{42-40} = !if(P.EmitDstSel, dst_sel{2-0}, 0);
+  let Inst{44-43} = !if(P.EmitDstSel, dst_unused{1-0}, 0);
   let Inst{45}    = !if(P.HasSDWAClamp, clamp{0}, 0);
   let Inst{47-46} = !if(P.HasSDWAOMod, omod{1-0}, 0);
 }
@@ -797,3 +803,17 @@ include "VOP1Instructions.td"
 include "VOP2Instructions.td"
 include "VOP3Instructions.td"
 include "VOP3PInstructions.td"
+
+
+class VOPInfoTable <string Format> : GenericTable {
+  let FilterClass = Format # "_Real";
+  let CppTypeName = "VOPInfo";
+  let Fields = ["Opcode", "IsSingle"];
+
+  let PrimaryKey = ["Opcode"];
+  let PrimaryKeyName = "get" # Format # "OpcodeHelper";
+}
+
+def VOP1InfoTable : VOPInfoTable<"VOP1">;
+def VOP2InfoTable : VOPInfoTable<"VOP2">;
+def VOP3InfoTable : VOPInfoTable<"VOP3">;

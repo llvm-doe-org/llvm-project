@@ -153,6 +153,16 @@ public:
   static Function *Create(FunctionType *Ty, LinkageTypes Linkage,
                           const Twine &N, Module &M);
 
+  /// Creates a function with some attributes recorded in llvm.module.flags
+  /// applied.
+  ///
+  /// Use this when synthesizing new functions that need attributes that would
+  /// have been set by command line options.
+  static Function *createWithDefaultAttr(FunctionType *Ty, LinkageTypes Linkage,
+                                         unsigned AddrSpace,
+                                         const Twine &N = "",
+                                         Module *M = nullptr);
+
   // Provide fast operand accessors.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 
@@ -483,6 +493,10 @@ public:
     return AttributeSets.getParamAlignment(ArgNo);
   }
 
+  MaybeAlign getParamStackAlign(unsigned ArgNo) const {
+    return AttributeSets.getParamStackAlignment(ArgNo);
+  }
+
   /// Extract the byval type for a parameter.
   Type *getParamByValType(unsigned ArgNo) const {
     return AttributeSets.getParamByValType(ArgNo);
@@ -491,6 +505,11 @@ public:
   /// Extract the sret type for a parameter.
   Type *getParamStructRetType(unsigned ArgNo) const {
     return AttributeSets.getParamStructRetType(ArgNo);
+  }
+
+  /// Extract the inalloca type for a parameter.
+  Type *getParamInAllocaType(unsigned ArgNo) const {
+    return AttributeSets.getParamInAllocaType(ArgNo);
   }
 
   /// Extract the byref type for a parameter.
@@ -890,7 +909,7 @@ public:
   ///
   bool hasAddressTaken(const User ** = nullptr,
                        bool IgnoreCallbackUses = false,
-                       bool IgnoreAssumeLikeCalls = false,
+                       bool IgnoreAssumeLikeCalls = true,
                        bool IngoreLLVMUsed = false) const;
 
   /// isDefTriviallyDead - Return true if it is trivially safe to remove

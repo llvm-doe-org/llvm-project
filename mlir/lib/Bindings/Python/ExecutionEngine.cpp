@@ -81,7 +81,25 @@ void mlir::python::populateExecutionEngineSubmodule(py::module &m) {
             auto *res = mlirExecutionEngineLookup(
                 executionEngine.get(),
                 mlirStringRefCreate(func.c_str(), func.size()));
-            return (int64_t)res;
+            return reinterpret_cast<uintptr_t>(res);
           },
-          "Lookup function `func` in the ExecutionEngine.");
+          "Lookup function `func` in the ExecutionEngine.")
+      .def(
+          "raw_register_runtime",
+          [](PyExecutionEngine &executionEngine, const std::string &name,
+             uintptr_t sym) {
+            mlirExecutionEngineRegisterSymbol(
+                executionEngine.get(),
+                mlirStringRefCreate(name.c_str(), name.size()),
+                reinterpret_cast<void *>(sym));
+          },
+          "Lookup function `func` in the ExecutionEngine.")
+      .def(
+          "dump_to_object_file",
+          [](PyExecutionEngine &executionEngine, const std::string &fileName) {
+            mlirExecutionEngineDumpToObjectFile(
+                executionEngine.get(),
+                mlirStringRefCreate(fileName.c_str(), fileName.size()));
+          },
+          "Dump ExecutionEngine to an object file.");
 }

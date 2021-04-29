@@ -18,6 +18,7 @@ namespace llvm {
 class FunctionPass;
 class GCNTargetMachine;
 class ImmutablePass;
+class MachineFunctionPass;
 class ModulePass;
 class Pass;
 class Target;
@@ -50,7 +51,6 @@ FunctionPass *createSIAnnotateControlFlowPass();
 FunctionPass *createSIFoldOperandsPass();
 FunctionPass *createSIPeepholeSDWAPass();
 FunctionPass *createSILowerI1CopiesPass();
-FunctionPass *createSIAddIMGInitPass();
 FunctionPass *createSIShrinkInstructionsPass();
 FunctionPass *createSILoadStoreOptimizerPass();
 FunctionPass *createSIWholeQuadModePass();
@@ -222,9 +222,6 @@ extern char &AMDGPUSimplifyLibCallsID;
 void initializeAMDGPUUseNativeCallsPass(PassRegistry &);
 extern char &AMDGPUUseNativeCallsID;
 
-void initializeSIAddIMGInitPass(PassRegistry &);
-extern char &SIAddIMGInitID;
-
 void initializeAMDGPUPerfHintAnalysisPass(PassRegistry &);
 extern char &AMDGPUPerfHintAnalysisID;
 
@@ -334,9 +331,6 @@ void initializeAMDGPUArgumentUsageInfoPass(PassRegistry &);
 ModulePass *createAMDGPUOpenCLEnqueuedBlockLoweringPass();
 void initializeAMDGPUOpenCLEnqueuedBlockLoweringPass(PassRegistry &);
 extern char &AMDGPUOpenCLEnqueuedBlockLoweringID;
-
-void initializeGCNRegBankReassignPass(PassRegistry &);
-extern char &GCNRegBankReassignID;
 
 void initializeGCNNSAReassignPass(PassRegistry &);
 extern char &GCNNSAReassignID;

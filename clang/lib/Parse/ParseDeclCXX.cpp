@@ -132,7 +132,7 @@ Parser::DeclGroupPtrTy Parser::ParseNamespace(DeclaratorContext Context,
           << FixItHint::CreateRemoval(InlineLoc);
     Decl *NSAlias = ParseNamespaceAlias(NamespaceLoc, IdentLoc, Ident, DeclEnd);
     return Actions.ConvertDeclToDeclGroup(NSAlias);
-}
+  }
 
   BalancedDelimiterTracker T(*this, tok::l_brace);
   if (T.consumeOpen()) {
@@ -1836,7 +1836,8 @@ void Parser::ParseClassSpecifier(tok::TokenKind TagTokKind,
     } else if (TemplateInfo.Kind == ParsedTemplateInfo::ExplicitInstantiation &&
         TUK == Sema::TUK_Declaration) {
       // This is an explicit instantiation of a class template.
-      ProhibitAttributes(attrs);
+      ProhibitCXX11Attributes(attrs, diag::err_attributes_not_allowed,
+                              /*DiagnoseEmptyAttrs=*/true);
 
       TagOrTempResult = Actions.ActOnExplicitInstantiation(
           getCurScope(), TemplateInfo.ExternLoc, TemplateInfo.TemplateLoc,
@@ -1851,7 +1852,8 @@ void Parser::ParseClassSpecifier(tok::TokenKind TagTokKind,
     } else if (TUK == Sema::TUK_Reference ||
                (TUK == Sema::TUK_Friend &&
                 TemplateInfo.Kind == ParsedTemplateInfo::NonTemplate)) {
-      ProhibitAttributes(attrs);
+      ProhibitCXX11Attributes(attrs, diag::err_attributes_not_allowed,
+                              /*DiagnoseEmptyAttrs=*/true);
       TypeResult = Actions.ActOnTagTemplateIdType(TUK, TagType, StartLoc,
                                                   SS,
                                                   TemplateId->TemplateKWLoc,
@@ -1923,7 +1925,8 @@ void Parser::ParseClassSpecifier(tok::TokenKind TagTokKind,
         TagType, StartLoc, SS, Name, NameLoc, attrs);
   } else if (TUK == Sema::TUK_Friend &&
              TemplateInfo.Kind != ParsedTemplateInfo::NonTemplate) {
-    ProhibitAttributes(attrs);
+    ProhibitCXX11Attributes(attrs, diag::err_attributes_not_allowed,
+                            /*DiagnoseEmptyAttrs=*/true);
 
     TagOrTempResult = Actions.ActOnTemplatedFriendTag(
         getCurScope(), DS.getFriendSpecLoc(), TagType, StartLoc, SS, Name,
@@ -1932,7 +1935,8 @@ void Parser::ParseClassSpecifier(tok::TokenKind TagTokKind,
                                TemplateParams ? TemplateParams->size() : 0));
   } else {
     if (TUK != Sema::TUK_Declaration && TUK != Sema::TUK_Definition)
-      ProhibitAttributes(attrs);
+      ProhibitCXX11Attributes(attrs, diag::err_attributes_not_allowed,
+                              /* DiagnoseEmptyAttrs=*/true);
 
     if (TUK == Sema::TUK_Definition &&
         TemplateInfo.Kind == ParsedTemplateInfo::ExplicitInstantiation) {
@@ -4209,10 +4213,21 @@ void Parser::ParseCXX11AttributeSpecifier(ParsedAttributes &attrs,
 
   llvm::SmallDenseMap<IdentifierInfo*, SourceLocation, 4> SeenAttrs;
 
-  while (Tok.isNot(tok::r_square)) {
-    // attribute not present
-    if (TryConsumeToken(tok::comma))
-      continue;
+  bool AttrParsed = false;
+  while (!Tok.isOneOf(tok::r_square, tok::semi)) {
+    if (AttrParsed) {
+      // If we parsed an attribute, a comma is required before parsing any
+      // additional attributes.
+      if (ExpectAndConsume(tok::comma)) {
+        SkipUntil(tok::r_square, StopAtSemi | StopBeforeMatch);
+        continue;
+      }
+      AttrParsed = false;
+    }
+
+    // Eat all remaining superfluous commas before parsing the next attribute.
+    while (TryConsumeToken(tok::comma))
+      ;
 
     SourceLocation ScopeLoc, AttrLoc;
     IdentifierInfo *ScopeName = nullptr, *AttrName = nullptr;
@@ -4245,29 +4260,30 @@ void Parser::ParseCXX11AttributeSpecifier(ParsedAttributes &attrs,
       }
     }
 
-    bool StandardAttr = IsBuiltInOrStandardCXX11Attribute(AttrName, ScopeName);
-    bool AttrParsed = false;
-
-    if (StandardAttr &&
-        !SeenAttrs.insert(std::make_pair(AttrName, AttrLoc)).second)
-      Diag(AttrLoc, diag::err_cxx11_attribute_repeated)
-          << AttrName << SourceRange(SeenAttrs[AttrName]);
-
     // Parse attribute arguments
     if (Tok.is(tok::l_paren))
       AttrParsed = ParseCXX11AttributeArgs(AttrName, AttrLoc, attrs, endLoc,
                                            ScopeName, ScopeLoc);
 
-    if (!AttrParsed)
+    if (!AttrParsed) {
       attrs.addNew(
           AttrName,
           SourceRange(ScopeLoc.isValid() ? ScopeLoc : AttrLoc, AttrLoc),
           ScopeName, ScopeLoc, nullptr, 0,
           getLangOpts().CPlusPlus ? ParsedAttr::AS_CXX11 : ParsedAttr::AS_C2x);
+      AttrParsed = true;
+    }
 
     if (TryConsumeToken(tok::ellipsis))
       Diag(Tok, diag::err_cxx11_attribute_forbids_ellipsis)
         << AttrName;
+  }
+
+  // If we hit an error and recovered by parsing up to a semicolon, eat the
+  // semicolon and don't issue further diagnostics about missing brackets.
+  if (Tok.is(tok::semi)) {
+    ConsumeToken();
+    return;
   }
 
   SourceLocation CloseLoc = Tok.getLocation();

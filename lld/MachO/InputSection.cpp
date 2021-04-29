@@ -34,18 +34,17 @@ uint64_t InputSection::getFileSize() const {
 
 uint64_t InputSection::getVA() const { return parent->addr + outSecOff; }
 
-static uint64_t resolveSymbolVA(uint8_t *loc, const lld::macho::Symbol &sym,
-                                uint8_t type) {
+static uint64_t resolveSymbolVA(uint8_t *loc, const Symbol &sym, uint8_t type) {
   const RelocAttrs &relocAttrs = target->getRelocAttrs(type);
   if (relocAttrs.hasAttr(RelocAttrBits::BRANCH)) {
     if (sym.isInStubs())
       return in.stubs->addr + sym.stubsIndex * target->stubSize;
   } else if (relocAttrs.hasAttr(RelocAttrBits::GOT)) {
     if (sym.isInGot())
-      return in.got->addr + sym.gotIndex * WordSize;
+      return in.got->addr + sym.gotIndex * target->wordSize;
   } else if (relocAttrs.hasAttr(RelocAttrBits::TLV)) {
     if (sym.isInGot())
-      return in.tlvPointers->addr + sym.gotIndex * WordSize;
+      return in.tlvPointers->addr + sym.gotIndex * target->wordSize;
     assert(isa<Defined>(&sym));
   }
   return sym.getVA();
@@ -63,8 +62,13 @@ void InputSection::writeTo(uint8_t *buf) {
     uint64_t referentVA = 0;
     if (target->hasAttr(r.type, RelocAttrBits::SUBTRAHEND)) {
       const Symbol *fromSym = r.referent.get<Symbol *>();
-      const Symbol *toSym = relocs[++i].referent.get<Symbol *>();
-      referentVA = toSym->getVA() - fromSym->getVA();
+      const Reloc &minuend = relocs[++i];
+      uint64_t minuendVA;
+      if (const Symbol *toSym = minuend.referent.dyn_cast<Symbol *>())
+        minuendVA = toSym->getVA();
+      else
+        minuendVA = minuend.referent.get<InputSection *>()->getVA();
+      referentVA = minuendVA - fromSym->getVA() + minuend.addend;
     } else if (auto *referentSym = r.referent.dyn_cast<Symbol *>()) {
       if (target->hasAttr(r.type, RelocAttrBits::LOAD) &&
           !referentSym->isInGot())
@@ -82,7 +86,7 @@ void InputSection::writeTo(uint8_t *buf) {
     } else if (auto *referentIsec = r.referent.dyn_cast<InputSection *>()) {
       referentVA = referentIsec->getVA();
     }
-    target->relocateOne(loc, r, referentVA, getVA() + r.offset);
+    target->relocateOne(loc, r, referentVA + r.addend, getVA() + r.offset);
   }
 }
 
@@ -97,7 +101,7 @@ bool macho::isCodeSection(InputSection *isec) {
 
   if (isec->segname == segment_names::text)
     return StringSwitch<bool>(isec->name)
-        .Cases("__textcoal_nt", "__StaticInit", true)
+        .Cases(section_names::textCoalNt, section_names::staticInit, true)
         .Default(false);
 
   return false;
