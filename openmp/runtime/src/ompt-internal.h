@@ -40,6 +40,10 @@
 # define OMPT_SUPPORT_IF(...)
 #endif
 
+/// Type alias for source location information for variable mappings with data
+/// layout ";name;filename;row;col;;\0" from clang.
+using map_var_info_t = void *;
+
 #define OMPT_INVOKER(x)                                                        \
   ((x == fork_context_gnu) ? ompt_parallel_invoker_program                     \
                            : ompt_parallel_invoker_runtime)
@@ -137,11 +141,9 @@ int ompt_get_target_info(uint64_t *device_num, ompt_id_t *target_id,
                          ompt_id_t *host_op_id) OMPT_LIBOMPTARGET_WEAK;
 void ompt_set_target_info(uint64_t device_num) OMPT_LIBOMPTARGET_WEAK;
 void ompt_clear_target_info() OMPT_LIBOMPTARGET_WEAK;
-const char *ompt_index_data_expressions(uint32_t) OMPT_LIBOMPTARGET_WEAK;
-void ompt_set_data_expression(const char *) OMPT_LIBOMPTARGET_WEAK;
+void ompt_set_map_var_info(map_var_info_t map_var_info) OMPT_LIBOMPTARGET_WEAK;
 extern bool ompt_has_user_source_info;
 extern ompt_directive_info_t ompt_directive_info;
-extern const char * const *ompt_data_expressions;
 int omp_get_initial_device(void) OMPT_LIBOMPTARGET_WEAK;
 
 // This struct is passed into target plugins where they require global_device_id

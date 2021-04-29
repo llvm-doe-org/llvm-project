@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string>
 #include <string.h>
 #if KMP_OS_UNIX
 #include <dlfcn.h>
@@ -93,8 +94,7 @@ static ompt_start_tool_result_t *ompt_start_tool_result = NULL;
 bool ompt_has_user_source_info = false;
 ompt_directive_info_t ompt_directive_info = {ompt_directive_unknown, 0, NULL,
                                              NULL, 0, 0, 0, 0};
-const char * const *ompt_data_expressions = NULL;
-const char *ompt_data_expression = NULL;
+static map_var_info_t ompt_map_var_info;
 static unsigned ompt_device_inits_capacity = 0;
 static unsigned ompt_device_inits_size = 0;
 static int32_t *ompt_device_inits = NULL;
@@ -495,14 +495,8 @@ void ompt_set_target_info(uint64_t device_num) {
 
 void ompt_clear_target_info() { ompt_target_device = UINT64_MAX; }
 
-const char *ompt_index_data_expressions(uint32_t i) {
-  if (!ompt_data_expressions)
-    return NULL;
-  return ompt_data_expressions[i];
-}
-
-void ompt_set_data_expression(const char *expr) {
-  ompt_data_expression = expr;
+void ompt_set_map_var_info(map_var_info_t map_var_info) {
+  ompt_map_var_info = map_var_info;
 }
 
 /*****************************************************************************
@@ -855,7 +849,16 @@ OMPT_API_ROUTINE ompt_directive_info_t *ompt_get_directive_info(void) {
 }
 
 OMPT_API_ROUTINE const char *ompt_get_data_expression(void) {
-  return ompt_data_expression;
+  if (!ompt_map_var_info)
+    return nullptr;
+  const std::string Info(reinterpret_cast<const char *>(ompt_map_var_info));
+  std::size_t Begin = Info.find(';');
+  std::size_t End = Info.find(';', Begin + 1);
+  // Static so it can be returned to caller, which must copy it elsewhere before
+  // the next call overwrites it.
+  static std::string DataExpression;
+  DataExpression = Info.substr(Begin + 1, End - Begin - 1);
+  return DataExpression.c_str();
 }
 
 /*****************************************************************************

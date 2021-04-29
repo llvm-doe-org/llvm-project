@@ -32,8 +32,7 @@ VERSION {
         ompt_record_device_init;
         ompt_set_target_info;
         ompt_clear_target_info;
-        ompt_index_data_expressions;
-        ompt_set_data_expression;
+        ompt_set_map_var_info;
 
         # icc drops weak attribute at linking step without the following line:
         Annotate*;           # TSAN annotation

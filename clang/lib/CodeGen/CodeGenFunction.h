@@ -3370,19 +3370,17 @@ public:
                                  const RegionCodeGenTy &BodyGen,
                                  const TaskGenTy &TaskGen, OMPTaskDataTy &Data);
   struct OMPTargetDataInfo {
-    Address MapExprsArray = Address::invalid();
     Address BasePointersArray = Address::invalid();
     Address PointersArray = Address::invalid();
     Address SizesArray = Address::invalid();
     Address MappersArray = Address::invalid();
     unsigned NumberOfTargetItems = 0;
     explicit OMPTargetDataInfo() = default;
-    OMPTargetDataInfo(Address MapExprsArray, Address BasePointersArray,
-                      Address PointersArray, Address SizesArray,
-                      Address MappersArray, unsigned NumberOfTargetItems)
-        : MapExprsArray(MapExprsArray), BasePointersArray(BasePointersArray),
-          PointersArray(PointersArray), SizesArray(SizesArray),
-          MappersArray(MappersArray),
+    OMPTargetDataInfo(Address BasePointersArray, Address PointersArray,
+                      Address SizesArray, Address MappersArray,
+                      unsigned NumberOfTargetItems)
+        : BasePointersArray(BasePointersArray), PointersArray(PointersArray),
+          SizesArray(SizesArray), MappersArray(MappersArray),
           NumberOfTargetItems(NumberOfTargetItems) {}
   };
   void EmitOMPTargetTaskBasedDirective(const OMPExecutableDirective &S,

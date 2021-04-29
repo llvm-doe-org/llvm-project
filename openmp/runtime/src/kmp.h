@@ -3933,9 +3933,6 @@ void __kmpc_set_source_info(const char *src_file, const char *func_name,
                             int func_end_line_no);
 void __kmpc_clear_source_info();
 
-// Records data expressions for upcoming runtime calls.
-void __kmpc_set_data_expressions(const char * const *exprs);
-
 #ifdef __cplusplus
 }
 #endif

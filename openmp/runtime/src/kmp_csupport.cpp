@@ -4295,9 +4295,3 @@ void __kmpc_clear_source_info() {
   ompt_directive_info.func_end_line_no = 0;
 #endif
 }
-
-void __kmpc_set_data_expressions(const char * const *exprs) {
-#if OMPT_SUPPORT
-  ompt_data_expressions = exprs;
-#endif
-}

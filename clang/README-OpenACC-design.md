@@ -2416,12 +2416,23 @@ these routines seem like they might be useful for other purposes
 outside OMPT, such as debugging facilities, in the future.
 
 In the case of directives, upstream Clang's LLVM IR codegen phase for
-OpenMP currently does not make the information required for the above
-OMPT entry points available to the OpenMP runtime.  For this purpose,
-Clacc extends this phase to instrument OpenMP runtime calls
+OpenMP currently does not make the information required for
+`ompt_get_directive_info` available to the OpenMP runtime.  For this
+purpose, Clacc extends this phase to instrument OpenMP runtime calls
 corresponding to OpenMP directives that are translated from OpenACC
 directives.  Thus, the required information is available only when
 using Clacc's compiler in traditional compilation mode.
+
+In the case of directives, upstream Clang's LLVM IR codegen phase for
+OpenMP currently makes the information required for
+`ompt_get_data_expression` available to the OpenMP runtime only if
+debug information is enabled with Clang command-line options like
+`-gline-tables-only` or `-g`.  Of course, only Clacc's OpenMP runtime
+currently provides `ompt_get_data_expression` to access that
+information from an application.  Clacc adjusts Clang's LLVM IR
+codegen phase to make that information available to the OpenMP runtime
+when compiling OpenACC directives regardless of such command-line
+options.
 
 When using Clacc's compiler in source-to-source mode followed by a
 foreign OpenMP compiler, we expect that the foreign OpenMP runtime's
@@ -2737,8 +2748,12 @@ support currently include:
                       `acc_ev_create` events for firstprivate `const`
                       arrays.  Please report additional cases.
                 * When compiling the OpenACC application using Clacc's
-                  compiler in source-to-source mode, this field is always
-                  set to `NULL`.
+                  compiler in source-to-source mode, this field is set
+                  to `NULL` by default.  However, it is set correctly
+                  when the generated OpenMP is compiled with Clacc's
+                  compiler and debug information is enabled with Clang
+                  command-line options like `-gline-tables-only` or
+                  `-g`.
                 * See the section "OpenACC to OpenMP Mapping: Profiling
                   Data" for further discussion.
                 * Note that setting this field to `NULL` is permitted
