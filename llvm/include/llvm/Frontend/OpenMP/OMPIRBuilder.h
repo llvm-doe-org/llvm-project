@@ -297,7 +297,10 @@ public:
   /// Return the (LLVM-IR) string describing the source location identified by
   /// the arguments.
   Constant *getOrCreateSrcLocStr(StringRef FunctionName, StringRef FileName,
-                                 unsigned Line, unsigned Column);
+                                 unsigned Line, unsigned Column,
+                                 unsigned EndLine = 0, unsigned FuncLine = 0,
+                                 unsigned FuncEndLine = 0,
+                                 unsigned DirKind = 0);
 
   /// Return the (LLVM-IR) string describing the source location \p Loc.
   Constant *getOrCreateSrcLocStr(const LocationDescription &Loc);

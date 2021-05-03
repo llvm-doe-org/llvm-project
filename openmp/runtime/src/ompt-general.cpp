@@ -92,9 +92,12 @@ static ompt_start_tool_result_t *ompt_start_tool_result = NULL;
 
 // FIXME: Access to these is not thread-safe.  Does it need to be?
 bool ompt_has_user_source_info = false;
-ompt_directive_info_t ompt_directive_info = {ompt_directive_unknown, 0, NULL,
-                                             NULL, 0, 0, 0, 0};
-static map_var_info_t ompt_map_var_info;
+// kind and is_explicit_event fields of ompt_user_source_info are not used.
+// They're taken from ompt_directive_ident if set.
+ompt_directive_info_t ompt_user_source_info;
+static const ident_t *ompt_directive_ident = nullptr;
+static bool ompt_directive_ident_parsed = false;
+static map_var_info_t ompt_map_var_info = NULL;
 static unsigned ompt_device_inits_capacity = 0;
 static unsigned ompt_device_inits_size = 0;
 static int32_t *ompt_device_inits = NULL;
@@ -495,6 +498,16 @@ void ompt_set_target_info(uint64_t device_num) {
 
 void ompt_clear_target_info() { ompt_target_device = UINT64_MAX; }
 
+void ompt_set_directive_ident(const ident_t *ident) {
+  ompt_directive_ident = ident;
+  ompt_directive_ident_parsed = false;
+}
+
+void ompt_clear_directive_ident() {
+  ompt_directive_ident = nullptr;
+  ompt_directive_ident_parsed = false;
+}
+
 void ompt_set_map_var_info(map_var_info_t map_var_info) {
   ompt_map_var_info = map_var_info;
 }
@@ -844,8 +857,87 @@ OMPT_API_ROUTINE int ompt_get_num_devices(void) {
  * Extensions originally added for OpenACC support
  ****************************************************************************/
 
+class IdentParser {
+private:
+  const char *Begin;
+  const char *End;
+public:
+  IdentParser(const char *Ident) : Begin(Ident), End(Ident) {
+    KMP_ASSERT2(*Begin == ';',
+                "expected first char of ident_t::psource to be ';'");
+  }
+  std::string next() {
+    Begin = End;
+    for (End = Begin + 1; *End != ';'; ++End)
+      KMP_ASSERT2(*End != '\0', "expected next field in ident_t::psource");
+    return std::string(Begin + 1, End - Begin - 1);
+  }
+};
+
 OMPT_API_ROUTINE ompt_directive_info_t *ompt_get_directive_info(void) {
-  return &ompt_directive_info;
+  // Static so they can be returned to caller, which must copy them elsewhere
+  // before the next call overwrites them.
+  static ompt_directive_info_t DirInfo;
+  static std::string SrcFile;
+  static std::string FuncName;
+
+  // Parse all fields from ompt_directive_ident.psource.  However, if we've
+  // already parsed it since the last time it was set, don't do it again.  That
+  // would waste time and would needlessly invalidate any strings we returned
+  // previously.
+  if (!ompt_directive_ident) {
+    DirInfo.kind = ompt_directive_unknown;
+    DirInfo.is_explicit_event = 0;
+    DirInfo.src_file = nullptr;
+    DirInfo.func_name = nullptr;
+    DirInfo.line_no = 0;
+    DirInfo.end_line_no = 0;
+    DirInfo.func_line_no = 0;
+    DirInfo.func_end_line_no = 0;
+  } else if (!ompt_directive_ident_parsed) {
+    ompt_directive_ident_parsed = true;
+    IdentParser TheIdentParser(ompt_directive_ident->psource);
+    SrcFile = TheIdentParser.next();
+    if (SrcFile.empty())
+      DirInfo.src_file = nullptr;
+    else
+      DirInfo.src_file = SrcFile.c_str();
+    FuncName = TheIdentParser.next();
+    if (FuncName.empty())
+      DirInfo.func_name = nullptr;
+    else
+      DirInfo.func_name = FuncName.c_str();
+    DirInfo.line_no = std::stoi(TheIdentParser.next());
+    // Skip column, which ompt_directive_info_t doesn't have.
+    TheIdentParser.next();
+    // If the next field is empty, there are no more fields.
+    std::string EndLineNo = TheIdentParser.next();
+    if (EndLineNo.empty()) {
+      DirInfo.end_line_no = 0;
+      DirInfo.func_line_no = 0;
+      DirInfo.func_end_line_no = 0;
+      DirInfo.kind = ompt_directive_unknown;
+      DirInfo.is_explicit_event = 0;
+    } else {
+      DirInfo.end_line_no = std::stoi(EndLineNo);
+      DirInfo.func_line_no = std::stoi(TheIdentParser.next());
+      DirInfo.func_end_line_no = std::stoi(TheIdentParser.next());
+      DirInfo.kind = (ompt_directive_kind_t)std::stoi(TheIdentParser.next());
+      DirInfo.is_explicit_event = DirInfo.kind != ompt_directive_unknown;
+    }
+  }
+
+  // Override fields with user-supplied source info if the omp_set_source_info
+  // has been called since the last omp_clear_source_info.
+  if (ompt_has_user_source_info) {
+    DirInfo.src_file = ompt_user_source_info.src_file;
+    DirInfo.func_name = ompt_user_source_info.func_name;
+    DirInfo.line_no = ompt_user_source_info.line_no;
+    DirInfo.end_line_no = ompt_user_source_info.end_line_no;
+    DirInfo.func_line_no = ompt_user_source_info.func_line_no;
+    DirInfo.func_end_line_no = ompt_user_source_info.func_end_line_no;
+  }
+  return &DirInfo;
 }
 
 OMPT_API_ROUTINE const char *ompt_get_data_expression(void) {

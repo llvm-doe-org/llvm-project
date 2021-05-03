@@ -1431,7 +1431,8 @@ void __kmp_serialized_parallel(ident_t *loc, kmp_int32 global_tid) {
 //
 // FIXME: See the fixme on ompt_dispatch_callback_target in omptarget.cpp about
 // finding the right place for these events.
-static void ompt_dispatch_callback_target(ompt_scope_endpoint_t endpoint,
+static void ompt_dispatch_callback_target(ident_t *loc,
+                                          ompt_scope_endpoint_t endpoint,
                                           bool is_parallel_league,
                                           unsigned int team_size = 0) {
   if (!is_parallel_league)
@@ -1440,8 +1441,10 @@ static void ompt_dispatch_callback_target(ompt_scope_endpoint_t endpoint,
   if (ompt_get_target_info(&device_num, NULL, NULL) &&
       device_num != omp_get_initial_device())
     return;
-  if (endpoint == ompt_scope_begin)
+  if (endpoint == ompt_scope_begin) {
     ompt_set_target_info(omp_get_initial_device());
+    ompt_set_directive_ident(loc);
+  }
   if (ompt_enabled.ompt_callback_target) {
     // FIXME: We don't yet need the task_data, target_id, and codeptr_ra
     // arguments for OpenACC support, so we haven't bothered to implement them
@@ -1479,8 +1482,10 @@ static void ompt_dispatch_callback_target(ompt_scope_endpoint_t endpoint,
           /*requested_num_teams=*/team_size);
     }
   }
-  if (endpoint == ompt_scope_end)
+  if (endpoint == ompt_scope_end) {
     ompt_clear_target_info();
+    ompt_clear_directive_ident();
+  }
 }
 #endif
 
@@ -1578,7 +1583,7 @@ int __kmp_fork_call(ident_t *loc, int gtid,
       int team_size = master_set_numthreads
                           ? master_set_numthreads
                           : get__nproc_2(parent_team, master_tid);
-      ompt_dispatch_callback_target(ompt_scope_begin,
+      ompt_dispatch_callback_target(loc, ompt_scope_begin,
                                     flags & ompt_parallel_league, team_size);
       if (ompt_enabled.ompt_callback_parallel_begin) {
         ompt_callbacks.ompt_callback(ompt_callback_parallel_begin)(
@@ -1946,7 +1951,8 @@ int __kmp_fork_call(ident_t *loc, int gtid,
                   OMPT_INVOKER(call_context) | ompt_parallel_league,
                   return_address);
             }
-            ompt_dispatch_callback_target(ompt_scope_end, true);
+            ompt_dispatch_callback_target(loc, ompt_scope_end,
+                                          /*is_parallel_league=*/true);
             master_th->th.ompt_thread_info.state = ompt_state_overhead;
           }
 #endif
@@ -2673,7 +2679,7 @@ void __kmp_join_call(ident_t *loc, int gtid
   if (ompt_enabled.enabled) {
     __kmp_join_ompt(gtid, master_th, parent_team, parallel_data, flags,
                     codeptr);
-    ompt_dispatch_callback_target(ompt_scope_end,
+    ompt_dispatch_callback_target(loc, ompt_scope_end,
                                   flags & ompt_parallel_league);
   }
 #endif

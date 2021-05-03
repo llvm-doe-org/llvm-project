@@ -1461,7 +1461,7 @@ CASE(caseSubarrayConcat2) {
 //         EXE-ERR-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
 // EXE-ERR-notPASS-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes)
 // EXE-ERR-notPASS-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-target pointer maps
-// EXE-ERR-notPASS-NEXT: Libomptarget error: Build with debug information to provide more informationLibomptarget fatal error 1: failure of target construct while offloading is mandatory
+// EXE-ERR-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                       # An abort message usually follows.
 //  EXE-ERR-notPASS-NOT: Libomptarget
 //     EXE-ERR-PASS-NOT: {{.}}

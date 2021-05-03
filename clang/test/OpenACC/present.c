@@ -256,7 +256,7 @@ FOREACH_CASE(AddCase)
 //    EXE-ERR-notPASS-parallel-NEXT: Libomptarget error: Call to targetDataBegin failed, abort target.
 //    EXE-ERR-notPASS-parallel-NEXT: Libomptarget error: Failed to process data before launching the kernel.
 //             EXE-ERR-notPASS-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-target pointer maps
-//             EXE-ERR-notPASS-NEXT: Libomptarget error: Build with debug information to provide more informationLibomptarget fatal error 1: failure of target construct while offloading is mandatory
+//             EXE-ERR-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                   # An abort message usually follows.
 //              EXE-ERR-notPASS-NOT: Libomptarget
 //                 EXE-ERR-PASS-NOT: {{.}}

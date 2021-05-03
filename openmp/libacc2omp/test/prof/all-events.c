@@ -84,50 +84,83 @@
 // RUN:    env-fc=HOST,HOST-%[dir-fc1],HOST-%[dir-fc2],%[tgt-host-or-off]-BEFORE-ENV,%[tgt-host-or-off]-BEFORE-ENV-%[dir-fc2])
 // RUN: }
 //      # Check both traditional compilation mode and source-to-source mode
-//      # followed by OpenMP compilation.  This is important because some
-//      # profiling data that depends on OMPT extensions is currently available
-//      # only in the former case.
-// RUN: %data debug-modes {
-// RUN:   (debug-opt=-gline-tables-only arr0-var-name=arr0     arr1-var-name=arr1[0:5])
-// RUN:   (debug-opt=                   arr0-var-name='(null)' arr1-var-name='(null)' )
-// RUN: }
+//      # followed by OpenMP compilation.  This is important because, in the
+//      # latter case, some profiling data that depends on OMPT extensions is
+//      # currently available only when debug info is turned.
 // RUN: %for dirs {
 // RUN:   %for tgts {
 // RUN:     %[run-if] %clang -Xclang -verify -fopenacc-print=omp %acc-includes \
 // RUN:                      %s %[tgt-cppflags] %[dir-cflags] > %t-omp.c \
 // RUN:                      -Wno-openacc-omp-map-hold
 // RUN:     %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %for debug-modes {
-// RUN:       %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:           %acc-includes %t-omp.c %acc-libs %[tgt-cppflags] \
-// RUN:           %[tgt-cflags] %[dir-cflags] -I%S %[debug-opt] -o %t
-// RUN:       %for run-envs {
-// RUN:         %[run-if] %[run-env] %t > %t.out 2> %t.err
-// RUN:         %[run-if] FileCheck -input-file %t.err %s \
-// RUN:             -allow-empty -check-prefixes=ERR
-// RUN:         %[run-if] FileCheck -input-file %t.out %s \
-// RUN:             -match-full-lines -strict-whitespace \
-// RUN:             -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2] \
-// RUN:             -check-prefixes=CHECK-%[dir-fc3],%[env-fc] \
-// RUN:             -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
-// RUN:             -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
-// RUN:             -DARR_ENTER_CONSTRUCT='runtime_api' \
-// RUN:             -DARR_EXIT_CONSTRUCT='runtime_api' \
-// RUN:             -DDATA_CONSTRUCT='runtime_api' \
-// RUN:             -DPARALLEL_CONSTRUCT='runtime_api' \
-// RUN:             -DUPDATE_CONSTRUCT='runtime_api' \
-// RUN:             -DIMPLICIT_FOR_DIRECTIVE=1 \
-// RUN:             -DSRC_FILE='(null)'      -DFUNC_NAME='(null)' \
-// RUN:             -DARR0_ENTER_LINE_NO=0   -DARR0_ENTER_END_LINE_NO=0 \
-// RUN:             -DARR0_EXIT_LINE_NO=0    -DARR0_EXIT_END_LINE_NO=0 \
-// RUN:             -DARR1_ENTER_LINE_NO=0   -DARR1_ENTER_END_LINE_NO=0 \
-// RUN:             -DARR1_EXIT_LINE_NO=0    -DARR1_EXIT_END_LINE_NO=0 \
-// RUN:             -DKERN_LINE_NO=0         -DKERN_END_LINE_NO=0 \
-// RUN:             -DUPDATE0_LINE_NO=0      -DUPDATE1_LINE_NO=0 \
-// RUN:             -DFUNC_LINE_NO=0         -DFUNC_END_LINE_NO=0 \
-// RUN:             -DARR0_VAR_NAME=%[arr0-var-name] \
-// RUN:             -DARR1_VAR_NAME=%[arr1-var-name]
-// RUN:       }
+//          # With debug info.
+// RUN:     %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
+// RUN:         %acc-includes %t-omp.c %acc-libs %[tgt-cppflags] \
+// RUN:         %[tgt-cflags] %[dir-cflags] -I%S -gline-tables-only -o %t
+// RUN:     %for run-envs {
+// RUN:       %[run-if] %[run-env] %t > %t.out 2> %t.err
+// RUN:       %[run-if] FileCheck -input-file %t.err %s \
+// RUN:           -allow-empty -check-prefixes=ERR
+// RUN:       %[run-if] FileCheck -input-file %t.out %s \
+// RUN:           -match-full-lines -strict-whitespace \
+// RUN:           -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2] \
+// RUN:           -check-prefixes=CHECK-%[dir-fc3],%[env-fc] \
+// RUN:           -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
+// RUN:           -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
+// RUN:           -DARR_ENTER_CONSTRUCT=%[arr-enter-construct] \
+// RUN:           -DARR_EXIT_CONSTRUCT=%[arr-exit-construct] \
+// RUN:           -DDATA_CONSTRUCT='data' -DPARALLEL_CONSTRUCT='parallel' \
+// RUN:           -DUPDATE_CONSTRUCT='update' \
+// RUN:           -DIMPLICIT_FOR_DIRECTIVE=0 -DSRC_FILE='%t-omp.c' \
+// RUN:           -DFUNC_NAME=main -DARR0_ENTER_LINE_NO=%[arr0-enter-line-no] \
+// RUN:           -DARR0_ENTER_END_LINE_NO=%[arr0-enter-end-line-no] \
+// RUN:           -DARR0_EXIT_LINE_NO=%[arr0-exit-line-no] \
+// RUN:           -DARR0_EXIT_END_LINE_NO=%[arr0-exit-end-line-no] \
+// RUN:           -DARR1_ENTER_LINE_NO=%[arr1-enter-line-no] \
+// RUN:           -DARR1_ENTER_END_LINE_NO=%[arr1-enter-end-line-no] \
+// RUN:           -DARR1_EXIT_LINE_NO=%[arr1-exit-line-no] \
+// RUN:           -DARR1_EXIT_END_LINE_NO=%[arr1-exit-end-line-no] \
+// RUN:           -DKERN_LINE_NO=%[kern-line-no] \
+// RUN:           -DKERN_END_LINE_NO=%[kern-end-line-no] \
+// RUN:           -DUPDATE0_LINE_NO=%[update0-line-no] \
+// RUN:           -DUPDATE1_LINE_NO=%[update1-line-no] \
+// RUN:           -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=150000 \
+// RUN:           -DARR0_VAR_NAME=arr0 -DARR1_VAR_NAME='arr1[0:5]'
+// RUN:     }
+//          # Without debug info.
+// RUN:     %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
+// RUN:         %acc-includes %t-omp.c %acc-libs %[tgt-cppflags] \
+// RUN:         %[tgt-cflags] %[dir-cflags] -I%S -o %t
+// RUN:     %for run-envs {
+// RUN:       %[run-if] %[run-env] %t > %t.out 2> %t.err
+// RUN:       %[run-if] FileCheck -input-file %t.err %s \
+// RUN:           -allow-empty -check-prefixes=ERR
+// RUN:       %[run-if] FileCheck -input-file %t.out %s \
+// RUN:           -match-full-lines -strict-whitespace \
+// RUN:           -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2] \
+// RUN:           -check-prefixes=CHECK-%[dir-fc3],%[env-fc] \
+// RUN:           -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
+// RUN:           -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
+// RUN:           -DARR_ENTER_CONSTRUCT='runtime_api' \
+// RUN:           -DARR_EXIT_CONSTRUCT='runtime_api' \
+// RUN:           -DDATA_CONSTRUCT='runtime_api' \
+// RUN:           -DPARALLEL_CONSTRUCT='runtime_api' \
+// RUN:           -DUPDATE_CONSTRUCT='runtime_api' \
+// RUN:           -DIMPLICIT_FOR_DIRECTIVE=1 \
+//                # FIXME: These should be nullified instead of 'unknown' in
+//                # order to distinguish from actual files or functions by that
+//                # name.  The use of 'unknown' is inherited from upstream's
+//                # LLVM OpenMP implementation, which uses 'unknown' in many
+//                # cases of a default ident_t.
+// RUN:           -DSRC_FILE='unknown'     -DFUNC_NAME='unknown' \
+// RUN:           -DARR0_ENTER_LINE_NO=0   -DARR0_ENTER_END_LINE_NO=0 \
+// RUN:           -DARR0_EXIT_LINE_NO=0    -DARR0_EXIT_END_LINE_NO=0 \
+// RUN:           -DARR1_ENTER_LINE_NO=0   -DARR1_ENTER_END_LINE_NO=0 \
+// RUN:           -DARR1_EXIT_LINE_NO=0    -DARR1_EXIT_END_LINE_NO=0 \
+// RUN:           -DKERN_LINE_NO=0         -DKERN_END_LINE_NO=0 \
+// RUN:           -DUPDATE0_LINE_NO=0      -DUPDATE1_LINE_NO=0 \
+// RUN:           -DFUNC_LINE_NO=0         -DFUNC_END_LINE_NO=0 \
+// RUN:           -DARR0_VAR_NAME='(null)' -DARR1_VAR_NAME='(null)'
 // RUN:     }
 // RUN:   }
 // RUN: }
@@ -141,7 +174,8 @@
 // RUN:           -allow-empty -check-prefixes=ERR
 // RUN:       %[run-if] FileCheck -input-file %t.out %s \
 // RUN:           -match-full-lines -strict-whitespace \
-// RUN:           -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2],CHECK-%[dir-fc3],%[env-fc] \
+// RUN:           -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2] \
+// RUN:           -check-prefixes=CHECK-%[dir-fc3],%[env-fc] \
 // RUN:           -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
 // RUN:           -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
 // RUN:           -DARR_ENTER_CONSTRUCT=%[arr-enter-construct] \

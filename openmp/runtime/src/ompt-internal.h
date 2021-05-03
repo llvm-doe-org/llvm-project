@@ -141,9 +141,13 @@ int ompt_get_target_info(uint64_t *device_num, ompt_id_t *target_id,
                          ompt_id_t *host_op_id) OMPT_LIBOMPTARGET_WEAK;
 void ompt_set_target_info(uint64_t device_num) OMPT_LIBOMPTARGET_WEAK;
 void ompt_clear_target_info() OMPT_LIBOMPTARGET_WEAK;
-void ompt_set_map_var_info(map_var_info_t map_var_info) OMPT_LIBOMPTARGET_WEAK;
+struct ident;
+typedef struct ident ident_t;
+void ompt_set_directive_ident(const ident_t *ident) OMPT_LIBOMPTARGET_WEAK;
+void ompt_clear_directive_ident(void) OMPT_LIBOMPTARGET_WEAK;
 extern bool ompt_has_user_source_info;
-extern ompt_directive_info_t ompt_directive_info;
+extern ompt_directive_info_t ompt_user_source_info;
+void ompt_set_map_var_info(map_var_info_t map_var_info) OMPT_LIBOMPTARGET_WEAK;
 int omp_get_initial_device(void) OMPT_LIBOMPTARGET_WEAK;
 
 // This struct is passed into target plugins where they require global_device_id

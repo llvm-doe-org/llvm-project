@@ -32,6 +32,8 @@ VERSION {
         ompt_record_device_init;
         ompt_set_target_info;
         ompt_clear_target_info;
+        ompt_set_directive_ident;
+        ompt_clear_directive_ident;
         ompt_set_map_var_info;
 
         # icc drops weak attribute at linking step without the following line:

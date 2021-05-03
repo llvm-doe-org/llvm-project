@@ -2386,6 +2386,17 @@ source location information is taken directly from the remaining
 fields.  OpenACC's `var_name` field is taken directly from the
 expression returned by `ompt_get_data_expression`.
 
+In the case of OpenMP directives, upstream Clang's LLVM IR codegen
+phase currently makes the information required for
+`ompt_get_directive_info` and `ompt_get_data_expression` available to
+the OpenMP runtime only if debug information is enabled with Clang
+command-line options like `-gline-tables-only` or `-g`.  Clacc does
+not alter this behavior except for OpenMP directives that were
+translated from OpenACC directives in traditional compilation mode.
+In that case, Clacc adjusts Clang's LLVM IR codegen phase to make that
+information available to the OpenMP runtime regardless of such
+command-line options.
+
 So far, OpenACC directives can be identified uniquely by the OpenMP
 directives to which the Clacc compiler translates them.  However, the
 same is not true for OpenACC Runtime Library routines and the OpenMP
@@ -2414,25 +2425,6 @@ more appealing as a general feature that can be used by OpenMP
 applications.  Clacc uses the `omp_` prefix instead of `ompt_` as
 these routines seem like they might be useful for other purposes
 outside OMPT, such as debugging facilities, in the future.
-
-In the case of directives, upstream Clang's LLVM IR codegen phase for
-OpenMP currently does not make the information required for
-`ompt_get_directive_info` available to the OpenMP runtime.  For this
-purpose, Clacc extends this phase to instrument OpenMP runtime calls
-corresponding to OpenMP directives that are translated from OpenACC
-directives.  Thus, the required information is available only when
-using Clacc's compiler in traditional compilation mode.
-
-In the case of directives, upstream Clang's LLVM IR codegen phase for
-OpenMP currently makes the information required for
-`ompt_get_data_expression` available to the OpenMP runtime only if
-debug information is enabled with Clang command-line options like
-`-gline-tables-only` or `-g`.  Of course, only Clacc's OpenMP runtime
-currently provides `ompt_get_data_expression` to access that
-information from an application.  Clacc adjusts Clang's LLVM IR
-codegen phase to make that information available to the OpenMP runtime
-when compiling OpenACC directives regardless of such command-line
-options.
 
 When using Clacc's compiler in source-to-source mode followed by a
 foreign OpenMP compiler, we expect that the foreign OpenMP runtime's
@@ -2474,19 +2466,6 @@ requiring the user to opt into these source-level insertions when
 OpenACC profiling is required.  However, it is our conclusion that
 Clacc's current design is cleaner and provides a clearer path to reuse
 between OpenACC and OpenMP implementations.
-
-Currently, Clacc's implementation actually suffers from the first
-problem mentioned for the alternative source-level design.  That is,
-Clacc's LLVM IR codegen instruments OpenMP runtime calls by inserting
-new calls.  This problem can be overcome by instead inserting new
-arguments to the existing OpenMP runtime calls.  While that solution
-is not possible at the source level, it should be straight-forward in
-LLVM IR codegen.  We have not yet pursued this solution in Clacc.  We
-have been advised by members of the LLVM community that the `ident_t`
-structure could be used for this purpose and extended with missing
-information.  Another missing piece is that, currently in upstream
-LLVM, `ident_t` is not passed to the required OpenMP runtime
-functions, such as `__tgt_target_teams`.
 
 OpenACC Clarifications
 ----------------------
@@ -2703,12 +2682,24 @@ support currently include:
               compiler in traditional compilation mode, these fields
               are set correctly.
             * When compiling the OpenACC application using Clacc's
-              compiler in source-to-source mode, these fields are
-              nullified.  This behavior is permitted by the OpenACC
-              2.7 specification, but actual source locations would
-              obviously be preferable.
+              compiler in source-to-source mode followed by OpenMP
+              compilation, these fields are nullified by default
+              (except in the case of the `unknown` string described
+              below).  However, they are set correctly when the
+              generated OpenMP is compiled with Clacc's compiler and
+              debug information is enabled with Clang command-line
+              options like `-gline-tables-only` or `-g`.
             * See the section "OpenACC to OpenMP Mapping: Profiling
               Data" for further discussion.
+            * Note that nullifying these fields is permitted by the
+              OpenACC 3.1 specification, but actual source locations
+              would obviously be preferable.
+            * In some cases where `src_file` or `func_name` should be
+              nullified to indicate it is not known, it is instead set
+              to the string `unknown`, which is unfortunate because it
+              is indistinguishable from an actual file or function by
+              that name.  This issue is inherited from upstream LLVM's
+              OpenMP debug info implementation.
     * `acc_event_info`:
         * `parent_construct` and `implicit`:
             * We do not know how to obtain this information via OMPT.
@@ -2717,11 +2708,16 @@ support currently include:
               are set correctly (but see the section "OpenACC
               Clarifications" above for the case of shutdown events).
             * When compiling the OpenACC application using Clacc's
-              compiler in source-to-source mode, these fields are
-              always set to `acc_construct_runtime_api` and `true` as
-              if all events are triggered internally and thus have no
-              connection back to specific directives or runtime calls.
-              This behavior does not conform to OpenACC 2.7.
+              compiler in source-to-source mode followed by OpenMP
+              compilation, these fields are, by default, set to
+              `acc_construct_runtime_api` and `true` as if all events
+              are triggered internally and thus have no connection
+              back to specific directives or runtime calls.  This
+              behavior does not conform to OpenACC 3.1.  However,
+              these fields are set correctly when the generated OpenMP
+              is compiled with Clacc's compiler and debug information
+              is enabled with Clang command-line options like
+              `-gline-tables-only` or `-g`.
             * See the section "OpenACC to OpenMP Mapping: Profiling
               Data" for further discussion.
         * `tool_info` is always set to `NULL`, and data cannot yet be
@@ -2748,16 +2744,16 @@ support currently include:
                       `acc_ev_create` events for firstprivate `const`
                       arrays.  Please report additional cases.
                 * When compiling the OpenACC application using Clacc's
-                  compiler in source-to-source mode, this field is set
-                  to `NULL` by default.  However, it is set correctly
-                  when the generated OpenMP is compiled with Clacc's
-                  compiler and debug information is enabled with Clang
-                  command-line options like `-gline-tables-only` or
-                  `-g`.
+                  compiler in source-to-source mode followed by OpenMP
+                  compilation, this field is set to `NULL` by default.
+                  However, it is set correctly when the generated
+                  OpenMP is compiled with Clacc's compiler and debug
+                  information is enabled with Clang command-line
+                  options like `-gline-tables-only` or `-g`.
                 * See the section "OpenACC to OpenMP Mapping: Profiling
                   Data" for further discussion.
                 * Note that setting this field to `NULL` is permitted
-                  by OpenACC 3.0 when the variable name is not known.
+                  by OpenACC 3.1 when the variable name is not known.
         * `acc_launch_event_info`:
             * `kernel_name` is always set to `NULL` because we do not
               know how to obtain it via OMPT.  Setting to `NULL` is

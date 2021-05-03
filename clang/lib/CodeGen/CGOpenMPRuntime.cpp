@@ -1418,27 +1418,81 @@ static StringRef getIdentStringFromSourceLocation(CodeGenFunction &CGF,
   return OS.str();
 }
 
-llvm::Value *CGOpenMPRuntime::emitUpdateLocation(CodeGenFunction &CGF,
-                                                 SourceLocation Loc,
-                                                 unsigned Flags) {
+llvm::Value *
+CGOpenMPRuntime::emitUpdateLocation(CodeGenFunction &CGF, SourceLocation Loc,
+                                    unsigned Flags,
+                                    const OMPExecutableDirective *D) {
   llvm::Constant *SrcLocStr;
-  if (CGM.getCodeGenOpts().getDebugInfo() == codegenoptions::NoDebugInfo ||
+  if ((CGM.getCodeGenOpts().getDebugInfo() == codegenoptions::NoDebugInfo &&
+       !IsInOpenACCConstruct) ||
       Loc.isInvalid()) {
     SrcLocStr = OMPBuilder.getOrCreateDefaultSrcLocStr();
   } else {
+    SourceManager &SM = CGF.getContext().getSourceManager();
     std::string FunctionName = "";
-    if (const auto *FD = dyn_cast_or_null<FunctionDecl>(CGF.CurFuncDecl))
+    unsigned FuncLine = 0;
+    unsigned FuncEndLine = 0;
+    if (const auto *FD = dyn_cast_or_null<FunctionDecl>(CGF.CurFuncDecl)) {
       FunctionName = FD->getQualifiedNameAsString();
-    PresumedLoc PLoc = CGF.getContext().getSourceManager().getPresumedLoc(Loc);
+      FuncLine = SM.getPresumedLoc(FD->getBeginLoc()).getLine();
+      FuncEndLine = SM.getPresumedLoc(FD->getEndLoc()).getLine();
+    }
+    PresumedLoc PLoc = SM.getPresumedLoc(Loc);
     const char *FileName = PLoc.getFilename();
     unsigned Line = PLoc.getLine();
     unsigned Column = PLoc.getColumn();
+    int DirKind = 0;
+    unsigned EndLine = 0;
+    if (D) {
+      EndLine = SM.getPresumedLoc(D->getConstructRange().getEnd()).getLine();
+      switch (D->getDirectiveKind()) {
+      // TODO: These values come from enum ompt_directive_kind_t in
+      // openmp/runtime/src/include/omp-tools.h.var.  Find a clean way to ensure
+      // these stay in sync.
+      case OMPD_target_update:
+        DirKind = 1;
+        break;
+      case OMPD_target_enter_data:
+        DirKind = 2;
+        break;
+      case OMPD_target_exit_data:
+        DirKind = 3;
+        break;
+      case OMPD_target_data:
+        DirKind = 4;
+        break;
+      case OMPD_target_teams:
+        DirKind = 5;
+        break;
+      default:
+        DirKind = 0;
+        break;
+      }
+    } else {
+      // TODO: Fields starting with EndLine are extensions for OpenACC Profiling
+      // Interface support.  If !D, then this isn't a case where we need those
+      // fields for OpenACC.  In that case, nullify all such fields so that
+      // OpenMPIRBuilder::getOrCreateSrcLocStr won't generate them.  This should
+      // make it easier to merge upstream changes to the OpenMP test suite.
+      // When OpenACC Profiling Interface support is upstreamed, revisit this
+      // decision.  Also see the related todo in
+      // OpenMPIRBuilder::getOrCreateSrcLocStr.
+      FuncLine = 0;
+      FuncEndLine = 0;
+    }
     SrcLocStr = OMPBuilder.getOrCreateSrcLocStr(FunctionName.c_str(), FileName,
-                                                Line, Column);
+                                                Line, Column, EndLine, FuncLine,
+                                                FuncEndLine, DirKind);
   }
   unsigned Reserved2Flags = getDefaultLocationReserved2Flags();
   return OMPBuilder.getOrCreateIdent(SrcLocStr, llvm::omp::IdentFlag(Flags),
                                      Reserved2Flags);
+}
+
+llvm::Value *
+CGOpenMPRuntime::emitUpdateLocation(CodeGenFunction &CGF,
+                                    const OMPExecutableDirective *D) {
+  return emitUpdateLocation(CGF, D->getBeginLoc(), /*Flags=*/0, D);
 }
 
 llvm::Value *CGOpenMPRuntime::getThreadID(CodeGenFunction &CGF,
@@ -9990,7 +10044,7 @@ void CGOpenMPRuntime::emitTargetCall(
     llvm::Value *NumThreads = emitNumThreadsForTargetDirective(CGF, D);
 
     // Source location for the ident struct
-    llvm::Value *RTLoc = emitUpdateLocation(CGF, D.getBeginLoc());
+    llvm::Value *RTLoc = emitUpdateLocation(CGF, &D);
 
     // Emit tripcount for the target loop-based directive.
     emitTargetNumIterationsCall(CGF, D, DeviceID, SizeEmitter);
@@ -10043,17 +10097,12 @@ void CGOpenMPRuntime::emitTargetCall(
                                        InputInfo.MappersArray.getPointer(),
                                        NumTeams,
                                        NumThreads};
-      // TODO: emit*DirectiveInfoCall and emit*DataExpressionsCall probably also
-      // make sense around the OMPRTL__tgt_target* call in the "else" below.
-      // However, so far, that doesn't appear to be useful for OpenACC support.
-      emitSetDirectiveInfoCall(CGF, D);
       Return = CGF.EmitRuntimeCall(
           OMPBuilder.getOrCreateRuntimeFunction(
               CGM.getModule(), HasNowait
                                    ? OMPRTL___tgt_target_teams_nowait_mapper
                                    : OMPRTL___tgt_target_teams_mapper),
           OffloadingArgs);
-      emitClearDirectiveInfoCall(CGF);
     } else {
       llvm::Value *OffloadingArgs[] = {RTLoc,
                                        DeviceID,
@@ -10085,9 +10134,7 @@ void CGOpenMPRuntime::emitTargetCall(
       CapturedVars.clear();
       CGF.GenerateOpenMPCapturedVars(CS, CapturedVars);
     }
-    emitSetDirectiveInfoCall(CGF, D);
     emitOutlinedFunctionCall(CGF, D.getBeginLoc(), OutlinedFn, CapturedVars);
-    emitClearDirectiveInfoCall(CGF);
     CGF.EmitBranch(OffloadContBlock);
 
     CGF.EmitBlock(OffloadContBlock, /*IsFinished=*/true);
@@ -10204,14 +10251,12 @@ void CGOpenMPRuntime::emitTargetCall(
 
   auto &&TargetElseGen = [this, &ElseGen, &D, RequiresOuterTask](
                              CodeGenFunction &CGF, PrePostActionTy &) {
-    emitSetDirectiveInfoCall(CGF, D);
     if (RequiresOuterTask) {
       CodeGenFunction::OMPTargetDataInfo InputInfo;
       CGF.EmitOMPTargetTaskBasedDirective(D, ElseGen, InputInfo);
     } else {
       emitInlinedDirective(CGF, D.getDirectiveKind(), ElseGen);
     }
-    emitClearDirectiveInfoCall(CGF);
   };
 
   // If we have a target function ID it means that we need to support
@@ -10727,7 +10772,7 @@ void CGOpenMPRuntime::emitTeamsCall(CodeGenFunction &CGF,
   if (!CGF.HaveInsertPoint())
     return;
 
-  llvm::Value *RTLoc = emitUpdateLocation(CGF, Loc);
+  llvm::Value *RTLoc = emitUpdateLocation(CGF, &D);
   CodeGenFunction::RunCleanupsScope Scope(CGF);
 
   // Build call __kmpc_fork_teams(loc, n, microtask, var1, .., varn);
@@ -10742,79 +10787,6 @@ void CGOpenMPRuntime::emitTeamsCall(CodeGenFunction &CGF,
   llvm::FunctionCallee RTLFn = OMPBuilder.getOrCreateRuntimeFunction(
       CGM.getModule(), OMPRTL___kmpc_fork_teams);
   CGF.EmitRuntimeCall(RTLFn, RealArgs);
-}
-
-void CGOpenMPRuntime::emitSetDirectiveInfoCall(
-    CodeGenFunction &CGF, const OMPExecutableDirective &D) {
-  if (!IsInOpenACCConstruct)
-    return;
-  SourceManager &SM = CGF.getContext().getSourceManager();
-  SourceRange ConstructRange = D.getConstructRange();
-  const NamedDecl *Func = cast<NamedDecl>(CGF.CurFuncDecl);
-  PresumedLoc DirBeginLoc = SM.getPresumedLoc(ConstructRange.getBegin());
-  PresumedLoc DirEndLoc = SM.getPresumedLoc(ConstructRange.getEnd());
-  PresumedLoc FuncBeginLoc = SM.getPresumedLoc(Func->getBeginLoc());
-  PresumedLoc FuncEndLoc = SM.getPresumedLoc(Func->getEndLoc());
-
-  // Due to preprocessing, the file name might vary among the various locations
-  // used here.  Use the file name associated with the beginning of the
-  // directive.
-  int KindRaw;
-  switch (D.getDirectiveKind()) {
-  // TODO: These values come from enum ompt_directive_kind_t in
-  // openmp/runtime/src/include/omp-tools.h.var.  Find a clean way to ensure
-  // these stay in sync.
-  case OMPD_target_update:
-    KindRaw = 1;
-    break;
-  case OMPD_target_enter_data:
-    KindRaw = 2;
-    break;
-  case OMPD_target_exit_data:
-    KindRaw = 3;
-    break;
-  case OMPD_target_data:
-    KindRaw = 4;
-    break;
-  case OMPD_target_teams:
-    KindRaw = 5;
-    break;
-  default:
-    // Other cases just aren't calling this yet, in part because of the check
-    // for IsInOpenACCConstruct above.
-    llvm_unreachable("unexpected OpenMP directive kind for "
-                     "__kmpc_set_directive_info call");
-  }
-  llvm::Value *Kind = llvm::ConstantInt::get(CGM.IntTy, KindRaw);
-  // TODO: For now, we only call this for explicit constructs, in part because
-  // of the check for IsInOpenACCConstruct above.  In the future, there may be
-  // cases where we must indicate an implicit event according to the OpenACC
-  // specification.
-  llvm::Value *Explicit = llvm::ConstantInt::get(CGM.IntTy, 1);
-  llvm::Value *SrcFile =
-      CGF.Builder.CreateGlobalStringPtr(DirBeginLoc.getFilename());
-  llvm::Value *FuncName = CGF.Builder.CreateGlobalStringPtr(Func->getName());
-  llvm::Value *LineNo = llvm::ConstantInt::get(CGM.IntTy,
-                                               DirBeginLoc.getLine());
-  llvm::Value *EndLineNo = llvm::ConstantInt::get(CGM.IntTy,
-                                                  DirEndLoc.getLine());
-  llvm::Value *FuncLineNo = llvm::ConstantInt::get(CGM.IntTy,
-                                                   FuncBeginLoc.getLine());
-  llvm::Value *FuncEndLineNo = llvm::ConstantInt::get(CGM.IntTy,
-                                                      FuncEndLoc.getLine());
-
-  llvm::Value *Args[] = {Kind, Explicit, SrcFile, FuncName, LineNo, EndLineNo,
-                         FuncLineNo, FuncEndLineNo};
-  CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
-                          CGM.getModule(), OMPRTL___kmpc_set_directive_info),
-                      Args);
-}
-
-void CGOpenMPRuntime::emitClearDirectiveInfoCall(CodeGenFunction &CGF) {
-  if (!IsInOpenACCConstruct)
-    return;
-  CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
-      CGM.getModule(), OMPRTL___kmpc_clear_directive_info));
 }
 
 void CGOpenMPRuntime::emitNumTeamsClause(CodeGenFunction &CGF,
@@ -10896,7 +10868,7 @@ void CGOpenMPRuntime::emitTargetDataCalls(
     llvm::Value *PointerNum = CGF.Builder.getInt32(Info.NumberOfPtrs);
     //
     // Source location for the ident struct
-    llvm::Value *RTLoc = emitUpdateLocation(CGF, D.getBeginLoc());
+    llvm::Value *RTLoc = emitUpdateLocation(CGF, &D);
 
     llvm::Value *OffloadingArgs[] = {RTLoc,
                                      DeviceID,
@@ -10907,12 +10879,10 @@ void CGOpenMPRuntime::emitTargetDataCalls(
                                      MapTypesArrayArg,
                                      MapNamesArrayArg,
                                      MappersArrayArg};
-    emitSetDirectiveInfoCall(CGF, D);
     CGF.EmitRuntimeCall(
         OMPBuilder.getOrCreateRuntimeFunction(
             CGM.getModule(), OMPRTL___tgt_target_data_begin_mapper),
         OffloadingArgs);
-    emitClearDirectiveInfoCall(CGF);
 
     // If device pointer privatization is required, emit the body of the region
     // here. It will have to be duplicated: with and without privatization.
@@ -10949,7 +10919,7 @@ void CGOpenMPRuntime::emitTargetDataCalls(
     llvm::Value *PointerNum = CGF.Builder.getInt32(Info.NumberOfPtrs);
 
     // Source location for the ident struct
-    llvm::Value *RTLoc = emitUpdateLocation(CGF, D.getBeginLoc());
+    llvm::Value *RTLoc = emitUpdateLocation(CGF, &D);
 
     llvm::Value *OffloadingArgs[] = {RTLoc,
                                      DeviceID,
@@ -10960,12 +10930,10 @@ void CGOpenMPRuntime::emitTargetDataCalls(
                                      MapTypesArrayArg,
                                      MapNamesArrayArg,
                                      MappersArrayArg};
-    emitSetDirectiveInfoCall(CGF, D);
     CGF.EmitRuntimeCall(
         OMPBuilder.getOrCreateRuntimeFunction(
             CGM.getModule(), OMPRTL___tgt_target_data_end_mapper),
         OffloadingArgs);
-    emitClearDirectiveInfoCall(CGF);
   };
 
   // If we need device pointer privatization, we need to emit the body of the
@@ -11036,7 +11004,7 @@ void CGOpenMPRuntime::emitTargetDataStandAloneCall(
         CGF.Builder.getInt32(InputInfo.NumberOfTargetItems);
 
     // Source location for the ident struct
-    llvm::Value *RTLoc = emitUpdateLocation(CGF, D.getBeginLoc());
+    llvm::Value *RTLoc = emitUpdateLocation(CGF, &D);
 
     llvm::Value *OffloadingArgs[] = {RTLoc,
                                      DeviceID,
@@ -11132,11 +11100,9 @@ void CGOpenMPRuntime::emitTargetDataStandAloneCall(
       llvm_unreachable("Unexpected standalone target data directive.");
       break;
     }
-    emitSetDirectiveInfoCall(CGF, D);
     CGF.EmitRuntimeCall(
         OMPBuilder.getOrCreateRuntimeFunction(CGM.getModule(), RTLFn),
         OffloadingArgs);
-    emitClearDirectiveInfoCall(CGF);
   };
 
   auto &&TargetThenGen = [this, &ThenGen, &D, &InputInfo, &MapTypesArray,

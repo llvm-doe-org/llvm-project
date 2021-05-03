@@ -245,10 +245,10 @@ Constant *OpenMPIRBuilder::getOrCreateSrcLocStr(StringRef LocStr) {
   return SrcLocStr;
 }
 
-Constant *OpenMPIRBuilder::getOrCreateSrcLocStr(StringRef FunctionName,
-                                                StringRef FileName,
-                                                unsigned Line,
-                                                unsigned Column) {
+Constant *OpenMPIRBuilder::getOrCreateSrcLocStr(
+    StringRef FunctionName, StringRef FileName, unsigned Line, unsigned Column,
+    unsigned EndLine, unsigned FuncLine, unsigned FuncEndLine,
+    unsigned DirKind) {
   SmallString<128> Buffer;
   Buffer.push_back(';');
   Buffer.append(FileName);
@@ -258,6 +258,22 @@ Constant *OpenMPIRBuilder::getOrCreateSrcLocStr(StringRef FunctionName,
   Buffer.append(std::to_string(Line));
   Buffer.push_back(';');
   Buffer.append(std::to_string(Column));
+  // TODO: The remaining fields are extensions for OpenACC Profiling Interface
+  // support.  To make it easier to merge upstream changes to the OpenMP test
+  // suite, don't generate these fields if they're all nullified.  Thus, when
+  // OpenACC Profiling Interface support is upstreamed, revisit this decision.
+  // See the related todo in CGOpenMPRuntime::emitUpdateLocation, which calls
+  // OpenMPIRBuilder::getOrCreateSrcLocStr.
+  if (EndLine || FuncLine || FuncEndLine || DirKind) {
+    Buffer.push_back(';');
+    Buffer.append(std::to_string(EndLine));
+    Buffer.push_back(';');
+    Buffer.append(std::to_string(FuncLine));
+    Buffer.push_back(';');
+    Buffer.append(std::to_string(FuncEndLine));
+    Buffer.push_back(';');
+    Buffer.append(std::to_string(DirKind));
+  }
   Buffer.push_back(';');
   Buffer.push_back(';');
   return getOrCreateSrcLocStr(Buffer.str());

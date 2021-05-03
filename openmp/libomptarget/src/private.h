@@ -86,11 +86,6 @@ int omp_get_default_device(void) __attribute__((weak));
 int32_t __kmpc_omp_taskwait(void *loc_ref, int32_t gtid) __attribute__((weak));
 int32_t __kmpc_global_thread_num(void *) __attribute__((weak));
 int __kmpc_get_target_offload(void) __attribute__((weak));
-void __kmpc_set_directive_info(int kind, int is_explicit_event,
-                               const char *src_file, const char *func_name,
-                               int line_no, int end_line_no, int func_line_no,
-                               int func_end_line_no) __attribute__((weak));
-void __kmpc_clear_directive_info() __attribute__((weak));
 #ifdef __cplusplus
 }
 #endif

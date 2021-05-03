@@ -27,14 +27,14 @@ using map_var_info_t = void *;
 
 /// The ident structure that describes a source location from kmp.h. with
 /// source location string data as ";filename;function;line;column;;\0".
-struct ident_t {
+typedef struct ident {
   // Ident_t flags described in kmp.h.
   int32_t reserved_1;
   int32_t flags;
   int32_t reserved_2;
   int32_t reserved_3;
   char const *psource;
-};
+} ident_t;
 
 /// Struct to hold source individual location information.
 class SourceInfo {

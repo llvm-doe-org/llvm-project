@@ -134,6 +134,19 @@ EXTERN void __tgt_target_data_begin_nowait(int64_t device_id, int32_t arg_num,
                                  arg_sizes, arg_types, nullptr, nullptr);
 }
 
+struct OmptIdentRAII {
+  OmptIdentRAII(ident_t *Ident) {
+#if OMPT_SUPPORT
+    ompt_set_directive_ident(Ident);
+#endif
+  }
+  ~OmptIdentRAII() {
+#if OMPT_SUPPORT
+    ompt_clear_directive_ident();
+#endif
+  }
+};
+
 EXTERN void __tgt_target_data_begin_mapper(ident_t *loc, int64_t device_id,
                                            int32_t arg_num, void **args_base,
                                            void **args, int64_t *arg_sizes,
@@ -141,6 +154,7 @@ EXTERN void __tgt_target_data_begin_mapper(ident_t *loc, int64_t device_id,
                                            map_var_info_t *arg_names,
                                            void **arg_mappers) {
   if (IsOffloadDisabled()) return;
+  OmptIdentRAII TheOmptIdentRAII(loc);
 
   DP("Entering data begin region for device %" PRId64 " with %d mappings\n",
       device_id, arg_num);
@@ -243,6 +257,7 @@ EXTERN void __tgt_target_data_end_mapper(ident_t *loc, int64_t device_id,
                                          map_var_info_t *arg_names,
                                          void **arg_mappers) {
   if (IsOffloadDisabled()) return;
+  OmptIdentRAII TheOmptIdentRAII(loc);
   DP("Entering data end region with %d mappings\n", arg_num);
 
   // No devices available?
@@ -331,6 +346,7 @@ EXTERN void __tgt_target_data_update_mapper(ident_t *loc, int64_t device_id,
                                             map_var_info_t *arg_names,
                                             void **arg_mappers) {
   if (IsOffloadDisabled()) return;
+  OmptIdentRAII TheOmptIdentRAII(loc);
   DP("Entering data update with %d mappings\n", arg_num);
 
   // No devices available?
@@ -390,6 +406,7 @@ EXTERN int __tgt_target_mapper(ident_t *loc, int64_t device_id, void *host_ptr,
                                int64_t *arg_sizes, int64_t *arg_types,
                                map_var_info_t *arg_names, void **arg_mappers) {
   if (IsOffloadDisabled()) return OFFLOAD_FAIL;
+  OmptIdentRAII TheOmptIdentRAII(loc);
   DP("Entering target region with entry point " DPxMOD " and device Id %"
       PRId64 "\n", DPxPTR(host_ptr), device_id);
 
@@ -464,6 +481,7 @@ EXTERN int __tgt_target_teams_mapper(ident_t *loc, int64_t device_id,
                                      void **arg_mappers, int32_t team_num,
                                      int32_t thread_limit) {
   if (IsOffloadDisabled()) return OFFLOAD_FAIL;
+  OmptIdentRAII TheOmptIdentRAII(loc);
   DP("Entering target region with entry point " DPxMOD " and device Id %"
       PRId64 "\n", DPxPTR(host_ptr), device_id);
 

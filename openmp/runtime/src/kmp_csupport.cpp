@@ -4237,61 +4237,28 @@ int __kmpc_pause_resource(kmp_pause_status_t level) {
   return __kmp_pause_resource(level);
 }
 
-void __kmpc_set_directive_info(
-    int kind, int is_explicit_event, const char *src_file,
-    const char *func_name, int line_no, int end_line_no, int func_line_no,
-    int func_end_line_no) {
-#if OMPT_SUPPORT
-  ompt_directive_info.kind = (ompt_directive_kind_t)kind;
-  ompt_directive_info.is_explicit_event = is_explicit_event;
-  if (ompt_has_user_source_info)
-    return;
-  ompt_directive_info.src_file = src_file;
-  ompt_directive_info.func_name = func_name;
-  ompt_directive_info.line_no = line_no;
-  ompt_directive_info.end_line_no = end_line_no;
-  ompt_directive_info.func_line_no = func_line_no;
-  ompt_directive_info.func_end_line_no = func_end_line_no;
-#endif
-}
-
-void __kmpc_clear_directive_info() {
-#if OMPT_SUPPORT
-  ompt_directive_info.kind = ompt_directive_unknown;
-  ompt_directive_info.is_explicit_event = false;
-  if (ompt_has_user_source_info)
-    return;
-  ompt_directive_info.src_file = nullptr;
-  ompt_directive_info.func_name = nullptr;
-  ompt_directive_info.line_no = 0;
-  ompt_directive_info.end_line_no = 0;
-  ompt_directive_info.func_line_no = 0;
-  ompt_directive_info.func_end_line_no = 0;
-#endif
-}
-
 void __kmpc_set_source_info(const char *src_file, const char *func_name,
                             int line_no, int end_line_no, int func_line_no,
                             int func_end_line_no) {
 #if OMPT_SUPPORT
   ompt_has_user_source_info = true;
-  ompt_directive_info.src_file = src_file;
-  ompt_directive_info.func_name = func_name;
-  ompt_directive_info.line_no = line_no;
-  ompt_directive_info.end_line_no = end_line_no;
-  ompt_directive_info.func_line_no = func_line_no;
-  ompt_directive_info.func_end_line_no = func_end_line_no;
+  ompt_user_source_info.src_file = src_file;
+  ompt_user_source_info.func_name = func_name;
+  ompt_user_source_info.line_no = line_no;
+  ompt_user_source_info.end_line_no = end_line_no;
+  ompt_user_source_info.func_line_no = func_line_no;
+  ompt_user_source_info.func_end_line_no = func_end_line_no;
 #endif
 }
 
 void __kmpc_clear_source_info() {
 #if OMPT_SUPPORT
   ompt_has_user_source_info = false;
-  ompt_directive_info.src_file = nullptr;
-  ompt_directive_info.func_name = nullptr;
-  ompt_directive_info.line_no = 0;
-  ompt_directive_info.end_line_no = 0;
-  ompt_directive_info.func_line_no = 0;
-  ompt_directive_info.func_end_line_no = 0;
+  ompt_user_source_info.src_file = nullptr;
+  ompt_user_source_info.func_name = nullptr;
+  ompt_user_source_info.line_no = 0;
+  ompt_user_source_info.end_line_no = 0;
+  ompt_user_source_info.func_line_no = 0;
+  ompt_user_source_info.func_end_line_no = 0;
 #endif
 }
