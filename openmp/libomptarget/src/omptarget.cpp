@@ -308,6 +308,19 @@ int targetDataMapper(DeviceTy &Device, void *arg_base, void *arg,
   return rc;
 }
 
+struct OmptMapVarInfoRAII {
+  OmptMapVarInfoRAII(map_var_info_t MapVarInfo) {
+#if OMPT_SUPPORT
+    ompt_set_map_var_info(MapVarInfo);
+#endif
+  }
+  ~OmptMapVarInfoRAII() {
+#if OMPT_SUPPORT
+    ompt_set_map_var_info(nullptr);
+#endif
+  }
+};
+
 /// Internal function to do the mapping and transfer the data to the device
 int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
                     void **args, int64_t *arg_sizes, int64_t *arg_types,
@@ -315,9 +328,8 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
                     __tgt_async_info *async_info_ptr) {
   // process each input.
   for (int32_t i = 0; i < arg_num; ++i) {
-#if OMPT_SUPPORT
-    ompt_set_map_var_info(arg_names ? arg_names[i] : nullptr);
-#endif
+    OmptMapVarInfoRAII TheOmptMapVarInfoRAII(arg_names ? arg_names[i]
+                                                       : nullptr);
     // Ignore private variables and arrays - there is no mapping for them.
     if ((arg_types[i] & OMP_TGT_MAPTYPE_LITERAL) ||
         (arg_types[i] & OMP_TGT_MAPTYPE_PRIVATE))
@@ -335,9 +347,6 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
       if (rc != OFFLOAD_SUCCESS) {
         REPORT("Call to targetDataBegin via targetDataMapper for custom mapper"
                " failed.\n");
-#if OMPT_SUPPORT
-        ompt_set_map_var_info(nullptr);
-#endif
         return OFFLOAD_FAIL;
       }
 
@@ -411,9 +420,6 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
         REPORT("Call to getOrAllocTgtPtr returned null pointer (%s).\n",
                HasPresentModifier ? "'present' map type modifier"
                                   : "device failure or illegal mapping");
-#if OMPT_SUPPORT
-        ompt_set_map_var_info(nullptr);
-#endif
         return OFFLOAD_FAIL;
       }
       DP("There are %zu bytes allocated at target address " DPxMOD " - is%s new"
@@ -440,9 +446,6 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
       REPORT("Call to getOrAllocTgtPtr returned null pointer (%s).\n",
              HasPresentModifier ? "'present' map type modifier"
                                 : "device failure or illegal mapping");
-#if OMPT_SUPPORT
-      ompt_set_map_var_info(nullptr);
-#endif
       return OFFLOAD_FAIL;
     }
     DP("There are %" PRId64 " bytes allocated at target address " DPxMOD
@@ -483,9 +486,6 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
                                    async_info_ptr);
         if (rt != OFFLOAD_SUCCESS) {
           REPORT("Copying data to device failed.\n");
-#if OMPT_SUPPORT
-          ompt_set_map_var_info(nullptr);
-#endif
           return OFFLOAD_FAIL;
         }
       }
@@ -500,9 +500,6 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
                                  sizeof(void *), async_info_ptr);
       if (rt != OFFLOAD_SUCCESS) {
         REPORT("Copying data to device failed.\n");
-#if OMPT_SUPPORT
-        ompt_set_map_var_info(nullptr);
-#endif
         return OFFLOAD_FAIL;
       }
       // create shadow pointers for this entry
@@ -512,9 +509,6 @@ int targetDataBegin(DeviceTy &Device, int32_t arg_num, void **args_base,
       Device.ShadowMtx.unlock();
     }
   }
-#if OMPT_SUPPORT
-  ompt_set_map_var_info(nullptr);
-#endif
 
   return OFFLOAD_SUCCESS;
 }
@@ -556,10 +550,8 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
   std::vector<DeallocTgtPtrInfo> DeallocTgtPtrs;
   // process each input.
   for (int32_t I = ArgNum - 1; I >= 0; --I) {
-#if OMPT_SUPPORT
     map_var_info_t HstPtrName = ArgNames ? ArgNames[I] : nullptr;
-    ompt_set_map_var_info(HstPtrName);
-#endif
+    OmptMapVarInfoRAII TheOmptMapVarInfoRAII(HstPtrName);
     // Ignore private variables and arrays - there is no mapping for them.
     // Also, ignore the use_device_ptr directive, it has no effect here.
     if ((ArgTypes[I] & OMP_TGT_MAPTYPE_LITERAL) ||
@@ -578,9 +570,6 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
       if (Ret != OFFLOAD_SUCCESS) {
         REPORT("Call to targetDataEnd via targetDataMapper for custom mapper"
                " failed.\n");
-#if OMPT_SUPPORT
-        ompt_set_map_var_info(nullptr);
-#endif
         return OFFLOAD_FAIL;
       }
 
@@ -648,9 +637,6 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
         MESSAGE("device mapping required by 'present' map type modifier does "
                 "not exist for host address " DPxMOD " (%" PRId64 " bytes)",
                 DPxPTR(HstPtrBegin), DataSize);
-#if OMPT_SUPPORT
-        ompt_set_map_var_info(nullptr);
-#endif
         return OFFLOAD_FAIL;
       }
     } else {
@@ -701,9 +687,6 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
                                     AsyncInfo);
           if (Ret != OFFLOAD_SUCCESS) {
             REPORT("Copying data from device failed.\n");
-#if OMPT_SUPPORT
-            ompt_set_map_var_info(nullptr);
-#endif
             return OFFLOAD_FAIL;
           }
         }
@@ -753,9 +736,6 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
                                     HstPtrName);
     }
   }
-#if OMPT_SUPPORT
-  ompt_set_map_var_info(nullptr);
-#endif
 
   // We need to synchronize before deallocating data.
   // If AsyncInfo is nullptr, the previous data transfer (if has) will be
@@ -773,15 +753,10 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
 
   // Deallocate target pointer
   for (DeallocTgtPtrInfo &Info : DeallocTgtPtrs) {
-#if OMPT_SUPPORT
-    ompt_set_map_var_info(Info.HstPtrName);
-#endif
+    OmptMapVarInfoRAII TheOmptMapVarInfoRAII(Info.HstPtrName);
     Ret =
         Device.deallocTgtPtr(Info.HstPtrBegin, Info.DataSize, Info.ForceDelete,
                              Info.HasCloseModifier, Info.HasHoldModifier);
-#if OMPT_SUPPORT
-    ompt_set_map_var_info(nullptr);
-#endif
     if (Ret != OFFLOAD_SUCCESS) {
       REPORT("Deallocating data from device failed.\n");
       return OFFLOAD_FAIL;
@@ -792,24 +767,43 @@ int targetDataEnd(DeviceTy &Device, int32_t ArgNum, void **ArgBases,
 }
 
 #if OMPT_SUPPORT
-void ompt_dispatch_callback_target(ompt_target_t kind,
-                                   ompt_scope_endpoint_t endpoint,
+void ompt_dispatch_callback_target(ompt_target_t Kind,
+                                   ompt_scope_endpoint_t Endpoint,
                                    DeviceTy &Device) {
-  bool SubRegion = kind == ompt_target_region_enter_data ||
-                   kind == ompt_target_region_exit_data;
-  if (!SubRegion && endpoint == ompt_scope_begin)
+  bool SubRegion = Kind == ompt_target_region_enter_data ||
+                   Kind == ompt_target_region_exit_data;
+  if (!SubRegion && Endpoint == ompt_scope_begin)
     ompt_set_target_info(Device.DeviceID);
   // FIXME: We don't yet need the task_data, target_id, or codeptr_ra argument
   // for OpenACC support, so we haven't bothered to implement them yet.
   if (Device.OmptApi.ompt_get_enabled().ompt_callback_target) {
     Device.OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target)(
-        kind, endpoint, Device.DeviceID, /*task_data=*/NULL,
+        Kind, Endpoint, Device.DeviceID, /*task_data=*/NULL,
         /*target_id=*/ompt_id_none, /*codeptr_ra=*/NULL);
   }
-  if (!SubRegion && endpoint == ompt_scope_end)
+  if (!SubRegion && Endpoint == ompt_scope_end)
     ompt_clear_target_info();
 }
 #endif
+
+class OmptTargetRAII {
+private:
+  ompt_target_t Kind;
+  DeviceTy &Device;
+public:
+  OmptTargetRAII(ompt_target_t Kind, DeviceTy &Device)
+      : Kind(Kind), Device(Device)
+  {
+#if OMPT_SUPPORT
+    ompt_dispatch_callback_target(Kind, ompt_scope_begin, Device);
+#endif
+  }
+  ~OmptTargetRAII() {
+#if OMPT_SUPPORT
+    ompt_dispatch_callback_target(Kind, ompt_scope_end, Device);
+#endif
+  }
+};
 
 // OpenMP 5.0 sec. 2.12.6 p. 179 L22-23:
 // "The target-update-begin event occurs when a thread enters a target update.
@@ -828,15 +822,12 @@ int target_data_update(DeviceTy &Device, int32_t arg_num, void **args_base,
                        void **args, int64_t *arg_sizes, int64_t *arg_types,
                        map_var_info_t *arg_names, void **arg_mappers,
                        __tgt_async_info *async_info_ptr) {
-#if OMPT_SUPPORT
-  ompt_dispatch_callback_target(ompt_target_update, ompt_scope_begin, Device);
-#endif
+  OmptTargetRAII TheOmptTargetRAII(ompt_target_update, Device);
 
   // process each input.
   for (int32_t i = 0; i < arg_num; ++i) {
-#if OMPT_SUPPORT
-    ompt_set_map_var_info(arg_names ? arg_names[i] : nullptr);
-#endif
+    OmptMapVarInfoRAII TheOmptMapVarInfoRAII(arg_names ? arg_names[i]
+                                                       : nullptr);
     if ((arg_types[i] & OMP_TGT_MAPTYPE_LITERAL) ||
         (arg_types[i] & OMP_TGT_MAPTYPE_PRIVATE))
       continue;
@@ -855,11 +846,6 @@ int target_data_update(DeviceTy &Device, int32_t arg_num, void **args_base,
         REPORT(
             "Call to target_data_update via targetDataMapper for custom mapper"
             " failed.\n");
-#if OMPT_SUPPORT
-        ompt_set_map_var_info(nullptr);
-        ompt_dispatch_callback_target(ompt_target_update, ompt_scope_end,
-                                      Device);
-#endif
         return OFFLOAD_FAIL;
       }
 
@@ -879,11 +865,6 @@ int target_data_update(DeviceTy &Device, int32_t arg_num, void **args_base,
         MESSAGE("device mapping required by 'present' motion modifier does not "
                 "exist for host address " DPxMOD " (%" PRId64 " bytes)",
                 DPxPTR(HstPtrBegin), MapSize);
-#if OMPT_SUPPORT
-        ompt_set_map_var_info(nullptr);
-        ompt_dispatch_callback_target(ompt_target_update, ompt_scope_end,
-                                      Device);
-#endif
         return OFFLOAD_FAIL;
       }
       continue;
@@ -902,11 +883,6 @@ int target_data_update(DeviceTy &Device, int32_t arg_num, void **args_base,
       int rt = Device.retrieveData(HstPtrBegin, TgtPtrBegin, MapSize, nullptr);
       if (rt != OFFLOAD_SUCCESS) {
         REPORT("Copying data from device failed.\n");
-#if OMPT_SUPPORT
-        ompt_set_map_var_info(nullptr);
-        ompt_dispatch_callback_target(ompt_target_update, ompt_scope_end,
-                                      Device);
-#endif
         return OFFLOAD_FAIL;
       }
 
@@ -934,11 +910,6 @@ int target_data_update(DeviceTy &Device, int32_t arg_num, void **args_base,
       int rt = Device.submitData(TgtPtrBegin, HstPtrBegin, MapSize, nullptr);
       if (rt != OFFLOAD_SUCCESS) {
         REPORT("Copying data to device failed.\n");
-#if OMPT_SUPPORT
-        ompt_set_map_var_info(nullptr);
-        ompt_dispatch_callback_target(ompt_target_update, ompt_scope_end,
-                                      Device);
-#endif
         return OFFLOAD_FAIL;
       }
 
@@ -960,21 +931,12 @@ int target_data_update(DeviceTy &Device, int32_t arg_num, void **args_base,
         if (rt != OFFLOAD_SUCCESS) {
           REPORT("Copying data to device failed.\n");
           Device.ShadowMtx.unlock();
-#if OMPT_SUPPORT
-          ompt_set_map_var_info(nullptr);
-          ompt_dispatch_callback_target(ompt_target_update, ompt_scope_end,
-                                        Device);
-#endif
           return OFFLOAD_FAIL;
         }
       }
       Device.ShadowMtx.unlock();
     }
   }
-#if OMPT_SUPPORT
-  ompt_set_map_var_info(nullptr);
-  ompt_dispatch_callback_target(ompt_target_update, ompt_scope_end, Device);
-#endif
   return OFFLOAD_SUCCESS;
 }
 
@@ -1243,7 +1205,7 @@ public:
       map_var_info_t HstPtrName = FirstPrivateArgInfo.size() == 1
                                       ? FirstPrivateArgInfo[0].HstPtrName
                                       : nullptr;
-      ompt_set_map_var_info(HstPtrName);
+      OmptMapVarInfoRAII TheOmptMapVarInfoRAII(HstPtrName);
       // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
       // "The target-data-op-begin event occurs before a thread initiates a data
       // operation on a target device.  The target-data-op-end event occurs
@@ -1319,9 +1281,6 @@ public:
       // Transfer data to target device
       int Ret = Device.submitData(TgtPtr, FirstPrivateArgBuffer.data(),
                                   FirstPrivateArgSize, AsyncInfo);
-#if OMPT_SUPPORT
-      ompt_set_map_var_info(nullptr);
-#endif
       if (Ret != OFFLOAD_SUCCESS) {
         DP("Failed to submit data of private arguments.\n");
         return OFFLOAD_FAIL;
@@ -1347,7 +1306,7 @@ public:
   int free() {
     for (FirstPrivateTgtInfoTy Info : FirstPrivateTgtInfo) {
 #if OMPT_SUPPORT
-      ompt_set_map_var_info(Info.HstPtrName);
+      OmptMapVarInfoRAII TheOmptMapVarInfoRAII(Info.HstPtrName);
       // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
       // "The target-data-op-begin event occurs before a thread initiates a data
       // operation on a target device.  The target-data-op-end event occurs
@@ -1396,7 +1355,6 @@ public:
             omp_get_initial_device(), Info.TgtPtr, Device.DeviceID, Info.Size,
             /*codeptr_ra=*/nullptr);
       }
-      ompt_set_map_var_info(nullptr);
 #endif
       int Ret = Device.deleteData(Info.TgtPtr);
       if (Ret != OFFLOAD_SUCCESS) {
@@ -1434,9 +1392,7 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
 
   for (int32_t I = 0; I < ArgNum; ++I) {
     map_var_info_t HstPtrName = ArgNames ? ArgNames[I] : nullptr;
-#if OMPT_SUPPORT
-    ompt_set_map_var_info(HstPtrName);
-#endif
+    OmptMapVarInfoRAII TheOmptMapVarInfoRAII(HstPtrName);
     if (!(ArgTypes[I] & OMP_TGT_MAPTYPE_TARGET_PARAM)) {
       // This is not a target parameter, do not push it into TgtArgs.
       // Check for lambda mapping.
@@ -1478,9 +1434,6 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
                                 sizeof(void *), AsyncInfo);
         if (Ret != OFFLOAD_SUCCESS) {
           REPORT("Copying data to device failed.\n");
-#if OMPT_SUPPORT
-          ompt_set_map_var_info(nullptr);
-#endif
           return OFFLOAD_FAIL;
         }
       }
@@ -1527,9 +1480,6 @@ int processDataBefore(int64_t DeviceId, void *HostPtr, int32_t ArgNum,
     TgtArgs.push_back(TgtPtrBegin);
     TgtOffsets.push_back(TgtBaseOffset);
   }
-#if OMPT_SUPPORT
-  ompt_set_map_var_info(nullptr);
-#endif
 
   assert(TgtArgs.size() == TgtOffsets.size() &&
          "Size mismatch in arguments and offsets");
@@ -1613,19 +1563,13 @@ int target(int64_t DeviceId, void *HostPtr, int32_t ArgNum, void **ArgBases,
            map_var_info_t *ArgNames, void **ArgMappers, int32_t TeamNum,
            int32_t ThreadLimit, int IsTeamConstruct) {
   DeviceTy &Device = PM->Devices[DeviceId];
-
-#if OMPT_SUPPORT
-  ompt_dispatch_callback_target(ompt_target, ompt_scope_begin, Device);
-#endif
+  OmptTargetRAII TheOmptTargetRAII(ompt_target, Device);
 
   TableMap *TM = getTableMap(HostPtr);
   // No map for this host pointer found!
   if (!TM) {
     REPORT("Host ptr " DPxMOD " does not have a matching target pointer.\n",
            DPxPTR(HostPtr));
-#if OMPT_SUPPORT
-    ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
-#endif
     return OFFLOAD_FAIL;
   }
 
@@ -1647,22 +1591,16 @@ int target(int64_t DeviceId, void *HostPtr, int32_t ArgNum, void **ArgBases,
   PrivateArgumentManagerTy PrivateArgumentManager(Device, &AsyncInfo);
 
   // Process data, such as data mapping, before launching the kernel
-#if OMPT_SUPPORT
-  ompt_dispatch_callback_target(ompt_target_region_enter_data, ompt_scope_begin,
-                                Device);
-#endif
-  int Ret = processDataBefore(DeviceId, HostPtr, ArgNum, ArgBases, Args,
-                              ArgSizes, ArgTypes, ArgNames, ArgMappers, TgtArgs,
-                              TgtOffsets, PrivateArgumentManager, &AsyncInfo);
-#if OMPT_SUPPORT
-  ompt_dispatch_callback_target(ompt_target_region_enter_data, ompt_scope_end,
-                                Device);
-#endif
+  int Ret;
+  {
+    OmptTargetRAII TheOmptTargetRegionEnterDataRAII(
+        ompt_target_region_enter_data, Device);
+    Ret = processDataBefore(DeviceId, HostPtr, ArgNum, ArgBases, Args, ArgSizes,
+                            ArgTypes, ArgNames, ArgMappers, TgtArgs, TgtOffsets,
+                            PrivateArgumentManager, &AsyncInfo);
+  }
   if (Ret != OFFLOAD_SUCCESS) {
     REPORT("Failed to process data before launching the kernel.\n");
-#if OMPT_SUPPORT
-    ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
-#endif
     return OFFLOAD_FAIL;
   }
 
@@ -1684,35 +1622,20 @@ int target(int64_t DeviceId, void *HostPtr, int32_t ArgNum, void **ArgBases,
 
   if (Ret != OFFLOAD_SUCCESS) {
     REPORT("Executing target region abort target.\n");
-#if OMPT_SUPPORT
-    ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
-#endif
     return OFFLOAD_FAIL;
   }
 
   // Transfer data back and deallocate target memory for (first-)private
   // variables
-#if OMPT_SUPPORT
-  ompt_dispatch_callback_target(ompt_target_region_exit_data, ompt_scope_begin,
-                                Device);
-#endif
+  OmptTargetRAII TheOmptTargetRegionExitDataRAII(
+      ompt_target_region_exit_data, Device);
   Ret = processDataAfter(DeviceId, HostPtr, ArgNum, ArgBases, Args, ArgSizes,
                          ArgTypes, ArgNames, ArgMappers, PrivateArgumentManager,
                          &AsyncInfo);
-#if OMPT_SUPPORT
-  ompt_dispatch_callback_target(ompt_target_region_exit_data, ompt_scope_end,
-                                Device);
-#endif
   if (Ret != OFFLOAD_SUCCESS) {
     REPORT("Failed to process data after launching the kernel.\n");
-#if OMPT_SUPPORT
-    ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
-#endif
     return OFFLOAD_FAIL;
   }
 
-#if OMPT_SUPPORT
-  ompt_dispatch_callback_target(ompt_target, ompt_scope_end, Device);
-#endif
   return OFFLOAD_SUCCESS;
 }
