@@ -98,6 +98,7 @@ ompt_directive_info_t ompt_user_source_info;
 static const ident_t *ompt_directive_ident = nullptr;
 static bool ompt_directive_ident_parsed = false;
 static map_var_info_t ompt_map_var_info = NULL;
+static bool ompt_map_var_info_parsed = false;
 static unsigned ompt_device_inits_capacity = 0;
 static unsigned ompt_device_inits_size = 0;
 static int32_t *ompt_device_inits = NULL;
@@ -510,6 +511,7 @@ void ompt_clear_directive_ident() {
 
 void ompt_set_map_var_info(map_var_info_t map_var_info) {
   ompt_map_var_info = map_var_info;
+  ompt_map_var_info_parsed = false;
 }
 
 /*****************************************************************************
@@ -863,8 +865,7 @@ private:
   const char *End;
 public:
   IdentParser(const char *Ident) : Begin(Ident), End(Ident) {
-    KMP_ASSERT2(*Begin == ';',
-                "expected first char of ident_t::psource to be ';'");
+    KMP_ASSERT2(*Begin == ';', "expected first char to be ';'");
   }
   std::string next() {
     Begin = End;
@@ -941,15 +942,19 @@ OMPT_API_ROUTINE ompt_directive_info_t *ompt_get_directive_info(void) {
 }
 
 OMPT_API_ROUTINE const char *ompt_get_data_expression(void) {
-  if (!ompt_map_var_info)
-    return nullptr;
-  const std::string Info(reinterpret_cast<const char *>(ompt_map_var_info));
-  std::size_t Begin = Info.find(';');
-  std::size_t End = Info.find(';', Begin + 1);
   // Static so it can be returned to caller, which must copy it elsewhere before
   // the next call overwrites it.
   static std::string DataExpression;
-  DataExpression = Info.substr(Begin + 1, End - Begin - 1);
+  if (!ompt_map_var_info)
+    return nullptr;
+  // If we've already parsed it since the last time it was set, don't do it
+  // again.  That would waste time and would needlessly invalidate the string we
+  // returned previously.
+  if (ompt_map_var_info_parsed)
+    return DataExpression.c_str();
+  ompt_map_var_info_parsed = true;
+  IdentParser TheIdentParser(reinterpret_cast<const char *>(ompt_map_var_info));
+  DataExpression = TheIdentParser.next();
   return DataExpression.c_str();
 }
 
