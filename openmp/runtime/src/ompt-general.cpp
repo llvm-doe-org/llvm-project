@@ -514,6 +514,11 @@ void ompt_set_map_var_info(map_var_info_t map_var_info) {
   ompt_map_var_info_parsed = false;
 }
 
+void ompt_clear_map_var_info() {
+  ompt_map_var_info = nullptr;
+  ompt_map_var_info_parsed = false;
+}
+
 /*****************************************************************************
  * interface operations
  ****************************************************************************/

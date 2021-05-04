@@ -316,7 +316,7 @@ struct OmptMapVarInfoRAII {
   }
   ~OmptMapVarInfoRAII() {
 #if OMPT_SUPPORT
-    ompt_set_map_var_info(nullptr);
+    ompt_clear_map_var_info();
 #endif
   }
 };
