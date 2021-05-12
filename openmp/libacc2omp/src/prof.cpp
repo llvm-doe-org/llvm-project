@@ -67,7 +67,7 @@
 // OMPT entry points previously looked up.
 static ompt_set_callback_t acc_ompt_set_callback = NULL;
 static ompt_get_target_info_t acc_ompt_get_target_info = NULL;
-static ompt_get_directive_info_t acc_ompt_get_directive_info = NULL;
+static ompt_get_trigger_info_t acc_ompt_get_trigger_info = NULL;
 static ompt_get_data_expression_t acc_ompt_get_data_expression = NULL;
 
 // Registered OpenACC callbacks.
@@ -188,16 +188,16 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type, int device_num) {
   // the field contains if the runtime doesn't, so we guess -1.
   ret.async_queue = -1;
   // The remaining fields of acc_prof_info are source location information.
-  // If the OpenMP runtime doesn't support the ompt_get_directive_info entry
+  // If the OpenMP runtime doesn't support the ompt_get_trigger_info entry
   // point (it's then not LLVM's OpenMP runtime), just nullify the fields.
-  if (acc_ompt_get_directive_info) {
-    ompt_directive_info_t *directive_info = acc_ompt_get_directive_info();
-    ret.src_file = directive_info->src_file;
-    ret.func_name = directive_info->func_name;
-    ret.line_no = directive_info->line_no;
-    ret.end_line_no = directive_info->end_line_no;
-    ret.func_line_no = directive_info->func_line_no;
-    ret.func_end_line_no = directive_info->func_end_line_no;
+  if (acc_ompt_get_trigger_info) {
+    ompt_trigger_info_t *trigger_info = acc_ompt_get_trigger_info();
+    ret.src_file = trigger_info->src_file;
+    ret.func_name = trigger_info->func_name;
+    ret.line_no = trigger_info->line_no;
+    ret.end_line_no = trigger_info->end_line_no;
+    ret.func_line_no = trigger_info->func_line_no;
+    ret.func_end_line_no = trigger_info->func_end_line_no;
   } else {
     ret.src_file = NULL;
     ret.func_name = NULL;
@@ -213,10 +213,10 @@ static acc_prof_info acc_get_prof_info(acc_event_t event_type, int device_num) {
 static acc_event_info acc_get_other_event_info(acc_event_t event_type) {
   acc_event_info ret;
   ret.other_event.event_type = event_type;
-  // When ompt_get_directive_info returns kind=ompt_directive_unknown, we
-  // assume the event was triggered internally and thus has no connection back
-  // to a specific directive or runtime call.  There's no acc_construct_t
-  // member in OpenACC 3.0 that makes sense for this case, so we pick
+  // When ompt_get_trigger_info returns kind=ompt_trigger_unknown, we assume the
+  // event was triggered internally and thus has no connection back to a
+  // specific directive or runtime call.  There's no acc_construct_t member in
+  // OpenACC 3.0 that makes sense for this case, so we pick
   // parent_construct=acc_construct_runtime_api and implicit=true to try to
   // indicate an internal call.  FIXME: OpenACC should be extended with
   // something like acc_construct_internal.
@@ -225,44 +225,44 @@ static acc_event_info acc_get_other_event_info(acc_event_t event_type) {
   // acc_ev_device_shutdown_start, or acc_ev_device_shutdown_end without a
   // triggering directive or runtime API call.  This case also currently also
   // occurs if the compiler or OpenMP runtime isn't able to provide the
-  // required directive info.  Thus, for this case, ompt_get_directive_info,
-  // if available as an entry point, should always return a default-initialized
-  // ompt_directive_info_t, which has is_explicit_event=false.
-  if (!acc_ompt_get_directive_info) {
+  // required trigger info.  Thus, for this case, ompt_get_trigger_info, if
+  // available as an entry point, should always return a default-initialized
+  // ompt_trigger_info_t, which has is_explicit_event=false.
+  if (!acc_ompt_get_trigger_info) {
     ret.other_event.parent_construct = acc_construct_runtime_api;
     ret.other_event.implicit = true;
   } else {
-    ompt_directive_info_t *directive_info = acc_ompt_get_directive_info();
+    ompt_trigger_info_t *trigger_info = acc_ompt_get_trigger_info();
     // FIXME: If these are equivalent, perhaps is_explicit_event is a redundant
     // field.  Will that remain true in the future?
-    ACC2OMP_ASSERT(!directive_info->is_explicit_event ==
-                       (directive_info->kind == ompt_directive_unknown),
+    ACC2OMP_ASSERT(!trigger_info->is_explicit_event ==
+                       (trigger_info->kind == ompt_trigger_unknown),
                    "expected !is_explicit_event if and only if "
                    "kind=ompt_directve_unknown");
-    switch (directive_info->kind) {
-    case ompt_directive_unknown:
+    switch (trigger_info->kind) {
+    case ompt_trigger_unknown:
       ret.other_event.parent_construct = acc_construct_runtime_api;
       break;
-    case ompt_directive_target_update:
+    case ompt_trigger_target_update:
       ret.other_event.parent_construct = acc_construct_update;
       break;
-    case ompt_directive_target_enter_data:
+    case ompt_trigger_target_enter_data:
       ret.other_event.parent_construct = acc_construct_enter_data;
       break;
-    case ompt_directive_target_exit_data:
+    case ompt_trigger_target_exit_data:
       ret.other_event.parent_construct = acc_construct_exit_data;
       break;
-    case ompt_directive_target_data:
+    case ompt_trigger_target_data:
       ret.other_event.parent_construct = acc_construct_data;
       break;
-    case ompt_directive_target_teams:
+    case ompt_trigger_target_teams:
       ret.other_event.parent_construct = acc_construct_parallel;
       break;
-    case ompt_directive_runtime_api:
+    case ompt_trigger_runtime_api:
       ret.other_event.parent_construct = acc_construct_runtime_api;
       break;
     }
-    ret.other_event.implicit = !directive_info->is_explicit_event;
+    ret.other_event.implicit = !trigger_info->is_explicit_event;
   }
   ret.other_event.tool_info = NULL;
   ret.other_event.valid_bytes = valid_bytes(acc_other_event_info, tool_info);
@@ -866,8 +866,8 @@ static int acc_ompt_initialize(ompt_function_lookup_t lookup,
   acc_ompt_set_callback = (ompt_set_callback_t)lookup("ompt_set_callback");
   acc_ompt_get_target_info =
       (ompt_get_target_info_t)lookup("ompt_get_target_info");
-  acc_ompt_get_directive_info =
-      (ompt_get_directive_info_t)lookup("ompt_get_directive_info");
+  acc_ompt_get_trigger_info =
+      (ompt_get_trigger_info_t)lookup("ompt_get_trigger_info");
   acc_ompt_get_data_expression =
       (ompt_get_data_expression_t)lookup("ompt_get_data_expression");
   while (acc_prof_action *action = acc_prof_dequeue()) {

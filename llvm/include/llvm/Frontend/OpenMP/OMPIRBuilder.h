@@ -300,7 +300,7 @@ public:
                                  unsigned Line, unsigned Column,
                                  unsigned EndLine = 0, unsigned FuncLine = 0,
                                  unsigned FuncEndLine = 0,
-                                 unsigned DirKind = 0);
+                                 unsigned TriggerKind = 0);
 
   /// Return the (LLVM-IR) string describing the source location \p Loc.
   Constant *getOrCreateSrcLocStr(const LocationDescription &Loc);

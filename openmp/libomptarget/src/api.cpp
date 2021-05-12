@@ -18,16 +18,16 @@
 #include <cstring>
 #include <cstdlib>
 
-// We need the string version of ompt_directive_runtime_api so that DEFINE_IDENT
+// We need the string version of ompt_trigger_runtime_api so that DEFINE_IDENT
 // can form a proper ident_t at compile time.
 //
 // I don't know how to automatically stringify an enumerator value at compile
-// time.  The assert will remind us to update if ompt_directive_kind_t evolves.
+// time.  The assert will remind us to update if ompt_trigger_kind_t evolves.
 #define STR_(Arg) #Arg
 #define STR(Arg) STR_(Arg)
-#define OMPT_DIRECTIVE_RUNTIME_API 6
-static_assert(OMPT_DIRECTIVE_RUNTIME_API == ompt_directive_runtime_api,
-              "unexpected change in ompt_directive_runtime_api value");
+#define OMPT_TRIGGER_RUNTIME_API 6
+static_assert(OMPT_TRIGGER_RUNTIME_API == ompt_trigger_runtime_api,
+              "unexpected change in ompt_trigger_runtime_api value");
 
 // At compile time, define an ident_t for the enclosing OpenMP runtime library
 // routine.  Don't waste run time doing this.
@@ -37,15 +37,15 @@ static_assert(OMPT_DIRECTIVE_RUNTIME_API == ompt_directive_runtime_api,
 #define DEFINE_IDENT(Func)                                                     \
   ident_t Ident = {                                                            \
     0, 0, 0, 0,                                                                \
-    ";;" #Func ";0;0;0;0;0;" STR(OMPT_DIRECTIVE_RUNTIME_API) ";;"              \
+    ";;" #Func ";0;0;0;0;0;" STR(OMPT_TRIGGER_RUNTIME_API) ";;"              \
   };                                                                           \
   assert(0 == strcmp(__func__, #Func) &&                                       \
          "expected specified function to be enclosing function")
 
 #if OMPT_SUPPORT
 # define OMPT_DEFINE_IDENT(Func) DEFINE_IDENT(Func)
-# define OMPT_SET_DIRECTIVE_IDENT() ompt_set_directive_ident(&Ident)
-# define OMPT_CLEAR_DIRECTIVE_IDENT() ompt_clear_directive_ident()
+# define OMPT_SET_TRIGGER_IDENT() ompt_set_trigger_ident(&Ident)
+# define OMPT_CLEAR_TRIGGER_IDENT() ompt_clear_trigger_ident()
 # define OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(                            \
     EndPoint, OpKind, SrcPtr, SrcDevNum, DestPtr, DestDevNum, Size)            \
   ompt_dispatch_callback_target_data_op_emi(                                   \
@@ -56,7 +56,7 @@ static void ompt_dispatch_callback_target_data_op_emi(
     ompt_target_data_op_t OpKind, void *SrcPtr, int SrcDevNum, void *DestPtr,
     int DestDevNum, size_t Size) {
   if (ompt_get_enabled().ompt_callback_target_data_op_emi) {
-    OMPT_SET_DIRECTIVE_IDENT();
+    OMPT_SET_TRIGGER_IDENT();
     // FIXME: We don't yet need the target_task_data, target_data, host_op_id,
     // and codeptr_ra arguments for OpenACC support, so we haven't bothered to
     // implement them yet.
@@ -64,13 +64,13 @@ static void ompt_dispatch_callback_target_data_op_emi(
         EndPoint, /*target_task_data=*/NULL, /*target_data=*/NULL,
         /*host_op_id=*/NULL, OpKind, SrcPtr, SrcDevNum, DestPtr, DestDevNum,
         Size, /*codeptr_ra=*/NULL);
-    OMPT_CLEAR_DIRECTIVE_IDENT();
+    OMPT_CLEAR_TRIGGER_IDENT();
   }
 }
 #else
 # define OMPT_DEFINE_IDENT(Func)
-# define OMPT_SET_DIRECTIVE_IDENT()
-# define OMPT_CLEAR_DIRECTIVE_IDENT()
+# define OMPT_SET_TRIGGER_IDENT()
+# define OMPT_CLEAR_TRIGGER_IDENT()
 # define OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(                            \
     EndPoint, OpKind, SrcPtr, SrcDevNum, DestPtr, DestDevNum, Size)
 #endif
@@ -146,12 +146,12 @@ EXTERN void *omp_target_alloc(size_t size, int device_num) {
     return rc;
   }
 
-  OMPT_SET_DIRECTIVE_IDENT();
+  OMPT_SET_TRIGGER_IDENT();
   if (!device_is_ready(device_num)) {
     DP("omp_target_alloc returns NULL ptr\n");
     return NULL;
   }
-  OMPT_CLEAR_DIRECTIVE_IDENT();
+  OMPT_CLEAR_TRIGGER_IDENT();
 
   rc = PM->Devices[device_num].allocData(size);
 #if OMPT_SUPPORT
@@ -487,7 +487,7 @@ EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
   // implemented (retrieveData and submitData), and we have implemented the
   // appropriate callback when the transfer is specified as between host and a
   // device (retreiveData or submitData).
-  OMPT_SET_DIRECTIVE_IDENT();
+  OMPT_SET_TRIGGER_IDENT();
   if (src_device == omp_get_initial_device() &&
       dst_device == omp_get_initial_device()) {
     DP("copy from host to host\n");
@@ -511,7 +511,7 @@ EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
     if (SrcDev.isDataExchangable(DstDev)) {
       rc = SrcDev.dataExchange(srcAddr, DstDev, dstAddr, length, nullptr);
       if (rc == OFFLOAD_SUCCESS) {
-        OMPT_CLEAR_DIRECTIVE_IDENT();
+        OMPT_CLEAR_TRIGGER_IDENT();
         return OFFLOAD_SUCCESS;
       }
     }
@@ -522,7 +522,7 @@ EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
       rc = DstDev.submitData(dstAddr, buffer, length, nullptr);
     free(buffer);
   }
-  OMPT_CLEAR_DIRECTIVE_IDENT();
+  OMPT_CLEAR_TRIGGER_IDENT();
 
   DP("omp_target_memcpy returns %d\n", rc);
   return rc;

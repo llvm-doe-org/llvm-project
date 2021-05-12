@@ -93,10 +93,10 @@ static ompt_start_tool_result_t *ompt_start_tool_result = NULL;
 // FIXME: Access to these is not thread-safe.  Does it need to be?
 bool ompt_has_user_source_info = false;
 // kind and is_explicit_event fields of ompt_user_source_info are not used.
-// They're taken from ompt_directive_ident if set.
-ompt_directive_info_t ompt_user_source_info;
-static const ident_t *ompt_directive_ident = nullptr;
-static bool ompt_directive_ident_parsed = false;
+// They're taken from ompt_trigger_ident if set.
+ompt_trigger_info_t ompt_user_source_info;
+static const ident_t *ompt_trigger_ident = nullptr;
+static bool ompt_trigger_ident_parsed = false;
 static map_var_info_t ompt_map_var_info = NULL;
 static bool ompt_map_var_info_parsed = false;
 static unsigned ompt_device_inits_capacity = 0;
@@ -499,14 +499,14 @@ void ompt_set_target_info(uint64_t device_num) {
 
 void ompt_clear_target_info() { ompt_target_device = UINT64_MAX; }
 
-void ompt_set_directive_ident(const ident_t *ident) {
-  ompt_directive_ident = ident;
-  ompt_directive_ident_parsed = false;
+void ompt_set_trigger_ident(const ident_t *ident) {
+  ompt_trigger_ident = ident;
+  ompt_trigger_ident_parsed = false;
 }
 
-void ompt_clear_directive_ident() {
-  ompt_directive_ident = nullptr;
-  ompt_directive_ident_parsed = false;
+void ompt_clear_trigger_ident() {
+  ompt_trigger_ident = nullptr;
+  ompt_trigger_ident_parsed = false;
 }
 
 void ompt_set_map_var_info(map_var_info_t map_var_info) {
@@ -880,70 +880,70 @@ public:
   }
 };
 
-OMPT_API_ROUTINE ompt_directive_info_t *ompt_get_directive_info(void) {
+OMPT_API_ROUTINE ompt_trigger_info_t *ompt_get_trigger_info(void) {
   // Static so they can be returned to caller, which must copy them elsewhere
   // before the next call overwrites them.
-  static ompt_directive_info_t DirInfo;
+  static ompt_trigger_info_t TriggerInfo;
   static std::string SrcFile;
   static std::string FuncName;
 
-  // Parse all fields from ompt_directive_ident.psource.  However, if we've
+  // Parse all fields from ompt_trigger_ident.psource.  However, if we've
   // already parsed it since the last time it was set, don't do it again.  That
   // would waste time and would needlessly invalidate any strings we returned
   // previously.
-  if (!ompt_directive_ident) {
-    DirInfo.kind = ompt_directive_unknown;
-    DirInfo.is_explicit_event = 0;
-    DirInfo.src_file = nullptr;
-    DirInfo.func_name = nullptr;
-    DirInfo.line_no = 0;
-    DirInfo.end_line_no = 0;
-    DirInfo.func_line_no = 0;
-    DirInfo.func_end_line_no = 0;
-  } else if (!ompt_directive_ident_parsed) {
-    ompt_directive_ident_parsed = true;
-    IdentParser TheIdentParser(ompt_directive_ident->psource);
+  if (!ompt_trigger_ident) {
+    TriggerInfo.kind = ompt_trigger_unknown;
+    TriggerInfo.is_explicit_event = 0;
+    TriggerInfo.src_file = nullptr;
+    TriggerInfo.func_name = nullptr;
+    TriggerInfo.line_no = 0;
+    TriggerInfo.end_line_no = 0;
+    TriggerInfo.func_line_no = 0;
+    TriggerInfo.func_end_line_no = 0;
+  } else if (!ompt_trigger_ident_parsed) {
+    ompt_trigger_ident_parsed = true;
+    IdentParser TheIdentParser(ompt_trigger_ident->psource);
     SrcFile = TheIdentParser.next();
     if (SrcFile.empty())
-      DirInfo.src_file = nullptr;
+      TriggerInfo.src_file = nullptr;
     else
-      DirInfo.src_file = SrcFile.c_str();
+      TriggerInfo.src_file = SrcFile.c_str();
     FuncName = TheIdentParser.next();
     if (FuncName.empty())
-      DirInfo.func_name = nullptr;
+      TriggerInfo.func_name = nullptr;
     else
-      DirInfo.func_name = FuncName.c_str();
-    DirInfo.line_no = std::stoi(TheIdentParser.next());
-    // Skip column, which ompt_directive_info_t doesn't have.
+      TriggerInfo.func_name = FuncName.c_str();
+    TriggerInfo.line_no = std::stoi(TheIdentParser.next());
+    // Skip column, which ompt_trigger_info_t doesn't have.
     TheIdentParser.next();
     // If the next field is empty, there are no more fields.
     std::string EndLineNo = TheIdentParser.next();
     if (EndLineNo.empty()) {
-      DirInfo.end_line_no = 0;
-      DirInfo.func_line_no = 0;
-      DirInfo.func_end_line_no = 0;
-      DirInfo.kind = ompt_directive_unknown;
-      DirInfo.is_explicit_event = 0;
+      TriggerInfo.end_line_no = 0;
+      TriggerInfo.func_line_no = 0;
+      TriggerInfo.func_end_line_no = 0;
+      TriggerInfo.kind = ompt_trigger_unknown;
+      TriggerInfo.is_explicit_event = 0;
     } else {
-      DirInfo.end_line_no = std::stoi(EndLineNo);
-      DirInfo.func_line_no = std::stoi(TheIdentParser.next());
-      DirInfo.func_end_line_no = std::stoi(TheIdentParser.next());
-      DirInfo.kind = (ompt_directive_kind_t)std::stoi(TheIdentParser.next());
-      DirInfo.is_explicit_event = DirInfo.kind != ompt_directive_unknown;
+      TriggerInfo.end_line_no = std::stoi(EndLineNo);
+      TriggerInfo.func_line_no = std::stoi(TheIdentParser.next());
+      TriggerInfo.func_end_line_no = std::stoi(TheIdentParser.next());
+      TriggerInfo.kind = (ompt_trigger_kind_t)std::stoi(TheIdentParser.next());
+      TriggerInfo.is_explicit_event = TriggerInfo.kind != ompt_trigger_unknown;
     }
   }
 
   // Override fields with user-supplied source info if the omp_set_source_info
   // has been called since the last omp_clear_source_info.
   if (ompt_has_user_source_info) {
-    DirInfo.src_file = ompt_user_source_info.src_file;
-    DirInfo.func_name = ompt_user_source_info.func_name;
-    DirInfo.line_no = ompt_user_source_info.line_no;
-    DirInfo.end_line_no = ompt_user_source_info.end_line_no;
-    DirInfo.func_line_no = ompt_user_source_info.func_line_no;
-    DirInfo.func_end_line_no = ompt_user_source_info.func_end_line_no;
+    TriggerInfo.src_file = ompt_user_source_info.src_file;
+    TriggerInfo.func_name = ompt_user_source_info.func_name;
+    TriggerInfo.line_no = ompt_user_source_info.line_no;
+    TriggerInfo.end_line_no = ompt_user_source_info.end_line_no;
+    TriggerInfo.func_line_no = ompt_user_source_info.func_line_no;
+    TriggerInfo.func_end_line_no = ompt_user_source_info.func_end_line_no;
   }
-  return &DirInfo;
+  return &TriggerInfo;
 }
 
 OMPT_API_ROUTINE const char *ompt_get_data_expression(void) {

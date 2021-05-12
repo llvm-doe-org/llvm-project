@@ -59,7 +59,7 @@
                                             \
     macro(ompt_get_target_info)             \
     macro(ompt_get_num_devices)             \
-    macro(ompt_get_directive_info)          \
+    macro(ompt_get_trigger_info)            \
     macro(ompt_get_data_expression)
 
 #define FOREACH_OMPT_STATE(macro)                                                                \
@@ -641,18 +641,18 @@ typedef int (*ompt_get_num_devices_t) (void);
 
 typedef void (*ompt_finalize_tool_t) (void);
 
-typedef enum ompt_directive_kind_t {
-  ompt_directive_unknown = 0,
-  ompt_directive_target_update,
-  ompt_directive_target_enter_data,
-  ompt_directive_target_exit_data,
-  ompt_directive_target_data,
-  ompt_directive_target_teams,
-  ompt_directive_runtime_api,
-} ompt_directive_kind_t;
+typedef enum ompt_trigger_kind_t {
+  ompt_trigger_unknown = 0,
+  ompt_trigger_target_update,
+  ompt_trigger_target_enter_data,
+  ompt_trigger_target_exit_data,
+  ompt_trigger_target_data,
+  ompt_trigger_target_teams,
+  ompt_trigger_runtime_api,
+} ompt_trigger_kind_t;
 
-typedef struct ompt_directive_info_t {
-  ompt_directive_kind_t kind;
+typedef struct ompt_trigger_info_t {
+  ompt_trigger_kind_t kind;
   int is_explicit_event;
   const char *src_file;
   const char *func_name;
@@ -660,9 +660,9 @@ typedef struct ompt_directive_info_t {
   int end_line_no;
   int func_line_no;
   int func_end_line_no;
-} ompt_directive_info_t;
+} ompt_trigger_info_t;
 
-typedef ompt_directive_info_t *(*ompt_get_directive_info_t) (void);
+typedef ompt_trigger_info_t *(*ompt_get_trigger_info_t) (void);
 typedef const char *(*ompt_get_data_expression_t) (void);
 
 typedef int (*ompt_get_device_num_procs_t) (

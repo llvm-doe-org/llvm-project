@@ -1443,7 +1443,7 @@ static void ompt_dispatch_callback_target(ident_t *loc,
     return;
   if (endpoint == ompt_scope_begin) {
     ompt_set_target_info(omp_get_initial_device());
-    ompt_set_directive_ident(loc);
+    ompt_set_trigger_ident(loc);
   }
   if (ompt_enabled.ompt_callback_target) {
     // FIXME: We don't yet need the task_data, target_id, and codeptr_ra
@@ -1484,7 +1484,7 @@ static void ompt_dispatch_callback_target(ident_t *loc,
   }
   if (endpoint == ompt_scope_end) {
     ompt_clear_target_info();
-    ompt_clear_directive_ident();
+    ompt_clear_trigger_ident();
   }
 }
 #endif

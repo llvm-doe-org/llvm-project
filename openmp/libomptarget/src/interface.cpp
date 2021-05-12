@@ -137,12 +137,12 @@ EXTERN void __tgt_target_data_begin_nowait(int64_t device_id, int32_t arg_num,
 struct OmptIdentRAII {
   OmptIdentRAII(ident_t *Ident) {
 #if OMPT_SUPPORT
-    ompt_set_directive_ident(Ident);
+    ompt_set_trigger_ident(Ident);
 #endif
   }
   ~OmptIdentRAII() {
 #if OMPT_SUPPORT
-    ompt_clear_directive_ident();
+    ompt_clear_trigger_ident();
 #endif
   }
 };

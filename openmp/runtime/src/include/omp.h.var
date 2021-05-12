@@ -248,13 +248,13 @@
     // meaningful than the routine's source info for the purposes of profiling.
     //
     // Specifically, omp_set_source_info sets the source info to be retrieved by
-    // calls to the ompt_get_directive_info entry point.  This source info is
+    // calls to the ompt_get_trigger_info entry point.  This source info is
     // not overwritten by any subsequent OpenMP runtime events, such as those
     // triggered by OpenMP directives or OpenMP Runtime Library routine calls.
-    // omp_clear_source_info clears all source info previously set by any means
-    // (there's no source info stack) and re-enables runtime events to set
-    // source info.  omp_set_source_info and omp_clear_source_info have no
-    // impact on other info retrieved by omp_get_directive_info.
+    // omp_clear_source_info clears all source info previously set by
+    // omp_set_source_info (there's no source info stack) and re-enables runtime
+    // events to set source info.  omp_set_source_info and omp_clear_source_info
+    // have no impact on other info retrieved by omp_get_trigger_info.
     extern void __KAI_KMPC_CONVENTION omp_set_source_info(
         const char *src_file, const char *func_name, int line_no,
         int end_line_no, int func_line_no, int func_end_line_no);

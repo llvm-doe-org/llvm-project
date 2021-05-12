@@ -1441,31 +1441,31 @@ CGOpenMPRuntime::emitUpdateLocation(CodeGenFunction &CGF, SourceLocation Loc,
     const char *FileName = PLoc.getFilename();
     unsigned Line = PLoc.getLine();
     unsigned Column = PLoc.getColumn();
-    int DirKind = 0;
+    int TriggerKind = 0;
     unsigned EndLine = 0;
     if (D) {
       EndLine = SM.getPresumedLoc(D->getConstructRange().getEnd()).getLine();
       switch (D->getDirectiveKind()) {
-      // TODO: These values come from enum ompt_directive_kind_t in
+      // TODO: These values come from enum ompt_trigger_kind_t in
       // openmp/runtime/src/include/omp-tools.h.var.  Find a clean way to ensure
       // these stay in sync.
       case OMPD_target_update:
-        DirKind = 1;
+        TriggerKind = 1;
         break;
       case OMPD_target_enter_data:
-        DirKind = 2;
+        TriggerKind = 2;
         break;
       case OMPD_target_exit_data:
-        DirKind = 3;
+        TriggerKind = 3;
         break;
       case OMPD_target_data:
-        DirKind = 4;
+        TriggerKind = 4;
         break;
       case OMPD_target_teams:
-        DirKind = 5;
+        TriggerKind = 5;
         break;
       default:
-        DirKind = 0;
+        TriggerKind = 0;
         break;
       }
     } else {
@@ -1482,7 +1482,7 @@ CGOpenMPRuntime::emitUpdateLocation(CodeGenFunction &CGF, SourceLocation Loc,
     }
     SrcLocStr = OMPBuilder.getOrCreateSrcLocStr(FunctionName.c_str(), FileName,
                                                 Line, Column, EndLine, FuncLine,
-                                                FuncEndLine, DirKind);
+                                                FuncEndLine, TriggerKind);
   }
   unsigned Reserved2Flags = getDefaultLocationReserved2Flags();
   return OMPBuilder.getOrCreateIdent(SrcLocStr, llvm::omp::IdentFlag(Flags),

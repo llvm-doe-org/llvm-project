@@ -248,7 +248,7 @@ Constant *OpenMPIRBuilder::getOrCreateSrcLocStr(StringRef LocStr) {
 Constant *OpenMPIRBuilder::getOrCreateSrcLocStr(
     StringRef FunctionName, StringRef FileName, unsigned Line, unsigned Column,
     unsigned EndLine, unsigned FuncLine, unsigned FuncEndLine,
-    unsigned DirKind) {
+    unsigned TriggerKind) {
   SmallString<128> Buffer;
   Buffer.push_back(';');
   Buffer.append(FileName);
@@ -264,7 +264,7 @@ Constant *OpenMPIRBuilder::getOrCreateSrcLocStr(
   // OpenACC Profiling Interface support is upstreamed, revisit this decision.
   // See the related todo in CGOpenMPRuntime::emitUpdateLocation, which calls
   // OpenMPIRBuilder::getOrCreateSrcLocStr.
-  if (EndLine || FuncLine || FuncEndLine || DirKind) {
+  if (EndLine || FuncLine || FuncEndLine || TriggerKind) {
     Buffer.push_back(';');
     Buffer.append(std::to_string(EndLine));
     Buffer.push_back(';');
@@ -272,7 +272,7 @@ Constant *OpenMPIRBuilder::getOrCreateSrcLocStr(
     Buffer.push_back(';');
     Buffer.append(std::to_string(FuncEndLine));
     Buffer.push_back(';');
-    Buffer.append(std::to_string(DirKind));
+    Buffer.append(std::to_string(TriggerKind));
   }
   Buffer.push_back(';');
   Buffer.push_back(';');
