@@ -42,8 +42,9 @@
 // CHECK:         }
 func @add_ddd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_ddd
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s: f32):
         %0 = addf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -76,8 +77,9 @@ func @add_ddd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @mul_ddd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_ddd
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = mulf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -157,8 +159,9 @@ func @mul_ddd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @add_dds(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_dds
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = addf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -199,8 +202,9 @@ func @add_dds(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @mul_dds(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_dds
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = mulf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -284,8 +288,9 @@ func @mul_dds(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @add_dsd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_dsd
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = addf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -326,8 +331,9 @@ func @add_dsd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @mul_dsd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_dsd
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = mulf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -437,8 +443,9 @@ func @mul_dsd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @add_dss(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_dss
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = addf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -482,8 +489,9 @@ func @add_dss(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @mul_dss(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_dss
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = mulf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -572,8 +580,9 @@ func @mul_dss(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @add_sdd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_sdd
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = addf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -615,8 +624,9 @@ func @add_sdd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @mul_sdd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_sdd
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = mulf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -731,8 +741,9 @@ func @mul_sdd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @add_sds(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_sds
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = addf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -777,8 +788,9 @@ func @add_sds(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @mul_sds(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_sds
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = mulf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -897,8 +909,9 @@ func @mul_sds(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @add_ssd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_ssd
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = addf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -943,8 +956,9 @@ func @add_ssd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @mul_ssd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_ssd
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = mulf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -1089,8 +1103,9 @@ func @mul_ssd(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @add_sss(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_sss
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = addf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -1138,8 +1153,9 @@ func @add_sss(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:         }
 func @mul_sss(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<32x16x8xf32> {
   %0 = linalg.generic #trait_sss
-    ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>) {
-      ^bb(%a: f32, %b: f32):
+     ins(%arga, %argb: tensor<32x16x8xf32>, tensor<32x16x8xf32>)
+    outs(%arga : tensor<32x16x8xf32>) {
+      ^bb(%a: f32, %b: f32, %s : f32):
         %0 = mulf %a, %b  : f32
         linalg.yield %0 : f32
   } -> tensor<32x16x8xf32>
@@ -1160,7 +1176,7 @@ func @mul_sss(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
     [ "D", "D" ]        // A
   ],
   iterator_types = ["parallel", "parallel", "reduction", "reduction"],
-  doc = "A(i,j) = SUM_k,l B(i,k,l) * C(k,j) * D(l,j)"
+  doc = "A(i,j) += SUM_k,l B(i,k,l) * C(k,j) * D(l,j)"
 }
 
 // CHECK-LABEL:   func @kernel_3d(
@@ -1192,15 +1208,15 @@ func @mul_sss(%arga: tensor<32x16x8xf32>, %argb: tensor<32x16x8xf32>) -> tensor<
 // CHECK:               %[[VAL_25:.*]] = load %[[VAL_7]]{{\[}}%[[VAL_24]]] : memref<?xindex>
 // CHECK:               scf.for %[[VAL_26:.*]] = %[[VAL_23]] to %[[VAL_25]] step %[[VAL_6]] {
 // CHECK:                 %[[VAL_27:.*]] = load %[[VAL_8]]{{\[}}%[[VAL_26]]] : memref<?xindex>
-// CHECK:                 scf.for %[[VAL_28:.*]] = %[[VAL_5]] to %[[VAL_17]] step %[[VAL_6]] {
-// CHECK:                   %[[VAL_29:.*]] = load %[[VAL_9]]{{\[}}%[[VAL_26]]] : memref<?xf32>
-// CHECK:                   %[[VAL_30:.*]] = load %[[VAL_12]]{{\[}}%[[VAL_20]], %[[VAL_28]]] : memref<?x?xf32>
-// CHECK:                   %[[VAL_31:.*]] = mulf %[[VAL_29]], %[[VAL_30]] : f32
-// CHECK:                   %[[VAL_32:.*]] = load %[[VAL_15]]{{\[}}%[[VAL_27]], %[[VAL_28]]] : memref<?x?xf32>
+// CHECK:                 %[[VAL_28:.*]] = load %[[VAL_9]]{{\[}}%[[VAL_26]]] : memref<?xf32>
+// CHECK:                 scf.for %[[VAL_29:.*]] = %[[VAL_5]] to %[[VAL_17]] step %[[VAL_6]] {
+// CHECK:                   %[[VAL_30:.*]] = load %[[VAL_12]]{{\[}}%[[VAL_20]], %[[VAL_29]]] : memref<?x?xf32>
+// CHECK:                   %[[VAL_31:.*]] = mulf %[[VAL_28]], %[[VAL_30]] : f32
+// CHECK:                   %[[VAL_32:.*]] = load %[[VAL_15]]{{\[}}%[[VAL_27]], %[[VAL_29]]] : memref<?x?xf32>
 // CHECK:                   %[[VAL_33:.*]] = mulf %[[VAL_31]], %[[VAL_32]] : f32
-// CHECK:                   %[[VAL_34:.*]] = load %[[VAL_18]]{{\[}}%[[VAL_19]], %[[VAL_28]]] : memref<?x?xf32>
+// CHECK:                   %[[VAL_34:.*]] = load %[[VAL_18]]{{\[}}%[[VAL_19]], %[[VAL_29]]] : memref<?x?xf32>
 // CHECK:                   %[[VAL_35:.*]] = addf %[[VAL_33]], %[[VAL_34]] : f32
-// CHECK:                   store %[[VAL_35]], %[[VAL_18]]{{\[}}%[[VAL_19]], %[[VAL_28]]] : memref<?x?xf32>
+// CHECK:                   store %[[VAL_35]], %[[VAL_18]]{{\[}}%[[VAL_19]], %[[VAL_29]]] : memref<?x?xf32>
 // CHECK:                 }
 // CHECK:               }
 // CHECK:             }
@@ -1213,8 +1229,8 @@ func @kernel_3d(%arga: tensor<?x?xf32>,
                 %argc: tensor<?x?xf32>,
 	        %argd: tensor<?x?xf32>) -> tensor<?x?xf32> {
   %0 = linalg.generic #trait_kernel_3d
-      ins(%argb, %argc, %argd : tensor<?x?x?xf32>, tensor<?x?xf32>, tensor<?x?xf32>)
-      init(%arga : tensor<?x?xf32>) {
+       ins(%argb, %argc, %argd : tensor<?x?x?xf32>, tensor<?x?xf32>, tensor<?x?xf32>)
+      outs(%arga : tensor<?x?xf32>) {
     ^bb(%b: f32, %c: f32, %d : f32, %a : f32):
       %0 = mulf %b, %c : f32
       %1 = mulf %0, %d : f32
@@ -1222,4 +1238,184 @@ func @kernel_3d(%arga: tensor<?x?xf32>,
       linalg.yield %2 : f32
   } -> tensor<?x?xf32>
   return %0 : tensor<?x?xf32>
+}
+
+#trait_sum_reduction = {
+  indexing_maps = [
+    affine_map<(i,j,k) -> (i,j,k)>,  // A
+    affine_map<(i,j,k) -> ()>        // x (scalar out)
+  ],
+  sparse = [
+    [ "S", "S", "S" ],  // A
+    [ ]                 // x
+  ],
+  iterator_types = ["reduction", "reduction", "reduction"],
+  doc = "x += SUM_ijk A(i,j,k)"
+}
+
+// CHECK-LABEL:   func @sum_reduction(
+// CHECK-SAME:                        %[[VAL_0:.*]]: tensor<10x20x30xf32>,
+// CHECK-SAME:                        %[[VAL_1:.*]]: tensor<f32>) -> tensor<f32> {
+// CHECK:           %[[VAL_2:.*]] = constant 999 : index
+// CHECK:           %[[VAL_3:.*]] = constant 0 : index
+// CHECK:           %[[VAL_4:.*]] = constant 1 : index
+// CHECK:           %[[VAL_5:.*]] = alloca(%[[VAL_2]]) : memref<?xindex>
+// CHECK:           %[[VAL_6:.*]] = alloca(%[[VAL_2]]) : memref<?xindex>
+// CHECK:           %[[VAL_7:.*]] = alloca(%[[VAL_2]]) : memref<?xindex>
+// CHECK:           %[[VAL_8:.*]] = alloca(%[[VAL_2]]) : memref<?xindex>
+// CHECK:           %[[VAL_9:.*]] = alloca(%[[VAL_2]]) : memref<?xindex>
+// CHECK:           %[[VAL_10:.*]] = alloca(%[[VAL_2]]) : memref<?xindex>
+// CHECK:           %[[VAL_11:.*]] = alloca(%[[VAL_2]]) : memref<?xf32>
+// CHECK:           %[[VAL_12:.*]] = alloca() : memref<f32>
+// CHECK:           %[[VAL_13:.*]] = load %[[VAL_5]]{{\[}}%[[VAL_3]]] : memref<?xindex>
+// CHECK:           %[[VAL_14:.*]] = load %[[VAL_5]]{{\[}}%[[VAL_4]]] : memref<?xindex>
+// CHECK:           scf.for %[[VAL_15:.*]] = %[[VAL_13]] to %[[VAL_14]] step %[[VAL_4]] {
+// CHECK:             %[[VAL_16:.*]] = load %[[VAL_7]]{{\[}}%[[VAL_15]]] : memref<?xindex>
+// CHECK:             %[[VAL_17:.*]] = addi %[[VAL_15]], %[[VAL_4]] : index
+// CHECK:             %[[VAL_18:.*]] = load %[[VAL_7]]{{\[}}%[[VAL_17]]] : memref<?xindex>
+// CHECK:             scf.for %[[VAL_19:.*]] = %[[VAL_16]] to %[[VAL_18]] step %[[VAL_4]] {
+// CHECK:               %[[VAL_20:.*]] = load %[[VAL_9]]{{\[}}%[[VAL_19]]] : memref<?xindex>
+// CHECK:               %[[VAL_21:.*]] = addi %[[VAL_19]], %[[VAL_4]] : index
+// CHECK:               %[[VAL_22:.*]] = load %[[VAL_9]]{{\[}}%[[VAL_21]]] : memref<?xindex>
+// CHECK:               %[[VAL_23:.*]] = load %[[VAL_12]][] : memref<f32>
+// CHECK:               %[[VAL_24:.*]] = scf.for %[[VAL_25:.*]] = %[[VAL_20]] to %[[VAL_22]] step %[[VAL_4]] iter_args(%[[VAL_26:.*]] = %[[VAL_23]]) -> (f32) {
+// CHECK:                 %[[VAL_27:.*]] = load %[[VAL_11]]{{\[}}%[[VAL_25]]] : memref<?xf32>
+// CHECK:                 %[[VAL_28:.*]] = addf %[[VAL_26]], %[[VAL_27]] : f32
+// CHECK:                 scf.yield %[[VAL_28]] : f32
+// CHECK:               }
+// CHECK:               store %[[VAL_29:.*]], %[[VAL_12]][] : memref<f32>
+// CHECK:             }
+// CHECK:           }
+// CHECK:           %[[VAL_30:.*]] = tensor_load %[[VAL_12]] : memref<f32>
+// CHECK:           return %[[VAL_30]] : tensor<f32>
+// CHECK:         }
+func @sum_reduction(%arga: tensor<10x20x30xf32>, %argx: tensor<f32>) -> tensor<f32> {
+  %0 = linalg.generic #trait_sum_reduction
+     ins(%arga : tensor<10x20x30xf32>)
+    outs(%argx : tensor<f32>) {
+      ^bb(%a : f32, %x : f32):
+        %0 = addf %x, %a  : f32
+        linalg.yield %0: f32
+  } -> tensor<f32>
+  return %0 : tensor<f32>
+}
+
+#trait_sum_reduction_inv = {
+  indexing_maps = [
+    affine_map<(i,j,k) -> (i,j,k)>,  // A
+    affine_map<(i,j,k) -> (i)>,      // b
+    affine_map<(i,j,k) -> ()>        // x (scalar out)
+  ],
+  sparse = [
+    [ "D", "D", "D" ], // A
+    [ "D" ],           // b
+    [ ]                // x
+  ],
+  iterator_types = ["reduction", "reduction", "reduction"],
+  doc = "x += SUM_i A(i,j,k) * b(i)"
+}
+
+// CHECK-LABEL:   func @sum_reduction_inv(
+// CHECK-SAME:                            %[[VAL_0:.*]]: tensor<?x?x?xf32>,
+// CHECK-SAME:                            %[[VAL_1:.*]]: tensor<?xf32>,
+// CHECK-SAME:                            %[[VAL_2:.*]]: tensor<f32>) -> tensor<f32> {
+// CHECK:           %[[VAL_3:.*]] = constant 2 : index
+// CHECK:           %[[VAL_4:.*]] = constant 0 : index
+// CHECK:           %[[VAL_5:.*]] = constant 1 : index
+// CHECK:           %[[VAL_6:.*]] = dim %[[VAL_0]], %[[VAL_4]] : tensor<?x?x?xf32>
+// CHECK:           %[[VAL_7:.*]] = dim %[[VAL_0]], %[[VAL_5]] : tensor<?x?x?xf32>
+// CHECK:           %[[VAL_8:.*]] = dim %[[VAL_0]], %[[VAL_3]] : tensor<?x?x?xf32>
+// CHECK:           %[[VAL_9:.*]] = alloca(%[[VAL_6]], %[[VAL_7]], %[[VAL_8]]) : memref<?x?x?xf32>
+// CHECK:           %[[VAL_10:.*]] = dim %[[VAL_1]], %[[VAL_4]] : tensor<?xf32>
+// CHECK:           %[[VAL_11:.*]] = alloca(%[[VAL_10]]) : memref<?xf32>
+// CHECK:           %[[VAL_12:.*]] = alloca() : memref<f32>
+// CHECK:           scf.for %[[VAL_13:.*]] = %[[VAL_4]] to %[[VAL_10]] step %[[VAL_5]] {
+// CHECK:             %[[VAL_14:.*]] = load %[[VAL_11]]{{\[}}%[[VAL_13]]] : memref<?xf32>
+// CHECK:             scf.for %[[VAL_15:.*]] = %[[VAL_4]] to %[[VAL_7]] step %[[VAL_5]] {
+// CHECK:               %[[VAL_16:.*]] = load %[[VAL_12]][] : memref<f32>
+// CHECK:               %[[VAL_17:.*]] = scf.for %[[VAL_18:.*]] = %[[VAL_4]] to %[[VAL_8]] step %[[VAL_5]] iter_args(%[[VAL_19:.*]] = %[[VAL_16]]) -> (f32) {
+// CHECK:                 %[[VAL_20:.*]] = load %[[VAL_9]]{{\[}}%[[VAL_13]], %[[VAL_15]], %[[VAL_18]]] : memref<?x?x?xf32>
+// CHECK:                 %[[VAL_21:.*]] = mulf %[[VAL_20]], %[[VAL_14]] : f32
+// CHECK:                 %[[VAL_22:.*]] = addf %[[VAL_19]], %[[VAL_21]] : f32
+// CHECK:                 scf.yield %[[VAL_22]] : f32
+// CHECK:               }
+// CHECK:               store %[[VAL_23:.*]], %[[VAL_12]][] : memref<f32>
+// CHECK:             }
+// CHECK:           }
+// CHECK:           %[[VAL_24:.*]] = tensor_load %[[VAL_12]] : memref<f32>
+// CHECK:           return %[[VAL_24]] : tensor<f32>
+// CHECK:         }
+func @sum_reduction_inv(%arga: tensor<?x?x?xf32>,
+                        %argb: tensor<?xf32>,
+		        %argx: tensor<f32>) -> tensor<f32> {
+  %0 = linalg.generic #trait_sum_reduction_inv
+    ins(%arga, %argb : tensor<?x?x?xf32>, tensor<?xf32>)
+    outs(%argx : tensor<f32>) {
+      ^bb(%a : f32, %b : f32, %x : f32):
+        %0 = mulf %a, %b  : f32
+        %1 = addf %x, %0  : f32
+        linalg.yield %1: f32
+  } -> tensor<f32>
+  return %0 : tensor<f32>
+}
+
+#trait_invariants = {
+  indexing_maps = [
+    affine_map<(i,j,k) -> (i)>,      // a
+    affine_map<(i,j,k) -> (j)>,      // b
+    affine_map<(i,j,k) -> (k)>,      // c
+    affine_map<(i,j,k) -> (i,j,k)>   // X (out)
+  ],
+  sparse = [
+    [ "D" ],           // a
+    [ "D" ],           // b
+    [ "D" ],           // c
+    [ "D", "D", "D" ]  // X
+  ],
+  iterator_types = ["parallel", "parallel", "parallel"],
+  doc = "X(i,j,k) = a(i) * b(j) * c(k)"
+}
+
+// CHECK-LABEL:   func @invariants(
+// CHECK-SAME:                     %[[VAL_0:.*]]: tensor<10xf32>,
+// CHECK-SAME:                     %[[VAL_1:.*]]: tensor<20xf32>,
+// CHECK-SAME:                     %[[VAL_2:.*]]: tensor<30xf32>,
+// CHECK-SAME:                     %[[SHAPE:.*]]: tensor<10x20x30xf32>) -> tensor<10x20x30xf32> {
+// CHECK:           %[[VAL_3:.*]] = constant 10 : index
+// CHECK:           %[[VAL_4:.*]] = constant 20 : index
+// CHECK:           %[[VAL_5:.*]] = constant 30 : index
+// CHECK:           %[[VAL_6:.*]] = constant 0 : index
+// CHECK:           %[[VAL_7:.*]] = constant 1 : index
+// CHECK:           %[[VAL_8:.*]] = alloca() : memref<10xf32>
+// CHECK:           %[[VAL_9:.*]] = alloca() : memref<20xf32>
+// CHECK:           %[[VAL_10:.*]] = alloca() : memref<30xf32>
+// CHECK:           %[[VAL_11:.*]] = alloca() : memref<10x20x30xf32>
+// CHECK:           scf.for %[[VAL_12:.*]] = %[[VAL_6]] to %[[VAL_3]] step %[[VAL_7]] {
+// CHECK:             %[[VAL_13:.*]] = load %[[VAL_8]]{{\[}}%[[VAL_12]]] : memref<10xf32>
+// CHECK:             scf.for %[[VAL_14:.*]] = %[[VAL_6]] to %[[VAL_4]] step %[[VAL_7]] {
+// CHECK:               %[[VAL_15:.*]] = load %[[VAL_9]]{{\[}}%[[VAL_14]]] : memref<20xf32>
+// CHECK:               scf.for %[[VAL_16:.*]] = %[[VAL_6]] to %[[VAL_5]] step %[[VAL_7]] {
+// CHECK:                 %[[VAL_17:.*]] = mulf %[[VAL_13]], %[[VAL_15]] : f32
+// CHECK:                 %[[VAL_18:.*]] = load %[[VAL_10]]{{\[}}%[[VAL_16]]] : memref<30xf32>
+// CHECK:                 %[[VAL_19:.*]] = mulf %[[VAL_17]], %[[VAL_18]] : f32
+// CHECK:                 store %[[VAL_19]], %[[VAL_11]]{{\[}}%[[VAL_12]], %[[VAL_14]], %[[VAL_16]]] : memref<10x20x30xf32>
+// CHECK:               }
+// CHECK:             }
+// CHECK:           }
+// CHECK:           %[[VAL_20:.*]] = tensor_load %[[VAL_11]] : memref<10x20x30xf32>
+// CHECK:           return %[[VAL_20]] : tensor<10x20x30xf32>
+// CHECK:         }
+func @invariants(%arga: tensor<10xf32>,
+                 %argb: tensor<20xf32>,
+                 %argc: tensor<30xf32>,
+                 %shape : tensor<10x20x30xf32>) -> tensor<10x20x30xf32> {
+  %0 = linalg.generic #trait_invariants
+     ins(%arga, %argb, %argc : tensor<10xf32>, tensor<20xf32>, tensor<30xf32>)
+    outs(%shape : tensor<10x20x30xf32>) {
+      ^bb(%a : f32, %b : f32, %c : f32, %s : f32):
+        %0 = mulf %a, %b  : f32
+        %1 = mulf %0, %c  : f32
+        linalg.yield %1: f32
+  } -> tensor<10x20x30xf32>
+  return %0 : tensor<10x20x30xf32>
 }

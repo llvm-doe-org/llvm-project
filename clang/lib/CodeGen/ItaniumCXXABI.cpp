@@ -486,9 +486,9 @@ public:
                                    CharUnits cookieSize) override;
 };
 
-class iOS64CXXABI : public ARMCXXABI {
+class AppleARM64CXXABI : public ARMCXXABI {
 public:
-  iOS64CXXABI(CodeGen::CodeGenModule &CGM) : ARMCXXABI(CGM) {
+  AppleARM64CXXABI(CodeGen::CodeGenModule &CGM) : ARMCXXABI(CGM) {
     Use32BitVTableOffsetABI = true;
   }
 
@@ -551,8 +551,8 @@ CodeGen::CGCXXABI *CodeGen::CreateItaniumCXXABI(CodeGenModule &CGM) {
   case TargetCXXABI::WatchOS:
     return new ARMCXXABI(CGM);
 
-  case TargetCXXABI::iOS64:
-    return new iOS64CXXABI(CGM);
+  case TargetCXXABI::AppleARM64:
+    return new AppleARM64CXXABI(CGM);
 
   case TargetCXXABI::Fuchsia:
     return new FuchsiaCXXABI(CGM);
@@ -771,7 +771,7 @@ CGCallee ItaniumCXXABI::EmitLoadOfMemberFunctionPointer(
       };
 
       if (CGM.getCodeGenOpts().SanitizeTrap.has(SanitizerKind::CFIMFCall)) {
-        CGF.EmitTrapCheck(CheckResult);
+        CGF.EmitTrapCheck(CheckResult, SanitizerHandler::CFICheckFail);
       } else {
         llvm::Value *AllVtables = llvm::MetadataAsValue::get(
             CGM.getLLVMContext(),
@@ -2331,7 +2331,8 @@ void ItaniumCXXABI::EmitGuardedInit(CodeGenFunction &CGF,
                              CGM.getDataLayout().getABITypeAlignment(guardTy));
     }
   }
-  llvm::PointerType *guardPtrTy = guardTy->getPointerTo();
+  llvm::PointerType *guardPtrTy = guardTy->getPointerTo(
+      CGF.CGM.getDataLayout().getDefaultGlobalsAddressSpace());
 
   // Create the guard variable if we don't already have it (as we
   // might if we're double-emitting this function body).
@@ -3177,7 +3178,7 @@ static bool TypeInfoIsInStandardLibrary(const BuiltinType *Ty) {
 #define SVE_TYPE(Name, Id, SingletonId) \
     case BuiltinType::Id:
 #include "clang/Basic/AArch64SVEACLETypes.def"
-#define PPC_MMA_VECTOR_TYPE(Name, Id, Size) \
+#define PPC_VECTOR_TYPE(Name, Id, Size) \
     case BuiltinType::Id:
 #include "clang/Basic/PPCTypes.def"
     case BuiltinType::ShortAccum:

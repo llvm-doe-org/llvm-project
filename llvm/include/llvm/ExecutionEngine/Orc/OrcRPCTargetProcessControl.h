@@ -94,7 +94,7 @@ public:
                  << " bytes to " << ((Prot & orcrpctpc::WPF_Read) ? 'R' : '-')
                  << ((Prot & orcrpctpc::WPF_Write) ? 'W' : '-')
                  << ((Prot & orcrpctpc::WPF_Exec) ? 'X' : '-')
-                 << " segment: local " << (void *)B.Buffer.data()
+                 << " segment: local " << (const void *)B.Buffer.data()
                  << " -> target " << formatv("{0:x16}", B.Address) << "\n";
         }
       });
@@ -148,7 +148,8 @@ public:
   OrcRPCTPCJITLinkMemoryManager(OrcRPCTPCImplT &Parent) : Parent(Parent) {}
 
   Expected<std::unique_ptr<Allocation>>
-  allocate(const SegmentsRequestMap &Request) override {
+  allocate(const jitlink::JITLinkDylib *JD,
+           const SegmentsRequestMap &Request) override {
     orcrpctpc::ReserveMemRequest RMR;
     HostAllocMap HostAllocs;
 

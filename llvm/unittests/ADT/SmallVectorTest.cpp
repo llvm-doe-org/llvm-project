@@ -341,6 +341,31 @@ TYPED_TEST(SmallVectorTest, ResizeFillTest) {
   this->assertValuesInOrder(this->theVector, 3u, 77, 77, 77);
 }
 
+TEST(SmallVectorTest, ResizeForOverwrite) {
+  {
+    // Heap allocated storage.
+    SmallVector<unsigned, 0> V;
+    V.push_back(5U);
+    V.pop_back();
+    V.resize_for_overwrite(V.size() + 1U);
+    EXPECT_EQ(5U, V.back());
+    V.pop_back();
+    V.resize(V.size() + 1);
+    EXPECT_EQ(0U, V.back());
+  }
+  {
+    // Inline storage.
+    SmallVector<unsigned, 2> V;
+    V.push_back(5U);
+    V.pop_back();
+    V.resize_for_overwrite(V.size() + 1U);
+    EXPECT_EQ(5U, V.back());
+    V.pop_back();
+    V.resize(V.size() + 1);
+    EXPECT_EQ(0U, V.back());
+  }
+}
+
 // Overflow past fixed size.
 TYPED_TEST(SmallVectorTest, OverflowTest) {
   SCOPED_TRACE("OverflowTest");
@@ -983,6 +1008,22 @@ TEST(SmallVectorTest, EmplaceBack) {
   }
 }
 
+TEST(SmallVectorTest, DefaultInlinedElements) {
+  SmallVector<int> V;
+  EXPECT_TRUE(V.empty());
+  V.push_back(7);
+  EXPECT_EQ(V[0], 7);
+
+  // Check that at least a couple layers of nested SmallVector<T>'s are allowed
+  // by the default inline elements policy. This pattern happens in practice
+  // with some frequency, and it seems fairly harmless even though each layer of
+  // SmallVector's will grow the total sizeof by a vector header beyond the
+  // "preferred" maximum sizeof.
+  SmallVector<SmallVector<SmallVector<int>>> NestedV;
+  NestedV.emplace_back().emplace_back().emplace_back(42);
+  EXPECT_EQ(NestedV[0][0][0], 42);
+}
+
 TEST(SmallVectorTest, InitializerList) {
   SmallVector<int, 2> V1 = {};
   EXPECT_TRUE(V1.empty());
@@ -1051,9 +1092,13 @@ TYPED_TEST(SmallVectorReferenceInvalidationTest, PushBackMoved) {
 TYPED_TEST(SmallVectorReferenceInvalidationTest, Resize) {
   auto &V = this->V;
   (void)V;
+  int N = this->NumBuiltinElts(V);
 #if !defined(NDEBUG) && GTEST_HAS_DEATH_TEST
-  EXPECT_DEATH(V.resize(2, V.back()), this->AssertionMessage);
+  EXPECT_DEATH(V.resize(N + 1, V.back()), this->AssertionMessage);
 #endif
+
+  // No assertion when shrinking, since the parameter isn't accessed.
+  V.resize(N - 1, V.back());
 }
 
 TYPED_TEST(SmallVectorReferenceInvalidationTest, Append) {

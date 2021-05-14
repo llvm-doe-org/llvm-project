@@ -19,7 +19,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinDialect.h"
+#include "mlir/IR/BuiltinOps.h"
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -186,7 +186,7 @@ void VulkanLaunchFuncToVulkanCallsPass::collectSPIRVAttributes(
   // Check that `kSPIRVBinary` and `kSPIRVEntryPoint` are present in attributes
   // for the given vulkan launch call.
   auto spirvBlobAttr =
-      vulkanLaunchCallOp.getAttrOfType<StringAttr>(kSPIRVBlobAttrName);
+      vulkanLaunchCallOp->getAttrOfType<StringAttr>(kSPIRVBlobAttrName);
   if (!spirvBlobAttr) {
     vulkanLaunchCallOp.emitError()
         << "missing " << kSPIRVBlobAttrName << " attribute";
@@ -194,7 +194,7 @@ void VulkanLaunchFuncToVulkanCallsPass::collectSPIRVAttributes(
   }
 
   auto spirvEntryPointNameAttr =
-      vulkanLaunchCallOp.getAttrOfType<StringAttr>(kSPIRVEntryPointAttrName);
+      vulkanLaunchCallOp->getAttrOfType<StringAttr>(kSPIRVEntryPointAttrName);
   if (!spirvEntryPointNameAttr) {
     vulkanLaunchCallOp.emitError()
         << "missing " << kSPIRVEntryPointAttrName << " attribute";

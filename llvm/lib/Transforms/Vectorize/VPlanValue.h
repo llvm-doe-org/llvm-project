@@ -35,6 +35,8 @@ class VPDef;
 class VPSlotTracker;
 class VPUser;
 class VPRecipeBase;
+class VPPredInstPHIRecipe;
+class VPWidenMemoryInstructionRecipe;
 
 // This is the base class of the VPlan Def/Use graph, used for modeling the data
 // flow into, within and out of the VPlan. VPValues can stand for live-ins
@@ -43,11 +45,14 @@ class VPRecipeBase;
 class VPValue {
   friend class VPBuilder;
   friend class VPDef;
+  friend class VPInstruction;
   friend struct VPlanTransforms;
   friend class VPBasicBlock;
   friend class VPInterleavedAccessInfo;
   friend class VPSlotTracker;
   friend class VPRecipeBase;
+  friend class VPPredInstPHIRecipe;
+  friend class VPWidenMemoryInstructionRecipe;
 
   const unsigned char SubclassID; ///< Subclass identifier (for isa/dyn_cast).
 
@@ -70,10 +75,6 @@ protected:
   // for multiple underlying IRs (Polly?) by providing a new VPlan front-end,
   // back-end and analysis information for the new IR.
 
-  /// Return the underlying Value attached to this VPValue.
-  Value *getUnderlyingValue() { return UnderlyingVal; }
-  const Value *getUnderlyingValue() const { return UnderlyingVal; }
-
   // Set \p Val as the underlying Value of this VPValue.
   void setUnderlyingValue(Value *Val) {
     assert(!UnderlyingVal && "Underlying Value is already set.");
@@ -81,17 +82,24 @@ protected:
   }
 
 public:
+  /// Return the underlying Value attached to this VPValue.
+  Value *getUnderlyingValue() { return UnderlyingVal; }
+  const Value *getUnderlyingValue() const { return UnderlyingVal; }
+
   /// An enumeration for keeping track of the concrete subclass of VPValue that
   /// are actually instantiated. Values of this enumeration are kept in the
   /// SubclassID field of the VPValue objects. They are used for concrete
   /// type identification.
   enum {
     VPValueSC,
-    VPInstructionSC,
-    VPMemoryInstructionSC,
+    VPVInstructionSC,
+    VPVMemoryInstructionSC,
+    VPVReductionSC,
+    VPVReplicateSC,
+    VPVWidenSC,
     VPVWidenCallSC,
+    VPVWidenGEPSC,
     VPVWidenSelectSC,
-    VPVWidenGEPSC
   };
 
   VPValue(Value *UV = nullptr, VPDef *Def = nullptr)
@@ -229,7 +237,7 @@ public:
   }
 
   /// Method to support type inquiry through isa, cast, and dyn_cast.
-  static inline bool classof(const VPRecipeBase *Recipe);
+  static inline bool classof(const VPDef *Recipe);
 };
 
 /// This class augments a recipe with a set of VPValues defined by the recipe.
@@ -239,6 +247,9 @@ public:
 /// from VPDef before VPValue.
 class VPDef {
   friend class VPValue;
+
+  /// Subclass identifier (for isa/dyn_cast).
+  const unsigned char SubclassID;
 
   /// The VPValues defined by this VPDef.
   TinyPtrVector<VPValue *> DefinedValues;
@@ -255,13 +266,37 @@ class VPDef {
   void removeDefinedValue(VPValue *V) {
     assert(V->getDef() == this &&
            "can only remove VPValue linked with this VPDef");
-    assert(find(DefinedValues, V) != DefinedValues.end() &&
+    assert(is_contained(DefinedValues, V) &&
            "VPValue to remove must be in DefinedValues");
     erase_value(DefinedValues, V);
     V->Def = nullptr;
   }
 
 public:
+  /// An enumeration for keeping track of the concrete subclass of VPRecipeBase
+  /// that is actually instantiated. Values of this enumeration are kept in the
+  /// SubclassID field of the VPRecipeBase objects. They are used for concrete
+  /// type identification.
+  using VPRecipeTy = enum {
+    VPBlendSC,
+    VPBranchOnMaskSC,
+    VPInstructionSC,
+    VPInterleaveSC,
+    VPPredInstPHISC,
+    VPReductionSC,
+    VPReplicateSC,
+    VPWidenCallSC,
+    VPWidenCanonicalIVSC,
+    VPWidenGEPSC,
+    VPWidenIntOrFpInductionSC,
+    VPWidenMemoryInstructionSC,
+    VPWidenPHISC,
+    VPWidenSC,
+    VPWidenSelectSC
+  };
+
+  VPDef(const unsigned char SC) : SubclassID(SC) {}
+
   virtual ~VPDef() {
     for (VPValue *D : make_early_inc_range(DefinedValues)) {
       assert(D->Def == this &&
@@ -288,6 +323,11 @@ public:
 
   /// Returns the number of values defined by the VPDef.
   unsigned getNumDefinedValues() const { return DefinedValues.size(); }
+
+  /// \return an ID for the concrete type of this object.
+  /// This is used to implement the classof checks. This should not be used
+  /// for any other purpose, as the values may change as LLVM evolves.
+  unsigned getVPDefID() const { return SubclassID; }
 };
 
 class VPlan;

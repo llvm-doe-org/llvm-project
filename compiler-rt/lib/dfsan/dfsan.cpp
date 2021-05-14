@@ -41,8 +41,15 @@ static dfsan_label_info __dfsan_label_info[kNumLabels];
 
 Flags __dfsan::flags_data;
 
-SANITIZER_INTERFACE_ATTRIBUTE THREADLOCAL dfsan_label __dfsan_retval_tls;
-SANITIZER_INTERFACE_ATTRIBUTE THREADLOCAL dfsan_label __dfsan_arg_tls[64];
+// The size of TLS variables. These constants must be kept in sync with the ones
+// in DataFlowSanitizer.cpp.
+static const int kDFsanArgTlsSize = 800;
+static const int kDFsanRetvalTlsSize = 800;
+
+SANITIZER_INTERFACE_ATTRIBUTE THREADLOCAL u64
+    __dfsan_retval_tls[kDFsanRetvalTlsSize / sizeof(u64)];
+SANITIZER_INTERFACE_ATTRIBUTE THREADLOCAL u64
+    __dfsan_arg_tls[kDFsanArgTlsSize / sizeof(u64)];
 
 SANITIZER_INTERFACE_ATTRIBUTE uptr __dfsan_shadow_ptr_mask;
 
@@ -144,8 +151,7 @@ int __dfsan::vmaSize;
 #endif
 
 static uptr UnusedAddr() {
-  return MappingArchImpl<MAPPING_UNION_TABLE_ADDR>()
-         + sizeof(dfsan_union_table_t);
+  return UnionTableAddr() + sizeof(dfsan_union_table_t);
 }
 
 static atomic_dfsan_label *union_table(dfsan_label l1, dfsan_label l2) {

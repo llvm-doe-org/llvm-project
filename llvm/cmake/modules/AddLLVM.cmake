@@ -228,14 +228,6 @@ function(add_link_opts target_name)
                    LINK_FLAGS " -Wl,-O3")
     endif()
 
-    if(LLVM_LINKER_IS_GOLD)
-      # With gold gc-sections is always safe.
-      set_property(TARGET ${target_name} APPEND_STRING PROPERTY
-                   LINK_FLAGS " -Wl,--gc-sections")
-      # Note that there is a bug with -Wl,--icf=safe so it is not safe
-      # to enable. See https://sourceware.org/bugzilla/show_bug.cgi?id=17704.
-    endif()
-
     if(NOT LLVM_NO_DEAD_STRIP)
       if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
         # ld64's implementation of -dead_strip breaks tools that use plugins.
@@ -250,12 +242,7 @@ function(add_link_opts target_name)
           set_property(TARGET ${target_name} APPEND_STRING PROPERTY
                        LINK_FLAGS " -Wl,-z,discard-unused=sections")
         endif()
-      elseif(NOT WIN32 AND NOT LLVM_LINKER_IS_GOLD AND
-             NOT CMAKE_SYSTEM_NAME MATCHES "OpenBSD|AIX|OS390")
-        # Object files are compiled with -ffunction-data-sections.
-        # Versions of bfd ld < 2.23.1 have a bug in --gc-sections that breaks
-        # tools that use plugins. Always pass --gc-sections once we require
-        # a newer linker.
+      elseif(NOT WIN32 AND NOT CMAKE_SYSTEM_NAME MATCHES "OpenBSD|AIX|OS390")
         # TODO Revisit this later on z/OS.
         set_property(TARGET ${target_name} APPEND_STRING PROPERTY
                      LINK_FLAGS " -Wl,--gc-sections")
@@ -2148,6 +2135,13 @@ function(setup_dependency_debugging name)
   set_target_properties(${name} PROPERTIES RULE_LAUNCH_COMPILE ${sandbox_command})
 endfunction()
 
+# If the sources at the given `path` are under version control, set `out_var`
+# to the the path of a file which will be modified when the VCS revision
+# changes, attempting to create that file if it does not exist; if no such
+# file exists and one cannot be created, instead set `out_var` to the
+# empty string.
+#
+# If the sources are not under version control, do not define `out_var`.
 function(find_first_existing_vc_file path out_var)
   if(NOT EXISTS "${path}")
     return()
@@ -2169,6 +2163,7 @@ function(find_first_existing_vc_file path out_var)
           RESULT_VARIABLE touch_head_result
           ERROR_QUIET)
         if (NOT touch_head_result EQUAL 0)
+          set(${out_var} "" PARENT_SCOPE)
           return()
         endif()
       endif()

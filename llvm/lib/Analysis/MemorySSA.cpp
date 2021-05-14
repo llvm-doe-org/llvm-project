@@ -362,8 +362,10 @@ static bool lifetimeEndsAt(MemoryDef *MD, const MemoryLocation &Loc,
   Instruction *Inst = MD->getMemoryInst();
   if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(Inst)) {
     switch (II->getIntrinsicID()) {
-    case Intrinsic::lifetime_end:
-      return AA.alias(MemoryLocation(II->getArgOperand(1)), Loc) == MustAlias;
+    case Intrinsic::lifetime_end: {
+      MemoryLocation ArgLoc = MemoryLocation::getAfter(II->getArgOperand(1));
+      return AA.alias(ArgLoc, Loc) == MustAlias;
+    }
     default:
       return false;
     }
@@ -376,9 +378,10 @@ static bool isUseTriviallyOptimizableToLiveOnEntry(AliasAnalysisType &AA,
                                                    const Instruction *I) {
   // If the memory can't be changed, then loads of the memory can't be
   // clobbered.
-  return isa<LoadInst>(I) && (I->hasMetadata(LLVMContext::MD_invariant_load) ||
-                              AA.pointsToConstantMemory(MemoryLocation(
-                                  cast<LoadInst>(I)->getPointerOperand())));
+  if (auto *LI = dyn_cast<LoadInst>(I))
+    return I->hasMetadata(LLVMContext::MD_invariant_load) ||
+           AA.pointsToConstantMemory(MemoryLocation::get(LI));
+  return false;
 }
 
 /// Verifies that `Start` is clobbered by `ClobberAt`, and that nothing
@@ -2577,4 +2580,20 @@ void MemoryDef::deleteMe(DerivedUser *Self) {
 
 void MemoryUse::deleteMe(DerivedUser *Self) {
   delete static_cast<MemoryUse *>(Self);
+}
+
+bool upward_defs_iterator::IsGuaranteedLoopInvariant(Value *Ptr) const {
+  auto IsGuaranteedLoopInvariantBase = [](Value *Ptr) {
+    Ptr = Ptr->stripPointerCasts();
+    if (!isa<Instruction>(Ptr))
+      return true;
+    return isa<AllocaInst>(Ptr);
+  };
+
+  Ptr = Ptr->stripPointerCasts();
+  if (auto *GEP = dyn_cast<GEPOperator>(Ptr)) {
+    return IsGuaranteedLoopInvariantBase(GEP->getPointerOperand()) &&
+           GEP->hasAllConstantIndices();
+  }
+  return IsGuaranteedLoopInvariantBase(Ptr);
 }

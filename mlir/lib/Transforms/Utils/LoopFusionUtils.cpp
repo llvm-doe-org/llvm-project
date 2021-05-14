@@ -21,7 +21,7 @@
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinDialect.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/Transforms/LoopUtils.h"
 #include "llvm/ADT/DenseMap.h"
@@ -137,7 +137,7 @@ static Operation *getLastDependentOpInRange(Operation *opA, Operation *opB) {
 static Operation *getFusedLoopNestInsertionPoint(AffineForOp srcForOp,
                                                  AffineForOp dstForOp) {
   bool isSrcForOpBeforeDstForOp =
-      srcForOp.getOperation()->isBeforeInBlock(dstForOp.getOperation());
+      srcForOp->isBeforeInBlock(dstForOp.getOperation());
   auto forOpA = isSrcForOpBeforeDstForOp ? srcForOp : dstForOp;
   auto forOpB = isSrcForOpBeforeDstForOp ? dstForOp : srcForOp;
 
@@ -270,8 +270,8 @@ FusionResult mlir::canFuseLoops(AffineForOp srcForOp, AffineForOp dstForOp,
     return FusionResult::FailPrecondition;
   }
   // Return 'failure' if 'srcForOp' and 'dstForOp' are not in the same block.
-  auto *block = srcForOp.getOperation()->getBlock();
-  if (block != dstForOp.getOperation()->getBlock()) {
+  auto *block = srcForOp->getBlock();
+  if (block != dstForOp->getBlock()) {
     LLVM_DEBUG(llvm::dbgs() << "Cannot fuse loop nests in different blocks\n");
     return FusionResult::FailPrecondition;
   }
@@ -285,7 +285,7 @@ FusionResult mlir::canFuseLoops(AffineForOp srcForOp, AffineForOp dstForOp,
 
   // Check if 'srcForOp' precedes 'dstForOp' in 'block'.
   bool isSrcForOpBeforeDstForOp =
-      srcForOp.getOperation()->isBeforeInBlock(dstForOp.getOperation());
+      srcForOp->isBeforeInBlock(dstForOp.getOperation());
   // 'forOpA' executes before 'forOpB' in 'block'.
   auto forOpA = isSrcForOpBeforeDstForOp ? srcForOp : dstForOp;
   auto forOpB = isSrcForOpBeforeDstForOp ? dstForOp : srcForOp;
@@ -402,7 +402,7 @@ void mlir::fuseLoops(AffineForOp srcForOp, AffineForOp dstForOp,
 bool mlir::getLoopNestStats(AffineForOp forOpRoot, LoopNestStats *stats) {
   auto walkResult = forOpRoot.walk([&](AffineForOp forOp) {
     auto *childForOp = forOp.getOperation();
-    auto *parentForOp = forOp.getParentOp();
+    auto *parentForOp = forOp->getParentOp();
     if (!llvm::isa<FuncOp>(parentForOp)) {
       if (!isa<AffineForOp>(parentForOp)) {
         LLVM_DEBUG(llvm::dbgs() << "Expected parent AffineForOp");

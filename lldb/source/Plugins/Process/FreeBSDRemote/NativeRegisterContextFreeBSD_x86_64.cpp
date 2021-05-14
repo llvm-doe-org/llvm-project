@@ -29,9 +29,6 @@
 using namespace lldb_private;
 using namespace lldb_private::process_freebsd;
 
-// Private namespace.
-
-namespace {
 // x86 64-bit general purpose registers.
 static const uint32_t g_gpr_regnums_x86_64[] = {
     lldb_rax_x86_64,    lldb_rbx_x86_64,    lldb_rcx_x86_64, lldb_rdx_x86_64,
@@ -138,7 +135,7 @@ static_assert((sizeof(g_dbr_regnums_x86_64) / sizeof(g_dbr_regnums_x86_64[0])) -
               "g_dbr_regnums_x86_64 has wrong number of register infos");
 
 // x86 32-bit general purpose registers.
-const uint32_t g_gpr_regnums_i386[] = {
+static const uint32_t g_gpr_regnums_i386[] = {
     lldb_eax_i386,      lldb_ebx_i386,    lldb_ecx_i386, lldb_edx_i386,
     lldb_edi_i386,      lldb_esi_i386,    lldb_ebp_i386, lldb_esp_i386,
     lldb_eip_i386,      lldb_eflags_i386, lldb_cs_i386,  lldb_fs_i386,
@@ -155,7 +152,7 @@ static_assert((sizeof(g_gpr_regnums_i386) / sizeof(g_gpr_regnums_i386[0])) -
               "g_gpr_regnums_i386 has wrong number of register infos");
 
 // x86 32-bit floating point registers.
-const uint32_t g_fpu_regnums_i386[] = {
+static const uint32_t g_fpu_regnums_i386[] = {
     lldb_fctrl_i386,    lldb_fstat_i386,     lldb_ftag_i386,  lldb_fop_i386,
     lldb_fiseg_i386,    lldb_fioff_i386,     lldb_foseg_i386, lldb_fooff_i386,
     lldb_mxcsr_i386,    lldb_mxcsrmask_i386, lldb_st0_i386,   lldb_st1_i386,
@@ -215,9 +212,9 @@ static const RegisterSet g_reg_sets_i386[k_num_register_sets] = {
     {"Floating Point Registers", "fpu", k_num_fpr_registers_i386,
      g_fpu_regnums_i386},
     {"Debug Registers", "dbr", k_num_dbr_registers_i386, g_dbr_regnums_i386},
-    {"Extended AVX registers", "avx", k_num_avx_registers_i386,
+    {"Advanced Vector Extensions", "avx", k_num_avx_registers_i386,
      g_avx_regnums_i386},
-    {"Extended MPX registers", "mpx", k_num_mpx_registers_i386,
+    {"Memory Protection Extensions", "mpx", k_num_mpx_registers_i386,
      g_mpx_regnums_i386},
 };
 
@@ -229,14 +226,13 @@ static const RegisterSet g_reg_sets_x86_64[k_num_register_sets] = {
      g_fpu_regnums_x86_64},
     {"Debug Registers", "dbr", k_num_dbr_registers_x86_64,
      g_dbr_regnums_x86_64},
-    {"Extended AVX registers", "avx", k_num_avx_registers_x86_64,
+    {"Advanced Vector Extensions", "avx", k_num_avx_registers_x86_64,
      g_avx_regnums_x86_64},
-    {"Extended MPX registers", "mpx", k_num_mpx_registers_x86_64,
+    {"Memory Protection Extensions", "mpx", k_num_mpx_registers_x86_64,
      g_mpx_regnums_x86_64},
 };
 
 #define REG_CONTEXT_SIZE (GetRegisterInfoInterface().GetGPRSize())
-} // namespace
 
 NativeRegisterContextFreeBSD *
 NativeRegisterContextFreeBSD::CreateHostNativeRegisterContextFreeBSD(
@@ -288,13 +284,7 @@ NativeRegisterContextFreeBSD_x86_64::NativeRegisterContextFreeBSD_x86_64(
 }
 
 uint32_t NativeRegisterContextFreeBSD_x86_64::GetRegisterSetCount() const {
-  uint32_t sets = 0;
-  for (uint32_t set_index = 0; set_index < k_num_register_sets; ++set_index) {
-    if (GetSetForNativeRegNum(set_index))
-      ++sets;
-  }
-
-  return sets;
+  return k_num_register_sets;
 }
 
 const RegisterSet *
@@ -309,8 +299,9 @@ NativeRegisterContextFreeBSD_x86_64::GetRegisterSet(uint32_t set_index) const {
   }
 }
 
-llvm::Optional<enum NativeRegisterContextFreeBSD_x86_64::RegSetKind>
-NativeRegisterContextFreeBSD_x86_64::GetSetForNativeRegNum(int reg_num) const {
+llvm::Optional<NativeRegisterContextFreeBSD_x86_64::RegSetKind>
+NativeRegisterContextFreeBSD_x86_64::GetSetForNativeRegNum(
+    uint32_t reg_num) const {
   switch (GetRegisterInfoInterface().GetTargetArchitecture().GetMachine()) {
   case llvm::Triple::x86:
     if (reg_num >= k_first_gpr_i386 && reg_num <= k_last_gpr_i386)
@@ -347,7 +338,7 @@ NativeRegisterContextFreeBSD_x86_64::GetSetForNativeRegNum(int reg_num) const {
   llvm_unreachable("Register does not belong to any register set");
 }
 
-Status NativeRegisterContextFreeBSD_x86_64::ReadRegisterSet(uint32_t set) {
+Status NativeRegisterContextFreeBSD_x86_64::ReadRegisterSet(RegSetKind set) {
   switch (set) {
   case GPRegSet:
     return NativeProcessFreeBSD::PtraceWrapper(PT_GETREGS, m_thread.GetID(),
@@ -388,7 +379,7 @@ Status NativeRegisterContextFreeBSD_x86_64::ReadRegisterSet(uint32_t set) {
   llvm_unreachable("NativeRegisterContextFreeBSD_x86_64::ReadRegisterSet");
 }
 
-Status NativeRegisterContextFreeBSD_x86_64::WriteRegisterSet(uint32_t set) {
+Status NativeRegisterContextFreeBSD_x86_64::WriteRegisterSet(RegSetKind set) {
   switch (set) {
   case GPRegSet:
     return NativeProcessFreeBSD::PtraceWrapper(PT_SETREGS, m_thread.GetID(),
@@ -434,7 +425,7 @@ NativeRegisterContextFreeBSD_x86_64::ReadRegister(const RegisterInfo *reg_info,
     return error;
   }
 
-  llvm::Optional<enum RegSetKind> opt_set = GetSetForNativeRegNum(reg);
+  llvm::Optional<RegSetKind> opt_set = GetSetForNativeRegNum(reg);
   if (!opt_set) {
     // This is likely an internal register for lldb use only and should not be
     // directly queried.
@@ -443,7 +434,7 @@ NativeRegisterContextFreeBSD_x86_64::ReadRegister(const RegisterInfo *reg_info,
     return error;
   }
 
-  enum RegSetKind set = opt_set.getValue();
+  RegSetKind set = opt_set.getValue();
   error = ReadRegisterSet(set);
   if (error.Fail())
     return error;
@@ -451,10 +442,16 @@ NativeRegisterContextFreeBSD_x86_64::ReadRegister(const RegisterInfo *reg_info,
   switch (set) {
   case GPRegSet:
   case FPRegSet:
-  case DBRegSet:
-    reg_value.SetBytes(GetOffsetRegSetData(set, reg_info->byte_offset),
-                       reg_info->byte_size, endian::InlHostByteOrder());
+  case DBRegSet: {
+    void *data = GetOffsetRegSetData(set, reg_info->byte_offset);
+    FXSAVE *fpr = reinterpret_cast<FXSAVE *>(m_fpr.data());
+    if (data == &fpr->ftag) // ftag
+      reg_value.SetUInt16(
+          AbridgedToFullTagWord(fpr->ftag, fpr->fstat, fpr->stmm));
+    else
+      reg_value.SetBytes(data, reg_info->byte_size, endian::InlHostByteOrder());
     break;
+  }
   case YMMRegSet: {
     llvm::Optional<YMMSplitPtr> ymm_reg = GetYMMSplitReg(reg);
     if (!ymm_reg) {
@@ -494,7 +491,7 @@ Status NativeRegisterContextFreeBSD_x86_64::WriteRegister(
     return error;
   }
 
-  llvm::Optional<enum RegSetKind> opt_set = GetSetForNativeRegNum(reg);
+  llvm::Optional<RegSetKind> opt_set = GetSetForNativeRegNum(reg);
   if (!opt_set) {
     // This is likely an internal register for lldb use only and should not be
     // directly queried.
@@ -503,7 +500,7 @@ Status NativeRegisterContextFreeBSD_x86_64::WriteRegister(
     return error;
   }
 
-  enum RegSetKind set = opt_set.getValue();
+  RegSetKind set = opt_set.getValue();
   error = ReadRegisterSet(set);
   if (error.Fail())
     return error;
@@ -511,10 +508,15 @@ Status NativeRegisterContextFreeBSD_x86_64::WriteRegister(
   switch (set) {
   case GPRegSet:
   case FPRegSet:
-  case DBRegSet:
-    ::memcpy(GetOffsetRegSetData(set, reg_info->byte_offset),
-             reg_value.GetBytes(), reg_value.GetByteSize());
+  case DBRegSet: {
+    void *data = GetOffsetRegSetData(set, reg_info->byte_offset);
+    FXSAVE *fpr = reinterpret_cast<FXSAVE *>(m_fpr.data());
+    if (data == &fpr->ftag) // ftag
+      fpr->ftag = FullToAbridgedTagWord(reg_value.GetAsUInt16());
+    else
+      ::memcpy(data, reg_value.GetBytes(), reg_value.GetByteSize());
     break;
+  }
   case YMMRegSet: {
     llvm::Optional<YMMSplitPtr> ymm_reg = GetYMMSplitReg(reg);
     if (!ymm_reg) {
@@ -605,7 +607,7 @@ llvm::Error NativeRegisterContextFreeBSD_x86_64::CopyHardwareWatchpointsFrom(
 }
 
 uint8_t *
-NativeRegisterContextFreeBSD_x86_64::GetOffsetRegSetData(uint32_t set,
+NativeRegisterContextFreeBSD_x86_64::GetOffsetRegSetData(RegSetKind set,
                                                          size_t reg_offset) {
   uint8_t *base;
   switch (set) {
@@ -620,6 +622,8 @@ NativeRegisterContextFreeBSD_x86_64::GetOffsetRegSetData(uint32_t set,
     break;
   case YMMRegSet:
     llvm_unreachable("GetRegSetData() is unsuitable for this regset.");
+  case MPXRegSet:
+    llvm_unreachable("MPX regset should have returned error");
   }
   assert(reg_offset >= m_regset_offsets[set]);
   return base + (reg_offset - m_regset_offsets[set]);

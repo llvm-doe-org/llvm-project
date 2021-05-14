@@ -50,12 +50,29 @@ static SmallVector<std::pair<int64_t, Value *>, 4> decompose(Value *V) {
     return {{CI->getSExtValue(), nullptr}};
   }
   auto *GEP = dyn_cast<GetElementPtrInst>(V);
-  if (GEP && GEP->getNumOperands() == 2 &&
-      isa<ConstantInt>(GEP->getOperand(GEP->getNumOperands() - 1))) {
-    return {{cast<ConstantInt>(GEP->getOperand(GEP->getNumOperands() - 1))
-                 ->getSExtValue(),
-             nullptr},
-            {1, GEP->getPointerOperand()}};
+  if (GEP && GEP->getNumOperands() == 2) {
+    if (isa<ConstantInt>(GEP->getOperand(GEP->getNumOperands() - 1))) {
+      return {{cast<ConstantInt>(GEP->getOperand(GEP->getNumOperands() - 1))
+                   ->getSExtValue(),
+               nullptr},
+              {1, GEP->getPointerOperand()}};
+    }
+    Value *Op0;
+    ConstantInt *CI;
+    if (match(GEP->getOperand(GEP->getNumOperands() - 1),
+              m_NUWShl(m_Value(Op0), m_ConstantInt(CI))))
+      return {{0, nullptr},
+              {1, GEP->getPointerOperand()},
+              {std::pow(int64_t(2), CI->getSExtValue()), Op0}};
+    if (match(GEP->getOperand(GEP->getNumOperands() - 1),
+              m_ZExt(m_NUWShl(m_Value(Op0), m_ConstantInt(CI)))))
+      return {{0, nullptr},
+              {1, GEP->getPointerOperand()},
+              {std::pow(int64_t(2), CI->getSExtValue()), Op0}};
+
+    return {{0, nullptr},
+            {1, GEP->getPointerOperand()},
+            {1, GEP->getOperand(GEP->getNumOperands() - 1)}};
   }
 
   Value *Op0;
@@ -329,8 +346,10 @@ static bool eliminateConstraints(Function &F, DominatorTree &DT) {
     if (CB.Not)
       R = ConstraintSystem::negate(R);
 
-    CS.addVariableRowFill(R);
-    DFSInStack.emplace_back(CB.NumIn, CB.NumOut, CB.Condition, CB.Not);
+    // If R has been added to the system, queue it for removal once it goes
+    // out-of-scope.
+    if (CS.addVariableRowFill(R))
+      DFSInStack.emplace_back(CB.NumIn, CB.NumOut, CB.Condition, CB.Not);
   }
 
   return Changed;

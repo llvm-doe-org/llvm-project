@@ -8,9 +8,9 @@
 
 #include "mlir/Dialect/Quant/QuantOps.h"
 #include "mlir/Dialect/Quant/QuantTypes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Location.h"
-#include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/Types.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -416,7 +416,7 @@ static void printUniformQuantizedPerAxisType(UniformQuantizedPerAxisType type,
 static void printCalibratedQuantizedType(CalibratedQuantizedType type,
                                          DialectAsmPrinter &out) {
   out << "calibrated<" << type.getExpressedType();
-  out << "<" << type.getMin() << ", " << type.getMax() << ">";
+  out << "<" << type.getMin() << ":" << type.getMax() << ">";
   out << ">";
 }
 

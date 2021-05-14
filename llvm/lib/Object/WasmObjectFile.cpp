@@ -214,12 +214,11 @@ static wasm::WasmLimits readLimits(WasmObjectFile::ReadContext &Ctx) {
   return Result;
 }
 
-static wasm::WasmTable readTable(WasmObjectFile::ReadContext &Ctx) {
-  wasm::WasmTable Table;
-  Table.ElemType = readUint8(Ctx);
-  Table.Limits = readLimits(Ctx);
-  // The caller needs to set Table.Index field for Table
-  return Table;
+static wasm::WasmTableType readTableType(WasmObjectFile::ReadContext &Ctx) {
+  wasm::WasmTableType TableType;
+  TableType.ElemType = readUint8(Ctx);
+  TableType.Limits = readLimits(Ctx);
+  return TableType;
 }
 
 static Error readSection(WasmSection &Section, WasmObjectFile::ReadContext &Ctx,
@@ -358,6 +357,7 @@ Error WasmObjectFile::parseDylinkSection(ReadContext &Ctx) {
 Error WasmObjectFile::parseNameSection(ReadContext &Ctx) {
   llvm::DenseSet<uint64_t> SeenFunctions;
   llvm::DenseSet<uint64_t> SeenGlobals;
+  llvm::DenseSet<uint64_t> SeenSegments;
   if (FunctionTypes.size() && !SeenCodeSection) {
     return make_error<GenericBinaryError>("Names must come after code section",
                                           object_error::parse_failed);
@@ -369,11 +369,13 @@ Error WasmObjectFile::parseNameSection(ReadContext &Ctx) {
     const uint8_t *SubSectionEnd = Ctx.Ptr + Size;
     switch (Type) {
     case wasm::WASM_NAMES_FUNCTION:
-    case wasm::WASM_NAMES_GLOBAL: {
+    case wasm::WASM_NAMES_GLOBAL:
+    case wasm::WASM_NAMES_DATA_SEGMENT: {
       uint32_t Count = readVaruint32(Ctx);
       while (Count--) {
         uint32_t Index = readVaruint32(Ctx);
         StringRef Name = readString(Ctx);
+        wasm::NameType nameType = wasm::NameType::FUNCTION;
         if (Type == wasm::WASM_NAMES_FUNCTION) {
           if (!SeenFunctions.insert(Index).second)
             return make_error<GenericBinaryError>(
@@ -384,18 +386,24 @@ Error WasmObjectFile::parseNameSection(ReadContext &Ctx) {
 
           if (isDefinedFunctionIndex(Index))
             getDefinedFunction(Index).DebugName = Name;
-        } else {
+        } else if (Type == wasm::WASM_NAMES_GLOBAL) {
+          nameType = wasm::NameType::GLOBAL;
           if (!SeenGlobals.insert(Index).second)
             return make_error<GenericBinaryError>("Global named more than once",
                                                   object_error::parse_failed);
           if (!isValidGlobalIndex(Index) || Name.empty())
             return make_error<GenericBinaryError>("Invalid name entry",
                                                   object_error::parse_failed);
+        } else {
+          nameType = wasm::NameType::DATA_SEGMENT;
+          if (!SeenSegments.insert(Index).second)
+            return make_error<GenericBinaryError>(
+                "Segment named more than once", object_error::parse_failed);
+          if (Index > DataSegments.size())
+            return make_error<GenericBinaryError>("Invalid named data segment",
+                                                  object_error::parse_failed);
         }
-        wasm::NameType T = Type == wasm::WASM_NAMES_FUNCTION
-                               ? wasm::NameType::FUNCTION
-                               : wasm::NameType::GLOBAL;
-        DebugNames.push_back(wasm::WasmDebugName{T, Index, Name});
+        DebugNames.push_back(wasm::WasmDebugName{nameType, Index, Name});
       }
       break;
     }
@@ -499,9 +507,11 @@ Error WasmObjectFile::parseLinkingSectionSymtab(ReadContext &Ctx) {
   std::vector<wasm::WasmImport *> ImportedGlobals;
   std::vector<wasm::WasmImport *> ImportedFunctions;
   std::vector<wasm::WasmImport *> ImportedEvents;
+  std::vector<wasm::WasmImport *> ImportedTables;
   ImportedGlobals.reserve(Imports.size());
   ImportedFunctions.reserve(Imports.size());
   ImportedEvents.reserve(Imports.size());
+  ImportedTables.reserve(Imports.size());
   for (auto &I : Imports) {
     if (I.Kind == wasm::WASM_EXTERNAL_FUNCTION)
       ImportedFunctions.emplace_back(&I);
@@ -509,6 +519,8 @@ Error WasmObjectFile::parseLinkingSectionSymtab(ReadContext &Ctx) {
       ImportedGlobals.emplace_back(&I);
     else if (I.Kind == wasm::WASM_EXTERNAL_EVENT)
       ImportedEvents.emplace_back(&I);
+    else if (I.Kind == wasm::WASM_EXTERNAL_TABLE)
+      ImportedTables.emplace_back(&I);
   }
 
   while (Count--) {
@@ -597,10 +609,22 @@ Error WasmObjectFile::parseLinkingSectionSymtab(ReadContext &Ctx) {
         Info.Name = readString(Ctx);
         unsigned TableIndex = Info.ElementIndex - NumImportedTables;
         wasm::WasmTable &Table = Tables[TableIndex];
-        TableType = Table.ElemType;
+        TableType = Table.Type.ElemType;
+        if (Table.SymbolName.empty())
+          Table.SymbolName = Info.Name;
       } else {
-        return make_error<GenericBinaryError>("undefined table symbol",
-                                              object_error::parse_failed);
+        wasm::WasmImport &Import = *ImportedTables[Info.ElementIndex];
+        if ((Info.Flags & wasm::WASM_SYMBOL_EXPLICIT_NAME) != 0) {
+          Info.Name = readString(Ctx);
+          Info.ImportName = Import.Field;
+        } else {
+          Info.Name = Import.Field;
+        }
+        TableType = Import.Table.ElemType;
+        // FIXME: Parse limits here too.
+        if (!Import.Module.empty()) {
+          Info.ImportModule = Import.Module;
+        }
       }
       break;
 
@@ -729,6 +753,15 @@ Error WasmObjectFile::parseLinkingSectionComdat(ReadContext &Ctx) {
           return make_error<GenericBinaryError>("Function in two COMDATs",
                                                 object_error::parse_failed);
         getDefinedFunction(Index).Comdat = ComdatIndex;
+        break;
+      case wasm::WASM_COMDAT_SECTION:
+        if (Index >= Sections.size())
+          return make_error<GenericBinaryError>(
+              "COMDAT section index out of range", object_error::parse_failed);
+        if (Sections[Index].Type != wasm::WASM_SEC_CUSTOM)
+          return make_error<GenericBinaryError>(
+              "Non-custom section in a COMDAT", object_error::parse_failed);
+        Sections[Index].Comdat = ComdatIndex;
         break;
       }
     }
@@ -1014,8 +1047,7 @@ Error WasmObjectFile::parseImportSection(ReadContext &Ctx) {
         HasMemory64 = true;
       break;
     case wasm::WASM_EXTERNAL_TABLE: {
-      Im.Table = readTable(Ctx);
-      Im.Table.Index = NumImportedTables + Tables.size();
+      Im.Table = readTableType(Ctx);
       NumImportedTables++;
       auto ElemType = Im.Table.ElemType;
       if (ElemType != wasm::WASM_TYPE_FUNCREF &&
@@ -1060,13 +1092,15 @@ Error WasmObjectFile::parseFunctionSection(ReadContext &Ctx) {
 }
 
 Error WasmObjectFile::parseTableSection(ReadContext &Ctx) {
+  TableSection = Sections.size();
   uint32_t Count = readVaruint32(Ctx);
   Tables.reserve(Count);
   while (Count--) {
-    wasm::WasmTable T = readTable(Ctx);
+    wasm::WasmTable T;
+    T.Type = readTableType(Ctx);
     T.Index = NumImportedTables + Tables.size();
     Tables.push_back(T);
-    auto ElemType = Tables.back().ElemType;
+    auto ElemType = Tables.back().Type.ElemType;
     if (ElemType != wasm::WASM_TYPE_FUNCREF &&
         ElemType != wasm::WASM_TYPE_EXTERNREF) {
       return make_error<GenericBinaryError>("Invalid table element type",
@@ -1431,6 +1465,7 @@ uint64_t WasmObjectFile::getWasmSymbolValue(const WasmSymbol &Sym) const {
   case wasm::WASM_SYMBOL_TYPE_FUNCTION:
   case wasm::WASM_SYMBOL_TYPE_GLOBAL:
   case wasm::WASM_SYMBOL_TYPE_EVENT:
+  case wasm::WASM_SYMBOL_TYPE_TABLE:
     return Sym.Info.ElementIndex;
   case wasm::WASM_SYMBOL_TYPE_DATA: {
     // The value of a data symbol is the segment offset, plus the symbol
@@ -1480,6 +1515,8 @@ WasmObjectFile::getSymbolType(DataRefImpl Symb) const {
     return SymbolRef::ST_Debug;
   case wasm::WASM_SYMBOL_TYPE_EVENT:
     return SymbolRef::ST_Other;
+  case wasm::WASM_SYMBOL_TYPE_TABLE:
+    return SymbolRef::ST_Other;
   }
 
   llvm_unreachable("Unknown WasmSymbol::SymbolType");
@@ -1514,6 +1551,8 @@ uint32_t WasmObjectFile::getSymbolSectionIdImpl(const WasmSymbol &Sym) const {
     return Sym.Info.ElementIndex;
   case wasm::WASM_SYMBOL_TYPE_EVENT:
     return EventSection;
+  case wasm::WASM_SYMBOL_TYPE_TABLE:
+    return TableSection;
   default:
     llvm_unreachable("Unknown WasmSymbol::SymbolType");
   }

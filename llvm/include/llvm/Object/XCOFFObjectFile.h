@@ -404,7 +404,7 @@ class TBVectorExt {
   TBVectorExt(StringRef TBvectorStrRef);
 
 public:
-  uint8_t geNumberOfVRSaved() const;
+  uint8_t getNumberOfVRSaved() const;
   bool isVRSavedOnStack() const;
   bool hasVarArgs() const;
   uint8_t getNumberOfVectorParms() const;
@@ -469,7 +469,7 @@ public:
 
   bool hasVectorInfo() const;
   bool hasExtensionTable() const;
-  uint8_t getNumofGPRsSaved() const;
+  uint8_t getNumOfGPRsSaved() const;
 
   uint8_t getNumberOfFixedParms() const;
 

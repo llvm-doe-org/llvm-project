@@ -6,11 +6,11 @@
 //
 //===---------------------------------------------------------------------===//
 
-#include "include/math.h"
 #include "utils/FPUtil/BasicOperations.h"
 #include "utils/FPUtil/FPBits.h"
 #include "utils/FPUtil/TestHelpers.h"
 #include "utils/UnitTest/Test.h"
+#include <math.h>
 
 template <typename T>
 class FDimTestTemplate : public __llvm_libc::testing::Test {
@@ -26,7 +26,7 @@ public:
     EXPECT_FP_EQ(nan, func(negZero, nan));
     EXPECT_FP_EQ(nan, func(nan, T(-1.2345)));
     EXPECT_FP_EQ(nan, func(T(1.2345), nan));
-    EXPECT_NE(isnan(func(nan, nan)), 0);
+    EXPECT_FP_EQ(func(nan, nan), nan);
   }
 
   void testInfArg(FuncPtr func) {

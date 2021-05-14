@@ -1082,7 +1082,7 @@ define void @fir(%struct.arm_fir_instance_f32* nocapture readonly %S, float* noc
 ; CHECK-NEXT:    vstrb.8 q0, [r2], #16
 ; CHECK-NEXT:    add.w r0, r5, r0, lsl #2
 ; CHECK-NEXT:    add.w r5, r0, #16
-; CHECK-NEXT:    beq.w .LBB16_12
+; CHECK-NEXT:    beq .LBB16_12
 ; CHECK-NEXT:  .LBB16_4: @ %while.body
 ; CHECK-NEXT:    @ =>This Loop Header: Depth=1
 ; CHECK-NEXT:    @ Child Loop BB16_6 Depth 2
@@ -1441,12 +1441,12 @@ define arm_aapcs_vfpcc void @arm_biquad_cascade_stereo_df2T_f32(%struct.arm_biqu
 ; CHECK-NEXT:    @ => This Inner Loop Header: Depth=2
 ; CHECK-NEXT:    vldrw.u32 q4, [r1, q0, uxtw #2]
 ; CHECK-NEXT:    vldrw.u32 q5, [r4, q0, uxtw #2]
+; CHECK-NEXT:    vldrw.u32 q3, [sp, #8]
 ; CHECK-NEXT:    adds r1, #8
 ; CHECK-NEXT:    vfma.f32 q5, q4, r5
+; CHECK-NEXT:    vfma.f32 q3, q5, q2
 ; CHECK-NEXT:    vstmia r7, {s20, s21}
 ; CHECK-NEXT:    adds r7, #8
-; CHECK-NEXT:    vldrw.u32 q3, [sp, #8]
-; CHECK-NEXT:    vfma.f32 q3, q5, q2
 ; CHECK-NEXT:    vfma.f32 q3, q4, q1
 ; CHECK-NEXT:    vstrw.32 q3, [r4]
 ; CHECK-NEXT:    le lr, .LBB17_3
@@ -1592,7 +1592,7 @@ define arm_aapcs_vfpcc void @fms(float* nocapture readonly %pSrc1, float* nocapt
 ; CHECK-NEXT:    @ => This Inner Loop Header: Depth=2
 ; CHECK-NEXT:    vldrw.u32 q1, [r1], #16
 ; CHECK-NEXT:    vldrw.u32 q2, [r0], #16
-; CHECK-NEXT:    vfms.f32 q2, q0, q1
+; CHECK-NEXT:    vfms.f32 q2, q1, q0
 ; CHECK-NEXT:    vstrb.8 q2, [r3], #16
 ; CHECK-NEXT:    le lr, .LBB18_3
 ; CHECK-NEXT:  @ %bb.4: @ %while.end

@@ -3130,11 +3130,12 @@ void CGOpenMPRuntime::createOffloadEntry(
       llvm::GlobalValue::InternalLinkage, StrPtrInit, StringName);
   Str->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
 
-  llvm::Constant *Data[] = {llvm::ConstantExpr::getBitCast(ID, CGM.VoidPtrTy),
-                            llvm::ConstantExpr::getBitCast(Str, CGM.Int8PtrTy),
-                            llvm::ConstantInt::get(CGM.SizeTy, Size),
-                            llvm::ConstantInt::get(CGM.Int32Ty, Flags),
-                            llvm::ConstantInt::get(CGM.Int32Ty, 0)};
+  llvm::Constant *Data[] = {
+      llvm::ConstantExpr::getPointerBitCastOrAddrSpaceCast(ID, CGM.VoidPtrTy),
+      llvm::ConstantExpr::getPointerBitCastOrAddrSpaceCast(Str, CGM.Int8PtrTy),
+      llvm::ConstantInt::get(CGM.SizeTy, Size),
+      llvm::ConstantInt::get(CGM.Int32Ty, Flags),
+      llvm::ConstantInt::get(CGM.Int32Ty, 0)};
   std::string EntryName = getName({"omp_offloading", "entry", ""});
   llvm::GlobalVariable *Entry = createGlobalStruct(
       CGM, getTgtOffloadEntryQTy(), /*IsConstant=*/true, Data,
@@ -7981,8 +7982,11 @@ private:
         IsCaptureFirstInfo = false;
         FirstPointerInComplexData = false;
       } else if (FirstPointerInComplexData) {
-        BP = CGF.EmitOMPSharedLValue(I->getAssociatedExpression())
-                 .getAddress(CGF);
+        QualType Ty = Components.rbegin()
+                          ->getAssociatedDeclaration()
+                          ->getType()
+                          .getNonReferenceType();
+        BP = CGF.EmitLoadOfPointer(BP, Ty->castAs<PointerType>());
         FirstPointerInComplexData = false;
       }
     }

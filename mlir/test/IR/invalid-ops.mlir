@@ -236,7 +236,7 @@ func @func_with_ops(i32, i32) {
 func @func_with_ops() {
 ^bb0:
   %c = constant dense<0> : vector<42 x i32>
-  // expected-error@+1 {{op requires the same shape for all operands and results}}
+  // expected-error@+1 {{all non-scalar operands/results must have the same shape and base type: found 'vector<41xi1>' and 'vector<42xi32>'}}
   %r = "std.cmpi"(%c, %c) {predicate = 0} : (vector<42 x i32>, vector<42 x i32>) -> vector<41 x i1>
 }
 
@@ -514,7 +514,7 @@ func @cmpf_canonical_wrong_result_type(%a : f32, %b : f32) -> f32 {
 // -----
 
 func @cmpf_result_shape_mismatch(%a : vector<42xf32>) {
-  // expected-error@+1 {{op requires the same shape for all operands and results}}
+  // expected-error@+1 {{all non-scalar operands/results must have the same shape and base type: found 'vector<41xi1>' and 'vector<42xf32>'}}
   %r = "std.cmpf"(%a, %a) {predicate = 0} : (vector<42 x f32>, vector<42 x f32>) -> vector<41 x i1>
 }
 
@@ -537,61 +537,6 @@ func @cmpf_generic_operand_type_mismatch(%a : f32, %b : f64) {
 func @cmpf_canonical_type_mismatch(%a : f32, %b : f64) { // expected-note {{prior use here}}
   // expected-error@+1 {{use of value '%b' expects different type than prior uses}}
   %r = cmpf "oeq", %a, %b : f32
-}
-
-// -----
-
-func @extract_element_no_operands() {
-  // expected-error@+1 {{op expected 1 or more operands}}
-  %0 = "std.extract_element"() : () -> f32
-  return
-}
-
-// -----
-
-func @extract_element_no_indices(%v : vector<3xf32>) {
-  // expected-error@+1 {{incorrect number of indices for extract_element}}
-  %0 = "std.extract_element"(%v) : (vector<3xf32>) -> f32
-  return
-}
-
-// -----
-
-func @extract_element_invalid_index_type(%v : vector<3xf32>, %i : i32) {
-  // expected-error@+1 {{operand #1 must be index}}
-  %0 = "std.extract_element"(%v, %i) : (vector<3xf32>, i32) -> f32
-  return
-}
-
-// -----
-
-func @extract_element_element_result_type_mismatch(%v : vector<3xf32>, %i : index) {
-  // expected-error@+1 {{result type matches element type of aggregate}}
-  %0 = "std.extract_element"(%v, %i) : (vector<3xf32>, index) -> f64
-  return
-}
-
-// -----
-
-func @extract_element_vector_too_many_indices(%v : vector<3xf32>, %i : index) {
-  // expected-error@+1 {{incorrect number of indices for extract_element}}
-  %0 = "std.extract_element"(%v, %i, %i) : (vector<3xf32>, index, index) -> f32
-  return
-}
-
-// -----
-
-func @extract_element_tensor_too_many_indices(%t : tensor<2x3xf32>, %i : index) {
-  // expected-error@+1 {{incorrect number of indices for extract_element}}
-  %0 = "std.extract_element"(%t, %i, %i, %i) : (tensor<2x3xf32>, index, index, index) -> f32
-  return
-}
-
-// -----
-
-func @extract_element_tensor_too_few_indices(%t : tensor<2x3xf32>, %i : index) {
-  // expected-error@+1 {{incorrect number of indices for extract_element}}
-  %0 = "std.extract_element"(%t, %i) : (tensor<2x3xf32>, index) -> f32 return
 }
 
 // -----
@@ -981,7 +926,7 @@ func @invalid_view(%arg0 : index, %arg1 : index, %arg2 : index) {
 func @invalid_subview(%arg0 : index, %arg1 : index, %arg2 : index) {
   %0 = alloc() : memref<8x16x4xf32, offset: 0, strides: [64, 4, 1], 2>
   // expected-error@+1 {{different memory spaces}}
-  %1 = subview %0[0, 0, 0][%arg2][1, 1, 1]
+  %1 = subview %0[0, 0, 0][%arg2, %arg2, %arg2][1, 1, 1]
     : memref<8x16x4xf32, offset: 0, strides: [64, 4, 1], 2> to
       memref<8x?x4xf32, affine_map<(d0, d1, d2)[s0] -> (d0 * s0 + d1 * 4 + d2)>>
   return
@@ -992,7 +937,7 @@ func @invalid_subview(%arg0 : index, %arg1 : index, %arg2 : index) {
 func @invalid_subview(%arg0 : index, %arg1 : index, %arg2 : index) {
   %0 = alloc() : memref<8x16x4xf32, affine_map<(d0, d1, d2) -> (d0 + d1, d1 + d2, d2)>>
   // expected-error@+1 {{is not strided}}
-  %1 = subview %0[0, 0, 0][%arg2][1, 1, 1]
+  %1 = subview %0[0, 0, 0][%arg2, %arg2, %arg2][1, 1, 1]
     : memref<8x16x4xf32, affine_map<(d0, d1, d2) -> (d0 + d1, d1 + d2, d2)>> to
       memref<8x?x4xf32, offset: 0, strides: [?, 4, 1]>
   return

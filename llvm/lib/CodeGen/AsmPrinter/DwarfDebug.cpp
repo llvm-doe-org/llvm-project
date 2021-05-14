@@ -573,7 +573,7 @@ static const DIExpression *combineDIExpressions(const DIExpression *Original,
   std::vector<uint64_t> Elts = Addition->getElements().vec();
   // Avoid multiple DW_OP_stack_values.
   if (Original->isImplicit() && Addition->isImplicit())
-    erase_if(Elts, [](uint64_t Op) { return Op == dwarf::DW_OP_stack_value; });
+    erase_value(Elts, dwarf::DW_OP_stack_value);
   const DIExpression *CombinedExpr =
       (Elts.size() > 0) ? DIExpression::append(Original, Elts) : Original;
   return CombinedExpr;
@@ -785,6 +785,16 @@ static void collectCallSiteParameters(const MachineInstr *CallMI,
             .second;
     assert(InsertedReg && "Single register used to forward two arguments?");
     (void)InsertedReg;
+  }
+
+  // Do not emit CSInfo for undef forwarding registers.
+  for (auto &MO : CallMI->uses()) {
+    if (!MO.isReg() || !MO.isUndef())
+      continue;
+    auto It = ForwardedRegWorklist.find(MO.getReg());
+    if (It == ForwardedRegWorklist.end())
+      continue;
+    ForwardedRegWorklist.erase(It);
   }
 
   // We erase, from the ForwardedRegWorklist, those forwarding registers for
@@ -1626,9 +1636,7 @@ bool DwarfDebug::buildLocationList(SmallVectorImpl<DebugLocEntry> &DebugLoc,
 
     // Remove all values that are no longer live.
     size_t Index = std::distance(EB, EI);
-    auto Last =
-        remove_if(OpenRanges, [&](OpenRange &R) { return R.first <= Index; });
-    OpenRanges.erase(Last, OpenRanges.end());
+    erase_if(OpenRanges, [&](OpenRange &R) { return R.first <= Index; });
 
     // If we are dealing with a clobbering entry, this iteration will result in
     // a location list entry starting after the clobbering instruction.
@@ -2469,13 +2477,13 @@ void DwarfDebug::emitDebugLocValue(const AsmPrinter &AP, const DIBasicType *BT,
       DwarfExpr.addExpression(std::move(ExprCursor));
       return;
   } else if (Value.isConstantFP()) {
-    if (AP.getDwarfVersion() >= 4 && !AP.getDwarfDebug()->tuneForSCE()) {
+    if (AP.getDwarfVersion() >= 4 && !AP.getDwarfDebug()->tuneForSCE() &&
+        !ExprCursor) {
       DwarfExpr.addConstantFP(Value.getConstantFP()->getValueAPF(), AP);
       return;
-    } else if (Value.getConstantFP()
-                   ->getValueAPF()
-                   .bitcastToAPInt()
-                   .getBitWidth() <= 64 /*bits*/)
+    }
+    if (Value.getConstantFP()->getValueAPF().bitcastToAPInt().getBitWidth() <=
+        64 /*bits*/)
       DwarfExpr.addUnsignedConstant(
           Value.getConstantFP()->getValueAPF().bitcastToAPInt());
     else

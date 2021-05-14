@@ -27,12 +27,12 @@ class Type;
 #include "clang/AST/TypeNodes.inc"
 class CXXCtorInitializer;
 class OMPClause;
-#define OMP_CLAUSE_CLASS(Enum, Str, Class) class Class;
-#include "llvm/Frontend/OpenMP/OMPKinds.def"
+#define GEN_CLANG_CLAUSE_CLASS
+#define CLAUSE_CLASS(Enum, Str, Class) class Class;
+#include "llvm/Frontend/OpenMP/OMP.inc"
 class ACCClause;
 #define OPENACC_CLAUSE(KIND, CLASSNAME) class CLASSNAME;
 #include "clang/Basic/OpenACCKinds.def"
-
 
 } // end namespace clang
 

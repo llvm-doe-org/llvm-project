@@ -356,6 +356,8 @@ public:
 
   unsigned getMinimumVF(unsigned ElemWidth) const { return 0; }
 
+  unsigned getMaximumVF(unsigned ElemWidth, unsigned Opcode) const { return 0; }
+
   bool
   shouldConsiderAddressTypePromotion(const Instruction &I,
                                      bool &AllowPromotionWithoutCommonHeader) {
@@ -526,6 +528,7 @@ public:
     case Intrinsic::annotation:
     case Intrinsic::assume:
     case Intrinsic::sideeffect:
+    case Intrinsic::pseudoprobe:
     case Intrinsic::dbg_declare:
     case Intrinsic::dbg_value:
     case Intrinsic::dbg_label:
@@ -681,6 +684,8 @@ public:
   bool shouldExpandReduction(const IntrinsicInst *II) const { return true; }
 
   unsigned getGISelRematGlobalCost() const { return 1; }
+
+  bool supportsScalableVectors() const { return false; }
 
   bool hasActiveVectorLength() const { return false; }
 

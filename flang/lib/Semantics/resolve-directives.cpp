@@ -114,15 +114,16 @@ public:
   template <typename A> bool Pre(const A &) { return true; }
   template <typename A> void Post(const A &) {}
 
-  bool Pre(const parser::SpecificationPart &x) {
-    Walk(std::get<std::list<parser::OpenACCDeclarativeConstruct>>(x.t));
-    return false;
-  }
-
   bool Pre(const parser::OpenACCBlockConstruct &);
   void Post(const parser::OpenACCBlockConstruct &) { PopContext(); }
   bool Pre(const parser::OpenACCCombinedConstruct &);
   void Post(const parser::OpenACCCombinedConstruct &) { PopContext(); }
+
+  bool Pre(const parser::OpenACCDeclarativeConstruct &);
+  void Post(const parser::OpenACCDeclarativeConstruct &) { PopContext(); }
+
+  bool Pre(const parser::OpenACCRoutineConstruct &);
+  bool Pre(const parser::AccBindClause &);
 
   void Post(const parser::AccBeginBlockDirective &) {
     GetContext().withinConstruct = true;
@@ -139,6 +140,9 @@ public:
   void Post(const parser::AccStandaloneDirective &) {
     GetContext().withinConstruct = true;
   }
+
+  bool Pre(const parser::OpenACCCacheConstruct &);
+  void Post(const parser::OpenACCCacheConstruct &) { PopContext(); }
 
   void Post(const parser::AccDefaultClause &);
 
@@ -204,11 +208,13 @@ private:
   void ResolveAccObject(const parser::AccObject &, Symbol::Flag);
   Symbol *ResolveAcc(const parser::Name &, Symbol::Flag, Scope &);
   Symbol *ResolveAcc(Symbol &, Symbol::Flag, Scope &);
+  Symbol *ResolveName(const parser::Name &);
   Symbol *ResolveAccCommonBlockName(const parser::Name *);
   Symbol *DeclareOrMarkOtherAccessEntity(const parser::Name &, Symbol::Flag);
   Symbol *DeclareOrMarkOtherAccessEntity(Symbol &, Symbol::Flag);
   void CheckMultipleAppearances(
       const parser::Name &, const Symbol &, Symbol::Flag);
+  void AllowOnlyArrayAndSubArray(const parser::AccObjectList &objectList);
 };
 
 // Data-sharing and Data-mapping attributes for data-refs in OpenMP construct
@@ -305,6 +311,12 @@ public:
   }
   void Post(const parser::Name &);
 
+  const parser::OmpClause *associatedClause{nullptr};
+  void SetAssociatedClause(const parser::OmpClause &c) {
+    associatedClause = &c;
+  }
+  const parser::OmpClause *GetAssociatedClause() { return associatedClause; }
+
 private:
   std::int64_t GetAssociatedLoopLevelFromClauses(const parser::OmpClauseList &);
 
@@ -344,7 +356,8 @@ private:
   }
 
   // Predetermined DSA rules
-  void PrivatizeAssociatedLoopIndex(const parser::OpenMPLoopConstruct &);
+  void PrivatizeAssociatedLoopIndexAndCheckLoopLevel(
+      const parser::OpenMPLoopConstruct &);
   void ResolveSeqLoopIndexInParallelOrTaskConstruct(const parser::Name &);
 
   void ResolveOmpObjectList(const parser::OmpObjectList &, Symbol::Flag);
@@ -361,6 +374,10 @@ private:
       const parser::Name &, const Symbol &, Symbol::Flag);
 
   void CheckDataCopyingClause(
+      const parser::Name &, const Symbol &, Symbol::Flag);
+
+  void CheckAssocLoopLevel(std::int64_t level, const parser::OmpClause *clause);
+  void CheckObjectInNamelist(
       const parser::Name &, const Symbol &, Symbol::Flag);
 };
 
@@ -425,6 +442,21 @@ bool AccAttributeVisitor::Pre(const parser::OpenACCBlockConstruct &x) {
   return true;
 }
 
+bool AccAttributeVisitor::Pre(const parser::OpenACCDeclarativeConstruct &x) {
+  if (const auto *declConstruct{
+          std::get_if<parser::OpenACCStandaloneDeclarativeConstruct>(&x.u)}) {
+    const auto &declDir{
+        std::get<parser::AccDeclarativeDirective>(declConstruct->t)};
+    PushContext(declDir.source, llvm::acc::Directive::ACCD_declare);
+  } else if (const auto *routineConstruct{
+                 std::get_if<parser::OpenACCRoutineConstruct>(&x.u)}) {
+    const auto &verbatim{std::get<parser::Verbatim>(routineConstruct->t)};
+    PushContext(verbatim.source, llvm::acc::Directive::ACCD_routine);
+  }
+  ClearDataSharingAttributeObjects();
+  return true;
+}
+
 bool AccAttributeVisitor::Pre(const parser::OpenACCLoopConstruct &x) {
   const auto &beginDir{std::get<parser::AccBeginLoopDirective>(x.t)};
   const auto &loopDir{std::get<parser::AccLoopDirective>(beginDir.t)};
@@ -441,7 +473,6 @@ bool AccAttributeVisitor::Pre(const parser::OpenACCLoopConstruct &x) {
 bool AccAttributeVisitor::Pre(const parser::OpenACCStandaloneConstruct &x) {
   const auto &standaloneDir{std::get<parser::AccStandaloneDirective>(x.t)};
   switch (standaloneDir.v) {
-  case llvm::acc::Directive::ACCD_cache:
   case llvm::acc::Directive::ACCD_enter_data:
   case llvm::acc::Directive::ACCD_exit_data:
   case llvm::acc::Directive::ACCD_init:
@@ -454,6 +485,35 @@ bool AccAttributeVisitor::Pre(const parser::OpenACCStandaloneConstruct &x) {
     break;
   }
   ClearDataSharingAttributeObjects();
+  return true;
+}
+
+Symbol *AccAttributeVisitor::ResolveName(const parser::Name &name) {
+  Symbol *prev{currScope().FindSymbol(name.source)};
+  if (prev != name.symbol) {
+    name.symbol = prev;
+  }
+  return prev;
+}
+
+bool AccAttributeVisitor::Pre(const parser::OpenACCRoutineConstruct &x) {
+  const auto &optName{std::get<std::optional<parser::Name>>(x.t)};
+  if (optName) {
+    if (!ResolveName(*optName))
+      context_.Say((*optName).source,
+          "No function or subroutine declared for '%s'"_err_en_US,
+          (*optName).source);
+  }
+  return true;
+}
+
+bool AccAttributeVisitor::Pre(const parser::AccBindClause &x) {
+  if (const auto *name{std::get_if<parser::Name>(&x.u)}) {
+    if (!ResolveName(*name))
+      context_.Say(name->source,
+          "No function or subroutine declared for '%s'"_err_en_US,
+          name->source);
+  }
   return true;
 }
 
@@ -471,6 +531,64 @@ bool AccAttributeVisitor::Pre(const parser::OpenACCCombinedConstruct &x) {
     break;
   }
   ClearDataSharingAttributeObjects();
+  return true;
+}
+
+static bool IsLastNameArray(const parser::Designator &designator) {
+  const auto &name{GetLastName(designator)};
+  const evaluate::DataRef dataRef{*(name.symbol)};
+  return std::visit(
+      common::visitors{
+          [](const evaluate::SymbolRef &ref) { return ref->Rank() > 0; },
+          [](const evaluate::ArrayRef &aref) {
+            return aref.base().IsSymbol() ||
+                aref.base().GetComponent().base().Rank() == 0;
+          },
+          [](const auto &) { return false; },
+      },
+      dataRef.u);
+}
+
+void AccAttributeVisitor::AllowOnlyArrayAndSubArray(
+    const parser::AccObjectList &objectList) {
+  for (const auto &accObject : objectList.v) {
+    std::visit(
+        common::visitors{
+            [&](const parser::Designator &designator) {
+              if (!IsLastNameArray(designator))
+                context_.Say(designator.source,
+                    "Only array element or subarray are allowed in %s directive"_err_en_US,
+                    parser::ToUpperCaseLetters(
+                        llvm::acc::getOpenACCDirectiveName(
+                            GetContext().directive)
+                            .str()));
+            },
+            [&](const auto &name) {
+              context_.Say(name.source,
+                  "Only array element or subarray are allowed in %s directive"_err_en_US,
+                  parser::ToUpperCaseLetters(
+                      llvm::acc::getOpenACCDirectiveName(GetContext().directive)
+                          .str()));
+            },
+        },
+        accObject.u);
+  }
+}
+
+bool AccAttributeVisitor::Pre(const parser::OpenACCCacheConstruct &x) {
+  const auto &verbatim{std::get<parser::Verbatim>(x.t)};
+  PushContext(verbatim.source, llvm::acc::Directive::ACCD_cache);
+  ClearDataSharingAttributeObjects();
+
+  const auto &objectListWithModifier =
+      std::get<parser::AccObjectListWithModifier>(x.t);
+  const auto &objectList =
+      std::get<Fortran::parser::AccObjectList>(objectListWithModifier.t);
+
+  // 2.10 Cache directive restriction: A var in a cache directive must be a
+  // single array element or a simple subarray.
+  AllowOnlyArrayAndSubArray(objectList);
+
   return true;
 }
 
@@ -520,10 +638,10 @@ void AccAttributeVisitor::PrivatizeAssociatedLoopIndex(
 void AccAttributeVisitor::Post(const parser::AccDefaultClause &x) {
   if (!dirContext_.empty()) {
     switch (x.v) {
-    case parser::AccDefaultClause::Arg::Present:
+    case llvm::acc::DefaultValue::ACC_Default_present:
       SetContextDefaultDSA(Symbol::Flag::AccPresent);
       break;
-    case parser::AccDefaultClause::Arg::None:
+    case llvm::acc::DefaultValue::ACC_Default_none:
       SetContextDefaultDSA(Symbol::Flag::AccNone);
       break;
     }
@@ -777,7 +895,7 @@ bool OmpAttributeVisitor::Pre(const parser::OpenMPLoopConstruct &x) {
   }
   ClearDataSharingAttributeObjects();
   SetContextAssociatedLoopLevel(GetAssociatedLoopLevelFromClauses(clauseList));
-  PrivatizeAssociatedLoopIndex(x);
+  PrivatizeAssociatedLoopIndexAndCheckLoopLevel(x);
   return true;
 }
 
@@ -803,17 +921,24 @@ void OmpAttributeVisitor::ResolveSeqLoopIndexInParallelOrTaskConstruct(
   }
 }
 
-// 2.15.1.1 Data-sharing Attribute Rules - Predetermined
+// [OMP-4.5]2.15.1.1 Data-sharing Attribute Rules - Predetermined
 //   - A loop iteration variable for a sequential loop in a parallel
 //     or task generating construct is private in the innermost such
 //     construct that encloses the loop
+// Loop iteration variables are not well defined for DO WHILE loop.
+// Use of DO CONCURRENT inside OpenMP construct is unspecified behavior
+// till OpenMP-5.0 standard.
+// In above both cases we skip the privatization of iteration variables.
 bool OmpAttributeVisitor::Pre(const parser::DoConstruct &x) {
-  if (!dirContext_.empty() && GetContext().withinConstruct) {
-    if (const auto &iv{GetLoopIndex(x)}; iv.symbol) {
-      if (!iv.symbol->test(Symbol::Flag::OmpPreDetermined)) {
-        ResolveSeqLoopIndexInParallelOrTaskConstruct(iv);
-      } else {
-        // TODO: conflict checks with explicitly determined DSA
+  // TODO:[OpenMP 5.1] DO CONCURRENT indices are private
+  if (x.IsDoNormal()) {
+    if (!dirContext_.empty() && GetContext().withinConstruct) {
+      if (const auto &iv{GetLoopIndex(x)}; iv.symbol) {
+        if (!iv.symbol->test(Symbol::Flag::OmpPreDetermined)) {
+          ResolveSeqLoopIndexInParallelOrTaskConstruct(iv);
+        } else {
+          // TODO: conflict checks with explicitly determined DSA
+        }
       }
     }
   }
@@ -824,24 +949,32 @@ std::int64_t OmpAttributeVisitor::GetAssociatedLoopLevelFromClauses(
     const parser::OmpClauseList &x) {
   std::int64_t orderedLevel{0};
   std::int64_t collapseLevel{0};
+
+  const parser::OmpClause *ordClause{nullptr};
+  const parser::OmpClause *collClause{nullptr};
+
   for (const auto &clause : x.v) {
     if (const auto *orderedClause{
             std::get_if<parser::OmpClause::Ordered>(&clause.u)}) {
       if (const auto v{EvaluateInt64(context_, orderedClause->v)}) {
         orderedLevel = *v;
       }
+      ordClause = &clause;
     }
     if (const auto *collapseClause{
             std::get_if<parser::OmpClause::Collapse>(&clause.u)}) {
       if (const auto v{EvaluateInt64(context_, collapseClause->v)}) {
         collapseLevel = *v;
       }
+      collClause = &clause;
     }
   }
 
   if (orderedLevel && (!collapseLevel || orderedLevel >= collapseLevel)) {
+    SetAssociatedClause(*ordClause);
     return orderedLevel;
   } else if (!orderedLevel && collapseLevel) {
+    SetAssociatedClause(*collClause);
     return collapseLevel;
   } // orderedLevel < collapseLevel is an error handled in structural checks
   return 1; // default is outermost loop
@@ -855,10 +988,7 @@ std::int64_t OmpAttributeVisitor::GetAssociatedLoopLevelFromClauses(
 //     increment of the associated do-loop.
 //   - The loop iteration variables in the associated do-loops of a simd
 //     construct with multiple associated do-loops are lastprivate.
-//
-// TODO: revisit after semantics checks are completed for do-loop association of
-//       collapse and ordered
-void OmpAttributeVisitor::PrivatizeAssociatedLoopIndex(
+void OmpAttributeVisitor::PrivatizeAssociatedLoopIndexAndCheckLoopLevel(
     const parser::OpenMPLoopConstruct &x) {
   std::int64_t level{GetContext().associatedLoopLevel};
   if (level <= 0) {
@@ -887,7 +1017,16 @@ void OmpAttributeVisitor::PrivatizeAssociatedLoopIndex(
     const auto it{block.begin()};
     loop = it != block.end() ? GetDoConstructIf(*it) : nullptr;
   }
-  CHECK(level == 0);
+  CheckAssocLoopLevel(level, GetAssociatedClause());
+}
+void OmpAttributeVisitor::CheckAssocLoopLevel(
+    std::int64_t level, const parser::OmpClause *clause) {
+  if (clause && level != 0) {
+    context_.Say(clause->source,
+        "The value of the parameter in the COLLAPSE or ORDERED clause must"
+        " not be larger than the number of nested loops"
+        " following the construct."_err_en_US);
+  }
 }
 
 bool OmpAttributeVisitor::Pre(const parser::OpenMPSectionsConstruct &x) {
@@ -1023,6 +1162,10 @@ void OmpAttributeVisitor::ResolveOmpObject(
                   if (dataSharingAttributeFlags.test(ompFlag)) {
                     CheckMultipleAppearances(*name, *symbol, ompFlag);
                   }
+                  if (privateDataSharingAttributeFlags.test(ompFlag)) {
+                    CheckObjectInNamelist(*name, *symbol, ompFlag);
+                  }
+
                   if (ompFlag == Symbol::Flag::OmpAllocate) {
                     AddAllocateName(name);
                   }
@@ -1171,6 +1314,20 @@ void OmpAttributeVisitor::CheckDataCopyingClause(
       context_.Say(name.source,
           "Non-THREADPRIVATE object '%s' in COPYIN clause"_err_en_US,
           checkSymbol->name());
+  }
+}
+
+void OmpAttributeVisitor::CheckObjectInNamelist(
+    const parser::Name &name, const Symbol &symbol, Symbol::Flag ompFlag) {
+  if (symbol.GetUltimate().test(Symbol::Flag::InNamelist)) {
+    llvm::StringRef clauseName{"PRIVATE"};
+    if (ompFlag == Symbol::Flag::OmpFirstPrivate)
+      clauseName = "FIRSTPRIVATE";
+    else if (ompFlag == Symbol::Flag::OmpLastPrivate)
+      clauseName = "LASTPRIVATE";
+    context_.Say(name.source,
+        "Variable '%s' in NAMELIST cannot be in a %s clause"_err_en_US,
+        name.ToString(), clauseName.str());
   }
 }
 

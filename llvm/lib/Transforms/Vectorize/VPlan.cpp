@@ -20,8 +20,10 @@
 #include "VPlanDominatorTree.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Analysis/IVDescriptors.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
@@ -110,34 +112,10 @@ VPUser *VPRecipeBase::toVPUser() {
     return U;
   if (auto *U = dyn_cast<VPWidenMemoryInstructionRecipe>(this))
     return U;
-  return nullptr;
-}
-
-VPValue *VPRecipeBase::toVPValue() {
-  if (auto *V = dyn_cast<VPInstruction>(this))
-    return V;
-  if (auto *V = dyn_cast<VPWidenMemoryInstructionRecipe>(this))
-    return V;
-  if (auto *V = dyn_cast<VPWidenCallRecipe>(this))
-    return V;
-  if (auto *V = dyn_cast<VPWidenSelectRecipe>(this))
-    return V;
-  if (auto *V = dyn_cast<VPWidenGEPRecipe>(this))
-    return V;
-  return nullptr;
-}
-
-const VPValue *VPRecipeBase::toVPValue() const {
-  if (auto *V = dyn_cast<VPInstruction>(this))
-    return V;
-  if (auto *V = dyn_cast<VPWidenMemoryInstructionRecipe>(this))
-    return V;
-  if (auto *V = dyn_cast<VPWidenCallRecipe>(this))
-    return V;
-  if (auto *V = dyn_cast<VPWidenSelectRecipe>(this))
-    return V;
-  if (auto *V = dyn_cast<VPWidenGEPRecipe>(this))
-    return V;
+  if (auto *U = dyn_cast<VPReductionRecipe>(this))
+    return U;
+  if (auto *U = dyn_cast<VPPredInstPHIRecipe>(this))
+    return U;
   return nullptr;
 }
 
@@ -222,14 +200,8 @@ VPBlockBase *VPBlockBase::getEnclosingBlockWithPredecessors() {
 void VPBlockBase::deleteCFG(VPBlockBase *Entry) {
   SmallVector<VPBlockBase *, 8> Blocks;
 
-  VPValue DummyValue;
-  for (VPBlockBase *Block : depth_first(Entry)) {
-    // Drop all references in VPBasicBlocks and replace all uses with
-    // DummyValue.
-    if (auto *VPBB = dyn_cast<VPBasicBlock>(Block))
-      VPBB->dropAllReferences(&DummyValue);
+  for (VPBlockBase *Block : depth_first(Entry))
     Blocks.push_back(Block);
-  }
 
   for (VPBlockBase *Block : Blocks)
     delete Block;
@@ -364,13 +336,20 @@ void VPBasicBlock::execute(VPTransformState *State) {
 
 void VPBasicBlock::dropAllReferences(VPValue *NewValue) {
   for (VPRecipeBase &R : Recipes) {
-    if (auto *VPV = R.toVPValue())
-      VPV->replaceAllUsesWith(NewValue);
+    for (auto *Def : R.definedValues())
+      Def->replaceAllUsesWith(NewValue);
 
     if (auto *User = R.toVPUser())
       for (unsigned I = 0, E = User->getNumOperands(); I != E; I++)
         User->setOperand(I, NewValue);
   }
+}
+
+void VPRegionBlock::dropAllReferences(VPValue *NewValue) {
+  for (VPBlockBase *Block : depth_first(Entry))
+    // Drop all references in VPBasicBlocks and replace all uses with
+    // DummyValue.
+    Block->dropAllReferences(NewValue);
 }
 
 void VPRegionBlock::execute(VPTransformState *State) {
@@ -876,8 +855,10 @@ void VPWidenSelectRecipe::print(raw_ostream &O, const Twine &Indent,
 
 void VPWidenRecipe::print(raw_ostream &O, const Twine &Indent,
                           VPSlotTracker &SlotTracker) const {
-  O << "\"WIDEN\\l\"";
-  O << "\"  " << VPlanIngredient(&Ingredient);
+  O << "\"WIDEN ";
+  printAsOperand(O, SlotTracker);
+  O << " = " << getUnderlyingInstr()->getOpcodeName() << " ";
+  printOperands(O, SlotTracker);
 }
 
 void VPWidenIntOrFpInductionRecipe::print(raw_ostream &O, const Twine &Indent,
@@ -932,28 +913,39 @@ void VPBlendRecipe::print(raw_ostream &O, const Twine &Indent,
 
 void VPReductionRecipe::print(raw_ostream &O, const Twine &Indent,
                               VPSlotTracker &SlotTracker) const {
-  O << "\"REDUCE of" << *I << " as ";
-  ChainOp->printAsOperand(O, SlotTracker);
-  O << " + reduce(";
-  VecOp->printAsOperand(O, SlotTracker);
-  if (CondOp) {
+  O << "\"REDUCE ";
+  printAsOperand(O, SlotTracker);
+  O << " = ";
+  getChainOp()->printAsOperand(O, SlotTracker);
+  O << " + reduce." << Instruction::getOpcodeName(RdxDesc->getRecurrenceBinOp())
+    << " (";
+  getVecOp()->printAsOperand(O, SlotTracker);
+  if (getCondOp()) {
     O << ", ";
-    CondOp->printAsOperand(O, SlotTracker);
+    getCondOp()->printAsOperand(O, SlotTracker);
   }
   O << ")";
 }
 
 void VPReplicateRecipe::print(raw_ostream &O, const Twine &Indent,
                               VPSlotTracker &SlotTracker) const {
-  O << "\"" << (IsUniform ? "CLONE " : "REPLICATE ")
-    << VPlanIngredient(Ingredient);
+  O << "\"" << (IsUniform ? "CLONE " : "REPLICATE ");
+
+  if (!getUnderlyingInstr()->getType()->isVoidTy()) {
+    printAsOperand(O, SlotTracker);
+    O << " = ";
+  }
+  O << Instruction::getOpcodeName(getUnderlyingInstr()->getOpcode()) << " ";
+  printOperands(O, SlotTracker);
+
   if (AlsoPack)
     O << " (S->V)";
 }
 
 void VPPredInstPHIRecipe::print(raw_ostream &O, const Twine &Indent,
                                 VPSlotTracker &SlotTracker) const {
-  O << "\"PHI-PREDICATED-INSTRUCTION " << VPlanIngredient(PredInst);
+  O << "\"PHI-PREDICATED-INSTRUCTION ";
+  printOperands(O, SlotTracker);
 }
 
 void VPWidenMemoryInstructionRecipe::print(raw_ostream &O, const Twine &Indent,
@@ -961,10 +953,10 @@ void VPWidenMemoryInstructionRecipe::print(raw_ostream &O, const Twine &Indent,
   O << "\"WIDEN ";
 
   if (!isStore()) {
-    printAsOperand(O, SlotTracker);
+    getVPValue()->printAsOperand(O, SlotTracker);
     O << " = ";
   }
-  O << Instruction::getOpcodeName(getUnderlyingInstr()->getOpcode()) << " ";
+  O << Instruction::getOpcodeName(Ingredient.getOpcode()) << " ";
 
   printOperands(O, SlotTracker);
 }
@@ -1034,13 +1026,9 @@ void VPValue::printAsOperand(raw_ostream &OS, VPSlotTracker &Tracker) const {
 }
 
 void VPUser::printOperands(raw_ostream &O, VPSlotTracker &SlotTracker) const {
-  bool First = true;
-  for (VPValue *Op : operands()) {
-    if (!First)
-      O << ", ";
+  interleaveComma(operands(), O, [&O, &SlotTracker](VPValue *Op) {
     Op->printAsOperand(O, SlotTracker);
-    First = false;
-  }
+  });
 }
 
 void VPInterleavedAccessInfo::visitRegion(VPRegionBlock *Region,

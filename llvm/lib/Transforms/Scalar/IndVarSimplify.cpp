@@ -1399,7 +1399,7 @@ bool IndVarSimplify::optimizeLoopExits(Loop *L, SCEVExpander &Rewriter) {
 
   // Remove all exits which aren't both rewriteable and execute on every
   // iteration.
-  auto NewEnd = llvm::remove_if(ExitingBlocks, [&](BasicBlock *ExitingBB) {
+  llvm::erase_if(ExitingBlocks, [&](BasicBlock *ExitingBB) {
     // If our exitting block exits multiple loops, we can only rewrite the
     // innermost one.  Otherwise, we're changing how many times the innermost
     // loop runs before it exits.
@@ -1421,7 +1421,6 @@ bool IndVarSimplify::optimizeLoopExits(Loop *L, SCEVExpander &Rewriter) {
 
     return false;
   });
-  ExitingBlocks.erase(NewEnd, ExitingBlocks.end());
 
   if (ExitingBlocks.empty())
     return false;
@@ -1869,11 +1868,15 @@ bool IndVarSimplify::run(Loop *L) {
 
   // Now that we're done iterating through lists, clean up any instructions
   // which are now dead.
-  while (!DeadInsts.empty())
-    if (Instruction *Inst =
-            dyn_cast_or_null<Instruction>(DeadInsts.pop_back_val()))
+  while (!DeadInsts.empty()) {
+    Value *V = DeadInsts.pop_back_val();
+
+    if (PHINode *PHI = dyn_cast_or_null<PHINode>(V))
+      Changed |= RecursivelyDeleteDeadPHINode(PHI, TLI, MSSAU.get());
+    else if (Instruction *Inst = dyn_cast_or_null<Instruction>(V))
       Changed |=
           RecursivelyDeleteTriviallyDeadInstructions(Inst, TLI, MSSAU.get());
+  }
 
   // The Rewriter may not be used from this point on.
 

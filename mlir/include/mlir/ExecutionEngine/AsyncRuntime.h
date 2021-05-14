@@ -32,21 +32,36 @@
 #define MLIR_ASYNCRUNTIME_DEFINE_FUNCTIONS
 #endif // _WIN32
 
+namespace mlir {
+namespace runtime {
+
 //===----------------------------------------------------------------------===//
 // Async runtime API.
 //===----------------------------------------------------------------------===//
 
 // Runtime implementation of `async.token` data type.
-typedef struct AsyncToken MLIR_AsyncToken;
+typedef struct AsyncToken AsyncToken;
 
 // Runtime implementation of `async.group` data type.
-typedef struct AsyncGroup MLIR_AsyncGroup;
+typedef struct AsyncGroup AsyncGroup;
 
 // Async runtime uses LLVM coroutines to represent asynchronous tasks. Task
 // function is a coroutine handle and a resume function that continue coroutine
 // execution from a suspension point.
 using CoroHandle = void *;           // coroutine handle
 using CoroResume = void (*)(void *); // coroutine resume function
+
+// Async runtime uses reference counting to manage the lifetime of async values
+// (values of async types like tokens, values and groups).
+using RefCountedObjPtr = void *;
+
+// Adds references to reference counted runtime object.
+extern "C" MLIR_ASYNCRUNTIME_EXPORT void
+    mlirAsyncRuntimeAddRef(RefCountedObjPtr, int32_t);
+
+// Drops references from reference counted runtime object.
+extern "C" MLIR_ASYNCRUNTIME_EXPORT void
+    mlirAsyncRuntimeDropRef(RefCountedObjPtr, int32_t);
 
 // Create a new `async.token` in not-ready state.
 extern "C" MLIR_ASYNCRUNTIME_EXPORT AsyncToken *mlirAsyncRuntimeCreateToken();
@@ -89,5 +104,8 @@ mlirAsyncRuntimeAwaitAllInGroupAndExecute(AsyncGroup *, CoroHandle, CoroResume);
 //===----------------------------------------------------------------------===//
 
 extern "C" MLIR_ASYNCRUNTIME_EXPORT void mlirAsyncRuntimePrintCurrentThreadId();
+
+} // namespace runtime
+} // namespace mlir
 
 #endif // MLIR_EXECUTIONENGINE_ASYNCRUNTIME_H_

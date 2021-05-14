@@ -48,6 +48,9 @@ public:
     llvm::Optional<Path> CompileCommandsDir;
     /// The offset-encoding to use, or None to negotiate it over LSP.
     llvm::Optional<OffsetEncoding> Encoding;
+    /// If set, periodically called to release memory.
+    /// Consider malloc_trim(3)
+    std::function<void()> MemoryCleanup = nullptr;
 
     /// Per-feature options. Generally ClangdServer lets these vary
     /// per-request, but LSP allows limited/no customizations.
@@ -93,6 +96,7 @@ private:
   void onDocumentDidChange(const DidChangeTextDocumentParams &);
   void onDocumentDidClose(const DidCloseTextDocumentParams &);
   void onDocumentDidSave(const DidSaveTextDocumentParams &);
+  void onAST(const ASTParams &, Callback<llvm::Optional<ASTNode>>);
   void onDocumentOnTypeFormatting(const DocumentOnTypeFormattingParams &,
                                   Callback<std::vector<TextEdit>>);
   void onDocumentRangeFormatting(const DocumentRangeFormattingParams &,
@@ -114,6 +118,8 @@ private:
                          Callback<std::vector<Location>>);
   void onGoToDefinition(const TextDocumentPositionParams &,
                         Callback<std::vector<Location>>);
+  void onGoToImplementation(const TextDocumentPositionParams &,
+                            Callback<std::vector<Location>>);
   void onReference(const ReferenceParams &, Callback<std::vector<Location>>);
   void onSwitchSourceHeader(const TextDocumentIdentifier &,
                             Callback<llvm::Optional<URIForFile>>);
@@ -132,6 +138,14 @@ private:
                        Callback<llvm::Optional<TypeHierarchyItem>>);
   void onResolveTypeHierarchy(const ResolveTypeHierarchyItemParams &,
                               Callback<llvm::Optional<TypeHierarchyItem>>);
+  void onPrepareCallHierarchy(const CallHierarchyPrepareParams &,
+                              Callback<std::vector<CallHierarchyItem>>);
+  void onCallHierarchyIncomingCalls(
+      const CallHierarchyIncomingCallsParams &,
+      Callback<std::vector<CallHierarchyIncomingCall>>);
+  void onCallHierarchyOutgoingCalls(
+      const CallHierarchyOutgoingCallsParams &,
+      Callback<std::vector<CallHierarchyOutgoingCall>>);
   void onChangeConfiguration(const DidChangeConfigurationParams &);
   void onSymbolInfo(const TextDocumentPositionParams &,
                     Callback<std::vector<SymbolDetails>>);
@@ -173,9 +187,17 @@ private:
   /// profiling hasn't happened recently.
   void maybeExportMemoryProfile();
 
+  /// Run the MemoryCleanup callback if it's time.
+  /// This method is thread safe.
+  void maybeCleanupMemory();
+
   /// Timepoint until which profiling is off. It is used to throttle profiling
   /// requests.
   std::chrono::steady_clock::time_point NextProfileTime;
+
+  /// Next time we want to call the MemoryCleanup callback.
+  std::mutex NextMemoryCleanupTimeMutex;
+  std::chrono::steady_clock::time_point NextMemoryCleanupTime;
 
   /// Since initialization of CDBs and ClangdServer is done lazily, the
   /// following context captures the one used while creating ClangdLSPServer and

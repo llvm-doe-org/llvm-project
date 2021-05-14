@@ -2787,6 +2787,11 @@ static PosIntResult IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
   if (Value.isInvalid())
     return PosIntError;
 
+  // ValExpr->getIntegerConstantExpr() fails if ValExpr->isValueDependent(),
+  // which might be true after an error with typo correction.
+  if (ValExpr->isValueDependent())
+    return PosIntError;
+
   ValExpr = Value.get();
   // The expression must evaluate to a non-negative integer value.
   Optional<llvm::APSInt> Result =

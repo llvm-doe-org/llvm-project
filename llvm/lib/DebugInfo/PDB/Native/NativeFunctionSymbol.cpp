@@ -78,10 +78,7 @@ static bool inlineSiteContainsAddress(InlineSiteSym &IS,
       break;
     case BinaryAnnotationsOpCode::ChangeCodeLengthAndCodeOffset:
       CodeOffset += Annot.U2;
-      if (OffsetInFunc >= CodeOffset)
-        Found = true;
-      CodeOffset += Annot.U1;
-      if (Found && OffsetInFunc < CodeOffset)
+      if (OffsetInFunc >= CodeOffset && OffsetInFunc < CodeOffset + Annot.U1)
         return true;
       Found = false;
       break;
@@ -121,7 +118,6 @@ NativeFunctionSymbol::findInlineFramesByVA(uint64_t VA) const {
       InlineSiteSym IS =
           cantFail(SymbolDeserializer::deserializeAs<InlineSiteSym>(*Start));
       if (inlineSiteContainsAddress(IS, CodeOffset)) {
-        fprintf(stderr, "inline: %d\n", Start.offset());
         // Insert frames in reverse order.
         SymIndexId Id = Session.getSymbolCache().getOrCreateInlineSymbol(
             IS, getVirtualAddress(), Modi, Start.offset());

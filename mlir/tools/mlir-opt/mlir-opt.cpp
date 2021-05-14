@@ -32,6 +32,7 @@ namespace mlir {
 void registerConvertToTargetEnvPass();
 void registerPassManagerTestPass();
 void registerPrintOpAvailabilityPass();
+void registerShapeFunctionTestPasses();
 void registerSideEffectTestPasses();
 void registerSliceAnalysisTestPass();
 void registerSymbolTestPasses();
@@ -74,6 +75,7 @@ void registerTestLinalgCodegenStrategy();
 void registerTestLinalgFusionTransforms();
 void registerTestLinalgGreedyFusion();
 void registerTestLinalgHoisting();
+void registerTestLinalgTileAndFuseSequencePass();
 void registerTestLinalgTransforms();
 void registerTestLivenessPass();
 void registerTestLoopFusion();
@@ -84,6 +86,7 @@ void registerTestMemRefStrideCalculation();
 void registerTestNumberOfBlockExecutionsPass();
 void registerTestNumberOfOperationExecutionsPass();
 void registerTestOpaqueLoc();
+void registerTestPDLByteCodePass();
 void registerTestPreparationPassWithAllowedMemrefResults();
 void registerTestRecursiveTypesPass();
 void registerTestSCFUtilsPass();
@@ -97,6 +100,7 @@ void registerTestPasses() {
   registerConvertToTargetEnvPass();
   registerPassManagerTestPass();
   registerPrintOpAvailabilityPass();
+  registerShapeFunctionTestPasses();
   registerSideEffectTestPasses();
   registerSliceAnalysisTestPass();
   registerSymbolTestPasses();
@@ -141,6 +145,7 @@ void registerTestPasses() {
   test::registerTestLinalgFusionTransforms();
   test::registerTestLinalgGreedyFusion();
   test::registerTestLinalgHoisting();
+  test::registerTestLinalgTileAndFuseSequencePass();
   test::registerTestLinalgTransforms();
   test::registerTestLivenessPass();
   test::registerTestLoopFusion();
@@ -151,6 +156,7 @@ void registerTestPasses() {
   test::registerTestNumberOfBlockExecutionsPass();
   test::registerTestNumberOfOperationExecutionsPass();
   test::registerTestOpaqueLoc();
+  test::registerTestPDLByteCodePass();
   test::registerTestRecursiveTypesPass();
   test::registerTestSCFUtilsPass();
   test::registerTestSparsification();

@@ -64,6 +64,8 @@ enum tgt_map_type {
   // TODO: Currently, it is not well tested outside of translations from OpenACC
   // to OpenMP, so it is not yet recommended for general use in OpenMP code.
   OMP_TGT_MAPTYPE_HOLD            = 0x4000,
+  // descriptor for non-contiguous target-update
+  OMP_TGT_MAPTYPE_NON_CONTIG      = 0x100000000000,
   // member of struct, member given by [16 MSBs] - 1
   OMP_TGT_MAPTYPE_MEMBER_OF       = 0xffff000000000000
 };
@@ -133,6 +135,13 @@ struct __tgt_async_info {
   // We assume to use this structure to do synchronization. In CUDA backend, it
   // is CUstream.
   void *Queue = nullptr;
+};
+
+/// This struct is a record of non-contiguous information
+struct __tgt_target_non_contig {
+  uint64_t Offset;
+  uint64_t Count;
+  uint64_t Stride;
 };
 
 #ifdef __cplusplus

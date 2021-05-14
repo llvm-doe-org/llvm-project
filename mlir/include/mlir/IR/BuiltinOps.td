@@ -6,23 +6,17 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Defines the set of builtin MLIR operations.
+// Defines the set of builtin MLIR operations, or the set of operations
+// necessary for the validity of and defining the IR.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef BUILTIN_OPS
 #define BUILTIN_OPS
 
+include "mlir/IR/BuiltinDialect.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
-
-def Builtin_Dialect : Dialect {
-  let summary =
-    "A dialect containing the builtin Attributes, Operations, and Types";
-
-  let name = "";
-  let cppNamespace = "::mlir";
-}
 
 // Base class for Builtin dialect ops.
 class Builtin_Op<string mnemonic, list<OpTrait> traits = []> :
@@ -83,7 +77,7 @@ def FuncOp : Builtin_Op<"func", [
   let builders = [OpBuilderDAG<(ins
     "StringRef":$name, "FunctionType":$type,
     CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
-    CArg<"ArrayRef<MutableDictionaryAttr>", "{}">:$argAttrs)
+    CArg<"ArrayRef<DictionaryAttr>", "{}">:$argAttrs)
   >];
   let extraClassDeclaration = [{
     static FuncOp create(Location location, StringRef name, FunctionType type,
@@ -92,7 +86,7 @@ def FuncOp : Builtin_Op<"func", [
                          iterator_range<dialect_attr_iterator> attrs);
     static FuncOp create(Location location, StringRef name, FunctionType type,
                          ArrayRef<NamedAttribute> attrs,
-                         ArrayRef<MutableDictionaryAttr> argAttrs);
+                         ArrayRef<DictionaryAttr> argAttrs);
 
     /// Create a deep copy of this function and all of its blocks, remapping any
     /// operands that use values outside of the function using the map that is
@@ -195,12 +189,6 @@ def ModuleOp : Builtin_Op<"module", [
 
     /// Return the name of this module if present.
     Optional<StringRef> getName() { return sym_name(); }
-
-    /// Print the this module in the custom top-level form.
-    void print(raw_ostream &os, OpPrintingFlags flags = llvm::None);
-    void print(raw_ostream &os, AsmState &state,
-               OpPrintingFlags flags = llvm::None);
-    void dump();
 
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
