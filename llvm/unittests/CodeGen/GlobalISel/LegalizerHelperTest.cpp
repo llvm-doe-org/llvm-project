@@ -589,9 +589,9 @@ TEST_F(AArch64GISelMITest, WidenUADDO) {
   CHECK: [[LHS:%[0-9]+]]:_(s16) = G_ZEXT [[Trunc]]
   CHECK: [[RHS:%[0-9]+]]:_(s16) = G_ZEXT [[Trunc]]
   CHECK: [[ADD:%[0-9]+]]:_(s16) = G_ADD [[LHS]]:_, [[RHS]]:_
-  CHECK: [[CST:%[0-9]+]]:_(s16) = G_CONSTANT i16 255
-  CHECK: [[AND:%[0-9]+]]:_(s16) = G_AND [[ADD]]:_, [[CST]]:_
-  CHECK: G_ICMP intpred(ne), [[ADD]]:_(s16), [[AND]]:_
+  CHECK: [[TRUNC1:%[0-9]+]]:_(s8) = G_TRUNC [[ADD]]
+  CHECK: [[ZEXT:%[0-9]+]]:_(s16) = G_ZEXT [[TRUNC1]]
+  CHECK: G_ICMP intpred(ne), [[ADD]]:_(s16), [[ZEXT]]:_
   CHECK: G_TRUNC [[ADD]]
   )";
 
@@ -628,10 +628,248 @@ TEST_F(AArch64GISelMITest, WidenUSUBO) {
   CHECK: [[LHS:%[0-9]+]]:_(s16) = G_ZEXT [[Trunc]]
   CHECK: [[RHS:%[0-9]+]]:_(s16) = G_ZEXT [[Trunc]]
   CHECK: [[SUB:%[0-9]+]]:_(s16) = G_SUB [[LHS]]:_, [[RHS]]:_
-  CHECK: [[CST:%[0-9]+]]:_(s16) = G_CONSTANT i16 255
-  CHECK: [[AND:%[0-9]+]]:_(s16) = G_AND [[SUB]]:_, [[CST]]:_
-  CHECK: G_ICMP intpred(ne), [[SUB]]:_(s16), [[AND]]:_
+  CHECK: [[TRUNC1:%[0-9]+]]:_(s8) = G_TRUNC [[SUB]]
+  CHECK: [[ZEXT:%[0-9]+]]:_(s16) = G_ZEXT [[TRUNC1]]
+  CHECK: G_ICMP intpred(ne), [[SUB]]:_(s16), [[ZEXT]]:_
   CHECK: G_TRUNC [[SUB]]
+  )";
+
+  // Check
+  EXPECT_TRUE(CheckMachineFunction(*MF, CheckStr)) << *MF;
+}
+
+// SADDO widening.
+TEST_F(AArch64GISelMITest, WidenSADDO) {
+  setUp();
+  if (!TM)
+    return;
+
+  // Declare your legalization info
+  DefineLegalizerInfo(A, {
+    getActionDefinitionsBuilder(G_ADD).legalFor({{s16, s16}});
+  });
+  // Build
+  // Trunc it to s8.
+  LLT s8{LLT::scalar(8)};
+  LLT s16{LLT::scalar(16)};
+  auto MIBTrunc = B.buildTrunc(s8, Copies[0]);
+  unsigned CarryReg = MRI->createGenericVirtualRegister(LLT::scalar(1));
+  auto MIBSAddO =
+      B.buildInstr(TargetOpcode::G_SADDO, {s8, CarryReg}, {MIBTrunc, MIBTrunc});
+  AInfo Info(MF->getSubtarget());
+  DummyGISelObserver Observer;
+  LegalizerHelper Helper(*MF, Info, Observer, B);
+  EXPECT_TRUE(Helper.widenScalar(*MIBSAddO, 0, s16) ==
+              LegalizerHelper::LegalizeResult::Legalized);
+
+  auto CheckStr = R"(
+  CHECK: [[Trunc:%[0-9]+]]:_(s8) = G_TRUNC
+  CHECK: [[LHS:%[0-9]+]]:_(s16) = G_SEXT [[Trunc]]
+  CHECK: [[RHS:%[0-9]+]]:_(s16) = G_SEXT [[Trunc]]
+  CHECK: [[ADD:%[0-9]+]]:_(s16) = G_ADD [[LHS]]:_, [[RHS]]:_
+  CHECK: [[TRUNC1:%[0-9]+]]:_(s8) = G_TRUNC [[ADD]]
+  CHECK: [[SEXT:%[0-9]+]]:_(s16) = G_SEXT [[TRUNC1]]
+  CHECK: G_ICMP intpred(ne), [[ADD]]:_(s16), [[SEXT]]:_
+  CHECK: G_TRUNC [[ADD]]
+  )";
+
+  // Check
+  EXPECT_TRUE(CheckMachineFunction(*MF, CheckStr)) << *MF;
+}
+
+// SSUBO widening.
+TEST_F(AArch64GISelMITest, WidenSSUBO) {
+  setUp();
+  if (!TM)
+    return;
+
+  // Declare your legalization info
+  DefineLegalizerInfo(A, {
+    getActionDefinitionsBuilder(G_SUB).legalFor({{s16, s16}});
+  });
+  // Build
+  // Trunc it to s8.
+  LLT s8{LLT::scalar(8)};
+  LLT s16{LLT::scalar(16)};
+  auto MIBTrunc = B.buildTrunc(s8, Copies[0]);
+  unsigned CarryReg = MRI->createGenericVirtualRegister(LLT::scalar(1));
+  auto MIBSSUBO =
+      B.buildInstr(TargetOpcode::G_SSUBO, {s8, CarryReg}, {MIBTrunc, MIBTrunc});
+  AInfo Info(MF->getSubtarget());
+  DummyGISelObserver Observer;
+  LegalizerHelper Helper(*MF, Info, Observer, B);
+  EXPECT_TRUE(Helper.widenScalar(*MIBSSUBO, 0, s16) ==
+              LegalizerHelper::LegalizeResult::Legalized);
+
+  auto CheckStr = R"(
+  CHECK: [[Trunc:%[0-9]+]]:_(s8) = G_TRUNC
+  CHECK: [[LHS:%[0-9]+]]:_(s16) = G_SEXT [[Trunc]]
+  CHECK: [[RHS:%[0-9]+]]:_(s16) = G_SEXT [[Trunc]]
+  CHECK: [[SUB:%[0-9]+]]:_(s16) = G_SUB [[LHS]]:_, [[RHS]]:_
+  CHECK: [[TRUNC1:%[0-9]+]]:_(s8) = G_TRUNC [[SUB]]
+  CHECK: [[SEXT:%[0-9]+]]:_(s16) = G_SEXT [[TRUNC1]]
+  CHECK: G_ICMP intpred(ne), [[SUB]]:_(s16), [[SEXT]]:_
+  CHECK: G_TRUNC [[SUB]]
+  )";
+
+  // Check
+  EXPECT_TRUE(CheckMachineFunction(*MF, CheckStr)) << *MF;
+}
+
+TEST_F(AArch64GISelMITest, WidenUADDE) {
+  setUp();
+  if (!TM)
+    return;
+
+  // Declare your legalization info
+  DefineLegalizerInfo(A, {
+    getActionDefinitionsBuilder(G_UADDE).legalFor({{s16, s16}});
+  });
+  // Build
+  // Trunc it to s8.
+  LLT s8{LLT::scalar(8)};
+  LLT s16{LLT::scalar(16)};
+  auto MIBTrunc = B.buildTrunc(s8, Copies[0]);
+  auto CarryIn = B.buildUndef(LLT::scalar(1));
+  Register CarryReg = MRI->createGenericVirtualRegister(LLT::scalar(1));
+  auto MIBUAddO = B.buildInstr(TargetOpcode::G_UADDE, {s8, CarryReg},
+                               {MIBTrunc, MIBTrunc, CarryIn});
+  AInfo Info(MF->getSubtarget());
+  DummyGISelObserver Observer;
+  LegalizerHelper Helper(*MF, Info, Observer, B);
+  EXPECT_TRUE(Helper.widenScalar(*MIBUAddO, 0, s16) ==
+              LegalizerHelper::LegalizeResult::Legalized);
+
+  const char *CheckStr = R"(
+  CHECK: [[Trunc:%[0-9]+]]:_(s8) = G_TRUNC
+  CHECK: [[Implicit:%[0-9]+]]:_(s1) = G_IMPLICIT_DEF
+  CHECK: [[LHS:%[0-9]+]]:_(s16) = G_ZEXT [[Trunc]]
+  CHECK: [[RHS:%[0-9]+]]:_(s16) = G_ZEXT [[Trunc]]
+  CHECK: [[UADDE:%[0-9]+]]:_(s16), [[CARRY:%[0-9]+]]:_(s1) = G_UADDE [[LHS]]:_, [[RHS]]:_, [[Implicit]]:_
+  CHECK: [[TRUNC1:%[0-9]+]]:_(s8) = G_TRUNC [[UADDE]]
+  CHECK: [[ZEXT:%[0-9]+]]:_(s16) = G_ZEXT [[TRUNC1]]
+  CHECK: G_ICMP intpred(ne), [[UADDE]]:_(s16), [[ZEXT]]:_
+  CHECK: G_TRUNC [[UADDE]]
+  )";
+
+  // Check
+  EXPECT_TRUE(CheckMachineFunction(*MF, CheckStr)) << *MF;
+}
+
+TEST_F(AArch64GISelMITest, WidenUSUBE) {
+  setUp();
+  if (!TM)
+    return;
+
+  // Declare your legalization info
+  DefineLegalizerInfo(A, {
+    getActionDefinitionsBuilder(G_USUBE).legalFor({{s16, s16}});
+  });
+  // Build
+  // Trunc it to s8.
+  LLT s8{LLT::scalar(8)};
+  LLT s16{LLT::scalar(16)};
+  auto MIBTrunc = B.buildTrunc(s8, Copies[0]);
+  auto CarryIn = B.buildUndef(LLT::scalar(1));
+  Register CarryReg = MRI->createGenericVirtualRegister(LLT::scalar(1));
+  auto MIBUSUBE = B.buildInstr(TargetOpcode::G_USUBE, {s8, CarryReg},
+                               {MIBTrunc, MIBTrunc, CarryIn});
+  AInfo Info(MF->getSubtarget());
+  DummyGISelObserver Observer;
+  LegalizerHelper Helper(*MF, Info, Observer, B);
+  EXPECT_TRUE(Helper.widenScalar(*MIBUSUBE, 0, s16) ==
+              LegalizerHelper::LegalizeResult::Legalized);
+
+  const char *CheckStr = R"(
+  CHECK: [[Trunc:%[0-9]+]]:_(s8) = G_TRUNC
+  CHECK: [[Implicit:%[0-9]+]]:_(s1) = G_IMPLICIT_DEF
+  CHECK: [[LHS:%[0-9]+]]:_(s16) = G_ZEXT [[Trunc]]
+  CHECK: [[RHS:%[0-9]+]]:_(s16) = G_ZEXT [[Trunc]]
+  CHECK: [[USUBE:%[0-9]+]]:_(s16), [[CARRY:%[0-9]+]]:_(s1) = G_USUBE [[LHS]]:_, [[RHS]]:_, [[Implicit]]:_
+  CHECK: [[TRUNC1:%[0-9]+]]:_(s8) = G_TRUNC [[USUBE]]
+  CHECK: [[ZEXT:%[0-9]+]]:_(s16) = G_ZEXT [[TRUNC1]]
+  CHECK: G_ICMP intpred(ne), [[USUBE]]:_(s16), [[ZEXT]]:_
+  CHECK: G_TRUNC [[USUBE]]
+  )";
+
+  // Check
+  EXPECT_TRUE(CheckMachineFunction(*MF, CheckStr)) << *MF;
+}
+
+TEST_F(AArch64GISelMITest, WidenSADDE) {
+  setUp();
+  if (!TM)
+    return;
+
+  // Declare your legalization info
+  DefineLegalizerInfo(A, {
+    getActionDefinitionsBuilder({G_SADDE, G_UADDE}).legalFor({{s16, s16}});
+  });
+  // Build
+  // Trunc it to s8.
+  LLT s8{LLT::scalar(8)};
+  LLT s16{LLT::scalar(16)};
+  auto MIBTrunc = B.buildTrunc(s8, Copies[0]);
+  auto CarryIn = B.buildUndef(LLT::scalar(1));
+  Register CarryReg = MRI->createGenericVirtualRegister(LLT::scalar(1));
+  auto MIBUAddO = B.buildInstr(TargetOpcode::G_SADDE, {s8, CarryReg},
+                               {MIBTrunc, MIBTrunc, CarryIn});
+  AInfo Info(MF->getSubtarget());
+  DummyGISelObserver Observer;
+  LegalizerHelper Helper(*MF, Info, Observer, B);
+  EXPECT_TRUE(Helper.widenScalar(*MIBUAddO, 0, s16) ==
+              LegalizerHelper::LegalizeResult::Legalized);
+
+  const char *CheckStr = R"(
+  CHECK: [[Trunc:%[0-9]+]]:_(s8) = G_TRUNC
+  CHECK: [[Implicit:%[0-9]+]]:_(s1) = G_IMPLICIT_DEF
+  CHECK: [[LHS:%[0-9]+]]:_(s16) = G_SEXT [[Trunc]]
+  CHECK: [[RHS:%[0-9]+]]:_(s16) = G_SEXT [[Trunc]]
+  CHECK: [[SADDE:%[0-9]+]]:_(s16), [[CARRY:%[0-9]+]]:_(s1) = G_UADDE [[LHS]]:_, [[RHS]]:_, [[Implicit]]:_
+  CHECK: [[TRUNC1:%[0-9]+]]:_(s8) = G_TRUNC [[SADDE]]
+  CHECK: [[SEXT:%[0-9]+]]:_(s16) = G_SEXT [[TRUNC1]]
+  CHECK: G_ICMP intpred(ne), [[SADDE]]:_(s16), [[SEXT]]:_
+  CHECK: G_TRUNC [[SADDE]]
+  )";
+
+  // Check
+  EXPECT_TRUE(CheckMachineFunction(*MF, CheckStr)) << *MF;
+}
+
+TEST_F(AArch64GISelMITest, WidenSSUBE) {
+  setUp();
+  if (!TM)
+    return;
+
+  // Declare your legalization info
+  DefineLegalizerInfo(A, {
+    getActionDefinitionsBuilder({G_SSUBE, G_USUBE}).legalFor({{s16, s16}});
+  });
+  // Build
+  // Trunc it to s8.
+  LLT s8{LLT::scalar(8)};
+  LLT s16{LLT::scalar(16)};
+  auto MIBTrunc = B.buildTrunc(s8, Copies[0]);
+  auto CarryIn = B.buildUndef(LLT::scalar(1));
+  Register CarryReg = MRI->createGenericVirtualRegister(LLT::scalar(1));
+  auto MIBSSUBE = B.buildInstr(TargetOpcode::G_SSUBE, {s8, CarryReg},
+                               {MIBTrunc, MIBTrunc, CarryIn});
+  AInfo Info(MF->getSubtarget());
+  DummyGISelObserver Observer;
+  LegalizerHelper Helper(*MF, Info, Observer, B);
+  EXPECT_TRUE(Helper.widenScalar(*MIBSSUBE, 0, s16) ==
+              LegalizerHelper::LegalizeResult::Legalized);
+
+  const char *CheckStr = R"(
+  CHECK: [[Trunc:%[0-9]+]]:_(s8) = G_TRUNC
+  CHECK: [[Implicit:%[0-9]+]]:_(s1) = G_IMPLICIT_DEF
+  CHECK: [[LHS:%[0-9]+]]:_(s16) = G_SEXT [[Trunc]]
+  CHECK: [[RHS:%[0-9]+]]:_(s16) = G_SEXT [[Trunc]]
+  CHECK: [[SSUBE:%[0-9]+]]:_(s16), [[CARRY:%[0-9]+]]:_(s1) = G_USUBE [[LHS]]:_, [[RHS]]:_, [[Implicit]]:_
+  CHECK: [[TRUNC1:%[0-9]+]]:_(s8) = G_TRUNC [[SSUBE]]
+  CHECK: [[SEXT:%[0-9]+]]:_(s16) = G_SEXT [[TRUNC1]]
+  CHECK: G_ICMP intpred(ne), [[SSUBE]]:_(s16), [[SEXT]]:_
+  CHECK: G_TRUNC [[SSUBE]]
   )";
 
   // Check

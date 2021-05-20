@@ -402,6 +402,29 @@ public:
 
 } // namespace
 
+static void prepareSymbolRelocation(lld::macho::Symbol *sym,
+                                    const InputSection *isec, const Reloc &r) {
+  const TargetInfo::RelocAttrs &relocAttrs = target->getRelocAttrs(r.type);
+
+  if (relocAttrs.hasAttr(RelocAttrBits::BRANCH)) {
+    prepareBranchTarget(sym);
+  } else if (relocAttrs.hasAttr(RelocAttrBits::GOT | RelocAttrBits::LOAD)) {
+    if (needsBinding(sym))
+      in.got->addEntry(sym);
+  } else if (relocAttrs.hasAttr(RelocAttrBits::GOT)) {
+    in.got->addEntry(sym);
+  } else if (relocAttrs.hasAttr(RelocAttrBits::TLV | RelocAttrBits::LOAD)) {
+    if (needsBinding(sym))
+      in.tlvPointers->addEntry(sym);
+  } else if (relocAttrs.hasAttr(RelocAttrBits::TLV)) {
+    // References from thread-local variable sections are treated as offsets
+    // relative to the start of the referent section, and therefore have no
+    // need of rebase opcodes.
+    if (!(isThreadLocalVariables(isec->flags) && isa<Defined>(sym)))
+      addNonLazyBindingEntries(sym, isec, r.offset, r.addend);
+  }
+}
+
 void Writer::scanRelocations() {
   for (InputSection *isec : inputSections) {
     // We do not wish to add rebase opcodes for __LD,__compact_unwind, because
@@ -411,11 +434,13 @@ void Writer::scanRelocations() {
       continue;
 
     for (Reloc &r : isec->relocs) {
-      if (auto *s = r.referent.dyn_cast<lld::macho::Symbol *>()) {
-        if (isa<Undefined>(s))
-          treatUndefinedSymbol(toString(*s), toString(isec->file));
-        else
-          target->prepareSymbolRelocation(s, isec, r);
+      if (target->hasAttr(r.type, RelocAttrBits::SUBTRAHEND))
+        continue;
+      if (auto *sym = r.referent.dyn_cast<lld::macho::Symbol *>()) {
+        if (auto *undefined = dyn_cast<Undefined>(sym))
+          treatUndefinedSymbol(*undefined);
+        else if (target->validateSymbolRelocation(sym, isec, r))
+          prepareSymbolRelocation(sym, isec, r);
       } else {
         assert(r.referent.is<InputSection *>());
         if (!r.pcrel)
@@ -431,7 +456,8 @@ void Writer::scanSymbols() {
       if (defined->overridesWeakDef)
         in.weakBinding->addNonWeakDefinition(defined);
     } else if (const auto *dysym = dyn_cast<DylibSymbol>(sym)) {
-      dysym->file->refState = std::max(dysym->file->refState, dysym->refState);
+      dysym->getFile()->refState =
+          std::max(dysym->getFile()->refState, dysym->refState);
     }
   }
 }
@@ -557,7 +583,27 @@ static int sectionOrder(OutputSection *osec) {
         .Case(section_names::unwindInfo, std::numeric_limits<int>::max() - 1)
         .Case(section_names::ehFrame, std::numeric_limits<int>::max())
         .Default(0);
-  } else if (segname == segment_names::linkEdit) {
+  }
+  if (segname == segment_names::data) {
+    // For each thread spawned, dyld will initialize its TLVs by copying the
+    // address range from the start of the first thread-local data section to
+    // the end of the last one. We therefore arrange these sections contiguously
+    // to minimize the amount of memory used. Additionally, since zerofill
+    // sections must be at the end of their segments, and since TLV data
+    // sections can be zerofills, we end up putting all TLV data sections at the
+    // end of the segment.
+    switch (sectionType(osec->flags)) {
+    case S_THREAD_LOCAL_REGULAR:
+      return std::numeric_limits<int>::max() - 2;
+    case S_THREAD_LOCAL_ZEROFILL:
+      return std::numeric_limits<int>::max() - 1;
+    case S_ZEROFILL:
+      return std::numeric_limits<int>::max();
+    default:
+      return 0;
+    }
+  }
+  if (segname == segment_names::linkEdit) {
     return StringSwitch<int>(osec->name)
         .Case(section_names::rebase, -8)
         .Case(section_names::binding, -7)
@@ -571,7 +617,7 @@ static int sectionOrder(OutputSection *osec) {
   }
   // ZeroFill sections must always be the at the end of their segments,
   // otherwise subsequent sections may get overwritten with zeroes at runtime.
-  if (isZeroFill(osec->flags))
+  if (sectionType(osec->flags) == S_ZEROFILL)
     return std::numeric_limits<int>::max();
   return 0;
 }
@@ -594,11 +640,14 @@ static void sortSegmentsAndSections() {
   uint32_t sectionIndex = 0;
   for (OutputSegment *seg : outputSegments) {
     seg->sortOutputSections(compareByOrder<OutputSection *>(sectionOrder));
-    for (auto *osec : seg->getSections()) {
+    for (OutputSection *osec : seg->getSections()) {
       // Now that the output sections are sorted, assign the final
       // output section indices.
       if (!osec->isHidden())
         osec->index = ++sectionIndex;
+
+      if (!firstTLVDataSection && isThreadLocalData(osec->flags))
+        firstTLVDataSection = osec;
 
       if (!isecPriorities.empty()) {
         if (auto *merged = dyn_cast<MergedOutputSection>(osec)) {
@@ -670,7 +719,7 @@ void Writer::assignAddresses(OutputSegment *seg) {
   fileOff = alignTo(fileOff, PageSize);
   seg->fileOff = fileOff;
 
-  for (auto *osec : seg->getSections()) {
+  for (OutputSection *osec : seg->getSections()) {
     if (!osec->isNeeded())
       continue;
     addr = alignTo(addr, osec->align);
@@ -777,3 +826,5 @@ void macho::createSyntheticSections() {
   in.stubHelper = make<StubHelperSection>();
   in.imageLoaderCache = make<ImageLoaderCacheSection>();
 }
+
+OutputSection *macho::firstTLVDataSection = nullptr;

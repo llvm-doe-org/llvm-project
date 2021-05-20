@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "device.h"
-#include "MemoryManager.h"
 #include "private.h"
 #include "rtl.h"
 
@@ -28,7 +27,7 @@ DeviceTy::DeviceTy(const DeviceTy &D)
       HostDataToTargetMap(D.HostDataToTargetMap),
       PendingCtorsDtors(D.PendingCtorsDtors), ShadowPtrMap(D.ShadowPtrMap),
       DataMapMtx(), PendingGlobalsMtx(), ShadowMtx(),
-      LoopTripCnt(D.LoopTripCnt), MemoryManager(nullptr) {}
+      LoopTripCnt(D.LoopTripCnt) {}
 
 DeviceTy &DeviceTy::operator=(const DeviceTy &D) {
   DeviceID = D.DeviceID;
@@ -50,8 +49,7 @@ DeviceTy &DeviceTy::operator=(const DeviceTy &D) {
 DeviceTy::DeviceTy(RTLInfoTy *RTL)
     : DeviceID(-1), RTL(RTL), RTLDeviceID(-1), IsInit(false), InitFlag(),
       HasPendingGlobals(false), HostDataToTargetMap(), PendingCtorsDtors(),
-      ShadowPtrMap(), DataMapMtx(), PendingGlobalsMtx(), ShadowMtx(),
-      MemoryManager(nullptr) {
+      ShadowPtrMap(), DataMapMtx(), PendingGlobalsMtx(), ShadowMtx() {
 #if OMPT_SUPPORT
   OmptApi.global_device_id = DeviceID;
   OmptApi.ompt_get_enabled = ompt_get_enabled;
@@ -60,10 +58,11 @@ DeviceTy::DeviceTy(RTLInfoTy *RTL)
 }
 
 DeviceTy::~DeviceTy() {
-  if (DeviceID == -1 || getInfoLevel() < 1)
+  if (DeviceID == -1 || !(getInfoLevel() & OMP_INFOTYPE_DUMP_TABLE))
     return;
 
-  dumpTargetPointerMappings(*this);
+  ident_t loc = {0, 0, 0, 0, ";libomptarget;libomptarget;0;0;;"};
+  dumpTargetPointerMappings(&loc, *this);
 }
 
 int DeviceTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size) {
@@ -303,14 +302,14 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
       HT.incRefCount(HasHoldModifier);
 
     uintptr_t tp = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
-    INFO(DeviceID,
+    INFO(OMP_INFOTYPE_MAPPING_EXISTS, DeviceID,
          "Mapping exists%s with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD
          ", "
          "Size=%" PRId64 ",%s RefCount=%s, Name=%s\n",
          (IsImplicit ? " (implicit)" : ""), DPxPTR(HstPtrBegin), DPxPTR(tp),
          Size, (UpdateRefCount ? " updated" : ""),
          HT.isRefCountInf() ? "INF" : std::to_string(HT.getRefCount()).c_str(),
-         (HstPtrName) ? getNameFromMapping(HstPtrName).c_str() : "(null)");
+         (HstPtrName) ? getNameFromMapping(HstPtrName).c_str() : "unknown");
     rc = (void *)tp;
   } else if ((lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) && !IsImplicit) {
     DP("Explicit extension not allowed: host address specified is " DPxMOD " (%"
@@ -623,16 +622,6 @@ void DeviceTy::init() {
     ompt_record_device_init(DeviceID);
 #endif
 
-  // The memory manager will only be disabled when users provide a threshold via
-  // the environment variable \p LIBOMPTARGET_MEMORY_MANAGER_THRESHOLD and set
-  // it to 0.
-  if (const char *Env = std::getenv("LIBOMPTARGET_MEMORY_MANAGER_THRESHOLD")) {
-    size_t Threshold = std::stoul(Env);
-    if (Threshold)
-      MemoryManager = std::make_unique<MemoryManagerTy>(*this, Threshold);
-  } else
-    MemoryManager = std::make_unique<MemoryManagerTy>(*this);
-
   IsInit = true;
 }
 
@@ -661,18 +650,10 @@ __tgt_target_table *DeviceTy::load_binary(void *Img) {
 }
 
 void *DeviceTy::allocData(int64_t Size, void *HstPtr) {
-  // If memory manager is enabled, we will allocate data via memory manager.
-  if (MemoryManager)
-    return MemoryManager->allocate(Size, HstPtr);
-
   return RTL->data_alloc(RTLDeviceID, Size, HstPtr);
 }
 
 int32_t DeviceTy::deleteData(void *TgtPtrBegin) {
-  // If memory manager is enabled, we will deallocate data via memory manager.
-  if (MemoryManager)
-    return MemoryManager->free(TgtPtrBegin);
-
   return RTL->data_delete(RTLDeviceID, TgtPtrBegin);
 }
 

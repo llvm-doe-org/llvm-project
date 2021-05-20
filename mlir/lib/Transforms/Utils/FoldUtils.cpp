@@ -61,9 +61,9 @@ static Operation *materializeConstant(Dialect *dialect, OpBuilder &builder,
     return constOp;
   }
 
-  // TODO: To faciliate splitting the std dialect (PR48490), have a special case
-  // for falling back to std.constant. Eventually, we will have separate ops
-  // tensor.constant, int.constant, float.constant, etc. that live in their
+  // TODO: To facilitate splitting the std dialect (PR48490), have a special
+  // case for falling back to std.constant. Eventually, we will have separate
+  // ops tensor.constant, int.constant, float.constant, etc. that live in their
   // respective dialects, which will allow each dialect to implement the
   // materializeConstant hook above.
   //
@@ -221,6 +221,8 @@ LogicalResult OperationFolder::tryToFold(
 
     // Check if the result was an SSA value.
     if (auto repl = foldResults[i].dyn_cast<Value>()) {
+      if (repl.getType() != op->getResult(i).getType())
+        return failure();
       results.emplace_back(repl);
       continue;
     }

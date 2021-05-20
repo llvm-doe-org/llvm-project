@@ -284,7 +284,7 @@ public:
   }
 
   /// Read an arbitrary constant value, advancing Idx.
-  APValue readAPValue();
+  // APValue readAPValue(); (inherited)
 
   /// Read an integral value, advancing Idx.
   // llvm::APInt readAPInt(); (inherited)

@@ -334,7 +334,7 @@ public:
 
   LogicalResult matchAndRewrite(AffineYieldOp op,
                                 PatternRewriter &rewriter) const override {
-    if (isa<scf::ParallelOp>(op.getParentOp())) {
+    if (isa<scf::ParallelOp>(op->getParentOp())) {
       // scf.parallel does not yield any values via its terminator scf.yield but
       // models reductions differently using additional ops in its region.
       rewriter.replaceOpWithNewOp<scf::YieldOp>(op);
@@ -379,7 +379,8 @@ static Value getIdentityValue(AtomicRMWKind op, OpBuilder &builder,
     return builder.create<ConstantOp>(loc, builder.getI32IntegerAttr(1));
   // TODO: Add remaining reduction operations.
   default:
-    emitOptionalError(loc, "Reduction operation type not supported");
+    (void)emitOptionalError(loc, "Reduction operation type not supported");
+    break;
   }
   return nullptr;
 }
@@ -399,7 +400,8 @@ static Value getReductionOp(AtomicRMWKind op, OpBuilder &builder, Location loc,
     return builder.create<MulIOp>(loc, lhs, rhs);
   // TODO: Add remaining reduction operations.
   default:
-    emitOptionalError(loc, "Reduction operation type not supported");
+    (void)emitOptionalError(loc, "Reduction operation type not supported");
+    break;
   }
   return nullptr;
 }

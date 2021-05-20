@@ -152,7 +152,7 @@ private:
     setKind((InstList.size() == 0 && Input.size() == 1)
                 ? NodeKind::SingleInstruction
                 : NodeKind::MultiInstruction);
-    InstList.insert(InstList.end(), Input.begin(), Input.end());
+    llvm::append_range(InstList, Input);
   }
   void appendInstructions(const SimpleDDGNode &Input) {
     appendInstructions(Input.getInstructions());
@@ -275,7 +275,7 @@ public:
   virtual ~DependenceGraphInfo() {}
 
   /// Return the label that is used to name this graph.
-  const StringRef getName() const { return Name; }
+  StringRef getName() const { return Name; }
 
   /// Return the root node of the graph.
   NodeType &getRoot() const {

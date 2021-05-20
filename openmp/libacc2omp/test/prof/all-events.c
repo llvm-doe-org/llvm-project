@@ -622,6 +622,7 @@ int main() {
     #line 80000
     #pragma acc data copy(arr1[0:5])
     {
+      // Implicit data regions have data events.
       #line 90000
       #pragma acc parallel num_gangs(1)
 #else

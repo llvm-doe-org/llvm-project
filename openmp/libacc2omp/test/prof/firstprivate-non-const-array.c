@@ -94,15 +94,11 @@ int main() {
   // OFF:acc_ev_device_init_end
 
   // CHECK:acc_ev_compute_construct_start
-  //   OFF:acc_ev_enter_data_start
-  //   OFF:acc_ev_enter_data_end
   // CHECK:acc_ev_enqueue_launch_start
   // CHECK:acc_ev_enqueue_launch_end
 #line 20000
   #pragma acc parallel num_gangs(1)
     ;
-  //   OFF:acc_ev_exit_data_start
-  //   OFF:acc_ev_exit_data_end
   // CHECK:acc_ev_compute_construct_end
 
   // CHECK:before kernel 1

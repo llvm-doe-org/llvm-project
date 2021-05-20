@@ -38,7 +38,7 @@
 #define TARGET_OMP_DEVICE_T omp_device_none
 #endif
 
-#include "../../common/elf_common.c"
+#include "elf_common.h"
 
 #define NUMBER_OF_DEVICES 4
 #define OFFLOADSECTIONNAME "omp_offloading_entries"

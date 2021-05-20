@@ -165,6 +165,20 @@ void baz() {
 #pragma omp target update to(t) nowait
 }
 
+struct S3 {
+  double Z[64];
+};
+
+#pragma omp declare mapper(id: S3 s) map(s.Z[0:64])
+
+void qux() {
+  S3 s;
+#pragma omp target map(mapper(id), to:s)
+  { }
+}
+
+// DEBUG: @{{[0-9]+}} = private unnamed_addr constant [{{[0-9]+}} x i8] c";s.Z[0:64];{{.*}}.cpp;{{[0-9]+}};{{[0-9]+}};;\00"
+
 // Clang used to mistakenly generate the map name "x" for both x and y on this
 // directive.  Conditions to reproduce the bug: a single map clause has two
 // variables, and at least the second is used in the associated statement.

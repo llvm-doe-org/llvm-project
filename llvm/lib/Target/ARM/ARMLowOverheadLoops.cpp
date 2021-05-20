@@ -143,8 +143,7 @@ namespace {
       // Insert exit blocks.
       SmallVector<MachineBasicBlock*, 2> ExitBlocks;
       ML.getExitBlocks(ExitBlocks);
-      for (auto *MBB : ExitBlocks)
-        Order.push_back(MBB);
+      append_range(Order, ExitBlocks);
 
       // Then add the loop body.
       Search(ML.getHeader());
@@ -1453,17 +1452,26 @@ MachineInstr* ARMLowOverheadLoops::ExpandLoopStart(LowOverheadLoop &LoLoop) {
   unsigned Opc = LoLoop.getStartOpcode();
   MachineOperand &Count = LoLoop.getLoopStartOperand();
 
-  MachineInstrBuilder MIB =
-    BuildMI(*MBB, InsertPt, Start->getDebugLoc(), TII->get(Opc));
+  // A DLS lr, lr we needn't emit
+  MachineInstr* NewStart;
+  if (Opc == ARM::t2DLS && Count.isReg() && Count.getReg() == ARM::LR) {
+    LLVM_DEBUG(dbgs() << "ARM Loops: Didn't insert start: DLS lr, lr");
+    NewStart = nullptr;
+  } else {
+    MachineInstrBuilder MIB =
+      BuildMI(*MBB, InsertPt, Start->getDebugLoc(), TII->get(Opc));
 
-  MIB.addDef(ARM::LR);
-  MIB.add(Count);
-  if (!isDo(Start))
-    MIB.add(Start->getOperand(1));
+    MIB.addDef(ARM::LR);
+    MIB.add(Count);
+    if (!isDo(Start))
+      MIB.add(Start->getOperand(1));
+
+    LLVM_DEBUG(dbgs() << "ARM Loops: Inserted start: " << *MIB);
+    NewStart = &*MIB;
+  }
 
   LoLoop.ToRemove.insert(Start);
-  LLVM_DEBUG(dbgs() << "ARM Loops: Inserted start: " << *MIB);
-  return &*MIB;
+  return NewStart;
 }
 
 void ARMLowOverheadLoops::ConvertVPTBlocks(LowOverheadLoop &LoLoop) {
@@ -1645,7 +1653,8 @@ void ARMLowOverheadLoops::Expand(LowOverheadLoop &LoLoop) {
       RevertLoopEnd(LoLoop.End, RevertLoopDec(LoLoop.Dec));
   } else {
     LoLoop.Start = ExpandLoopStart(LoLoop);
-    RemoveDeadBranch(LoLoop.Start);
+    if (LoLoop.Start)
+      RemoveDeadBranch(LoLoop.Start);
     LoLoop.End = ExpandLoopEnd(LoLoop);
     RemoveDeadBranch(LoLoop.End);
     if (LoLoop.IsTailPredicationLegal())

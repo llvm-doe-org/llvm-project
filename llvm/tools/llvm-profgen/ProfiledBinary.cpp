@@ -8,6 +8,7 @@
 
 #include "ProfiledBinary.h"
 #include "ErrorHandling.h"
+#include "ProfileGenerator.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/Support/CommandLine.h"
@@ -28,6 +29,10 @@ static cl::opt<bool> ShowSourceLocations("show-source-locations",
                                          cl::ReallyHidden, cl::init(false),
                                          cl::ZeroOrMore,
                                          cl::desc("Print source locations."));
+
+static cl::opt<bool> ShowPseudoProbe(
+    "show-pseudo-probe", cl::ReallyHidden, cl::init(false), cl::ZeroOrMore,
+    cl::desc("Print pseudo probe section and disassembled info."));
 
 namespace llvm {
 namespace sampleprof {
@@ -93,6 +98,9 @@ void ProfiledBinary::load() {
   // Find the preferred base address for text sections.
   setPreferredBaseAddress(Obj);
 
+  // Decode pseudo probe related section
+  decodePseudoProbe(Obj);
+
   // Disassemble the text sections.
   disassemble(Obj);
 
@@ -101,8 +109,6 @@ void ProfiledBinary::load() {
   ProEpilogTracker.inferEpilogOffsets(RetAddrs);
 
   // TODO: decode other sections.
-
-  return;
 }
 
 bool ProfiledBinary::inlineContextEqual(uint64_t Address1,
@@ -120,13 +126,13 @@ bool ProfiledBinary::inlineContextEqual(uint64_t Address1,
                     Context2.begin(), Context2.begin() + Context2.size() - 1);
 }
 
-std::string
-ProfiledBinary::getExpandedContextStr(const std::list<uint64_t> &Stack) const {
+std::string ProfiledBinary::getExpandedContextStr(
+    const SmallVectorImpl<uint64_t> &Stack) const {
   std::string ContextStr;
-  SmallVector<std::string, 8> ContextVec;
+  SmallVector<std::string, 16> ContextVec;
   // Process from frame root to leaf
-  for (auto Iter = Stack.rbegin(); Iter != Stack.rend(); Iter++) {
-    uint64_t Offset = virtualAddrToOffset(*Iter);
+  for (auto Address : Stack) {
+    uint64_t Offset = virtualAddrToOffset(Address);
     const FrameLocationStack &ExpandedContext = getFrameLocationStack(Offset);
     for (const auto &Loc : ExpandedContext) {
       ContextVec.push_back(getCallSite(Loc));
@@ -134,22 +140,22 @@ ProfiledBinary::getExpandedContextStr(const std::list<uint64_t> &Stack) const {
   }
 
   assert(ContextVec.size() && "Context length should be at least 1");
+  // Compress the context string except for the leaf frame
+  std::string LeafFrame = ContextVec.back();
+  ContextVec.pop_back();
+  CSProfileGenerator::compressRecursionContext<std::string>(ContextVec);
 
   std::ostringstream OContextStr;
   for (uint32_t I = 0; I < (uint32_t)ContextVec.size(); I++) {
     if (OContextStr.str().size()) {
       OContextStr << " @ ";
     }
-
-    if (I == ContextVec.size() - 1) {
-      // Only keep the function name for the leaf frame
-      StringRef Ref(ContextVec[I]);
-      OContextStr << Ref.split(":").first.str();
-    } else {
-      OContextStr << ContextVec[I];
-    }
+    OContextStr << ContextVec[I];
   }
-
+  // Only keep the function name for the leaf frame
+  if (OContextStr.str().size())
+    OContextStr << " @ ";
+  OContextStr << StringRef(LeafFrame).split(":").first.str();
   return OContextStr.str();
 }
 
@@ -163,6 +169,30 @@ void ProfiledBinary::setPreferredBaseAddress(const ELFObjectFileBase *Obj) {
     }
   }
   exitWithError("no text section found", Obj->getFileName());
+}
+
+void ProfiledBinary::decodePseudoProbe(const ELFObjectFileBase *Obj) {
+  StringRef FileName = Obj->getFileName();
+  for (section_iterator SI = Obj->section_begin(), SE = Obj->section_end();
+       SI != SE; ++SI) {
+    const SectionRef &Section = *SI;
+    StringRef SectionName = unwrapOrError(Section.getName(), FileName);
+
+    if (SectionName == ".pseudo_probe_desc") {
+      StringRef Contents = unwrapOrError(Section.getContents(), FileName);
+      ProbeDecoder.buildGUID2FuncDescMap(
+          reinterpret_cast<const uint8_t *>(Contents.data()), Contents.size());
+    } else if (SectionName == ".pseudo_probe") {
+      StringRef Contents = unwrapOrError(Section.getContents(), FileName);
+      ProbeDecoder.buildAddress2ProbeMap(
+          reinterpret_cast<const uint8_t *>(Contents.data()), Contents.size());
+      // set UsePseudoProbes flag, used for PerfReader
+      UsePseudoProbes = true;
+    }
+  }
+
+  if (ShowPseudoProbe)
+    ProbeDecoder.printGUID2FuncDescMap(outs());
 }
 
 bool ProfiledBinary::dissassembleSymbol(std::size_t SI, ArrayRef<uint8_t> Bytes,
@@ -193,6 +223,10 @@ bool ProfiledBinary::dissassembleSymbol(std::size_t SI, ArrayRef<uint8_t> Bytes,
       return false;
 
     if (ShowDisassembly) {
+      if (ShowPseudoProbe) {
+        ProbeDecoder.printProbeForAddress(outs(),
+                                          Offset + PreferredBaseAddress);
+      }
       outs() << format("%8" PRIx64 ":", Offset);
       size_t Start = outs().tell();
       IPrinter->printInst(&Inst, Offset + Size, "", *STI.get(), outs());

@@ -3,6 +3,7 @@ set(LLVM_OPTIONAL_SOURCES
   AffineStructures.cpp
   BufferAliasAnalysis.cpp
   CallGraph.cpp
+  LinearTransform.cpp
   Liveness.cpp
   LoopAnalysis.cpp
   NestedMatcher.cpp
@@ -30,12 +31,14 @@ add_mlir_library(MLIRAnalysis
   MLIRCallInterfaces
   MLIRControlFlowInterfaces
   MLIRInferTypeOpInterface
+  MLIRLinalg
   MLIRSCF
   )
 
 add_mlir_library(MLIRLoopAnalysis
   AffineAnalysis.cpp
   AffineStructures.cpp
+  LinearTransform.cpp
   LoopAnalysis.cpp
   NestedMatcher.cpp
   PresburgerSet.cpp

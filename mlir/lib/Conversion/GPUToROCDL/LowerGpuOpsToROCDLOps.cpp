@@ -62,7 +62,7 @@ struct LowerGpuOpsToROCDLOpsPass
     OwningRewritePatternList patterns, llvmPatterns;
 
     populateGpuRewritePatterns(m.getContext(), patterns);
-    applyPatternsAndFoldGreedily(m, std::move(patterns));
+    (void)applyPatternsAndFoldGreedily(m, std::move(patterns));
 
     populateVectorToLLVMConversionPatterns(converter, llvmPatterns);
     populateVectorToROCDLConversionPatterns(converter, llvmPatterns);
@@ -121,6 +121,8 @@ void mlir::populateGpuToROCDLConversionPatterns(
                                                "__ocml_log_f64");
   patterns.insert<OpToFuncCallLowering<Log10Op>>(converter, "__ocml_log10_f32",
                                                  "__ocml_log10_f64");
+  patterns.insert<OpToFuncCallLowering<Log1pOp>>(converter, "__ocml_log1p_f32",
+                                                 "__ocml_log1p_f64");
   patterns.insert<OpToFuncCallLowering<Log2Op>>(converter, "__ocml_log2_f32",
                                                 "__ocml_log2_f64");
   patterns.insert<OpToFuncCallLowering<PowFOp>>(converter, "__ocml_pow_f32",

@@ -213,9 +213,25 @@
      */
     extern const char * __KAI_KMPC_CONVENTION  omp_get_interop_rc_desc(const omp_interop_rc_t, omp_interop_rc_t);
 
-    /* OpenMP 5.1 */
+    /* OpenMP 5.1 device memory routines */
+
+    /*!
+     * The `omp_target_memcpy_async` routine asynchronously performs a copy between any combination of host and device pointers.
+     */
+    extern int    __KAI_KMPC_CONVENTION  omp_target_memcpy_async(void *, const void *, size_t, size_t, size_t, int,
+                                             int, int, omp_depend_t *);
+    /*!
+     * The `omp_target_memcpy_rect_async` routine asynchronously performs a copy between any combination of host and device pointers.
+     */
+    extern int    __KAI_KMPC_CONVENTION  omp_target_memcpy_rect_async(void *, const void *, size_t, int, const size_t *,
+                                             const size_t *, const size_t *, const size_t *, const size_t *, int, int,
+                                             int, omp_depend_t *);
+    /*!
+     * The `omp_get_mapped_ptr` routine returns the device pointer that is associated with a host pointer for a given device.
+     */
+    extern void * __KAI_KMPC_CONVENTION  omp_get_mapped_ptr(const void *, int);
+
     extern int   __KAI_KMPC_CONVENTION  omp_target_is_accessible(const void *, size_t, int);
-    extern void *__KAI_KMPC_CONVENTION omp_get_mapped_ptr(const void *, int);
 
     /* OpenMP extensions for OpenACC support */
 
@@ -455,7 +471,7 @@
     typedef uintptr_t omp_uintptr_t;
 
     typedef enum {
-        omp_atk_threadmodel = 1,
+        omp_atk_sync_hint = 1,
         omp_atk_alignment = 2,
         omp_atk_access = 3,
         omp_atk_pool_size = 4,
@@ -468,10 +484,10 @@
     typedef enum {
         omp_atv_false = 0,
         omp_atv_true = 1,
-        omp_atv_default = 2,
         omp_atv_contended = 3,
         omp_atv_uncontended = 4,
-        omp_atv_sequential = 5,
+        omp_atv_serialized = 5,
+        omp_atv_sequential = omp_atv_serialized, // (deprecated)
         omp_atv_private = 6,
         omp_atv_all = 7,
         omp_atv_thread = 8,
@@ -486,6 +502,7 @@
         omp_atv_blocked = 17,
         omp_atv_interleaved = 18
     } omp_alloctrait_value_t;
+    #define omp_atv_default ((omp_uintptr_t)-1)
 
     typedef struct {
         omp_alloctrait_key_t key;
@@ -588,6 +605,12 @@
     extern int __KAI_KMPC_CONVENTION omp_pause_resource_all(omp_pause_resource_t);
 
     extern int __KAI_KMPC_CONVENTION omp_get_supported_active_levels(void);
+
+    /* OpenMP 5.1 */
+    extern void __KAI_KMPC_CONVENTION omp_set_num_teams(int num_teams);
+    extern int __KAI_KMPC_CONVENTION omp_get_max_teams(void);
+    extern void __KAI_KMPC_CONVENTION omp_set_teams_thread_limit(int limit);
+    extern int __KAI_KMPC_CONVENTION omp_get_teams_thread_limit(void);
 
     /* OpenMP 5.1 Display Environment */
     extern void omp_display_env(int verbose);

@@ -16,6 +16,7 @@
 
 #include "clang/Basic/CommentOptions.h"
 #include "clang/Basic/LLVM.h"
+#include "clang/Basic/LangStandard.h"
 #include "clang/Basic/ObjCRuntime.h"
 #include "clang/Basic/Sanitizers.h"
 #include "clang/Basic/Visibility.h"
@@ -319,6 +320,9 @@ public:
   };
 
 public:
+  /// The used language standard.
+  LangStandard::Kind LangStd;
+
   /// Set of enabled sanitizers.
   SanitizerSet Sanitize;
 
@@ -342,6 +346,10 @@ public:
   /// (files, functions, variables) should be imbued with the appropriate XRay
   /// attribute(s).
   std::vector<std::string> XRayAttrListFiles;
+
+  /// Paths to special case list files specifying which entities
+  /// (files, functions) should or should not be instrumented.
+  std::vector<std::string> ProfileListFiles;
 
   clang::ObjCRuntime ObjCRuntime;
 

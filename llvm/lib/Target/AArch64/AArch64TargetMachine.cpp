@@ -161,6 +161,8 @@ static cl::opt<bool>
                         cl::desc("Enable the AAcrh64 branch target pass"),
                         cl::init(true));
 
+extern cl::opt<bool> EnableHomogeneousPrologEpilog;
+
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAArch64Target() {
   // Register the target.
   RegisterTargetMachine<AArch64leTargetMachine> X(getTheAArch64leTarget());
@@ -197,6 +199,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAArch64Target() {
   initializeAArch64SLSHardeningPass(*PR);
   initializeAArch64StackTaggingPass(*PR);
   initializeAArch64StackTaggingPreRAPass(*PR);
+  initializeAArch64LowerHomogeneousPrologEpilogPass(*PR);
 }
 
 //===----------------------------------------------------------------------===//
@@ -215,8 +218,6 @@ static std::unique_ptr<TargetLoweringObjectFile> createTLOF(const Triple &TT) {
 static std::string computeDataLayout(const Triple &TT,
                                      const MCTargetOptions &Options,
                                      bool LittleEndian) {
-  if (Options.getABIName() == "ilp32")
-    return "e-m:e-p:32:32-i8:8-i16:16-i64:64-S128";
   if (TT.isOSBinFormatMachO()) {
     if (TT.getArch() == Triple::aarch64_32)
       return "e-m:o-p:32:32-i64:64-i128:128-n32:64-S128";
@@ -224,9 +225,10 @@ static std::string computeDataLayout(const Triple &TT,
   }
   if (TT.isOSBinFormatCOFF())
     return "e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128";
-  if (LittleEndian)
-    return "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128";
-  return "E-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128";
+  std::string Endian = LittleEndian ? "e" : "E";
+  std::string Ptr32 = TT.getEnvironment() == Triple::GNUILP32 ? "-p:32:32" : "";
+  return Endian + "-m:e" + Ptr32 +
+         "-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128";
 }
 
 static StringRef computeDefaultCPU(const Triple &TT, StringRef CPU) {
@@ -318,6 +320,7 @@ AArch64TargetMachine::AArch64TargetMachine(const Target &T, const Triple &TT,
   // MachO/CodeModel::Large, which GlobalISel does not support.
   if (getOptLevel() <= EnableGlobalISelAtO &&
       TT.getArch() != Triple::aarch64_32 &&
+      TT.getEnvironment() != Triple::GNUILP32 &&
       !(getCodeModel() == CodeModel::Large && TT.isOSBinFormatMachO())) {
     setGlobalISel(true);
     setGlobalISelAbort(GlobalISelAbortMode::Disable);
@@ -634,6 +637,9 @@ void AArch64PassConfig::addPostRegAlloc() {
 }
 
 void AArch64PassConfig::addPreSched2() {
+  // Lower homogeneous frame instructions
+  if (EnableHomogeneousPrologEpilog)
+    addPass(createAArch64LowerHomogeneousPrologEpilogPass());
   // Expand some pseudo instructions to allow proper scheduling.
   addPass(createAArch64ExpandPseudoPass());
   // Use load/store pair instructions when possible.

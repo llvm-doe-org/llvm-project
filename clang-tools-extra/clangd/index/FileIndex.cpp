@@ -61,7 +61,8 @@ SlabTuple indexSymbols(ASTContext &AST, std::shared_ptr<Preprocessor> PP,
   // We only need declarations, because we don't count references.
   IndexOpts.SystemSymbolFilter =
       index::IndexingOptions::SystemSymbolFilterKind::DeclarationsOnly;
-  IndexOpts.IndexFunctionLocals = false;
+  // We index function-local classes and its member functions only.
+  IndexOpts.IndexFunctionLocals = true;
   if (IsIndexMainAST) {
     // We only collect refs when indexing main AST.
     CollectorOpts.RefFilter = RefKind::All;
@@ -216,11 +217,11 @@ FileShardedIndex::getShard(llvm::StringRef Uri) const {
   return std::move(IF);
 }
 
-SlabTuple indexMainDecls(ParsedAST &AST, bool CollectMainFileRefs) {
+SlabTuple indexMainDecls(ParsedAST &AST) {
   return indexSymbols(
       AST.getASTContext(), AST.getPreprocessorPtr(),
       AST.getLocalTopLevelDecls(), &AST.getMacros(), AST.getCanonicalIncludes(),
-      /*IsIndexMainAST=*/true, AST.version(), CollectMainFileRefs);
+      /*IsIndexMainAST=*/true, AST.version(), /*CollectMainFileRefs=*/true);
 }
 
 SlabTuple indexHeaderSymbols(llvm::StringRef Version, ASTContext &AST,
@@ -409,9 +410,8 @@ void FileSymbols::profile(MemoryTree &MT) const {
   }
 }
 
-FileIndex::FileIndex(bool UseDex, bool CollectMainFileRefs)
-    : MergedIndex(&MainFileIndex, &PreambleIndex), UseDex(UseDex),
-      CollectMainFileRefs(CollectMainFileRefs),
+FileIndex::FileIndex()
+    : MergedIndex(&MainFileIndex, &PreambleIndex),
       PreambleIndex(std::make_unique<MemIndex>()),
       MainFileIndex(std::make_unique<MemIndex>()) {}
 
@@ -435,9 +435,8 @@ void FileIndex::updatePreamble(PathRef Path, llvm::StringRef Version,
         /*CountReferences=*/false);
   }
   size_t IndexVersion = 0;
-  auto NewIndex =
-      PreambleSymbols.buildIndex(UseDex ? IndexType::Heavy : IndexType::Light,
-                                 DuplicateHandling::PickOne, &IndexVersion);
+  auto NewIndex = PreambleSymbols.buildIndex(
+      IndexType::Heavy, DuplicateHandling::PickOne, &IndexVersion);
   {
     std::lock_guard<std::mutex> Lock(UpdateIndexMu);
     if (IndexVersion <= PreambleIndexVersion) {
@@ -454,7 +453,7 @@ void FileIndex::updatePreamble(PathRef Path, llvm::StringRef Version,
 }
 
 void FileIndex::updateMain(PathRef Path, ParsedAST &AST) {
-  auto Contents = indexMainDecls(AST, CollectMainFileRefs);
+  auto Contents = indexMainDecls(AST);
   MainFileSymbols.update(
       Path, std::make_unique<SymbolSlab>(std::move(std::get<0>(Contents))),
       std::make_unique<RefSlab>(std::move(std::get<1>(Contents))),

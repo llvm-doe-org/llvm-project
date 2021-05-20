@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
+#include "mlir/Dialect/Vector/VectorOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -81,6 +82,10 @@ struct TestSparsification
       return linalg::SparseIntType::kI64;
     case 2:
       return linalg::SparseIntType::kI32;
+    case 3:
+      return linalg::SparseIntType::kI16;
+    case 4:
+      return linalg::SparseIntType::kI8;
     }
   }
 
@@ -94,7 +99,8 @@ struct TestSparsification
                                           typeOption(indType));
     // Apply rewriting.
     linalg::populateSparsificationPatterns(ctx, patterns, options);
-    applyPatternsAndFoldGreedily(getFunction(), std::move(patterns));
+    vector::populateVectorToVectorCanonicalizationPatterns(patterns, ctx);
+    (void)applyPatternsAndFoldGreedily(getFunction(), std::move(patterns));
   }
 };
 
@@ -106,7 +112,7 @@ namespace test {
 void registerTestSparsification() {
   PassRegistration<TestSparsification> sparsificationPass(
       "test-sparsification",
-      "Test automatic geneneration of sparse tensor code");
+      "Test automatic generation of sparse tensor code");
 }
 
 } // namespace test

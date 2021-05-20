@@ -157,7 +157,7 @@ LogicalResult mlir::mlirTranslateMain(int argc, char **argv,
                            llvm::cl::Required);
   registerAsmPrinterCLOptions();
   registerMLIRContextCLOptions();
-  llvm::cl::ParseCommandLineOptions(argc, argv, "MLIR translation driver\n");
+  llvm::cl::ParseCommandLineOptions(argc, argv, toolName);
 
   std::string errorMessage;
   auto input = openInputFile(inputFilename, &errorMessage);
@@ -189,7 +189,7 @@ LogicalResult mlir::mlirTranslateMain(int argc, char **argv,
     // failed (in most cases, it is expected to fail). Instead, we check if the
     // diagnostics were produced as expected.
     SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
-    (*translationRequested)(sourceMgr, os, &context);
+    (void)(*translationRequested)(sourceMgr, os, &context);
     return sourceMgrHandler.verify();
   };
 

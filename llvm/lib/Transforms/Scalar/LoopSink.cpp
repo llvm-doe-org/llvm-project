@@ -70,7 +70,7 @@ static cl::opt<unsigned> MaxNumberOfUseBBsForSinking(
     cl::desc("Do not sink instructions that have too many uses."));
 
 static cl::opt<bool> EnableMSSAInLoopSink(
-    "enable-mssa-in-loop-sink", cl::Hidden, cl::init(false),
+    "enable-mssa-in-loop-sink", cl::Hidden, cl::init(true),
     cl::desc("Enable MemorySSA for LoopSink in new pass manager"));
 
 static cl::opt<bool> EnableMSSAInLegacyLoopSink(
@@ -191,7 +191,7 @@ static bool sinkInstruction(
   for (auto &U : I.uses()) {
     Instruction *UI = cast<Instruction>(U.getUser());
     // We cannot sink I to PHI-uses.
-    if (dyn_cast<PHINode>(UI))
+    if (isa<PHINode>(UI))
       return false;
     // We cannot sink I if it has uses outside of the loop.
     if (!L.contains(LI.getLoopFor(UI->getParent())))
@@ -222,8 +222,7 @@ static bool sinkInstruction(
   // of the loop block numbers as iterating the set doesn't give a useful
   // order. No need to stable sort as the block numbers are a total ordering.
   SmallVector<BasicBlock *, 2> SortedBBsToSinkInto;
-  SortedBBsToSinkInto.insert(SortedBBsToSinkInto.begin(), BBsToSinkInto.begin(),
-                             BBsToSinkInto.end());
+  llvm::append_range(SortedBBsToSinkInto, BBsToSinkInto);
   llvm::sort(SortedBBsToSinkInto, [&](BasicBlock *A, BasicBlock *B) {
     return LoopBlockNumber.find(A)->second < LoopBlockNumber.find(B)->second;
   });

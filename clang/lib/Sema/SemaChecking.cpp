@@ -75,6 +75,7 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/AtomicOrdering.h"
@@ -1422,6 +1423,7 @@ bool Sema::CheckTSBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
   case llvm::Triple::x86_64:
     return CheckX86BuiltinFunctionCall(TI, BuiltinID, TheCall);
   case llvm::Triple::ppc:
+  case llvm::Triple::ppcle:
   case llvm::Triple::ppc64:
   case llvm::Triple::ppc64le:
     return CheckPPCBuiltinFunctionCall(TI, BuiltinID, TheCall);
@@ -1941,7 +1943,8 @@ Sema::CheckBuiltinFunctionCall(FunctionDecl *FDecl, unsigned BuiltinID,
     // -Wframe-address warning if non-zero passed to builtin
     // return/frame address.
     Expr::EvalResult Result;
-    if (TheCall->getArg(0)->EvaluateAsInt(Result, getASTContext()) &&
+    if (!TheCall->getArg(0)->isValueDependent() &&
+        TheCall->getArg(0)->EvaluateAsInt(Result, getASTContext()) &&
         Result.Val.getInt() != 0)
       Diag(TheCall->getBeginLoc(), diag::warn_frame_address)
           << ((BuiltinID == Builtin::BI__builtin_return_address)
@@ -4567,6 +4570,8 @@ bool Sema::CheckFunctionCall(FunctionDecl *FDecl, CallExpr *TheCall,
   // simple names (e.g., C++ conversion functions).
   if (!FnInfo)
     return false;
+
+  CheckTCBEnforcement(TheCall, FDecl);
 
   CheckAbsoluteValueFunction(TheCall, FDecl);
   CheckMaxUnsignedZero(TheCall, FDecl);
@@ -14382,62 +14387,63 @@ void Sema::CheckArrayAccess(const Expr *BaseExpr, const Expr *IndexExpr,
                         PDiag(diag::note_array_declared_here) << ND);
 }
 
-void Sema::CheckArrayAccess(const Expr *expr) {
-  int AllowOnePastEnd = 0;
-  while (expr) {
-    expr = expr->IgnoreParenImpCasts();
-    switch (expr->getStmtClass()) {
-      case Stmt::ArraySubscriptExprClass: {
-        const ArraySubscriptExpr *ASE = cast<ArraySubscriptExpr>(expr);
-        CheckArrayAccess(ASE->getBase(), ASE->getIdx(), ASE,
-                         AllowOnePastEnd > 0);
-        expr = ASE->getBase();
-        break;
-      }
-      case Stmt::MemberExprClass: {
-        expr = cast<MemberExpr>(expr)->getBase();
-        break;
-      }
-      case Stmt::OMPArraySectionExprClass: {
-        const OMPArraySectionExpr *ASE = cast<OMPArraySectionExpr>(expr);
-        if (ASE->getLowerBound())
-          CheckArrayAccess(ASE->getBase(), ASE->getLowerBound(),
-                           /*ASE=*/nullptr, AllowOnePastEnd > 0);
-        return;
-      }
-      case Stmt::UnaryOperatorClass: {
-        // Only unwrap the * and & unary operators
-        const UnaryOperator *UO = cast<UnaryOperator>(expr);
-        expr = UO->getSubExpr();
-        switch (UO->getOpcode()) {
-          case UO_AddrOf:
-            AllowOnePastEnd++;
-            break;
-          case UO_Deref:
-            AllowOnePastEnd--;
-            break;
-          default:
-            return;
-        }
-        break;
-      }
-      case Stmt::ConditionalOperatorClass: {
-        const ConditionalOperator *cond = cast<ConditionalOperator>(expr);
-        if (const Expr *lhs = cond->getLHS())
-          CheckArrayAccess(lhs);
-        if (const Expr *rhs = cond->getRHS())
-          CheckArrayAccess(rhs);
-        return;
-      }
-      case Stmt::CXXOperatorCallExprClass: {
-        const auto *OCE = cast<CXXOperatorCallExpr>(expr);
-        for (const auto *Arg : OCE->arguments())
-          CheckArrayAccess(Arg);
-        return;
-      }
-      default:
-        return;
+void Sema::CheckArrayAccess(const Expr *expr, int AllowOnePastEnd) {
+  if (!expr)
+    return;
+
+  expr = expr->IgnoreParenCasts();
+  switch (expr->getStmtClass()) {
+  case Stmt::ArraySubscriptExprClass: {
+    const ArraySubscriptExpr *ASE = cast<ArraySubscriptExpr>(expr);
+    CheckArrayAccess(ASE->getBase(), ASE->getIdx(), ASE, AllowOnePastEnd > 0);
+    CheckArrayAccess(ASE->getBase(), AllowOnePastEnd);
+    return;
+  }
+  case Stmt::MemberExprClass: {
+    expr = cast<MemberExpr>(expr)->getBase();
+    CheckArrayAccess(expr, /*AllowOnePastEnd=*/0);
+    return;
+  }
+  case Stmt::OMPArraySectionExprClass: {
+    const OMPArraySectionExpr *ASE = cast<OMPArraySectionExpr>(expr);
+    if (ASE->getLowerBound())
+      CheckArrayAccess(ASE->getBase(), ASE->getLowerBound(),
+                       /*ASE=*/nullptr, AllowOnePastEnd > 0);
+    return;
+  }
+  case Stmt::UnaryOperatorClass: {
+    // Only unwrap the * and & unary operators
+    const UnaryOperator *UO = cast<UnaryOperator>(expr);
+    expr = UO->getSubExpr();
+    switch (UO->getOpcode()) {
+    case UO_AddrOf:
+      AllowOnePastEnd++;
+      break;
+    case UO_Deref:
+      AllowOnePastEnd--;
+      break;
+    default:
+      return;
     }
+    CheckArrayAccess(expr, AllowOnePastEnd);
+    return;
+  }
+  case Stmt::ConditionalOperatorClass: {
+    const ConditionalOperator *cond = cast<ConditionalOperator>(expr);
+    if (const Expr *lhs = cond->getLHS())
+      CheckArrayAccess(lhs, AllowOnePastEnd);
+    if (const Expr *rhs = cond->getRHS())
+      CheckArrayAccess(rhs, AllowOnePastEnd);
+    return;
+  }
+  case Stmt::CXXOperatorCallExprClass: {
+    const auto *OCE = cast<CXXOperatorCallExpr>(expr);
+    for (const auto *Arg : OCE->arguments())
+      CheckArrayAccess(Arg);
+    return;
+  }
+  default:
+    return;
   }
 }
 
@@ -16057,4 +16063,39 @@ ExprResult Sema::SemaBuiltinMatrixColumnMajorStore(CallExpr *TheCall,
     return ExprError();
 
   return CallResult;
+}
+
+/// \brief Enforce the bounds of a TCB
+/// CheckTCBEnforcement - Enforces that every function in a named TCB only
+/// directly calls other functions in the same TCB as marked by the enforce_tcb
+/// and enforce_tcb_leaf attributes.
+void Sema::CheckTCBEnforcement(const CallExpr *TheCall,
+                               const FunctionDecl *Callee) {
+  const FunctionDecl *Caller = getCurFunctionDecl();
+
+  // Calls to builtins are not enforced.
+  if (!Caller || !Caller->hasAttr<EnforceTCBAttr>() ||
+      Callee->getBuiltinID() != 0)
+    return;
+
+  // Search through the enforce_tcb and enforce_tcb_leaf attributes to find
+  // all TCBs the callee is a part of.
+  llvm::StringSet<> CalleeTCBs;
+  for_each(Callee->specific_attrs<EnforceTCBAttr>(),
+           [&](const auto *A) { CalleeTCBs.insert(A->getTCBName()); });
+  for_each(Callee->specific_attrs<EnforceTCBLeafAttr>(),
+           [&](const auto *A) { CalleeTCBs.insert(A->getTCBName()); });
+
+  // Go through the TCBs the caller is a part of and emit warnings if Caller
+  // is in a TCB that the Callee is not.
+  for_each(
+      Caller->specific_attrs<EnforceTCBAttr>(),
+      [&](const auto *A) {
+        StringRef CallerTCB = A->getTCBName();
+        if (CalleeTCBs.count(CallerTCB) == 0) {
+          this->Diag(TheCall->getExprLoc(),
+                     diag::warn_tcb_enforcement_violation) << Callee
+                                                           << CallerTCB;
+        }
+      });
 }

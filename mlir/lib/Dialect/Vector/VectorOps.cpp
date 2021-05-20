@@ -67,27 +67,13 @@ static MaskFormat get1DMaskFormat(Value mask) {
     ArrayAttr masks = m.mask_dim_sizes();
     assert(masks.size() == 1);
     int64_t i = masks[0].cast<IntegerAttr>().getInt();
-    int64_t u = m.getType().cast<VectorType>().getDimSize(0);
+    int64_t u = m.getType().getDimSize(0);
     if (i >= u)
       return MaskFormat::AllTrue;
     if (i <= 0)
       return MaskFormat::AllFalse;
   }
   return MaskFormat::Unknown;
-}
-
-/// Helper method to cast a 1-D memref<10xf32> "base" into a
-/// memref<vector<10xf32>> in the output parameter "newBase",
-/// using the 'element' vector type "vt". Returns true on success.
-static bool castedToMemRef(Location loc, Value base, MemRefType mt,
-                           VectorType vt, PatternRewriter &rewriter,
-                           Value &newBase) {
-  // The vector.type_cast operation does not accept unknown memref<?xf32>.
-  // TODO: generalize the cast and accept this case too
-  if (!mt.hasStaticShape())
-    return false;
-  newBase = rewriter.create<TypeCastOp>(loc, MemRefType::get({}, vt), base);
-  return true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -849,7 +835,7 @@ static Value foldExtractFromShapeCast(ExtractOp extractOp) {
     return Value();
   // Get the nth dimension size starting from lowest dimension.
   auto getDimReverse = [](VectorType type, int64_t n) {
-    return type.getShape().take_back(n+1).front();
+    return type.getShape().take_back(n + 1).front();
   };
   int64_t destinationRank =
       extractOp.getType().isa<VectorType>()
@@ -1108,6 +1094,36 @@ OpFoldResult BroadcastOp::fold(ArrayRef<Attribute> operands) {
   if (auto attr = operands[0].dyn_cast<SplatElementsAttr>())
     return DenseElementsAttr::get(vectorType, attr.getSplatValue());
   return {};
+}
+
+namespace {
+
+// BroadcastOp can only add dimensions or broadcast a dimension from 1 to N. In
+// the degenerated case where the broadcast only adds dimensions of size 1 it
+// can be replaced by a ShapeCastOp. This canonicalization checks if the total
+// number of elements is the same before and after the broadcast to detect if
+// the only change in the vector type are new dimensions of size 1.
+class BroadcastToShapeCast final : public OpRewritePattern<BroadcastOp> {
+public:
+  using OpRewritePattern<BroadcastOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(BroadcastOp broadcastOp,
+                                PatternRewriter &rewriter) const override {
+    auto srcVecType = broadcastOp.getSourceType().dyn_cast<VectorType>();
+    if (!srcVecType || broadcastOp.getVectorType().getNumElements() !=
+                           srcVecType.getNumElements())
+      return failure();
+    rewriter.replaceOpWithNewOp<ShapeCastOp>(
+        broadcastOp, broadcastOp.getVectorType(), broadcastOp.source());
+    return success();
+  }
+};
+
+} // namespace
+
+void BroadcastOp::getCanonicalizationPatterns(
+    OwningRewritePatternList &results, MLIRContext *context) {
+  results.insert<BroadcastToShapeCast>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1768,7 +1784,8 @@ void ExtractStridedSliceOp::getOffsets(SmallVectorImpl<int64_t> &results) {
 
 namespace {
 
-// Pattern to rewrite a ExtractStridedSliceOp(ConstantMaskOp) -> ConstantMaskOp.
+// Pattern to rewrite an ExtractStridedSliceOp(ConstantMaskOp) to
+// ConstantMaskOp.
 class StridedSliceConstantMaskFolder final
     : public OpRewritePattern<ExtractStridedSliceOp> {
 public:
@@ -1839,10 +1856,65 @@ public:
     auto dense = constantOp.value().dyn_cast<SplatElementsAttr>();
     if (!dense)
       return failure();
-    auto newAttr = DenseElementsAttr::get(
-        extractStridedSliceOp.getType().cast<VectorType>(),
-        dense.getSplatValue());
+    auto newAttr = DenseElementsAttr::get(extractStridedSliceOp.getType(),
+                                          dense.getSplatValue());
     rewriter.replaceOpWithNewOp<ConstantOp>(extractStridedSliceOp, newAttr);
+    return success();
+  }
+};
+
+// Helper that returns a subset of `arrayAttr` as a vector of int64_t.
+static SmallVector<int64_t, 4> getI64SubArray(ArrayAttr arrayAttr,
+                                              unsigned dropFront = 0,
+                                              unsigned dropBack = 0) {
+  assert(arrayAttr.size() > dropFront + dropBack && "Out of bounds");
+  auto range = arrayAttr.getAsRange<IntegerAttr>();
+  SmallVector<int64_t, 4> res;
+  res.reserve(arrayAttr.size() - dropFront - dropBack);
+  for (auto it = range.begin() + dropFront, eit = range.end() - dropBack;
+       it != eit; ++it)
+    res.push_back((*it).getValue().getSExtValue());
+  return res;
+}
+
+// Pattern to rewrite an ExtractStridedSliceOp(BroadcastOp) to
+// BroadcastOp(ExtractStrideSliceOp).
+class StridedSliceBroadcast final
+    : public OpRewritePattern<ExtractStridedSliceOp> {
+public:
+  using OpRewritePattern<ExtractStridedSliceOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ExtractStridedSliceOp op,
+                                PatternRewriter &rewriter) const override {
+    auto broadcast = op.vector().getDefiningOp<BroadcastOp>();
+    if (!broadcast)
+      return failure();
+    auto srcVecType = broadcast.source().getType().dyn_cast<VectorType>();
+    unsigned srcRrank = srcVecType ? srcVecType.getRank() : 0;
+    auto dstVecType = op.getType().cast<VectorType>();
+    unsigned dstRank = dstVecType.getRank();
+    unsigned rankDiff = dstRank - srcRrank;
+    // Check if the most inner dimensions of the source of the broadcast are the
+    // same as the destination of the extract. If this is the case we can just
+    // use a broadcast as the original dimensions are untouched.
+    bool lowerDimMatch = true;
+    for (unsigned i = 0; i < srcRrank; i++) {
+      if (srcVecType.getDimSize(i) != dstVecType.getDimSize(i + rankDiff)) {
+        lowerDimMatch = false;
+        break;
+      }
+    }
+    Value source = broadcast.source();
+    if (!lowerDimMatch) {
+      // The inner dimensions don't match, it means we need to extract from the
+      // source of the orignal broadcast and then broadcast the extracted value.
+      source = rewriter.create<ExtractStridedSliceOp>(
+          op->getLoc(), source,
+          getI64SubArray(op.offsets(), /* dropFront=*/rankDiff),
+          getI64SubArray(op.sizes(), /* dropFront=*/rankDiff),
+          getI64SubArray(op.strides(), /* dropFront=*/rankDiff));
+    }
+    rewriter.replaceOpWithNewOp<BroadcastOp>(op, op.getType(), source);
     return success();
   }
 };
@@ -1853,8 +1925,8 @@ void ExtractStridedSliceOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
   // Pattern to rewrite a ExtractStridedSliceOp(ConstantMaskOp) ->
   // ConstantMaskOp and ExtractStridedSliceOp(ConstantOp) -> ConstantOp.
-  results.insert<StridedSliceConstantMaskFolder, StridedSliceConstantFolder>(
-      context);
+  results.insert<StridedSliceConstantMaskFolder, StridedSliceConstantFolder,
+                 StridedSliceBroadcast>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1953,28 +2025,28 @@ static LogicalResult verifyTransferOp(Operation *op, ShapedType shapedType,
 
 /// Builder that sets padding to zero.
 void TransferReadOp::build(OpBuilder &builder, OperationState &result,
-                           VectorType vector, Value memref, ValueRange indices,
+                           VectorType vector, Value source, ValueRange indices,
                            AffineMap permutationMap,
                            ArrayRef<bool> maybeMasked) {
-  Type elemType = memref.getType().cast<MemRefType>().getElementType();
+  Type elemType = source.getType().cast<ShapedType>().getElementType();
   Value padding = builder.create<ConstantOp>(result.location, elemType,
                                              builder.getZeroAttr(elemType));
   if (maybeMasked.empty())
-    return build(builder, result, vector, memref, indices, permutationMap,
+    return build(builder, result, vector, source, indices, permutationMap,
                  padding, ArrayAttr());
   ArrayAttr maskedArrayAttr = builder.getBoolArrayAttr(maybeMasked);
-  build(builder, result, vector, memref, indices, permutationMap, padding,
+  build(builder, result, vector, source, indices, permutationMap, padding,
         maskedArrayAttr);
 }
 
 /// Builder that sets permutation map (resp. padding) to 'getMinorIdentityMap'
 /// (resp. zero).
 void TransferReadOp::build(OpBuilder &builder, OperationState &result,
-                           VectorType vectorType, Value memref,
+                           VectorType vectorType, Value source,
                            ValueRange indices, ArrayRef<bool> maybeMasked) {
   auto permMap = getTransferMinorIdentityMap(
-      memref.getType().cast<MemRefType>(), vectorType);
-  build(builder, result, vectorType, memref, indices, permMap, maybeMasked);
+      source.getType().cast<ShapedType>(), vectorType);
+  build(builder, result, vectorType, source, indices, permMap, maybeMasked);
 }
 
 static void printTransferAttrs(OpAsmPrinter &p, VectorTransferOpInterface op) {
@@ -2155,6 +2227,14 @@ Optional<SmallVector<int64_t, 4>> TransferReadOp::getShapeForUnroll() {
   return SmallVector<int64_t, 4>{s.begin(), s.end()};
 }
 
+void TransferReadOp::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  if (getShapedType().isa<MemRefType>())
+    effects.emplace_back(MemoryEffects::Read::get(), source(),
+                         SideEffects::DefaultResource::get());
+}
+
 //===----------------------------------------------------------------------===//
 // TransferWriteOp
 //===----------------------------------------------------------------------===//
@@ -2165,7 +2245,7 @@ void TransferWriteOp::build(OpBuilder &builder, OperationState &result,
                             ArrayRef<bool> maybeMasked) {
   auto vectorType = vector.getType().cast<VectorType>();
   auto permMap = getTransferMinorIdentityMap(
-      source.getType().cast<MemRefType>(), vectorType);
+      source.getType().cast<ShapedType>(), vectorType);
   if (maybeMasked.empty())
     return build(builder, result, vector, source, indices, permMap,
                  ArrayAttr());
@@ -2241,7 +2321,7 @@ static void print(OpAsmPrinter &p, TransferWriteOp op) {
 }
 
 static LogicalResult verify(TransferWriteOp op) {
-  // Consistency of elemental types in memref and vector.
+  // Consistency of elemental types in shape and vector.
   ShapedType shapedType = op.getShapedType();
   VectorType vectorType = op.getVectorType();
   auto permutationMap = op.permutation_map();
@@ -2269,6 +2349,14 @@ Optional<SmallVector<int64_t, 4>> TransferWriteOp::getShapeForUnroll() {
   return llvm::to_vector<4>(getVectorType().getShape());
 }
 
+void TransferWriteOp::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  if (getShapedType().isa<MemRefType>())
+    effects.emplace_back(MemoryEffects::Write::get(), source(),
+                         SideEffects::DefaultResource::get());
+}
+
 //===----------------------------------------------------------------------===//
 // MaskedLoadOp
 //===----------------------------------------------------------------------===//
@@ -2277,10 +2365,12 @@ static LogicalResult verify(MaskedLoadOp op) {
   VectorType maskVType = op.getMaskVectorType();
   VectorType passVType = op.getPassThruVectorType();
   VectorType resVType = op.getResultVectorType();
+  MemRefType memType = op.getMemRefType();
 
-  if (resVType.getElementType() != op.getMemRefType().getElementType())
+  if (resVType.getElementType() != memType.getElementType())
     return op.emitOpError("base and result element type should match");
-
+  if (llvm::size(op.indices()) != memType.getRank())
+    return op.emitOpError("requires ") << memType.getRank() << " indices";
   if (resVType.getDimSize(0) != maskVType.getDimSize(0))
     return op.emitOpError("expected result dim to match mask dim");
   if (resVType != passVType)
@@ -2294,13 +2384,10 @@ public:
   using OpRewritePattern<MaskedLoadOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(MaskedLoadOp load,
                                 PatternRewriter &rewriter) const override {
-    Value newBase;
     switch (get1DMaskFormat(load.mask())) {
     case MaskFormat::AllTrue:
-      if (!castedToMemRef(load.getLoc(), load.base(), load.getMemRefType(),
-                          load.getResultVectorType(), rewriter, newBase))
-        return failure();
-      rewriter.replaceOpWithNewOp<LoadOp>(load, newBase);
+      rewriter.replaceOpWithNewOp<vector::TransferReadOp>(
+          load, load.getType(), load.base(), load.indices(), false);
       return success();
     case MaskFormat::AllFalse:
       rewriter.replaceOp(load, load.pass_thru());
@@ -2325,10 +2412,12 @@ void MaskedLoadOp::getCanonicalizationPatterns(
 static LogicalResult verify(MaskedStoreOp op) {
   VectorType maskVType = op.getMaskVectorType();
   VectorType valueVType = op.getValueVectorType();
+  MemRefType memType = op.getMemRefType();
 
-  if (valueVType.getElementType() != op.getMemRefType().getElementType())
+  if (valueVType.getElementType() != memType.getElementType())
     return op.emitOpError("base and value element type should match");
-
+  if (llvm::size(op.indices()) != memType.getRank())
+    return op.emitOpError("requires ") << memType.getRank() << " indices";
   if (valueVType.getDimSize(0) != maskVType.getDimSize(0))
     return op.emitOpError("expected value dim to match mask dim");
   return success();
@@ -2340,13 +2429,10 @@ public:
   using OpRewritePattern<MaskedStoreOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(MaskedStoreOp store,
                                 PatternRewriter &rewriter) const override {
-    Value newBase;
     switch (get1DMaskFormat(store.mask())) {
     case MaskFormat::AllTrue:
-      if (!castedToMemRef(store.getLoc(), store.base(), store.getMemRefType(),
-                          store.getValueVectorType(), rewriter, newBase))
-        return failure();
-      rewriter.replaceOpWithNewOp<StoreOp>(store, store.value(), newBase);
+      rewriter.replaceOpWithNewOp<vector::TransferWriteOp>(
+          store, store.value(), store.base(), store.indices(), false);
       return success();
     case MaskFormat::AllFalse:
       rewriter.eraseOp(store);
@@ -2372,19 +2458,16 @@ static LogicalResult verify(GatherOp op) {
   VectorType indicesVType = op.getIndicesVectorType();
   VectorType maskVType = op.getMaskVectorType();
   VectorType resVType = op.getResultVectorType();
+  MemRefType memType = op.getMemRefType();
 
-  if (resVType.getElementType() != op.getMemRefType().getElementType())
+  if (resVType.getElementType() != memType.getElementType())
     return op.emitOpError("base and result element type should match");
-
   if (resVType.getDimSize(0) != indicesVType.getDimSize(0))
     return op.emitOpError("expected result dim to match indices dim");
   if (resVType.getDimSize(0) != maskVType.getDimSize(0))
     return op.emitOpError("expected result dim to match mask dim");
-  if (llvm::size(op.pass_thru()) != 0) {
-    VectorType passVType = op.getPassThruVectorType();
-    if (resVType != passVType)
-      return op.emitOpError("expected pass_thru of same type as result type");
-  }
+  if (resVType != op.getPassThruVectorType())
+    return op.emitOpError("expected pass_thru of same type as result type");
   return success();
 }
 
@@ -2421,10 +2504,10 @@ static LogicalResult verify(ScatterOp op) {
   VectorType indicesVType = op.getIndicesVectorType();
   VectorType maskVType = op.getMaskVectorType();
   VectorType valueVType = op.getValueVectorType();
+  MemRefType memType = op.getMemRefType();
 
-  if (valueVType.getElementType() != op.getMemRefType().getElementType())
+  if (valueVType.getElementType() != memType.getElementType())
     return op.emitOpError("base and value element type should match");
-
   if (valueVType.getDimSize(0) != indicesVType.getDimSize(0))
     return op.emitOpError("expected value dim to match indices dim");
   if (valueVType.getDimSize(0) != maskVType.getDimSize(0))
@@ -2465,10 +2548,12 @@ static LogicalResult verify(ExpandLoadOp op) {
   VectorType maskVType = op.getMaskVectorType();
   VectorType passVType = op.getPassThruVectorType();
   VectorType resVType = op.getResultVectorType();
+  MemRefType memType = op.getMemRefType();
 
-  if (resVType.getElementType() != op.getMemRefType().getElementType())
+  if (resVType.getElementType() != memType.getElementType())
     return op.emitOpError("base and result element type should match");
-
+  if (llvm::size(op.indices()) != memType.getRank())
+    return op.emitOpError("requires ") << memType.getRank() << " indices";
   if (resVType.getDimSize(0) != maskVType.getDimSize(0))
     return op.emitOpError("expected result dim to match mask dim");
   if (resVType != passVType)
@@ -2482,14 +2567,10 @@ public:
   using OpRewritePattern<ExpandLoadOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(ExpandLoadOp expand,
                                 PatternRewriter &rewriter) const override {
-    Value newBase;
     switch (get1DMaskFormat(expand.mask())) {
     case MaskFormat::AllTrue:
-      if (!castedToMemRef(expand.getLoc(), expand.base(),
-                          expand.getMemRefType(), expand.getResultVectorType(),
-                          rewriter, newBase))
-        return failure();
-      rewriter.replaceOpWithNewOp<LoadOp>(expand, newBase);
+      rewriter.replaceOpWithNewOp<vector::TransferReadOp>(
+          expand, expand.getType(), expand.base(), expand.indices(), false);
       return success();
     case MaskFormat::AllFalse:
       rewriter.replaceOp(expand, expand.pass_thru());
@@ -2514,10 +2595,12 @@ void ExpandLoadOp::getCanonicalizationPatterns(
 static LogicalResult verify(CompressStoreOp op) {
   VectorType maskVType = op.getMaskVectorType();
   VectorType valueVType = op.getValueVectorType();
+  MemRefType memType = op.getMemRefType();
 
-  if (valueVType.getElementType() != op.getMemRefType().getElementType())
+  if (valueVType.getElementType() != memType.getElementType())
     return op.emitOpError("base and value element type should match");
-
+  if (llvm::size(op.indices()) != memType.getRank())
+    return op.emitOpError("requires ") << memType.getRank() << " indices";
   if (valueVType.getDimSize(0) != maskVType.getDimSize(0))
     return op.emitOpError("expected value dim to match mask dim");
   return success();
@@ -2529,14 +2612,11 @@ public:
   using OpRewritePattern<CompressStoreOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(CompressStoreOp compress,
                                 PatternRewriter &rewriter) const override {
-    Value newBase;
     switch (get1DMaskFormat(compress.mask())) {
     case MaskFormat::AllTrue:
-      if (!castedToMemRef(compress.getLoc(), compress.base(),
-                          compress.getMemRefType(),
-                          compress.getValueVectorType(), rewriter, newBase))
-        return failure();
-      rewriter.replaceOpWithNewOp<StoreOp>(compress, compress.value(), newBase);
+      rewriter.replaceOpWithNewOp<vector::TransferWriteOp>(
+          compress, compress.value(), compress.base(), compress.indices(),
+          false);
       return success();
     case MaskFormat::AllFalse:
       rewriter.eraseOp(compress);
@@ -2652,10 +2732,12 @@ OpFoldResult ShapeCastOp::fold(ArrayRef<Attribute> operands) {
     return source();
 
   // Canceling shape casts.
-  if (auto otherOp = source().getDefiningOp<ShapeCastOp>())
+  if (auto otherOp = source().getDefiningOp<ShapeCastOp>()) {
     if (result().getType() == otherOp.source().getType())
       return otherOp.source();
-
+    setOperand(otherOp.source());
+    return getResult();
+  }
   return {};
 }
 

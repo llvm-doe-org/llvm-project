@@ -78,6 +78,7 @@ std::vector<Fix> IncludeFixer::fix(DiagnosticsEngine::Level DiagLevel,
   case diag::err_sizeof_alignof_incomplete_or_sizeless_type:
   case diag::err_for_range_incomplete_type:
   case diag::err_func_def_incomplete_result:
+  case diag::err_field_incomplete_or_sizeless:
     // Incomplete type diagnostics should have a QualType argument for the
     // incomplete type.
     for (unsigned Idx = 0; Idx < Info.getNumArgs(); ++Idx) {
@@ -100,6 +101,8 @@ std::vector<Fix> IncludeFixer::fix(DiagnosticsEngine::Level DiagLevel,
   case diag::err_undeclared_var_use_suggest:
   case diag::err_no_member: // Could be no member in namespace.
   case diag::err_no_member_suggest:
+  case diag::err_no_member_template:
+  case diag::err_no_member_template_suggest:
     if (LastUnresolvedName) {
       // Try to fix unresolved name caused by missing declaration.
       // E.g.

@@ -37,7 +37,6 @@ stages:
   - setup
   - config
   - build
-  - openmp
   - test
   - cleanup
   - manual cleanup
@@ -59,12 +58,11 @@ stages:
     NINJA: ninja
     PYTHON: /usr/bin/python3
     CMAKE_BUILD_TYPE: Debug
-    CMAKE_OFFLOAD_CONFIG_CLANG:
+    CMAKE_OFFLOAD_CONFIG:
       -DCLANG_OPENMP_NVPTX_DEFAULT_ARCH=sm_70
       -DCLANG_ACC_TEST_EXE_X86_64=0
       -DCLANG_ACC_TEST_EXE_PPC64LE=4
       -DCLANG_ACC_TEST_EXE_NVPTX64=6
-    CMAKE_OFFLOAD_CONFIG_OPENMP:
       -DLIBOMPTARGET_NVPTX_COMPUTE_CAPABILITIES=70
     PATH_PREPEND:
       /opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin
@@ -78,12 +76,9 @@ stages:
     NINJA: ninja-build
     PYTHON: /usr/bin/python3
     CMAKE_BUILD_TYPE: Debug
-    CMAKE_OFFLOAD_CONFIG_CLANG:
       -DCLANG_ACC_TEST_EXE_X86_64=4
       -DCLANG_ACC_TEST_EXE_PPC64LE=0
       -DCLANG_ACC_TEST_EXE_NVPTX64=0
-    CMAKE_OFFLOAD_CONFIG_OPENMP:
-      ""
     PATH_PREPEND:
       ""
 
@@ -243,8 +238,7 @@ z-cleanup-project-builds:
     - echo $PYTHON
     - $PYTHON --version
     - echo $LLVM_CCACHE_PARAMS
-    - echo $CMAKE_OFFLOAD_CONFIG_CLANG
-    - echo $CMAKE_OFFLOAD_CONFIG_OPENMP
+    - echo $CMAKE_OFFLOAD_CONFIG
     - time $CMAKE -G Ninja
                   -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE
                   -DLLVM_CCACHE_BUILD=ON
@@ -253,12 +247,12 @@ z-cleanup-project-builds:
                   -DCMAKE_C_COMPILER=gcc
                   -DCMAKE_CXX_COMPILER=g++
                   -DGCC_INSTALL_PREFIX=$GCC_DIR
-                  -DLLVM_ENABLE_PROJECTS='clang;openmp'
+                  -DLLVM_ENABLE_PROJECTS='clang'
+                  -DLLVM_ENABLE_RUNTIMES='openmp'
                   -DPython3_EXECUTABLE=$PYTHON
                   -DLLVM_CCACHE_PARAMS="$LLVM_CCACHE_PARAMS"
                   -DLLVM_LIT_ARGS='-s -vv'
-                  $CMAKE_OFFLOAD_CONFIG_CLANG
-                  $CMAKE_OFFLOAD_CONFIG_OPENMP
+                  $CMAKE_OFFLOAD_CONFIG
                   ../source/llvm
       |& tee $CI_PROJECT_DIR/cmake-log.txt
     - cp CMakeCache.txt $CI_PROJECT_DIR
@@ -318,70 +312,6 @@ release (build):
       artifacts: false
 
 #-------------------------------------------------
-# openmp
-#
-# Rebuild the openmp subproject with the clang we just built in order to
-# produce libomptarget-*.bc libraries.  Without these, supposedly the worst
-# that can happen is degraded performance.  However, we've also seen failures,
-# in particular when offloading to nvptx64, that we could no longer reproduce
-# after building these.
-#-------------------------------------------------
-
-.openmp:
-  extends: .non-utility
-  stage: openmp
-  script:
-    - echo $CMAKE
-    - $CMAKE --version
-    - echo $CMAKE_BUILD_TYPE
-    - echo $GCC_DIR
-    - echo $CMAKE_OFFLOAD_CONFIG_OPENMP
-    - mkdir ../build-openmp
-    - cd ../build-openmp
-    - time $CMAKE -G Ninja
-                  -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE
-                  -DCMAKE_INSTALL_PREFIX=../install-openmp
-                  -DOPENMP_LLVM_TOOLS_DIR=$(pwd)/../build/bin
-                  -DCMAKE_C_COMPILER=$(pwd)/../build/bin/clang
-                  -DCMAKE_CXX_COMPILER=$(pwd)/../build/bin/clang++
-                  -DCMAKE_C_FLAGS=--gcc-toolchain=$GCC_DIR
-                  -DCMAKE_CXX_FLAGS=--gcc-toolchain=$GCC_DIR
-                  $CMAKE_OFFLOAD_CONFIG_OPENMP
-                  ../source/openmp
-      |& tee $CI_PROJECT_DIR/cmake-log.txt
-    - cp CMakeCache.txt $CI_PROJECT_DIR/CMakeCache.txt
-    - echo $NINJA
-    - $NINJA --version
-    - time $NINJA -l `nproc` |& tee $CI_PROJECT_DIR/build-log.txt
-    - time $NINJA install |& tee $CI_PROJECT_DIR/install-log.txt
-    - cp ../install-openmp/lib/* ../build/lib
-  artifacts:
-    when: always
-    paths:
-      - cmake-log.txt
-      - CMakeCache.txt
-      - build-log.txt
-      - install-log.txt
-
-leconte (openmp):
-  extends: [.leconte, .openmp]
-  needs:
-    - job: leconte (build)
-      artifacts: false
-
-kold (openmp):
-  extends: [.kold, .openmp]
-  needs:
-    - job: kold (build)
-      artifacts: false
-
-release (openmp):
-  extends: [.release, .openmp]
-  needs:
-    - job: release (build)
-      artifacts: false
-
-#-------------------------------------------------
 # tests
 #
 # The additional build required for the test suite can be very noisy and
@@ -391,6 +321,17 @@ release (openmp):
 # When there are fails, the test suite run can be very noisy too and
 # exceed the log output limit.  It's hard to grep for just the important
 # stuff, so just print it all but also dump to an artifact.
+#
+# At various points in LLVM's history, check-all has run multiple lit
+# invocations.  For example, at the time of this writing, specifying runtimes
+# like openmp in LLVM_ENABLE_RUNTIMES instead of in LLVM_ENABLE_PROJECTS causes
+# all such runtimes' test suites to run in a separate lit invocation from all
+# other projects' test suites.  As a result, if a runtime test fails, then the
+# other projects' test suites don't run.  The best solution is to fix check-all,
+# but that won't protect us from unknowingly missing test results the next time
+# this happens.  The following use of --ignore-fail followed by grep avoids that
+# problem.  The count printed by grep tells us how many test suite summaries we
+# need to search for.
 #-------------------------------------------------
 
 .test:
@@ -405,9 +346,11 @@ release (openmp):
       |& tee $CI_PROJECT_DIR/check-all-build-log.txt
       | grep '^\[[0-9]\+/[0-9]\+]\|\<error:'
     - time FILECHECK_OPTS='-dump-input-filter=all -vv -color'
-           LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml"
+           LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml --ignore-fail"
            $NINJA -l `nproc` check-all
-      |& tee $CI_PROJECT_DIR/check-all-log.txt;
+      |& tee $CI_PROJECT_DIR/check-all-log.txt
+    - "! grep -c \"'--ignore-fail' was specified\"
+                 $CI_PROJECT_DIR/check-all-log.txt"
   artifacts:
     when: always
     paths: [check-all-build-log.txt, check-all-log.txt, check-all.xml]
@@ -417,17 +360,17 @@ release (openmp):
 leconte (test):
   extends: [.leconte, .test]
   needs:
-    - job: leconte (openmp)
+    - job: leconte (build)
       artifacts: false
 
 kold (test):
   extends: [.kold, .test]
   needs:
-    - job: kold (openmp)
+    - job: kold (build)
       artifacts: false
 
 release (test):
   extends: [.release, .test]
   needs:
-    - job: release (openmp)
+    - job: release (build)
       artifacts: false

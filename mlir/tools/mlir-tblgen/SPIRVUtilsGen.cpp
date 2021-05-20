@@ -647,8 +647,7 @@ static void emitDecorationSerialization(const Operator &op, StringRef tabs,
     // All non-argument attributes translated into OpDecorate instruction
     os << tabs << formatv("for (auto attr : {0}->getAttrs()) {{\n", opVar);
     os << tabs
-       << formatv("  if (llvm::any_of({0}, [&](StringRef elided)", elidedAttrs);
-    os << " {return attr.first == elided;})) {\n";
+       << formatv("  if (llvm::is_contained({0}, attr.first)) {{", elidedAttrs);
     os << tabs << "    continue;\n";
     os << tabs << "  }\n";
     os << tabs
@@ -666,14 +665,35 @@ static void emitSerializationFunction(const Record *attrClass,
                                       const Record *record, const Operator &op,
                                       raw_ostream &os) {
   // If the record has 'autogenSerialization' set to 0, nothing to do
-  if (!record->getValueAsBit("autogenSerialization")) {
+  if (!record->getValueAsBit("autogenSerialization"))
     return;
-  }
+
   StringRef opVar("op"), operands("operands"), elidedAttrs("elidedAttrs"),
       resultID("resultID");
+
   os << formatv(
       "template <> LogicalResult\nSerializer::processOp<{0}>({0} {1}) {{\n",
       op.getQualCppClassName(), opVar);
+
+  // Special case for ops without attributes in TableGen definitions
+  if (op.getNumAttributes() == 0 && op.getNumVariableLengthOperands() == 0) {
+    std::string extInstSet;
+    std::string opcode;
+    if (record->isSubClassOf("SPV_ExtInstOp")) {
+      extInstSet =
+          formatv("\"{0}\"", record->getValueAsString("extendedInstSetName"));
+      opcode = std::to_string(record->getValueAsInt("extendedInstOpcode"));
+    } else {
+      extInstSet = "\"\"";
+      opcode = formatv("static_cast<uint32_t>(spirv::Opcode::{0})",
+                       record->getValueAsString("spirvOpName"));
+    }
+
+    os << formatv("  return processOpWithoutGrammarAttr({0}, {1}, {2});\n}\n\n",
+                  opVar, extInstSet, opcode);
+    return;
+  }
+
   os << formatv("  SmallVector<uint32_t, 4> {0};\n", operands);
   os << formatv("  SmallVector<StringRef, 2> {0};\n", elidedAttrs);
 
@@ -689,13 +709,15 @@ static void emitSerializationFunction(const Record *attrClass,
                             elidedAttrs, os);
 
   if (record->isSubClassOf("SPV_ExtInstOp")) {
-    os << formatv("  encodeExtensionInstruction({0}, \"{1}\", {2}, {3});\n",
-                  opVar, record->getValueAsString("extendedInstSetName"),
-                  record->getValueAsInt("extendedInstOpcode"), operands);
+    os << formatv(
+        "  (void)encodeExtensionInstruction({0}, \"{1}\", {2}, {3});\n", opVar,
+        record->getValueAsString("extendedInstSetName"),
+        record->getValueAsInt("extendedInstOpcode"), operands);
   } else {
     // Emit debug info.
-    os << formatv("  emitDebugLine(functionBody, {0}.getLoc());\n", opVar);
-    os << formatv("  encodeInstructionInto("
+    os << formatv("  (void)emitDebugLine(functionBody, {0}.getLoc());\n",
+                  opVar);
+    os << formatv("  (void)encodeInstructionInto("
                   "functionBody, spirv::Opcode::{1}, {2});\n",
                   op.getQualCppClassName(),
                   record->getValueAsString("spirvOpName"), operands);
@@ -914,16 +936,28 @@ static void emitDeserializationFunction(const Record *attrClass,
                                         const Record *record,
                                         const Operator &op, raw_ostream &os) {
   // If the record has 'autogenSerialization' set to 0, nothing to do
-  if (!record->getValueAsBit("autogenSerialization")) {
+  if (!record->getValueAsBit("autogenSerialization"))
     return;
-  }
+
   StringRef resultTypes("resultTypes"), valueID("valueID"), words("words"),
       wordIndex("wordIndex"), opVar("op"), operands("operands"),
       attributes("attributes");
+
+  // Method declaration
   os << formatv("template <> "
                 "LogicalResult\nDeserializer::processOp<{0}>(ArrayRef<"
                 "uint32_t> {1}) {{\n",
                 op.getQualCppClassName(), words);
+
+  // Special case for ops without attributes in TableGen definitions
+  if (op.getNumAttributes() == 0 && op.getNumVariableLengthOperands() == 0) {
+    os << formatv("  return processOpWithoutGrammarAttr("
+                  "{0}, \"{1}\", {2}, {3});\n}\n\n",
+                  words, op.getOperationName(),
+                  op.getNumResults() ? "true" : "false", op.getNumOperands());
+    return;
+  }
+
   os << formatv("  SmallVector<Type, 1> {0};\n", resultTypes);
   os << formatv("  size_t {0} = 0; (void){0};\n", wordIndex);
   os << formatv("  uint32_t {0} = 0; (void){0};\n", valueID);
@@ -937,6 +971,9 @@ static void emitDeserializationFunction(const Record *attrClass,
   // Operand deserialization
   emitOperandDeserialization(op, record->getLoc(), "  ", words, wordIndex,
                              operands, attributes, os);
+
+  // Decorations
+  emitDecorationDeserialization(op, "  ", valueID, attributes, os);
 
   os << formatv("  Location loc = createFileLineColLoc(opBuilder);\n");
   os << formatv("  auto {1} = opBuilder.create<{0}>(loc, {2}, {3}, {4}); "
@@ -952,10 +989,7 @@ static void emitDeserializationFunction(const Record *attrClass,
   // this instruction, up to the first occurrence of any of the following: the
   // next end of block.
   os << formatv("  if ({0}.hasTrait<OpTrait::IsTerminator>())\n", opVar);
-  os << formatv("    clearDebugLine();\n");
-
-  // Decorations
-  emitDecorationDeserialization(op, "  ", valueID, attributes, os);
+  os << formatv("    (void)clearDebugLine();\n");
   os << "  return success();\n";
   os << "}\n\n";
 }
@@ -964,11 +998,10 @@ static void emitDeserializationFunction(const Record *attrClass,
 /// based on the `opcode`.
 static void initDispatchDeserializationFn(StringRef opcode, StringRef words,
                                           raw_ostream &os) {
-  os << formatv(
-      "LogicalResult "
-      "Deserializer::dispatchToAutogenDeserialization(spirv::Opcode {0}, "
-      "ArrayRef<uint32_t> {1}) {{\n",
-      opcode, words);
+  os << formatv("LogicalResult spirv::Deserializer::"
+                "dispatchToAutogenDeserialization(spirv::Opcode {0},"
+                " ArrayRef<uint32_t> {1}) {{\n",
+                opcode, words);
   os << formatv("  switch ({0}) {{\n", opcode);
 }
 
@@ -1011,8 +1044,8 @@ static void initExtendedSetDeserializationDispatch(StringRef extensionSetName,
                                                    StringRef instructionID,
                                                    StringRef words,
                                                    raw_ostream &os) {
-  os << formatv("LogicalResult "
-                "Deserializer::dispatchToExtensionSetAutogenDeserialization("
+  os << formatv("LogicalResult spirv::Deserializer::"
+                "dispatchToExtensionSetAutogenDeserialization("
                 "StringRef {0}, uint32_t {1}, ArrayRef<uint32_t> {2}) {{\n",
                 extensionSetName, instructionID, words);
 }

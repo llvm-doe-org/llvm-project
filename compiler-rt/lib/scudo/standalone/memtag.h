@@ -52,6 +52,8 @@ inline uint8_t extractTag(uptr Ptr) {
 
 #if defined(__aarch64__)
 
+#if SCUDO_LINUX
+
 inline bool systemSupportsMemoryTagging() {
 #ifndef HWCAP2_MTE
 #define HWCAP2_MTE (1 << 18)
@@ -76,6 +78,14 @@ inline bool systemDetectsMemoryTagFaultsTestOnly() {
               prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0)) &
           PR_MTE_TCF_MASK) != PR_MTE_TCF_NONE;
 }
+
+#else // !SCUDO_LINUX
+
+inline bool systemSupportsMemoryTagging() { return false; }
+
+inline bool systemDetectsMemoryTagFaultsTestOnly() { return false; }
+
+#endif // SCUDO_LINUX
 
 inline void disableMemoryTagChecksTestOnly() {
   __asm__ __volatile__(".arch_extension mte; msr tco, #1");
@@ -266,6 +276,11 @@ inline void setRandomTag(void *Ptr, uptr Size, uptr ExcludeMask,
                          uptr *TaggedBegin, uptr *TaggedEnd) {
   *TaggedBegin = selectRandomTag(reinterpret_cast<uptr>(Ptr), ExcludeMask);
   *TaggedEnd = storeTags(*TaggedBegin, *TaggedBegin + Size);
+}
+
+template <typename Config>
+inline constexpr bool allocatorSupportsMemoryTagging() {
+  return archSupportsMemoryTagging() && Config::MaySupportMemoryTagging;
 }
 
 } // namespace scudo

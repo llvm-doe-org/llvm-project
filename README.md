@@ -33,21 +33,22 @@ and OpenMP support are desired.  At minimum, you must build the
 your system configuration, the following might prove sufficient:
 
 ```
-$ cd $LLVM_GIT_DIR/..
-$ mkdir llvm-build && cd llvm-build
-$ cmake -DCMAKE_INSTALL_PREFIX=../llvm-install \
-        -DLLVM_ENABLE_PROJECTS='clang;openmp' \
-        $LLVM_GIT_DIR
+$ cd $LLVM_GIT_DIR
+$ mkdir build && cd build
+$ cmake -DCMAKE_INSTALL_PREFIX=../install \
+        -DLLVM_ENABLE_PROJECTS='clang' \
+        -DLLVM_ENABLE_RUNTIMES='openmp' \
+        ../llvm
 $ make
+$ make install
 ```
 
-For further details on building OpenMP support, including another
-build stage that improves offloading support, see the following blog:
+For further details on building OpenMP support, see the following FAQ:
 
-> <https://www.hahnjo.de/blog/2018/10/08/clang-7.0-openmp-offloading-nvidia.html>
+> <https://openmp.llvm.org/docs/SupportAndFAQ.html>
 
-Clacc's Clang OpenACC test suite currently builds and runs OpenACC
-test programs.  Normally it builds them without offloading to avoid
+Clacc's OpenACC test suites currently build and run OpenACC test
+programs.  Normally it builds them without offloading to avoid
 requiring specific hardware.  To specify hardware architectures
 available on your system so that it tests offloading to them as well,
 specify one or more of the following when running `cmake`:
@@ -60,11 +61,12 @@ specify one or more of the following when running `cmake`:
 
 In each case, the value should be `0`, the empty string, or
 unspecified to turn off testing of that device type.  Otherwise, it
-should be the number of devices of that type expected to be available
-on the system.  In the latter case, the value is used to test device
-management functionality, such as `acc_get_num_devices`.  Specifying a
-smaller non-zero value will not significantly affect device resources
-used during testing but will cause some tests to fail.
+should be the number of devices of that type that LLVM's OpenMP
+runtime is expected to report as available on the system.  In the
+latter case, the value is used to test device management
+functionality, such as `acc_get_num_devices`.  Specifying a smaller
+non-zero value will not significantly affect device resources used
+during testing but will cause some tests to fail.
 
 Test suites checking Clacc's OpenACC support can be run by themselves
 or as part of larger test suites, as follows:
@@ -85,11 +87,17 @@ below).  Currently, Clacc only supports OpenACC programs with C as the
 base language.
 
 Clacc's compiler is the `clang` executable in the `bin` subdirectory
-of the LLVM build directory.  Here's a simple example of using it:
+of the install directory.  It's also possible to work from the build
+directory, but additional effort is usually then required to help
+`clang` find its own libraries and header files.
+
+Here's a simple example of using Clacc's `clang`, where
+`$CLACC_INSTALL_DIR` is `$LLVM_GIT_DIR/install` when following the
+build procedure above:
 
 ```
-$ export LD_LIBRARY_PATH=$CLACC_BUILD/lib
-$ export PATH=$CLACC_BUILD/bin:$PATH
+$ export PATH=$CLACC_INSTALL_DIR/bin:$PATH
+$ export LD_LIBRARY_PATH=$CLACC_INSTALL_DIR/lib:$LD_LIBRARY_PATH
 $ cat test.c
 #include <stdio.h>
 int main() {

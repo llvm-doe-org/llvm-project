@@ -151,7 +151,7 @@
 // RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:       %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
 // RUN:                 %[tgt-cflags] -DCASES_HEADER='"%t-cases.h"' -o %t.exe \
-// RUN:                 %t-omp.c
+// RUN:                 -gline-tables-only %t-omp.c
 // RUN:       %for cases {
 // RUN:         %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2> %t.err
 // RUN:         %[run-if] FileCheck -input-file %t.err -allow-empty %s \
@@ -1460,7 +1460,7 @@ CASE(caseSubarrayConcat2) {
 //              EXE-ERR: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
 //         EXE-ERR-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
 // EXE-ERR-notPASS-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes)
-// EXE-ERR-notPASS-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-target pointer maps
+// EXE-ERR-notPASS-NEXT: Libomptarget error: Run with LIBOMPTARGET_DEBUG=4 to dump host-target pointer mappings.
 // EXE-ERR-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                       # An abort message usually follows.
 //  EXE-ERR-notPASS-NOT: Libomptarget

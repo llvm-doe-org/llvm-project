@@ -264,9 +264,12 @@ public:
 
   /// Identifiers are uniqued by string value and use the internal string set
   /// for storage.
-  llvm::StringSet<llvm::BumpPtrAllocator &> identifiers;
+  llvm::StringMap<PointerUnion<Dialect *, MLIRContext *>,
+                  llvm::BumpPtrAllocator &>
+      identifiers;
   /// A thread local cache of identifiers to reduce lock contention.
-  ThreadLocalCache<llvm::StringMap<llvm::StringMapEntry<llvm::NoneType> *>>
+  ThreadLocalCache<llvm::StringMap<
+      llvm::StringMapEntry<PointerUnion<Dialect *, MLIRContext *>> *>>
       localIdentifierCache;
 
   /// An allocator used for AbstractAttribute and AbstractType objects.
@@ -303,6 +306,8 @@ public:
   Float16Type f16Ty;
   Float32Type f32Ty;
   Float64Type f64Ty;
+  Float80Type f80Ty;
+  Float128Type f128Ty;
   IndexType indexTy;
   IntegerType int1Ty, int8Ty, int16Ty, int32Ty, int64Ty, int128Ty;
   NoneType noneType;
@@ -351,6 +356,8 @@ MLIRContext::MLIRContext() : impl(new MLIRContextImpl()) {
   impl->f16Ty = TypeUniquer::get<Float16Type>(this);
   impl->f32Ty = TypeUniquer::get<Float32Type>(this);
   impl->f64Ty = TypeUniquer::get<Float64Type>(this);
+  impl->f80Ty = TypeUniquer::get<Float80Type>(this);
+  impl->f128Ty = TypeUniquer::get<Float128Type>(this);
   /// Index Type.
   impl->indexTy = TypeUniquer::get<IndexType>(this);
   /// Integer Types.
@@ -477,6 +484,15 @@ MLIRContext::getOrLoadDialect(StringRef dialectNamespace, TypeID dialectID,
 #endif
     dialect = ctor();
     assert(dialect && "dialect ctor failed");
+
+    // Refresh all the identifiers dialect field, this catches cases where a
+    // dialect may be loaded after identifier prefixed with this dialect name
+    // were already created.
+    for (auto &identifierEntry : impl.identifiers)
+      if (!identifierEntry.second &&
+          identifierEntry.first().startswith(dialectNamespace))
+        identifierEntry.second = dialect.get();
+
     return dialect.get();
   }
 
@@ -486,6 +502,16 @@ MLIRContext::getOrLoadDialect(StringRef dialectNamespace, TypeID dialectID,
                              "' has already been registered");
 
   return dialect.get();
+}
+
+llvm::hash_code MLIRContext::getRegistryHash() {
+  llvm::hash_code hash(0);
+  // Factor in number of loaded dialects, attributes, operations, types.
+  hash = llvm::hash_combine(hash, impl->loadedDialects.size());
+  hash = llvm::hash_combine(hash, impl->registeredAttributes.size());
+  hash = llvm::hash_combine(hash, impl->registeredOperations.size());
+  hash = llvm::hash_combine(hash, impl->registeredTypes.size());
+  return hash;
 }
 
 bool MLIRContext::allowsUnregisteredDialects() {
@@ -693,9 +719,22 @@ Identifier Identifier::get(StringRef str, MLIRContext *context) {
   assert(str.find('\0') == StringRef::npos &&
          "Cannot create an identifier with a nul character");
 
+  auto getDialectOrContext = [&]() {
+    PointerUnion<Dialect *, MLIRContext *> dialectOrContext = context;
+    auto dialectNamePair = str.split('.');
+    if (!dialectNamePair.first.empty())
+      if (Dialect *dialect = context->getLoadedDialect(dialectNamePair.first))
+        dialectOrContext = dialect;
+    return dialectOrContext;
+  };
+
   auto &impl = context->getImpl();
-  if (!context->isMultithreadingEnabled())
-    return Identifier(&*impl.identifiers.insert(str).first);
+  if (!context->isMultithreadingEnabled()) {
+    auto insertedIt = impl.identifiers.insert({str, nullptr});
+    if (insertedIt.second)
+      insertedIt.first->second = getDialectOrContext();
+    return Identifier(&*insertedIt.first);
+  }
 
   // Check for an existing instance in the local cache.
   auto *&localEntry = (*impl.localIdentifierCache)[str];
@@ -714,9 +753,19 @@ Identifier Identifier::get(StringRef str, MLIRContext *context) {
 
   // Acquire a writer-lock so that we can safely create the new instance.
   llvm::sys::SmartScopedWriter<true> contextLock(impl.identifierMutex);
-  auto it = impl.identifiers.insert(str).first;
+  auto it = impl.identifiers.insert({str, getDialectOrContext()}).first;
   localEntry = &*it;
   return Identifier(localEntry);
+}
+
+Dialect *Identifier::getDialect() {
+  return entry->second.dyn_cast<Dialect *>();
+}
+
+MLIRContext *Identifier::getContext() {
+  if (Dialect *dialect = getDialect())
+    return dialect->getContext();
+  return entry->second.get<MLIRContext *>();
 }
 
 //===----------------------------------------------------------------------===//
@@ -738,6 +787,12 @@ Float32Type Float32Type::get(MLIRContext *context) {
 }
 Float64Type Float64Type::get(MLIRContext *context) {
   return context->getImpl().f64Ty;
+}
+Float80Type Float80Type::get(MLIRContext *context) {
+  return context->getImpl().f80Ty;
+}
+Float128Type Float128Type::get(MLIRContext *context) {
+  return context->getImpl().f128Ty;
 }
 
 /// Get an instance of the IndexType.
@@ -772,19 +827,11 @@ getCachedIntegerType(unsigned width,
   }
 }
 
-IntegerType IntegerType::get(MLIRContext *context, unsigned width) {
-  return get(context, width, IntegerType::Signless);
-}
-
 IntegerType IntegerType::get(MLIRContext *context, unsigned width,
                              IntegerType::SignednessSemantics signedness) {
   if (auto cached = getCachedIntegerType(width, signedness, context))
     return cached;
   return Base::get(context, width, signedness);
-}
-
-IntegerType IntegerType::getChecked(Location location, unsigned width) {
-  return getChecked(location, width, IntegerType::Signless);
 }
 
 IntegerType IntegerType::getChecked(Location location, unsigned width,

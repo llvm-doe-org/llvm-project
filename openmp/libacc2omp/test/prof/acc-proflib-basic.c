@@ -65,22 +65,17 @@ int main() {
   //   OFF: acc_ev_device_init_start
   //   OFF: acc_ev_device_init_end
   // CHECK: acc_ev_compute_construct_start
-  //   OFF: acc_ev_enter_data_start
-  //   OFF: acc_ev_enter_data_end
   // CHECK: acc_ev_enqueue_launch_start
   // CHECK: acc_ev_enqueue_launch_end
   #pragma acc parallel num_gangs(1)
   // After an ACC_PROFLIB error, the kernel should not execute, and so stdout
-  // should remain empty.  For the case of no error, use CHECK-DAG in case the
-  // kernel and exit events occur out of order due to the use of CUDA streams.
+  // should remain empty.
   printf("success\n");
-  // CHECK-DAG: success
-  //   OFF-DAG: acc_ev_exit_data_start
-  //   OFF-DAG: acc_ev_exit_data_end
-  //     CHECK: acc_ev_compute_construct_end
-  //       OFF: acc_ev_device_shutdown_start
-  //       OFF: acc_ev_device_shutdown_end
-  //     CHECK: acc_ev_runtime_shutdown
+  // CHECK: success
+  // CHECK: acc_ev_compute_construct_end
+  //   OFF: acc_ev_device_shutdown_start
+  //   OFF: acc_ev_device_shutdown_end
+  // CHECK: acc_ev_runtime_shutdown
   return 0;
 }
 

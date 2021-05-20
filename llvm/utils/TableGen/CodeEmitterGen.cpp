@@ -311,7 +311,7 @@ std::string CodeEmitterGen::getInstructionCaseForEncoding(Record *R, Record *Enc
   for (const RecordVal &RV : EncodingDef->getValues()) {
     // Ignore fixed fields in the record, we're looking for values like:
     //    bits<5> RST = { ?, ?, ?, ?, ? };
-    if (RV.getPrefix() || RV.getValue()->isComplete())
+    if (RV.isNonconcreteOK() || RV.getValue()->isComplete())
       continue;
 
     AddCodeToMergeInOperand(R, BI, std::string(RV.getName()), NumberedOp,
@@ -461,9 +461,7 @@ void CodeEmitterGen::run(raw_ostream &o) {
   std::map<std::string, std::vector<std::string>> CaseMap;
 
   // Construct all cases statement for each opcode
-  for (std::vector<Record*>::iterator IC = Insts.begin(), EC = Insts.end();
-        IC != EC; ++IC) {
-    Record *R = *IC;
+  for (Record *R : Insts) {
     if (R->getValueAsString("Namespace") == "TargetOpcode" ||
         R->getValueAsBit("isPseudo"))
       continue;

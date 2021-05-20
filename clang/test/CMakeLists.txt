@@ -21,6 +21,21 @@ llvm_canonicalize_cmake_booleans(
   LLVM_ENABLE_PLUGINS
   LLVM_ENABLE_THREADS)
 
+# This is required for Clang's OpenACC test suite because of its dependence on
+# the OpenMP/OpenACC runtime, from which this logic is copied.
+#
+# When using libgcc, -latomic may be needed for atomics
+# (but when using compiler-rt, the atomics will be built-in)
+# Note: we can not check for __atomic_load because clang treats it
+# as special built-in and that breaks CMake checks
+check_function_exists(__atomic_load_1 CLANG_HAVE_BUILTIN_ATOMIC)
+if(NOT CLANG_HAVE_BUILTIN_ATOMIC)
+  check_library_exists(atomic __atomic_load_1 "" CLANG_HAVE_LIBATOMIC)
+else()
+  # not needed
+  set(CLANG_HAVE_LIBATOMIC 0)
+endif()
+
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
   ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py
@@ -122,6 +137,7 @@ if( NOT CLANG_BUILT_STANDALONE )
     llvm-profdata
     llvm-readelf
     llvm-readobj
+    llvm-strip
     llvm-symbolizer
     opt
     split-file

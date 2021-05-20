@@ -22,6 +22,7 @@
 #include "llvm/IR/PassTimingInfo.h"
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Transforms/IPO/SampleProfileProbe.h"
 
 #include <string>
 #include <utility>
@@ -152,7 +153,7 @@ public:
 // 8.  To compare two IR representations (of type \p T).
 template <typename IRUnitT> class ChangeReporter {
 protected:
-  ChangeReporter() {}
+  ChangeReporter(bool RunInVerboseMode) : VerboseMode(RunInVerboseMode) {}
 
 public:
   virtual ~ChangeReporter();
@@ -204,6 +205,9 @@ protected:
   std::vector<IRUnitT> BeforeStack;
   // Is this the first IR seen?
   bool InitialIR = true;
+
+  // Run in verbose mode, printing everything?
+  const bool VerboseMode;
 };
 
 // An abstract template base class that handles printing banners and
@@ -211,7 +215,7 @@ protected:
 template <typename IRUnitT>
 class TextChangeReporter : public ChangeReporter<IRUnitT> {
 protected:
-  TextChangeReporter();
+  TextChangeReporter(bool Verbose);
 
   // Print a module dump of the first IR that is changed.
   void handleInitialIR(Any IR) override;
@@ -235,7 +239,8 @@ protected:
 // included in this representation but it is massaged before reporting.
 class IRChangedPrinter : public TextChangeReporter<std::string> {
 public:
-  IRChangedPrinter() {}
+  IRChangedPrinter(bool VerboseMode)
+      : TextChangeReporter<std::string>(VerboseMode) {}
   ~IRChangedPrinter() override;
   void registerCallbacks(PassInstrumentationCallbacks &PIC);
 
@@ -269,14 +274,13 @@ class StandardInstrumentations {
   OptBisectInstrumentation OptBisect;
   PreservedCFGCheckerInstrumentation PreservedCFGChecker;
   IRChangedPrinter PrintChangedIR;
+  PseudoProbeVerifier PseudoProbeVerification;
   VerifyInstrumentation Verify;
 
   bool VerifyEach;
 
 public:
-  StandardInstrumentations(bool DebugLogging, bool VerifyEach = false)
-      : PrintPass(DebugLogging), OptNone(DebugLogging), Verify(DebugLogging),
-        VerifyEach(VerifyEach) {}
+  StandardInstrumentations(bool DebugLogging, bool VerifyEach = false);
 
   void registerCallbacks(PassInstrumentationCallbacks &PIC);
 

@@ -10,6 +10,7 @@
 
 #include "flang/Frontend/CompilerInvocation.h"
 #include "flang/Frontend/FrontendAction.h"
+#include "flang/Frontend/PreprocessorOptions.h"
 #include "flang/Parser/parsing.h"
 #include "flang/Parser/provenance.h"
 #include "flang/Semantics/semantics.h"
@@ -28,6 +29,8 @@ class CompilerInstance {
   std::shared_ptr<Fortran::parser::AllCookedSources> allCookedSources_;
 
   std::shared_ptr<Fortran::parser::Parsing> parsing_;
+
+  std::unique_ptr<Fortran::semantics::SemanticsContext> semanticsContext_;
 
   /// The stream for diagnostics from Semantics
   llvm::raw_ostream *semaOutputStream_ = &llvm::errs();
@@ -99,6 +102,9 @@ public:
   /// }
   /// @name Semantic analysis
   /// {
+  Fortran::semantics::SemanticsContext &semanticsContext() const {
+    return *semanticsContext_;
+  }
 
   /// Replace the current stream for verbose output.
   void set_semaOutputStream(llvm::raw_ostream &Value);
@@ -133,6 +139,13 @@ public:
   FrontendOptions &frontendOpts() { return invocation_->frontendOpts(); }
   const FrontendOptions &frontendOpts() const {
     return invocation_->frontendOpts();
+  }
+
+  PreprocessorOptions &preprocessorOpts() {
+    return invocation_->preprocessorOpts();
+  }
+  const PreprocessorOptions &preprocessorOpts() const {
+    return invocation_->preprocessorOpts();
   }
 
   /// }

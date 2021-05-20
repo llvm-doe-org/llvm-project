@@ -232,13 +232,10 @@ bool RecordRecTy::typeIsA(const RecTy *RHS) const {
 
 static RecordRecTy *resolveRecordTypes(RecordRecTy *T1, RecordRecTy *T2) {
   SmallVector<Record *, 4> CommonSuperClasses;
-  SmallVector<Record *, 4> Stack;
-
-  Stack.insert(Stack.end(), T1->classes_begin(), T1->classes_end());
+  SmallVector<Record *, 4> Stack(T1->classes_begin(), T1->classes_end());
 
   while (!Stack.empty()) {
-    Record *R = Stack.back();
-    Stack.pop_back();
+    Record *R = Stack.pop_back_val();
 
     if (T2->isSubClassOf(R)) {
       CommonSuperClasses.push_back(R);
@@ -505,6 +502,28 @@ IntInit::convertInitializerBitRange(ArrayRef<unsigned> Bits) const {
   return BitsInit::get(NewBits);
 }
 
+AnonymousNameInit *AnonymousNameInit::get(unsigned V) {
+  return new (Allocator) AnonymousNameInit(V);
+}
+
+StringInit *AnonymousNameInit::getNameInit() const {
+  return StringInit::get(getAsString());
+}
+
+std::string AnonymousNameInit::getAsString() const {
+  return "anonymous_" + utostr(Value);
+}
+
+Init *AnonymousNameInit::resolveReferences(Resolver &R) const {
+  auto *Old = const_cast<Init *>(static_cast<const Init *>(this));
+  auto *New = R.resolve(Old);
+  New = New ? New : Old;
+  if (R.isFinal())
+    if (auto *Anonymous = dyn_cast<AnonymousNameInit>(New))
+      return Anonymous->getNameInit();
+  return New;
+}
+
 StringInit *StringInit::get(StringRef V, StringFormat Fmt) {
   static StringMap<StringInit*, BumpPtrAllocator &> StringPool(Allocator);
   static StringMap<StringInit*, BumpPtrAllocator &> CodePool(Allocator);
@@ -691,8 +710,10 @@ Init *UnOpInit::Fold(Record *CurRec, bool IsFinal) const {
       if (DefInit *LHSd = dyn_cast<DefInit>(LHS))
         return StringInit::get(LHSd->getAsString());
 
-      if (IntInit *LHSi = dyn_cast<IntInit>(LHS))
+      if (IntInit *LHSi =
+              dyn_cast_or_null<IntInit>(LHS->convertInitializerTo(IntRecTy::get())))
         return StringInit::get(LHSi->getAsString());
+
     } else if (isa<RecordRecTy>(getType())) {
       if (StringInit *Name = dyn_cast<StringInit>(LHS)) {
         if (!CurRec && !IsFinal)
@@ -702,7 +723,9 @@ Init *UnOpInit::Fold(Record *CurRec, bool IsFinal) const {
 
         // Self-references are allowed, but their resolution is delayed until
         // the final resolve to ensure that we get the correct type for them.
-        if (Name == CurRec->getNameInit()) {
+        auto *Anonymous = dyn_cast<AnonymousNameInit>(CurRec->getNameInit());
+        if (Name == CurRec->getNameInit() ||
+            (Anonymous && Name == Anonymous->getNameInit())) {
           if (!IsFinal)
             break;
           D = CurRec;
@@ -856,14 +879,19 @@ static StringInit *interleaveStringList(const ListInit *List,
                                         const StringInit *Delim) {
   if (List->size() == 0)
     return StringInit::get("");
-  SmallString<80> Result(cast<StringInit>(List->getElement(0))->getValue());
+  StringInit *Element = dyn_cast<StringInit>(List->getElement(0));
+  if (!Element)
+    return nullptr;
+  SmallString<80> Result(Element->getValue());
   StringInit::StringFormat Fmt = StringInit::SF_String;
 
   for (unsigned I = 1, E = List->size(); I < E; ++I) {
     Result.append(Delim->getValue());
-    auto *StrInit = cast<StringInit>(List->getElement(I));
-    Result.append(StrInit->getValue());
-    Fmt = StringInit::determineFormat(Fmt, StrInit->getFormat());
+    StringInit *Element = dyn_cast<StringInit>(List->getElement(I));
+    if (!Element)
+      return nullptr;
+    Result.append(Element->getValue());
+    Fmt = StringInit::determineFormat(Fmt, Element->getFormat());
   }
   return StringInit::get(Result, Fmt);
 }
@@ -872,14 +900,21 @@ static StringInit *interleaveIntList(const ListInit *List,
                                      const StringInit *Delim) {
   if (List->size() == 0)
     return StringInit::get("");
-  SmallString<80> Result(
-      cast<IntInit>(List->getElement(0)->getCastTo(IntRecTy::get()))
-          ->getAsString());
+  IntInit *Element =
+      dyn_cast_or_null<IntInit>(List->getElement(0)
+                                    ->convertInitializerTo(IntRecTy::get()));
+  if (!Element)
+    return nullptr;
+  SmallString<80> Result(Element->getAsString());
 
   for (unsigned I = 1, E = List->size(); I < E; ++I) {
     Result.append(Delim->getValue());
-    Result.append(cast<IntInit>(List->getElement(I)->getCastTo(IntRecTy::get()))
-                      ->getAsString());
+    IntInit *Element =
+        dyn_cast_or_null<IntInit>(List->getElement(I)
+                                      ->convertInitializerTo(IntRecTy::get()));
+    if (!Element)
+      return nullptr;
+    Result.append(Element->getAsString());
   }
   return StringInit::get(Result);
 }
@@ -895,8 +930,8 @@ Init *BinOpInit::getStrConcat(Init *I0, Init *I1) {
 static ListInit *ConcatListInits(const ListInit *LHS,
                                  const ListInit *RHS) {
   SmallVector<Init *, 8> Args;
-  Args.insert(Args.end(), LHS->begin(), LHS->end());
-  Args.insert(Args.end(), RHS->begin(), RHS->end());
+  llvm::append_range(Args, *LHS);
+  llvm::append_range(Args, *RHS);
   return ListInit::get(Args, LHS->getElementType());
 }
 
@@ -949,8 +984,8 @@ Init *BinOpInit::Fold(Record *CurRec) const {
     ListInit *RHSs = dyn_cast<ListInit>(RHS);
     if (LHSs && RHSs) {
       SmallVector<Init *, 8> Args;
-      Args.insert(Args.end(), LHSs->begin(), LHSs->end());
-      Args.insert(Args.end(), RHSs->begin(), RHSs->end());
+      llvm::append_range(Args, *LHSs);
+      llvm::append_range(Args, *RHSs);
       return ListInit::get(Args, LHSs->getElementType());
     }
     break;
@@ -975,10 +1010,13 @@ Init *BinOpInit::Fold(Record *CurRec) const {
     ListInit *List = dyn_cast<ListInit>(LHS);
     StringInit *Delim = dyn_cast<StringInit>(RHS);
     if (List && Delim) {
+      StringInit *Result;
       if (isa<StringRecTy>(List->getElementType()))
-        return interleaveStringList(List, Delim);
+        Result = interleaveStringList(List, Delim);
       else
-        return interleaveIntList(List, Delim);
+        Result = interleaveIntList(List, Delim);
+      if (Result)
+        return Result;
     }
     break;
   }
@@ -1325,6 +1363,27 @@ Init *TernOpInit::Fold(Record *CurRec) const {
     }
     break;
   }
+
+  case SUBSTR: {
+    StringInit *LHSs = dyn_cast<StringInit>(LHS);
+    IntInit *MHSi = dyn_cast<IntInit>(MHS);
+    IntInit *RHSi = dyn_cast<IntInit>(RHS);
+    if (LHSs && MHSi && RHSi) {
+      int64_t StringSize = LHSs->getValue().size();
+      int64_t Start = MHSi->getValue();
+      int64_t Length = RHSi->getValue();
+      if (Start < 0 || Start > StringSize)
+        PrintError(CurRec->getLoc(),
+                   Twine("!substr start position is out of range 0...") +
+                       std::to_string(StringSize) + ": " +
+                       std::to_string(Start));
+      if (Length < 0)
+        PrintError(CurRec->getLoc(), "!substr length must be nonnegative");
+      return StringInit::get(LHSs->getValue().substr(Start, Length),
+                             LHSs->getFormat());
+    }
+    break;
+  }
   }
 
   return const_cast<TernOpInit *>(this);
@@ -1364,11 +1423,12 @@ std::string TernOpInit::getAsString() const {
   std::string Result;
   bool UnquotedLHS = false;
   switch (getOpcode()) {
-  case SUBST: Result = "!subst"; break;
-  case FOREACH: Result = "!foreach"; UnquotedLHS = true; break;
-  case FILTER: Result = "!filter"; UnquotedLHS = true; break;
-  case IF: Result = "!if"; break;
   case DAG: Result = "!dag"; break;
+  case FILTER: Result = "!filter"; UnquotedLHS = true; break;
+  case FOREACH: Result = "!foreach"; UnquotedLHS = true; break;
+  case IF: Result = "!if"; break;
+  case SUBST: Result = "!subst"; break;
+  case SUBSTR: Result = "!substr"; break;
   }
   return (Result + "(" +
           (UnquotedLHS ? LHS->getAsUnquotedString() : LHS->getAsString()) +
@@ -2106,16 +2166,16 @@ std::string DagInit::getAsString() const {
 //    Other implementations
 //===----------------------------------------------------------------------===//
 
-RecordVal::RecordVal(Init *N, RecTy *T, bool P)
-  : Name(N), TyAndPrefix(T, P) {
+RecordVal::RecordVal(Init *N, RecTy *T, FieldKind K)
+    : Name(N), TyAndKind(T, K) {
   setValue(UnsetInit::get());
   assert(Value && "Cannot create unset value for current type!");
 }
 
 // This constructor accepts the same arguments as the above, but also
 // a source location.
-RecordVal::RecordVal(Init *N, SMLoc Loc, RecTy *T, bool P)
-    : Name(N), Loc(Loc), TyAndPrefix(T, P) {
+RecordVal::RecordVal(Init *N, SMLoc Loc, RecTy *T, FieldKind K)
+    : Name(N), Loc(Loc), TyAndKind(T, K) {
   setValue(UnsetInit::get());
   assert(Value && "Cannot create unset value for current type!");
 }
@@ -2135,7 +2195,7 @@ std::string RecordVal::getPrintType() const {
       return "string";
     }
   } else {
-    return TyAndPrefix.getPointer()->getAsString();
+    return TyAndKind.getPointer()->getAsString();
   }
 }
 
@@ -2192,7 +2252,7 @@ LLVM_DUMP_METHOD void RecordVal::dump() const { errs() << *this; }
 #endif
 
 void RecordVal::print(raw_ostream &OS, bool PrintSem) const {
-  if (getPrefix()) OS << "field ";
+  if (isNonconcreteOK()) OS << "field ";
   OS << getPrintType() << " " << getNameInitAsString();
 
   if (getValue())
@@ -2268,6 +2328,12 @@ void Record::getDirectSuperClasses(SmallVectorImpl<Record *> &Classes) const {
 }
 
 void Record::resolveReferences(Resolver &R, const RecordVal *SkipVal) {
+  Init *OldName = getNameInit();
+  Init *NewName = Name->resolveReferences(R);
+  if (NewName != OldName) {
+    // Re-register with RecordKeeper.
+    setName(NewName);
+  }
   for (RecordVal &Value : Values) {
     if (SkipVal == &Value) // Skip resolve the same field as the given one
       continue;
@@ -2288,16 +2354,11 @@ void Record::resolveReferences(Resolver &R, const RecordVal *SkipVal) {
       }
     }
   }
-  Init *OldName = getNameInit();
-  Init *NewName = Name->resolveReferences(R);
-  if (NewName != OldName) {
-    // Re-register with RecordKeeper.
-    setName(NewName);
-  }
 }
 
-void Record::resolveReferences() {
+void Record::resolveReferences(Init *NewName) {
   RecordResolver R(*this);
+  R.setName(NewName);
   R.setFinal(true);
   resolveReferences(R);
 }
@@ -2333,10 +2394,10 @@ raw_ostream &llvm::operator<<(raw_ostream &OS, const Record &R) {
   OS << "\n";
 
   for (const RecordVal &Val : R.getValues())
-    if (Val.getPrefix() && !R.isTemplateArg(Val.getNameInit()))
+    if (Val.isNonconcreteOK() && !R.isTemplateArg(Val.getNameInit()))
       OS << Val;
   for (const RecordVal &Val : R.getValues())
-    if (!Val.getPrefix() && !R.isTemplateArg(Val.getNameInit()))
+    if (!Val.isNonconcreteOK() && !R.isTemplateArg(Val.getNameInit()))
       OS << Val;
 
   return OS << "}\n";
@@ -2552,7 +2613,7 @@ raw_ostream &llvm::operator<<(raw_ostream &OS, const RecordKeeper &RK) {
 /// GetNewAnonymousName - Generate a unique anonymous name that can be used as
 /// an identifier.
 Init *RecordKeeper::getNewAnonymousName() {
-  return StringInit::get("anonymous_" + utostr(AnonCounter++));
+  return AnonymousNameInit::get(AnonCounter++);
 }
 
 // These functions implement the phase timing facility. Starting a timer
@@ -2666,6 +2727,10 @@ Init *RecordResolver::resolve(Init *VarName) {
       Val = Val->resolveReferences(*this);
       Stack.pop_back();
     }
+  } else if (Name && VarName == getCurrentRecord()->getNameInit()) {
+    Stack.push_back(VarName);
+    Val = Name->resolveReferences(*this);
+    Stack.pop_back();
   }
 
   Cache[VarName] = Val;

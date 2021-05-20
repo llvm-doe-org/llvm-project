@@ -755,7 +755,7 @@ LogicalResult InlinerPass::initializeOptions(StringRef options) {
   if (!defaultPipelineStr.empty()) {
     std::string defaultPipelineCopy = defaultPipelineStr;
     defaultPipeline = [=](OpPassManager &pm) {
-      parsePassPipeline(defaultPipelineCopy, pm);
+      (void)parsePassPipeline(defaultPipelineCopy, pm);
     };
   } else if (defaultPipelineStr.getNumOccurrences()) {
     defaultPipeline = nullptr;
@@ -764,6 +764,10 @@ LogicalResult InlinerPass::initializeOptions(StringRef options) {
   // Initialize the op specific pass pipelines.
   llvm::StringMap<OpPassManager> pipelines;
   for (StringRef pipeline : opPipelineStrs) {
+    // Skip empty pipelines.
+    if (pipeline.empty())
+      continue;
+
     // Pipelines are expected to be of the form `<op-name>(<pipeline>)`.
     size_t pipelineStart = pipeline.find_first_of('(');
     if (pipelineStart == StringRef::npos || !pipeline.consume_back(")"))

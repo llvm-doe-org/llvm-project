@@ -177,7 +177,7 @@
 // RUN:         %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:         %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
 // RUN:                   %[tgt-cflags] %[use-var-cflags] -o %t.exe %t-omp.c \
-// RUN:                   -DCASES_HEADER='"%t-cases.h"'
+// RUN:                   -DCASES_HEADER='"%t-cases.h"' -gline-tables-only
 // RUN:         %for cases {
 // RUN:           %[run-if] %[not-crash-if-fail] %t.exe %[case] \
 // RUN:                     > %t.out 2> %t.err
@@ -255,7 +255,7 @@ FOREACH_CASE(AddCase)
 // EXE-ERR-PRESENT-notARRAYEXT-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping)
 //    EXE-ERR-notPASS-parallel-NEXT: Libomptarget error: Call to targetDataBegin failed, abort target.
 //    EXE-ERR-notPASS-parallel-NEXT: Libomptarget error: Failed to process data before launching the kernel.
-//             EXE-ERR-notPASS-NEXT: Libomptarget error: run with env LIBOMPTARGET_INFO>1 to dump host-target pointer maps
+//             EXE-ERR-notPASS-NEXT: Libomptarget error: Run with LIBOMPTARGET_DEBUG=4 to dump host-target pointer mappings.
 //             EXE-ERR-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                   # An abort message usually follows.
 //              EXE-ERR-notPASS-NOT: Libomptarget

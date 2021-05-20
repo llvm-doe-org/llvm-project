@@ -1,14 +1,16 @@
 ##===----------------------------------------------------------------------===##
-# 
+#
 # Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-# 
+#
 ##===----------------------------------------------------------------------===##
 #
 # Build plugins for the user system if available.
 #
 ##===----------------------------------------------------------------------===##
+
+add_subdirectory(common)
 
 # void build_generic_elf64(string tmachine, string tmachine_name, string tmachine_libname, string elf_machine_id);
 # - build a plugin for an ELF based generic 64-bit target based on libffi.
@@ -24,28 +26,28 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
       if (${num_optional_args} GREATER 0)
         list(GET optional_args 0 target_omp_device_t)
       endif()
-    
+
       libomptarget_say("Building ${tmachine_name} offloading plugin.")
-    
+
       include_directories(${LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIR})
       include_directories(${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR})
 
       # Set the -I for headers from the runtime.
       include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../../runtime/src)
-      
+
       # Define macro to be used as prefix of the runtime messages for this target.
       add_definitions("-DTARGET_NAME=${tmachine_name}")
 
       # Define macro with the ELF ID for this target.
       add_definitions("-DTARGET_ELF_ID=${elf_machine_id}")
-    
+
       # Define macro with the omp_device_t for this target, if supplied.  Some
       # targets don't have omp_device_t entries yet, but eventually all should.
       if(DEFINED target_omp_device_t)
         add_definitions("-DTARGET_OMP_DEVICE_T=${target_omp_device_t}")
       endif()
 
-      add_library("omptarget.rtl.${tmachine_libname}" SHARED 
+      add_library("omptarget.rtl.${tmachine_libname}" SHARED
         ${CMAKE_CURRENT_SOURCE_DIR}/../generic-elf-64bit/src/rtl.cpp)
       if(OPENMP_CLANG_LIB_SUBDIR AND NOT OPENMP_STANDALONE_BUILD)
         add_custom_command(TARGET "omptarget.rtl.${tmachine_libname}"
@@ -57,32 +59,32 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
             $<TARGET_FILE_DIR:omptarget.rtl.${tmachine_libname}>/${OPENMP_CLANG_LIB_SUBDIR}
         )
       endif()
-        
+
       # Install plugin under the lib destination folder.
-      install(TARGETS "omptarget.rtl.${tmachine_libname}" 
-        LIBRARY DESTINATION "${OPENMP_INSTALL_LIBDIR}")
       if(OPENMP_CLANG_LIB_SUBDIR)
         install(TARGETS "omptarget.rtl.${tmachine_libname}"
           LIBRARY DESTINATION
           "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
       endif()
-        
+
       target_link_libraries(
         "omptarget.rtl.${tmachine_libname}"
-        ${LIBOMPTARGET_DEP_LIBFFI_LIBRARIES} 
+        elf_common
+        ${LIBOMPTARGET_DEP_LIBFFI_LIBRARIES}
         ${LIBOMPTARGET_DEP_LIBELF_LIBRARIES}
         dl
+        ${OPENMP_PTHREAD_LIB}
         "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/../exports")
-    
+
       list(APPEND LIBOMPTARGET_TESTED_PLUGINS
         "omptarget.rtl.${tmachine_libname}")
 
       # Report to the parent scope that we are building a plugin.
-      set(LIBOMPTARGET_SYSTEM_TARGETS 
+      set(LIBOMPTARGET_SYSTEM_TARGETS
         "${LIBOMPTARGET_SYSTEM_TARGETS} ${tmachine_triple}" PARENT_SCOPE)
       set(LIBOMPTARGET_TESTED_PLUGINS
         "${LIBOMPTARGET_TESTED_PLUGINS}" PARENT_SCOPE)
-      
+
     else(LIBOMPTARGET_DEP_LIBFFI_FOUND)
       libomptarget_say("Not building ${tmachine_name} offloading plugin: libffi dependency not found.")
     endif(LIBOMPTARGET_DEP_LIBFFI_FOUND)
@@ -100,6 +102,7 @@ add_subdirectory(ppc64)
 add_subdirectory(ppc64le)
 add_subdirectory(ve)
 add_subdirectory(x86_64)
+add_subdirectory(remote)
 
 # Make sure the parent scope can see the plugins that will be created.
 set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS}" PARENT_SCOPE)
