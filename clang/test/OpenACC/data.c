@@ -1,7 +1,9 @@
 // Check "acc data".
 //
 // Interactions with "acc enter data" and "acc exit data" are checked in
-// enter-exit-data.c and fopenacc-structured-ref-count-omp.c.
+// enter-exit-data.c and fopenacc-structured-ref-count-omp.c.  Subarray
+// extension errors are checked in subarray-errors.c, and other runtime errors
+// from data clauses are checked in no-create.c and present.c.
 
 // Check -ast-dump before and after AST serialization.
 //

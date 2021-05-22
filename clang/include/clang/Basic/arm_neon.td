@@ -646,7 +646,7 @@ def VABS    : SInst<"vabs", "..", "csifQcQsQiQf">;
 def VQABS   : SInst<"vqabs", "..", "csiQcQsQi">;
 def VNEG    : SOpInst<"vneg", "..", "csifQcQsQiQf", OP_NEG>;
 def VQNEG   : SInst<"vqneg", "..", "csiQcQsQi">;
-def VCLS    : SInst<"vcls", "..", "csiQcQsQi">;
+def VCLS    : SInst<"vcls", "S.", "csiUcUsUiQcQsQiQUcQUsQUi">;
 def VCLZ    : IInst<"vclz", "..", "csiUcUsUiQcQsQiQUcQUsQUi">;
 def VCNT    : WInst<"vcnt", "..", "UccPcQUcQcQPc">;
 def VRECPE  : SInst<"vrecpe", "..", "fUiQfQUi">;
@@ -1134,7 +1134,33 @@ def SHA1SU0 : SInst<"vsha1su0", "....", "QUi">;
 def SHA256H : SInst<"vsha256h", "....", "QUi">;
 def SHA256H2 : SInst<"vsha256h2", "....", "QUi">;
 def SHA256SU1 : SInst<"vsha256su1", "....", "QUi">;
+
+def BCAX : SInst<"vbcax", "....", "QUcQUsQUiQUlQcQsQiQl">;
+def EOR3 : SInst<"veor3", "....", "QUcQUsQUiQUlQcQsQiQl">;
+def RAX1 : SInst<"vrax1", "...", "QUl">;
+
+let isVXAR = 1 in {
+def XAR :  SInst<"vxar", "...I", "QUl">;
 }
+
+def SHA512SU0 : SInst<"vsha512su0", "...", "QUl">;
+def SHA512su1 : SInst<"vsha512su1", "....", "QUl">;
+def SHA512H : SInst<"vsha512h", "....", "QUl">;
+def SHA512H2 : SInst<"vsha512h2", "....", "QUl">;
+
+def SM3SS1 : SInst<"vsm3ss1", "....", "QUi">;
+def SM3TT1A : SInst<"vsm3tt1a", "....I", "QUi">;
+def SM3TT1B : SInst<"vsm3tt1b", "....I", "QUi">;
+def SM3TT2A : SInst<"vsm3tt2a", "....I", "QUi">;
+def SM3TT2B : SInst<"vsm3tt2b", "....I", "QUi">;
+def SM3PARTW1 : SInst<"vsm3partw1", "....", "QUi">;
+def SM3PARTW2 : SInst<"vsm3partw2", "....", "QUi">;
+
+def SM4E : SInst<"vsm4e", "...", "QUi">;
+def SM4EKEY : SInst<"vsm4ekey", "...", "QUi">;
+}
+
+def VADDP   : WInst<"vadd", "...", "PcPsPlQPcQPsQPlQPk">;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Float -> Int conversions with explicit rounding mode

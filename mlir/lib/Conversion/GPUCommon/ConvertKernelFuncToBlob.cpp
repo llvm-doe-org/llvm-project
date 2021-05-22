@@ -93,9 +93,9 @@ private:
   LoweringCallback loweringCallback;
   BlobGenerator blobGenerator;
   llvm::Triple triple;
-  StringRef targetChip;
-  StringRef features;
-  StringRef blobAnnotation;
+  std::string targetChip;
+  std::string features;
+  std::string blobAnnotation;
 };
 
 } // anonymous namespace
@@ -148,7 +148,7 @@ StringAttr GpuKernelToBlobPass::translateGPUModuleToBinaryAnnotation(
   auto blob = convertModuleToBlob(llvmModule, loc, name);
   if (!blob)
     return {};
-  return StringAttr::get({blob->data(), blob->size()}, loc->getContext());
+  return StringAttr::get(loc->getContext(), {blob->data(), blob->size()});
 }
 
 std::unique_ptr<OperationPass<gpu::GPUModuleOp>>

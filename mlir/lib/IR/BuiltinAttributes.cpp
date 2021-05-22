@@ -22,29 +22,11 @@ using namespace mlir;
 using namespace mlir::detail;
 
 //===----------------------------------------------------------------------===//
-// AffineMapAttr
+/// Tablegen Attribute Definitions
 //===----------------------------------------------------------------------===//
 
-AffineMapAttr AffineMapAttr::get(AffineMap value) {
-  return Base::get(value.getContext(), value);
-}
-
-AffineMap AffineMapAttr::getValue() const { return getImpl()->value; }
-
-//===----------------------------------------------------------------------===//
-// ArrayAttr
-//===----------------------------------------------------------------------===//
-
-ArrayAttr ArrayAttr::get(ArrayRef<Attribute> value, MLIRContext *context) {
-  return Base::get(context, value);
-}
-
-ArrayRef<Attribute> ArrayAttr::getValue() const { return getImpl()->value; }
-
-Attribute ArrayAttr::operator[](unsigned idx) const {
-  assert(idx < size() && "index out of bounds");
-  return getValue()[idx];
-}
+#define GET_ATTRDEF_CLASSES
+#include "mlir/IR/BuiltinAttributes.cpp.inc"
 
 //===----------------------------------------------------------------------===//
 // DictionaryAttr
@@ -134,8 +116,8 @@ DictionaryAttr::findDuplicate(SmallVectorImpl<NamedAttribute> &array,
   return findDuplicateElement(array);
 }
 
-DictionaryAttr DictionaryAttr::get(ArrayRef<NamedAttribute> value,
-                                   MLIRContext *context) {
+DictionaryAttr DictionaryAttr::get(MLIRContext *context,
+                                   ArrayRef<NamedAttribute> value) {
   if (value.empty())
     return DictionaryAttr::getEmpty(context);
   assert(llvm::all_of(value,
@@ -152,8 +134,8 @@ DictionaryAttr DictionaryAttr::get(ArrayRef<NamedAttribute> value,
 }
 /// Construct a dictionary with an array of values that is known to already be
 /// sorted by name and uniqued.
-DictionaryAttr DictionaryAttr::getWithSorted(ArrayRef<NamedAttribute> value,
-                                             MLIRContext *context) {
+DictionaryAttr DictionaryAttr::getWithSorted(MLIRContext *context,
+                                             ArrayRef<NamedAttribute> value) {
   if (value.empty())
     return DictionaryAttr::getEmpty(context);
   // Ensure that the attribute elements are unique and sorted.
@@ -165,10 +147,6 @@ DictionaryAttr DictionaryAttr::getWithSorted(ArrayRef<NamedAttribute> value,
   assert(!findDuplicateElement(value) &&
          "DictionaryAttr element names must be unique");
   return Base::get(context, value);
-}
-
-ArrayRef<NamedAttribute> DictionaryAttr::getValue() const {
-  return getImpl()->getElements();
 }
 
 /// Return the specified attribute if present, null otherwise.
@@ -203,6 +181,10 @@ DictionaryAttr::iterator DictionaryAttr::end() const {
 }
 size_t DictionaryAttr::size() const { return getValue().size(); }
 
+DictionaryAttr DictionaryAttr::getEmptyUnchecked(MLIRContext *context) {
+  return Base::get(context, ArrayRef<NamedAttribute>());
+}
+
 //===----------------------------------------------------------------------===//
 // FloatAttr
 //===----------------------------------------------------------------------===//
@@ -211,16 +193,18 @@ FloatAttr FloatAttr::get(Type type, double value) {
   return Base::get(type.getContext(), type, value);
 }
 
-FloatAttr FloatAttr::getChecked(Type type, double value, Location loc) {
-  return Base::getChecked(loc, type, value);
+FloatAttr FloatAttr::getChecked(function_ref<InFlightDiagnostic()> emitError,
+                                Type type, double value) {
+  return Base::getChecked(emitError, type.getContext(), type, value);
 }
 
 FloatAttr FloatAttr::get(Type type, const APFloat &value) {
   return Base::get(type.getContext(), type, value);
 }
 
-FloatAttr FloatAttr::getChecked(Type type, const APFloat &value, Location loc) {
-  return Base::getChecked(loc, type, value);
+FloatAttr FloatAttr::getChecked(function_ref<InFlightDiagnostic()> emitError,
+                                Type type, const APFloat &value) {
+  return Base::getChecked(emitError, type.getContext(), type, value);
 }
 
 APFloat FloatAttr::getValue() const { return getImpl()->getValue(); }
@@ -238,27 +222,29 @@ double FloatAttr::getValueAsDouble(APFloat value) {
 }
 
 /// Verify construction invariants.
-static LogicalResult verifyFloatTypeInvariants(Location loc, Type type) {
+static LogicalResult
+verifyFloatTypeInvariants(function_ref<InFlightDiagnostic()> emitError,
+                          Type type) {
   if (!type.isa<FloatType>())
-    return emitError(loc, "expected floating point type");
+    return emitError() << "expected floating point type";
   return success();
 }
 
-LogicalResult FloatAttr::verifyConstructionInvariants(Location loc, Type type,
-                                                      double value) {
-  return verifyFloatTypeInvariants(loc, type);
+LogicalResult FloatAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                                Type type, double value) {
+  return verifyFloatTypeInvariants(emitError, type);
 }
 
-LogicalResult FloatAttr::verifyConstructionInvariants(Location loc, Type type,
-                                                      const APFloat &value) {
+LogicalResult FloatAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                                Type type, const APFloat &value) {
   // Verify that the type is correct.
-  if (failed(verifyFloatTypeInvariants(loc, type)))
+  if (failed(verifyFloatTypeInvariants(emitError, type)))
     return failure();
 
   // Verify that the type semantics match that of the value.
   if (&type.cast<FloatType>().getFloatSemantics() != &value.getSemantics()) {
-    return emitError(
-        loc, "FloatAttr type doesn't match the type implied by its value");
+    return emitError()
+           << "FloatAttr type doesn't match the type implied by its value";
   }
   return success();
 }
@@ -267,25 +253,13 @@ LogicalResult FloatAttr::verifyConstructionInvariants(Location loc, Type type,
 // SymbolRefAttr
 //===----------------------------------------------------------------------===//
 
-FlatSymbolRefAttr SymbolRefAttr::get(StringRef value, MLIRContext *ctx) {
-  return Base::get(ctx, value, llvm::None).cast<FlatSymbolRefAttr>();
+FlatSymbolRefAttr SymbolRefAttr::get(MLIRContext *ctx, StringRef value) {
+  return get(ctx, value, llvm::None).cast<FlatSymbolRefAttr>();
 }
-
-SymbolRefAttr SymbolRefAttr::get(StringRef value,
-                                 ArrayRef<FlatSymbolRefAttr> nestedReferences,
-                                 MLIRContext *ctx) {
-  return Base::get(ctx, value, nestedReferences);
-}
-
-StringRef SymbolRefAttr::getRootReference() const { return getImpl()->value; }
 
 StringRef SymbolRefAttr::getLeafReference() const {
   ArrayRef<FlatSymbolRefAttr> nestedRefs = getNestedReferences();
   return nestedRefs.empty() ? getRootReference() : nestedRefs.back().getValue();
-}
-
-ArrayRef<FlatSymbolRefAttr> SymbolRefAttr::getNestedReferences() const {
-  return getImpl()->getNestedRefs();
 }
 
 //===----------------------------------------------------------------------===//
@@ -294,7 +268,7 @@ ArrayRef<FlatSymbolRefAttr> SymbolRefAttr::getNestedReferences() const {
 
 IntegerAttr IntegerAttr::get(Type type, const APInt &value) {
   if (type.isSignlessInteger(1))
-    return BoolAttr::get(value.getBoolValue(), type.getContext());
+    return BoolAttr::get(type.getContext(), value.getBoolValue());
   return Base::get(type.getContext(), type, value);
 }
 
@@ -327,26 +301,28 @@ uint64_t IntegerAttr::getUInt() const {
   return getValue().getZExtValue();
 }
 
-static LogicalResult verifyIntegerTypeInvariants(Location loc, Type type) {
+static LogicalResult
+verifyIntegerTypeInvariants(function_ref<InFlightDiagnostic()> emitError,
+                            Type type) {
   if (type.isa<IntegerType, IndexType>())
     return success();
-  return emitError(loc, "expected integer or index type");
+  return emitError() << "expected integer or index type";
 }
 
-LogicalResult IntegerAttr::verifyConstructionInvariants(Location loc, Type type,
-                                                        int64_t value) {
-  return verifyIntegerTypeInvariants(loc, type);
+LogicalResult IntegerAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                                  Type type, int64_t value) {
+  return verifyIntegerTypeInvariants(emitError, type);
 }
 
-LogicalResult IntegerAttr::verifyConstructionInvariants(Location loc, Type type,
-                                                        const APInt &value) {
-  if (failed(verifyIntegerTypeInvariants(loc, type)))
+LogicalResult IntegerAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                                  Type type, const APInt &value) {
+  if (failed(verifyIntegerTypeInvariants(emitError, type)))
     return failure();
   if (auto integerType = type.dyn_cast<IntegerType>())
     if (integerType.getWidth() != value.getBitWidth())
-      return emitError(loc, "integer type bit width (")
-             << integerType.getWidth() << ") doesn't match value bit width ("
-             << value.getBitWidth() << ")";
+      return emitError() << "integer type bit width (" << integerType.getWidth()
+                         << ") doesn't match value bit width ("
+                         << value.getBitWidth() << ")";
   return success();
 }
 
@@ -364,71 +340,16 @@ bool BoolAttr::classof(Attribute attr) {
 }
 
 //===----------------------------------------------------------------------===//
-// IntegerSetAttr
-//===----------------------------------------------------------------------===//
-
-IntegerSetAttr IntegerSetAttr::get(IntegerSet value) {
-  return Base::get(value.getConstraint(0).getContext(), value);
-}
-
-IntegerSet IntegerSetAttr::getValue() const { return getImpl()->value; }
-
-//===----------------------------------------------------------------------===//
 // OpaqueAttr
 //===----------------------------------------------------------------------===//
 
-OpaqueAttr OpaqueAttr::get(Identifier dialect, StringRef attrData, Type type,
-                           MLIRContext *context) {
-  return Base::get(context, dialect, attrData, type);
-}
-
-OpaqueAttr OpaqueAttr::getChecked(Identifier dialect, StringRef attrData,
-                                  Type type, Location location) {
-  return Base::getChecked(location, dialect, attrData, type);
-}
-
-/// Returns the dialect namespace of the opaque attribute.
-Identifier OpaqueAttr::getDialectNamespace() const {
-  return getImpl()->dialectNamespace;
-}
-
-/// Returns the raw attribute data of the opaque attribute.
-StringRef OpaqueAttr::getAttrData() const { return getImpl()->attrData; }
-
-/// Verify the construction of an opaque attribute.
-LogicalResult OpaqueAttr::verifyConstructionInvariants(Location loc,
-                                                       Identifier dialect,
-                                                       StringRef attrData,
-                                                       Type type) {
+LogicalResult OpaqueAttr::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 Identifier dialect, StringRef attrData,
+                                 Type type) {
   if (!Dialect::isValidNamespace(dialect.strref()))
-    return emitError(loc, "invalid dialect namespace '") << dialect << "'";
+    return emitError() << "invalid dialect namespace '" << dialect << "'";
   return success();
 }
-
-//===----------------------------------------------------------------------===//
-// StringAttr
-//===----------------------------------------------------------------------===//
-
-StringAttr StringAttr::get(StringRef bytes, MLIRContext *context) {
-  return get(bytes, NoneType::get(context));
-}
-
-/// Get an instance of a StringAttr with the given string and Type.
-StringAttr StringAttr::get(StringRef bytes, Type type) {
-  return Base::get(type.getContext(), bytes, type);
-}
-
-StringRef StringAttr::getValue() const { return getImpl()->value; }
-
-//===----------------------------------------------------------------------===//
-// TypeAttr
-//===----------------------------------------------------------------------===//
-
-TypeAttr TypeAttr::get(Type value) {
-  return Base::get(value.getContext(), value);
-}
-
-Type TypeAttr::getValue() const { return getImpl()->value; }
 
 //===----------------------------------------------------------------------===//
 // ElementsAttr

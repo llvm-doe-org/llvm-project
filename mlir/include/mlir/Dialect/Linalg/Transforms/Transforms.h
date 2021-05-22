@@ -31,13 +31,6 @@ struct LinalgTilingOptions;
 //===----------------------------------------------------------------------===//
 using LinalgLoops = SmallVector<Operation *, 4>;
 
-struct TiledLinalgOp {
-  LinalgOp op;
-  SmallVector<Operation *, 8> loops;
-  SmallVector<Value, 4> tensorResults;
-  TiledLinalgOp &operator=(const TiledLinalgOp &) = default;
-};
-
 /// Populates patterns for vectorization of all ConvN-D ops.
 void populateConvVectorizationPatterns(
     MLIRContext *context, SmallVectorImpl<OwningRewritePatternList> &patterns,
@@ -63,6 +56,12 @@ void populateLinalgBufferizePatterns(MLIRContext *context,
 /// `interchangeVector = [1,2,0]`. All values in `interchangeVector` must be
 /// integers, in the range 0..`tileSizes.size()` without duplications
 /// (i.e. `[1,1,2]` is an invalid permutation).
+struct TiledLinalgOp {
+  LinalgOp op;
+  SmallVector<Operation *, 8> loops;
+  SmallVector<Value, 4> tensorResults;
+  TiledLinalgOp &operator=(const TiledLinalgOp &) = default;
+};
 Optional<TiledLinalgOp> tileLinalgOp(OpBuilder &b, LinalgOp op,
                                      const LinalgTilingOptions &options);
 
@@ -264,7 +263,12 @@ Optional<LinalgOp> promoteSubViews(OpBuilder &b, LinalgOp op,
                                    OperationFolder *folder = nullptr);
 
 /// Emit a suitable vector form for a Linalg op with fully static shape.
-void vectorizeLinalgOp(OpBuilder &builder, Operation *op);
+struct VectorizedLinalgOp {
+  SmallVector<Value> tensorResults;
+  VectorizedLinalgOp &operator=(const VectorizedLinalgOp &) = default;
+};
+Optional<VectorizedLinalgOp> vectorizeLinalgOp(OpBuilder &builder,
+                                               Operation *op);
 
 /// Emits a loop nest of `LoopTy` with the proper body for `op`.
 template <typename LoopTy>
@@ -372,8 +376,10 @@ enum class LinalgTilingLoopType {
 using TileSizeComputationFunction =
     std::function<SmallVector<Value, 4>(OpBuilder &, Operation *)>;
 
+/// Specify the padding value for an OpOperand. This should be a function of
+/// both the operation and the operand type.
 using PaddingValueComputationFunction =
-    std::function<Value(OpBuilder &, Operation *)>;
+    std::function<Value(OpBuilder &, OpOperand &)>;
 
 struct LinalgTilingOptions {
   /// Computation function that returns the tile sizes for each operation.
@@ -803,6 +809,16 @@ void populateLinalgConvGeneralizationPatterns(
 //===----------------------------------------------------------------------===//
 // Op-specific patterns.
 //===----------------------------------------------------------------------===//
+
+/// PadTensorOp does not implement the LinalgStructuredOpInterface `LinalgOp`,
+/// it needs a specific pattern to vectorize.
+struct PadTensorOpVectorizationPattern : public OpRewritePattern<PadTensorOp> {
+  using OpRewritePattern<PadTensorOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(PadTensorOp padOp,
+                                PatternRewriter &rewriter) const override;
+};
+
 /// Match and rewrite for the pattern:
 /// ```
 ///    %alloc = ...
@@ -1000,9 +1016,9 @@ enum class SparseIntType { kNative, kI64, kI32, kI16, kI8 };
 struct SparsificationOptions {
   SparsificationOptions(SparseParallelizationStrategy p,
                         SparseVectorizationStrategy v, unsigned vl,
-                        SparseIntType pt, SparseIntType it)
+                        SparseIntType pt, SparseIntType it, bool fo)
       : parallelizationStrategy(p), vectorizationStrategy(v), vectorLength(vl),
-        ptrType(pt), indType(it) {
+        ptrType(pt), indType(it), fastOutput(fo) {
     // TODO: remove restriction when vectors with index elements are supported
     assert((v != SparseVectorizationStrategy::kAnyStorageInnerLoop ||
             (ptrType != SparseIntType::kNative &&
@@ -1012,18 +1028,24 @@ struct SparsificationOptions {
   SparsificationOptions()
       : SparsificationOptions(SparseParallelizationStrategy::kNone,
                               SparseVectorizationStrategy::kNone, 1u,
-                              SparseIntType::kNative, SparseIntType::kNative) {}
+                              SparseIntType::kNative, SparseIntType::kNative,
+                              false) {}
   SparseParallelizationStrategy parallelizationStrategy;
   SparseVectorizationStrategy vectorizationStrategy;
   unsigned vectorLength;
   SparseIntType ptrType;
   SparseIntType indType;
+  bool fastOutput; // experimental: fast output buffers
 };
 
-/// Set up sparsification rewriting rules with the given options.
+/// Sets up sparsification rewriting rules with the given options.
 void populateSparsificationPatterns(
     MLIRContext *context, OwningRewritePatternList &patterns,
     const SparsificationOptions &options = SparsificationOptions());
+
+/// Sets up sparsification conversion rules with the given options.
+void populateSparsificationConversionPatterns(
+    MLIRContext *context, OwningRewritePatternList &patterns);
 
 } // namespace linalg
 } // namespace mlir

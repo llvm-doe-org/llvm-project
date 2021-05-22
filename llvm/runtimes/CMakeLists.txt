@@ -85,13 +85,12 @@ function(builtin_default_target compiler_rt_path)
                                       -DLLVM_RUNTIME_OUTPUT_INTDIR=${LLVM_TOOLS_BINARY_DIR}
                                       -DLLVM_DEFAULT_TARGET_TRIPLE=${TARGET_TRIPLE}
                                       -DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=${LLVM_ENABLE_PER_TARGET_RUNTIME_DIR_default}
-                                      -DCMAKE_C_COMPILER_TARGET=${TARGET_TRIPLE}
-                                      -DCMAKE_ASM_COMPILER_TARGET=${TARGET_TRIPLE}
                                       -DCMAKE_C_COMPILER_WORKS=ON
                                       -DCMAKE_ASM_COMPILER_WORKS=ON
                                       ${BUILTINS_CMAKE_ARGS}
                            PASSTHROUGH_PREFIXES COMPILER_RT
                            USE_TOOLCHAIN
+                           TARGET_TRIPLE ${TARGET_TRIPLE}
                            ${EXTRA_ARGS})
 endfunction()
 
@@ -117,13 +116,12 @@ function(builtin_register_target compiler_rt_path target)
                                       -DLLVM_RUNTIME_OUTPUT_INTDIR=${LLVM_TOOLS_BINARY_DIR}
                                       -DLLVM_DEFAULT_TARGET_TRIPLE=${target}
                                       -DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=ON
-                                      -DCMAKE_C_COMPILER_TARGET=${target}
-                                      -DCMAKE_ASM_COMPILER_TARGET=${target}
                                       -DCMAKE_C_COMPILER_WORKS=ON
                                       -DCMAKE_ASM_COMPILER_WORKS=ON
                                       -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
                                       ${${target}_extra_args}
                            USE_TOOLCHAIN
+                           TARGET_TRIPLE ${target}
                            ${EXTRA_ARGS})
 endfunction()
 
@@ -187,14 +185,6 @@ foreach(entry ${runtimes})
   list(APPEND runtime_names ${projName})
 endforeach()
 
-if(LLVM_RUNTIME_BUILD_ID_LINK_TARGETS)
-  configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/llvm-strip-link.in
-    ${CMAKE_CURRENT_BINARY_DIR}/llvm-strip-link
-    @ONLY
-  )
-endif()
-
 function(runtime_default_target)
   cmake_parse_arguments(ARG "" "" "DEPENDS;PREFIXES" ${ARGN})
 
@@ -239,9 +229,6 @@ function(runtime_default_target)
                                       -DLLVM_DEFAULT_TARGET_TRIPLE=${TARGET_TRIPLE}
                                       -DLLVM_ENABLE_PROJECTS_USED=${LLVM_ENABLE_PROJECTS_USED}
                                       -DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=${LLVM_ENABLE_PER_TARGET_RUNTIME_DIR_default}
-                                      -DCMAKE_C_COMPILER_TARGET=${TARGET_TRIPLE}
-                                      -DCMAKE_CXX_COMPILER_TARGET=${TARGET_TRIPLE}
-                                      -DCMAKE_ASM_COMPILER_TARGET=${TARGET_TRIPLE}
                                       -DCMAKE_C_COMPILER_WORKS=ON
                                       -DCMAKE_CXX_COMPILER_WORKS=ON
                                       -DCMAKE_ASM_COMPILER_WORKS=ON
@@ -254,6 +241,7 @@ function(runtime_default_target)
                                          ${SUB_CHECK_TARGETS}
                                          ${SUB_INSTALL_TARGETS}
                            USE_TOOLCHAIN
+                           TARGET_TRIPLE ${TARGET_TRIPLE}
                            ${EXTRA_ARGS})
 endfunction()
 
@@ -332,10 +320,6 @@ function(runtime_register_target name target)
     list(APPEND ${name}_extra_args -DLLVM_ENABLE_RUNTIMES=${LLVM_ENABLE_RUNTIMES_PASSTHROUGH})
   endif()
 
-  if(target IN_LIST LLVM_RUNTIME_BUILD_ID_LINK_TARGETS)
-    list(APPEND EXTRA_ARGS STRIP_TOOL ${CMAKE_CURRENT_BINARY_DIR}/llvm-strip-link)
-  endif()
-
   llvm_ExternalProject_Add(runtimes-${name}
                            ${CMAKE_CURRENT_SOURCE_DIR}/../../runtimes
                            DEPENDS ${${name}_deps}
@@ -345,9 +329,6 @@ function(runtime_register_target name target)
                                       -DLLVM_DEFAULT_TARGET_TRIPLE=${target}
                                       -DLLVM_ENABLE_PROJECTS_USED=${LLVM_ENABLE_PROJECTS_USED}
                                       -DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=ON
-                                      -DCMAKE_C_COMPILER_TARGET=${target}
-                                      -DCMAKE_CXX_COMPILER_TARGET=${target}
-                                      -DCMAKE_ASM_COMPILER_TARGET=${target}
                                       -DCMAKE_C_COMPILER_WORKS=ON
                                       -DCMAKE_CXX_COMPILER_WORKS=ON
                                       -DCMAKE_ASM_COMPILER_WORKS=ON
@@ -357,6 +338,7 @@ function(runtime_register_target name target)
                            EXTRA_TARGETS ${${name}_extra_targets}
                                          ${${name}_test_targets}
                            USE_TOOLCHAIN
+                           TARGET_TRIPLE ${target}
                            ${EXTRA_ARGS})
 endfunction()
 

@@ -313,14 +313,17 @@ void Dex::relations(
   }
 }
 
-llvm::unique_function<bool(llvm::StringRef) const> Dex::indexedFiles() const {
+llvm::unique_function<IndexContents(llvm::StringRef) const>
+Dex::indexedFiles() const {
   return [this](llvm::StringRef FileURI) {
-    auto Path = URI::resolve(FileURI);
+    if (Files.empty())
+      return IndexContents::None;
+    auto Path = URI::resolve(FileURI, Files.begin()->first());
     if (!Path) {
-      llvm::consumeError(Path.takeError());
-      return false;
+      vlog("Failed to resolve the URI {0} : {1}", FileURI, Path.takeError());
+      return IndexContents::None;
     }
-    return Files.contains(*Path);
+    return Files.contains(*Path) ? IdxContents : IndexContents::None;
   };
 }
 

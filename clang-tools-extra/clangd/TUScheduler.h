@@ -151,11 +151,11 @@ public:
   /// in this callback (obtained via ParsedAST::getLocalTopLevelDecls) to obtain
   /// optimal performance.
   ///
-  /// When information about the file (diagnostics, syntax highlighting) is
+  /// When information about the file (e.g. diagnostics) is
   /// published to clients, this should be wrapped in Publish, e.g.
   ///   void onMainAST(...) {
-  ///     Highlights = computeHighlights();
-  ///     Publish([&] { notifyHighlights(Path, Highlights); });
+  ///     Diags = renderDiagnostics();
+  ///     Publish([&] { notifyDiagnostics(Path, Diags); });
   ///   }
   /// This guarantees that clients will see results in the correct sequence if
   /// the file is concurrently closed and/or reopened. (The lambda passed to
@@ -310,6 +310,8 @@ public:
   /// Responsible for retaining and rebuilding idle ASTs. An implementation is
   /// an LRU cache.
   class ASTCache;
+  /// Tracks headers included by open files, to get known-good compile commands.
+  class HeaderIncluderCache;
 
   // The file being built/processed in the current thread. This is a hack in
   // order to get the file name into the index implementations. Do not depend on
@@ -332,6 +334,7 @@ private:
   Semaphore QuickRunBarrier;
   llvm::StringMap<std::unique_ptr<FileData>> Files;
   std::unique_ptr<ASTCache> IdleASTs;
+  std::unique_ptr<HeaderIncluderCache> HeaderIncluders;
   // None when running tasks synchronously and non-None when running tasks
   // asynchronously.
   llvm::Optional<AsyncTaskRunner> PreambleTasks;

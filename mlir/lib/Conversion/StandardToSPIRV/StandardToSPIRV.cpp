@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
 #include "mlir/Dialect/SPIRV/Transforms/SPIRVConversion.h"
@@ -193,7 +194,7 @@ static bool isAllocationSupported(MemRefType t) {
   // shape and int or float or vector of int or float element type.
   if (!(t.hasStaticShape() &&
         SPIRVTypeConverter::getMemorySpaceForStorageClass(
-            spirv::StorageClass::Workgroup) == t.getMemorySpace()))
+            spirv::StorageClass::Workgroup) == t.getMemorySpaceAsInt()))
     return false;
   Type elementType = t.getElementType();
   if (auto vecType = elementType.dyn_cast<VectorType>())
@@ -206,7 +207,8 @@ static bool isAllocationSupported(MemRefType t) {
 /// type. Returns None on failure.
 static Optional<spirv::Scope> getAtomicOpScope(MemRefType t) {
   Optional<spirv::StorageClass> storageClass =
-      SPIRVTypeConverter::getStorageClassForMemorySpace(t.getMemorySpace());
+      SPIRVTypeConverter::getStorageClassForMemorySpace(
+          t.getMemorySpaceAsInt());
   if (!storageClass)
     return {};
   switch (*storageClass) {
@@ -248,7 +250,7 @@ public:
     // Get the SPIR-V type for the allocation.
     Type spirvType = getTypeConverter()->convertType(allocType);
 
-    // Insert spv.globalVariable for this allocation.
+    // Insert spv.GlobalVariable for this allocation.
     Operation *parent =
         SymbolTable::getNearestSymbolTable(operation->getParentOp());
     if (!parent)
@@ -263,9 +265,8 @@ public:
       std::string varName =
           std::string("__workgroup_mem__") +
           std::to_string(std::distance(varOps.begin(), varOps.end()));
-      varOp = rewriter.create<spirv::GlobalVariableOp>(
-          loc, TypeAttr::get(spirvType), varName,
-          /*initializer = */ nullptr);
+      varOp = rewriter.create<spirv::GlobalVariableOp>(loc, spirvType, varName,
+                                                       /*initializer=*/nullptr);
     }
 
     // Get pointer to global variable at the current scope.
@@ -355,7 +356,7 @@ public:
   }
 };
 
-/// Converts composite std.constant operation to spv.constant.
+/// Converts composite std.constant operation to spv.Constant.
 class ConstantCompositeOpPattern final
     : public OpConversionPattern<ConstantOp> {
 public:
@@ -366,7 +367,7 @@ public:
                   ConversionPatternRewriter &rewriter) const override;
 };
 
-/// Converts scalar std.constant operation to spv.constant.
+/// Converts scalar std.constant operation to spv.Constant.
 class ConstantScalarOpPattern final : public OpConversionPattern<ConstantOp> {
 public:
   using OpConversionPattern<ConstantOp>::OpConversionPattern;
@@ -511,6 +512,35 @@ public:
   }
 };
 
+/// Converts std.trunci to spv.Select if the type of result is i1 or vector of
+/// i1.
+class TruncI1Pattern final : public OpConversionPattern<TruncateIOp> {
+public:
+  using OpConversionPattern<TruncateIOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(TruncateIOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto dstType =
+        this->getTypeConverter()->convertType(op.getResult().getType());
+    if (!isBoolScalarOrVector(dstType))
+      return failure();
+
+    Location loc = op.getLoc();
+    auto srcType = operands.front().getType();
+    // Check if (x & 1) == 1.
+    Value mask = spirv::ConstantOp::getOne(srcType, loc, rewriter);
+    Value maskedSrc =
+        rewriter.create<spirv::BitwiseAndOp>(loc, srcType, operands[0], mask);
+    Value isOne = rewriter.create<spirv::IEqualOp>(loc, maskedSrc, mask);
+
+    Value zero = spirv::ConstantOp::getZero(dstType, loc, rewriter);
+    Value one = spirv::ConstantOp::getOne(dstType, loc, rewriter);
+    rewriter.replaceOpWithNewOp<spirv::SelectOp>(op, dstType, isOne, one, zero);
+    return success();
+  }
+};
+
 /// Converts std.uitofp to spv.Select if the type of source is i1 or vector of
 /// i1.
 class UIToFPI1Pattern final : public OpConversionPattern<UIToFPOp> {
@@ -546,10 +576,10 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     assert(operands.size() == 1);
     auto srcType = operands.front().getType();
-    if (isBoolScalarOrVector(srcType))
-      return failure();
     auto dstType =
         this->getTypeConverter()->convertType(operation.getResult().getType());
+    if (isBoolScalarOrVector(srcType) || isBoolScalarOrVector(dstType))
+      return failure();
     if (dstType == srcType) {
       // Due to type conversion, we are seeing the same source and target type.
       // Then we can just erase this operation by forwarding its operand.
@@ -1131,6 +1161,15 @@ void populateStandardToSPIRVPatterns(MLIRContext *context,
                                      SPIRVTypeConverter &typeConverter,
                                      OwningRewritePatternList &patterns) {
   patterns.insert<
+      // Math dialect operations.
+      // TODO: Move to separate pass.
+      UnaryAndBinaryOpPattern<math::CosOp, spirv::GLSLCosOp>,
+      UnaryAndBinaryOpPattern<math::ExpOp, spirv::GLSLExpOp>,
+      UnaryAndBinaryOpPattern<math::LogOp, spirv::GLSLLogOp>,
+      UnaryAndBinaryOpPattern<math::RsqrtOp, spirv::GLSLInverseSqrtOp>,
+      UnaryAndBinaryOpPattern<math::SinOp, spirv::GLSLSinOp>,
+      UnaryAndBinaryOpPattern<math::SqrtOp, spirv::GLSLSqrtOp>,
+      UnaryAndBinaryOpPattern<math::TanhOp, spirv::GLSLTanhOp>,
       // Unary and binary patterns
       BitwiseOpPattern<AndOp, spirv::LogicalAndOp, spirv::BitwiseAndOp>,
       BitwiseOpPattern<OrOp, spirv::LogicalOrOp, spirv::BitwiseOrOp>,
@@ -1138,25 +1177,18 @@ void populateStandardToSPIRVPatterns(MLIRContext *context,
       UnaryAndBinaryOpPattern<AddFOp, spirv::FAddOp>,
       UnaryAndBinaryOpPattern<AddIOp, spirv::IAddOp>,
       UnaryAndBinaryOpPattern<CeilFOp, spirv::GLSLCeilOp>,
-      UnaryAndBinaryOpPattern<CosOp, spirv::GLSLCosOp>,
       UnaryAndBinaryOpPattern<DivFOp, spirv::FDivOp>,
-      UnaryAndBinaryOpPattern<ExpOp, spirv::GLSLExpOp>,
       UnaryAndBinaryOpPattern<FloorFOp, spirv::GLSLFloorOp>,
-      UnaryAndBinaryOpPattern<LogOp, spirv::GLSLLogOp>,
       UnaryAndBinaryOpPattern<MulFOp, spirv::FMulOp>,
       UnaryAndBinaryOpPattern<MulIOp, spirv::IMulOp>,
       UnaryAndBinaryOpPattern<NegFOp, spirv::FNegateOp>,
       UnaryAndBinaryOpPattern<RemFOp, spirv::FRemOp>,
-      UnaryAndBinaryOpPattern<RsqrtOp, spirv::GLSLInverseSqrtOp>,
       UnaryAndBinaryOpPattern<ShiftLeftOp, spirv::ShiftLeftLogicalOp>,
       UnaryAndBinaryOpPattern<SignedDivIOp, spirv::SDivOp>,
       UnaryAndBinaryOpPattern<SignedShiftRightOp,
                               spirv::ShiftRightArithmeticOp>,
-      UnaryAndBinaryOpPattern<SinOp, spirv::GLSLSinOp>,
-      UnaryAndBinaryOpPattern<SqrtOp, spirv::GLSLSqrtOp>,
-      UnaryAndBinaryOpPattern<SubFOp, spirv::FSubOp>,
       UnaryAndBinaryOpPattern<SubIOp, spirv::ISubOp>,
-      UnaryAndBinaryOpPattern<TanhOp, spirv::GLSLTanhOp>,
+      UnaryAndBinaryOpPattern<SubFOp, spirv::FSubOp>,
       UnaryAndBinaryOpPattern<UnsignedDivIOp, spirv::UDivOp>,
       UnaryAndBinaryOpPattern<UnsignedRemIOp, spirv::UModOp>,
       UnaryAndBinaryOpPattern<UnsignedShiftRightOp, spirv::ShiftRightLogicalOp>,
@@ -1175,10 +1207,11 @@ void populateStandardToSPIRVPatterns(MLIRContext *context,
       ReturnOpPattern, SelectOpPattern,
 
       // Type cast patterns
-      UIToFPI1Pattern, ZeroExtendI1Pattern,
+      UIToFPI1Pattern, ZeroExtendI1Pattern, TruncI1Pattern,
       TypeCastingOpPattern<IndexCastOp, spirv::SConvertOp>,
       TypeCastingOpPattern<SIToFPOp, spirv::ConvertSToFOp>,
       TypeCastingOpPattern<UIToFPOp, spirv::ConvertUToFOp>,
+      TypeCastingOpPattern<SignExtendIOp, spirv::SConvertOp>,
       TypeCastingOpPattern<ZeroExtendIOp, spirv::UConvertOp>,
       TypeCastingOpPattern<TruncateIOp, spirv::SConvertOp>,
       TypeCastingOpPattern<FPToSIOp, spirv::ConvertFToSOp>,

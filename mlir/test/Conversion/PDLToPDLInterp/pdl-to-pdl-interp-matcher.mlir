@@ -66,8 +66,8 @@ module @constraints {
   // CHECK:       pdl_interp.apply_constraint "multi_constraint" [true](%[[INPUT]], %[[INPUT1]] : !pdl.value, !pdl.value)
 
   pdl.pattern : benefit(1) {
-    %input0 = pdl.input
-    %input1 = pdl.input
+    %input0 = pdl.operand
+    %input1 = pdl.operand
 
     pdl.apply_constraint "multi_constraint"[true](%input0, %input1 : !pdl.value, !pdl.value)
 
@@ -94,7 +94,7 @@ module @inputs {
   // CHECK-DAG:  pdl_interp.are_equal %[[INPUT]], %[[INPUT1]] : !pdl.value
   pdl.pattern : benefit(1) {
     %type = pdl.type : i64
-    %input = pdl.input : %type
+    %input = pdl.operand : %type
     %root = pdl.operation(%input, %input)
     pdl.rewrite %root with "rewriter"
   }
@@ -141,5 +141,33 @@ module @switch_result_types {
     %type = pdl.type : i64
     %root, %result = pdl.operation -> %type
     pdl.rewrite %root with "rewriter"
+  }
+}
+
+// -----
+
+// CHECK-LABEL: module @predicate_ordering
+module @predicate_ordering  {
+  // Check that the result is checked for null first, before applying the
+  // constraint. The null check is prevalent in both patterns, so should be
+  // prioritized first.
+
+  // CHECK: func @matcher(%[[ROOT:.*]]: !pdl.operation)
+  // CHECK:   %[[RESULT:.*]] = pdl_interp.get_result 0 of %[[ROOT]]
+  // CHECK-NEXT: pdl_interp.is_not_null %[[RESULT]]
+  // CHECK:   %[[RESULT_TYPE:.*]] = pdl_interp.get_value_type of %[[RESULT]]
+  // CHECK: pdl_interp.apply_constraint "typeConstraint" [](%[[RESULT_TYPE]]
+
+  pdl.pattern : benefit(1) {
+    %resultType = pdl.type
+    pdl.apply_constraint "typeConstraint"[](%resultType : !pdl.type)
+    %root, %result = pdl.operation -> %resultType
+    pdl.rewrite %root with "rewriter"
+  }
+
+  pdl.pattern : benefit(1) {
+    %resultType = pdl.type
+    %apply, %applyRes = pdl.operation -> %resultType
+    pdl.rewrite %apply with "rewriter"
   }
 }

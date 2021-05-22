@@ -4,11 +4,11 @@
 // with explicit DAs and the defaultmap added for scalars with suppressed
 // OpenACC implicit DAs.
 //
-// The various cases covered here should be kept consistent with present.c and
-// update.c.  For example, a subarray that extends a subarray already present is
-// consistently considered not present, so the present clause produces a runtime
-// error and the no_create clause doesn't allocate.  However, INHERITED cases
-// have no meaning for the present clause.
+// The various cases covered here should be kept consistent with present.c,
+// update.c, and subarray-errors.c.  For example, a subarray that extends a
+// subarray already present is consistently considered not present, so the
+// present clause produces a runtime error and the no_create clause doesn't
+// allocate.  However, INHERITED cases have no meaning for the present clause.
 //
 // In some cases, it's challenging to check when no_create actually doesn't
 // allocate memory.  Specifically, calling acc_is_present or
@@ -64,6 +64,7 @@
 // RUN:   (case=caseDataSubarrayOverlapStart     not-crash-if-fail=%[not-crash-if-off-and-alloc])
 // RUN:   (case=caseDataSubarrayOverlapEnd       not-crash-if-fail=%[not-crash-if-off-and-alloc])
 // RUN:   (case=caseDataSubarrayConcat2          not-crash-if-fail=%[not-crash-if-off-and-alloc])
+// RUN:   (case=caseDataSubarrayNonSubarray      not-crash-if-fail=%[not-crash-if-off-and-alloc])
 // RUN:   (case=caseParallelScalarPresent        not-crash-if-fail=                             )
 // RUN:   (case=caseParallelScalarAbsent         not-crash-if-fail=                             )
 // RUN:   (case=caseParallelArrayPresent         not-crash-if-fail=                             )
@@ -73,6 +74,7 @@
 // RUN:   (case=caseParallelSubarrayOverlapStart not-crash-if-fail=%[not-crash-if-off-and-alloc])
 // RUN:   (case=caseParallelSubarrayOverlapEnd   not-crash-if-fail=%[not-crash-if-off-and-alloc])
 // RUN:   (case=caseParallelSubarrayConcat2      not-crash-if-fail=%[not-crash-if-off-and-alloc])
+// RUN:   (case=caseParallelSubarrayNonSubarray  not-crash-if-fail=%[not-crash-if-off-and-alloc])
 // RUN:   (case=caseParallelLoopScalarPresent    not-crash-if-fail=                             )
 // RUN:   (case=caseParallelLoopScalarAbsent     not-crash-if-fail=                             )
 // RUN:   (case=caseConstPresent                 not-crash-if-fail=                             )
@@ -651,6 +653,36 @@ CASE(caseDataSubarrayConcat2) {
   ;
 }
 
+//  EXE-caseDataSubarrayNonSubarray-HOST-NOT: {{.}}
+//      EXE-caseDataSubarrayNonSubarray-HOST: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+// EXE-caseDataSubarrayNonSubarray-HOST-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//
+//           EXE-caseDataSubarrayNonSubarray-NOT: {{.}}
+//               EXE-caseDataSubarrayNonSubarray: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//          EXE-caseDataSubarrayNonSubarray-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//          EXE-caseDataSubarrayNonSubarray-NEXT: acc_ev_enter_data_start
+//          EXE-caseDataSubarrayNonSubarray-NEXT:   acc_ev_alloc
+//          EXE-caseDataSubarrayNonSubarray-NEXT:   acc_ev_create
+//          EXE-caseDataSubarrayNonSubarray-NEXT:   acc_ev_enter_data_start
+//    EXE-caseDataSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+//    EXE-caseDataSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+//    EXE-caseDataSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Run with LIBOMPTARGET_DEBUG=4 to dump host-target pointer mappings.
+//    EXE-caseDataSubarrayNonSubarray-ALLOC-NEXT:   {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                                                  # An abort message usually follows.
+//     EXE-caseDataSubarrayNonSubarray-ALLOC-NOT:   Libomptarget
+// EXE-caseDataSubarrayNonSubarray-NO-ALLOC-NEXT:   acc_ev_exit_data_start
+// EXE-caseDataSubarrayNonSubarray-NO-ALLOC-NEXT: acc_ev_exit_data_start
+// EXE-caseDataSubarrayNonSubarray-NO-ALLOC-NEXT:   acc_ev_delete
+// EXE-caseDataSubarrayNonSubarray-NO-ALLOC-NEXT:   acc_ev_free
+CASE(caseDataSubarrayNonSubarray) {
+  int arr[5];
+  PRINT_SUBARRAY_INFO(arr, 1, 2);
+  PRINT_SUBARRAY_INFO(arr, 0, 5);
+  #pragma acc data copyin(arr[1:2])
+  #pragma acc data no_create(arr)
+  ;
+}
+
 // DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseParallelScalarPresent
 //       DMP: ACCDataDirective
 //  DMP-NEXT:   ACCCopyClause
@@ -911,6 +943,40 @@ CASE(caseParallelSubarrayConcat2) {
   #pragma acc data copyout(arr[0:2])
   #pragma acc data copy(arr[2:2])
   #pragma acc parallel no_create(arr[0:4])
+  if (use) arr[0] = 1;
+}
+
+//  EXE-caseParallelSubarrayNonSubarray-HOST-NOT: {{.}}
+//      EXE-caseParallelSubarrayNonSubarray-HOST: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+// EXE-caseParallelSubarrayNonSubarray-HOST-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//
+//           EXE-caseParallelSubarrayNonSubarray-NOT: {{.}}
+//               EXE-caseParallelSubarrayNonSubarray: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//          EXE-caseParallelSubarrayNonSubarray-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//          EXE-caseParallelSubarrayNonSubarray-NEXT: acc_ev_enter_data_start
+//          EXE-caseParallelSubarrayNonSubarray-NEXT:   acc_ev_alloc
+//          EXE-caseParallelSubarrayNonSubarray-NEXT:   acc_ev_create
+//          EXE-caseParallelSubarrayNonSubarray-NEXT:   acc_ev_enter_data_start
+//    EXE-caseParallelSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+//                                                      # FIXME: Names like getOrAllocTgtPtr are meaningless to users.
+//    EXE-caseParallelSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+//    EXE-caseParallelSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Call to targetDataBegin failed, abort target.
+//    EXE-caseParallelSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Failed to process data before launching the kernel.
+//    EXE-caseParallelSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Run with LIBOMPTARGET_DEBUG=4 to dump host-target pointer mappings.
+//    EXE-caseParallelSubarrayNonSubarray-ALLOC-NEXT:   {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                                                      # An abort message usually follows.
+//     EXE-caseParallelSubarrayNonSubarray-ALLOC-NOT:   Libomptarget
+// EXE-caseParallelSubarrayNonSubarray-NO-ALLOC-NEXT:   acc_ev_exit_data_start
+// EXE-caseParallelSubarrayNonSubarray-NO-ALLOC-NEXT: acc_ev_exit_data_start
+// EXE-caseParallelSubarrayNonSubarray-NO-ALLOC-NEXT:   acc_ev_delete
+// EXE-caseParallelSubarrayNonSubarray-NO-ALLOC-NEXT:   acc_ev_free
+CASE(caseParallelSubarrayNonSubarray) {
+  int arr[4];
+  PRINT_SUBARRAY_INFO(arr, 1, 2);
+  PRINT_SUBARRAY_INFO(arr, 0, 4);
+  int use = 0;
+  #pragma acc data copy(arr[1:2])
+  #pragma acc parallel no_create(arr)
   if (use) arr[0] = 1;
 }
 

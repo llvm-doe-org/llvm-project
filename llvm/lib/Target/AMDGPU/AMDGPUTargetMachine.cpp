@@ -383,6 +383,10 @@ AMDGPUTargetMachine::AMDGPUTargetMachine(const Target &T, const Triple &TT,
     else if (getMCSubtargetInfo()->checkFeatures("+wavefrontsize32"))
       MRI.reset(llvm::createGCNMCRegisterInfo(AMDGPUDwarfFlavour::Wave32));
   }
+  // Set -fixed-function-abi to true if not provided..
+  if (TT.getOS() == Triple::AMDHSA &&
+      EnableAMDGPUFixedFunctionABIOpt.getNumOccurrences() == 0)
+    EnableFixedFunctionABI = true;
 }
 
 bool AMDGPUTargetMachine::EnableLateStructurizeCFG = false;
@@ -1110,7 +1114,7 @@ bool GCNPassConfig::addRegBankSelect() {
 }
 
 bool GCNPassConfig::addGlobalInstructionSelect() {
-  addPass(new InstructionSelect());
+  addPass(new InstructionSelect(getOptLevel()));
   // TODO: Fix instruction selection to do the right thing for image
   // instructions with tfe or lwe in the first place, instead of running a
   // separate pass to fix them up?

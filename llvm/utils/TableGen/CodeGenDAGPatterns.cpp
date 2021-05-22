@@ -205,11 +205,9 @@ void TypeSetByHwMode::writeToStream(const SetType &S, raw_ostream &OS) {
   array_pod_sort(Types.begin(), Types.end());
 
   OS << '[';
-  for (unsigned i = 0, e = Types.size(); i != e; ++i) {
-    OS << ValueTypeByHwMode::getMVTName(Types[i]);
-    if (i != e-1)
-      OS << ' ';
-  }
+  ListSeparator LS(" ");
+  for (const MVT &T : Types)
+    OS << LS << ValueTypeByHwMode::getMVTName(T);
   OS << ']';
 }
 
@@ -980,12 +978,9 @@ std::string TreePredicateFn::getPredCode() const {
       Code += "unsigned AddrSpace = cast<MemSDNode>(N)->getAddressSpace();\n"
         " if (";
 
-      bool First = true;
+      ListSeparator LS(" && ");
       for (Init *Val : AddressSpaces->getValues()) {
-        if (First)
-          First = false;
-        else
-          Code += " && ";
+        Code += LS;
 
         IntInit *IntVal = dyn_cast<IntInit>(Val);
         if (!IntVal) {
@@ -1857,9 +1852,9 @@ void TreePatternNode::print(raw_ostream &OS) const {
   if (!isLeaf()) {
     if (getNumChildren() != 0) {
       OS << " ";
-      getChild(0)->print(OS);
-      for (unsigned i = 1, e = getNumChildren(); i != e; ++i) {
-        OS << ", ";
+      ListSeparator LS;
+      for (unsigned i = 0, e = getNumChildren(); i != e; ++i) {
+        OS << LS;
         getChild(i)->print(OS);
       }
     }
@@ -3032,9 +3027,10 @@ InferAllTypes(const StringMap<SmallVector<TreePatternNode*,1> > *InNamedTypes) {
 void TreePattern::print(raw_ostream &OS) const {
   OS << getRecord()->getName();
   if (!Args.empty()) {
-    OS << "(" << Args[0];
-    for (unsigned i = 1, e = Args.size(); i != e; ++i)
-      OS << ", " << Args[i];
+    OS << "(";
+    ListSeparator LS;
+    for (const std::string &Arg : Args)
+      OS << LS << Arg;
     OS << ")";
   }
   OS << ": ";
@@ -3472,6 +3468,9 @@ private:
     if (N->getNumChildren() != 1 || !N->getChild(0)->isLeaf())
       return false;
 
+    if (N->getOperator()->isSubClassOf("ComplexPattern"))
+      return false;
+
     const SDNodeInfo &OpInfo = CDP.getSDNodeInfo(N->getOperator());
     if (OpInfo.getNumResults() != 1 || OpInfo.getNumOperands() != 1)
       return false;
@@ -3673,9 +3672,9 @@ void CodeGenDAGPatterns::parseInstructionPattern(
     TreePatternNodePtr Pat = I.getTree(j);
     if (Pat->getNumTypes() != 0) {
       raw_svector_ostream OS(TypesString);
+      ListSeparator LS;
       for (unsigned k = 0, ke = Pat->getNumTypes(); k != ke; ++k) {
-        if (k > 0)
-          OS << ", ";
+        OS << LS;
         Pat->getExtType(k).writeToStream(OS);
       }
       I.error("Top-level forms in instruction pattern should have"
@@ -4287,13 +4286,13 @@ void CodeGenDAGPatterns::ExpandHwModeBasedTypes() {
   PatternsToMatch.swap(Copy);
 
   auto AppendPattern = [this, &ModeChecks](PatternToMatch &P, unsigned Mode) {
-    TreePatternNodePtr NewSrc = P.SrcPattern->clone();
-    TreePatternNodePtr NewDst = P.DstPattern->clone();
+    TreePatternNodePtr NewSrc = P.getSrcPattern()->clone();
+    TreePatternNodePtr NewDst = P.getDstPattern()->clone();
     if (!NewSrc->setDefaultMode(Mode) || !NewDst->setDefaultMode(Mode)) {
       return;
     }
 
-    std::vector<Predicate> Preds = P.Predicates;
+    std::vector<Predicate> Preds = P.getPredicates();
     const std::vector<Predicate> &MC = ModeChecks[Mode];
     llvm::append_range(Preds, MC);
     PatternsToMatch.emplace_back(P.getSrcRecord(), std::move(Preds),
@@ -4305,10 +4304,10 @@ void CodeGenDAGPatterns::ExpandHwModeBasedTypes() {
 
   for (PatternToMatch &P : Copy) {
     TreePatternNodePtr SrcP = nullptr, DstP = nullptr;
-    if (P.SrcPattern->hasProperTypeByHwMode())
-      SrcP = P.SrcPattern;
-    if (P.DstPattern->hasProperTypeByHwMode())
-      DstP = P.DstPattern;
+    if (P.getSrcPattern()->hasProperTypeByHwMode())
+      SrcP = P.getSrcPatternShared();
+    if (P.getDstPattern()->hasProperTypeByHwMode())
+      DstP = P.getDstPatternShared();
     if (!SrcP && !DstP) {
       PatternsToMatch.push_back(P);
       continue;

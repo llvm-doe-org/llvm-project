@@ -1,36 +1,16 @@
 // Check diagnostics for "acc data".
 
-// RUN: %data {
-// RUN:   (cflags=-DERR=ERR_ACC                )
-// RUN:   (cflags=-DERR=ERR_OMP_SUBARRAY_DATA  )
-// RUN:   (cflags=-DERR=ERR_OMP_SUBARRAY_PAR   )
-// RUN:   (cflags=-DERR=ERR_OMP_SUBARRAY_MISSED)
-// RUN: }
-
 // OpenACC disabled
-// RUN: %for {
-// RUN:   %clang_cc1 -verify=noacc,expected-noacc -Wchar-subscripts %[cflags] %s
-// RUN: }
+// RUN: %clang_cc1 -verify=noacc,expected-noacc -Wchar-subscripts %s
 
 // OpenACC enabled
-// RUN: %for {
-// RUN:   %clang_cc1 -verify=expected,expected-noacc,char-subscripts -fopenacc \
-// RUN:              -Wchar-subscripts %[cflags] %s
-// RUN: }
+// RUN: %clang_cc1 -verify=expected,expected-noacc,char-subscripts -fopenacc \
+// RUN:            -Wchar-subscripts %s
 
 // OpenACC enabled but optional warnings disabled
-// RUN: %for {
-// RUN:   %clang_cc1 -verify=expected,expected-noacc -fopenacc %[cflags] %s
-// RUN: }
+// RUN: %clang_cc1 -verify=expected,expected-noacc -fopenacc %s
 
 // END.
-
-#define ERR_ACC                        1
-#define ERR_OMP_SUBARRAY_DATA          2
-#define ERR_OMP_SUBARRAY_PAR           3
-#define ERR_OMP_SUBARRAY_MISSED        4
-
-#if ERR == ERR_ACC
 
 int incomplete[];
 
@@ -314,67 +294,3 @@ int main() {
 
 // Complete to suppress an additional warning, but it's too late for pragmas.
 int incomplete[3];
-
-//--------------------------------------------------
-// The remaining diagnostics are currently produced by OpenMP sema during the
-// transform from OpenACC to OpenMP, which is skipped if there have been any
-// previous diagnostics.  Thus, each must be tested in a separate compilation.
-//
-// The various subarray cases focus on the following OpenMP restriction:
-//
-//   OpenMP 5.0 sec. 2.19.7.1, map Clause Restrictions:
-//     If any part of the original storage of a list item with an explicit
-//     data-mapping attribute has corresponding storage in the device data
-//     environment prior to a task encountering the construct associated with
-//     the map clause, all of the original storage must have corresponding
-//     storage in the device data environment prior to the task encountering
-//     the construct.
-//--------------------------------------------------
-
-#elif ERR == ERR_OMP_SUBARRAY_DATA
-
-// noacc-no-diagnostics
-
-int main() {
-  int a[5];
-  // expected-note@+1 {{used here}}
-  #pragma acc data copy(a[2:3])
-  // expected-error@+1 {{original storage of expression in data environment is shared but data environment do not fully contain mapped expression storage}}
-  #pragma acc data copy(a)
-    ;
-  return 0;
-}
-
-#elif ERR == ERR_OMP_SUBARRAY_PAR
-
-// noacc-no-diagnostics
-
-int main() {
-  int a[5];
-  // expected-note@+1 {{used here}}
-  #pragma acc data copy(a[0:2])
-  // expected-error@+1 {{original storage of expression in data environment is shared but data environment do not fully contain mapped expression storage}}
-  #pragma acc parallel copy(a)
-    ;
-  return 0;
-}
-
-#elif ERR == ERR_OMP_SUBARRAY_MISSED
-
-// expected-noacc-no-diagnostics
-
-int main() {
-  int a[5];
-  // TODO: It seems like this case is also a violation of the above
-  // restriction, but it doesn't produce a diagnostic.  We have this test so we
-  // can tell if Clang's OpenMP implementation decides to diagnose this in the
-  // future.
-  #pragma acc data copy(a[0:2])
-  #pragma acc parallel copy(a[0:5])
-    ;
-  return 0;
-}
-
-#else
-# error undefined ERR
-#endif

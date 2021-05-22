@@ -90,13 +90,17 @@ public:
   /// type identification.
   enum {
     VPValueSC,
+    VPVBlendSC,
     VPVInstructionSC,
     VPVMemoryInstructionSC,
+    VPVPredInstPHI,
     VPVReductionSC,
     VPVReplicateSC,
     VPVWidenSC,
     VPVWidenCallSC,
     VPVWidenGEPSC,
+    VPVWidenIntOrFpIndcutionSC,
+    VPVWidenPHISC,
     VPVWidenSelectSC,
   };
 
@@ -227,6 +231,11 @@ public:
     Operands[I]->removeUser(*this);
     Operands[I] = New;
     New->addUser(*this);
+  }
+
+  void removeLastOperand() {
+    VPValue *Op = Operands.pop_back_val();
+    Op->removeUser(*this);
   }
 
   typedef SmallVectorImpl<VPValue *>::iterator operand_iterator;

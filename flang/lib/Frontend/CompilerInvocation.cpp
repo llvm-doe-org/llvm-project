@@ -7,7 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "flang/Frontend/CompilerInvocation.h"
+#include "flang/Common/Fortran-features.h"
 #include "flang/Frontend/PreprocessorOptions.h"
+#include "flang/Semantics/semantics.h"
 #include "flang/Version.inc"
 #include "clang/Basic/AllDiagnostics.h"
 #include "clang/Basic/DiagnosticDriver.h"
@@ -21,6 +23,7 @@
 #include "llvm/Option/OptTable.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/raw_ostream.h"
+#include <memory>
 
 using namespace Fortran::frontend;
 
@@ -106,6 +109,27 @@ static InputKind ParseFrontendArgs(FrontendOptions &opts,
       break;
     case clang::driver::options::OPT_emit_obj:
       opts.programAction_ = EmitObj;
+      break;
+    case clang::driver::options::OPT_fdebug_unparse:
+      opts.programAction_ = DebugUnparse;
+      break;
+    case clang::driver::options::OPT_fdebug_unparse_with_symbols:
+      opts.programAction_ = DebugUnparseWithSymbols;
+      break;
+    case clang::driver::options::OPT_fdebug_dump_symbols:
+      opts.programAction_ = DebugDumpSymbols;
+      break;
+    case clang::driver::options::OPT_fdebug_dump_parse_tree:
+      opts.programAction_ = DebugDumpParseTree;
+      break;
+    case clang::driver::options::OPT_fdebug_dump_provenance:
+      opts.programAction_ = DebugDumpProvenance;
+      break;
+    case clang::driver::options::OPT_fdebug_measure_parse_tree:
+      opts.programAction_ = DebugMeasureParseTree;
+      break;
+    case clang::driver::options::OPT_fdebug_pre_fir_tree:
+      opts.programAction_ = DebugPreFIRTree;
       break;
 
       // TODO:
@@ -196,6 +220,50 @@ static InputKind ParseFrontendArgs(FrontendOptions &opts,
       opts.fixedFormColumns_ = columns;
     }
   }
+
+  if (const llvm::opt::Arg *arg =
+          args.getLastArg(clang::driver::options::OPT_fimplicit_none,
+              clang::driver::options::OPT_fno_implicit_none)) {
+    opts.features_.Enable(
+        Fortran::common::LanguageFeature::ImplicitNoneTypeAlways,
+        arg->getOption().matches(clang::driver::options::OPT_fimplicit_none));
+  }
+  if (const llvm::opt::Arg *arg =
+          args.getLastArg(clang::driver::options::OPT_fbackslash,
+              clang::driver::options::OPT_fno_backslash)) {
+    opts.features_.Enable(Fortran::common::LanguageFeature::BackslashEscapes,
+        arg->getOption().matches(clang::driver::options::OPT_fbackslash));
+  }
+  if (const llvm::opt::Arg *arg =
+          args.getLastArg(clang::driver::options::OPT_flogical_abbreviations,
+              clang::driver::options::OPT_fno_logical_abbreviations)) {
+    opts.features_.Enable(
+        Fortran::common::LanguageFeature::LogicalAbbreviations,
+        arg->getOption().matches(
+            clang::driver::options::OPT_flogical_abbreviations));
+  }
+  if (const llvm::opt::Arg *arg =
+          args.getLastArg(clang::driver::options::OPT_fxor_operator,
+              clang::driver::options::OPT_fno_xor_operator)) {
+    opts.features_.Enable(Fortran::common::LanguageFeature::XOROperator,
+        arg->getOption().matches(clang::driver::options::OPT_fxor_operator));
+  }
+  if (args.hasArg(
+          clang::driver::options::OPT_falternative_parameter_statement)) {
+    opts.features_.Enable(Fortran::common::LanguageFeature::OldStyleParameter);
+  }
+  if (const llvm::opt::Arg *arg =
+          args.getLastArg(clang::driver::options::OPT_finput_charset_EQ)) {
+    llvm::StringRef argValue = arg->getValue();
+    if (argValue == "utf-8") {
+      opts.encoding_ = Fortran::parser::Encoding::UTF_8;
+    } else if (argValue == "latin-1") {
+      opts.encoding_ = Fortran::parser::Encoding::LATIN_1;
+    } else {
+      diags.Report(clang::diag::err_drv_invalid_value)
+          << arg->getAsString(args) << argValue;
+    }
+  }
   return dashX;
 }
 
@@ -240,6 +308,48 @@ static void parseSemaArgs(std::string &moduleDir, llvm::opt::ArgList &args,
     moduleDir = moduleDirList[0];
 }
 
+/// Parses all Dialect related arguments and populates the variables
+/// options accordingly.
+static void parseDialectArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
+    clang::DiagnosticsEngine &diags) {
+
+  // -fdefault* family
+  if (args.hasArg(clang::driver::options::OPT_fdefault_real_8)) {
+    res.defaultKinds().set_defaultRealKind(8);
+    res.defaultKinds().set_doublePrecisionKind(16);
+  }
+  if (args.hasArg(clang::driver::options::OPT_fdefault_integer_8)) {
+    res.defaultKinds().set_defaultIntegerKind(8);
+    res.defaultKinds().set_subscriptIntegerKind(8);
+    res.defaultKinds().set_sizeIntegerKind(8);
+  }
+  if (args.hasArg(clang::driver::options::OPT_fdefault_double_8)) {
+    if (!args.hasArg(clang::driver::options::OPT_fdefault_real_8)) {
+      // -fdefault-double-8 has to be used with -fdefault-real-8
+      // to be compatible with gfortran
+      const unsigned diagID =
+          diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
+              "Use of `-fdefault-double-8` requires `-fdefault-real-8`");
+      diags.Report(diagID);
+    }
+    // https://gcc.gnu.org/onlinedocs/gfortran/Fortran-Dialect-Options.html
+    res.defaultKinds().set_doublePrecisionKind(8);
+  }
+  if (args.hasArg(clang::driver::options::OPT_flarge_sizes))
+    res.defaultKinds().set_sizeIntegerKind(8);
+
+  // -fopenmp and -fopenacc
+  if (args.hasArg(clang::driver::options::OPT_fopenacc)) {
+    res.frontendOpts().features_.Enable(
+        Fortran::common::LanguageFeature::OpenACC);
+  }
+  if (args.hasArg(clang::driver::options::OPT_fopenmp)) {
+    res.frontendOpts().features_.Enable(
+        Fortran::common::LanguageFeature::OpenMP);
+  }
+  return;
+}
+
 bool CompilerInvocation::CreateFromArgs(CompilerInvocation &res,
     llvm::ArrayRef<const char *> commandLineArgs,
     clang::DiagnosticsEngine &diags) {
@@ -271,6 +381,8 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &res,
   parsePreprocessorArgs(res.preprocessorOpts(), args);
   // Parse semantic args
   parseSemaArgs(res.moduleDir(), args, diags);
+  // Parse dialect arguments
+  parseDialectArgs(res, args, diags);
 
   return success;
 }
@@ -317,11 +429,16 @@ void CompilerInvocation::SetDefaultFortranOpts() {
   std::vector<std::string> searchDirectories{"."s};
   fortranOptions.searchDirectories = searchDirectories;
   fortranOptions.isFixedForm = false;
+}
+
+// TODO: When expanding this method, consider creating a dedicated API for
+// this. Also at some point we will need to differentiate between different
+// targets and add dedicated predefines for each.
+void CompilerInvocation::setDefaultPredefinitions() {
+  auto &fortranOptions = fortranOpts();
+  const auto &frontendOptions = frontendOpts();
 
   // Populate the macro list with version numbers and other predefinitions.
-  // TODO: When expanding this list of standard predefinitions, consider
-  // creating a dedicated API for this. Also at some point we will need to
-  // differentiate between different targets.
   fortranOptions.predefinitions.emplace_back("__flang__", "1");
   fortranOptions.predefinitions.emplace_back(
       "__flang_major__", FLANG_VERSION_MAJOR_STRING);
@@ -329,6 +446,16 @@ void CompilerInvocation::SetDefaultFortranOpts() {
       "__flang_minor__", FLANG_VERSION_MINOR_STRING);
   fortranOptions.predefinitions.emplace_back(
       "__flang_patchlevel__", FLANG_VERSION_PATCHLEVEL_STRING);
+
+  // Add predefinitions based on extensions enabled
+  if (frontendOptions.features_.IsEnabled(
+          Fortran::common::LanguageFeature::OpenACC)) {
+    fortranOptions.predefinitions.emplace_back("_OPENACC", "202011");
+  }
+  if (frontendOptions.features_.IsEnabled(
+          Fortran::common::LanguageFeature::OpenMP)) {
+    fortranOptions.predefinitions.emplace_back("_OPENMP", "201511");
+  }
 }
 
 void CompilerInvocation::setFortranOpts() {
@@ -342,6 +469,9 @@ void CompilerInvocation::setFortranOpts() {
         frontendOptions.fortranForm_ == FortranForm::FixedForm;
   }
   fortranOptions.fixedFormColumns = frontendOptions.fixedFormColumns_;
+
+  fortranOptions.features = frontendOptions.features_;
+  fortranOptions.encoding = frontendOptions.encoding_;
 
   collectMacroDefinitions(preprocessorOptions, fortranOptions);
 
@@ -357,10 +487,13 @@ void CompilerInvocation::setFortranOpts() {
 }
 
 void CompilerInvocation::setSemanticsOpts(
-    Fortran::semantics::SemanticsContext &semaCtxt) {
-  auto &fortranOptions = fortranOpts();
+    Fortran::parser::AllCookedSources &allCookedSources) {
+  const auto &fortranOptions = fortranOpts();
+
+  semanticsContext_ = std::make_unique<semantics::SemanticsContext>(
+      defaultKinds(), fortranOptions.features, allCookedSources);
+
   auto &moduleDirJ = moduleDir();
-  semaCtxt.set_moduleDirectory(moduleDirJ)
+  semanticsContext_->set_moduleDirectory(moduleDirJ)
       .set_searchDirectories(fortranOptions.searchDirectories);
-  return;
 }

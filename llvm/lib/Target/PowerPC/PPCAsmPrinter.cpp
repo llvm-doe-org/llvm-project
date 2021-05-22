@@ -78,11 +78,44 @@ using namespace llvm::XCOFF;
 
 #define DEBUG_TYPE "asmprinter"
 
+// Specialize DenseMapInfo to allow
+// std::pair<const MCSymbol *, MCSymbolRefExpr::VariantKind> in DenseMap.
+// This specialization is needed here because that type is used as keys in the
+// map representing TOC entries.
+namespace llvm {
+template <>
+struct DenseMapInfo<std::pair<const MCSymbol *, MCSymbolRefExpr::VariantKind>> {
+  using TOCKey = std::pair<const MCSymbol *, MCSymbolRefExpr::VariantKind>;
+
+  static inline TOCKey getEmptyKey() {
+    return {nullptr, MCSymbolRefExpr::VariantKind::VK_None};
+  }
+  static inline TOCKey getTombstoneKey() {
+    return {nullptr, MCSymbolRefExpr::VariantKind::VK_Invalid};
+  }
+  static unsigned getHashValue(const TOCKey &PairVal) {
+    return detail::combineHashValue(
+        DenseMapInfo<const MCSymbol *>::getHashValue(PairVal.first),
+        DenseMapInfo<int>::getHashValue(PairVal.second));
+  }
+  static bool isEqual(const TOCKey &A, const TOCKey &B) { return A == B; }
+};
+} // end namespace llvm
+
 namespace {
 
 class PPCAsmPrinter : public AsmPrinter {
 protected:
-  MapVector<const MCSymbol *, MCSymbol *> TOC;
+  // For TLS on AIX, we need to be able to identify TOC entries of specific
+  // VariantKind so we can add the right relocations when we generate the
+  // entries. So each entry is represented by a pair of MCSymbol and
+  // VariantKind. For example, we need to be able to identify the following
+  // entry as a TLSGD entry so we can add the @m relocation:
+  //   .tc .i[TC],i[TL]@m
+  // By default, VK_None is used for the VariantKind.
+  MapVector<std::pair<const MCSymbol *, MCSymbolRefExpr::VariantKind>,
+            MCSymbol *>
+      TOC;
   const PPCSubtarget *Subtarget = nullptr;
   StackMaps SM;
 
@@ -93,7 +126,9 @@ public:
 
   StringRef getPassName() const override { return "PowerPC Assembly Printer"; }
 
-  MCSymbol *lookUpOrCreateTOCEntry(const MCSymbol *Sym);
+  MCSymbol *lookUpOrCreateTOCEntry(const MCSymbol *Sym,
+                                   MCSymbolRefExpr::VariantKind Kind =
+                                       MCSymbolRefExpr::VariantKind::VK_None);
 
   bool doInitialization(Module &M) override {
     if (!TOC.empty())
@@ -158,7 +193,6 @@ private:
   /// sinit/sterm function names.
   std::string FormatIndicatorAndUniqueModId;
 
-  static void ValidateGV(const GlobalVariable *GV);
   // Record a list of GlobalAlias associated with a GlobalObject.
   // This is used for AIX's extra-label-at-definition aliasing strategy.
   DenseMap<const GlobalObject *, SmallVector<const GlobalAlias *, 1>>
@@ -344,8 +378,10 @@ bool PPCAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
 /// lookUpOrCreateTOCEntry -- Given a symbol, look up whether a TOC entry
 /// exists for it.  If not, create one.  Then return a symbol that references
 /// the TOC entry.
-MCSymbol *PPCAsmPrinter::lookUpOrCreateTOCEntry(const MCSymbol *Sym) {
-  MCSymbol *&TOCEntry = TOC[Sym];
+MCSymbol *
+PPCAsmPrinter::lookUpOrCreateTOCEntry(const MCSymbol *Sym,
+                                      MCSymbolRefExpr::VariantKind Kind) {
+  MCSymbol *&TOCEntry = TOC[{Sym, Kind}];
   if (!TOCEntry)
     TOCEntry = createTempSymbol("C");
   return TOCEntry;
@@ -604,7 +640,8 @@ void PPCAsmPrinter::emitInstruction(const MachineInstr *MI) {
       [IsPPC64, getTOCRelocAdjustedExprForXCOFF,
        this](const MCSymbol *MOSymbol, const MCExpr *Expr) -> const MCExpr * {
     const unsigned EntryByteSize = IsPPC64 ? 8 : 4;
-    const auto TOCEntryIter = TOC.find(MOSymbol);
+    const auto TOCEntryIter =
+        TOC.find({MOSymbol, MCSymbolRefExpr::VariantKind::VK_None});
     assert(TOCEntryIter != TOC.end() &&
            "Could not find the TOC entry for this symbol.");
     const ptrdiff_t EntryDistanceFromTOCBase =
@@ -1285,8 +1322,7 @@ void PPCLinuxAsmPrinter::emitInstruction(const MachineInstr *MI) {
     unsigned RetOpcode = MI->getOperand(0).getImm();
     MCInst RetInst;
     RetInst.setOpcode(RetOpcode);
-    for (const auto &MO :
-         make_range(std::next(MI->operands_begin()), MI->operands_end())) {
+    for (const auto &MO : llvm::drop_begin(MI->operands())) {
       MCOperand MCOp;
       if (LowerPPCMachineOperandToMCOperand(MO, MCOp, *this))
         RetInst.addOperand(MCOp);
@@ -1505,7 +1541,7 @@ void PPCLinuxAsmPrinter::emitEndOfAsmFile(Module &M) {
       OutStreamer->emitValueToAlignment(4);
 
     for (const auto &TOCMapPair : TOC) {
-      const MCSymbol *const TOCEntryTarget = TOCMapPair.first;
+      const MCSymbol *const TOCEntryTarget = TOCMapPair.first.first;
       MCSymbol *const TOCEntryLabel = TOCMapPair.second;
 
       OutStreamer->emitLabel(TOCEntryLabel);
@@ -2014,15 +2050,6 @@ void PPCAIXAsmPrinter::emitTracebackTable() {
 #undef GENVALUECOMMENT
 }
 
-void PPCAIXAsmPrinter::ValidateGV(const GlobalVariable *GV) {
-  // Early error checking limiting what is supported.
-  if (GV->isThreadLocal())
-    report_fatal_error("Thread local not yet supported on AIX.");
-
-  if (GV->hasComdat())
-    report_fatal_error("COMDAT not yet supported by AIX.");
-}
-
 static bool isSpecialLLVMGlobalArrayToSkip(const GlobalVariable *GV) {
   return GV->hasAppendingLinkage() &&
          StringSwitch<bool>(GV->getName())
@@ -2048,7 +2075,9 @@ void PPCAIXAsmPrinter::emitGlobalVariable(const GlobalVariable *GV) {
 
   assert(!GV->getName().startswith("llvm.") &&
          "Unhandled intrinsic global variable.");
-  ValidateGV(GV);
+
+  if (GV->hasComdat())
+    report_fatal_error("COMDAT not yet supported by AIX.");
 
   MCSymbolXCOFF *GVSym = cast<MCSymbolXCOFF>(getSymbol(GV));
 
@@ -2058,7 +2087,8 @@ void PPCAIXAsmPrinter::emitGlobalVariable(const GlobalVariable *GV) {
   }
 
   SectionKind GVKind = getObjFileLowering().getKindForGlobal(GV, TM);
-  if (!GVKind.isGlobalWriteableData() && !GVKind.isReadOnly())
+  if (!GVKind.isGlobalWriteableData() && !GVKind.isReadOnly() &&
+      !GVKind.isThreadLocal()) // Checks for both ThreadData and ThreadBSS.
     report_fatal_error("Encountered a global variable kind that is "
                        "not supported yet.");
 
@@ -2070,14 +2100,15 @@ void PPCAIXAsmPrinter::emitGlobalVariable(const GlobalVariable *GV) {
 
   const DataLayout &DL = GV->getParent()->getDataLayout();
 
-  // Handle common symbols.
-  if (GVKind.isCommon() || GVKind.isBSSLocal()) {
+  // Handle common and zero-initialized local symbols.
+  if (GV->hasCommonLinkage() || GVKind.isBSSLocal() ||
+      GVKind.isThreadBSSLocal()) {
     Align Alignment = GV->getAlign().getValueOr(DL.getPreferredAlign(GV));
     uint64_t Size = DL.getTypeAllocSize(GV->getType()->getElementType());
     GVSym->setStorageClass(
         TargetLoweringObjectFileXCOFF::getStorageClassForGlobal(GV));
 
-    if (GVKind.isBSSLocal())
+    if (GVKind.isBSSLocal() || GVKind.isThreadBSSLocal())
       OutStreamer->emitXCOFFLocalCommonSymbol(
           OutContext.getOrCreateSymbol(GVSym->getSymbolTableName()), Size,
           GVSym, Alignment.value());
@@ -2163,12 +2194,12 @@ void PPCAIXAsmPrinter::emitEndOfAsmFile(Module &M) {
   for (auto &I : TOC) {
     // Setup the csect for the current TC entry.
     MCSectionXCOFF *TCEntry = cast<MCSectionXCOFF>(
-        getObjFileLowering().getSectionForTOCEntry(I.first, TM));
+        getObjFileLowering().getSectionForTOCEntry(I.first.first, TM));
     OutStreamer->SwitchSection(TCEntry);
 
     OutStreamer->emitLabel(I.second);
     if (TS != nullptr)
-      TS->emitTCEntry(*I.first);
+      TS->emitTCEntry(*I.first.first);
   }
 }
 
@@ -2272,6 +2303,11 @@ void PPCAIXAsmPrinter::emitInstruction(const MachineInstr *MI) {
 }
 
 bool PPCAIXAsmPrinter::doFinalization(Module &M) {
+  // Do streamer related finalization for DWARF.
+  if (!MAI->usesDwarfFileAndLocDirectives() && MMI->hasDebugInfo())
+    OutStreamer->doFinalizationAtSectionEnd(
+        OutStreamer->getContext().getObjectFileInfo()->getTextSection());
+
   for (MCSymbol *Sym : ExtSymSDNodeSymbols)
     OutStreamer->emitSymbolAttribute(Sym, MCSA_Extern);
   return PPCAsmPrinter::doFinalization(M);

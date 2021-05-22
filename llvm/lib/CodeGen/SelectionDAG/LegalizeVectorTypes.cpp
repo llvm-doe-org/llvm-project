@@ -930,6 +930,9 @@ void DAGTypeLegalizer::SplitVectorResult(SDNode *N, unsigned ResNo) {
   case ISD::SETCC:
     SplitVecRes_SETCC(N, Lo, Hi);
     break;
+  case ISD::VECTOR_REVERSE:
+    SplitVecRes_VECTOR_REVERSE(N, Lo, Hi);
+    break;
   case ISD::VECTOR_SHUFFLE:
     SplitVecRes_VECTOR_SHUFFLE(cast<ShuffleVectorSDNode>(N), Lo, Hi);
     break;
@@ -1255,20 +1258,23 @@ void DAGTypeLegalizer::SplitVecRes_INSERT_SUBVECTOR(SDNode *N, SDValue &Lo,
   GetSplitVector(Vec, Lo, Hi);
 
   EVT VecVT = Vec.getValueType();
+  EVT LoVT = Lo.getValueType();
   unsigned VecElems = VecVT.getVectorNumElements();
   unsigned SubElems = SubVec.getValueType().getVectorNumElements();
+  unsigned LoElems = LoVT.getVectorNumElements();
 
-  // If we know the index is 0, and we know the subvector doesn't cross the
-  // boundary between the halves, we can avoid spilling the vector, and insert
-  // into the lower half of the split vector directly.
-  // TODO: The IdxVal == 0 constraint is artificial, we could do this whenever
-  // there is no boundary crossing. But those cases don't seem to get hit in
-  // practice.
+  // If we know the index is in the first half, and we know the subvector
+  // doesn't cross the boundary between the halves, we can avoid spilling the
+  // vector, and insert into the lower half of the split vector directly.
+  // Similarly if the subvector is fully in the high half.
   unsigned IdxVal = cast<ConstantSDNode>(Idx)->getZExtValue();
-  if ((IdxVal == 0) && (IdxVal + SubElems <= VecElems / 2)) {
-    EVT LoVT, HiVT;
-    std::tie(LoVT, HiVT) = DAG.GetSplitDestVTs(N->getValueType(0));
+  if (IdxVal + SubElems <= LoElems) {
     Lo = DAG.getNode(ISD::INSERT_SUBVECTOR, dl, LoVT, Lo, SubVec, Idx);
+    return;
+  }
+  if (IdxVal >= LoElems && IdxVal + SubElems <= VecElems) {
+    Hi = DAG.getNode(ISD::INSERT_SUBVECTOR, dl, Hi.getValueType(), Hi, SubVec,
+                     DAG.getVectorIdxConstant(IdxVal - LoElems, dl));
     return;
   }
 
@@ -5491,4 +5497,14 @@ SDValue DAGTypeLegalizer::ModifyToType(SDValue InOp, EVT NVT,
   for ( ; Idx < WidenNumElts; ++Idx)
     Ops[Idx] = FillVal;
   return DAG.getBuildVector(NVT, dl, Ops);
+}
+
+void DAGTypeLegalizer::SplitVecRes_VECTOR_REVERSE(SDNode *N, SDValue &Lo,
+                                                  SDValue &Hi) {
+  SDValue InLo, InHi;
+  GetSplitVector(N->getOperand(0), InLo, InHi);
+  SDLoc DL(N);
+
+  Lo = DAG.getNode(ISD::VECTOR_REVERSE, DL, InHi.getValueType(), InHi);
+  Hi = DAG.getNode(ISD::VECTOR_REVERSE, DL, InLo.getValueType(), InLo);
 }

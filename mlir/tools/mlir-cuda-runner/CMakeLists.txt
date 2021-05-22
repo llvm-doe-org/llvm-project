@@ -1,5 +1,4 @@
 set(LLVM_OPTIONAL_SOURCES
-  cuda-runtime-wrappers.cpp
   mlir-cuda-runner.cpp
   )
 set(LLVM_LINK_COMPONENTS
@@ -27,35 +26,24 @@ if(MLIR_CUDA_RUNNER_ENABLED)
   # We need the libcuda.so library.
   find_library(CUDA_RUNTIME_LIBRARY cuda)
 
-  add_mlir_library(cuda-runtime-wrappers
-    SHARED
-    cuda-runtime-wrappers.cpp
-
-    EXCLUDE_FROM_LIBMLIR
-  )
-  target_include_directories(cuda-runtime-wrappers
-    PRIVATE
-    ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
-  )
-  target_link_libraries(cuda-runtime-wrappers
-    PRIVATE
-    ${CUDA_RUNTIME_LIBRARY}
-  )
-
-  get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
   get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
   set(LIBS
-    ${dialect_libs}
     ${conversion_libs}
     MLIRJitRunner
     MLIRAnalysis
+    MLIRAsync
     MLIREDSC
     MLIRExecutionEngine
+    MLIRGPU
     MLIRIR
+    MLIRLLVMIR
+    MLIRLLVMToLLVMIRTranslation
+    MLIRNVVMIR
     MLIRParser
+    MLIRStandard
     MLIRSupport
-    MLIRTargetLLVMIR
-    MLIRTargetNVVMIR
+    MLIRTargetLLVMIRExport
+    MLIRNVVMToLLVMIRTranslation
     MLIRTransforms
     MLIRTranslation
     ${CUDA_RUNTIME_LIBRARY}
@@ -76,7 +64,7 @@ if(MLIR_CUDA_RUNNER_ENABLED)
     mlir-cuda-runner.cpp
 
     DEPENDS
-    cuda-runtime-wrappers
+    mlir_cuda_runtime
     )
   target_include_directories(mlir-cuda-runner
     PRIVATE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}

@@ -1980,20 +1980,26 @@ const Symbol &ExpressionAnalyzer::AccessSpecific(
   } else if (const auto *used{
                  originalGeneric.detailsIf<semantics::UseDetails>()}) {
     const auto &scope{originalGeneric.owner()};
-    auto iter{scope.find(specific.name())};
-    if (iter != scope.end() && iter->second->has<semantics::UseDetails>() &&
-        &iter->second->get<semantics::UseDetails>().symbol() == &specific) {
-      return specific;
-    } else {
-      // Create a renaming USE of the specific procedure.
-      auto rename{context_.SaveTempName(
-          used->symbol().owner().GetName().value().ToString() + "$" +
-          specific.name().ToString())};
-      return *const_cast<semantics::Scope &>(scope)
-                  .try_emplace(rename, specific.attrs(),
-                      semantics::UseDetails{rename, specific})
-                  .first->second;
+    if (auto iter{scope.find(specific.name())}; iter != scope.end()) {
+      if (const auto *useDetails{
+              iter->second->detailsIf<semantics::UseDetails>()}) {
+        const Symbol &usedSymbol{useDetails->symbol()};
+        const auto *usedGeneric{
+            usedSymbol.detailsIf<semantics::GenericDetails>()};
+        if (&usedSymbol == &specific ||
+            (usedGeneric && usedGeneric->specific() == &specific)) {
+          return specific;
+        }
+      }
     }
+    // Create a renaming USE of the specific procedure.
+    auto rename{context_.SaveTempName(
+        used->symbol().owner().GetName().value().ToString() + "$" +
+        specific.name().ToString())};
+    return *const_cast<semantics::Scope &>(scope)
+                .try_emplace(rename, specific.attrs(),
+                    semantics::UseDetails{rename, specific})
+                .first->second;
   } else {
     return specific;
   }
@@ -2038,6 +2044,7 @@ auto ExpressionAnalyzer::GetCalleeAndArguments(const parser::Name &name,
     if (std::optional<SpecificCall> specificCall{context_.intrinsics().Probe(
             CallCharacteristics{ultimate.name().ToString(), isSubroutine},
             arguments, GetFoldingContext())}) {
+      CheckBadExplicitType(*specificCall, *symbol);
       return CalleeAndArguments{
           ProcedureDesignator{std::move(specificCall->specificIntrinsic)},
           std::move(specificCall->arguments)};
@@ -2073,6 +2080,39 @@ auto ExpressionAnalyzer::GetCalleeAndArguments(const parser::Name &name,
     }
   }
   return std::nullopt;
+}
+
+// Fortran 2018 expressly states (8.2 p3) that any declared type for a
+// generic intrinsic function "has no effect" on the result type of a
+// call to that intrinsic.  So one can declare "character*8 cos" and
+// still get a real result from "cos(1.)".  This is a dangerous feature,
+// especially since implementations are free to extend their sets of
+// intrinsics, and in doing so might clash with a name in a program.
+// So we emit a warning in this situation, and perhaps it should be an
+// error -- any correctly working program can silence the message by
+// simply deleting the pointless type declaration.
+void ExpressionAnalyzer::CheckBadExplicitType(
+    const SpecificCall &call, const Symbol &intrinsic) {
+  if (intrinsic.GetUltimate().GetType()) {
+    const auto &procedure{call.specificIntrinsic.characteristics.value()};
+    if (const auto &result{procedure.functionResult}) {
+      if (const auto *typeAndShape{result->GetTypeAndShape()}) {
+        if (auto declared{
+                typeAndShape->Characterize(intrinsic, GetFoldingContext())}) {
+          if (!declared->type().IsTkCompatibleWith(typeAndShape->type())) {
+            if (auto *msg{Say(
+                    "The result type '%s' of the intrinsic function '%s' is not the explicit declared type '%s'"_en_US,
+                    typeAndShape->AsFortran(), intrinsic.name(),
+                    declared->AsFortran())}) {
+              msg->Attach(intrinsic.name(),
+                  "Ignored declaration of intrinsic function '%s'"_en_US,
+                  intrinsic.name());
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 void ExpressionAnalyzer::CheckForBadRecursion(

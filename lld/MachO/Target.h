@@ -29,7 +29,6 @@ enum : uint64_t {
   // We are currently only supporting 64-bit targets since macOS and iOS are
   // deprecating 32-bit apps.
   WordSize = 8,
-  PageSize = 4096,
   PageZeroSize = 1ull << 32, // XXX should be 4096 for 32-bit targets
   MaxAlignmentPowerOf2 = 32,
 };
@@ -45,12 +44,15 @@ enum class RelocAttrBits {
   ADDEND = 1 << 6,     // *_ADDEND paired prefix reloc
   SUBTRAHEND = 1 << 7, // *_SUBTRACTOR paired prefix reloc
   BRANCH = 1 << 8,     // Value is branch target
-  GOT = 1 << 9,        // Pertains to Global Offset Table slots
-  TLV = 1 << 10,       // Pertains to Thread-Local Variable slots
+  GOT = 1 << 9,        // References a symbol in the Global Offset Table
+  TLV = 1 << 10,       // References a thread-local symbol
   DYSYM8 = 1 << 11,    // Requires DySym width to be 8 bytes
   LOAD = 1 << 12,      // Relaxable indirect load
-  LLVM_MARK_AS_BITMASK_ENUM(/*LargestValue*/ LOAD),
+  POINTER = 1 << 13,   // Non-relaxable indirect load (pointer is taken)
+  UNSIGNED = 1 << 14,  // *_UNSIGNED relocs
+  LLVM_MARK_AS_BITMASK_ENUM(/*LargestValue*/ (1 << 15) - 1),
 };
+// Note: SUBTRACTOR always pairs with UNSIGNED (a delta between two symbols).
 
 class TargetInfo {
 public:
@@ -86,6 +88,8 @@ public:
 
   virtual const RelocAttrs &getRelocAttrs(uint8_t type) const = 0;
 
+  virtual uint64_t getPageSize() const = 0;
+
   bool hasAttr(uint8_t type, RelocAttrBits bit) const {
     return getRelocAttrs(type).hasAttr(bit);
   }
@@ -106,6 +110,7 @@ public:
 };
 
 TargetInfo *createX86_64TargetInfo();
+TargetInfo *createARM64TargetInfo();
 
 extern TargetInfo *target;
 

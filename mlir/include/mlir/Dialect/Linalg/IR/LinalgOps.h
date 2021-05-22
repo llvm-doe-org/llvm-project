@@ -107,6 +107,13 @@ SmallVector<AffineExpr, 4> concat(ArrayRef<AffineExpr> a,
 void getDimsOfType(Operation *op, StringRef iteratorTypeName,
                    SmallVectorImpl<AffineExpr> &res);
 
+/// For reshape operation, compute the shape of the output based on the result
+/// type and shape of the input.
+SmallVector<Value, 4>
+getReshapeOutputShapeFromInputShape(OpBuilder &b, Location loc, Value src,
+                                    ArrayRef<int64_t> dstStaticShape,
+                                    ArrayRef<AffineMap> reassociation);
+
 namespace detail {
 LogicalResult verifyStructuredOpInterface(Operation *op);
 } // namespace detail
@@ -125,5 +132,8 @@ class IndexedGenericOp;
 
 #define GET_OP_CLASSES
 #include "mlir/Dialect/Linalg/IR/LinalgStructuredOps.h.inc"
+
+#define GET_OP_CLASSES
+#include "mlir/Dialect/Linalg/IR/LinalgSparseOps.h.inc"
 
 #endif // MLIR_DIALECT_LINALG_LINALGOPS_H_

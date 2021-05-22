@@ -40,7 +40,7 @@ class omptarget_nvptx_SharedArgs {
 public:
   // All these methods must be called by the master thread only.
   INLINE void Init() {
-    args  = buffer;
+    args = buffer;
     nArgs = MAX_SHARED_ARGS;
   }
   INLINE void DeInit() {
@@ -62,6 +62,7 @@ public:
   }
   // Called by all threads.
   INLINE void **GetArgs() const { return args; };
+
 private:
   // buffer of pre-allocated arguments.
   void *buffer[MAX_SHARED_ARGS];
@@ -91,7 +92,7 @@ struct __kmpc_data_sharing_slot {
 struct DataSharingStateTy {
   __kmpc_data_sharing_slot *SlotPtr[DS_Max_Warp_Number];
   void *StackPtr[DS_Max_Warp_Number];
-  void * volatile FramePtr[DS_Max_Warp_Number];
+  void *volatile FramePtr[DS_Max_Warp_Number];
   __kmpc_impl_lanemask_t ActiveThreads[DS_Max_Warp_Number];
 };
 
@@ -337,8 +338,9 @@ INLINE omptarget_nvptx_TaskDescr *getMyTopTaskDescriptor(int globalThreadId);
 ////////////////////////////////////////////////////////////////////////////////
 
 INLINE uint32_t __kmpc_impl_ffs(uint32_t x) { return __builtin_ffs(x); }
-
 INLINE uint32_t __kmpc_impl_popc(uint32_t x) { return __builtin_popcount(x); }
+INLINE uint32_t __kmpc_impl_ffs(uint64_t x) { return __builtin_ffsl(x); }
+INLINE uint32_t __kmpc_impl_popc(uint64_t x) { return __builtin_popcountl(x); }
 
 #include "common/omptargeti.h"
 

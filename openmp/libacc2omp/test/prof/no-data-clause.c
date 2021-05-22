@@ -4,6 +4,10 @@
 // "When the program encounters a compute construct with explicit data
 // clauses or with implicit data allocation added by the compiler, it
 // creates a data region that has a duration of the compute construct."
+//
+// Also check that synchronization at the end of the kernel works correctly even
+// though there's no data synchronization: acc_ev_compute_construct_end occurs
+// after the kernel terminates.
 
 // RUN: %data tgts {
 // RUN:   (run-if=                cflags=                                     host-or-off=HOST)
@@ -25,6 +29,7 @@
 
 // expected-no-diagnostics
 
+#include "stdio.h"
 #include "callbacks.h"
 
 void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
@@ -37,12 +42,13 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
 // CHECK:acc_ev_compute_construct_start
 // CHECK:acc_ev_enqueue_launch_start
 // CHECK:acc_ev_enqueue_launch_end
+// CHECK:hello world
 // CHECK:acc_ev_compute_construct_end
 //   OFF:acc_ev_device_shutdown_start
 //   OFF:acc_ev_device_shutdown_end
 // CHECK:acc_ev_runtime_shutdown
 int main() {
   #pragma acc parallel
-  ;
+  printf("hello world\n");
   return 0;
 }

@@ -958,6 +958,10 @@ extern omp_memspace_handle_t const omp_large_cap_mem_space;
 extern omp_memspace_handle_t const omp_const_mem_space;
 extern omp_memspace_handle_t const omp_high_bw_mem_space;
 extern omp_memspace_handle_t const omp_low_lat_mem_space;
+// Preview of target memory support
+extern omp_memspace_handle_t const llvm_omp_target_host_mem_space;
+extern omp_memspace_handle_t const llvm_omp_target_shared_mem_space;
+extern omp_memspace_handle_t const llvm_omp_target_device_mem_space;
 
 typedef struct {
   omp_alloctrait_key_t key;
@@ -974,6 +978,10 @@ extern omp_allocator_handle_t const omp_low_lat_mem_alloc;
 extern omp_allocator_handle_t const omp_cgroup_mem_alloc;
 extern omp_allocator_handle_t const omp_pteam_mem_alloc;
 extern omp_allocator_handle_t const omp_thread_mem_alloc;
+// Preview of target memory support
+extern omp_allocator_handle_t const llvm_omp_target_host_mem_alloc;
+extern omp_allocator_handle_t const llvm_omp_target_shared_mem_alloc;
+extern omp_allocator_handle_t const llvm_omp_target_device_mem_alloc;
 extern omp_allocator_handle_t const kmp_max_mem_alloc;
 extern omp_allocator_handle_t __kmp_def_allocator;
 
@@ -1011,6 +1019,7 @@ extern void __kmpc_free(int gtid, void *ptr, omp_allocator_handle_t al);
 
 extern void __kmp_init_memkind();
 extern void __kmp_fini_memkind();
+extern void __kmp_init_target_mem();
 
 /* ------------------------------------------------------------------------ */
 
@@ -1075,13 +1084,11 @@ extern void __kmp_fini_memkind();
 /* Calculate new number of monitor wakeups for a specific block time based on
    previous monitor_wakeups. Only allow increasing number of wakeups */
 #define KMP_WAKEUPS_FROM_BLOCKTIME(blocktime, monitor_wakeups)                 \
-  (((blocktime) == KMP_MAX_BLOCKTIME)                                          \
+  (((blocktime) == KMP_MAX_BLOCKTIME)   ? (monitor_wakeups)                    \
+   : ((blocktime) == KMP_MIN_BLOCKTIME) ? KMP_MAX_MONITOR_WAKEUPS              \
+   : ((monitor_wakeups) > (KMP_BLOCKTIME_MULTIPLIER / (blocktime)))            \
        ? (monitor_wakeups)                                                     \
-       : ((blocktime) == KMP_MIN_BLOCKTIME)                                    \
-             ? KMP_MAX_MONITOR_WAKEUPS                                         \
-             : ((monitor_wakeups) > (KMP_BLOCKTIME_MULTIPLIER / (blocktime)))  \
-                   ? (monitor_wakeups)                                         \
-                   : (KMP_BLOCKTIME_MULTIPLIER) / (blocktime))
+       : (KMP_BLOCKTIME_MULTIPLIER) / (blocktime))
 
 /* Calculate number of intervals for a specific block time based on
    monitor_wakeups */
@@ -1126,7 +1133,10 @@ extern kmp_uint64 __kmp_now_nsec();
 #define KMP_MAX_CHUNK (INT_MAX - 1)
 #define KMP_DEFAULT_CHUNK 1
 
+#define KMP_MIN_DISP_NUM_BUFF 1
 #define KMP_DFLT_DISP_NUM_BUFF 7
+#define KMP_MAX_DISP_NUM_BUFF 4096
+
 #define KMP_MAX_ORDERED 8
 
 #define KMP_MAX_FIELDS 32
@@ -1368,8 +1378,7 @@ static inline void __kmp_x86_pause(void) { _mm_pause(); }
 #endif
 #endif // KMP_HAVE_WAITPKG_INTRINSICS
 KMP_ATTRIBUTE_TARGET_WAITPKG
-static inline int
-__kmp_tpause(uint32_t hint, uint64_t counter) {
+static inline int __kmp_tpause(uint32_t hint, uint64_t counter) {
 #if !KMP_HAVE_WAITPKG_INTRINSICS
   uint32_t timeHi = uint32_t(counter >> 32);
   uint32_t timeLo = uint32_t(counter & 0xffffffff);
@@ -1385,8 +1394,7 @@ __kmp_tpause(uint32_t hint, uint64_t counter) {
 #endif
 }
 KMP_ATTRIBUTE_TARGET_WAITPKG
-static inline void
-__kmp_umonitor(void *cacheline) {
+static inline void __kmp_umonitor(void *cacheline) {
 #if !KMP_HAVE_WAITPKG_INTRINSICS
   __asm__ volatile("# umonitor\n.byte 0xF3, 0x0F, 0xAE, 0x01 "
                    :
@@ -1397,8 +1405,7 @@ __kmp_umonitor(void *cacheline) {
 #endif
 }
 KMP_ATTRIBUTE_TARGET_WAITPKG
-static inline int
-__kmp_umwait(uint32_t hint, uint64_t counter) {
+static inline int __kmp_umwait(uint32_t hint, uint64_t counter) {
 #if !KMP_HAVE_WAITPKG_INTRINSICS
   uint32_t timeHi = uint32_t(counter >> 32);
   uint32_t timeLo = uint32_t(counter & 0xffffffff);
@@ -1911,9 +1918,8 @@ typedef enum kmp_bar_pat { /* Barrier communication patterns */
                                0, /* Single level (degenerate) tree */
                            bp_tree_bar =
                                1, /* Balanced tree with branching factor 2^n */
-                           bp_hyper_bar =
-                               2, /* Hypercube-embedded tree with min branching
-                                     factor 2^n */
+                           bp_hyper_bar = 2, /* Hypercube-embedded tree with min
+                                                branching factor 2^n */
                            bp_hierarchical_bar = 3, /* Machine hierarchy tree */
                            bp_last_bar /* Placeholder to mark the end */
 } kmp_bar_pat_e;
@@ -2698,7 +2704,9 @@ typedef union KMP_ALIGN_CACHE kmp_info {
 
 // OpenMP thread team data structures
 
-typedef struct kmp_base_data { volatile kmp_uint32 t_value; } kmp_base_data_t;
+typedef struct kmp_base_data {
+  volatile kmp_uint32 t_value;
+} kmp_base_data_t;
 
 typedef union KMP_ALIGN_CACHE kmp_sleep_team {
   double dt_align; /* use worst case alignment */
@@ -3073,9 +3081,8 @@ extern int __kmp_ncores; /* Total number of cores for threads placement */
 extern int __kmp_abort_delay;
 
 extern int __kmp_need_register_atfork_specified;
-extern int
-    __kmp_need_register_atfork; /* At initialization, call pthread_atfork to
-                                   install fork handler */
+extern int __kmp_need_register_atfork; /* At initialization, call pthread_atfork
+                                          to install fork handler */
 extern int __kmp_gtid_mode; /* Method of getting gtid, values:
                                0 - not set, will be set at runtime
                                1 - using stack search
@@ -3363,6 +3370,8 @@ extern void __kmp_push_proc_bind(ident_t *loc, int gtid,
                                  kmp_proc_bind_t proc_bind);
 extern void __kmp_push_num_teams(ident_t *loc, int gtid, int num_teams,
                                  int num_threads);
+extern void __kmp_push_num_teams_51(ident_t *loc, int gtid, int num_teams_lb,
+                                    int num_teams_ub, int num_threads);
 
 extern void __kmp_yield();
 
@@ -3441,7 +3450,7 @@ extern void __kmp_wait_64(kmp_info_t *this_thr, kmp_flag_64<> *flag,
                           ,
                           void *itt_sync_obj
 #endif
-                          );
+);
 extern void __kmp_release_64(kmp_flag_64<> *flag);
 
 extern void __kmp_infinite_loop(void);
@@ -3699,7 +3708,7 @@ extern int __kmp_invoke_microtask(microtask_t pkfn, int gtid, int npr, int argc,
                                   ,
                                   void **exit_frame_ptr
 #endif
-                                  );
+);
 
 /* ------------------------------------------------------------------------ */
 
@@ -3776,12 +3785,9 @@ KMP_EXPORT kmp_task_t *__kmpc_omp_task_alloc(ident_t *loc_ref, kmp_int32 gtid,
                                              size_t sizeof_kmp_task_t,
                                              size_t sizeof_shareds,
                                              kmp_routine_entry_t task_entry);
-KMP_EXPORT kmp_task_t *__kmpc_omp_target_task_alloc(ident_t *loc_ref, kmp_int32 gtid,
-                                                    kmp_int32 flags,
-                                                    size_t sizeof_kmp_task_t,
-                                                    size_t sizeof_shareds,
-                                                    kmp_routine_entry_t task_entry,
-                                                    kmp_int64 device_id);
+KMP_EXPORT kmp_task_t *__kmpc_omp_target_task_alloc(
+    ident_t *loc_ref, kmp_int32 gtid, kmp_int32 flags, size_t sizeof_kmp_task_t,
+    size_t sizeof_shareds, kmp_routine_entry_t task_entry, kmp_int64 device_id);
 KMP_EXPORT void __kmpc_omp_task_begin_if0(ident_t *loc_ref, kmp_int32 gtid,
                                           kmp_task_t *task);
 KMP_EXPORT void __kmpc_omp_task_complete_if0(ident_t *loc_ref, kmp_int32 gtid,
@@ -3921,6 +3927,11 @@ KMP_EXPORT void __kmpc_push_proc_bind(ident_t *loc, kmp_int32 global_tid,
 KMP_EXPORT void __kmpc_push_num_teams(ident_t *loc, kmp_int32 global_tid,
                                       kmp_int32 num_teams,
                                       kmp_int32 num_threads);
+/* Function for OpenMP 5.1 num_teams clause */
+KMP_EXPORT void __kmpc_push_num_teams_51(ident_t *loc, kmp_int32 global_tid,
+                                         kmp_int32 num_teams_lb,
+                                         kmp_int32 num_teams_ub,
+                                         kmp_int32 num_threads);
 KMP_EXPORT void __kmpc_fork_teams(ident_t *loc, kmp_int32 argc,
                                   kmpc_micro microtask, ...);
 struct kmp_dim { // loop bounds info casted to kmp_int64

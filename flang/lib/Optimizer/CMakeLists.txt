@@ -6,6 +6,7 @@ add_flang_library(FIROptimizer
   Dialect/FIROps.cpp
   Dialect/FIRType.cpp
 
+  Support/FIRContext.cpp
   Support/InternalNames.cpp
   Support/KindMapping.cpp
 
@@ -18,8 +19,8 @@ add_flang_library(FIROptimizer
 
   LINK_LIBS
   ${dialect_libs}
-  MLIRTargetLLVMIR
-  MLIRTargetLLVMIRModuleTranslation
+  MLIRLLVMToLLVMIRTranslation
+  MLIRTargetLLVMIRExport
 
   LINK_COMPONENTS
   AsmParser

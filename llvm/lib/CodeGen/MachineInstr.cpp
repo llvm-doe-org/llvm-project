@@ -1462,7 +1462,8 @@ bool MachineInstr::hasUnmodeledSideEffects() const {
 }
 
 bool MachineInstr::isLoadFoldBarrier() const {
-  return mayStore() || isCall() || hasUnmodeledSideEffects();
+  return mayStore() || isCall() ||
+         (hasUnmodeledSideEffects() && !isPseudoProbe());
 }
 
 /// allDefsAreDead - Return true if all the defs of this instruction are dead.
@@ -2056,9 +2057,8 @@ void MachineInstr::setPhysRegsDeadExcept(ArrayRef<Register> UsedRegs,
   // This is a call with a register mask operand.
   // Mask clobbers are always dead, so add defs for the non-dead defines.
   if (HasRegMask)
-    for (ArrayRef<Register>::iterator I = UsedRegs.begin(), E = UsedRegs.end();
-         I != E; ++I)
-      addRegisterDefined(*I, &TRI);
+    for (const Register &UsedReg : UsedRegs)
+      addRegisterDefined(UsedReg, &TRI);
 }
 
 unsigned

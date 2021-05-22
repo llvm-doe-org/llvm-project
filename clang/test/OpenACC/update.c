@@ -3,10 +3,11 @@
 // Diagnostics about the present motion modifier in the translation are tested
 // in warn-acc-omp-update-present.c.  The "if" clause is tested in update-if.c.
 //
-// The various cases covered here should be kept consistent with present.c and
-// no-create.c.  For example, a subarray that extends a subarray already present
-// is consistently considered not present, so the present clause produces a
-// runtime error and the no_create clause doesn't allocate.
+// The various cases covered here should be kept consistent with present.c,
+// no-create.c, and subarray-errors.c  For example, a subarray that extends a
+// subarray already present is consistently considered not present, so the
+// present clause produces a runtime error and the no_create clause doesn't
+// allocate.
 
 // Check bad -fopenacc-update-present-omp values.
 //
@@ -59,6 +60,7 @@
 // RUN:   (case=caseSubarrayOverlapStart not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
 // RUN:   (case=caseSubarrayOverlapEnd   not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
 // RUN:   (case=caseSubarrayConcat2      not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
+// RUN:   (case=caseSubarrayNonSubarray  not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
 // RUN: }
 // RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
 // RUN: %for cases {
@@ -1453,6 +1455,93 @@ CASE(caseSubarrayConcat2) {
     printDeviceInt(d[1]);
     printDeviceInt(d[2]);
     printDeviceInt(d[3]);
+  }
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseSubarrayNonSubarray
+// PRT-LABEL: {{.*}}caseSubarrayNonSubarray{{.*}} {
+CASE(caseSubarrayNonSubarray) {
+  int s[4];
+  int h[4];
+  int d[4];
+  PRINT_SUBARRAY_INFO(h, 1, 2);
+  PRINT_SUBARRAY_INFO(h, 0, 4);
+
+  #pragma acc data create(s[1:2], h[1:2], d[1:2])
+  {
+    setHostInt(s[0], 10);
+    setHostInt(s[1], 20);
+    setHostInt(s[2], 30);
+    setHostInt(s[3], 40);
+    setHostInt(h[0], 50);
+    setHostInt(h[1], 60);
+    setHostInt(h[2], 70);
+    setHostInt(h[3], 80);
+    setHostInt(d[0], 90);
+    setHostInt(d[1], 100);
+    setHostInt(d[2], 110);
+    setHostInt(d[3], 120);
+    setDeviceInt(s[1], 21);
+    setDeviceInt(s[2], 31);
+    setDeviceInt(h[1], 61);
+    setDeviceInt(h[2], 71);
+    setDeviceInt(d[1], 101);
+    setDeviceInt(d[2], 111);
+
+    // We need multiple directives here so we can control which clause
+    // produces the runtime error.  We vary which clause produces the runtime
+    // error across the various CASE_* that produce it.
+    #pragma acc update host(h) IF_PRESENT
+    #pragma acc update device(d) self(s) IF_PRESENT
+
+    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host s[0]=10{{$}}
+    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host s[1]=20{{$}}
+    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host s[2]=30{{$}}
+    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host s[3]=40{{$}}
+    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host h[0]=50{{$}}
+    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host h[1]=60{{$}}
+    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host h[2]=70{{$}}
+    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host h[3]=80{{$}}
+    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host d[0]=90{{$}}
+    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host d[1]=100{{$}}
+    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host d[2]=110{{$}}
+    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host d[3]=120{{$}}
+    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host s[0]=10{{$}}
+    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host s[1]=21{{$}}
+    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host s[2]=31{{$}}
+    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host s[3]=40{{$}}
+    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host h[0]=50{{$}}
+    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host h[1]=61{{$}}
+    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host h[2]=71{{$}}
+    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host h[3]=80{{$}}
+    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host d[0]=90{{$}}
+    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host d[1]=101{{$}}
+    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host d[2]=111{{$}}
+    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host d[3]=120{{$}}
+    //      EXE-OUT-caseSubarrayNonSubarray-PASS-NEXT: device s[1]=21{{$}}
+    //      EXE-OUT-caseSubarrayNonSubarray-PASS-NEXT: device s[2]=31{{$}}
+    //      EXE-OUT-caseSubarrayNonSubarray-PASS-NEXT: device h[1]=61{{$}}
+    //      EXE-OUT-caseSubarrayNonSubarray-PASS-NEXT: device h[2]=71{{$}}
+    //      EXE-OUT-caseSubarrayNonSubarray-PASS-NEXT: device d[1]=101{{$}}
+    //      EXE-OUT-caseSubarrayNonSubarray-PASS-NEXT: device d[2]=111{{$}}
+    printHostInt(s[0]);
+    printHostInt(s[1]);
+    printHostInt(s[2]);
+    printHostInt(s[3]);
+    printHostInt(h[0]);
+    printHostInt(h[1]);
+    printHostInt(h[2]);
+    printHostInt(h[3]);
+    printHostInt(d[0]);
+    printHostInt(d[1]);
+    printHostInt(d[2]);
+    printHostInt(d[3]);
+    printDeviceInt(s[1]);
+    printDeviceInt(s[2]);
+    printDeviceInt(h[1]);
+    printDeviceInt(h[2]);
+    printDeviceInt(d[1]);
+    printDeviceInt(d[2]);
   }
 }
 

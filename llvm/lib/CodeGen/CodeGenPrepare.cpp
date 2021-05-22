@@ -377,6 +377,7 @@ class TypePromotionTransaction;
     }
 
     void removeAllAssertingVHReferences(Value *V);
+    bool eliminateAssumptions(Function &F);
     bool eliminateFallThrough(Function &F);
     bool eliminateMostlyEmptyBlocks(Function &F);
     BasicBlock *findDestBlockOfMergeableEmptyBlock(BasicBlock *BB);
@@ -506,6 +507,11 @@ bool CodeGenPrepare::runOnFunction(Function &F) {
     }
   }
 
+  // Get rid of @llvm.assume builtins before attempting to eliminate empty
+  // blocks, since there might be blocks that only contain @llvm.assume calls
+  // (plus arguments that we can get rid of).
+  EverMadeChange |= eliminateAssumptions(F);
+
   // Eliminate blocks that contain only PHI nodes and an
   // unconditional branch.
   EverMadeChange |= eliminateMostlyEmptyBlocks(F);
@@ -566,10 +572,9 @@ bool CodeGenPrepare::runOnFunction(Function &F) {
       MadeChange |= ConstantFoldTerminator(&BB, true);
       if (!MadeChange) continue;
 
-      for (SmallVectorImpl<BasicBlock*>::iterator
-             II = Successors.begin(), IE = Successors.end(); II != IE; ++II)
-        if (pred_empty(*II))
-          WorkList.insert(*II);
+      for (BasicBlock *Succ : Successors)
+        if (pred_empty(Succ))
+          WorkList.insert(Succ);
     }
 
     // Delete the dead blocks and any of their dead successors.
@@ -580,10 +585,9 @@ bool CodeGenPrepare::runOnFunction(Function &F) {
 
       DeleteDeadBlock(BB);
 
-      for (SmallVectorImpl<BasicBlock*>::iterator
-             II = Successors.begin(), IE = Successors.end(); II != IE; ++II)
-        if (pred_empty(*II))
-          WorkList.insert(*II);
+      for (BasicBlock *Succ : Successors)
+        if (pred_empty(Succ))
+          WorkList.insert(Succ);
     }
 
     // Merge pairs of basic blocks with unconditional branches, connected by
@@ -614,6 +618,28 @@ bool CodeGenPrepare::runOnFunction(Function &F) {
 #endif
 
   return EverMadeChange;
+}
+
+bool CodeGenPrepare::eliminateAssumptions(Function &F) {
+  bool MadeChange = false;
+  for (BasicBlock &BB : F) {
+    CurInstIterator = BB.begin();
+    while (CurInstIterator != BB.end()) {
+      Instruction *I = &*(CurInstIterator++);
+      if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(I)) {
+        if (II->getIntrinsicID() != Intrinsic::assume)
+          continue;
+        MadeChange = true;
+        Value *Operand = II->getOperand(0);
+        II->eraseFromParent();
+
+        resetIteratorIfInvalidatedWhileCalling(&BB, [&]() {
+          RecursivelyDeleteTriviallyDeadInstructions(Operand, TLInfo, nullptr);
+        });
+      }
+    }
+  }
+  return MadeChange;
 }
 
 /// An instruction is about to be deleted, so remove all references to it in our
@@ -780,8 +806,8 @@ bool CodeGenPrepare::isMergingEmptyBlockProfitable(BasicBlock *BB,
   // Skip merging if the block's successor is also a successor to any callbr
   // that leads to this block.
   // FIXME: Is this really needed? Is this a correctness issue?
-  for (pred_iterator PI = pred_begin(BB), E = pred_end(BB); PI != E; ++PI) {
-    if (auto *CBI = dyn_cast<CallBrInst>((*PI)->getTerminator()))
+  for (BasicBlock *Pred : predecessors(BB)) {
+    if (auto *CBI = dyn_cast<CallBrInst>((Pred)->getTerminator()))
       for (unsigned i = 0, e = CBI->getNumSuccessors(); i != e; ++i)
         if (DestBB == CBI->getSuccessor(i))
           return false;
@@ -822,9 +848,7 @@ bool CodeGenPrepare::isMergingEmptyBlockProfitable(BasicBlock *BB,
 
   // Find all other incoming blocks from which incoming values of all PHIs in
   // DestBB are the same as the ones from BB.
-  for (pred_iterator PI = pred_begin(DestBB), E = pred_end(DestBB); PI != E;
-       ++PI) {
-    BasicBlock *DestBBPred = *PI;
+  for (BasicBlock *DestBBPred : predecessors(DestBB)) {
     if (DestBBPred == BB)
       continue;
 
@@ -964,8 +988,8 @@ void CodeGenPrepare::eliminateMostlyEmptyBlock(BasicBlock *BB) {
         for (unsigned i = 0, e = BBPN->getNumIncomingValues(); i != e; ++i)
           PN.addIncoming(InVal, BBPN->getIncomingBlock(i));
       } else {
-        for (pred_iterator PI = pred_begin(BB), E = pred_end(BB); PI != E; ++PI)
-          PN.addIncoming(InVal, *PI);
+        for (BasicBlock *Pred : predecessors(BB))
+          PN.addIncoming(InVal, Pred);
       }
     }
   }
@@ -1280,11 +1304,64 @@ static bool OptimizeNoopCopyExpression(CastInst *CI, const TargetLowering &TLI,
   return SinkCast(CI);
 }
 
+/// If given \p PN is an inductive variable with value IVInc coming from the
+/// backedge, and on each iteration it gets increased by Step, return pair
+/// <IVInc, Step>. Otherwise, return None.
+static Optional<std::pair<Instruction *, Constant *> >
+getIVIncrement(const PHINode *PN, const LoopInfo *LI) {
+  const Loop *L = LI->getLoopFor(PN->getParent());
+  if (!L || L->getHeader() != PN->getParent() || !L->getLoopLatch())
+    return None;
+  auto *IVInc =
+      dyn_cast<Instruction>(PN->getIncomingValueForBlock(L->getLoopLatch()));
+  if (!IVInc)
+    return None;
+  Constant *Step = nullptr;
+  if (match(IVInc, m_Sub(m_Specific(PN), m_Constant(Step))))
+    return std::make_pair(IVInc, ConstantExpr::getNeg(Step));
+  if (match(IVInc, m_Add(m_Specific(PN), m_Constant(Step))))
+    return std::make_pair(IVInc, Step);
+  if (match(IVInc, m_ExtractValue<0>(m_Intrinsic<Intrinsic::usub_with_overflow>(
+                       m_Specific(PN), m_Constant(Step)))))
+    return std::make_pair(IVInc, ConstantExpr::getNeg(Step));
+  if (match(IVInc, m_ExtractValue<0>(m_Intrinsic<Intrinsic::uadd_with_overflow>(
+                       m_Specific(PN), m_Constant(Step)))))
+    return std::make_pair(IVInc, Step);
+  return None;
+}
+
+static bool isIVIncrement(const BinaryOperator *BO, const LoopInfo *LI) {
+  auto *PN = dyn_cast<PHINode>(BO->getOperand(0));
+  if (!PN)
+    return false;
+  if (auto IVInc = getIVIncrement(PN, LI))
+    return IVInc->first == BO;
+  return false;
+}
+
 bool CodeGenPrepare::replaceMathCmpWithIntrinsic(BinaryOperator *BO,
                                                  Value *Arg0, Value *Arg1,
                                                  CmpInst *Cmp,
                                                  Intrinsic::ID IID) {
-  if (BO->getParent() != Cmp->getParent()) {
+  auto IsReplacableIVIncrement = [this, &Cmp](BinaryOperator *BO) {
+    if (!isIVIncrement(BO, LI))
+      return false;
+    const Loop *L = LI->getLoopFor(BO->getParent());
+    // IV increment may have other users than the IV. We do not want to make
+    // dominance queries to analyze the legality of moving it towards the cmp,
+    // so just check that there is no other users.
+    if (!BO->hasOneUse())
+      return false;
+    // Do not risk on moving increment into a child loop.
+    if (LI->getLoopFor(Cmp->getParent()) != L)
+      return false;
+    // Ultimately, the insertion point must dominate latch. This should be a
+    // cheap check because no CFG changes & dom tree recomputation happens
+    // during the transform.
+    Function *F = BO->getParent()->getParent();
+    return getDT(*F).dominates(Cmp->getParent(), L->getLoopLatch());
+  };
+  if (BO->getParent() != Cmp->getParent() && !IsReplacableIVIncrement(BO)) {
     // We used to use a dominator tree here to allow multi-block optimization.
     // But that was problematic because:
     // 1. It could cause a perf regression by hoisting the math op into the
@@ -1295,6 +1372,14 @@ bool CodeGenPrepare::replaceMathCmpWithIntrinsic(BinaryOperator *BO,
     //    This is because we recompute the DT on every change in the main CGP
     //    run-loop. The recomputing is probably unnecessary in many cases, so if
     //    that was fixed, using a DT here would be ok.
+    //
+    // There is one important particular case we still want to handle: if BO is
+    // the IV increment. Important properties that make it profitable:
+    // - We can speculate IV increment anywhere in the loop (as long as the
+    //   indvar Phi is its only user);
+    // - Upon computing Cmp, we effectively compute something equivalent to the
+    //   IV increment (despite it loops differently in the IR). So moving it up
+    //   to the cmp point does not really increase register pressure.
     return false;
   }
 
@@ -2061,18 +2146,8 @@ bool CodeGenPrepare::optimizeCallInst(CallInst *CI, bool &ModifiedDT) {
   if (II) {
     switch (II->getIntrinsicID()) {
     default: break;
-    case Intrinsic::assume: {
-      Value *Operand = II->getOperand(0);
-      II->eraseFromParent();
-      // Prune the operand, it's most likely dead.
-      resetIteratorIfInvalidatedWhileCalling(BB, [&]() {
-        RecursivelyDeleteTriviallyDeadInstructions(
-            Operand, TLInfo, nullptr,
-            [&](Value *V) { removeAllAssertingVHReferences(V); });
-      });
-      return true;
-    }
-
+    case Intrinsic::assume:
+      llvm_unreachable("llvm.assume should have been removed already");
     case Intrinsic::experimental_widenable_condition: {
       // Give up on future widening oppurtunties so that we can fold away dead
       // paths and merge blocks before going into block-local instruction
@@ -2280,14 +2355,14 @@ bool CodeGenPrepare::dupRetToEnableTailCallOpts(BasicBlock *BB, bool &ModifiedDT
     }
   } else {
     SmallPtrSet<BasicBlock*, 4> VisitedBBs;
-    for (pred_iterator PI = pred_begin(BB), PE = pred_end(BB); PI != PE; ++PI) {
-      if (!VisitedBBs.insert(*PI).second)
+    for (BasicBlock *Pred : predecessors(BB)) {
+      if (!VisitedBBs.insert(Pred).second)
         continue;
-      if (Instruction *I = (*PI)->rbegin()->getPrevNonDebugInstruction(true)) {
+      if (Instruction *I = Pred->rbegin()->getPrevNonDebugInstruction(true)) {
         CallInst *CI = dyn_cast<CallInst>(I);
         if (CI && CI->use_empty() && TLI->mayBeEmittedAsTailCall(CI) &&
             attributesPermitTailCall(F, CI, RetI, *TLI))
-          TailCallBBs.push_back(*PI);
+          TailCallBBs.push_back(Pred);
       }
     }
   }
@@ -2802,11 +2877,8 @@ class TypePromotionTransaction {
     /// Reassign the original uses of Inst to Inst.
     void undo() override {
       LLVM_DEBUG(dbgs() << "Undo: UsersReplacer: " << *Inst << "\n");
-      for (use_iterator UseIt = OriginalUses.begin(),
-                        EndIt = OriginalUses.end();
-           UseIt != EndIt; ++UseIt) {
-        UseIt->Inst->setOperand(UseIt->Idx, Inst);
-      }
+      for (InstructionAndIdx &Use : OriginalUses)
+        Use.Inst->setOperand(Use.Idx, Inst);
       // RAUW has replaced all original uses with references to the new value,
       // including the debug uses. Since we are undoing the replacements,
       // the original debug uses must also be reinstated to maintain the
@@ -2985,9 +3057,8 @@ TypePromotionTransaction::getRestorationPoint() const {
 }
 
 bool TypePromotionTransaction::commit() {
-  for (CommitPt It = Actions.begin(), EndIt = Actions.end(); It != EndIt;
-       ++It)
-    (*It)->commit();
+  for (std::unique_ptr<TypePromotionAction> &Action : Actions)
+    Action->commit();
   bool Modified = !Actions.empty();
   Actions.clear();
   return Modified;
@@ -3011,6 +3082,8 @@ class AddressingModeMatcher {
   const TargetLowering &TLI;
   const TargetRegisterInfo &TRI;
   const DataLayout &DL;
+  const LoopInfo &LI;
+  const std::function<const DominatorTree &()> getDTFn;
 
   /// AccessTy/MemoryInst - This is the type for the access (e.g. double) and
   /// the memory instruction that we're computing this address for.
@@ -3046,16 +3119,18 @@ class AddressingModeMatcher {
 
   AddressingModeMatcher(
       SmallVectorImpl<Instruction *> &AMI, const TargetLowering &TLI,
-      const TargetRegisterInfo &TRI, Type *AT, unsigned AS, Instruction *MI,
-      ExtAddrMode &AM, const SetOfInstrs &InsertedInsts,
-      InstrToOrigTy &PromotedInsts, TypePromotionTransaction &TPT,
+      const TargetRegisterInfo &TRI, const LoopInfo &LI,
+      const std::function<const DominatorTree &()> getDTFn,
+      Type *AT, unsigned AS, Instruction *MI, ExtAddrMode &AM,
+      const SetOfInstrs &InsertedInsts, InstrToOrigTy &PromotedInsts,
+      TypePromotionTransaction &TPT,
       std::pair<AssertingVH<GetElementPtrInst>, int64_t> &LargeOffsetGEP,
       bool OptSize, ProfileSummaryInfo *PSI, BlockFrequencyInfo *BFI)
       : AddrModeInsts(AMI), TLI(TLI), TRI(TRI),
-        DL(MI->getModule()->getDataLayout()), AccessTy(AT), AddrSpace(AS),
-        MemoryInst(MI), AddrMode(AM), InsertedInsts(InsertedInsts),
-        PromotedInsts(PromotedInsts), TPT(TPT), LargeOffsetGEP(LargeOffsetGEP),
-        OptSize(OptSize), PSI(PSI), BFI(BFI) {
+        DL(MI->getModule()->getDataLayout()), LI(LI), getDTFn(getDTFn),
+        AccessTy(AT), AddrSpace(AS), MemoryInst(MI), AddrMode(AM),
+        InsertedInsts(InsertedInsts), PromotedInsts(PromotedInsts), TPT(TPT),
+        LargeOffsetGEP(LargeOffsetGEP), OptSize(OptSize), PSI(PSI), BFI(BFI) {
     IgnoreProfitability = false;
   }
 
@@ -3070,18 +3145,18 @@ public:
   static ExtAddrMode
   Match(Value *V, Type *AccessTy, unsigned AS, Instruction *MemoryInst,
         SmallVectorImpl<Instruction *> &AddrModeInsts,
-        const TargetLowering &TLI, const TargetRegisterInfo &TRI,
-        const SetOfInstrs &InsertedInsts, InstrToOrigTy &PromotedInsts,
-        TypePromotionTransaction &TPT,
+        const TargetLowering &TLI, const LoopInfo &LI,
+        const std::function<const DominatorTree &()> getDTFn,
+        const TargetRegisterInfo &TRI, const SetOfInstrs &InsertedInsts,
+        InstrToOrigTy &PromotedInsts, TypePromotionTransaction &TPT,
         std::pair<AssertingVH<GetElementPtrInst>, int64_t> &LargeOffsetGEP,
         bool OptSize, ProfileSummaryInfo *PSI, BlockFrequencyInfo *BFI) {
     ExtAddrMode Result;
 
-    bool Success = AddressingModeMatcher(AddrModeInsts, TLI, TRI, AccessTy, AS,
-                                         MemoryInst, Result, InsertedInsts,
-                                         PromotedInsts, TPT, LargeOffsetGEP,
-                                         OptSize, PSI, BFI)
-                       .matchAddr(V, 0);
+    bool Success = AddressingModeMatcher(
+        AddrModeInsts, TLI, TRI, LI, getDTFn, AccessTy, AS, MemoryInst, Result,
+        InsertedInsts, PromotedInsts, TPT, LargeOffsetGEP, OptSize, PSI,
+        BFI).matchAddr(V, 0);
     (void)Success; assert(Success && "Couldn't select *anything*?");
     return Result;
   }
@@ -3777,10 +3852,12 @@ bool AddressingModeMatcher::matchScaledValue(Value *ScaleReg, int64_t Scale,
 
   // Okay, we decided that we can add ScaleReg+Scale to AddrMode.  Check now
   // to see if ScaleReg is actually X+C.  If so, we can turn this into adding
-  // X*Scale + C*Scale to addr mode.
+  // X*Scale + C*Scale to addr mode. If we found available IV increment, do not
+  // go any further: we can reuse it and cannot eliminate it.
   ConstantInt *CI = nullptr; Value *AddLHS = nullptr;
-  if (isa<Instruction>(ScaleReg) &&  // not a constant expr.
+  if (isa<Instruction>(ScaleReg) && // not a constant expr.
       match(ScaleReg, m_Add(m_Value(AddLHS), m_ConstantInt(CI))) &&
+      !isIVIncrement(cast<BinaryOperator>(ScaleReg), &LI) &&
       CI->getValue().isSignedIntN(64)) {
     TestAddrMode.InBounds = false;
     TestAddrMode.ScaledReg = AddLHS;
@@ -3793,9 +3870,68 @@ bool AddressingModeMatcher::matchScaledValue(Value *ScaleReg, int64_t Scale,
       AddrMode = TestAddrMode;
       return true;
     }
+    // Restore status quo.
+    TestAddrMode = AddrMode;
   }
 
-  // Otherwise, not (x+c)*scale, just return what we have.
+  auto GetConstantStep = [this](const Value * V)
+      ->Optional<std::pair<Instruction *, APInt> > {
+    auto *PN = dyn_cast<PHINode>(V);
+    if (!PN)
+      return None;
+    auto IVInc = getIVIncrement(PN, &LI);
+    if (!IVInc)
+      return None;
+    // TODO: The result of the intrinsics above is two-compliment. However when
+    // IV inc is expressed as add or sub, iv.next is potentially a poison value.
+    // If it has nuw or nsw flags, we need to make sure that these flags are
+    // inferrable at the point of memory instruction. Otherwise we are replacing
+    // well-defined two-compliment computation with poison. Currently, to avoid
+    // potentially complex analysis needed to prove this, we reject such cases.
+    if (auto *OIVInc = dyn_cast<OverflowingBinaryOperator>(IVInc->first))
+      if (OIVInc->hasNoSignedWrap() || OIVInc->hasNoUnsignedWrap())
+        return None;
+    if (auto *ConstantStep = dyn_cast<ConstantInt>(IVInc->second))
+      return std::make_pair(IVInc->first, ConstantStep->getValue());
+    return None;
+  };
+
+  // Try to account for the following special case:
+  // 1. ScaleReg is an inductive variable;
+  // 2. We use it with non-zero offset;
+  // 3. IV's increment is available at the point of memory instruction.
+  //
+  // In this case, we may reuse the IV increment instead of the IV Phi to
+  // achieve the following advantages:
+  // 1. If IV step matches the offset, we will have no need in the offset;
+  // 2. Even if they don't match, we will reduce the overlap of living IV
+  //    and IV increment, that will potentially lead to better register
+  //    assignment.
+  if (AddrMode.BaseOffs) {
+    if (auto IVStep = GetConstantStep(ScaleReg)) {
+      Instruction *IVInc = IVStep->first;
+      APInt Step = IVStep->second;
+      APInt Offset = Step * AddrMode.Scale;
+      if (Offset.isSignedIntN(64)) {
+        TestAddrMode.InBounds = false;
+        TestAddrMode.ScaledReg = IVInc;
+        TestAddrMode.BaseOffs -= Offset.getLimitedValue();
+        // If this addressing mode is legal, commit it..
+        // (Note that we defer the (expensive) domtree base legality check
+        // to the very last possible point.)
+        if (TLI.isLegalAddressingMode(DL, TestAddrMode, AccessTy, AddrSpace) &&
+            getDTFn().dominates(IVInc, MemoryInst)) {
+          AddrModeInsts.push_back(cast<Instruction>(IVInc));
+          AddrMode = TestAddrMode;
+          return true;
+        }
+        // Restore status quo.
+        TestAddrMode = AddrMode;
+      }
+    }
+  }
+
+  // Otherwise, just return what we have.
   return true;
 }
 
@@ -4885,9 +5021,10 @@ isProfitableToFoldIntoAddressingMode(Instruction *I, ExtAddrMode &AMBefore,
                                                                       0);
     TypePromotionTransaction::ConstRestorationPt LastKnownGood =
         TPT.getRestorationPoint();
-    AddressingModeMatcher Matcher(
-        MatchedAddrModeInsts, TLI, TRI, AddressAccessTy, AS, MemoryInst, Result,
-        InsertedInsts, PromotedInsts, TPT, LargeOffsetGEP, OptSize, PSI, BFI);
+    AddressingModeMatcher Matcher(MatchedAddrModeInsts, TLI, TRI, LI, getDTFn,
+                                  AddressAccessTy, AS, MemoryInst, Result,
+                                  InsertedInsts, PromotedInsts, TPT,
+                                  LargeOffsetGEP, OptSize, PSI, BFI);
     Matcher.IgnoreProfitability = true;
     bool Success = Matcher.matchAddr(Address, 0);
     (void)Success; assert(Success && "Couldn't select *anything*?");
@@ -4990,9 +5127,16 @@ bool CodeGenPrepare::optimizeMemoryInst(Instruction *MemoryInst, Value *Addr,
     AddrModeInsts.clear();
     std::pair<AssertingVH<GetElementPtrInst>, int64_t> LargeOffsetGEP(nullptr,
                                                                       0);
+    // Defer the query (and possible computation of) the dom tree to point of
+    // actual use.  It's expected that most address matches don't actually need
+    // the domtree.
+    auto getDTFn = [MemoryInst, this]() -> const DominatorTree & {
+      Function *F = MemoryInst->getParent()->getParent();
+      return this->getDT(*F);
+    };
     ExtAddrMode NewAddrMode = AddressingModeMatcher::Match(
-        V, AccessTy, AddrSpace, MemoryInst, AddrModeInsts, *TLI, *TRI,
-        InsertedInsts, PromotedInsts, TPT, LargeOffsetGEP, OptSize, PSI,
+        V, AccessTy, AddrSpace, MemoryInst, AddrModeInsts, *TLI, *LI, getDTFn,
+        *TRI, InsertedInsts, PromotedInsts, TPT, LargeOffsetGEP, OptSize, PSI,
         BFI.get());
 
     GetElementPtrInst *GEP = LargeOffsetGEP.first;
@@ -6931,11 +7075,10 @@ class VectorPromoteHelper {
 
     StoreInst *ST = cast<StoreInst>(CombineInst);
     unsigned AS = ST->getPointerAddressSpace();
-    unsigned Align = ST->getAlignment();
     // Check if this store is supported.
     if (!TLI.allowsMisalignedMemoryAccesses(
             TLI.getValueType(DL, ST->getValueOperand()->getType()), AS,
-            Align)) {
+            ST->getAlign())) {
       // If this is not supported, there is no way we can combine
       // the extract with the store.
       return false;
@@ -6944,9 +7087,9 @@ class VectorPromoteHelper {
     // The scalar chain of computation has to pay for the transition
     // scalar to vector.
     // The vector chain has to account for the combining cost.
-    uint64_t ScalarCost =
+    InstructionCost ScalarCost =
         TTI.getVectorInstrCost(Transition->getOpcode(), PromotedType, Index);
-    uint64_t VectorCost = StoreExtractCombineCost;
+    InstructionCost VectorCost = StoreExtractCombineCost;
     enum TargetTransformInfo::TargetCostKind CostKind =
       TargetTransformInfo::TCK_RecipThroughput;
     for (const auto &Inst : InstsToBePromoted) {

@@ -44,14 +44,11 @@ define void @fma(float* noalias nocapture readonly %A, float* noalias nocapture 
 ; CHECK-NEXT:    add.w r2, r2, r12, lsl #2
 ; CHECK-NEXT:  .LBB0_7: @ %for.body
 ; CHECK-NEXT:    @ =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    vldr s0, [r0]
-; CHECK-NEXT:    adds r0, #4
-; CHECK-NEXT:    vldr s2, [r1]
-; CHECK-NEXT:    adds r1, #4
+; CHECK-NEXT:    vldmia r0!, {s0}
+; CHECK-NEXT:    vldmia r1!, {s2}
 ; CHECK-NEXT:    vldr s4, [r2]
 ; CHECK-NEXT:    vfma.f32 s4, s2, s0
-; CHECK-NEXT:    vstr s4, [r2]
-; CHECK-NEXT:    adds r2, #4
+; CHECK-NEXT:    vstmia r2!, {s4}
 ; CHECK-NEXT:    le lr, .LBB0_7
 ; CHECK-NEXT:  .LBB0_8: @ %for.cond.cleanup
 ; CHECK-NEXT:    pop {r4, r5, r6, pc}
@@ -739,7 +736,6 @@ define i8* @signext(i8* %input_row, i8* %input_col, i16 zeroext %output_ch, i16 
 ; CHECK-NEXT:    mla r3, r9, r2, r0
 ; CHECK-NEXT:    ldr r5, [sp, #8] @ 4-byte Reload
 ; CHECK-NEXT:    ldrd r7, r0, [sp] @ 8-byte Folded Reload
-; CHECK-NEXT:    mov r11, r2
 ; CHECK-NEXT:    mov r8, r10
 ; CHECK-NEXT:    dlstp.16 lr, r2
 ; CHECK-NEXT:  .LBB5_7: @ %for.body24
@@ -913,7 +909,6 @@ define i8* @signext_optsize(i8* %input_row, i8* %input_col, i16 zeroext %output_
 ; CHECK-NEXT:    mla r3, r9, r2, r0
 ; CHECK-NEXT:    ldr r5, [sp, #8] @ 4-byte Reload
 ; CHECK-NEXT:    ldrd r7, r0, [sp] @ 8-byte Folded Reload
-; CHECK-NEXT:    mov r11, r2
 ; CHECK-NEXT:    mov r8, r10
 ; CHECK-NEXT:    dlstp.16 lr, r2
 ; CHECK-NEXT:  .LBB6_5: @ %for.body24

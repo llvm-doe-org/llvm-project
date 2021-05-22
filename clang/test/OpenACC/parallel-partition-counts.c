@@ -363,6 +363,7 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:   impl: OMPDistributeSimdDirective
       // DMP-NEXT:     OMPSimdlenClause
       // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         value: Int 1
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
       // DMP-NOT:      OMP
       //
@@ -424,6 +425,7 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:   impl: OMPDistributeSimdDirective
       // DMP-NEXT:     OMPSimdlenClause
       // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         value: Int 1
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
       // DMP-NOT:      OMP
       //
@@ -487,6 +489,7 @@ int main(int argc, char *argv[]) {
           // DMP-NEXT:   impl: OMPSimdDirective
           // DMP-NEXT:     OMPSimdlenClause
           // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+          // DMP-NEXT:         value: Int 1
           // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
           // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
           // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
@@ -563,6 +566,7 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:   impl: OMPSimdDirective
       // DMP-NEXT:     OMPSimdlenClause
       // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         value: Int 1
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
       // DMP-NOT:      OMP
       //
@@ -616,6 +620,7 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:       impl: OMPDistributeSimdDirective
     // DMP-NEXT:         OMPSimdlenClause
     // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:             value: Int 1
     // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 1
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop vector num_gangs(1) num_workers(1) vector_length(1){{$}}
@@ -691,6 +696,7 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
       // DMP-NEXT:     OMPSimdlenClause
       // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         value: Int 3
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
       // DMP-NOT:      OMP
       //
@@ -725,6 +731,7 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
       // DMP-NEXT:     OMPSimdlenClause
       // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         value: Int 3
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
       // DMP-NOT:      OMP
       //
@@ -773,6 +780,7 @@ int main(int argc, char *argv[]) {
         // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
         // DMP-NEXT:     OMPSimdlenClause
         // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+        // DMP-NEXT:         value: Int 3
         // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
         // DMP-NEXT:     OMPSharedClause {{.*}}
         // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
@@ -833,6 +841,7 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:         OMPSimdlenClause
     // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:             value: Int 3
     // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 3
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop worker vector num_gangs(1) num_workers(2) vector_length(3){{$}}
@@ -892,6 +901,7 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:         OMPSimdlenClause
     // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:             value: Int 3
     // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 3
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop gang worker vector num_gangs(1) num_workers(2) vector_length(3){{$}}
@@ -965,6 +975,7 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
       // DMP-NEXT:     OMPSimdlenClause
       // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         value: Int 3
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
       // DMP-NEXT:     OMPSharedClause {{.*}}
       // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
@@ -1081,6 +1092,7 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:   impl: OMPDistributeSimdDirective
       // DMP-NEXT:     OMPSimdlenClause
       // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         value: Int 1
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
       // DMP-NOT:      OMP
       //
@@ -1213,6 +1225,7 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:       impl: OMPDistributeSimdDirective
     // DMP-NEXT:         OMPSimdlenClause
     // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:             value: Int 1
     // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 1
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop gang vector num_gangs(1) num_workers(nw) vector_length(1){{$}}
@@ -1270,6 +1283,7 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:       impl: OMPDistributeSimdDirective
     // DMP-NEXT:         OMPSimdlenClause
     // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:             value: Int 1
     // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 1
     // DMP-NOT:          OMP
     // DMP:            CallExpr
@@ -1388,6 +1402,7 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:           impl: OMPSimdDirective
     // DMP-NEXT:             OMPSimdlenClause
     // DMP-NEXT:               ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:                 value: Int 1
     // DMP-NEXT:                 IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:             OMPSharedClause {{.*}} <implicit>
     // DMP-NEXT:               DeclRefExpr {{.*}} 'i' 'int'
@@ -1606,6 +1621,7 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:           impl: OMPSimdDirective
     // DMP-NEXT:             OMPSimdlenClause
     // DMP-NEXT:               ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:                 value: Int 1
     // DMP-NEXT:                 IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:             OMPSharedClause {{.*}} <implicit>
     // DMP-NEXT:               DeclRefExpr {{.*}} 'i' 'int'
@@ -1754,6 +1770,7 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:                 impl: OMPSimdDirective
     // DMP-NEXT:                   OMPSimdlenClause
     // DMP-NEXT:                     ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:                       value: Int 1
     // DMP-NEXT:                       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:                   OMPSharedClause {{.*}} <implicit>
     // DMP-NEXT:                     DeclRefExpr {{.*}} 'i' 'int'

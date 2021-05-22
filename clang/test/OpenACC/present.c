@@ -2,10 +2,11 @@
 // -fopenacc-present-omp.  Diagnostics about present in the translation are
 // tested in warn-acc-omp-map-present.c.
 //
-// The various cases covered here should be kept consistent with no-create.c
-// and update.c.  For example, a subarray that extends a subarray already
-// present is consistently considered not present, so the present clause
-// produces a runtime error and the no_create clause doesn't allocate.
+// The various cases covered here should be kept consistent with no-create.c,
+// update.c, and subarray-errors.c.  For example, a subarray that extends a
+// subarray already present is consistently considered not present, so the
+// present clause produces a runtime error and the no_create clause doesn't
+// allocate.
 
 // Check bad -fopenacc-present-omp values.
 //
@@ -67,6 +68,7 @@
 // RUN:   (case=caseDataSubarrayOverlapStart     not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=data    )
 // RUN:   (case=caseDataSubarrayOverlapEnd       not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=data    )
 // RUN:   (case=caseDataSubarrayConcat2          not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=data    )
+// RUN:   (case=caseDataSubarrayNonSubarray      not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=data    )
 // RUN:   (case=caseParallelScalarPresent        not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
 // RUN:   (case=caseParallelScalarAbsent         not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=parallel)
 // RUN:   (case=caseParallelArrayPresent         not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
@@ -76,6 +78,7 @@
 // RUN:   (case=caseParallelSubarrayOverlapStart not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=parallel)
 // RUN:   (case=caseParallelSubarrayOverlapEnd   not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=parallel)
 // RUN:   (case=caseParallelSubarrayConcat2      not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=parallel)
+// RUN:   (case=caseParallelSubarrayNonSubarray  not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=parallel)
 // RUN:   (case=caseParallelLoopScalarPresent    not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
 // RUN:   (case=caseParallelLoopScalarAbsent     not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=parallel)
 // RUN:   (case=caseConstPresent                 not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
@@ -539,6 +542,15 @@ CASE(caseDataSubarrayConcat2) {
   USE_VAR(arr[0] = 1);
 }
 
+CASE(caseDataSubarrayNonSubarray) {
+  int arr[5];
+  PRINT_SUBARRAY_INFO(arr, 1, 2);
+  PRINT_SUBARRAY_INFO(arr, 0, 5);
+  #pragma acc data copyin(arr[1:2])
+  #pragma acc data present(arr)
+  USE_VAR(arr[2] = 1);
+}
+
 // DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseParallelScalarPresent
 //       DMP: ACCDataDirective
 //  DMP-NEXT:   ACCCopyClause
@@ -650,6 +662,15 @@ CASE(caseParallelSubarrayConcat2) {
   #pragma acc data copy(arr[2:2])
   #pragma acc parallel present(arr[0:4])
   USE_VAR(arr[0] = 1);
+}
+
+CASE(caseParallelSubarrayNonSubarray) {
+  int arr[10];
+  PRINT_SUBARRAY_INFO(arr, 3, 4);
+  PRINT_SUBARRAY_INFO(arr, 0, 10);
+  #pragma acc data copyin(arr[3:4])
+  #pragma acc parallel present(arr)
+  USE_VAR(arr[4] = 1);
 }
 
 // DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseParallelLoopScalarPresent

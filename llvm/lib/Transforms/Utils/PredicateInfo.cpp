@@ -77,8 +77,7 @@ static Instruction *getBranchTerminator(const PredicateBase *PB) {
 
 // Given a predicate info that is a type of branching terminator, get the
 // edge this predicate info represents
-const std::pair<BasicBlock *, BasicBlock *>
-getBlockEdge(const PredicateBase *PB) {
+std::pair<BasicBlock *, BasicBlock *> getBlockEdge(const PredicateBase *PB) {
   assert(isa<PredicateWithEdge>(PB) &&
          "Not a predicate info type we know how to get an edge from.");
   const auto *PEdge = cast<PredicateWithEdge>(PB);
@@ -158,8 +157,7 @@ struct ValueDFS_Compare {
   }
 
   // For a phi use, or a non-materialized def, return the edge it represents.
-  const std::pair<BasicBlock *, BasicBlock *>
-  getBlockEdge(const ValueDFS &VD) const {
+  std::pair<BasicBlock *, BasicBlock *> getBlockEdge(const ValueDFS &VD) const {
     if (!VD.Def && VD.U) {
       auto *PHI = cast<PHINode>(VD.U->getUser());
       return std::make_pair(PHI->getIncomingBlock(*VD.U), PHI->getParent());
@@ -867,15 +865,14 @@ void PredicateInfoPrinterLegacyPass::getAnalysisUsage(AnalysisUsage &AU) const {
 
 // Replace ssa_copy calls created by PredicateInfo with their operand.
 static void replaceCreatedSSACopys(PredicateInfo &PredInfo, Function &F) {
-  for (auto I = inst_begin(F), E = inst_end(F); I != E;) {
-    Instruction *Inst = &*I++;
-    const auto *PI = PredInfo.getPredicateInfoFor(Inst);
-    auto *II = dyn_cast<IntrinsicInst>(Inst);
+  for (Instruction &Inst : llvm::make_early_inc_range(instructions(F))) {
+    const auto *PI = PredInfo.getPredicateInfoFor(&Inst);
+    auto *II = dyn_cast<IntrinsicInst>(&Inst);
     if (!PI || !II || II->getIntrinsicID() != Intrinsic::ssa_copy)
       continue;
 
-    Inst->replaceAllUsesWith(II->getOperand(0));
-    Inst->eraseFromParent();
+    Inst.replaceAllUsesWith(II->getOperand(0));
+    Inst.eraseFromParent();
   }
 }
 

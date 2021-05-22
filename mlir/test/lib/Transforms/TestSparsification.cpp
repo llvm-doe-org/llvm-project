@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/Vector/VectorOps.h"
 #include "mlir/Pass/Pass.h"
@@ -16,7 +17,7 @@ using namespace mlir;
 namespace {
 
 struct TestSparsification
-    : public PassWrapper<TestSparsification, FunctionPass> {
+    : public PassWrapper<TestSparsification, OperationPass<ModuleOp>> {
 
   TestSparsification() = default;
   TestSparsification(const TestSparsification &pass) {}
@@ -40,9 +41,17 @@ struct TestSparsification
                           llvm::cl::desc("Set the index type"),
                           llvm::cl::init(0)};
 
+  Option<bool> fastOutput{*this, "fast-output",
+                          llvm::cl::desc("Allows fast output buffers"),
+                          llvm::cl::init(false)};
+
+  Option<bool> lower{*this, "lower", llvm::cl::desc("Lower sparse primitives"),
+                     llvm::cl::init(false)};
+
   /// Registers all dialects required by testing.
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<scf::SCFDialect, vector::VectorDialect>();
+    registry
+        .insert<scf::SCFDialect, vector::VectorDialect, LLVM::LLVMDialect>();
   }
 
   /// Returns parallelization strategy given on command line.
@@ -90,17 +99,31 @@ struct TestSparsification
   }
 
   /// Runs the test on a function.
-  void runOnFunction() override {
+  void runOnOperation() override {
     auto *ctx = &getContext();
     OwningRewritePatternList patterns;
     // Translate strategy flags to strategy options.
     linalg::SparsificationOptions options(parallelOption(), vectorOption(),
                                           vectorLength, typeOption(ptrType),
-                                          typeOption(indType));
+                                          typeOption(indType), fastOutput);
     // Apply rewriting.
     linalg::populateSparsificationPatterns(ctx, patterns, options);
     vector::populateVectorToVectorCanonicalizationPatterns(patterns, ctx);
-    (void)applyPatternsAndFoldGreedily(getFunction(), std::move(patterns));
+    (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    // Lower sparse primitives to calls into runtime support library.
+    if (lower) {
+      OwningRewritePatternList conversionPatterns;
+      ConversionTarget target(*ctx);
+      target.addIllegalOp<linalg::SparseTensorFromPointerOp,
+                          linalg::SparseTensorToPointersMemRefOp,
+                          linalg::SparseTensorToIndicesMemRefOp,
+                          linalg::SparseTensorToValuesMemRefOp>();
+      target.addLegalOp<CallOp>();
+      linalg::populateSparsificationConversionPatterns(ctx, conversionPatterns);
+      if (failed(applyPartialConversion(getOperation(), target,
+                                        std::move(conversionPatterns))))
+        signalPassFailure();
+    }
   }
 };
 

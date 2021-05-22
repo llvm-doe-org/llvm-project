@@ -1714,6 +1714,15 @@ static unsigned extractDLC(unsigned CachePolicy) {
   return (CachePolicy >> 2) & 1;
 }
 
+static unsigned extractSWZ(unsigned CachePolicy) {
+  return (CachePolicy >> 3) & 1;
+}
+
+static unsigned extractSCCB(unsigned CachePolicy) {
+  return (CachePolicy >> 4) & 1;
+}
+
+
 MachineInstr *
 AMDGPURegisterBankInfo::selectStoreIntrinsic(MachineIRBuilder &B,
                                              MachineInstr &MI) const {
@@ -1782,6 +1791,8 @@ AMDGPURegisterBankInfo::selectStoreIntrinsic(MachineIRBuilder &B,
      .addImm(extractSLC(CachePolicy))
      .addImm(0) // tfe: FIXME: Remove from inst
      .addImm(extractDLC(CachePolicy))
+     .addImm(extractSWZ(CachePolicy))
+     .addImm(extractSCCB(CachePolicy))
      .cloneMemRefs(MI);
 
   // FIXME: We need a way to report failure from applyMappingImpl.
@@ -2382,6 +2393,7 @@ void AMDGPURegisterBankInfo::applyMappingImpl(
     return;
   }
   case AMDGPU::G_CTPOP:
+  case AMDGPU::G_BITREVERSE:
   case AMDGPU::G_CTLZ_ZERO_UNDEF:
   case AMDGPU::G_CTTZ_ZERO_UNDEF: {
     const RegisterBank *DstBank =
@@ -2839,7 +2851,9 @@ void AMDGPURegisterBankInfo::applyMappingImpl(
     executeInWaterfallLoop(MI, MRI, {2, 5});
     return;
   }
-  case AMDGPU::G_AMDGPU_BUFFER_ATOMIC_FADD: {
+  case AMDGPU::G_AMDGPU_BUFFER_ATOMIC_FADD:
+  case AMDGPU::G_AMDGPU_BUFFER_ATOMIC_FMIN:
+  case AMDGPU::G_AMDGPU_BUFFER_ATOMIC_FMAX: {
     applyDefaultMapping(OpdMapper);
     executeInWaterfallLoop(MI, MRI, {2, 5});
     return;
@@ -3507,6 +3521,8 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
   case AMDGPU::G_AMDGPU_CVT_F32_UBYTE1:
   case AMDGPU::G_AMDGPU_CVT_F32_UBYTE2:
   case AMDGPU::G_AMDGPU_CVT_F32_UBYTE3:
+  case AMDGPU::G_AMDGPU_CVT_PK_I16_I32:
+  case AMDGPU::G_AMDGPU_MED3:
     return getDefaultMappingVOP(MI);
   case AMDGPU::G_UMULH:
   case AMDGPU::G_SMULH: {
@@ -3592,10 +3608,10 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
       OpdsMapping[i] = AMDGPU::getValueMapping(Bank, SrcSize);
     break;
   }
+  case AMDGPU::G_BITREVERSE:
   case AMDGPU::G_BITCAST:
   case AMDGPU::G_INTTOPTR:
   case AMDGPU::G_PTRTOINT:
-  case AMDGPU::G_BITREVERSE:
   case AMDGPU::G_FABS:
   case AMDGPU::G_FNEG: {
     unsigned Size = MRI.getType(MI.getOperand(0).getReg()).getSizeInBits();
@@ -3805,7 +3821,9 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
   case AMDGPU::G_AMDGPU_BUFFER_ATOMIC_XOR:
   case AMDGPU::G_AMDGPU_BUFFER_ATOMIC_INC:
   case AMDGPU::G_AMDGPU_BUFFER_ATOMIC_DEC:
-  case AMDGPU::G_AMDGPU_BUFFER_ATOMIC_FADD: {
+  case AMDGPU::G_AMDGPU_BUFFER_ATOMIC_FADD:
+  case AMDGPU::G_AMDGPU_BUFFER_ATOMIC_FMIN:
+  case AMDGPU::G_AMDGPU_BUFFER_ATOMIC_FMAX: {
     // vdata_out
     OpdsMapping[0] = getVGPROpMapping(MI.getOperand(0).getReg(), MRI, *TRI);
 
@@ -3938,7 +3956,9 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     case Intrinsic::amdgcn_update_dpp:
     case Intrinsic::amdgcn_mov_dpp8:
     case Intrinsic::amdgcn_mov_dpp:
+    case Intrinsic::amdgcn_strict_wwm:
     case Intrinsic::amdgcn_wwm:
+    case Intrinsic::amdgcn_strict_wqm:
     case Intrinsic::amdgcn_wqm:
     case Intrinsic::amdgcn_softwqm:
     case Intrinsic::amdgcn_set_inactive:
@@ -4062,7 +4082,14 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     case Intrinsic::amdgcn_mfma_i32_32x32x4i8:
     case Intrinsic::amdgcn_mfma_i32_32x32x8i8:
     case Intrinsic::amdgcn_mfma_f32_32x32x2bf16:
-    case Intrinsic::amdgcn_mfma_f32_32x32x4bf16: {
+    case Intrinsic::amdgcn_mfma_f32_32x32x4bf16:
+    case Intrinsic::amdgcn_mfma_f32_32x32x4bf16_1k:
+    case Intrinsic::amdgcn_mfma_f32_16x16x4bf16_1k:
+    case Intrinsic::amdgcn_mfma_f32_4x4x4bf16_1k:
+    case Intrinsic::amdgcn_mfma_f32_32x32x8bf16_1k:
+    case Intrinsic::amdgcn_mfma_f32_16x16x16bf16_1k:
+    case Intrinsic::amdgcn_mfma_f64_16x16x4f64:
+    case Intrinsic::amdgcn_mfma_f64_4x4x4f64: {
       // Default for MAI intrinsics.
       // srcC can also be an immediate which can be folded later.
       // FIXME: Should we eventually add an alternative mapping with AGPR src
@@ -4136,6 +4163,11 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     }
     case Intrinsic::amdgcn_global_atomic_fadd:
     case Intrinsic::amdgcn_global_atomic_csub:
+    case Intrinsic::amdgcn_global_atomic_fmin:
+    case Intrinsic::amdgcn_global_atomic_fmax:
+    case Intrinsic::amdgcn_flat_atomic_fadd:
+    case Intrinsic::amdgcn_flat_atomic_fmin:
+    case Intrinsic::amdgcn_flat_atomic_fmax:
       return getDefaultMappingAllVGPR(MI);
     case Intrinsic::amdgcn_ds_ordered_add:
     case Intrinsic::amdgcn_ds_ordered_swap: {
@@ -4192,6 +4224,11 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
       OpdsMapping[3] = AMDGPU::getValueMapping(AMDGPU::SGPRRegBankID, WaveSize);
       break;
     }
+    case Intrinsic::amdgcn_live_mask: {
+      OpdsMapping[0] = AMDGPU::getValueMapping(AMDGPU::VCCRegBankID, 1);
+      break;
+    }
+    case Intrinsic::amdgcn_wqm_demote:
     case Intrinsic::amdgcn_kill: {
       OpdsMapping[1] = AMDGPU::getValueMapping(AMDGPU::VCCRegBankID, 1);
       break;

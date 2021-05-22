@@ -426,9 +426,8 @@ CodeExtractor::findOrCreateBlockForHoisting(BasicBlock *CommonExitBlock) {
   BasicBlock *NewExitBlock = CommonExitBlock->splitBasicBlock(
       CommonExitBlock->getFirstNonPHI()->getIterator());
 
-  for (auto PI = pred_begin(CommonExitBlock), PE = pred_end(CommonExitBlock);
-       PI != PE;) {
-    BasicBlock *Pred = *PI++;
+  for (BasicBlock *Pred :
+       llvm::make_early_inc_range(predecessors(CommonExitBlock))) {
     if (Blocks.count(Pred))
       continue;
     Pred->getTerminator()->replaceUsesOfWith(CommonExitBlock, NewExitBlock);
@@ -1611,15 +1610,14 @@ CodeExtractor::extractCodeRegion(const CodeExtractorAnalysisCache &CEAC) {
   DenseMap<BasicBlock *, BlockFrequency> ExitWeights;
   SmallPtrSet<BasicBlock *, 1> ExitBlocks;
   for (BasicBlock *Block : Blocks) {
-    for (succ_iterator SI = succ_begin(Block), SE = succ_end(Block); SI != SE;
-         ++SI) {
-      if (!Blocks.count(*SI)) {
+    for (BasicBlock *Succ : successors(Block)) {
+      if (!Blocks.count(Succ)) {
         // Update the branch weight for this successor.
         if (BFI) {
-          BlockFrequency &BF = ExitWeights[*SI];
-          BF += BFI->getBlockFreq(Block) * BPI->getEdgeProbability(Block, *SI);
+          BlockFrequency &BF = ExitWeights[Succ];
+          BF += BFI->getBlockFreq(Block) * BPI->getEdgeProbability(Block, Succ);
         }
-        ExitBlocks.insert(*SI);
+        ExitBlocks.insert(Succ);
       }
     }
   }

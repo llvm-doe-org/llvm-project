@@ -98,7 +98,7 @@ getInterfaceVariables(spirv::FuncOp funcOp,
   });
   for (auto &var : interfaceVarSet) {
     interfaceVars.push_back(SymbolRefAttr::get(
-        cast<spirv::GlobalVariableOp>(var).sym_name(), funcOp.getContext()));
+        funcOp.getContext(), cast<spirv::GlobalVariableOp>(var).sym_name()));
   }
   return success();
 }
@@ -139,7 +139,7 @@ static LogicalResult lowerEntryPointABIAttr(spirv::FuncOp funcOp,
   SmallVector<int32_t, 3> localSize(localSizeAttr.getValues<int32_t>());
   builder.create<spirv::ExecutionModeOp>(
       funcOp.getLoc(), funcOp, spirv::ExecutionMode::LocalSize, localSize);
-  funcOp.removeAttr(entryPointAttrName);
+  funcOp->removeAttr(entryPointAttrName);
   return success();
 }
 

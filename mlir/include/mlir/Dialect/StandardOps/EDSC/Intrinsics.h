@@ -35,7 +35,6 @@ using std_muli = ValueBuilder<MulIOp>;
 using std_mulf = ValueBuilder<MulFOp>;
 using std_memref_cast = ValueBuilder<MemRefCastOp>;
 using std_ret = OperationBuilder<ReturnOp>;
-using std_rsqrt = ValueBuilder<RsqrtOp>;
 using std_select = ValueBuilder<SelectOp>;
 using std_load = ValueBuilder<LoadOp>;
 using std_sign_extendi = ValueBuilder<SignExtendIOp>;
@@ -44,7 +43,6 @@ using std_store = OperationBuilder<StoreOp>;
 using std_subf = ValueBuilder<SubFOp>;
 using std_subi = ValueBuilder<SubIOp>;
 using std_sub_view = ValueBuilder<SubViewOp>;
-using std_tanh = ValueBuilder<TanhOp>;
 using std_tensor_load = ValueBuilder<TensorLoadOp>;
 using std_tensor_store = OperationBuilder<TensorStoreOp>;
 using std_view = ValueBuilder<ViewOp>;
@@ -61,6 +59,16 @@ struct SExtiValueBuilder : public ValueBuilder<SignExtendIOp> {
 };
 
 using std_sexti32 = SExtiValueBuilder<32>;
+
+template <CmpFPredicate Predicate>
+struct CmpFValueBuilder : public ValueBuilder<CmpFOp> {
+  using ValueBuilder<CmpFOp>::ValueBuilder;
+  template <typename... Args>
+  CmpFValueBuilder(Args... args) : ValueBuilder<CmpFOp>(Predicate, args...) {}
+};
+
+using std_cmpf_ogt = CmpFValueBuilder<CmpFPredicate::OGT>;
+using std_cmpf_olt = CmpFValueBuilder<CmpFPredicate::OLT>;
 
 /// Branches into `block` with `operands`.
 BranchOp std_br(Block *block, ValueRange operands);

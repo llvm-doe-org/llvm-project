@@ -784,10 +784,10 @@ template <> struct MDNodeSubsetEqualImpl<DISubprogram> {
 
     // Compare to the RHS.
     // FIXME: We need to compare template parameters here to avoid incorrect
-    // collisions in mapMetadata when RF_MoveDistinctMDs and a ODR-DISubprogram
-    // has a non-ODR template parameter (i.e., a DICompositeType that does not
-    // have an identifier). Eventually we should decouple ODR logic from
-    // uniquing logic.
+    // collisions in mapMetadata when RF_ReuseAndMutateDistinctMDs and a
+    // ODR-DISubprogram has a non-ODR template parameter (i.e., a
+    // DICompositeType that does not have an identifier). Eventually we should
+    // decouple ODR logic from uniquing logic.
     return IsDefinition == RHS->isDefinition() && Scope == RHS->getRawScope() &&
            LinkageName == RHS->getRawLinkageName() &&
            TemplateParams == RHS->getRawTemplateParams();
@@ -1313,9 +1313,6 @@ public:
   /// OwnedModules - The set of modules instantiated in this context, and which
   /// will be automatically deleted if this context is deleted.
   SmallPtrSet<Module*, 4> OwnedModules;
-
-  LLVMContext::InlineAsmDiagHandlerTy InlineAsmDiagHandler = nullptr;
-  void *InlineAsmDiagContext = nullptr;
 
   /// The main remark streamer used by all the other streamers (e.g. IR, MIR,
   /// frontends, etc.). This should only be used by the specific streamers, and

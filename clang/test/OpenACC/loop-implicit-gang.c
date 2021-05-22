@@ -218,6 +218,7 @@ int main() {
     // DMP-NEXT:   impl: OMPDistributeSimdDirective
     // DMP-NEXT:     OMPSimdlenClause
     // DMP-NEXT:       ConstantExpr
+    // DMP-NEXT:         value: Int 2
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     // DMP-NOT:      OMP
     //
@@ -538,6 +539,7 @@ int main() {
   // DMP-NEXT:       impl: OMPDistributeSimdDirective
   // DMP-NEXT:         OMPSimdlenClause
   // DMP-NEXT:           ConstantExpr
+  // DMP-NEXT:             value: Int 2
   // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 2
   // DMP-NOT:          OMP
   //
@@ -895,6 +897,7 @@ int main() {
       // DMP-NEXT:   impl: OMPSimdDirective
       // DMP-NEXT:     OMPSimdlenClause
       // DMP-NEXT:       ConstantExpr
+      // DMP-NEXT:         value: Int 2
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
       // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
@@ -1210,6 +1213,7 @@ int main() {
     // DMP-NEXT:   impl: OMPSimdDirective
     // DMP-NEXT:     OMPSimdlenClause
     // DMP-NEXT:       ConstantExpr
+    // DMP-NEXT:         value: Int 2
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'

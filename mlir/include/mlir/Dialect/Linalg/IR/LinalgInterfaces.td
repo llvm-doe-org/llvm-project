@@ -34,6 +34,41 @@ def LinalgContractionOpInterface : OpInterface<"ContractionOpInterface"> {
   }];
   let cppNamespace = "::mlir::linalg";
   let verify = [{ return detail::verifyContractionInterface($_op); }];
+  let methods = [
+    InterfaceMethod<
+    /*desc=*/[{
+      Returns whether the given op has indexing maps that correspond to a
+      row-major matmul operation.
+    }],
+    /*retTy=*/"bool",
+    /*methodName=*/"isRowMajorMatmul",
+    /*args=*/(ins),
+    /*methodBody=*/[{
+        return mlir::isRowMajorMatmul($_op.indexing_maps());
+    }]>,
+    InterfaceMethod<
+    /*desc=*/[{
+      Returns whether the given op has indexing maps that correspond to a
+      column-major matmul operation.
+    }],
+    /*retTy=*/"bool",
+    /*methodName=*/"isColumnMajorMatmul",
+    /*args=*/(ins),
+    /*methodBody=*/[{
+        return mlir::isColumnMajorMatmul($_op.indexing_maps());
+    }]>,
+    InterfaceMethod<
+    /*desc=*/[{
+      Returns whether the given op has indexing maps that correspond to a
+      row-major batch matmul operation.
+    }],
+    /*retTy=*/"bool",
+    /*methodName=*/"isRowMajorBatchMatmul",
+    /*args=*/(ins),
+    /*methodBody=*/[{
+        return mlir::isRowMajorBatchMatmul($_op.indexing_maps());
+    }]>,
+  ];
 }
 
 // The 'LinalgStructuredInterface' provides access to the 'LinalgOp' interface.
@@ -644,6 +679,22 @@ def LinalgStructuredInterface : OpInterface<"LinalgOp"> {
     >,
     InterfaceMethod<
       /*desc=*/[{
+        Return true if `opOperand` is an output tensor.
+      }],
+      /*retTy=*/"bool",
+      /*methodName=*/"isOutputTensor",
+      /*args=*/(ins "OpOperand *":$opOperand),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        if (!opOperand->get().getType().template isa<RankedTensorType>())
+          return false;
+        if (opOperand->getOperandNumber() >= $_op.getNumInputs())
+          return true;
+        return false;
+      }]
+    >,
+    InterfaceMethod<
+      /*desc=*/[{
         Return true if `opOperand` is an init tensor. This is true when it is
         an output tensor operand whose value is used in the payload region.
       }],
@@ -652,9 +703,7 @@ def LinalgStructuredInterface : OpInterface<"LinalgOp"> {
       /*args=*/(ins "OpOperand *":$opOperand),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
-        if (!opOperand->get().getType().template isa<RankedTensorType>())
-          return false;
-        if (opOperand->getOperandNumber() < $_op.getNumInputs())
+        if (!$_op.isOutputTensor(opOperand))
           return false;
         return payloadUsesValueFromOpOperand(opOperand);
       }]
@@ -812,6 +861,29 @@ def LinalgStructuredInterface : OpInterface<"LinalgOp"> {
       /*defaultImplementation=*/[{
         return $_op.iterator_types();
       }]
+    >,
+    InterfaceMethod<
+      /*desc=*/[{
+        Return true if the indexing map is depending on the current op instance.
+        This means that the indexing map is dynamically synthesized by using the
+        op instance's concrete attributes, instead of being static for all
+        instances of the same op kind.
+      }],
+      /*retTy=*/"bool",
+      /*methodName=*/"hasDynamicIndexingMaps",
+      /*args=*/(ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{ return false; }]
+    >,
+    InterfaceMethod<
+      /*desc=*/[{
+        Verify all attributes used by indexing maps are valid.
+      }],
+      /*retTy=*/"LogicalResult",
+      /*methodName=*/"verifyIndexingMapRequiredAttributes",
+      /*args=*/(ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{ return success(); }]
     >,
     InterfaceMethod<
       /*desc=*/[{
@@ -1033,20 +1105,6 @@ def LinalgStructuredInterface : OpInterface<"LinalgOp"> {
     //===------------------------------------------------------------------===//
     // Other static interface methods.
     //===------------------------------------------------------------------===//
-    StaticInterfaceMethod<
-      /*desc=*/[{
-        Create an operation of the current type with the given location,
-        operands, and attributes.
-      }],
-      /*retTy=*/"Operation *",
-      /*methodName=*/"create",
-      (ins "OpBuilder &":$builder, "Location":$loc, "TypeRange":$resultTypes,
-           "ValueRange":$operands,
-           "ArrayRef<NamedAttribute>":$attributes), [{
-        return builder.create<ConcreteOp>(
-          loc, resultTypes, operands, attributes);
-      }]
-    >,
     InterfaceMethod<
       /*desc=*/[{
         Clone the current operation with the given location and operands. This
@@ -1059,14 +1117,34 @@ def LinalgStructuredInterface : OpInterface<"LinalgOp"> {
       (ins "OpBuilder &":$b, "Location":$loc, "TypeRange":$resultTypes,
            "ValueRange":$operands),
       [{
-        BlockAndValueMapping map;
-        unsigned numRegions = $_op->getNumRegions();
-        Operation *res = create(b, loc, resultTypes, operands, $_op->getAttrs());
-        assert(res->getNumRegions() == numRegions && "inconsistent # regions");
-        for (unsigned ridx = 0; ridx < numRegions; ++ridx)
-          $_op->getRegion(ridx).cloneInto(
-            &res->getRegion(ridx), map);
-        return res;
+        BlockAndValueMapping bvm;
+        OperationState state(
+          loc, ConcreteOp::getOperationName(), operands, resultTypes,
+          $_op->getAttrs());
+        for (Region &r : $_op->getRegions())
+          r.cloneInto(state.addRegion(), bvm);
+        return b.createOperation(state);
+      }]
+    >,
+    InterfaceMethod<
+      /*desc=*/[{
+        Clone the current operation with the given location, operands
+        and BlockAndValueMapping. This is used to abstract away the
+        optional underlying region creation. This does not change the
+        balance between input, output_buffer and init_tensors
+        operands.
+      }],
+      /*retTy=*/"Operation *",
+      /*methodName=*/"cloneWithMapper",
+      (ins "OpBuilder &":$b, "Location":$loc, "TypeRange":$resultTypes,
+           "ValueRange":$operands, "BlockAndValueMapping &":$bvm),
+      [{
+        OperationState state(
+          loc, ConcreteOp::getOperationName(), operands, resultTypes,
+          $_op->getAttrs());
+        for (Region &r : $_op->getRegions())
+          r.cloneInto(state.addRegion(), bvm);
+        return b.createOperation(state);
       }]
     >,
     StaticInterfaceMethod<
@@ -1075,7 +1153,7 @@ def LinalgStructuredInterface : OpInterface<"LinalgOp"> {
         Returns a null function if this named op does not define a region
         builder.
       }],
-      /*retTy=*/"std::function<void(Block &)>",
+      /*retTy=*/"std::function<void(Block &, ValueRange)>",
       /*methodName=*/"getRegionBuilder",
       (ins),
       [{ return ConcreteOp::getRegionBuilder(); }]

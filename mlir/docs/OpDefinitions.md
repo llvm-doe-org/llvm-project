@@ -451,7 +451,7 @@ def MyOp : Op<"my_op", []> {
   let arguments = (ins F32Attr:$attr);
 
   let builders = [
-    OpBuilderDAG<(ins "float":$val)>
+    OpBuilder<(ins "float":$val)>
   ];
 }
 ```
@@ -489,7 +489,7 @@ def MyOp : Op<"my_op", []> {
   let arguments = (ins F32Attr:$attr);
 
   let builders = [
-    OpBuilderDAG<(ins "float":$val), [{
+    OpBuilder<(ins "float":$val), [{
       $_state.addAttribute("attr", $_builder.getF32FloatAttr(val));
     }]>
   ];
@@ -511,7 +511,7 @@ def MyOp : Op<"my_op", []> {
   let arguments = (ins F32Attr:$attr);
 
   let builders = [
-    OpBuilderDAG<(ins CArg<"float", "0.5f">:$val), [{
+    OpBuilder<(ins CArg<"float", "0.5f">:$val), [{
       $_state.addAttribute("attr", $_builder.getF32FloatAttr(val));
     }]>
   ];
@@ -613,6 +613,15 @@ The available directives are as follows:
 
     -   Represents all of the operands of an operation.
 
+*   `ref` ( input )
+
+    -   Represents a reference to the a variable or directive, that must have
+        already been resolved, that may be used as a parameter to a `custom`
+        directive.
+    -   Used to pass previously parsed entities to custom directives.
+    -   The input may be any directive or variable, aside from `functional-type`
+        and `custom`.
+
 *   `regions`
 
     -   Represents all of the regions of an operation.
@@ -630,14 +639,6 @@ The available directives are as follows:
     -   Represents the type of the given input.
     -   `input` must be either an operand or result [variable](#variables), the
         `operands` directive, or the `results` directive.
-
-*   `type_ref` ( input )
-
-    -   Represents a reference to the type of the given input that must have
-        already been resolved.
-    -   `input` must be either an operand or result [variable](#variables), the
-        `operands` directive, or the `results` directive.
-    -   Used to pass previously parsed types to custom directives.
 
 #### Literals
 
@@ -716,6 +717,10 @@ declarative parameter to `parse` method argument is detailed below:
     -   Single: `OpAsmParser::OperandType &`
     -   Optional: `Optional<OpAsmParser::OperandType> &`
     -   Variadic: `SmallVectorImpl<OpAsmParser::OperandType> &`
+*   Ref Directives
+    -   A reference directive is passed to the parser using the same mapping as
+        the input operand. For example, a single region would be passed as a
+        `Region &`.
 *   Region Variables
     -   Single: `Region &`
     -   Variadic: `SmallVectorImpl<std::unique_ptr<Region>> &`
@@ -726,10 +731,6 @@ declarative parameter to `parse` method argument is detailed below:
     -   Single: `Type &`
     -   Optional: `Type &`
     -   Variadic: `SmallVectorImpl<Type> &`
-*   TypeRef Directives
-    -   Single: `Type`
-    -   Optional: `Type`
-    -   Variadic: `const SmallVectorImpl<Type> &`
 *   `attr-dict` Directive: `NamedAttrList &`
 
 When a variable is optional, the value should only be specified if the variable
@@ -748,6 +749,10 @@ declarative parameter to `print` method argument is detailed below:
     -   Single: `Value`
     -   Optional: `Value`
     -   Variadic: `OperandRange`
+*   Ref Directives
+    -   A reference directive is passed to the printer using the same mapping as
+        the input operand. For example, a single region would be passed as a
+        `Region &`.
 *   Region Variables
     -   Single: `Region &`
     -   Variadic: `MutableArrayRef<Region>`
@@ -755,10 +760,6 @@ declarative parameter to `print` method argument is detailed below:
     -   Single: `Block *`
     -   Variadic: `SuccessorRange`
 *   Type Directives
-    -   Single: `Type`
-    -   Optional: `Type`
-    -   Variadic: `TypeRange`
-*   TypeRef Directives
     -   Single: `Type`
     -   Optional: `Type`
     -   Variadic: `TypeRange`
@@ -1406,8 +1407,9 @@ def IntegerType : Test_Type<"TestInteger"> {
       return Type();
     if ($_parser.parseGreater())
       return Type();
-    return get(ctxt, width);
+    return get($_ctxt, width);
   }];
+}
 ```
 
 ### Type name
@@ -1523,11 +1525,10 @@ responsible for parsing/printing the types in `Dialect::printType` and
 -   If the `genAccessors` field is 1 (the default) accessor methods will be
     generated on the Type class (e.g. `int getWidth() const` in the example
     above).
--   If the `genVerifyInvariantsDecl` field is set, a declaration for a method
-    `static LogicalResult verifyConstructionInvariants(Location, parameters...)`
-    is added to the class as well as a `getChecked(Location, parameters...)`
-    method which gets the result of `verifyConstructionInvariants` before
-    calling `get`.
+-   If the `genVerifyDecl` field is set, a declaration for a method `static
+    LogicalResult verify(emitErrorFn, parameters...)` is added to the class as
+    well as a `getChecked(emitErrorFn, parameters...)` method which checks the
+    result of `verify` before calling `get`.
 -   The `storageClass` field can be used to set the name of the storage class.
 -   The `storageNamespace` field is used to set the namespace where the storage
     class should sit. Defaults to "detail".
@@ -1553,9 +1554,9 @@ The following builders are generated:
 // given set of parameters.
 static MyType get(MLIRContext *context, int intParam);
 
-// If `genVerifyInvariantsDecl` is set to 1, the following method is also
-// generated.
-static MyType getChecked(Location loc, int intParam);
+// If `genVerifyDecl` is set to 1, the following method is also generated.
+static MyType getChecked(function_ref<InFlightDiagnostic()> emitError,
+                         MLIRContext *context, int intParam);
 ```
 
 If these autogenerated methods are not desired, such as when they conflict with

@@ -269,12 +269,13 @@ convertScalarType(const spirv::TargetEnv &targetEnv, spirv::ScalarType type,
 static Optional<Type>
 convertVectorType(const spirv::TargetEnv &targetEnv, VectorType type,
                   Optional<spirv::StorageClass> storageClass = {}) {
+  if (type.getRank() == 1 && type.getNumElements() == 1)
+    return type.getElementType();
+
   if (!spirv::CompositeType::isValid(type)) {
-    // TODO: One-element vector types can be translated into scalar
-    // types. Vector types with more than four elements can be translated into
+    // TODO: Vector types with more than four elements can be translated into
     // array types.
-    LLVM_DEBUG(llvm::dbgs()
-               << type << " illegal: 1- and > 4-element unimplemented\n");
+    LLVM_DEBUG(llvm::dbgs() << type << " illegal: > 4-element unimplemented\n");
     return llvm::None;
   }
 
@@ -343,7 +344,8 @@ static Optional<Type> convertTensorType(const spirv::TargetEnv &targetEnv,
 static Optional<Type> convertMemrefType(const spirv::TargetEnv &targetEnv,
                                         MemRefType type) {
   Optional<spirv::StorageClass> storageClass =
-      SPIRVTypeConverter::getStorageClassForMemorySpace(type.getMemorySpace());
+      SPIRVTypeConverter::getStorageClassForMemorySpace(
+          type.getMemorySpaceAsInt());
   if (!storageClass) {
     LLVM_DEBUG(llvm::dbgs()
                << type << " illegal: cannot convert memory space\n");
@@ -497,7 +499,7 @@ FuncOpConversion::matchAndRewrite(FuncOp funcOp, ArrayRef<Value> operands,
                                           : TypeRange()));
 
   // Copy over all attributes other than the function name and type.
-  for (const auto &namedAttr : funcOp.getAttrs()) {
+  for (const auto &namedAttr : funcOp->getAttrs()) {
     if (namedAttr.first != impl::getTypeAttrName() &&
         namedAttr.first != SymbolTable::getSymbolAttrName())
       newFuncOp->setAttr(namedAttr.first, namedAttr.second);
@@ -525,7 +527,7 @@ void mlir::populateBuiltinFuncToSPIRVPatterns(
 static spirv::GlobalVariableOp getBuiltinVariable(Block &body,
                                                   spirv::BuiltIn builtin) {
   // Look through all global variables in the given `body` block and check if
-  // there is a spv.globalVariable that has the same `builtin` attribute.
+  // there is a spv.GlobalVariable that has the same `builtin` attribute.
   for (auto varOp : body.getOps<spirv::GlobalVariableOp>()) {
     if (auto builtinAttr = varOp->getAttrOfType<StringAttr>(
             spirv::SPIRVDialect::getAttributeName(

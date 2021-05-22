@@ -147,6 +147,26 @@ static Value ceilDivPositive(OpBuilder &builder, Location loc, Value dividend,
   return builder.create<SignedDivIOp>(loc, sum, divisor);
 }
 
+/// Helper to replace uses of loop carried values (iter_args) and loop
+/// yield values while promoting single iteration affine.for and scf.for ops.
+template <typename AffineOrSCFForOp>
+static void replaceIterArgsAndYieldResults(AffineOrSCFForOp forOp) {
+  static_assert(
+      llvm::is_one_of<AffineOrSCFForOp, AffineForOp, scf::ForOp>::value,
+      "only for affine.for and scf.for ops");
+  // Replace uses of iter arguments with iter operands (initial values).
+  auto iterOperands = forOp.getIterOperands();
+  auto iterArgs = forOp.getRegionIterArgs();
+  for (auto e : llvm::zip(iterOperands, iterArgs))
+    std::get<1>(e).replaceAllUsesWith(std::get<0>(e));
+
+  // Replace uses of loop results with the values yielded by the loop.
+  auto outerResults = forOp.getResults();
+  auto innerResults = forOp.getBody()->getTerminator()->getOperands();
+  for (auto e : llvm::zip(outerResults, innerResults))
+    std::get<0>(e).replaceAllUsesWith(std::get<1>(e));
+}
+
 /// Promotes the loop body of a forOp to its containing block if the forOp
 /// was known to have a single iteration.
 // TODO: extend this for arbitrary affine bounds.
@@ -181,6 +201,9 @@ LogicalResult mlir::promoteIfSingleIteration(AffineForOp forOp) {
       }
     }
   }
+
+  replaceIterArgsAndYieldResults(forOp);
+
   // Move the loop body operations, except for its terminator, to the loop's
   // containing block.
   forOp.getBody()->back().erase();
@@ -206,17 +229,7 @@ LogicalResult mlir::promoteIfSingleIteration(scf::ForOp forOp) {
   auto iv = forOp.getInductionVar();
   iv.replaceAllUsesWith(lbCstOp);
 
-  // Replace uses of iterArgs with iterOperands.
-  auto iterOperands = forOp.getIterOperands();
-  auto iterArgs = forOp.getRegionIterArgs();
-  for (auto e : llvm::zip(iterOperands, iterArgs))
-    std::get<1>(e).replaceAllUsesWith(std::get<0>(e));
-
-  // Replace uses of loop results with the values yielded by the loop.
-  auto outerResults = forOp.getResults();
-  auto innerResults = forOp.getBody()->getTerminator()->getOperands();
-  for (auto e : llvm::zip(outerResults, innerResults))
-    std::get<0>(e).replaceAllUsesWith(std::get<1>(e));
+  replaceIterArgsAndYieldResults(forOp);
 
   // Move the loop body operations, except for its terminator, to the loop's
   // containing block.
@@ -835,7 +848,9 @@ constructTiledIndexSetHyperRect(MutableArrayRef<AffineForOp> origLoops,
     OperandRange newUbOperands = origLoops[i].getUpperBoundOperands();
     newLoops[i].setLowerBound(newLbOperands, origLoops[i].getLowerBoundMap());
     newLoops[i].setUpperBound(newUbOperands, origLoops[i].getUpperBoundMap());
-    newLoops[i].setStep(tileSizes[i]);
+    // If the step size of original loop is x and tileSize is y then after
+    // tiling the tile space loops' step size becomes x*y.
+    newLoops[i].setStep(tileSizes[i] * origLoops[i].getStep());
   }
   // Bounds for intra-tile loops.
   for (unsigned i = 0; i < width; i++) {
@@ -845,20 +860,23 @@ constructTiledIndexSetHyperRect(MutableArrayRef<AffineForOp> origLoops,
     AffineMap lbMap = b.getDimIdentityMap();
     newLoops[width + i].setLowerBound(
         /*operands=*/newLoops[i].getInductionVar(), lbMap);
+    // The step sizes of intra-tile loops is just the original loops' step size.
+    newLoops[width + i].setStep(origLoops[i].getStep());
 
     // Set the upper bound.
     if (mayBeConstantCount && mayBeConstantCount.getValue() < tileSizes[i]) {
       // Trip count is less than the tile size: upper bound is lower bound +
-      // trip count.
-      AffineMap ubMap =
-          b.getSingleDimShiftAffineMap(mayBeConstantCount.getValue());
+      // trip count * stepSize.
+      AffineMap ubMap = b.getSingleDimShiftAffineMap(
+          mayBeConstantCount.getValue() * origLoops[i].getStep());
       newLoops[width + i].setUpperBound(
           /*operands=*/newLoops[i].getInductionVar(), ubMap);
     } else if (largestDiv % tileSizes[i] != 0) {
-      // Intra-tile loop ii goes from i to min(i + tileSize, ub_i).
+      // Intra-tile loop ii goes from i to min(i + tileSize * stepSize, ub_i).
       // Construct the upper bound map; the operands are the original operands
       // with 'i' (tile-space loop) appended to it. The new upper bound map is
-      // the original one with an additional expression i + tileSize appended.
+      // the original one with an additional expression i + tileSize * stepSize
+      // appended.
 
       // Add dim operands from original upper bound.
       SmallVector<Value, 4> ubOperands;
@@ -879,8 +897,8 @@ constructTiledIndexSetHyperRect(MutableArrayRef<AffineForOp> origLoops,
       boundExprs.reserve(1 + origUbMap.getNumResults());
       AffineExpr dim = b.getAffineDimExpr(origUbMap.getNumDims());
       // The new upper bound map is the original one with an additional
-      // expression i + tileSize appended.
-      boundExprs.push_back(dim + tileSizes[i]);
+      // expression i + tileSize * stepSize (of original loop) appended.
+      boundExprs.push_back(dim + tileSizes[i] * origLoops[i].getStep());
       boundExprs.append(origUbMap.getResults().begin(),
                         origUbMap.getResults().end());
       AffineMap ubMap =
@@ -890,7 +908,8 @@ constructTiledIndexSetHyperRect(MutableArrayRef<AffineForOp> origLoops,
     } else {
       // No need of the min expression.
       AffineExpr dim = b.getAffineDimExpr(0);
-      AffineMap ubMap = AffineMap::get(1, 0, dim + tileSizes[i]);
+      AffineMap ubMap =
+          AffineMap::get(1, 0, dim + tileSizes[i] * origLoops[i].getStep());
       newLoops[width + i].setUpperBound(newLoops[i].getInductionVar(), ubMap);
     }
   }
@@ -1127,6 +1146,17 @@ LogicalResult mlir::loopUnrollByFactor(AffineForOp forOp,
   if (getLargestDivisorOfTripCount(forOp) % unrollFactor != 0) {
     OpBuilder builder(forOp->getBlock(), std::next(Block::iterator(forOp)));
     auto cleanupForOp = cast<AffineForOp>(builder.clone(*forOp));
+
+    // Update users of loop results.
+    auto results = forOp.getResults();
+    auto cleanupResults = cleanupForOp.getResults();
+    auto cleanupIterOperands = cleanupForOp.getIterOperands();
+
+    for (auto e : llvm::zip(results, cleanupResults, cleanupIterOperands)) {
+      std::get<0>(e).replaceAllUsesWith(std::get<1>(e));
+      cleanupForOp->replaceUsesOfWith(std::get<2>(e), std::get<0>(e));
+    }
+
     AffineMap cleanupMap;
     SmallVector<Value, 4> cleanupOperands;
     getCleanupLoopLowerBound(forOp, unrollFactor, cleanupMap, cleanupOperands);
@@ -1142,18 +1172,21 @@ LogicalResult mlir::loopUnrollByFactor(AffineForOp forOp,
     forOp.setUpperBound(cleanupOperands, cleanupMap);
   }
 
+  ValueRange iterArgs(forOp.getRegionIterArgs());
+  auto yieldedValues = forOp.getBody()->getTerminator()->getOperands();
+
   // Scale the step of loop being unrolled by unroll factor.
   int64_t step = forOp.getStep();
   forOp.setStep(step * unrollFactor);
-  generateUnrolledLoop(forOp.getBody(), forOp.getInductionVar(), unrollFactor,
-                       [&](unsigned i, Value iv, OpBuilder b) {
-                         // iv' = iv + i * step
-                         auto d0 = b.getAffineDimExpr(0);
-                         auto bumpMap = AffineMap::get(1, 0, d0 + i * step);
-                         return b.create<AffineApplyOp>(forOp.getLoc(), bumpMap,
-                                                        iv);
-                       },
-                       /*iterArgs=*/{}, /*yieldedValues=*/{});
+  generateUnrolledLoop(
+      forOp.getBody(), forOp.getInductionVar(), unrollFactor,
+      [&](unsigned i, Value iv, OpBuilder b) {
+        // iv' = iv + i * step
+        auto d0 = b.getAffineDimExpr(0);
+        auto bumpMap = AffineMap::get(1, 0, d0 + i * step);
+        return b.create<AffineApplyOp>(forOp.getLoc(), bumpMap, iv);
+      },
+      /*iterArgs=*/iterArgs, /*yieldedValues=*/yieldedValues);
 
   // Promote the loop body up if this has turned into a single iteration loop.
   (void)promoteIfSingleIteration(forOp);
@@ -1803,9 +1836,9 @@ Loops mlir::tilePerfectlyNested(scf::ForOp rootForOp, ArrayRef<Value> sizes) {
 // Return failure when any op fails to hoist.
 static LogicalResult hoistOpsBetween(scf::ForOp outer, scf::ForOp inner) {
   SetVector<Operation *> forwardSlice;
-  getForwardSlice(outer.getOperation(), &forwardSlice, [&inner](Operation *op) {
-    return op != inner.getOperation();
-  });
+  getForwardSlice(
+      outer.getInductionVar(), &forwardSlice,
+      [&inner](Operation *op) { return op != inner.getOperation(); });
   LogicalResult status = success();
   SmallVector<Operation *, 8> toHoist;
   for (auto &op : outer.getBody()->without_terminator()) {
@@ -1817,8 +1850,8 @@ static LogicalResult hoistOpsBetween(scf::ForOp outer, scf::ForOp inner) {
       status = failure();
       continue;
     }
-    // Skip scf::ForOp, these are not considered a failure.
-    if (op.getNumRegions() > 0)
+    // Skip intermediate scf::ForOp, these are not considered a failure.
+    if (isa<scf::ForOp>(op))
       continue;
     // Skip other ops with regions.
     if (op.getNumRegions() > 0) {
@@ -2692,12 +2725,12 @@ uint64_t mlir::affineDataCopyGenerate(Block::iterator begin,
     // Gather regions to allocate to buffers in faster memory space.
     if (auto loadOp = dyn_cast<AffineLoadOp>(opInst)) {
       if ((filterMemRef.hasValue() && filterMemRef != loadOp.getMemRef()) ||
-          (loadOp.getMemRefType().getMemorySpace() !=
+          (loadOp.getMemRefType().getMemorySpaceAsInt() !=
            copyOptions.slowMemorySpace))
         return;
     } else if (auto storeOp = dyn_cast<AffineStoreOp>(opInst)) {
       if ((filterMemRef.hasValue() && filterMemRef != storeOp.getMemRef()) ||
-          storeOp.getMemRefType().getMemorySpace() !=
+          storeOp.getMemRefType().getMemorySpaceAsInt() !=
               copyOptions.slowMemorySpace)
         return;
     } else {

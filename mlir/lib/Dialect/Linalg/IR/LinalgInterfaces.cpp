@@ -115,6 +115,8 @@ static MatchContractionResult isContractionInterfaceImpl(Operation *op) {
 }
 
 bool mlir::linalg::isaContractionOpInterface(LinalgOp linalgOp) {
+  if (!linalgOp)
+    return false;
   Operation *op = linalgOp.getOperation();
   return isa<ContractionOpInterface>(op) ||
          (isContractionInterfaceImpl(op) == MatchContractionResult::Success);
@@ -299,6 +301,12 @@ LogicalResult mlir::linalg::detail::verifyStructuredOpInterface(Operation *op) {
   // Can also have outbut buffers that do not correspond to results.
   if (op->getNumResults() > linalgOp.getNumOutputTensors())
     return op->emitError("unexpected #results > #outputs");
+
+  // Before checking indexing maps, we need to make sure the attributes
+  // referenced by it are valid.
+  if (linalgOp.hasDynamicIndexingMaps())
+    if (failed(linalgOp.verifyIndexingMapRequiredAttributes()))
+      return failure();
 
   // All shaped operands must be indexed.
   if (linalgOp.indexing_maps().size() != linalgOp.getNumShapedOperands())

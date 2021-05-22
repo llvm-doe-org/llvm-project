@@ -15,6 +15,12 @@
 #include "llvm/Option/OptTable.h"
 #include "llvm/Support/MemoryBuffer.h"
 
+namespace llvm {
+namespace MachO {
+class InterfaceFile;
+} // namespace MachO
+} // namespace llvm
+
 namespace lld {
 namespace macho {
 
@@ -44,7 +50,8 @@ std::string createResponseFile(const llvm::opt::InputArgList &args);
 llvm::Optional<std::string> resolveDylibPath(llvm::StringRef path);
 
 llvm::Optional<DylibFile *> loadDylib(llvm::MemoryBufferRef mbref,
-                                      DylibFile *umbrella = nullptr);
+                                      DylibFile *umbrella = nullptr,
+                                      bool isBundleLoader = false);
 
 llvm::Optional<InputFile *> loadArchiveMember(MemoryBufferRef, uint32_t modTime,
                                               StringRef archiveName,

@@ -289,6 +289,7 @@ std::string SDNode::getOperationName(const SelectionDAG *G) const {
   case ISD::SCALAR_TO_VECTOR:           return "scalar_to_vector";
   case ISD::VECTOR_SHUFFLE:             return "vector_shuffle";
   case ISD::SPLAT_VECTOR:               return "splat_vector";
+  case ISD::VECTOR_REVERSE:             return "vector_reverse";
   case ISD::CARRY_FALSE:                return "carry_false";
   case ISD::ADDC:                       return "addc";
   case ISD::ADDE:                       return "adde";
@@ -895,12 +896,10 @@ static void DumpNodes(const SDNode *N, unsigned indent, const SelectionDAG *G) {
 LLVM_DUMP_METHOD void SelectionDAG::dump() const {
   dbgs() << "SelectionDAG has " << AllNodes.size() << " nodes:\n";
 
-  for (allnodes_const_iterator I = allnodes_begin(), E = allnodes_end();
-       I != E; ++I) {
-    const SDNode *N = &*I;
-    if (!N->hasOneUse() && N != getRoot().getNode() &&
-        (!shouldPrintInline(*N, this) || N->use_empty()))
-      DumpNodes(N, 2, this);
+  for (const SDNode &N : allnodes()) {
+    if (!N.hasOneUse() && &N != getRoot().getNode() &&
+        (!shouldPrintInline(N, this) || N.use_empty()))
+      DumpNodes(&N, 2, this);
   }
 
   if (getRoot().getNode()) DumpNodes(getRoot().getNode(), 2, this);

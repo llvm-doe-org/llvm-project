@@ -21,6 +21,7 @@
 #ifndef LLVM_ANALYSIS_TARGETTRANSFORMINFO_H
 #define LLVM_ANALYSIS_TARGETTRANSFORMINFO_H
 
+#include "llvm/Analysis/IVDescriptors.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/PassManager.h"
@@ -118,44 +119,32 @@ class IntrinsicCostAttributes {
   SmallVector<Type *, 4> ParamTys;
   SmallVector<const Value *, 4> Arguments;
   FastMathFlags FMF;
-  ElementCount VF = ElementCount::getFixed(1);
   // If ScalarizationCost is UINT_MAX, the cost of scalarizing the
   // arguments and the return value will be computed based on types.
   unsigned ScalarizationCost = std::numeric_limits<unsigned>::max();
 
 public:
-  IntrinsicCostAttributes(const IntrinsicInst &I);
+  IntrinsicCostAttributes(
+      Intrinsic::ID Id, const CallBase &CI,
+      unsigned ScalarizationCost = std::numeric_limits<unsigned>::max());
 
-  IntrinsicCostAttributes(Intrinsic::ID Id, const CallBase &CI);
-
-  IntrinsicCostAttributes(Intrinsic::ID Id, const CallBase &CI,
-                          ElementCount Factor);
-
-  IntrinsicCostAttributes(Intrinsic::ID Id, const CallBase &CI,
-                          ElementCount Factor, unsigned ScalarCost);
-
-  IntrinsicCostAttributes(Intrinsic::ID Id, Type *RTy,
-                          ArrayRef<Type *> Tys, FastMathFlags Flags);
-
-  IntrinsicCostAttributes(Intrinsic::ID Id, Type *RTy,
-                          ArrayRef<Type *> Tys, FastMathFlags Flags,
-                          unsigned ScalarCost);
-
-  IntrinsicCostAttributes(Intrinsic::ID Id, Type *RTy,
-                          ArrayRef<Type *> Tys, FastMathFlags Flags,
-                          unsigned ScalarCost,
-                          const IntrinsicInst *I);
-
-  IntrinsicCostAttributes(Intrinsic::ID Id, Type *RTy,
-                          ArrayRef<Type *> Tys);
+  IntrinsicCostAttributes(
+      Intrinsic::ID Id, Type *RTy, ArrayRef<Type *> Tys,
+      FastMathFlags Flags = FastMathFlags(), const IntrinsicInst *I = nullptr,
+      unsigned ScalarCost = std::numeric_limits<unsigned>::max());
 
   IntrinsicCostAttributes(Intrinsic::ID Id, Type *RTy,
                           ArrayRef<const Value *> Args);
 
+  IntrinsicCostAttributes(
+      Intrinsic::ID Id, Type *RTy, ArrayRef<const Value *> Args,
+      ArrayRef<Type *> Tys, FastMathFlags Flags = FastMathFlags(),
+      const IntrinsicInst *I = nullptr,
+      unsigned ScalarCost = std::numeric_limits<unsigned>::max());
+
   Intrinsic::ID getID() const { return IID; }
   const IntrinsicInst *getInst() const { return II; }
   Type *getReturnType() const { return RetTy; }
-  ElementCount getVectorFactor() const { return VF; }
   FastMathFlags getFlags() const { return FMF; }
   unsigned getScalarizationCost() const { return ScalarizationCost; }
   const SmallVectorImpl<const Value *> &getArgs() const { return Arguments; }
@@ -638,13 +627,15 @@ public:
                   DominatorTree *DT, AssumptionCache *AC,
                   TargetLibraryInfo *LibInfo) const;
 
-  /// \return True is LSR should make efforts to create/preserve post-inc
-  /// addressing mode expressions.
-  bool shouldFavorPostInc() const;
+  enum AddressingModeKind {
+    AMK_PreIndexed,
+    AMK_PostIndexed,
+    AMK_None
+  };
 
-  /// Return true if LSR should make efforts to generate indexed addressing
-  /// modes that operate across loop iterations.
-  bool shouldFavorBackedgeIndex(const Loop *L) const;
+  /// Return the preferred addressing mode LSR should make efforts to generate.
+  AddressingModeKind getPreferredAddressingMode(const Loop *L,
+                                                ScalarEvolution *SE) const;
 
   /// Return true if the target supports masked store.
   bool isLegalMaskedStore(Type *DataType, Align Alignment) const;
@@ -735,10 +726,10 @@ public:
                                     bool Insert, bool Extract) const;
 
   /// Estimate the overhead of scalarizing an instructions unique
-  /// non-constant operands. The types of the arguments are ordinarily
-  /// scalar, in which case the costs are multiplied with VF.
+  /// non-constant operands. The (potentially vector) types to use for each of
+  /// argument are passes via Tys.
   unsigned getOperandsScalarizationOverhead(ArrayRef<const Value *> Args,
-                                            unsigned VF) const;
+                                            ArrayRef<Type *> Tys) const;
 
   /// If target has efficient vector element load/store instructions, it can
   /// return true here so that insertion/extraction costs are not added to
@@ -798,7 +789,7 @@ public:
   /// Determine if the target supports unaligned memory accesses.
   bool allowsMisalignedMemoryAccesses(LLVMContext &Context, unsigned BitWidth,
                                       unsigned AddressSpace = 0,
-                                      unsigned Alignment = 1,
+                                      Align Alignment = Align(1),
                                       bool *Fast = nullptr) const;
 
   /// Return hardware support for population count.
@@ -945,7 +936,8 @@ public:
   /// \return The minimum vectorization factor for types of given element
   /// bit width, or 0 if there is no minimum VF. The returned value only
   /// applies when shouldMaximizeVectorBandwidth returns true.
-  unsigned getMinimumVF(unsigned ElemWidth) const;
+  /// If IsScalable is true, the returned ElementCount must be a scalable VF.
+  ElementCount getMinimumVF(unsigned ElemWidth, bool IsScalable) const;
 
   /// \return The maximum vectorization factor for types of given element
   /// bit width and opcode, or 0 if there is no maximum VF.
@@ -1305,6 +1297,10 @@ public:
   bool isLegalToVectorizeStoreChain(unsigned ChainSizeInBytes, Align Alignment,
                                     unsigned AddrSpace) const;
 
+  /// \returns True if it is legal to vectorize the given reduction kind.
+  bool isLegalToVectorizeReduction(RecurrenceDescriptor RdxDesc,
+                                   ElementCount VF) const;
+
   /// \returns The new vector factor value if the target doesn't support \p
   /// SizeInBytes loads or has a better vector factor.
   unsigned getLoadVectorFactor(unsigned VF, unsigned LoadSize,
@@ -1324,11 +1320,6 @@ public:
     bool IsSigned; ///< Whether the operation is a signed int reduction.
     bool NoNaN;    ///< If op is an fp min/max, whether NaNs may be present.
   };
-
-  /// \returns True if the target wants to handle the given reduction idiom in
-  /// the intrinsics form instead of the shuffle form.
-  bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
-                             ReductionFlags Flags) const;
 
   /// \returns True if the target prefers reductions in loop.
   bool preferInLoopReduction(unsigned Opcode, Type *Ty,
@@ -1458,8 +1449,8 @@ public:
   virtual bool canSaveCmp(Loop *L, BranchInst **BI, ScalarEvolution *SE,
                           LoopInfo *LI, DominatorTree *DT, AssumptionCache *AC,
                           TargetLibraryInfo *LibInfo) = 0;
-  virtual bool shouldFavorPostInc() const = 0;
-  virtual bool shouldFavorBackedgeIndex(const Loop *L) const = 0;
+  virtual AddressingModeKind
+    getPreferredAddressingMode(const Loop *L, ScalarEvolution *SE) const = 0;
   virtual bool isLegalMaskedStore(Type *DataType, Align Alignment) = 0;
   virtual bool isLegalMaskedLoad(Type *DataType, Align Alignment) = 0;
   virtual bool isLegalNTStore(Type *DataType, Align Alignment) = 0;
@@ -1488,7 +1479,7 @@ public:
                                             bool Insert, bool Extract) = 0;
   virtual unsigned
   getOperandsScalarizationOverhead(ArrayRef<const Value *> Args,
-                                   unsigned VF) = 0;
+                                   ArrayRef<Type *> Tys) = 0;
   virtual bool supportsEfficientVectorElementLoadStore() = 0;
   virtual bool enableAggressiveInterleaving(bool LoopHasReductions) = 0;
   virtual MemCmpExpansionOptions
@@ -1499,7 +1490,7 @@ public:
   virtual bool allowsMisalignedMemoryAccesses(LLVMContext &Context,
                                               unsigned BitWidth,
                                               unsigned AddressSpace,
-                                              unsigned Alignment,
+                                              Align Alignment,
                                               bool *Fast) = 0;
   virtual PopcntSupportKind getPopcntSupport(unsigned IntTyWidthInBit) = 0;
   virtual bool haveFastSqrt(Type *Ty) = 0;
@@ -1523,7 +1514,8 @@ public:
   virtual unsigned getMinVectorRegisterBitWidth() = 0;
   virtual Optional<unsigned> getMaxVScale() const = 0;
   virtual bool shouldMaximizeVectorBandwidth(bool OptSize) const = 0;
-  virtual unsigned getMinimumVF(unsigned ElemWidth) const = 0;
+  virtual ElementCount getMinimumVF(unsigned ElemWidth,
+                                    bool IsScalable) const = 0;
   virtual unsigned getMaximumVF(unsigned ElemWidth, unsigned Opcode) const = 0;
   virtual bool shouldConsiderAddressTypePromotion(
       const Instruction &I, bool &AllowPromotionWithoutCommonHeader) = 0;
@@ -1644,14 +1636,14 @@ public:
   virtual bool isLegalToVectorizeStoreChain(unsigned ChainSizeInBytes,
                                             Align Alignment,
                                             unsigned AddrSpace) const = 0;
+  virtual bool isLegalToVectorizeReduction(RecurrenceDescriptor RdxDesc,
+                                           ElementCount VF) const = 0;
   virtual unsigned getLoadVectorFactor(unsigned VF, unsigned LoadSize,
                                        unsigned ChainSizeInBytes,
                                        VectorType *VecTy) const = 0;
   virtual unsigned getStoreVectorFactor(unsigned VF, unsigned StoreSize,
                                         unsigned ChainSizeInBytes,
                                         VectorType *VecTy) const = 0;
-  virtual bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
-                                     ReductionFlags) const = 0;
   virtual bool preferInLoopReduction(unsigned Opcode, Type *Ty,
                                      ReductionFlags) const = 0;
   virtual bool preferPredicatedReductionSelect(unsigned Opcode, Type *Ty,
@@ -1801,9 +1793,10 @@ public:
                   TargetLibraryInfo *LibInfo) override {
     return Impl.canSaveCmp(L, BI, SE, LI, DT, AC, LibInfo);
   }
-  bool shouldFavorPostInc() const override { return Impl.shouldFavorPostInc(); }
-  bool shouldFavorBackedgeIndex(const Loop *L) const override {
-    return Impl.shouldFavorBackedgeIndex(L);
+  AddressingModeKind
+    getPreferredAddressingMode(const Loop *L,
+                               ScalarEvolution *SE) const override {
+    return Impl.getPreferredAddressingMode(L, SE);
   }
   bool isLegalMaskedStore(Type *DataType, Align Alignment) override {
     return Impl.isLegalMaskedStore(DataType, Alignment);
@@ -1871,8 +1864,8 @@ public:
     return Impl.getScalarizationOverhead(Ty, DemandedElts, Insert, Extract);
   }
   unsigned getOperandsScalarizationOverhead(ArrayRef<const Value *> Args,
-                                            unsigned VF) override {
-    return Impl.getOperandsScalarizationOverhead(Args, VF);
+                                            ArrayRef<Type *> Tys) override {
+    return Impl.getOperandsScalarizationOverhead(Args, Tys);
   }
 
   bool supportsEfficientVectorElementLoadStore() override {
@@ -1896,7 +1889,7 @@ public:
     return Impl.isFPVectorizationPotentiallyUnsafe();
   }
   bool allowsMisalignedMemoryAccesses(LLVMContext &Context, unsigned BitWidth,
-                                      unsigned AddressSpace, unsigned Alignment,
+                                      unsigned AddressSpace, Align Alignment,
                                       bool *Fast) override {
     return Impl.allowsMisalignedMemoryAccesses(Context, BitWidth, AddressSpace,
                                                Alignment, Fast);
@@ -1951,8 +1944,9 @@ public:
   bool shouldMaximizeVectorBandwidth(bool OptSize) const override {
     return Impl.shouldMaximizeVectorBandwidth(OptSize);
   }
-  unsigned getMinimumVF(unsigned ElemWidth) const override {
-    return Impl.getMinimumVF(ElemWidth);
+  ElementCount getMinimumVF(unsigned ElemWidth,
+                            bool IsScalable) const override {
+    return Impl.getMinimumVF(ElemWidth, IsScalable);
   }
   unsigned getMaximumVF(unsigned ElemWidth, unsigned Opcode) const override {
     return Impl.getMaximumVF(ElemWidth, Opcode);
@@ -2170,6 +2164,10 @@ public:
     return Impl.isLegalToVectorizeStoreChain(ChainSizeInBytes, Alignment,
                                              AddrSpace);
   }
+  bool isLegalToVectorizeReduction(RecurrenceDescriptor RdxDesc,
+                                   ElementCount VF) const override {
+    return Impl.isLegalToVectorizeReduction(RdxDesc, VF);
+  }
   unsigned getLoadVectorFactor(unsigned VF, unsigned LoadSize,
                                unsigned ChainSizeInBytes,
                                VectorType *VecTy) const override {
@@ -2179,10 +2177,6 @@ public:
                                 unsigned ChainSizeInBytes,
                                 VectorType *VecTy) const override {
     return Impl.getStoreVectorFactor(VF, StoreSize, ChainSizeInBytes, VecTy);
-  }
-  bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
-                             ReductionFlags Flags) const override {
-    return Impl.useReductionIntrinsic(Opcode, Ty, Flags);
   }
   bool preferInLoopReduction(unsigned Opcode, Type *Ty,
                              ReductionFlags Flags) const override {

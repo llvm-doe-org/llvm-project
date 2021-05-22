@@ -14,6 +14,7 @@
 #include "UsedDeclVisitor.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTDiagnostic.h"
+#include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclFriend.h"
 #include "clang/AST/DeclObjC.h"
@@ -387,6 +388,12 @@ void Sema::Initialize() {
 #define PPC_VECTOR_VSX_TYPE(Name, Id, Size) \
     addImplicitTypedef(#Name, Context.Id##Ty);
 #include "clang/Basic/PPCTypes.def"
+  }
+
+  if (Context.getTargetInfo().hasRISCVVTypes()) {
+#define RVV_TYPE(Name, Id, SingletonId)                                        \
+  addImplicitTypedef(Name, Context.SingletonId);
+#include "clang/Basic/RISCVVTypes.def"
   }
 
   if (Context.getTargetInfo().hasBuiltinMSVaList()) {
@@ -1747,11 +1754,12 @@ Sema::SemaDiagnosticBuilder::~SemaDiagnosticBuilder() {
   }
 }
 
-Sema::SemaDiagnosticBuilder Sema::targetDiag(SourceLocation Loc,
-                                             unsigned DiagID) {
+Sema::SemaDiagnosticBuilder
+Sema::targetDiag(SourceLocation Loc, unsigned DiagID, FunctionDecl *FD) {
+  FD = FD ? FD : getCurFunctionDecl();
   if (LangOpts.OpenMP)
-    return LangOpts.OpenMPIsDevice ? diagIfOpenMPDeviceCode(Loc, DiagID)
-                                   : diagIfOpenMPHostCode(Loc, DiagID);
+    return LangOpts.OpenMPIsDevice ? diagIfOpenMPDeviceCode(Loc, DiagID, FD)
+                                   : diagIfOpenMPHostCode(Loc, DiagID, FD);
   if (getLangOpts().CUDA)
     return getLangOpts().CUDAIsDevice ? CUDADiagIfDeviceCode(Loc, DiagID)
                                       : CUDADiagIfHostCode(Loc, DiagID);
@@ -1760,7 +1768,7 @@ Sema::SemaDiagnosticBuilder Sema::targetDiag(SourceLocation Loc,
     return SYCLDiagIfDeviceCode(Loc, DiagID);
 
   return SemaDiagnosticBuilder(SemaDiagnosticBuilder::K_Immediate, Loc, DiagID,
-                               getCurFunctionDecl(), *this);
+                               FD, *this);
 }
 
 Sema::SemaDiagnosticBuilder Sema::Diag(SourceLocation Loc, unsigned DiagID,
@@ -1779,15 +1787,14 @@ Sema::SemaDiagnosticBuilder Sema::Diag(SourceLocation Loc, unsigned DiagID,
                                  DiagID, getCurFunctionDecl(), *this);
   }
 
-  SemaDiagnosticBuilder DB =
-      getLangOpts().CUDAIsDevice
-          ? CUDADiagIfDeviceCode(Loc, DiagID)
-          : CUDADiagIfHostCode(Loc, DiagID);
+  SemaDiagnosticBuilder DB = getLangOpts().CUDAIsDevice
+                                 ? CUDADiagIfDeviceCode(Loc, DiagID)
+                                 : CUDADiagIfHostCode(Loc, DiagID);
   SetIsLastErrorImmediate(DB.isImmediate());
   return DB;
 }
 
-void Sema::checkDeviceDecl(const ValueDecl *D, SourceLocation Loc) {
+void Sema::checkDeviceDecl(ValueDecl *D, SourceLocation Loc) {
   if (isUnevaluatedContext())
     return;
 
@@ -1805,13 +1812,17 @@ void Sema::checkDeviceDecl(const ValueDecl *D, SourceLocation Loc) {
         return;
   }
 
+  // Try to associate errors with the lexical context, if that is a function, or
+  // the value declaration otherwise.
+  FunctionDecl *FD =
+      isa<FunctionDecl>(C) ? cast<FunctionDecl>(C) : dyn_cast<FunctionDecl>(D);
   auto CheckType = [&](QualType Ty) {
     if (Ty->isDependentType())
       return;
 
     if (Ty->isExtIntType()) {
       if (!Context.getTargetInfo().hasExtIntType()) {
-        targetDiag(Loc, diag::err_device_unsupported_type)
+        targetDiag(Loc, diag::err_device_unsupported_type, FD)
             << D << false /*show bit size*/ << 0 /*bitsize*/
             << Ty << Context.getTargetInfo().getTriple().str();
       }
@@ -1824,11 +1835,12 @@ void Sema::checkDeviceDecl(const ValueDecl *D, SourceLocation Loc) {
          !Context.getTargetInfo().hasFloat128Type()) ||
         (Ty->isIntegerType() && Context.getTypeSize(Ty) == 128 &&
          !Context.getTargetInfo().hasInt128Type())) {
-      targetDiag(Loc, diag::err_device_unsupported_type)
+      if (targetDiag(Loc, diag::err_device_unsupported_type, FD)
           << D << true /*show bit size*/
           << static_cast<unsigned>(Context.getTypeSize(Ty)) << Ty
-          << Context.getTargetInfo().getTriple().str();
-      targetDiag(D->getLocation(), diag::note_defined_here) << D;
+          << Context.getTargetInfo().getTriple().str())
+        D->setInvalidDecl();
+      targetDiag(D->getLocation(), diag::note_defined_here, FD) << D;
     }
   };
 
@@ -1840,6 +1852,8 @@ void Sema::checkDeviceDecl(const ValueDecl *D, SourceLocation Loc) {
       CheckType(ParamTy);
     CheckType(FPTy->getReturnType());
   }
+  if (const auto *FNPTy = dyn_cast<FunctionNoProtoType>(Ty))
+    CheckType(FNPTy->getReturnType());
 }
 
 /// Looks through the macro-expansion chain for the given
@@ -2301,13 +2315,11 @@ bool Sema::tryExprAsCall(Expr &E, QualType &ZeroArgCallReturnTy,
 ///  ill-formed expression.
 static void noteOverloads(Sema &S, const UnresolvedSetImpl &Overloads,
                           const SourceLocation FinalNoteLoc) {
-  int ShownOverloads = 0;
-  int SuppressedOverloads = 0;
+  unsigned ShownOverloads = 0;
+  unsigned SuppressedOverloads = 0;
   for (UnresolvedSetImpl::iterator It = Overloads.begin(),
        DeclsEnd = Overloads.end(); It != DeclsEnd; ++It) {
-    // FIXME: Magic number for max shown overloads stolen from
-    // OverloadCandidateSet::NoteCandidates.
-    if (ShownOverloads >= 4 && S.Diags.getShowOverloads() == Ovl_Best) {
+    if (ShownOverloads >= S.Diags.getNumOverloadCandidatesToShow()) {
       ++SuppressedOverloads;
       continue;
     }
@@ -2322,6 +2334,8 @@ static void noteOverloads(Sema &S, const UnresolvedSetImpl &Overloads,
     S.Diag(Fn->getLocation(), diag::note_possible_target_of_call);
     ++ShownOverloads;
   }
+
+  S.Diags.overloadCandidatesShown(ShownOverloads);
 
   if (SuppressedOverloads)
     S.Diag(FinalNoteLoc, diag::note_ovl_too_many_candidates)

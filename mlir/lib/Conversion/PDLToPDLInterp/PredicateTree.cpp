@@ -36,7 +36,7 @@ static void getTreePredicates(std::vector<PositionalPredicate> &predList,
   // If this is an input value that has been visited in the tree, add a
   // constraint to ensure that both instances refer to the same value.
   if (!it.second &&
-      isa<pdl::AttributeOp, pdl::InputOp, pdl::TypeOp>(val.getDefiningOp())) {
+      isa<pdl::AttributeOp, pdl::OperandOp, pdl::TypeOp>(val.getDefiningOp())) {
     auto minMaxPositions = std::minmax(pos, it.first->second, comparePosDepth);
     predList.emplace_back(minMaxPositions.second,
                           builder.getEqualTo(minMaxPositions.first));
@@ -67,8 +67,8 @@ static void getTreePredicates(std::vector<PositionalPredicate> &predList,
     // Prevent traversal into a null value.
     predList.emplace_back(pos, builder.getIsNotNull());
 
-    // If this is a typed input, add a type constraint.
-    if (auto in = val.getDefiningOp<pdl::InputOp>()) {
+    // If this is a typed operand, add a type constraint.
+    if (auto in = val.getDefiningOp<pdl::OperandOp>()) {
       if (Value type = in.type()) {
         getTreePredicates(predList, type, builder, inputs,
                           builder.getType(pos));
@@ -214,20 +214,20 @@ struct OrderedPredicate {
   /// within that pattern.
   DenseMap<Operation *, Qualifier *> patternToAnswer;
 
-  /// Returns true if this predicate is ordered before `other`, based on the
-  /// cost model.
-  bool operator<(const OrderedPredicate &other) const {
+  /// Returns true if this predicate is ordered before `rhs`, based on the cost
+  /// model.
+  bool operator<(const OrderedPredicate &rhs) const {
     // Sort by:
-    // * first and secondary order sums
+    // * higher first and secondary order sums
     // * lower depth
-    // * position dependency
-    // * predicate dependency.
-    auto *otherPos = other.position;
-    return std::make_tuple(other.primary, other.secondary,
-                           otherPos->getIndex().size(), otherPos->getKind(),
-                           other.question->getKind()) >
-           std::make_tuple(primary, secondary, position->getIndex().size(),
-                           position->getKind(), question->getKind());
+    // * lower position dependency
+    // * lower predicate dependency
+    auto *rhsPos = rhs.position;
+    return std::make_tuple(primary, secondary, rhsPos->getIndex().size(),
+                           rhsPos->getKind(), rhs.question->getKind()) >
+           std::make_tuple(rhs.primary, rhs.secondary,
+                           position->getIndex().size(), position->getKind(),
+                           question->getKind());
   }
 };
 

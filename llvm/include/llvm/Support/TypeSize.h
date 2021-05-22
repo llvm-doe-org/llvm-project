@@ -381,6 +381,7 @@ template <> struct LinearPolyBaseTypeTraits<ElementCount> {
 
 class ElementCount : public LinearPolySize<ElementCount> {
 public:
+  ElementCount() : LinearPolySize(LinearPolySize::getNull()) {}
 
   ElementCount(const LinearPolySize<ElementCount> &V) : LinearPolySize(V) {}
 
@@ -528,4 +529,4 @@ template <> struct DenseMapInfo<ElementCount> {
 
 } // end namespace llvm
 
-#endif // LLVM_SUPPORT_TypeSize_H
+#endif // LLVM_SUPPORT_TYPESIZE_H

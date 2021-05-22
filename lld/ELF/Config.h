@@ -187,6 +187,8 @@ struct Configuration {
   bool nostdlib;
   bool oFormatBinary;
   bool omagic;
+  bool optEB = false;
+  bool optEL = false;
   bool optimizeBBJumps;
   bool optRemarksWithHotness;
   bool picThunk;
@@ -237,6 +239,7 @@ struct Configuration {
   bool zRelro;
   bool zRodynamic;
   bool zShstk;
+  bool zStartStopGC;
   uint8_t zStartStopVisibility;
   bool zText;
   bool zRetpolineplt;
@@ -250,6 +253,7 @@ struct Configuration {
   UnresolvedPolicy unresolvedSymbols;
   UnresolvedPolicy unresolvedSymbolsInShlib;
   Target2Policy target2;
+  bool Power10Stub;
   ARMVFPArgKind armVFPArgs = ARMVFPArgKind::Default;
   BuildIdKind buildId = BuildIdKind::None;
   SeparateSegmentKind zSeparate;

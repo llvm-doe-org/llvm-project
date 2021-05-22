@@ -1070,12 +1070,6 @@ void Verifier::visitDICompositeType(const DICompositeType &N) {
   if (auto *Params = N.getRawTemplateParams())
     visitTemplateParams(N, *Params);
 
-  if (N.getTag() == dwarf::DW_TAG_class_type ||
-      N.getTag() == dwarf::DW_TAG_union_type) {
-    AssertDI(N.getFile() && !N.getFile()->getFilename().empty(),
-             "class/union requires a filename", &N, N.getFile());
-  }
-
   if (auto *D = N.getRawDiscriminator()) {
     AssertDI(isa<DIDerivedType>(D) && N.getTag() == dwarf::DW_TAG_variant_part,
              "discriminator can only appear on variant part");
@@ -3193,7 +3187,8 @@ void Verifier::visitCallBase(CallBase &Call) {
   // and at most one "preallocated" operand bundle.
   bool FoundDeoptBundle = false, FoundFuncletBundle = false,
        FoundGCTransitionBundle = false, FoundCFGuardTargetBundle = false,
-       FoundPreallocatedBundle = false, FoundGCLiveBundle = false;;
+       FoundPreallocatedBundle = false, FoundGCLiveBundle = false,
+       FoundAttachedCallBundle = false;
   for (unsigned i = 0, e = Call.getNumOperandBundles(); i < e; ++i) {
     OperandBundleUse BU = Call.getOperandBundleAt(i);
     uint32_t Tag = BU.getTagID();
@@ -3234,8 +3229,18 @@ void Verifier::visitCallBase(CallBase &Call) {
       Assert(!FoundGCLiveBundle, "Multiple gc-live operand bundles",
              Call);
       FoundGCLiveBundle = true;
+    } else if (Tag == LLVMContext::OB_clang_arc_attachedcall) {
+      Assert(!FoundAttachedCallBundle,
+             "Multiple \"clang.arc.attachedcall\" operand bundles", Call);
+      FoundAttachedCallBundle = true;
     }
   }
+
+  if (FoundAttachedCallBundle)
+    Assert(FTy->getReturnType()->isPointerTy(),
+           "a call with operand bundle \"clang.arc.attachedcall\" must call a "
+           "function returning a pointer",
+           Call);
 
   // Verify that each inlinable callsite of a debug-info-bearing function in a
   // debug-info-bearing function has a debug location attached to it. Failure to
@@ -3666,10 +3671,9 @@ void Verifier::visitStoreInst(StoreInst &SI) {
 /// Check that SwiftErrorVal is used as a swifterror argument in CS.
 void Verifier::verifySwiftErrorCall(CallBase &Call,
                                     const Value *SwiftErrorVal) {
-  unsigned Idx = 0;
-  for (auto I = Call.arg_begin(), E = Call.arg_end(); I != E; ++I, ++Idx) {
-    if (*I == SwiftErrorVal) {
-      Assert(Call.paramHasAttr(Idx, Attribute::SwiftError),
+  for (const auto &I : llvm::enumerate(Call.args())) {
+    if (I.value() == SwiftErrorVal) {
+      Assert(Call.paramHasAttr(I.index(), Attribute::SwiftError),
              "swifterror value when used in a callsite should be marked "
              "with swifterror attribute",
              SwiftErrorVal, Call);
@@ -4588,12 +4592,12 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
       break;
     auto *GV = dyn_cast<GlobalVariable>(InfoArg);
     Assert(GV && GV->isConstant() && GV->hasDefinitiveInitializer(),
-      "info argument of llvm.coro.begin must refer to an initialized "
-      "constant");
+           "info argument of llvm.coro.id must refer to an initialized "
+           "constant");
     Constant *Init = GV->getInitializer();
     Assert(isa<ConstantStruct>(Init) || isa<ConstantArray>(Init),
-      "info argument of llvm.coro.begin must refer to either a struct or "
-      "an array");
+           "info argument of llvm.coro.id must refer to either a struct or "
+           "an array");
     break;
   }
 #define INSTRUCTION(NAME, NARGS, ROUND_MODE, INTRINSIC)                        \
@@ -5013,20 +5017,34 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
 
     break;
   }
-  case Intrinsic::sadd_sat:
-  case Intrinsic::uadd_sat:
-  case Intrinsic::ssub_sat:
-  case Intrinsic::usub_sat:
-  case Intrinsic::sshl_sat:
-  case Intrinsic::ushl_sat: {
-    Value *Op1 = Call.getArgOperand(0);
-    Value *Op2 = Call.getArgOperand(1);
-    Assert(Op1->getType()->isIntOrIntVectorTy(),
-           "first operand of [us][add|sub|shl]_sat must be an int type or "
-           "vector of ints");
-    Assert(Op2->getType()->isIntOrIntVectorTy(),
-           "second operand of [us][add|sub|shl]_sat must be an int type or "
-           "vector of ints");
+  case Intrinsic::vector_reduce_and:
+  case Intrinsic::vector_reduce_or:
+  case Intrinsic::vector_reduce_xor:
+  case Intrinsic::vector_reduce_add:
+  case Intrinsic::vector_reduce_mul:
+  case Intrinsic::vector_reduce_smax:
+  case Intrinsic::vector_reduce_smin:
+  case Intrinsic::vector_reduce_umax:
+  case Intrinsic::vector_reduce_umin: {
+    Type *ArgTy = Call.getArgOperand(0)->getType();
+    Assert(ArgTy->isIntOrIntVectorTy() && ArgTy->isVectorTy(),
+           "Intrinsic has incorrect argument type!");
+    break;
+  }
+  case Intrinsic::vector_reduce_fmax:
+  case Intrinsic::vector_reduce_fmin: {
+    Type *ArgTy = Call.getArgOperand(0)->getType();
+    Assert(ArgTy->isFPOrFPVectorTy() && ArgTy->isVectorTy(),
+           "Intrinsic has incorrect argument type!");
+    break;
+  }
+  case Intrinsic::vector_reduce_fadd:
+  case Intrinsic::vector_reduce_fmul: {
+    // Unlike the other reductions, the first argument is a start value. The
+    // second argument is the vector to be reduced.
+    Type *ArgTy = Call.getArgOperand(1)->getType();
+    Assert(ArgTy->isFPOrFPVectorTy() && ArgTy->isVectorTy(),
+           "Intrinsic has incorrect argument type!");
     break;
   }
   case Intrinsic::smul_fix:

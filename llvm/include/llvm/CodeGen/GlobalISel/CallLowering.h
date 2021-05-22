@@ -164,13 +164,14 @@ public:
                                       uint64_t Size, MachinePointerInfo &MPO,
                                       CCValAssign &VA) = 0;
 
-    /// An overload which takes an ArgInfo if additional information about
-    /// the arg is needed.
-    virtual void assignValueToAddress(const ArgInfo &Arg, Register Addr,
-                                      uint64_t Size, MachinePointerInfo &MPO,
+    /// An overload which takes an ArgInfo if additional information about the
+    /// arg is needed. \p ValRegIndex is the index in \p Arg.Regs for the value
+    /// to store.
+    virtual void assignValueToAddress(const ArgInfo &Arg, unsigned ValRegIndex,
+                                      Register Addr, uint64_t Size,
+                                      MachinePointerInfo &MPO,
                                       CCValAssign &VA) {
-      assert(Arg.Regs.size() == 1);
-      assignValueToAddress(Arg.Regs[0], Addr, Size, MPO, VA);
+      assignValueToAddress(Arg.Regs[ValRegIndex], Addr, Size, MPO, VA);
     }
 
     /// Handle custom values, which may be passed into one or more of \p VAs.
@@ -208,6 +209,14 @@ public:
     IncomingValueHandler(MachineIRBuilder &MIRBuilder, MachineRegisterInfo &MRI,
                          CCAssignFn *AssignFn)
         : ValueHandler(true, MIRBuilder, MRI, AssignFn) {}
+
+    /// Insert G_ASSERT_ZEXT/G_ASSERT_SEXT or other hint instruction based on \p
+    /// VA, returning the new register if a hint was inserted.
+    Register buildExtensionHint(CCValAssign &VA, Register SrcReg, LLT NarrowTy);
+
+    /// Provides a default implementation for argument handling.
+    void assignValueToReg(Register ValVReg, Register PhysReg,
+                          CCValAssign &VA) override;
   };
 
   struct OutgoingValueHandler : public ValueHandler {
@@ -243,15 +252,12 @@ protected:
   void setArgFlags(ArgInfo &Arg, unsigned OpIdx, const DataLayout &DL,
                    const FuncInfoTy &FuncInfo) const;
 
-  /// Generate instructions for packing \p SrcRegs into one big register
-  /// corresponding to the aggregate type \p PackedTy.
-  ///
-  /// \param SrcRegs should contain one virtual register for each base type in
-  ///                \p PackedTy, as returned by computeValueLLTs.
-  ///
-  /// \return The packed register.
-  Register packRegs(ArrayRef<Register> SrcRegs, Type *PackedTy,
-                    MachineIRBuilder &MIRBuilder) const;
+  /// Break \p OrigArgInfo into one or more pieces the calling convention can
+  /// process, returned in \p SplitArgs. For example, this should break structs
+  /// down into individual fields.
+  void splitToValueTypes(const ArgInfo &OrigArgInfo,
+                         SmallVectorImpl<ArgInfo> &SplitArgs,
+                         const DataLayout &DL, CallingConv::ID CallConv) const;
 
   /// Generate instructions for unpacking \p SrcReg into the \p DstRegs
   /// corresponding to the aggregate type \p PackedTy.
@@ -266,13 +272,14 @@ protected:
   ///
   /// \return True if everything has succeeded, false otherwise.
   bool handleAssignments(MachineIRBuilder &MIRBuilder,
-                         SmallVectorImpl<ArgInfo> &Args,
-                         ValueHandler &Handler) const;
+                         SmallVectorImpl<ArgInfo> &Args, ValueHandler &Handler,
+                         CallingConv::ID CallConv, bool IsVarArg,
+                         Register ThisReturnReg = Register()) const;
   bool handleAssignments(CCState &CCState,
                          SmallVectorImpl<CCValAssign> &ArgLocs,
                          MachineIRBuilder &MIRBuilder,
-                         SmallVectorImpl<ArgInfo> &Args,
-                         ValueHandler &Handler) const;
+                         SmallVectorImpl<ArgInfo> &Args, ValueHandler &Handler,
+                         Register ThisReturnReg = Register()) const;
 
   /// Analyze passed or returned values from a call, supplied in \p ArgInfo,
   /// incorporating info about the passed values into \p CCState.
@@ -456,6 +463,10 @@ public:
                  ArrayRef<Register> ResRegs,
                  ArrayRef<ArrayRef<Register>> ArgRegs, Register SwiftErrorVReg,
                  std::function<unsigned()> GetCalleeReg) const;
+
+  /// For targets which support the "returned" parameter attribute, returns
+  /// true if the given type is a valid one to use with "returned".
+  virtual bool isTypeIsValidForThisReturn(EVT Ty) const { return false; }
 };
 
 } // end namespace llvm

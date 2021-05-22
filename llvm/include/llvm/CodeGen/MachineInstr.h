@@ -25,6 +25,7 @@
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/InlineAsm.h"
+#include "llvm/IR/PseudoProbe.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/ArrayRecycler.h"
@@ -1156,6 +1157,10 @@ public:
     return getOpcode() == TargetOpcode::CFI_INSTRUCTION;
   }
 
+  bool isPseudoProbe() const {
+    return getOpcode() == TargetOpcode::PSEUDO_PROBE;
+  }
+
   // True if the instruction represents a position in the function.
   bool isPosition() const { return isLabel() || isCFIInstruction(); }
 
@@ -1164,6 +1169,9 @@ public:
   bool isDebugRef() const { return getOpcode() == TargetOpcode::DBG_INSTR_REF; }
   bool isDebugInstr() const {
     return isDebugValue() || isDebugLabel() || isDebugRef();
+  }
+  bool isDebugOrPseudoInstr() const {
+    return isDebugInstr() || isPseudoProbe();
   }
 
   bool isDebugOffsetImm() const { return getDebugOffset().isImm(); }
@@ -1791,6 +1799,17 @@ public:
         MO.setSubReg(0);
       }
     }
+  }
+
+  PseudoProbeAttributes getPseudoProbeAttribute() const {
+    assert(isPseudoProbe() && "Must be a pseudo probe instruction");
+    return (PseudoProbeAttributes)getOperand(3).getImm();
+  }
+
+  void addPseudoProbeAttribute(PseudoProbeAttributes Attr) {
+    assert(isPseudoProbe() && "Must be a pseudo probe instruction");
+    MachineOperand &AttrOperand = getOperand(3);
+    AttrOperand.setImm(AttrOperand.getImm() | (uint32_t)Attr);
   }
 
 private:

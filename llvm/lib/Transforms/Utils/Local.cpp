@@ -65,6 +65,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/PatternMatch.h"
+#include "llvm/IR/PseudoProbe.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Use.h"
 #include "llvm/IR/User.h"
@@ -420,13 +421,8 @@ bool llvm::wouldInstructionBeTriviallyDead(Instruction *I,
     return true;
   }
 
-  if (auto *CB = dyn_cast<CallBase>(I)) {
-    // Treat calls that may not return as alive.
-    // TODO: Remove the intrinsic escape hatch once all intrinsics set
-    // willreturn properly.
-    if (!CB->willReturn() && !isa<IntrinsicInst>(I))
-      return false;
-  }
+  if (!I->willReturn())
+    return false;
 
   if (!I->mayHaveSideEffects())
     return true;
@@ -743,11 +739,11 @@ void llvm::MergeBasicBlockIntoOnlyPred(BasicBlock *DestBB,
   SmallVector<DominatorTree::UpdateType, 32> Updates;
 
   if (DTU) {
-    for (auto I = pred_begin(PredBB), E = pred_end(PredBB); I != E; ++I) {
+    for (BasicBlock *PredPredBB : predecessors(PredBB)) {
       // This predecessor of PredBB may already have DestBB as a successor.
-      if (!llvm::is_contained(successors(*I), DestBB))
-        Updates.push_back({DominatorTree::Insert, *I, DestBB});
-      Updates.push_back({DominatorTree::Delete, *I, PredBB});
+      if (!llvm::is_contained(successors(PredPredBB), DestBB))
+        Updates.push_back({DominatorTree::Insert, PredPredBB, DestBB});
+      Updates.push_back({DominatorTree::Delete, PredPredBB, PredBB});
     }
     Updates.push_back({DominatorTree::Delete, PredBB, DestBB});
   }
@@ -923,6 +919,7 @@ static void gatherIncomingValuesToPhi(PHINode *PN,
 /// \param IncomingValues A map from block to value.
 static void replaceUndefValuesInPhi(PHINode *PN,
                                     const IncomingValueMap &IncomingValues) {
+  SmallVector<unsigned> TrueUndefOps;
   for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
     Value *V = PN->getIncomingValue(i);
 
@@ -930,9 +927,30 @@ static void replaceUndefValuesInPhi(PHINode *PN,
 
     BasicBlock *BB = PN->getIncomingBlock(i);
     IncomingValueMap::const_iterator It = IncomingValues.find(BB);
-    if (It == IncomingValues.end()) continue;
 
+    // Keep track of undef/poison incoming values. Those must match, so we fix
+    // them up below if needed.
+    // Note: this is conservatively correct, but we could try harder and group
+    // the undef values per incoming basic block.
+    if (It == IncomingValues.end()) {
+      TrueUndefOps.push_back(i);
+      continue;
+    }
+
+    // There is a defined value for this incoming block, so map this undef
+    // incoming value to the defined value.
     PN->setIncomingValue(i, It->second);
+  }
+
+  // If there are both undef and poison values incoming, then convert those
+  // values to undef. It is invalid to have different values for the same
+  // incoming block.
+  unsigned PoisonCount = count_if(TrueUndefOps, [&](unsigned i) {
+    return isa<PoisonValue>(PN->getIncomingValue(i));
+  });
+  if (PoisonCount != 0 && PoisonCount != TrueUndefOps.size()) {
+    for (unsigned i : TrueUndefOps)
+      PN->setIncomingValue(i, UndefValue::get(PN->getType()));
   }
 }
 
@@ -1040,8 +1058,8 @@ bool llvm::TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
 
   // We cannot fold the block if it's a branch to an already present callbr
   // successor because that creates duplicate successors.
-  for (auto I = pred_begin(BB), E = pred_end(BB); I != E; ++I) {
-    if (auto *CBI = dyn_cast<CallBrInst>((*I)->getTerminator())) {
+  for (BasicBlock *PredBB : predecessors(BB)) {
+    if (auto *CBI = dyn_cast<CallBrInst>(PredBB->getTerminator())) {
       if (Succ == CBI->getDefaultDest())
         return false;
       for (unsigned i = 0, e = CBI->getNumIndirectDests(); i != e; ++i)
@@ -1102,10 +1120,14 @@ bool llvm::TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
   Instruction *TI = BB->getTerminator();
   if (TI)
     if (MDNode *LoopMD = TI->getMetadata(LoopMDKind))
-      for (pred_iterator PI = pred_begin(BB), E = pred_end(BB); PI != E; ++PI) {
-        BasicBlock *Pred = *PI;
+      for (BasicBlock *Pred : predecessors(BB))
         Pred->getTerminator()->setMetadata(LoopMDKind, LoopMD);
-      }
+
+  // For AutoFDO, since BB is going to be removed, we won't be able to sample
+  // it. To avoid assigning a zero weight for BB, move all its pseudo probes
+  // into Succ and mark them dangling. This should allow the counts inference a
+  // chance to get a more reasonable weight for BB.
+  moveAndDanglePseudoProbes(BB, &*Succ->getFirstInsertionPt());
 
   // Everything that jumped to BB now goes to Succ.
   BB->replaceAllUsesWith(Succ);
@@ -1709,11 +1731,9 @@ void llvm::replaceDbgValueForAlloca(AllocaInst *AI, Value *NewAllocaAddress,
                                     DIBuilder &Builder, int Offset) {
   if (auto *L = LocalAsMetadata::getIfExists(AI))
     if (auto *MDV = MetadataAsValue::getIfExists(AI->getContext(), L))
-      for (auto UI = MDV->use_begin(), UE = MDV->use_end(); UI != UE;) {
-        Use &U = *UI++;
+      for (Use &U : llvm::make_early_inc_range(MDV->uses()))
         if (auto *DVI = dyn_cast<DbgValueInst>(U.getUser()))
           replaceOneDbgValueForAlloca(DVI, NewAllocaAddress, Builder, Offset);
-      }
 }
 
 /// Wrap \p V in a ValueAsMetadata instance.
@@ -2782,6 +2802,13 @@ void llvm::hoistAllInstructionsInto(BasicBlock *DomBlock, Instruction *InsertPt,
   // TODO: Extend llvm.dbg.value to take more than one SSA Value (PR39141) to
   // encode predicated DIExpressions that yield different results on different
   // code paths.
+
+  // A hoisted conditional probe should be treated as dangling so that it will
+  // not be over-counted when the samples collected on the non-conditional path
+  // are counted towards the conditional path. We leave it for the counts
+  // inference algorithm to figure out a proper count for a danglng probe.
+  moveAndDanglePseudoProbes(BB, InsertPt);
+
   for (BasicBlock::iterator II = BB->begin(), IE = BB->end(); II != IE;) {
     Instruction *I = &*II;
     I->dropUnknownNonDebugMetadata();
@@ -2857,6 +2884,10 @@ collectBitParts(Value *V, bool MatchBSwaps, bool MatchBitReversals,
 
   auto &Result = BPS[V] = None;
   auto BitWidth = V->getType()->getScalarSizeInBits();
+
+  // Can't do integer/elements > 128 bits.
+  if (BitWidth > 128)
+    return Result;
 
   // Prevent stack overflow by limiting the recursion depth
   if (Depth == BitPartRecursionMaxDepth) {
@@ -2961,6 +2992,19 @@ collectBitParts(Value *V, bool MatchBSwaps, bool MatchBitReversals,
         Result->Provenance[BitIdx] = Res->Provenance[BitIdx];
       for (unsigned BitIdx = NarrowBitWidth; BitIdx < BitWidth; ++BitIdx)
         Result->Provenance[BitIdx] = BitPart::Unset;
+      return Result;
+    }
+
+    // If this is a truncate instruction, extract the lower bits.
+    if (match(V, m_Trunc(m_Value(X)))) {
+      const auto &Res =
+          collectBitParts(X, MatchBSwaps, MatchBitReversals, BPS, Depth + 1);
+      if (!Res)
+        return Result;
+
+      Result = BitPart(Res->Provider, BitWidth);
+      for (unsigned BitIdx = 0; BitIdx < BitWidth; ++BitIdx)
+        Result->Provenance[BitIdx] = Res->Provenance[BitIdx];
       return Result;
     }
 

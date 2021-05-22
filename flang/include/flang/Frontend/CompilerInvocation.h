@@ -61,10 +61,16 @@ class CompilerInvocation : public CompilerInvocationBase {
   // of options.
   Fortran::parser::Options parserOpts_;
 
+  // Semantics context
+  std::unique_ptr<Fortran::semantics::SemanticsContext> semanticsContext_;
+
   /// Semantic options
   // TODO: Merge with or translate to frontendOpts_. We shouldn't need two sets
   // of options.
   std::string moduleDir_ = ".";
+
+  // Fortran Dialect options
+  Fortran::common::IntrinsicTypeDefaultKinds defaultKinds_;
 
 public:
   CompilerInvocation() = default;
@@ -75,8 +81,22 @@ public:
   Fortran::parser::Options &fortranOpts() { return parserOpts_; }
   const Fortran::parser::Options &fortranOpts() const { return parserOpts_; }
 
+  Fortran::semantics::SemanticsContext &semanticsContext() {
+    return *semanticsContext_;
+  }
+  const Fortran::semantics::SemanticsContext &semanticsContext() const {
+    return *semanticsContext_;
+  }
+
   std::string &moduleDir() { return moduleDir_; }
   const std::string &moduleDir() const { return moduleDir_; }
+
+  Fortran::common::IntrinsicTypeDefaultKinds &defaultKinds() {
+    return defaultKinds_;
+  }
+  const Fortran::common::IntrinsicTypeDefaultKinds &defaultKinds() const {
+    return defaultKinds_;
+  }
 
   /// Create a compiler invocation from a list of input options.
   /// \returns true on success.
@@ -93,12 +113,15 @@ public:
   // compiler driver options in libclangDriver.
   void SetDefaultFortranOpts();
 
+  /// Set the default predefinitions.
+  void setDefaultPredefinitions();
+
   /// Set the Fortran options to user-specified values.
   /// These values are found in the preprocessor options.
   void setFortranOpts();
 
   /// Set the Semantic Options
-  void setSemanticsOpts(Fortran::semantics::SemanticsContext &);
+  void setSemanticsOpts(Fortran::parser::AllCookedSources &);
 };
 
 } // end namespace Fortran::frontend

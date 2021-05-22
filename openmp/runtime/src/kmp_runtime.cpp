@@ -541,65 +541,16 @@ static void __kmp_print_team_storage_map(const char *header, kmp_team_t *team,
                                "%s_%d.t_disp_buffer", header, team_id);
 }
 
-static void __kmp_init_allocator() { __kmp_init_memkind(); }
+static void __kmp_init_allocator() {
+  __kmp_init_memkind();
+  __kmp_init_target_mem();
+}
 static void __kmp_fini_allocator() { __kmp_fini_memkind(); }
 
 /* ------------------------------------------------------------------------ */
 
 #if KMP_DYNAMIC_LIB
 #if KMP_OS_WINDOWS
-
-static void __kmp_reset_lock(kmp_bootstrap_lock_t *lck) {
-  // TODO: Change to __kmp_break_bootstrap_lock().
-  __kmp_init_bootstrap_lock(lck); // make the lock released
-}
-
-static void __kmp_reset_locks_on_process_detach(int gtid_req) {
-  int i;
-  int thread_count;
-
-  // PROCESS_DETACH is expected to be called by a thread that executes
-  // ProcessExit() or FreeLibrary(). OS terminates other threads (except the one
-  // calling ProcessExit or FreeLibrary). So, it might be safe to access the
-  // __kmp_threads[] without taking the forkjoin_lock. However, in fact, some
-  // threads can be still alive here, although being about to be terminated. The
-  // threads in the array with ds_thread==0 are most suspicious. Actually, it
-  // can be not safe to access the __kmp_threads[].
-
-  // TODO: does it make sense to check __kmp_roots[] ?
-
-  // Let's check that there are no other alive threads registered with the OMP
-  // lib.
-  while (1) {
-    thread_count = 0;
-    for (i = 0; i < __kmp_threads_capacity; ++i) {
-      if (!__kmp_threads)
-        continue;
-      kmp_info_t *th = __kmp_threads[i];
-      if (th == NULL)
-        continue;
-      int gtid = th->th.th_info.ds.ds_gtid;
-      if (gtid == gtid_req)
-        continue;
-      if (gtid < 0)
-        continue;
-      DWORD exit_val;
-      int alive = __kmp_is_thread_alive(th, &exit_val);
-      if (alive) {
-        ++thread_count;
-      }
-    }
-    if (thread_count == 0)
-      break; // success
-  }
-
-  // Assume that I'm alone. Now it might be safe to check and reset locks.
-  // __kmp_forkjoin_lock and __kmp_stdio_lock are expected to be reset.
-  __kmp_reset_lock(&__kmp_forkjoin_lock);
-#ifdef KMP_DEBUG
-  __kmp_reset_lock(&__kmp_stdio_lock);
-#endif // KMP_DEBUG
-}
 
 BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpReserved) {
   //__kmp_acquire_bootstrap_lock( &__kmp_initz_lock );
@@ -614,36 +565,19 @@ BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpReserved) {
   case DLL_PROCESS_DETACH:
     KA_TRACE(10, ("DllMain: PROCESS_DETACH T#%d\n", __kmp_gtid_get_specific()));
 
-    if (lpReserved != NULL) {
-      // lpReserved is used for telling the difference:
-      //   lpReserved == NULL when FreeLibrary() was called,
-      //   lpReserved != NULL when the process terminates.
-      // When FreeLibrary() is called, worker threads remain alive. So they will
-      // release the forkjoin lock by themselves. When the process terminates,
-      // worker threads disappear triggering the problem of unreleased forkjoin
-      // lock as described below.
-
-      // A worker thread can take the forkjoin lock. The problem comes up if
-      // that worker thread becomes dead before it releases the forkjoin lock.
-      // The forkjoin lock remains taken, while the thread executing
-      // DllMain()->PROCESS_DETACH->__kmp_internal_end_library() below will try
-      // to take the forkjoin lock and will always fail, so that the application
-      // will never finish [normally]. This scenario is possible if
-      // __kmpc_end() has not been executed. It looks like it's not a corner
-      // case, but common cases:
-      // - the main function was compiled by an alternative compiler;
-      // - the main function was compiled by icl but without /Qopenmp
-      //   (application with plugins);
-      // - application terminates by calling C exit(), Fortran CALL EXIT() or
-      //   Fortran STOP.
-      // - alive foreign thread prevented __kmpc_end from doing cleanup.
-      //
-      // This is a hack to work around the problem.
-      // TODO: !!! figure out something better.
-      __kmp_reset_locks_on_process_detach(__kmp_gtid_get_specific());
-    }
-
-    __kmp_internal_end_library(__kmp_gtid_get_specific());
+    // According to Windows* documentation for DllMain entry point:
+    // for DLL_PROCESS_DETACH, lpReserved is used for telling the difference:
+    //   lpReserved == NULL when FreeLibrary() is called,
+    //   lpReserved != NULL when the process is terminated.
+    // When FreeLibrary() is called, worker threads remain alive. So the
+    // runtime's state is consistent and executing proper shutdown is OK.
+    // When the process is terminated, worker threads have exited or been
+    // forcefully terminated by the OS and only the shutdown thread remains.
+    // This can leave the runtime in an inconsistent state.
+    // Hence, only attempt proper cleanup when FreeLibrary() is called.
+    // Otherwise, rely on OS to reclaim resources.
+    if (lpReserved == NULL)
+      __kmp_internal_end_library(__kmp_gtid_get_specific());
 
     return TRUE;
 
@@ -1373,7 +1307,8 @@ void __kmp_serialized_parallel(ident_t *loc, kmp_int32 global_tid) {
   serial_team->t.ompt_team_info.master_return_address = codeptr;
   if (ompt_enabled.enabled &&
       this_thr->th.ompt_thread_info.state != ompt_state_overhead) {
-    OMPT_CUR_TASK_INFO(this_thr)->frame.exit_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
+    OMPT_CUR_TASK_INFO(this_thr)->frame.exit_frame.ptr =
+        OMPT_GET_FRAME_ADDRESS(0);
 
     ompt_lw_taskteam_t lw_taskteam;
     __ompt_lw_taskteam_init(&lw_taskteam, this_thr, global_tid,
@@ -1387,14 +1322,16 @@ void __kmp_serialized_parallel(ident_t *loc, kmp_int32 global_tid) {
     if (ompt_enabled.ompt_callback_implicit_task) {
       ompt_callbacks.ompt_callback(ompt_callback_implicit_task)(
           ompt_scope_begin, OMPT_CUR_TEAM_DATA(this_thr),
-          OMPT_CUR_TASK_DATA(this_thr), 1, __kmp_tid_from_gtid(global_tid), ompt_task_implicit); // TODO: Can this be ompt_task_initial?
-      OMPT_CUR_TASK_INFO(this_thr)
-          ->thread_num = __kmp_tid_from_gtid(global_tid);
+          OMPT_CUR_TASK_DATA(this_thr), 1, __kmp_tid_from_gtid(global_tid),
+          ompt_task_implicit); // TODO: Can this be ompt_task_initial?
+      OMPT_CUR_TASK_INFO(this_thr)->thread_num =
+          __kmp_tid_from_gtid(global_tid);
     }
 
     /* OMPT state */
     this_thr->th.ompt_thread_info.state = ompt_state_work_parallel;
-    OMPT_CUR_TASK_INFO(this_thr)->frame.exit_frame.ptr = OMPT_GET_FRAME_ADDRESS(0);
+    OMPT_CUR_TASK_INFO(this_thr)->frame.exit_frame.ptr =
+        OMPT_GET_FRAME_ADDRESS(0);
   }
 #endif
 }
@@ -1641,8 +1578,8 @@ int __kmp_fork_call(ident_t *loc, int gtid,
           /* OMPT implicit task begin */
           implicit_task_data = OMPT_CUR_TASK_DATA(master_th);
           if (ompt_enabled.ompt_callback_implicit_task) {
-            OMPT_CUR_TASK_INFO(master_th)
-                ->thread_num = __kmp_tid_from_gtid(gtid);
+            OMPT_CUR_TASK_INFO(master_th)->thread_num =
+                __kmp_tid_from_gtid(gtid);
             ompt_callbacks.ompt_callback(ompt_callback_implicit_task)(
                 ompt_scope_begin, OMPT_CUR_TEAM_DATA(master_th),
                 implicit_task_data, 1,
@@ -1667,7 +1604,7 @@ int __kmp_fork_call(ident_t *loc, int gtid,
                                  ,
                                  exit_frame_p
 #endif
-                                 );
+          );
         }
 
 #if OMPT_SUPPORT
@@ -1743,6 +1680,7 @@ int __kmp_fork_call(ident_t *loc, int gtid,
         parent_team->t.t_region_time = tmp_time;
       }
       if (__itt_stack_caller_create_ptr) {
+        KMP_DEBUG_ASSERT(parent_team->t.t_stack_id == NULL);
         // create new stack stitching id before entering fork barrier
         parent_team->t.t_stack_id = __kmp_itt_stack_caller_create();
       }
@@ -1782,12 +1720,13 @@ int __kmp_fork_call(ident_t *loc, int gtid,
     }
 #endif
 
+    int enter_teams = 0;
     if (parent_team->t.t_active_level >=
         master_th->th.th_current_task->td_icvs.max_active_levels) {
       nthreads = 1;
     } else {
-      int enter_teams = ((ap == NULL && active_level == 0) ||
-                         (ap && teams_level > 0 && teams_level == level));
+      enter_teams = ((ap == NULL && active_level == 0) ||
+                     (ap && teams_level > 0 && teams_level == level));
       nthreads =
           master_set_numthreads
               ? master_set_numthreads
@@ -1852,7 +1791,7 @@ int __kmp_fork_call(ident_t *loc, int gtid,
         if (!ap) {
           // revert change made in __kmpc_serialized_parallel()
           master_th->th.th_serial_team->t.t_level--;
-// Get args from parent team for teams construct
+          // Get args from parent team for teams construct
 
 #if OMPT_SUPPORT
           void *dummy;
@@ -1871,8 +1810,8 @@ int __kmp_fork_call(ident_t *loc, int gtid,
             task_info = OMPT_CUR_TASK_INFO(master_th);
             exit_frame_p = &(task_info->frame.exit_frame.ptr);
             if (ompt_enabled.ompt_callback_implicit_task) {
-              OMPT_CUR_TASK_INFO(master_th)
-                  ->thread_num = __kmp_tid_from_gtid(gtid);
+              OMPT_CUR_TASK_INFO(master_th)->thread_num =
+                  __kmp_tid_from_gtid(gtid);
               ompt_callbacks.ompt_callback(ompt_callback_implicit_task)(
                   ompt_scope_begin, OMPT_CUR_TEAM_DATA(master_th),
                   &(task_info->task_data), 1,
@@ -1896,7 +1835,7 @@ int __kmp_fork_call(ident_t *loc, int gtid,
                                    ,
                                    exit_frame_p
 #endif
-                                   );
+            );
           }
 
 #if OMPT_SUPPORT
@@ -1988,8 +1927,8 @@ int __kmp_fork_call(ident_t *loc, int gtid,
                   ompt_scope_begin, OMPT_CUR_TEAM_DATA(master_th),
                   implicit_task_data, 1, __kmp_tid_from_gtid(gtid),
                   ompt_task_implicit);
-              OMPT_CUR_TASK_INFO(master_th)
-                  ->thread_num = __kmp_tid_from_gtid(gtid);
+              OMPT_CUR_TASK_INFO(master_th)->thread_num =
+                  __kmp_tid_from_gtid(gtid);
             }
 
             /* OMPT state */
@@ -2007,7 +1946,7 @@ int __kmp_fork_call(ident_t *loc, int gtid,
                                    ,
                                    exit_frame_p
 #endif
-                                   );
+            );
           }
 
 #if OMPT_SUPPORT
@@ -2308,9 +2247,18 @@ int __kmp_fork_call(ident_t *loc, int gtid,
 
 #if USE_ITT_BUILD
     if (__itt_stack_caller_create_ptr) {
-      team->t.t_stack_id =
-          __kmp_itt_stack_caller_create(); // create new stack stitching id
-      // before entering fork barrier
+      // create new stack stitching id before entering fork barrier
+      if (!enter_teams) {
+        KMP_DEBUG_ASSERT(team->t.t_stack_id == NULL);
+        team->t.t_stack_id = __kmp_itt_stack_caller_create();
+      } else if (parent_team->t.t_serialized) {
+        // keep stack stitching id in the serialized parent_team;
+        // current team will be used for parallel inside the teams;
+        // if parent_team is active, then it already keeps stack stitching id
+        // for the league of teams
+        KMP_DEBUG_ASSERT(parent_team->t.t_stack_id == NULL);
+        parent_team->t.t_stack_id = __kmp_itt_stack_caller_create();
+      }
     }
 #endif /* USE_ITT_BUILD */
 
@@ -2470,9 +2418,27 @@ void __kmp_join_call(ident_t *loc, int gtid
     // AC: No barrier for internal teams at exit from teams construct.
     //     But there is barrier for external team (league).
     __kmp_internal_join(loc, gtid, team);
+#if USE_ITT_BUILD
+    if (__itt_stack_caller_create_ptr) {
+      KMP_DEBUG_ASSERT(team->t.t_stack_id != NULL);
+      // destroy the stack stitching id after join barrier
+      __kmp_itt_stack_caller_destroy((__itt_caller)team->t.t_stack_id);
+      team->t.t_stack_id = NULL;
+    }
+#endif
   } else {
     master_th->th.th_task_state =
         0; // AC: no tasking in teams (out of any parallel)
+#if USE_ITT_BUILD
+    if (__itt_stack_caller_create_ptr && parent_team->t.t_serialized) {
+      KMP_DEBUG_ASSERT(parent_team->t.t_stack_id != NULL);
+      // destroy the stack stitching id on exit from the teams construct
+      // if parent_team is active, then the id will be destroyed later on
+      // by master of the league of teams
+      __kmp_itt_stack_caller_destroy((__itt_caller)parent_team->t.t_stack_id);
+      parent_team->t.t_stack_id = NULL;
+    }
+#endif
   }
 
   KMP_MB();
@@ -2483,10 +2449,6 @@ void __kmp_join_call(ident_t *loc, int gtid
 #endif
 
 #if USE_ITT_BUILD
-  if (__itt_stack_caller_create_ptr) {
-    // destroy the stack stitching id after join barrier
-    __kmp_itt_stack_caller_destroy((__itt_caller)team->t.t_stack_id);
-  }
   // Mark end of "parallel" region for Intel(R) VTune(TM) analyzer.
   if (team->t.t_active_level == 1 &&
       (!master_th->th.th_teams_microtask || /* not in teams construct */
@@ -2756,7 +2718,7 @@ void __kmp_set_num_threads(int new_nth, int gtid) {
 #if KMP_NESTED_HOT_TEAMS
       && __kmp_hot_teams_max_level && !__kmp_hot_teams_mode
 #endif
-      ) {
+  ) {
     kmp_team_t *hot_team = root->r.r_hot_team;
     int f;
 
@@ -3301,7 +3263,7 @@ static void __kmp_initialize_root(kmp_root_t *root) {
                           __kmp_nested_proc_bind.bind_types[0], &r_icvs,
                           0 // argc
                           USE_NESTED_HOT_ARG(NULL) // master thread is unknown
-                          );
+      );
 #if USE_DEBUGGER
   // Non-NULL value should be assigned to make the debugger display the root
   // team.
@@ -3338,7 +3300,7 @@ static void __kmp_initialize_root(kmp_root_t *root) {
                           __kmp_nested_proc_bind.bind_types[0], &r_icvs,
                           0 // argc
                           USE_NESTED_HOT_ARG(NULL) // master thread is unknown
-                          );
+      );
   KF_TRACE(10, ("__kmp_initialize_root: after hot_team = %p\n", hot_team));
 
   root->r.r_hot_team = hot_team;
@@ -3369,7 +3331,7 @@ typedef kmp_team_list_item_t *kmp_team_list_t;
 static void __kmp_print_structure_team_accum( // Add team to list of teams.
     kmp_team_list_t list, // List of teams.
     kmp_team_p const *team // Team to add.
-    ) {
+) {
 
   // List must terminate with item where both entry and next are NULL.
   // Team is added to the list only once.
@@ -3413,7 +3375,7 @@ static void __kmp_print_structure_team_accum( // Add team to list of teams.
 
 static void __kmp_print_structure_team(char const *title, kmp_team_p const *team
 
-                                       ) {
+) {
   __kmp_printf("%s", title);
   if (team != NULL) {
     __kmp_printf("%2x %p\n", team->t.t_id, team);
@@ -3636,9 +3598,9 @@ static int __kmp_expand_threads(int nNeed) {
   kmp_info_t **newThreads;
   kmp_root_t **newRoot;
 
-// All calls to __kmp_expand_threads should be under __kmp_forkjoin_lock, so
-// resizing __kmp_threads does not need additional protection if foreign
-// threads are present
+  // All calls to __kmp_expand_threads should be under __kmp_forkjoin_lock, so
+  // resizing __kmp_threads does not need additional protection if foreign
+  // threads are present
 
 #if KMP_OS_WINDOWS && !KMP_DYNAMIC_LIB
   /* only for Windows static library */
@@ -3957,7 +3919,8 @@ int __kmp_register_root(int initial_thread) {
     }
     ompt_data_t *task_data;
     ompt_data_t *parallel_data;
-    __ompt_get_task_info_internal(0, NULL, &task_data, NULL, &parallel_data, NULL);
+    __ompt_get_task_info_internal(0, NULL, &task_data, NULL, &parallel_data,
+                                  NULL);
     if (ompt_enabled.ompt_callback_implicit_task) {
       ompt_callbacks.ompt_callback(ompt_callback_implicit_task)(
           ompt_scope_begin, parallel_data, task_data, 1, 1, ompt_task_initial);
@@ -4052,7 +4015,8 @@ static int __kmp_reset_root(int gtid, kmp_root_t *root) {
 #if OMPT_SUPPORT
   ompt_data_t *task_data;
   ompt_data_t *parallel_data;
-  __ompt_get_task_info_internal(0, NULL, &task_data, NULL, &parallel_data, NULL);
+  __ompt_get_task_info_internal(0, NULL, &task_data, NULL, &parallel_data,
+                                NULL);
   if (ompt_enabled.ompt_callback_implicit_task) {
     ompt_callbacks.ompt_callback(ompt_callback_implicit_task)(
         ompt_scope_end, parallel_data, task_data, 0, 1, ompt_task_initial);
@@ -4293,8 +4257,9 @@ static void __kmp_initialize_info(kmp_info_t *this_thr, kmp_team_t *team,
             &dispatch->th_disp_buffer[team->t.t_max_nproc == 1
                                           ? 1
                                           : __kmp_dispatch_num_buffers],
-            disp_size, "th_%d.th_dispatch.th_disp_buffer "
-                       "(team_%d.t_dispatch[%d].th_disp_buffer)",
+            disp_size,
+            "th_%d.th_dispatch.th_disp_buffer "
+            "(team_%d.t_dispatch[%d].th_disp_buffer)",
             gtid, team->t.t_id, gtid);
       }
     } else {
@@ -6079,7 +6044,7 @@ static void __kmp_reap_thread(kmp_info_t *thread, int is_root) {
   TCW_SYNC_PTR(__kmp_threads[gtid], NULL);
 
   --__kmp_all_nth;
-// __kmp_nth was decremented when thread is added to the pool.
+  // __kmp_nth was decremented when thread is added to the pool.
 
 #ifdef KMP_ADJUST_BLOCKTIME
   /* Adjust blocktime back to user setting or default if necessary */
@@ -6626,8 +6591,8 @@ void __kmp_register_library_startup(void) {
       file_name = tail;
       if (tail != NULL) {
         long *flag_addr = 0;
-        long flag_val = 0;
-        KMP_SSCANF(flag_addr_str, "%p", RCAST(void**, &flag_addr));
+        unsigned long flag_val = 0;
+        KMP_SSCANF(flag_addr_str, "%p", RCAST(void **, &flag_addr));
         KMP_SSCANF(flag_val_str, "%lx", &flag_val);
         if (flag_addr != 0 && flag_val != 0 && strcmp(file_name, "") != 0) {
           // First, check whether environment-encoded address is mapped into
@@ -6672,7 +6637,9 @@ void __kmp_register_library_startup(void) {
         __kmp_env_unset(name);
 #endif
       } break;
-      default: { KMP_DEBUG_ASSERT(0); } break;
+      default: {
+        KMP_DEBUG_ASSERT(0);
+      } break;
       }
     }
     KMP_INTERNAL_FREE((void *)value);
@@ -7400,9 +7367,14 @@ int __kmp_invoke_task_func(int gtid) {
   __kmp_run_before_invoked_task(gtid, tid, this_thr, team);
 #if USE_ITT_BUILD
   if (__itt_stack_caller_create_ptr) {
-    __kmp_itt_stack_callee_enter(
-        (__itt_caller)
-            team->t.t_stack_id); // inform ittnotify about entering user's code
+    // inform ittnotify about entering user's code
+    if (team->t.t_stack_id != NULL) {
+      __kmp_itt_stack_callee_enter((__itt_caller)team->t.t_stack_id);
+    } else {
+      KMP_DEBUG_ASSERT(team->t.t_parent->t.t_stack_id != NULL);
+      __kmp_itt_stack_callee_enter(
+          (__itt_caller)team->t.t_parent->t.t_stack_id);
+    }
   }
 #endif /* USE_ITT_BUILD */
 #if INCLUDE_SSC_MARKS
@@ -7417,8 +7389,8 @@ int __kmp_invoke_task_func(int gtid) {
   int ompt_team_size;
 
   if (ompt_enabled.enabled) {
-    exit_frame_p = &(
-        team->t.t_implicit_task_taskdata[tid].ompt_task_info.frame.exit_frame.ptr);
+    exit_frame_p = &(team->t.t_implicit_task_taskdata[tid]
+                         .ompt_task_info.frame.exit_frame.ptr);
   } else {
     exit_frame_p = &dummy;
   }
@@ -7451,10 +7423,10 @@ int __kmp_invoke_task_func(int gtid) {
                               ,
                               exit_frame_p
 #endif
-                              );
+  );
 #if OMPT_SUPPORT
   *exit_frame_p = NULL;
-   this_thr->th.ompt_thread_info.parallel_flags |= ompt_parallel_team;
+  this_thr->th.ompt_thread_info.parallel_flags |= ompt_parallel_team;
 #endif
 
 #if KMP_STATS_ENABLED
@@ -7466,9 +7438,14 @@ int __kmp_invoke_task_func(int gtid) {
 
 #if USE_ITT_BUILD
   if (__itt_stack_caller_create_ptr) {
-    __kmp_itt_stack_callee_leave(
-        (__itt_caller)
-            team->t.t_stack_id); // inform ittnotify about leaving user's code
+    // inform ittnotify about leaving user's code
+    if (team->t.t_stack_id != NULL) {
+      __kmp_itt_stack_callee_leave((__itt_caller)team->t.t_stack_id);
+    } else {
+      KMP_DEBUG_ASSERT(team->t.t_parent->t.t_stack_id != NULL);
+      __kmp_itt_stack_callee_leave(
+          (__itt_caller)team->t.t_parent->t.t_stack_id);
+    }
   }
 #endif /* USE_ITT_BUILD */
   __kmp_run_after_invoked_task(gtid, tid, this_thr, team);
@@ -7565,6 +7542,63 @@ void __kmp_push_num_threads(ident_t *id, int gtid, int num_threads) {
     thr->th.th_set_nproc = num_threads;
 }
 
+static void __kmp_push_thread_limit(kmp_info_t *thr, int num_teams,
+                                    int num_threads) {
+  KMP_DEBUG_ASSERT(thr);
+  // Remember the number of threads for inner parallel regions
+  if (!TCR_4(__kmp_init_middle))
+    __kmp_middle_initialize(); // get internal globals calculated
+  KMP_DEBUG_ASSERT(__kmp_avail_proc);
+  KMP_DEBUG_ASSERT(__kmp_dflt_team_nth);
+
+  if (num_threads == 0) {
+    if (__kmp_teams_thread_limit > 0) {
+      num_threads = __kmp_teams_thread_limit;
+    } else {
+      num_threads = __kmp_avail_proc / num_teams;
+    }
+    // adjust num_threads w/o warning as it is not user setting
+    // num_threads = min(num_threads, nthreads-var, thread-limit-var)
+    // no thread_limit clause specified -  do not change thread-limit-var ICV
+    if (num_threads > __kmp_dflt_team_nth) {
+      num_threads = __kmp_dflt_team_nth; // honor nthreads-var ICV
+    }
+    if (num_threads > thr->th.th_current_task->td_icvs.thread_limit) {
+      num_threads = thr->th.th_current_task->td_icvs.thread_limit;
+    } // prevent team size to exceed thread-limit-var
+    if (num_teams * num_threads > __kmp_teams_max_nth) {
+      num_threads = __kmp_teams_max_nth / num_teams;
+    }
+    if (num_threads == 0) {
+      num_threads = 1;
+    }
+  } else {
+    // This thread will be the master of the league masters
+    // Store new thread limit; old limit is saved in th_cg_roots list
+    thr->th.th_current_task->td_icvs.thread_limit = num_threads;
+    // num_threads = min(num_threads, nthreads-var)
+    if (num_threads > __kmp_dflt_team_nth) {
+      num_threads = __kmp_dflt_team_nth; // honor nthreads-var ICV
+    }
+    if (num_teams * num_threads > __kmp_teams_max_nth) {
+      int new_threads = __kmp_teams_max_nth / num_teams;
+      if (new_threads == 0) {
+        new_threads = 1;
+      }
+      if (new_threads != num_threads) {
+        if (!__kmp_reserve_warn) { // user asked for too many threads
+          __kmp_reserve_warn = 1; // conflicts with KMP_TEAMS_THREAD_LIMIT
+          __kmp_msg(kmp_ms_warning,
+                    KMP_MSG(CantFormThrTeam, num_threads, new_threads),
+                    KMP_HNT(Unset_ALL_THREADS), __kmp_msg_null);
+        }
+      }
+      num_threads = new_threads;
+    }
+  }
+  thr->th.th_teams_size.nth = num_threads;
+}
+
 /* this sets the requested number of teams for the teams region and/or
    the number of threads for the next parallel region encountered  */
 void __kmp_push_num_teams(ident_t *id, int gtid, int num_teams,
@@ -7593,49 +7627,64 @@ void __kmp_push_num_teams(ident_t *id, int gtid, int num_teams,
   // teams)
   thr->th.th_set_nproc = thr->th.th_teams_size.nteams = num_teams;
 
-  // Remember the number of threads for inner parallel regions
-  if (!TCR_4(__kmp_init_middle))
-    __kmp_middle_initialize(); // get internal globals calculated
-  KMP_DEBUG_ASSERT(__kmp_avail_proc);
-  KMP_DEBUG_ASSERT(__kmp_dflt_team_nth);
-  if (num_threads == 0) {
-    if (__kmp_teams_thread_limit > 0) {
-      num_threads = __kmp_teams_thread_limit;
-    } else {
-      num_threads = __kmp_avail_proc / num_teams;
-    }
-    // adjust num_threads w/o warning as it is not user setting
-    // num_threads = min(num_threads, nthreads-var, thread-limit-var)
-    // no thread_limit clause specified -  do not change thread-limit-var ICV
-    if (num_threads > __kmp_dflt_team_nth) {
-      num_threads = __kmp_dflt_team_nth; // honor nthreads-var ICV
-    }
-    if (num_threads > thr->th.th_current_task->td_icvs.thread_limit) {
-      num_threads = thr->th.th_current_task->td_icvs.thread_limit;
-    } // prevent team size to exceed thread-limit-var
-    if (num_teams * num_threads > __kmp_teams_max_nth) {
-      num_threads = __kmp_teams_max_nth / num_teams;
-    }
-  } else {
-    // This thread will be the master of the league masters
-    // Store new thread limit; old limit is saved in th_cg_roots list
-    thr->th.th_current_task->td_icvs.thread_limit = num_threads;
-    // num_threads = min(num_threads, nthreads-var)
-    if (num_threads > __kmp_dflt_team_nth) {
-      num_threads = __kmp_dflt_team_nth; // honor nthreads-var ICV
-    }
-    if (num_teams * num_threads > __kmp_teams_max_nth) {
-      int new_threads = __kmp_teams_max_nth / num_teams;
-      if (!__kmp_reserve_warn) { // user asked for too many threads
-        __kmp_reserve_warn = 1; // conflicts with KMP_TEAMS_THREAD_LIMIT
+  __kmp_push_thread_limit(thr, num_teams, num_threads);
+}
+
+/* This sets the requested number of teams for the teams region and/or
+   the number of threads for the next parallel region encountered  */
+void __kmp_push_num_teams_51(ident_t *id, int gtid, int num_teams_lb,
+                             int num_teams_ub, int num_threads) {
+  kmp_info_t *thr = __kmp_threads[gtid];
+  KMP_DEBUG_ASSERT(num_teams_lb >= 0 && num_teams_ub >= 0);
+  KMP_DEBUG_ASSERT(num_teams_ub >= num_teams_lb);
+  KMP_DEBUG_ASSERT(num_threads >= 0);
+
+  if (num_teams_lb > num_teams_ub) {
+    __kmp_fatal(KMP_MSG(FailedToCreateTeam, num_teams_lb, num_teams_ub),
+                KMP_HNT(SetNewBound, __kmp_teams_max_nth), __kmp_msg_null);
+  }
+
+  int num_teams = 1; // defalt number of teams is 1.
+
+  if (num_teams_lb == 0 && num_teams_ub > 0)
+    num_teams_lb = num_teams_ub;
+
+  if (num_teams_lb == 0 && num_teams_ub == 0) { // no num_teams clause
+    num_teams = (__kmp_nteams > 0) ? __kmp_nteams : num_teams;
+    if (num_teams > __kmp_teams_max_nth) {
+      if (!__kmp_reserve_warn) {
+        __kmp_reserve_warn = 1;
         __kmp_msg(kmp_ms_warning,
-                  KMP_MSG(CantFormThrTeam, num_threads, new_threads),
+                  KMP_MSG(CantFormThrTeam, num_teams, __kmp_teams_max_nth),
                   KMP_HNT(Unset_ALL_THREADS), __kmp_msg_null);
       }
-      num_threads = new_threads;
+      num_teams = __kmp_teams_max_nth;
+    }
+  } else if (num_teams_lb == num_teams_ub) { // requires exact number of teams
+    num_teams = num_teams_ub;
+  } else { // num_teams_lb <= num_teams <= num_teams_ub
+    if (num_threads == 0) {
+      if (num_teams_ub > __kmp_teams_max_nth) {
+        num_teams = num_teams_lb;
+      } else {
+        num_teams = num_teams_ub;
+      }
+    } else {
+      num_teams = (num_threads > __kmp_teams_max_nth)
+                      ? num_teams
+                      : __kmp_teams_max_nth / num_threads;
+      if (num_teams < num_teams_lb) {
+        num_teams = num_teams_lb;
+      } else if (num_teams > num_teams_ub) {
+        num_teams = num_teams_ub;
+      }
     }
   }
-  thr->th.th_teams_size.nth = num_threads;
+  // Set number of teams (number of threads in the outer "parallel" of the
+  // teams)
+  thr->th.th_set_nproc = thr->th.th_teams_size.nteams = num_teams;
+
+  __kmp_push_thread_limit(thr, num_teams, num_threads);
 }
 
 // Set the proc_bind var to use in the following parallel region.
@@ -7697,7 +7746,7 @@ void __kmp_internal_join(ident_t *id, int gtid, kmp_team_t *team) {
   KMP_ASSERT(KMP_MASTER_GTID(gtid));
   KMP_MB(); /* Flush all pending memory write invalidates.  */
 
-/* Join barrier after fork */
+  /* Join barrier after fork */
 
 #ifdef KMP_DEBUG
   if (__kmp_threads[gtid] &&
@@ -7741,7 +7790,8 @@ void __kmp_internal_join(ident_t *id, int gtid, kmp_team_t *team) {
 #endif
     if (!KMP_MASTER_TID(ds_tid) && ompt_enabled.ompt_callback_implicit_task) {
       ompt_callbacks.ompt_callback(ompt_callback_implicit_task)(
-          ompt_scope_end, NULL, task_data, 0, ds_tid, ompt_task_implicit); // TODO: Can this be ompt_task_initial?
+          ompt_scope_end, NULL, task_data, 0, ds_tid,
+          ompt_task_implicit); // TODO: Can this be ompt_task_initial?
     }
   }
 #endif
@@ -8171,7 +8221,7 @@ int __kmp_aux_get_num_teams() {
  *
  * Implementation-specific field types can be added
  * If a type is unknown, print "undefined"
-*/
+ */
 
 // Structure holding the short name, long name, and corresponding data type
 // for snprintf.  A table of these will represent the entire valid keyword
@@ -8366,7 +8416,7 @@ static int __kmp_aux_capture_affinity_field(int gtid, const kmp_info_t *th,
  * (not including null byte character)
  * The resultant string is printed to buffer, which the caller can then
  * handle afterwards
-*/
+ */
 size_t __kmp_aux_capture_affinity(int gtid, const char *format,
                                   kmp_str_buf_t *buffer) {
   const char *parse_ptr;

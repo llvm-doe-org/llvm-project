@@ -232,6 +232,7 @@ check_symbol_exists(lseek64 "sys/types.h;unistd.h" HAVE_LSEEK64)
 set(CMAKE_REQUIRED_DEFINITIONS "")
 check_symbol_exists(mallctl malloc_np.h HAVE_MALLCTL)
 check_symbol_exists(mallinfo malloc.h HAVE_MALLINFO)
+check_symbol_exists(mallinfo2 malloc.h HAVE_MALLINFO2)
 check_symbol_exists(malloc_zone_statistics malloc/malloc.h
                     HAVE_MALLOC_ZONE_STATISTICS)
 check_symbol_exists(getrlimit "sys/types.h;sys/time.h;sys/resource.h" HAVE_GETRLIMIT)
@@ -350,6 +351,8 @@ else()
   unset(HAVE_FFI_H CACHE)
   unset(HAVE_FFI_CALL CACHE)
 endif( LLVM_ENABLE_FFI )
+
+check_symbol_exists(proc_pid_rusage "libproc.h" HAVE_PROC_PID_RUSAGE)
 
 # Whether we can use std::is_trivially_copyable to verify llvm::is_trivially_copyable.
 CHECK_CXX_SOURCE_COMPILES("

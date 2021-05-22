@@ -16,6 +16,7 @@
 
 #include "AArch64.h"
 #include "llvm/CodeGen/CallingConvLower.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/IR/CallingConv.h"
@@ -49,6 +50,10 @@ enum NodeType : unsigned {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
   WrapperLarge, // 4-instruction MOVZ/MOVK sequence for 64-bit addresses.
   CALL,         // Function call.
+
+  // Pseudo for a OBJC call that gets emitted together with a special `mov
+  // x29, x29` marker instruction.
+  CALL_RVMARKER,
 
   // Produces the full sequence of instructions for getting the thread pointer
   // offset of a variable into X0, using the TLSDesc model.
@@ -231,6 +236,10 @@ enum NodeType : unsigned {
   UABD,
   SABD,
 
+  // udot/sdot instructions
+  UDOT,
+  SDOT,
+
   // Vector across-lanes min/max
   // Only the lower result lane is defined.
   SMINV,
@@ -292,7 +301,6 @@ enum NodeType : unsigned {
   CLASTB_N,
   LASTA,
   LASTB,
-  REV,
   TBL,
 
   // Floating-point reductions.
@@ -425,10 +433,6 @@ enum NodeType : unsigned {
   LDP,
   STP,
   STNP,
-
-  // Pseudo for a OBJC call that gets emitted together with a special `mov
-  // x29, x29` marker instruction.
-  CALL_RVMARKER
 };
 
 } // end namespace AArch64ISD
@@ -449,6 +453,21 @@ static inline bool isDef32(const SDNode &N) {
 }
 
 } // end anonymous namespace
+
+namespace AArch64 {
+/// Possible values of current rounding mode, which is specified in bits
+/// 23:22 of FPCR.
+enum Rounding {
+  RN = 0,    // Round to Nearest
+  RP = 1,    // Round towards Plus infinity
+  RM = 2,    // Round towards Minus infinity
+  RZ = 3,    // Round towards Zero
+  rmMask = 3 // Bit mask selecting rounding mode
+};
+
+// Bit position of rounding mode bits in FPCR.
+const unsigned RoundingBitsPos = 22;
+} // namespace AArch64
 
 class AArch64Subtarget;
 class AArch64TargetMachine;
@@ -488,7 +507,7 @@ public:
   /// Returns true if the target allows unaligned memory accesses of the
   /// specified type.
   bool allowsMisalignedMemoryAccesses(
-      EVT VT, unsigned AddrSpace = 0, unsigned Align = 1,
+      EVT VT, unsigned AddrSpace = 0, Align Alignment = Align(1),
       MachineMemOperand::Flags Flags = MachineMemOperand::MONone,
       bool *Fast = nullptr) const override;
   /// LLT variant.
@@ -595,6 +614,9 @@ public:
   bool isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
                                   EVT VT) const override;
   bool isFMAFasterThanFMulAndFAdd(const Function &F, Type *Ty) const override;
+
+  bool generateFMAsInMachineCombiner(EVT VT,
+                                     CodeGenOpt::Level OptLevel) const override;
 
   const MCPhysReg *getScratchRegisters(CallingConv::ID CC) const override;
 
@@ -786,6 +808,13 @@ public:
   /// vector types this override can be removed.
   bool mergeStoresAfterLegalization(EVT VT) const override;
 
+  // If the platform/function should have a redzone, return the size in bytes.
+  unsigned getRedZoneSize(const Function &F) const {
+    if (F.hasFnAttribute(Attribute::NoRedZone))
+      return 0;
+    return 128;
+  }
+
 private:
   /// Keep a pointer to the AArch64Subtarget around so that we can
   /// make the right decision when generating code for different targets.
@@ -896,6 +925,7 @@ private:
   SDValue LowerSPONENTRY(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFLT_ROUNDS_(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerSET_ROUNDING(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG) const;

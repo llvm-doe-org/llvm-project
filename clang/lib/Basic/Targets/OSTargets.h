@@ -114,7 +114,7 @@ public:
     this->MCountName = "\01mcount";
   }
 
-  std::string isValidSectionSpecifier(StringRef SR) const override {
+  llvm::Error isValidSectionSpecifier(StringRef SR) const override {
     // Let MCSectionMachO validate this.
     StringRef Segment, Section;
     unsigned TAA, StubSize;
@@ -940,6 +940,8 @@ class LLVM_LIBRARY_VISIBILITY EmscriptenTargetInfo
                     MacroBuilder &Builder) const final {
     WebAssemblyOSTargetInfo<Target>::getOSDefines(Opts, Triple, Builder);
     Builder.defineMacro("__EMSCRIPTEN__");
+    if (Opts.POSIXThreads)
+      Builder.defineMacro("__EMSCRIPTEN_PTHREADS__");
   }
 
 public:

@@ -208,6 +208,7 @@ int main() {
   // DMP-NEXT:   impl: OMPDistributeDirective
   // DMP-NEXT:     OMPCollapseClause
   // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:         value: Int 2
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
   // DMP:          ForStmt
   //
@@ -257,6 +258,7 @@ int main() {
   // DMP-NEXT:       impl: OMPDistributeDirective
   // DMP-NEXT:         OMPCollapseClause
   // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:             value: Int 2
   // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 2
   // DMP:              ForStmt
   //
@@ -312,6 +314,7 @@ int main() {
   // DMP-NEXT:   impl: OMPDistributeDirective
   // DMP-NEXT:     OMPCollapseClause
   // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:         value: Int 2
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
   // DMP:          ForStmt
   //
@@ -364,6 +367,7 @@ int main() {
   // DMP-NEXT:       impl: OMPDistributeDirective
   // DMP-NEXT:         OMPCollapseClause
   // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:             value: Int 2
   // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 2
   // DMP:              ForStmt
   //
@@ -516,6 +520,7 @@ int main() {
   // DMP-NEXT:       IntegerLiteral {{.*}} 4
   // DMP-NEXT:     OMPCollapseClause
   // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:         value: Int 2
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
   // DMP:          ForStmt
   //
@@ -567,9 +572,11 @@ int main() {
   // DMP-NEXT:       impl: OMPDistributeSimdDirective
   // DMP-NEXT:         OMPSimdlenClause
   // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:             value: Int 4
   // DMP-NEXT:             IntegerLiteral {{.*}} 4
   // DMP-NEXT:         OMPCollapseClause
   // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:             value: Int 2
   // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 2
   // DMP:              ForStmt
   //
@@ -625,6 +632,7 @@ int main() {
   // DMP-NEXT:   impl: OMPDistributeDirective
   // DMP-NEXT:     OMPCollapseClause
   // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:         value: Int 2
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
   // DMP:          ForStmt
   //
@@ -673,6 +681,7 @@ int main() {
   // DMP-NEXT:       impl: OMPDistributeDirective
   // DMP-NEXT:         OMPCollapseClause
   // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:             value: Int 3
   // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 3
   // DMP:              ForStmt
   //
@@ -735,6 +744,7 @@ int main() {
   // DMP-NEXT:   impl: OMPDistributeDirective
   // DMP-NEXT:     OMPCollapseClause
   // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:         value: Int 1
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
   // DMP:          ForStmt
   //
@@ -782,6 +792,7 @@ int main() {
   // DMP-NEXT:   impl: OMPDistributeDirective
   // DMP-NEXT:     OMPCollapseClause
   // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:         value: Int 2
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
   // DMP:          ForStmt
   //
@@ -832,6 +843,7 @@ int main() {
   // DMP-NEXT:       impl: OMPDistributeDirective
   // DMP-NEXT:         OMPCollapseClause
   // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:             value: Int 2
   // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 2
   // DMP:              ForStmt
   //
@@ -896,6 +908,7 @@ int main() {
   // DMP-NEXT:   impl: OMPDistributeDirective
   // DMP-NEXT:     OMPCollapseClause
   // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:         value: Int 2
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
   // DMP:          ForStmt
   //
@@ -922,6 +935,7 @@ int main() {
       // DMP-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-NEXT:     OMPCollapseClause
       // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         value: Int 2
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
       // DMP-NEXT:     OMPSharedClause {{.*}}
       // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
@@ -990,6 +1004,7 @@ int main() {
   // DMP-NEXT:       impl: OMPDistributeDirective
   // DMP-NEXT:         OMPCollapseClause
   // DMP-NEXT:           ConstantExpr {{.*}} 'int'
+  // DMP-NEXT:             value: Int 2
   // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 2
   // DMP:              ForStmt
   //
@@ -1020,6 +1035,7 @@ int main() {
       // DMP-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-NEXT:     OMPCollapseClause
       // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+      // DMP-NEXT:         value: Int 2
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
       // DMP-NEXT:     OMPSharedClause {{.*}}
       // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
@@ -1049,9 +1065,11 @@ int main() {
           // DMP-NEXT:   impl: OMPSimdDirective
           // DMP-NEXT:     OMPSimdlenClause
           // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+          // DMP-NEXT:         value: Int 4
           // DMP-NEXT:         IntegerLiteral {{.*}} 4
           // DMP-NEXT:     OMPCollapseClause
           // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+          // DMP-NEXT:         value: Int 2
           // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
           // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
           // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
@@ -1198,6 +1216,7 @@ int main() {
     // DMP-NEXT:   impl: OMPDistributeDirective
     // DMP-NEXT:     OMPCollapseClause
     // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:         value: Int 2
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     OMPPrivateClause
     // DMP-NOT:        <implicit>
@@ -1280,6 +1299,7 @@ int main() {
     // DMP-NEXT:       IntegerLiteral {{.*}} 8
     // DMP-NEXT:     OMPCollapseClause
     // DMP-NEXT:       ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:         value: Int 2
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:     OMPPrivateClause {{.*}}
     // DMP-NOT:        <implicit>
@@ -1360,9 +1380,11 @@ int main() {
     // DMP-NEXT:         OMPDistributeSimdDirective
     // DMP-NEXT:           OMPSimdlenClause
     // DMP-NEXT:             ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:               value: Int 8
     // DMP-NEXT:               IntegerLiteral {{.*}} 8
     // DMP-NEXT:           OMPCollapseClause
     // DMP-NEXT:             ConstantExpr {{.*}} 'int'
+    // DMP-NEXT:               value: Int 2
     // DMP-NEXT:               IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:           OMPSharedClause {{.*}} <implicit>
     // DMP-NEXT:             DeclRefExpr {{.*}} 'k' 'int'

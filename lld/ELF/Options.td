@@ -159,6 +159,9 @@ defm dynamic_list : Eq<"dynamic-list",
    "shared object. Implies -Bsymbolic but does not set DF_SYMBOLIC">,
    MetaVarName<"<file>">;
 
+def eb: F<"EB">, HelpText<"Select the big-endian format in OUTPUT_FORMAT">;
+def el: F<"EL">, HelpText<"Select the little-endian format in OUTPUT_FORMAT">;
+
 defm eh_frame_hdr: B<"eh-frame-hdr",
     "Request creation of .eh_frame_hdr section and PT_GNU_EH_FRAME segment header",
     "Do not create .eh_frame_hdr section">;
@@ -442,6 +445,17 @@ def verbose: F<"verbose">, HelpText<"Verbose mode">;
 
 def version: F<"version">, HelpText<"Display the version number and exit">;
 
+def power10_stubs: F<"power10-stubs">, HelpText<"Alias for --power10-stubs=auto">;
+
+def no_power10_stubs: F<"no-power10-stubs">, HelpText<"Alias for --power10-stubs=no">;
+
+def power10_stubs_eq:
+  J<"power10-stubs=">, HelpText<
+                     "Enables Power10 instructions in all stubs without options, "
+                     "options override previous flags."
+                     "auto: Allow Power10 instructions in stubs if applicable."
+                     "no:   No Power10 instructions in stubs.">;
+
 defm version_script: Eq<"version-script", "Read a version script">;
 
 defm warn_backrefs: BB<"warn-backrefs",
@@ -687,8 +701,6 @@ def: F<"stats">;
 def: F<"warn-execstack">;
 def: F<"warn-once">;
 def: F<"warn-shared-textrel">;
-def: F<"EB">;
-def: F<"EL">;
 def: JoinedOrSeparate<["-"], "G">;
 def: F<"Qy">;
 

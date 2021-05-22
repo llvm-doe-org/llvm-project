@@ -142,6 +142,10 @@ public:
     return createInstruction(Instruction::BinaryOps::Or, {LHS, RHS});
   }
 
+  VPValue *createSelect(VPValue *Cond, VPValue *TrueVal, VPValue *FalseVal) {
+    return createNaryOp(Instruction::Select, {Cond, TrueVal, FalseVal});
+  }
+
   //===--------------------------------------------------------------------===//
   // RAII helpers.
   //===--------------------------------------------------------------------===//
@@ -217,18 +221,6 @@ class LoopVectorizationPlanner {
   PredicatedScalarEvolution &PSE;
 
   SmallVector<VPlanPtr, 4> VPlans;
-
-  /// This class is used to enable the VPlan to invoke a method of ILV. This is
-  /// needed until the method is refactored out of ILV and becomes reusable.
-  struct VPCallbackILV : public VPCallback {
-    InnerLoopVectorizer &ILV;
-
-    VPCallbackILV(InnerLoopVectorizer &ILV) : ILV(ILV) {}
-
-    Value *getOrCreateVectorValues(Value *V, unsigned Part) override;
-    Value *getOrCreateScalarValue(Value *V,
-                                  const VPIteration &Instance) override;
-  };
 
   /// A builder used to construct the current plan.
   VPBuilder Builder;

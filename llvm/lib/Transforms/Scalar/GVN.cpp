@@ -289,9 +289,8 @@ GVN::Expression GVN::ValueTable::createExpr(Instruction *I) {
   Expression e;
   e.type = I->getType();
   e.opcode = I->getOpcode();
-  for (Instruction::op_iterator OI = I->op_begin(), OE = I->op_end();
-       OI != OE; ++OI)
-    e.varargs.push_back(lookupOrAdd(*OI));
+  for (Use &Op : I->operands())
+    e.varargs.push_back(lookupOrAdd(Op));
   if (I->isCommutative()) {
     // Ensure that commutative instructions that only differ by a permutation
     // of their operands get the same value number by sorting the operand value
@@ -362,9 +361,8 @@ GVN::Expression GVN::ValueTable::createExtractvalueExpr(ExtractValueInst *EI) {
   // Not a recognised intrinsic. Fall back to producing an extract value
   // expression.
   e.opcode = EI->getOpcode();
-  for (Instruction::op_iterator OI = EI->op_begin(), OE = EI->op_end();
-       OI != OE; ++OI)
-    e.varargs.push_back(lookupOrAdd(*OI));
+  for (Use &Op : EI->operands())
+    e.varargs.push_back(lookupOrAdd(Op));
 
   append_range(e.varargs, EI->indices());
 
@@ -681,10 +679,9 @@ PreservedAnalyses GVN::run(Function &F, FunctionAnalysisManager &AM) {
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
 LLVM_DUMP_METHOD void GVN::dump(DenseMap<uint32_t, Value*>& d) const {
   errs() << "{\n";
-  for (DenseMap<uint32_t, Value*>::iterator I = d.begin(),
-       E = d.end(); I != E; ++I) {
-      errs() << I->first << "\n";
-      I->second->dump();
+  for (auto &I : d) {
+    errs() << I.first << "\n";
+    I.second->dump();
   }
   errs() << "}\n";
 }
@@ -1776,7 +1773,7 @@ bool GVN::processLoad(LoadInst *L) {
       MSSAU->removeMemoryAccess(L);
     ++NumGVNLoad;
     reportLoadElim(L, AvailableValue, ORE);
-    // Tell MDA to rexamine the reused pointer since we might have more
+    // Tell MDA to reexamine the reused pointer since we might have more
     // information after forwarding it.
     if (MD && AvailableValue->getType()->isPtrOrPtrVectorTy())
       MD->invalidateCachedPointerInfo(AvailableValue);
@@ -1852,8 +1849,8 @@ bool GVN::ValueTable::areCallValsEqual(uint32_t Num, uint32_t NewNum,
       MD->getNonLocalCallDependency(Call);
 
   // Check to see if the Call has no function local clobber.
-  for (unsigned i = 0; i < deps.size(); i++) {
-    if (deps[i].getResult().isNonFuncLocal())
+  for (const NonLocalDepEntry &D : deps) {
+    if (D.getResult().isNonFuncLocal())
       return true;
   }
   return false;
@@ -2735,9 +2732,8 @@ void GVN::verifyRemoved(const Instruction *Inst) const {
 
   // Walk through the value number scope to make sure the instruction isn't
   // ferreted away in it.
-  for (DenseMap<uint32_t, LeaderTableEntry>::const_iterator
-       I = LeaderTable.begin(), E = LeaderTable.end(); I != E; ++I) {
-    const LeaderTableEntry *Node = &I->second;
+  for (const auto &I : LeaderTable) {
+    const LeaderTableEntry *Node = &I.second;
     assert(Node->Val != Inst && "Inst still in value numbering scope!");
 
     while (Node->Next) {
@@ -2795,9 +2791,7 @@ void GVN::addDeadBlock(BasicBlock *BB) {
 
   // For the dead blocks' live successors, update their phi nodes by replacing
   // the operands corresponding to dead blocks with UndefVal.
-  for(SmallSetVector<BasicBlock *, 4>::iterator I = DF.begin(), E = DF.end();
-        I != E; I++) {
-    BasicBlock *B = *I;
+  for (BasicBlock *B : DF) {
     if (DeadBlocks.count(B))
       continue;
 

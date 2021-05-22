@@ -30,6 +30,14 @@
 # define OMPT_SUPPORT 1
 # define OMPT_OPTIONAL 1
 # define OMPT_LIBOMPTARGET_WEAK __attribute__((weak))
+
+# if OMPT_SUPPORT
+struct DeviceTy;
+void ompt_dispatch_callback_target(ompt_target_t Kind,
+                                   ompt_scope_endpoint_t Endpoint,
+                                   DeviceTy &Device);
+# endif
+
 #else
 # define OMPT_LIBOMPTARGET_WEAK
 #endif

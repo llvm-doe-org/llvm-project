@@ -24,7 +24,6 @@ add_lldb_library(lldbCore
   AddressRange.cpp
   AddressResolver.cpp
   AddressResolverFileLine.cpp
-  AddressResolverName.cpp
   Communication.cpp
   Debugger.cpp
   Disassembler.cpp
@@ -64,6 +63,7 @@ add_lldb_library(lldbCore
   ValueObjectMemory.cpp
   ValueObjectRegister.cpp
   ValueObjectSyntheticFilter.cpp
+  ValueObjectUpdater.cpp
   ValueObjectVariable.cpp
 
   DEPENDS
