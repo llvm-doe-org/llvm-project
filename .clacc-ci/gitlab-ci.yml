@@ -32,6 +32,9 @@ variables:
   BUILD_DIR: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-$BUILD_ID
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
+  XFAIL_COMMON:
+    offloading/memory_manager.cpp
+    offloading/parallel_offloading_map.cpp
 
 stages:
   - setup
@@ -66,6 +69,8 @@ stages:
       -DLIBOMPTARGET_NVPTX_COMPUTE_CAPABILITIES=70
     PATH_PREPEND:
       /opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin
+    XFAIL:
+      Driver/openmp-offload-gpu.c
 
 .kold:
   tags: [shell, kold]
@@ -76,11 +81,15 @@ stages:
     NINJA: ninja-build
     PYTHON: /usr/bin/python3
     CMAKE_BUILD_TYPE: Debug
+    CMAKE_OFFLOAD_CONFIG:
       -DCLANG_ACC_TEST_EXE_X86_64=4
       -DCLANG_ACC_TEST_EXE_PPC64LE=0
       -DCLANG_ACC_TEST_EXE_NVPTX64=0
     PATH_PREPEND:
       ""
+    XFAIL:
+      offloading/bug49334.cpp
+      ompt/tasks/task_if0-depend.c
 
 # Sometimes bugs cause only release builds to fail.  For example, debugging
 # macros might accidentally be used but not defined in release builds.
@@ -89,6 +98,28 @@ stages:
   variables:
     BUILD_ID: release
     CMAKE_BUILD_TYPE: Release
+    XFAIL:
+      CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
+      CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
+      CodeGen/AMDGPU/GlobalISel/irtranslator-call-sret.ll
+      CodeGen/AMDGPU/GlobalISel/irtranslator-call.ll
+      CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
+      CodeGen/AMDGPU/agpr-register-count.ll
+      CodeGen/AMDGPU/call-argument-types.ll
+      CodeGen/AMDGPU/call-constant.ll
+      CodeGen/AMDGPU/call-graph-register-usage.ll
+      CodeGen/AMDGPU/call-preserved-registers.ll
+      CodeGen/AMDGPU/call-waitcnt.ll
+      CodeGen/AMDGPU/cc-update.ll
+      CodeGen/AMDGPU/cross-block-use-is-not-abi-copy.ll
+      CodeGen/AMDGPU/indirect-call.ll
+      CodeGen/AMDGPU/returnaddress.ll
+      CodeGen/AMDGPU/spill-csr-frame-ptr-reg-copy.ll
+      CodeGen/AMDGPU/stack-realign.ll
+      CodeGen/AMDGPU/unstructured-cfg-def-use-issue.ll
+      CodeGen/AMDGPU/vgpr-tuple-allocation.ll
+      CodeGen/MIR/AMDGPU/machine-function-info-no-ir.mir
+      offloading/bug49334.cpp
 
 # Not setup or cleanup.
 .non-utility:
@@ -341,12 +372,13 @@ release (build):
     - echo $CHECK_TARGETS
     - echo $NINJA
     - $NINJA --version
+    - echo "$XFAIL_COMMON" "$XFAIL" | sed 's/  */;/g' | tee xfail.txt
     - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
            $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-build-log.txt
       | grep '^\[[0-9]\+/[0-9]\+]\|\<error:'
     - time FILECHECK_OPTS='-dump-input-filter=all -vv -color'
-           LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml --ignore-fail"
+           LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml --xfail=`cat xfail.txt` --ignore-fail"
            $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-log.txt
     - "! grep -c \"'--ignore-fail' was specified\"
