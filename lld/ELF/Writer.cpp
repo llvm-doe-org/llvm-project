@@ -19,6 +19,7 @@
 #include "Symbols.h"
 #include "SyntheticSections.h"
 #include "Target.h"
+#include "lld/Common/Arrays.h"
 #include "lld/Common/Filesystem.h"
 #include "lld/Common/Memory.h"
 #include "lld/Common/Strings.h"
@@ -1291,22 +1292,39 @@ findOrphanPos(std::vector<BaseCommand *>::iterator b,
 
 // Adds random priorities to sections not already in the map.
 static void maybeShuffle(DenseMap<const InputSectionBase *, int> &order) {
-  if (!config->shuffleSectionSeed)
+  if (config->shuffleSections.empty())
     return;
 
-  std::vector<int> priorities(inputSections.size() - order.size());
+  std::vector<InputSectionBase *> matched, sections = inputSections;
+  matched.reserve(sections.size());
+  for (const auto &patAndSeed : config->shuffleSections) {
+    matched.clear();
+    for (InputSectionBase *sec : sections)
+      if (patAndSeed.first.match(sec->name))
+        matched.push_back(sec);
+    const uint32_t seed = patAndSeed.second;
+    if (seed == UINT32_MAX) {
+      // If --shuffle-sections <section-glob>=-1, reverse the section order. The
+      // section order is stable even if the number of sections changes. This is
+      // useful to catch issues like static initialization order fiasco
+      // reliably.
+      std::reverse(matched.begin(), matched.end());
+    } else {
+      std::mt19937 g(seed ? seed : std::random_device()());
+      llvm::shuffle(matched.begin(), matched.end(), g);
+    }
+    size_t i = 0;
+    for (InputSectionBase *&sec : sections)
+      if (patAndSeed.first.match(sec->name))
+        sec = matched[i++];
+  }
+
   // Existing priorities are < 0, so use priorities >= 0 for the missing
   // sections.
-  int curPrio = 0;
-  for (int &prio : priorities)
-    prio = curPrio++;
-  uint32_t seed = *config->shuffleSectionSeed;
-  std::mt19937 g(seed ? seed : std::random_device()());
-  llvm::shuffle(priorities.begin(), priorities.end(), g);
-  int prioIndex = 0;
-  for (InputSectionBase *sec : inputSections) {
-    if (order.try_emplace(sec, priorities[prioIndex]).second)
-      ++prioIndex;
+  int prio = 0;
+  for (InputSectionBase *sec : sections) {
+    if (order.try_emplace(sec, prio).second)
+      ++prio;
   }
 }
 
@@ -2953,19 +2971,6 @@ template <class ELFT> void Writer<ELFT>::writeSections() {
   for (OutputSection *sec : outputSections)
     if (sec->type != SHT_REL && sec->type != SHT_RELA)
       sec->writeTo<ELFT>(Out::bufferStart + sec->offset);
-}
-
-// Split one uint8 array into small pieces of uint8 arrays.
-static std::vector<ArrayRef<uint8_t>> split(ArrayRef<uint8_t> arr,
-                                            size_t chunkSize) {
-  std::vector<ArrayRef<uint8_t>> ret;
-  while (arr.size() > chunkSize) {
-    ret.push_back(arr.take_front(chunkSize));
-    arr = arr.drop_front(chunkSize);
-  }
-  if (!arr.empty())
-    ret.push_back(arr);
-  return ret;
 }
 
 // Computes a hash value of Data using a given hash function.

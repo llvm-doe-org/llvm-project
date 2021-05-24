@@ -22,6 +22,7 @@
 #include "Targets/Hexagon.h"
 #include "Targets/Lanai.h"
 #include "Targets/Le64.h"
+#include "Targets/M68k.h"
 #include "Targets/MSP430.h"
 #include "Targets/Mips.h"
 #include "Targets/NVPTX.h"
@@ -301,6 +302,16 @@ TargetInfo *AllocateTarget(const llvm::Triple &Triple,
       return new OpenBSDTargetInfo<MipsTargetInfo>(Triple, Opts);
     default:
       return new MipsTargetInfo(Triple, Opts);
+    }
+
+  case llvm::Triple::m68k:
+    switch (os) {
+    case llvm::Triple::Linux:
+      return new LinuxTargetInfo<M68kTargetInfo>(Triple, Opts);
+    case llvm::Triple::NetBSD:
+      return new NetBSDTargetInfo<M68kTargetInfo>(Triple, Opts);
+    default:
+      return new M68kTargetInfo(Triple, Opts);
     }
 
   case llvm::Triple::le32:
@@ -584,13 +595,13 @@ TargetInfo *AllocateTarget(const llvm::Triple &Triple,
     }
 
   case llvm::Triple::spir: {
-    if (Triple.getOS() != llvm::Triple::UnknownOS ||
+    if (os != llvm::Triple::UnknownOS ||
         Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
       return nullptr;
     return new SPIR32TargetInfo(Triple, Opts);
   }
   case llvm::Triple::spir64: {
-    if (Triple.getOS() != llvm::Triple::UnknownOS ||
+    if (os != llvm::Triple::UnknownOS ||
         Triple.getEnvironment() != llvm::Triple::UnknownEnvironment)
       return nullptr;
     return new SPIR64TargetInfo(Triple, Opts);
@@ -600,7 +611,7 @@ TargetInfo *AllocateTarget(const llvm::Triple &Triple,
         Triple.getVendor() != llvm::Triple::UnknownVendor ||
         !Triple.isOSBinFormatWasm())
       return nullptr;
-    switch (Triple.getOS()) {
+    switch (os) {
       case llvm::Triple::WASI:
         return new WASITargetInfo<WebAssembly32TargetInfo>(Triple, Opts);
       case llvm::Triple::Emscripten:
@@ -615,7 +626,7 @@ TargetInfo *AllocateTarget(const llvm::Triple &Triple,
         Triple.getVendor() != llvm::Triple::UnknownVendor ||
         !Triple.isOSBinFormatWasm())
       return nullptr;
-    switch (Triple.getOS()) {
+    switch (os) {
       case llvm::Triple::WASI:
         return new WASITargetInfo<WebAssembly64TargetInfo>(Triple, Opts);
       case llvm::Triple::Emscripten:

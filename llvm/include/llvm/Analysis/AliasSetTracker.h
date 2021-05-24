@@ -20,7 +20,6 @@
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/ilist.h"
 #include "llvm/ADT/ilist_node.h"
-#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/MemoryLocation.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Metadata.h"

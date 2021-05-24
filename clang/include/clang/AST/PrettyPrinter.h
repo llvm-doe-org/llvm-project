@@ -39,9 +39,12 @@ enum OpenACCPrintKind {
   OpenACCPrint_ACC_OMP,
   /// Print OpenMP translation plus original OpenACC in comments.
   OpenACCPrint_OMP_ACC,
+  /// The last kind that can be specified in command line options.
+  OpenACCPrint_LastOption = OpenACCPrint_OMP_ACC,
   /// Print only pragma from OpenMP translation.
   OpenACCPrint_OMP_HEAD
 };
+StringRef getOpenACCPrintOptionValue(OpenACCPrintKind K);
 
 /// Callbacks to use to customize the behavior of the pretty-printer.
 class PrintingCallbacks {

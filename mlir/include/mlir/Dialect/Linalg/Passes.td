@@ -19,7 +19,7 @@ def ConvertElementwiseToLinalg : FunctionPass<"convert-elementwise-to-linalg"> {
     This pass only converts ops that operate on ranked tensors.
   }];
   let constructor = "mlir::createConvertElementwiseToLinalgPass()";
-  let dependentDialects = ["linalg::LinalgDialect"];
+  let dependentDialects = ["linalg::LinalgDialect", "memref::MemRefDialect"];
 }
 
 def LinalgFoldUnitExtentDims : FunctionPass<"linalg-fold-unit-extent-dims"> {
@@ -37,6 +37,12 @@ def LinalgFoldUnitExtentDims : FunctionPass<"linalg-fold-unit-extent-dims"> {
 def LinalgFusionOfTensorOps : Pass<"linalg-fusion-for-tensor-ops"> {
   let summary = "Fuse operations on RankedTensorType in linalg dialect";
   let constructor = "mlir::createLinalgFusionOfTensorOpsPass()";
+  let options = [
+    Option<"allowFoldingUnitDimReshapes", "allow-folding-unit-dim-reshapes",
+           "bool", /*default=*/"false",
+           "Allow fusing linalg.tensor_reshape ops that performs unit "
+           "dimension collapsing">
+  ];
   let dependentDialects = ["linalg::LinalgDialect", "AffineDialect"];
 }
 
@@ -70,13 +76,21 @@ def LinalgLowerToLoops : FunctionPass<"convert-linalg-to-loops"> {
                "interchange vector",
                "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">
   ];
-  let dependentDialects = ["linalg::LinalgDialect", "scf::SCFDialect", "AffineDialect"];
+  let dependentDialects = [
+    "linalg::LinalgDialect",
+    "scf::SCFDialect",
+    "AffineDialect"
+  ];
 }
 
 def LinalgBufferize : Pass<"linalg-bufferize", "FuncOp"> {
   let summary = "Bufferize the linalg dialect";
   let constructor = "mlir::createLinalgBufferizePass()";
-  let dependentDialects = ["linalg::LinalgDialect", "AffineDialect"];
+  let dependentDialects = [
+    "linalg::LinalgDialect",
+    "AffineDialect",
+    "memref::MemRefDialect"
+  ];
 }
 
 def LinalgLowerToParallelLoops
@@ -90,7 +104,12 @@ def LinalgLowerToParallelLoops
                "interchange vector",
                "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">
   ];
-  let dependentDialects = ["AffineDialect", "linalg::LinalgDialect", "scf::SCFDialect"];
+  let dependentDialects = [
+    "AffineDialect",
+    "linalg::LinalgDialect",
+    "memref::MemRefDialect",
+    "scf::SCFDialect"
+  ];
 }
 
 def LinalgPromotion : FunctionPass<"linalg-promote-subviews"> {
@@ -109,7 +128,10 @@ def LinalgTiling : FunctionPass<"linalg-tile"> {
   let summary = "Tile operations in the linalg dialect";
   let constructor = "mlir::createLinalgTilingPass()";
   let dependentDialects = [
-    "AffineDialect", "linalg::LinalgDialect", "scf::SCFDialect"
+    "AffineDialect",
+    "linalg::LinalgDialect",
+    "memref::MemRefDialect",
+    "scf::SCFDialect"
   ];
   let options = [
     ListOption<"tileSizes", "linalg-tile-sizes", "int64_t",
@@ -127,7 +149,12 @@ def LinalgTilingToParallelLoops
                "Test generation of dynamic promoted buffers",
                "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">
   ];
-  let dependentDialects = ["AffineDialect", "linalg::LinalgDialect", "scf::SCFDialect"];
+  let dependentDialects = [
+    "AffineDialect",
+    "linalg::LinalgDialect",
+    "memref::MemRefDialect",
+    "scf::SCFDialect"
+  ];
 }
 
 def LinalgGeneralization : FunctionPass<"linalg-generalize-named-ops"> {

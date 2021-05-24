@@ -522,18 +522,24 @@ static Instruction *foldCtpop(IntrinsicInst &II, InstCombinerImpl &IC) {
     return CallInst::Create(F, {X, IC.Builder.getFalse()});
   }
 
+  KnownBits Known(BitWidth);
+  IC.computeKnownBits(Op0, Known, 0, &II);
+
+  // If all bits are zero except for exactly one fixed bit, then the result
+  // must be 0 or 1, and we can get that answer by shifting to LSB:
+  // ctpop (X & 32) --> (X & 32) >> 5
+  if ((~Known.Zero).isPowerOf2())
+    return BinaryOperator::CreateLShr(
+        Op0, ConstantInt::get(Ty, (~Known.Zero).exactLogBase2()));
+
   // FIXME: Try to simplify vectors of integers.
   auto *IT = dyn_cast<IntegerType>(Ty);
   if (!IT)
     return nullptr;
 
-  KnownBits Known(BitWidth);
-  IC.computeKnownBits(Op0, Known, 0, &II);
-
+  // Add range metadata since known bits can't completely reflect what we know.
   unsigned MinCount = Known.countMinPopulation();
   unsigned MaxCount = Known.countMaxPopulation();
-
-  // Add range metadata since known bits can't completely reflect what we know.
   if (IT->getBitWidth() != 1 && !II.getMetadata(LLVMContext::MD_range)) {
     Metadata *LowAndHigh[] = {
         ConstantAsMetadata::get(ConstantInt::get(IT, MinCount)),
@@ -839,6 +845,12 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
       return CastInst::Create(Instruction::ZExt, NarrowAbs, II->getType());
     }
 
+    // Match a complicated way to check if a number is odd/even:
+    // abs (srem X, 2) --> and X, 1
+    const APInt *C;
+    if (match(IIOperand, m_SRem(m_Value(X), m_APInt(C))) && *C == 2)
+      return BinaryOperator::CreateAnd(X, ConstantInt::get(II->getType(), 1));
+
     break;
   }
   case Intrinsic::umax:
@@ -872,6 +884,7 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
       Value *NarrowMaxMin = Builder.CreateBinaryIntrinsic(IID, X, Y);
       return CastInst::Create(Instruction::SExt, NarrowMaxMin, II->getType());
     }
+
     Constant *C;
     if (match(I0, m_SExt(m_Value(X))) && match(I1, m_Constant(C)) &&
         I0->hasOneUse()) {
@@ -881,6 +894,23 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
         return CastInst::Create(Instruction::SExt, NarrowMaxMin, II->getType());
       }
     }
+
+    if (match(I0, m_Not(m_Value(X)))) {
+      // max (not X), (not Y) --> not (min X, Y)
+      Intrinsic::ID InvID = getInverseMinMaxIntrinsic(IID);
+      if (match(I1, m_Not(m_Value(Y))) &&
+          (I0->hasOneUse() || I1->hasOneUse())) {
+        Value *InvMaxMin = Builder.CreateBinaryIntrinsic(InvID, X, Y);
+        return BinaryOperator::CreateNot(InvMaxMin);
+      }
+      // max (not X), C --> not(min X, ~C)
+      if (match(I1, m_Constant(C)) && I0->hasOneUse()) {
+        Constant *NotC = ConstantExpr::getNot(C);
+        Value *InvMaxMin = Builder.CreateBinaryIntrinsic(InvID, X, NotC);
+        return BinaryOperator::CreateNot(InvMaxMin);
+      }
+    }
+
     break;
   }
   case Intrinsic::bswap: {

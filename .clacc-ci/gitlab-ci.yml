@@ -89,7 +89,6 @@ stages:
       ""
     XFAIL:
       offloading/bug49334.cpp
-      ompt/tasks/task_if0-depend.c
 
 # Sometimes bugs cause only release builds to fail.  For example, debugging
 # macros might accidentally be used but not defined in release builds.

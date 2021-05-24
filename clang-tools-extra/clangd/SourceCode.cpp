@@ -599,7 +599,7 @@ lex(llvm::StringRef Code, const LangOptions &LangOpts,
         Action) {
   // FIXME: InMemoryFileAdapter crashes unless the buffer is null terminated!
   std::string NullTerminatedCode = Code.str();
-  SourceManagerForFile FileSM("dummy.cpp", NullTerminatedCode);
+  SourceManagerForFile FileSM("mock_file_name.cpp", NullTerminatedCode);
   auto &SM = FileSM.get();
   for (const auto &Tok : syntax::tokenize(SM.getMainFileID(), SM, LangOpts))
     Action(Tok, SM);
@@ -1091,15 +1091,8 @@ llvm::Error applyChange(std::string &Contents,
                  "computed range length ({1}).",
                  *Change.rangeLength, ComputedRangeLength);
 
-  std::string NewContents;
-  NewContents.reserve(*StartIndex + Change.text.length() +
-                      (Contents.length() - *EndIndex));
+  Contents.replace(*StartIndex, *EndIndex - *StartIndex, Change.text);
 
-  NewContents = Contents.substr(0, *StartIndex);
-  NewContents += Change.text;
-  NewContents += Contents.substr(*EndIndex);
-
-  std::swap(Contents, NewContents);
   return llvm::Error::success();
 }
 

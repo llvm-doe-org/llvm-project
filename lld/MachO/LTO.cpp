@@ -11,6 +11,7 @@
 #include "Driver.h"
 #include "InputFiles.h"
 #include "Symbols.h"
+#include "Target.h"
 
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Strings.h"
@@ -36,11 +37,13 @@ static lto::Config createConfig() {
   c.PreCodeGenPassesHook = [](legacy::PassManager &pm) {
     pm.add(createObjCARCContractPass());
   };
+  c.TimeTraceEnabled = config->timeTraceEnabled;
+  c.TimeTraceGranularity = config->timeTraceGranularity;
   return c;
 }
 
 BitcodeCompiler::BitcodeCompiler() {
-  auto backend =
+  lto::ThinBackend backend =
       lto::createInProcessThinBackend(heavyweight_hardware_concurrency());
   ltoObj = std::make_unique<lto::LTO>(createConfig(), backend);
 }
@@ -99,9 +102,8 @@ std::vector<ObjFile *> BitcodeCompiler::compile() {
 
   std::vector<ObjFile *> ret;
   for (unsigned i = 0; i != maxTasks; ++i) {
-    if (buf[i].empty()) {
+    if (buf[i].empty())
       continue;
-    }
     SmallString<261> filePath("/tmp/lto.tmp");
     uint32_t modTime = 0;
     if (!config->ltoObjPath.empty()) {

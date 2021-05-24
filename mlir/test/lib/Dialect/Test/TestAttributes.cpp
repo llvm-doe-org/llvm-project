@@ -100,14 +100,25 @@ void CompoundAAttr::print(DialectAsmPrinter &printer) const {
 // TestDialect
 //===----------------------------------------------------------------------===//
 
+void TestDialect::registerAttributes() {
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "TestAttrDefs.cpp.inc"
+      >();
+}
+
 Attribute TestDialect::parseAttribute(DialectAsmParser &parser,
                                       Type type) const {
   StringRef attrTag;
   if (failed(parser.parseKeyword(&attrTag)))
     return Attribute();
-  if (auto attr = generatedAttributeParser(getContext(), parser, attrTag, type))
-    return attr;
-
+  {
+    Attribute attr;
+    auto parseResult =
+        generatedAttributeParser(getContext(), parser, attrTag, type, attr);
+    if (parseResult.hasValue())
+      return attr;
+  }
   parser.emitError(parser.getNameLoc(), "unknown test attribute");
   return Attribute();
 }

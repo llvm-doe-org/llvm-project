@@ -802,6 +802,7 @@ bool Process::HandleProcessStateChangedEvent(const EventSP &event_sp,
             case eStopReasonExec:
             case eStopReasonThreadExiting:
             case eStopReasonInstrumentation:
+            case eStopReasonProcessorTrace:
               if (!other_thread)
                 other_thread = thread;
               break;
@@ -1352,8 +1353,8 @@ void Process::SetPrivateState(StateType new_state) {
   if (m_finalizing)
     return;
 
-  Log *log(lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_STATE |
-                                                  LIBLLDB_LOG_PROCESS));
+  Log *log(lldb_private::GetLogIfAnyCategoriesSet(
+      LIBLLDB_LOG_STATE | LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_UNWIND));
   bool state_changed = false;
 
   LLDB_LOGF(log, "Process::SetPrivateState (%s)", StateAsCString(new_state));
@@ -5958,7 +5959,7 @@ UtilityFunction *Process::GetLoadImageUtilityFunction(
   return m_dlopen_utility_func_up.get();
 }
 
-llvm::Expected<TraceTypeInfo> Process::GetSupportedTraceType() {
+llvm::Expected<TraceSupportedResponse> Process::TraceSupported() {
   if (!IsLiveDebugSession())
     return llvm::createStringError(llvm::inconvertibleErrorCode(),
                                    "Can't trace a non-live process.");

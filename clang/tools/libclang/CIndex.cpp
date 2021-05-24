@@ -2278,7 +2278,22 @@ void OMPClauseEnqueue::VisitOMPSIMDClause(const OMPSIMDClause *) {}
 
 void OMPClauseEnqueue::VisitOMPNogroupClause(const OMPNogroupClause *) {}
 
-void OMPClauseEnqueue::VisitOMPDestroyClause(const OMPDestroyClause *) {}
+void OMPClauseEnqueue::VisitOMPInitClause(const OMPInitClause *C) {
+  VisitOMPClauseList(C);
+}
+
+void OMPClauseEnqueue::VisitOMPUseClause(const OMPUseClause *C) {
+  Visitor->AddStmt(C->getInteropVar());
+}
+
+void OMPClauseEnqueue::VisitOMPDestroyClause(const OMPDestroyClause *C) {
+  if (C->getInteropVar())
+    Visitor->AddStmt(C->getInteropVar());
+}
+
+void OMPClauseEnqueue::VisitOMPNovariantsClause(const OMPNovariantsClause *C) {
+  Visitor->AddStmt(C->getCondition());
+}
 
 void OMPClauseEnqueue::VisitOMPUnifiedAddressClause(
     const OMPUnifiedAddressClause *) {}
@@ -5655,6 +5670,10 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
         "OMPTargetTeamsDistributeParallelForSimdDirective");
   case CXCursor_OMPTargetTeamsDistributeSimdDirective:
     return cxstring::createRef("OMPTargetTeamsDistributeSimdDirective");
+  case CXCursor_OMPInteropDirective:
+    return cxstring::createRef("OMPInteropDirective");
+  case CXCursor_OMPDispatchDirective:
+    return cxstring::createRef("OMPDispatchDirective");
   case CXCursor_ACCUpdateDirective:
     return cxstring::createRef("ACCUpdateDirective");
   case CXCursor_ACCEnterDataDirective:

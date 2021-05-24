@@ -2925,6 +2925,28 @@ Status Target::Launch(ProcessLaunchInfo &launch_info, Stream *stream) {
 
   launch_info.GetFlags().Set(eLaunchFlagDebug);
 
+  if (launch_info.IsScriptedProcess()) {
+    TargetPropertiesSP properties_sp = GetGlobalProperties();
+
+    if (!properties_sp) {
+      LLDB_LOGF(log, "Target::%s Couldn't fetch target global properties.",
+                __FUNCTION__);
+      return error;
+    }
+
+    // Only copy scripted process launch options.
+    ProcessLaunchInfo &default_launch_info =
+        const_cast<ProcessLaunchInfo &>(properties_sp->GetProcessLaunchInfo());
+
+    default_launch_info.SetProcessPluginName("ScriptedProcess");
+    default_launch_info.SetScriptedProcessClassName(
+        launch_info.GetScriptedProcessClassName());
+    default_launch_info.SetScriptedProcessDictionarySP(
+        launch_info.GetScriptedProcessDictionarySP());
+
+    SetProcessLaunchInfo(launch_info);
+  }
+
   // Get the value of synchronous execution here.  If you wait till after you
   // have started to run, then you could have hit a breakpoint, whose command
   // might switch the value, and then you'll pick up that incorrect value.
@@ -3053,7 +3075,27 @@ Status Target::Launch(ProcessLaunchInfo &launch_info, Stream *stream) {
 
 void Target::SetTrace(const TraceSP &trace_sp) { m_trace_sp = trace_sp; }
 
-const TraceSP &Target::GetTrace() { return m_trace_sp; }
+TraceSP &Target::GetTrace() { return m_trace_sp; }
+
+llvm::Expected<TraceSP &> Target::GetTraceOrCreate() {
+  if (!m_trace_sp && m_process_sp) {
+    llvm::Expected<TraceSupportedResponse> trace_type =
+        m_process_sp->TraceSupported();
+    if (!trace_type)
+      return llvm::createStringError(
+          llvm::inconvertibleErrorCode(), "Tracing is not supported. %s",
+          llvm::toString(trace_type.takeError()).c_str());
+    if (llvm::Expected<TraceSP> trace_sp =
+            Trace::FindPluginForLiveProcess(trace_type->name, *m_process_sp))
+      m_trace_sp = *trace_sp;
+    else
+      return llvm::createStringError(
+          llvm::inconvertibleErrorCode(),
+          "Couldn't start tracing the process. %s",
+          llvm::toString(trace_sp.takeError()).c_str());
+  }
+  return m_trace_sp;
+}
 
 Status Target::Attach(ProcessAttachInfo &attach_info, Stream *stream) {
   auto state = eStateInvalid;

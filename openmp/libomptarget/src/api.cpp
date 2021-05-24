@@ -103,17 +103,10 @@ static std::map<void *, size_t> DeviceAllocSizes;
 
 EXTERN void *omp_target_alloc(size_t size, int device_num) {
   OMPT_DEFINE_IDENT(omp_target_alloc);
-  TIMESCOPE();
-  DP("Call to omp_target_alloc for device %d requesting %zu bytes\n",
-     device_num, size);
-
-  if (size <= 0) {
-    DP("Call to omp_target_alloc with non-positive length\n");
-    return NULL;
-  }
-
-  void *rc = NULL;
-
+  OMPT_SET_TRIGGER_IDENT();
+  void *Ptr = targetAllocExplicit(size, device_num, TARGET_ALLOC_DEFAULT,
+                                  __func__);
+  OMPT_CLEAR_TRIGGER_IDENT();
   // OpenMP 5.1, sec. 3.8.1 "omp_target_alloc", p. 413, L14-15:
   // "The target-data-allocation-begin event occurs before a thread initiates a
   // data allocation on a target device.  The target-data-allocation-end event
@@ -132,40 +125,31 @@ EXTERN void *omp_target_alloc(size_t size, int device_num) {
   //
   // TODO: We have not implemented the ompt_scope_begin callback because we
   // don't need it for OpenACC support.
-  if (device_num == omp_get_initial_device()) {
-    rc = malloc(size);
 #if OMPT_SUPPORT
-    // TODO: If offloading is disabled, the runtime might not be initialized.
-    // In that case, ompt_start_tool hasn't been called, so we don't know what
-    // OMPT callbacks to dispatch.  Calling __kmpc_get_target_offload guarantees
-    // the runtime is initialized, but maybe we should expose something like
-    // __kmpc_initialize_runtime to call here instead.
-    __kmpc_get_target_offload();
-    DeviceAllocSizes[rc] = size;
-    OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(ompt_scope_end, alloc,
-                                              /*SrcPtr=*/NULL, device_num, rc,
-                                              device_num, size);
-#endif
-    DP("omp_target_alloc returns host ptr " DPxMOD "\n", DPxPTR(rc));
-    return rc;
-  }
-
-  OMPT_SET_TRIGGER_IDENT();
-  if (!device_is_ready(device_num)) {
-    DP("omp_target_alloc returns NULL ptr\n");
-    return NULL;
-  }
-  OMPT_CLEAR_TRIGGER_IDENT();
-
-  rc = PM->Devices[device_num].allocData(size);
-#if OMPT_SUPPORT
-  DeviceAllocSizes[rc] = size;
+  // TODO: If offloading is disabled, the runtime might not be initialized.  In
+  // that case, ompt_start_tool hasn't been called, so we don't know what OMPT
+  // callbacks to dispatch.  Calling __kmpc_get_target_offload guarantees the
+  // runtime is initialized, but maybe we should expose something like
+  // __kmpc_initialize_runtime to call here instead.
+  __kmpc_get_target_offload();
+  DeviceAllocSizes[Ptr] = size;
   OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(
-      ompt_scope_end, alloc, /*SrcPtr=*/NULL, omp_get_initial_device(), rc,
+      ompt_scope_end, alloc, /*SrcPtr=*/NULL, omp_get_initial_device(), Ptr,
       device_num, size);
 #endif
-  DP("omp_target_alloc returns device ptr " DPxMOD "\n", DPxPTR(rc));
-  return rc;
+  return Ptr;
+}
+
+EXTERN void *llvm_omp_target_alloc_device(size_t size, int device_num) {
+  return targetAllocExplicit(size, device_num, TARGET_ALLOC_DEVICE, __func__);
+}
+
+EXTERN void *llvm_omp_target_alloc_host(size_t size, int device_num) {
+  return targetAllocExplicit(size, device_num, TARGET_ALLOC_HOST, __func__);
+}
+
+EXTERN void *llvm_omp_target_alloc_shared(size_t size, int device_num) {
+  return targetAllocExplicit(size, device_num, TARGET_ALLOC_SHARED, __func__);
 }
 
 EXTERN void omp_target_free(void *device_ptr, int device_num) {

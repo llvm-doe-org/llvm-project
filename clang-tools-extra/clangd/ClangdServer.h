@@ -12,10 +12,11 @@
 #include "../clang-tidy/ClangTidyOptions.h"
 #include "CodeComplete.h"
 #include "ConfigProvider.h"
+#include "Diagnostics.h"
 #include "DraftStore.h"
+#include "FeatureModule.h"
 #include "GlobalCompilationDatabase.h"
 #include "Hover.h"
-#include "Module.h"
 #include "Protocol.h"
 #include "SemanticHighlighting.h"
 #include "TUScheduler.h"
@@ -40,6 +41,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace clang {
 namespace clangd {
@@ -64,6 +66,8 @@ public:
     virtual ~Callbacks() = default;
 
     /// Called by ClangdServer when \p Diagnostics for \p File are ready.
+    /// These pushed diagnostics might correspond to an older version of the
+    /// file, they do not interfere with "pull-based" ClangdServer::diagnostics.
     /// May be called concurrently for separate files, not for a single file.
     virtual void onDiagnosticsReady(PathRef File, llvm::StringRef Version,
                                     std::vector<Diag> Diagnostics) {}
@@ -146,6 +150,12 @@ public:
         /*RebuildRatio=*/1,
     };
 
+    /// Cancel certain requests if the file changes before they begin running.
+    /// This is useful for "transient" actions like enumerateTweaks that were
+    /// likely implicitly generated, and avoids redundant work if clients forget
+    /// to cancel. Clients that always cancel stale requests should clear this.
+    bool ImplicitCancellation = true;
+
     /// Clangd will execute compiler drivers matching one of these globs to
     /// fetch system include path.
     std::vector<std::string> QueryDriverGlobs;
@@ -153,7 +163,7 @@ public:
     /// Enable preview of FoldingRanges feature.
     bool FoldingRanges = false;
 
-    ModuleSet *Modules = nullptr;
+    FeatureModuleSet *FeatureModules = nullptr;
 
     explicit operator TUScheduler::Options() const;
   };
@@ -172,13 +182,13 @@ public:
                const Options &Opts, Callbacks *Callbacks = nullptr);
   ~ClangdServer();
 
-  /// Gets the installed module of a given type, if any.
-  /// This exposes access the public interface of modules that have one.
-  template <typename Mod> Mod *getModule() {
-    return Modules ? Modules->get<Mod>() : nullptr;
+  /// Gets the installed feature module of a given type, if any.
+  /// This exposes access the public interface of feature modules that have one.
+  template <typename Mod> Mod *featureModule() {
+    return FeatureModules ? FeatureModules->get<Mod>() : nullptr;
   }
-  template <typename Mod> const Mod *getModule() const {
-    return Modules ? Modules->get<Mod>() : nullptr;
+  template <typename Mod> const Mod *featureModule() const {
+    return FeatureModules ? FeatureModules->get<Mod>() : nullptr;
   }
 
   /// Add a \p File to the list of tracked C++ files or update the contents if
@@ -339,6 +349,14 @@ public:
   void customAction(PathRef File, llvm::StringRef Name,
                     Callback<InputsAndAST> Action);
 
+  /// Fetches diagnostics for current version of the \p File. This might fail if
+  /// server is busy (building a preamble) and would require a long time to
+  /// prepare diagnostics. If it fails, clients should wait for
+  /// onSemanticsMaybeChanged and then retry.
+  /// These 'pulled' diagnostics do not interfere with the diagnostics 'pushed'
+  /// to Callbacks::onDiagnosticsReady, and clients may use either or both.
+  void diagnostics(PathRef File, Callback<std::vector<Diag>> CB);
+
   /// Returns estimated memory usage and other statistics for each of the
   /// currently open files.
   /// Overall memory usage of clangd may be significantly more than reported
@@ -348,7 +366,9 @@ public:
   /// FIXME: those metrics might be useful too, we should add them.
   llvm::StringMap<TUScheduler::FileStats> fileStats() const;
 
-  llvm::Optional<std::string> getDraft(PathRef File) const;
+  /// Gets the contents of a currently tracked file. Returns nullptr if the file
+  /// isn't being tracked.
+  std::shared_ptr<const std::string> getDraft(PathRef File) const;
 
   // Blocks the main thread until the server is idle. Only for use in tests.
   // Returns false if the timeout expires.
@@ -361,7 +381,7 @@ public:
   void profile(MemoryTree &MT) const;
 
 private:
-  ModuleSet *Modules;
+  FeatureModuleSet *FeatureModules;
   const GlobalCompilationDatabase &CDB;
   const ThreadsafeFS &TFS;
 
@@ -389,11 +409,14 @@ private:
 
   llvm::Optional<std::string> WorkspaceRoot;
   llvm::Optional<TUScheduler> WorkScheduler;
+  // Invalidation policy used for actions that we assume are "transient".
+  TUScheduler::ASTActionInvalidation Transient;
 
   // Store of the current versions of the open documents.
   // Only written from the main thread (despite being threadsafe).
-  // FIXME: TUScheduler also keeps these, unify?
   DraftStore DraftMgr;
+
+  std::unique_ptr<ThreadsafeFS> DirtyFS;
 };
 
 } // namespace clangd

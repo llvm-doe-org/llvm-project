@@ -2849,6 +2849,12 @@ let Constraints = "$src = $Rd" in {
 defm t2ORN  : T2I_bin_irs<0b0011, "orn",
                           IIC_iBITi, IIC_iBITr, IIC_iBITsi,
                           BinOpFrag<(or node:$LHS, (not node:$RHS))>, 0, "">;
+def : t2InstAlias<"orn${s}${p}.w $Rd, $Rn, $imm",
+   (t2ORNri rGPR:$Rd, rGPR:$Rn, t2_so_imm:$imm, pred:$p, cc_out:$s)>;
+def : t2InstAlias<"orn${s}${p}.w $Rd, $Rn, $Rm",
+   (t2ORNrr rGPR:$Rd, rGPR:$Rn, rGPR:$Rm, pred:$p, cc_out:$s)>;
+def : t2InstAlias<"orn${s}${p}.w $Rd, $Rn, $ShiftedRm",
+   (t2ORNrs rGPR:$Rd, rGPR:$Rn, t2_so_reg:$ShiftedRm, pred:$p, cc_out:$s)>;
 
 /// T2I_un_irs - Defines a set of (op reg, {so_imm|r|so_reg}) patterns for a
 /// unary operation that produces a value. These are predicable and can be
@@ -5058,8 +5064,8 @@ def : t2InstAlias<"rev16${p} $Rd, $Rm", (t2REV16 rGPR:$Rd, rGPR:$Rm, pred:$p)>;
 def : t2InstAlias<"revsh${p} $Rd, $Rm", (t2REVSH rGPR:$Rd, rGPR:$Rm, pred:$p)>;
 
 
-// Alias for RSB without the ".w" optional width specifier, and with optional
-// implied destination register.
+// Alias for RSB with and without the ".w" optional width specifier, with and
+// without explicit destination register.
 def : t2InstAlias<"rsb${s}${p} $Rd, $Rn, $imm",
            (t2RSBri rGPR:$Rd, rGPR:$Rn, t2_so_imm:$imm, pred:$p, cc_out:$s)>;
 def : t2InstAlias<"rsb${s}${p} $Rdn, $imm",
@@ -5068,6 +5074,13 @@ def : t2InstAlias<"rsb${s}${p} $Rdn, $Rm",
            (t2RSBrr rGPR:$Rdn, rGPR:$Rdn, rGPR:$Rm, pred:$p, cc_out:$s)>;
 def : t2InstAlias<"rsb${s}${p} $Rdn, $ShiftedRm",
            (t2RSBrs rGPR:$Rdn, rGPR:$Rdn, t2_so_reg:$ShiftedRm, pred:$p,
+                    cc_out:$s)>;
+def : t2InstAlias<"rsb${s}${p}.w $Rdn, $Rm",
+           (t2RSBrr rGPR:$Rdn, rGPR:$Rdn, rGPR:$Rm, pred:$p, cc_out:$s)>;
+def : t2InstAlias<"rsb${s}${p}.w $Rd, $Rn, $Rm",
+           (t2RSBrr rGPR:$Rd, rGPR:$Rn, rGPR:$Rm, pred:$p, cc_out:$s)>;
+def : t2InstAlias<"rsb${s}${p}.w $Rd, $Rn, $ShiftedRm",
+           (t2RSBrs rGPR:$Rd, rGPR:$Rn, t2_so_reg:$ShiftedRm, pred:$p,
                     cc_out:$s)>;
 
 // SSAT/USAT optional shift operand.
@@ -5457,33 +5470,64 @@ def t2LE : t2LOL<(outs ), (ins lelabel_u11:$label), "le", "$label"> {
 
 let Predicates = [IsThumb2, HasV8_1MMainline, HasLOB] in {
 
-let usesCustomInserter = 1 in
+// t2DoLoopStart a pseudo for DLS hardware loops. Lowered into a DLS in
+// ARMLowOverheadLoops if possible, or reverted to a Mov if not.
 def t2DoLoopStart :
   t2PseudoInst<(outs GPRlr:$X), (ins rGPR:$elts), 4, IIC_Br,
   [(set GPRlr:$X, (int_start_loop_iterations rGPR:$elts))]>;
 
+// A pseudo for a DLSTP, created in the MVETPAndVPTOptimizationPass from a
+// t2DoLoopStart if the loops is tail predicated. Holds both the element
+// count and trip count of the loop, picking the correct one during
+// ARMLowOverheadLoops when it is converted to a DLSTP or DLS as required.
 let isTerminator = 1, hasSideEffects = 1 in
 def t2DoLoopStartTP :
   t2PseudoInst<(outs GPRlr:$X), (ins rGPR:$elts, rGPR:$count), 4, IIC_Br, []>;
 
+// Setup for a t2WhileLoopStart. A pair of t2WhileLoopSetup and t2WhileLoopStart
+// will be created post-ISel from a llvm.test.start.loop.iterations. This
+// t2WhileLoopSetup to setup LR and t2WhileLoopStart to perform the branch. Not
+// valid after reg alloc, as it should be lowered during MVETPAndVPTOptimisations
+// into a t2WhileLoopStartLR (or expanded).
+def t2WhileLoopSetup :
+  t2PseudoInst<(outs GPRlr:$lr), (ins rGPR:$elts), 4, IIC_Br, []>;
+
+// A pseudo to represent the decrement in a low overhead loop. A t2LoopDec and
+// t2LoopEnd together represent a LE instruction. Ideally these are converted
+// to a t2LoopEndDec which is lowered as a single instruction.
 let hasSideEffects = 0 in
 def t2LoopDec :
   t2PseudoInst<(outs GPRlr:$Rm), (ins GPRlr:$Rn, imm0_7:$size),
                4, IIC_Br, []>, Sched<[WriteBr]>;
 
 let isBranch = 1, isTerminator = 1, hasSideEffects = 1, Defs = [CPSR] in {
-// Set WhileLoopStart and LoopEnd to occupy 8 bytes because they may
-// get converted into t2CMP and t2Bcc.
+// The branch in a t2WhileLoopSetup/t2WhileLoopStart pair, eventually turned
+// into a t2WhileLoopStartLR that does both the LR setup and branch.
 def t2WhileLoopStart :
     t2PseudoInst<(outs),
+                 (ins GPRlr:$elts, brtarget:$target),
+                 4, IIC_Br, []>,
+                 Sched<[WriteBr]>;
+
+// WhileLoopStartLR that sets up LR and branches on zero, equivalent to WLS. It
+// is lowered in the ARMLowOverheadLoops pass providing the branches are within
+// range. WhileLoopStartLR and LoopEnd to occupy 8 bytes because they may get
+// converted into t2CMP and t2Bcc.
+def t2WhileLoopStartLR :
+    t2PseudoInst<(outs GPRlr:$lr),
                  (ins rGPR:$elts, brtarget:$target),
                  8, IIC_Br, []>,
                  Sched<[WriteBr]>;
 
+// t2LoopEnd - the branch half of a t2LoopDec/t2LoopEnd pair.
 def t2LoopEnd :
   t2PseudoInst<(outs), (ins GPRlr:$elts, brtarget:$target),
   8, IIC_Br, []>, Sched<[WriteBr]>;
 
+// The combination of a t2LoopDec and t2LoopEnd, performing both the LR
+// decrement and branch as a single instruction. Is lowered to a LE or
+// LETP in ARMLowOverheadLoops as appropriate, or converted to t2CMP/t2Bcc
+// if the branches are out of range.
 def t2LoopEndDec :
   t2PseudoInst<(outs GPRlr:$Rm), (ins GPRlr:$elts, brtarget:$target),
   8, IIC_Br, []>, Sched<[WriteBr]>;

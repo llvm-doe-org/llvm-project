@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Analysis/AliasSetTracker.h"
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/GuardUtils.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/MemoryLocation.h"

@@ -45,6 +45,7 @@ CreateFrontendBaseAction(CompilerInstance &CI) {
   case ASTDeclList:            return std::make_unique<ASTDeclListAction>();
   case ASTDump:                return std::make_unique<ASTDumpAction>();
   case ASTPrint:               return std::make_unique<ASTPrintAction>();
+  case OpenACCASTPrint:        return std::make_unique<ASTPrintAction>();
   case ASTView:                return std::make_unique<ASTViewAction>();
   case DumpCompilerOptions:
     return std::make_unique<DumpCompilerOptionsAction>();

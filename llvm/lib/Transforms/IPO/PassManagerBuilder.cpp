@@ -84,9 +84,9 @@ static cl::opt<::CFLAAType>
                         clEnumValN(::CFLAAType::Both, "both",
                                    "Enable both variants of CFL-AA")));
 
-static cl::opt<bool> EnableLoopInterchange(
+cl::opt<bool> EnableLoopInterchange(
     "enable-loopinterchange", cl::init(false), cl::Hidden,
-    cl::desc("Enable the new, experimental LoopInterchange Pass"));
+    cl::desc("Enable the experimental LoopInterchange Pass"));
 
 cl::opt<bool> EnableUnrollAndJam("enable-unroll-and-jam", cl::init(false),
                                  cl::Hidden,
@@ -431,6 +431,10 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
     MPM.add(createLoopInstSimplifyPass());
     MPM.add(createLoopSimplifyCFGPass());
   }
+  // Try to remove as much code from the loop header as possible,
+  // to reduce amount of IR that will have to be duplicated.
+  // TODO: Investigate promotion cap for O1.
+  MPM.add(createLICMPass(LicmMssaOptCap, LicmMssaNoAccForPromotionCap));
   // Rotate Loop - disable header duplication at -Oz
   MPM.add(createLoopRotatePass(SizeLevel == 2 ? 0 : -1, PrepareForLTO));
   // TODO: Investigate promotion cap for O1.

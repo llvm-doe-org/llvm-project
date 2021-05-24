@@ -1987,6 +1987,12 @@ Instruction *InstCombinerImpl::visitAnd(BinaryOperator &I) {
   if (sinkNotIntoOtherHandOfAndOrOr(I))
     return &I;
 
+  // An and recurrence w/loop invariant step is equivelent to (and start, step)
+  PHINode *PN = nullptr;
+  Value *Start = nullptr, *Step = nullptr;
+  if (matchSimpleRecurrence(&I, PN, Start, Step) && DT.dominates(Step, PN))
+    return replaceInstUsesWith(I, Builder.CreateAnd(Start, Step));
+
   return nullptr;
 }
 
@@ -2837,6 +2843,12 @@ Instruction *InstCombinerImpl::visitOr(BinaryOperator &I) {
   if (sinkNotIntoOtherHandOfAndOrOr(I))
     return &I;
 
+  // An or recurrence w/loop invariant step is equivelent to (or start, step)
+  PHINode *PN = nullptr;
+  Value *Start = nullptr, *Step = nullptr;
+  if (matchSimpleRecurrence(&I, PN, Start, Step) && DT.dominates(Step, PN))
+    return replaceInstUsesWith(I, Builder.CreateOr(Start, Step));
+
   return nullptr;
 }
 
@@ -3191,6 +3203,14 @@ Instruction *InstCombinerImpl::visitXor(BinaryOperator &I) {
     if (match(NotVal, m_Sub(m_Value(X), m_Value(Y))))
       if (isa<Constant>(X) || NotVal->hasOneUse())
         return BinaryOperator::CreateAdd(Builder.CreateNot(X), Y);
+
+    // ~((-X) | Y) --> (X - 1) & (~Y)
+    if (match(NotVal,
+              m_OneUse(m_c_Or(m_OneUse(m_Neg(m_Value(X))), m_Value(Y))))) {
+      Value *DecX = Builder.CreateAdd(X, ConstantInt::getAllOnesValue(Ty));
+      Value *NotY = Builder.CreateNot(Y);
+      return BinaryOperator::CreateAnd(DecX, NotY);
+    }
 
     // ~(~X >>s Y) --> (X >>s Y)
     if (match(NotVal, m_AShr(m_Not(m_Value(X)), m_Value(Y))))

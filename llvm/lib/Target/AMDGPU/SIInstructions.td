@@ -274,19 +274,6 @@ def WAVE_BARRIER : SPseudoInstSI<(outs), (ins),
 // SI pseudo instructions. These are used by the CFG structurizer pass
 // and should be lowered to ISA instructions prior to codegen.
 
-// Dummy terminator instruction to use after control flow instructions
-// replaced with exec mask operations.
-def SI_MASK_BRANCH : VPseudoInstSI <
-  (outs), (ins brtarget:$target)> {
-  let isBranch = 0;
-  let isTerminator = 1;
-  let isBarrier = 0;
-  let SchedRW = [];
-  let hasNoSchedulingInfo = 1;
-  let FixedSize = 1;
-  let Size = 0;
-}
-
 let isTerminator = 1 in {
 
 let OtherPredicates = [EnableLateCFGStructurize] in {
@@ -492,7 +479,7 @@ def SI_CALL : SPseudoInstSI <
 
 // Tail call handling pseudo
 def SI_TCRETURN : SPseudoInstSI <(outs),
-  (ins SSrc_b64:$src0, unknown:$callee, i32imm:$fpdiff),
+  (ins SReg_64:$src0, unknown:$callee, i32imm:$fpdiff),
   [(AMDGPUtc_return i64:$src0, tglobaladdr:$callee, i32:$fpdiff)]> {
   let Size = 4;
   let isCall = 1;

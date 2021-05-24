@@ -5086,6 +5086,125 @@ public:
   }
 };
 
+/// This represents '#pragma omp interop' directive.
+///
+/// \code
+/// #pragma omp interop init(target:obj) device(x) depend(inout:y) nowait
+/// \endcode
+/// In this example directive '#pragma omp interop' has
+/// clauses 'init', 'device', 'depend' and 'nowait'.
+///
+class OMPInteropDirective final : public OMPExecutableDirective {
+  friend class ASTStmtReader;
+  friend class OMPExecutableDirective;
+
+  /// Build directive with the given start and end location.
+  ///
+  /// \param StartLoc Starting location of the directive.
+  /// \param EndLoc Ending location of the directive.
+  ///
+  OMPInteropDirective(SourceLocation StartLoc, SourceLocation EndLoc)
+      : OMPExecutableDirective(OMPInteropDirectiveClass,
+                               llvm::omp::OMPD_interop, StartLoc, EndLoc) {}
+
+  /// Build an empty directive.
+  ///
+  explicit OMPInteropDirective()
+      : OMPExecutableDirective(OMPInteropDirectiveClass,
+                               llvm::omp::OMPD_interop, SourceLocation(),
+                               SourceLocation()) {}
+
+public:
+  /// Creates directive.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the directive.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param Clauses The directive's clauses.
+  ///
+  static OMPInteropDirective *Create(const ASTContext &C,
+                                     SourceLocation StartLoc,
+                                     SourceLocation EndLoc,
+                                     ArrayRef<OMPClause *> Clauses);
+
+  /// Creates an empty directive.
+  ///
+  /// \param C AST context.
+  ///
+  static OMPInteropDirective *CreateEmpty(const ASTContext &C,
+                                          unsigned NumClauses, EmptyShell);
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == OMPInteropDirectiveClass;
+  }
+};
+
+/// This represents '#pragma omp dispatch' directive.
+///
+/// \code
+/// #pragma omp dispatch device(dnum)
+/// \endcode
+/// This example shows a directive '#pragma omp dispatch' with a
+/// device clause with variable 'dnum'.
+///
+class OMPDispatchDirective final : public OMPExecutableDirective {
+  friend class ASTStmtReader;
+  friend class OMPExecutableDirective;
+
+  /// The location of the target-call.
+  SourceLocation TargetCallLoc;
+
+  /// Set the location of the target-call.
+  void setTargetCallLoc(SourceLocation Loc) { TargetCallLoc = Loc; }
+
+  /// Build directive with the given start and end location.
+  ///
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending location of the directive.
+  ///
+  OMPDispatchDirective(SourceLocation StartLoc, SourceLocation EndLoc)
+      : OMPExecutableDirective(OMPDispatchDirectiveClass,
+                               llvm::omp::OMPD_dispatch, StartLoc, EndLoc) {}
+
+  /// Build an empty directive.
+  ///
+  explicit OMPDispatchDirective()
+      : OMPExecutableDirective(OMPDispatchDirectiveClass,
+                               llvm::omp::OMPD_dispatch, SourceLocation(),
+                               SourceLocation()) {}
+
+public:
+  /// Creates directive with a list of \a Clauses.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param Clauses List of clauses.
+  /// \param AssociatedStmt Statement, associated with the directive.
+  /// \param TargetCallLoc Location of the target-call.
+  ///
+  static OMPDispatchDirective *
+  Create(const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
+         ArrayRef<OMPClause *> Clauses, Stmt *AssociatedStmt,
+         SourceLocation TargetCallLoc);
+
+  /// Creates an empty directive with the place for \a NumClauses
+  /// clauses.
+  ///
+  /// \param C AST context.
+  /// \param NumClauses Number of clauses.
+  ///
+  static OMPDispatchDirective *CreateEmpty(const ASTContext &C,
+                                           unsigned NumClauses, EmptyShell);
+
+  /// Return location of target-call.
+  SourceLocation getTargetCallLoc() const { return TargetCallLoc; }
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == OMPDispatchDirectiveClass;
+  }
+};
+
 } // end namespace clang
 
 #endif

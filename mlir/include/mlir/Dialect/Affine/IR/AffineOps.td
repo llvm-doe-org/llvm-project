@@ -75,6 +75,11 @@ def AffineApplyOp : Affine_Op<"apply", [NoSideEffect]> {
     OpBuilder<(ins "AffineMap":$map, "ValueRange":$mapOperands),
     [{
       build($_builder, $_state, $_builder.getIndexType(), map, mapOperands);
+    }]>,
+    OpBuilder<(ins "ArrayRef<AffineExpr> ":$exprList,"ValueRange":$mapOperands),
+    [{
+      build($_builder, $_state, $_builder.getIndexType(),
+            AffineMap::inferFromExprList(exprList).front(), mapOperands);
     }]>
   ];
 
@@ -233,7 +238,7 @@ def AffineForOp : Affine_Op<"for",
     static StringRef getLowerBoundAttrName() { return "lower_bound"; }
     static StringRef getUpperBoundAttrName() { return "upper_bound"; }
 
-    Value getInductionVar() { return getBody()->getArgument(0); }
+    BlockArgument getInductionVar() { return getBody()->getArgument(0); }
     Block::BlockArgListType getRegionIterArgs() {
       return getBody()->getArguments().drop_front();
     }

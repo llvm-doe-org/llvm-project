@@ -15,6 +15,7 @@
 
 include "mlir/Dialect/Linalg/IR/LinalgBase.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
@@ -33,7 +34,10 @@ class Linalg_Op<string mnemonic, list<OpTrait> traits = []> :
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-def Linalg_InitTensorOp : Linalg_Op<"init_tensor", [NoSideEffect]> {
+def Linalg_InitTensorOp : Linalg_Op<"init_tensor",
+    [NoSideEffect,
+     DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+         ["reifyReturnTypeShapesPerResultDim"]>]> {
   let summary = "operation to define a tensor of particular value";
 
   let description = [{
@@ -126,7 +130,10 @@ def Linalg_InitTensorOp : Linalg_Op<"init_tensor", [NoSideEffect]> {
 }
 
 def Linalg_PadTensorOp : Linalg_Op<"pad_tensor",
-    [AttrSizedOperandSegments, NoSideEffect]> {
+    [AttrSizedOperandSegments,
+     DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+         ["reifyReturnTypeShapesPerResultDim"]>,
+     NoSideEffect]> {
   let summary = "tensor pad operation";
   let description = [{
     `linalg.pad_tensor` is an operation that pads the `source` tensor
@@ -348,11 +355,6 @@ class Linalg_ReshapeLikeOp<string mnemonic, list<OpTrait> traits = []> :
               a.cast<AffineMapAttr>().getValue().getResults());
           }));
     }
-    SmallVector<Value, 4> getOutputShape(OpBuilder &b, Location loc) {
-      return getReshapeOutputShapeFromInputShape(
-          b, loc, src(), getResultType().getShape(),
-          getReassociationMaps());
-    }
   }];
   let assemblyFormat = [{
     $src $reassociation attr-dict `:` type($src) `into` type(results)
@@ -417,7 +419,10 @@ def Linalg_ReshapeOp : Linalg_ReshapeLikeOp<"reshape",
   let hasCanonicalizer = 1;
 }
 
-def Linalg_TensorReshapeOp : Linalg_ReshapeLikeOp<"tensor_reshape">,
+def Linalg_TensorReshapeOp : Linalg_ReshapeLikeOp<
+    "tensor_reshape",
+    [DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+      ["reifyReturnTypeShapesPerResultDim"]>]>,
     Arguments<(ins AnyTensor:$src,
                    AffineMapArrayAttr:$reassociation)>,
     Results<(outs AnyTensor:$result)> {
@@ -496,21 +501,25 @@ def Linalg_TiledLoopOp : Linalg_Op<"tiled_loop", [
   let summary = "Linalg tiled loop operation";
   let description = [{
     This is a loop-like operation with additional properties. The arguments
-    also include the input and the output tensors and the attributes to specify
-    the iterator types. The body region of the loop contains `subtensor`
-    operations applied to every tensor argument of TiledLoopOp.
+    also include the input and the output tensors or memrefs and the attributes
+    to specify the iterator types.
+
+    Parsing TiledLoopOp will set all elements of the `iterator_types` attribute
+    to "parallel" type, when it is absent from the custom format.
+
+    Tensor-based version:
+
+    The body region of the loop contains `subtensor` operations applied to
+    every tensor argument of TiledLoopOp.
 
     The body region must contain exactly one block that terminates with
     `linalg.yield` with the operands resulting from `subtensor_insert`
     operations.
 
-    Parsing TiledLoopOp will set all elements of the `iterator_types` attribute
-    to "parallel" type, when it is absent from the custom format.
-
     Example:
 
     ```mlir
-    linalg.tiled_loop (%i) = (%c0) to (%c24) step (%c4)
+    %0 = linalg.tiled_loop (%i) = (%c0) to (%c24) step (%c4)
         ins(%lhs, %rhs : tensor<24x64xi8>, tensor<24x64xi8>)
         outs(%out : tensor<24x64xi8>)
         iterators("parallel") {
@@ -528,13 +537,40 @@ def Linalg_TiledLoopOp : Linalg_Op<"tiled_loop", [
       linalg.yield %result : tensor<24x64xi8>
     }
     ```
+
+    MemRef-based version:
+
+    The body region of the loop contains `subview` operations applied to
+    every memref argument of TiledLoopOp.
+
+    The body region must contain exactly one block that terminates with
+    `linalg.yield` with no operands.
+
+    Example:
+
+    ```mlir
+    linalg.tiled_loop (%i) = (%c0) to (%c24) step (%c4)
+        ins(%lhs, %rhs : memref<24x64xi8>, memref<24x64xi8>)
+        outs(%out : memref<24x64xi8>)
+        iterators("parallel") {
+      %lhs_sub = subview %lhs[%i, 0] [%c4, %c64] [1, 1]
+          : memref<24x64xi8> to memref<?x?xi8>
+      %rhs_sub = subview %rhs[%i, 0] [%c4, %c64] [1, 1]
+          : memref<24x64xi8> to memref<?x?xi8>
+      %out_sub = subview %out[%i, 0] [%c4, %c64] [1, 1]
+          : memref<24x64xi8> to memref<?x?xi8>
+
+      %result_sub = linalg.generic ...
+      linalg.yield
+    }
+    ```
   }];
 
   let arguments = (ins Variadic<Index>:$lowerBound,
                        Variadic<Index>:$upperBound,
                        Variadic<Index>:$step,
-                       Variadic<AnyRankedTensor>:$inputs,
-                       Variadic<AnyRankedTensor>:$outputs,
+                       Variadic<LinalgOperand>:$inputs,
+                       Variadic<LinalgOperand>:$outputs,
                        ArrayAttr:$iterator_types);
   let results = (outs Variadic<AnyRankedTensor>:$results);
   let regions = (region SizedRegion<1>:$region);
@@ -542,7 +578,7 @@ def Linalg_TiledLoopOp : Linalg_Op<"tiled_loop", [
   let builders = [
     OpBuilder<(ins "ValueRange":$lowerBounds, "ValueRange":$upperBounds,
       "ValueRange":$steps, "ValueRange":$inputs, "ValueRange":$outputs,
-      "ArrayRef<StringRef>":$iteratorTypes,
+      "ArrayAttr":$iteratorTypes,
       CArg<"function_ref<void (OpBuilder &, Location, ValueRange)>",
            "nullptr">:$bodyBuilderFn)>,
   ];
@@ -553,6 +589,9 @@ def Linalg_TiledLoopOp : Linalg_Op<"tiled_loop", [
     }
     unsigned getNumLoops() { return step().size(); }
   }];
+
+  let hasCanonicalizer = 1;
+  let hasFolder = 1;
 }
 
 

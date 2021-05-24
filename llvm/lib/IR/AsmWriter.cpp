@@ -1239,8 +1239,9 @@ void SlotTracker::CreateFunctionSlot(const Value *V) {
 void SlotTracker::CreateMetadataSlot(const MDNode *N) {
   assert(N && "Can't insert a null Value into SlotTracker!");
 
-  // Don't make slots for DIExpressions. We just print them inline everywhere.
-  if (isa<DIExpression>(N))
+  // Don't make slots for DIExpressions or DIArgLists. We just print them inline
+  // everywhere.
+  if (isa<DIExpression>(N) || isa<DIArgList>(N))
     return;
 
   unsigned DestSlot = mdnNext;
@@ -1888,11 +1889,14 @@ static void writeDISubrange(raw_ostream &Out, const DISubrange *N,
                             const Module *Context) {
   Out << "!DISubrange(";
   MDFieldPrinter Printer(Out, TypePrinter, Machine, Context);
-  if (auto *CE = N->getCount().dyn_cast<ConstantInt*>())
-    Printer.printInt("count", CE->getSExtValue(), /* ShouldSkipZero */ false);
-  else
-    Printer.printMetadata("count", N->getCount().dyn_cast<DIVariable *>(),
-                          /*ShouldSkipNull */ true);
+
+  auto *Count = N->getRawCountNode();
+  if (auto *CE = dyn_cast_or_null<ConstantAsMetadata>(Count)) {
+    auto *CV = cast<ConstantInt>(CE->getValue());
+    Printer.printInt("count", CV->getSExtValue(),
+                     /* ShouldSkipZero */ false);
+  } else
+    Printer.printMetadata("count", Count, /*ShouldSkipNull */ true);
 
   // A lowerBound of constant 0 should not be skipped, since it is different
   // from an unspecified lower bound (= nullptr).
@@ -1931,7 +1935,10 @@ static void writeDIGenericSubrange(raw_ostream &Out, const DIGenericSubrange *N,
 
   auto IsConstant = [&](Metadata *Bound) -> bool {
     if (auto *BE = dyn_cast_or_null<DIExpression>(Bound)) {
-      return BE->isSignedConstant();
+      return BE->isConstant()
+                 ? DIExpression::SignedOrUnsignedConstant::SignedConstant ==
+                       *BE->isConstant()
+                 : false;
     }
     return false;
   };
@@ -2351,6 +2358,21 @@ static void writeDIExpression(raw_ostream &Out, const DIExpression *N,
   Out << ")";
 }
 
+static void writeDIArgList(raw_ostream &Out, const DIArgList *N,
+                           TypePrinting *TypePrinter, SlotTracker *Machine,
+                           const Module *Context, bool FromValue = false) {
+  assert(FromValue &&
+         "Unexpected DIArgList metadata outside of value argument");
+  Out << "!DIArgList(";
+  FieldSeparator FS;
+  MDFieldPrinter Printer(Out, TypePrinter, Machine, Context);
+  for (Metadata *Arg : N->getArgs()) {
+    Out << FS;
+    WriteAsOperandInternal(Out, Arg, TypePrinter, Machine, Context, true);
+  }
+  Out << ")";
+}
+
 static void writeDIGlobalVariableExpression(raw_ostream &Out,
                                             const DIGlobalVariableExpression *N,
                                             TypePrinting *TypePrinter,
@@ -2496,10 +2518,14 @@ static void WriteAsOperandInternal(raw_ostream &Out, const Metadata *MD,
                                    TypePrinting *TypePrinter,
                                    SlotTracker *Machine, const Module *Context,
                                    bool FromValue) {
-  // Write DIExpressions inline when used as a value. Improves readability of
-  // debug info intrinsics.
+  // Write DIExpressions and DIArgLists inline when used as a value. Improves
+  // readability of debug info intrinsics.
   if (const DIExpression *Expr = dyn_cast<DIExpression>(MD)) {
     writeDIExpression(Out, Expr, TypePrinter, Machine, Context);
+    return;
+  }
+  if (const DIArgList *ArgList = dyn_cast<DIArgList>(MD)) {
+    writeDIArgList(Out, ArgList, TypePrinter, Machine, Context, FromValue);
     return;
   }
 
@@ -3427,6 +3453,8 @@ void AssemblyWriter::printNamedMDNode(const NamedMDNode *NMD) {
     // Write DIExpressions inline.
     // FIXME: Ban DIExpressions in NamedMDNodes, they will serve no purpose.
     MDNode *Op = NMD->getOperand(i);
+    assert(!isa<DIArgList>(Op) &&
+           "DIArgLists should not appear in NamedMDNodes");
     if (auto *Expr = dyn_cast<DIExpression>(Op)) {
       writeDIExpression(Out, Expr, nullptr, nullptr, nullptr);
       continue;
@@ -4391,20 +4419,18 @@ void AssemblyWriter::writeAttribute(const Attribute &Attr, bool InAttrGroup) {
     return;
   }
 
-  assert((Attr.hasAttribute(Attribute::ByVal) ||
-          Attr.hasAttribute(Attribute::StructRet) ||
-          Attr.hasAttribute(Attribute::ByRef) ||
-          Attr.hasAttribute(Attribute::Preallocated)) &&
-         "unexpected type attr");
-
   if (Attr.hasAttribute(Attribute::ByVal)) {
     Out << "byval";
   } else if (Attr.hasAttribute(Attribute::StructRet)) {
     Out << "sret";
   } else if (Attr.hasAttribute(Attribute::ByRef)) {
     Out << "byref";
-  } else {
+  } else if (Attr.hasAttribute(Attribute::Preallocated)) {
     Out << "preallocated";
+  } else if (Attr.hasAttribute(Attribute::InAlloca)) {
+    Out << "inalloca";
+  } else {
+    llvm_unreachable("unexpected type attr");
   }
 
   if (Type *Ty = Attr.getValueAsType()) {
@@ -4697,7 +4723,7 @@ static void printMetadataImpl(raw_ostream &ROS, const Metadata &MD,
                          /* FromValue */ true);
 
   auto *N = dyn_cast<MDNode>(&MD);
-  if (OnlyAsOperand || !N || isa<DIExpression>(MD))
+  if (OnlyAsOperand || !N || isa<DIExpression>(MD) || isa<DIArgList>(MD))
     return;
 
   OS << " = ";

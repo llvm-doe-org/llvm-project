@@ -10,6 +10,7 @@
 // that do not rely on any of the library functions.
 //
 //===----------------------------------------------------------------------===//
+
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/Math/IR/Math.h"
@@ -17,18 +18,15 @@
 #include "mlir/Dialect/Vector/VectorOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Transforms/Bufferize.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include <limits.h>
+#include <climits>
 
 using namespace mlir;
 using namespace mlir::vector;
 
 using TypePredicate = llvm::function_ref<bool(Type)>;
-
-static bool isF32(Type type) { return type.isF32(); }
-
-static bool isI32(Type type) { return type.isInteger(32); }
 
 // Returns vector width if the element type is matching the predicate (scalars
 // that do match the predicate have width equal to `1`).
@@ -54,9 +52,15 @@ static int vectorWidth(Type type) {
 }
 
 // Returns vector element type. If the type is a scalar returns the argument.
-static Type elementType(Type type) {
+LLVM_ATTRIBUTE_UNUSED static Type elementType(Type type) {
   auto vectorType = type.dyn_cast<VectorType>();
   return vectorType ? vectorType.getElementType() : type;
+}
+
+LLVM_ATTRIBUTE_UNUSED static bool isF32(Type type) { return type.isF32(); }
+
+LLVM_ATTRIBUTE_UNUSED static bool isI32(Type type) {
+  return type.isInteger(32);
 }
 
 //----------------------------------------------------------------------------//
@@ -258,29 +262,30 @@ TanhApproximation::matchAndRewrite(math::TanhOp op,
 
 #define LN2_VALUE                                                              \
   0.693147180559945309417232121458176568075500134360255254120680009493393621L
-#define LN2E_VALUE                                                             \
+#define LOG2E_VALUE                                                            \
   1.442695040888963407359924681001892137426645954152985934135449406931109219L
 
 //----------------------------------------------------------------------------//
-// LogOp approximation.
+// LogOp and Log2Op approximation.
 //----------------------------------------------------------------------------//
 
 namespace {
+template <typename Op>
+struct LogApproximationBase : public OpRewritePattern<Op> {
+  using OpRewritePattern<Op>::OpRewritePattern;
 
-// This approximations comes from the Julien Pommier's SSE math library.
-// Link: http://gruntthepeon.free.fr/ssemath
-struct LogApproximation : public OpRewritePattern<math::LogOp> {
-public:
-  using OpRewritePattern::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(math::LogOp op,
-                                PatternRewriter &rewriter) const final;
+  /// Base 2 if 'base2' is set; natural logarithm (base e) otherwise.
+  LogicalResult logMatchAndRewrite(Op op, PatternRewriter &rewriter,
+                                   bool base2) const;
 };
 } // namespace
 
+// This approximation comes from Julien Pommier's SSE math library.
+// Link: http://gruntthepeon.free.fr/ssemath
+template <typename Op>
 LogicalResult
-LogApproximation::matchAndRewrite(math::LogOp op,
-                                  PatternRewriter &rewriter) const {
+LogApproximationBase<Op>::logMatchAndRewrite(Op op, PatternRewriter &rewriter,
+                                             bool base2) const {
   auto width = vectorWidth(op.operand().getType(), isF32);
   if (!width.hasValue())
     return rewriter.notifyMatchFailure(op, "unsupported operand type");
@@ -356,8 +361,13 @@ LogApproximation::matchAndRewrite(math::LogOp op,
   y0 = builder.create<FmaFOp>(cstNegHalf, x2, y0);
   x = builder.create<AddFOp>(x, y0);
 
-  Value cstLn2 = bcast(f32Cst(builder, static_cast<float>(LN2_VALUE)));
-  x = builder.create<FmaFOp>(e, cstLn2, x);
+  if (base2) {
+    Value cstLog2e = bcast(f32Cst(builder, static_cast<float>(LOG2E_VALUE)));
+    x = builder.create<FmaFOp>(x, cstLog2e, e);
+  } else {
+    Value cstLn2 = bcast(f32Cst(builder, static_cast<float>(LN2_VALUE)));
+    x = builder.create<FmaFOp>(e, cstLn2, x);
+  }
 
   Value invalidMask =
       builder.create<CmpFOp>(CmpFPredicate::ULT, op.operand(), cstZero);
@@ -380,6 +390,28 @@ LogApproximation::matchAndRewrite(math::LogOp op,
 
   return success();
 }
+
+namespace {
+struct LogApproximation : public LogApproximationBase<math::LogOp> {
+  using LogApproximationBase::LogApproximationBase;
+
+  LogicalResult matchAndRewrite(math::LogOp op,
+                                PatternRewriter &rewriter) const final {
+    return logMatchAndRewrite(op, rewriter, /*base2=*/false);
+  }
+};
+} // namespace
+
+namespace {
+struct Log2Approximation : public LogApproximationBase<math::Log2Op> {
+  using LogApproximationBase::LogApproximationBase;
+
+  LogicalResult matchAndRewrite(math::Log2Op op,
+                                PatternRewriter &rewriter) const final {
+    return logMatchAndRewrite(op, rewriter, /*base2=*/true);
+  }
+};
+} // namespace
 
 //----------------------------------------------------------------------------//
 // Exp approximation.
@@ -424,7 +456,7 @@ ExpApproximation::matchAndRewrite(math::ExpOp op,
   auto floor = [&](Value a) { return builder.create<FloorFOp>(a); };
 
   Value cstLn2 = bcast(f32Cst(builder, static_cast<float>(LN2_VALUE)));
-  Value cstLN2E = bcast(f32Cst(builder, static_cast<float>(LN2E_VALUE)));
+  Value cstLog2E = bcast(f32Cst(builder, static_cast<float>(LOG2E_VALUE)));
 
   // Polynomial coefficients.
   Value cstCephesExpP0 = bcast(f32Cst(builder, 1.0));
@@ -437,7 +469,7 @@ ExpApproximation::matchAndRewrite(math::ExpOp op,
   Value x = op.operand();
 
   // Reduced y = x - floor(x / ln(2)) * ln(2) = x - k * ln(2)
-  Value xL2Inv = mul(x, cstLN2E);
+  Value xL2Inv = mul(x, cstLog2E);
   Value kF32 = floor(xL2Inv);
   Value kLn2 = mul(kF32, cstLn2);
   Value y = sub(x, kLn2);
@@ -500,6 +532,7 @@ ExpApproximation::matchAndRewrite(math::ExpOp op,
 //----------------------------------------------------------------------------//
 
 void mlir::populateMathPolynomialApproximationPatterns(
-    OwningRewritePatternList &patterns, MLIRContext *ctx) {
-  patterns.insert<TanhApproximation, LogApproximation, ExpApproximation>(ctx);
+    RewritePatternSet &patterns) {
+  patterns.add<TanhApproximation, LogApproximation, Log2Approximation,
+               ExpApproximation>(patterns.getContext());
 }

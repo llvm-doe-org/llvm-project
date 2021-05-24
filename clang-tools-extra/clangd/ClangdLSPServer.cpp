@@ -467,11 +467,10 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
   if (Server)
     return Reply(llvm::make_error<LSPError>("server already initialized",
                                             ErrorCode::InvalidRequest));
-  if (const auto &Dir = Params.initializationOptions.compilationDatabasePath)
-    Opts.CompileCommandsDir = Dir;
   if (Opts.UseDirBasedCDB) {
     DirectoryBasedGlobalCompilationDatabase::Options CDBOpts(TFS);
-    CDBOpts.CompileCommandsDir = Opts.CompileCommandsDir;
+    if (const auto &Dir = Params.initializationOptions.compilationDatabasePath)
+      CDBOpts.CompileCommandsDir = Dir;
     CDBOpts.ContextProvider = Opts.ContextProvider;
     BaseCDB =
         std::make_unique<DirectoryBasedGlobalCompilationDatabase>(CDBOpts);
@@ -519,6 +518,7 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
   if (Params.capabilities.WorkDoneProgress)
     BackgroundIndexProgressState = BackgroundIndexProgress::Empty;
   BackgroundIndexSkipCreate = Params.capabilities.ImplicitProgressCreation;
+  Opts.ImplicitCancellation = !Params.capabilities.CancelsStaleRequests;
 
   llvm::json::Object ServerCaps{
       {"textDocumentSync",
@@ -580,8 +580,8 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
   {
     LSPBinder Binder(Handlers, *this);
     bindMethods(Binder, Params.capabilities);
-    if (Opts.Modules)
-      for (auto &Mod : *Opts.Modules)
+    if (Opts.FeatureModules)
+      for (auto &Mod : *Opts.FeatureModules)
         Mod.initializeLSP(Binder, Params.rawCapabilities, ServerCaps);
   }
 
@@ -666,8 +666,9 @@ void ClangdLSPServer::onDocumentDidChange(
     log("Trying to incrementally change non-added document: {0}", File);
     return;
   }
+  std::string NewCode(*Code);
   for (const auto &Change : Params.contentChanges) {
-    if (auto Err = applyChange(*Code, Change)) {
+    if (auto Err = applyChange(NewCode, Change)) {
       // If this fails, we are most likely going to be not in sync anymore with
       // the client.  It is better to remove the draft and let further
       // operations fail rather than giving wrong results.
@@ -676,7 +677,7 @@ void ClangdLSPServer::onDocumentDidChange(
       return;
     }
   }
-  Server->addDocument(File, *Code, encodeVersion(Params.textDocument.version),
+  Server->addDocument(File, NewCode, encodeVersion(Params.textDocument.version),
                       WantDiags, Params.forceRebuild);
 }
 
@@ -779,7 +780,7 @@ void ClangdLSPServer::onWorkspaceSymbol(
     const WorkspaceSymbolParams &Params,
     Callback<std::vector<SymbolInformation>> Reply) {
   Server->workspaceSymbols(
-      Params.query, Opts.CodeComplete.Limit,
+      Params.query, Params.limit.getValueOr(Opts.CodeComplete.Limit),
       [Reply = std::move(Reply),
        this](llvm::Expected<std::vector<SymbolInformation>> Items) mutable {
         if (!Items)
@@ -1030,21 +1031,24 @@ void ClangdLSPServer::onCompletion(const CompletionParams &Params,
     vlog("ignored auto-triggered completion, preceding char did not match");
     return Reply(CompletionList());
   }
-  Server->codeComplete(
-      Params.textDocument.uri.file(), Params.position, Opts.CodeComplete,
-      [Reply = std::move(Reply),
-       this](llvm::Expected<CodeCompleteResult> List) mutable {
-        if (!List)
-          return Reply(List.takeError());
-        CompletionList LSPList;
-        LSPList.isIncomplete = List->HasMore;
-        for (const auto &R : List->Completions) {
-          CompletionItem C = R.render(Opts.CodeComplete);
-          C.kind = adjustKindToCapability(C.kind, SupportedCompletionItemKinds);
-          LSPList.items.push_back(std::move(C));
-        }
-        return Reply(std::move(LSPList));
-      });
+  auto Opts = this->Opts.CodeComplete;
+  if (Params.limit && *Params.limit >= 0)
+    Opts.Limit = *Params.limit;
+  Server->codeComplete(Params.textDocument.uri.file(), Params.position, Opts,
+                       [Reply = std::move(Reply), Opts,
+                        this](llvm::Expected<CodeCompleteResult> List) mutable {
+                         if (!List)
+                           return Reply(List.takeError());
+                         CompletionList LSPList;
+                         LSPList.isIncomplete = List->HasMore;
+                         for (const auto &R : List->Completions) {
+                           CompletionItem C = R.render(Opts);
+                           C.kind = adjustKindToCapability(
+                               C.kind, SupportedCompletionItemKinds);
+                           LSPList.items.push_back(std::move(C));
+                         }
+                         return Reply(std::move(LSPList));
+                       });
 }
 
 void ClangdLSPServer::onSignatureHelp(const TextDocumentPositionParams &Params,

@@ -63,6 +63,11 @@ public:
   SourceRange getDirectiveRange() const {
     return SourceRange(getBeginLoc(), getEndLoc());
   }
+
+  static bool classof(const Stmt *S) {
+    return S->getStmtClass() >= firstExecutableDirectiveConstant &&
+           S->getStmtClass() <= lastExecutableDirectiveConstant;
+  }
 };
 } // end namespace clang
 

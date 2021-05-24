@@ -2588,6 +2588,17 @@ void ASTStmtReader::VisitOMPTargetTeamsDistributeSimdDirective(
   VisitOMPLoopDirective(D);
 }
 
+void ASTStmtReader::VisitOMPInteropDirective(OMPInteropDirective *D) {
+  VisitStmt(D);
+  VisitOMPExecutableDirective(D);
+}
+
+void ASTStmtReader::VisitOMPDispatchDirective(OMPDispatchDirective *D) {
+  VisitStmt(D);
+  VisitOMPExecutableDirective(D);
+  D->setTargetCallLoc(Record.readSourceLocation());
+}
+
 //===----------------------------------------------------------------------===//
 // OpenACC Directives.
 //===----------------------------------------------------------------------===//
@@ -3584,6 +3595,16 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
           Context, NumClauses, CollapsedNum, Empty);
       break;
     }
+
+    case STMT_OMP_INTEROP_DIRECTIVE:
+      S = OMPInteropDirective::CreateEmpty(
+          Context, Record[ASTStmtReader::NumStmtFields], Empty);
+      break;
+
+    case STMT_OMP_DISPATCH_DIRECTIVE:
+      S = OMPDispatchDirective::CreateEmpty(
+          Context, Record[ASTStmtReader::NumStmtFields], Empty);
+      break;
 
     case STMT_ACC_ENTER_DATA_DIRECTIVE: {
       unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];

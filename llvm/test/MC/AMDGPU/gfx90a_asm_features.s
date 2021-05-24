@@ -1,5 +1,5 @@
-// RUN: not llvm-mc -arch=amdgcn -mcpu=gfx908 %s 2>&1 | FileCheck --check-prefixes=NOT-GFX908,NOT-GFX90A --implicit-check-not=error: %s
-// RUN: not llvm-mc -arch=amdgcn -mcpu=gfx1010 %s 2>&1 | FileCheck --check-prefixes=NOT-GFX1010,NOT-GFX90A --implicit-check-not=error: %s
+// RUN: not llvm-mc -arch=amdgcn -mcpu=gfx908 %s 2>&1 | FileCheck --check-prefixes=GFX908,NOT-GFX90A --implicit-check-not=error: %s
+// RUN: not llvm-mc -arch=amdgcn -mcpu=gfx1010 %s 2>&1 | FileCheck --check-prefixes=GFX1010,NOT-GFX90A --implicit-check-not=error: %s
 // RUN: llvm-mc -arch=amdgcn -mcpu=gfx90a -show-encoding %s | FileCheck --check-prefix=GFX90A %s
 
 // NOT-GFX90A: error: instruction not supported on this GPU
@@ -87,8 +87,7 @@ v_pk_mul_f32 v[4:5], s[2:3], v[16:17]
 v_pk_mul_f32 v[4:5], s[100:101], v[16:17]
 
 // GFX90A: v_pk_mul_f32 v[4:5], flat_scratch, v[16:17] ; encoding: [0x04,0x40,0xb1,0xd3,0x66,0x20,0x02,0x18]
-// NOT-GFX1010: error: instruction not supported on this GPU
-// NOT-GFX908: error: instruction not supported on this GPU
+// NOT-GFX90A: error: instruction not supported on this GPU
 v_pk_mul_f32 v[4:5], flat_scratch, v[16:17]
 
 // NOT-GFX90A: error: instruction not supported on this GPU
@@ -112,8 +111,7 @@ v_pk_mul_f32 v[4:5], v[8:9], s[2:3]
 v_pk_mul_f32 v[4:5], v[8:9], s[100:101]
 
 // GFX90A: v_pk_mul_f32 v[4:5], v[8:9], flat_scratch ; encoding: [0x04,0x40,0xb1,0xd3,0x08,0xcd,0x00,0x18]
-// NOT-GFX1010: error: instruction not supported on this GPU
-// NOT-GFX908: error: instruction not supported on this GPU
+// NOT-GFX90A: error: instruction not supported on this GPU
 v_pk_mul_f32 v[4:5], v[8:9], flat_scratch
 
 // NOT-GFX90A: error: instruction not supported on this GPU
@@ -201,8 +199,7 @@ v_pk_add_f32 v[4:5], s[2:3], v[16:17]
 v_pk_add_f32 v[4:5], s[100:101], v[16:17]
 
 // GFX90A: v_pk_add_f32 v[4:5], flat_scratch, v[16:17] ; encoding: [0x04,0x40,0xb2,0xd3,0x66,0x20,0x02,0x18]
-// NOT-GFX1010: error: instruction not supported on this GPU
-// NOT-GFX908: error: instruction not supported on this GPU
+// NOT-GFX90A: error: instruction not supported on this GPU
 v_pk_add_f32 v[4:5], flat_scratch, v[16:17]
 
 // NOT-GFX90A: error: instruction not supported on this GPU
@@ -226,8 +223,7 @@ v_pk_add_f32 v[4:5], v[8:9], s[2:3]
 v_pk_add_f32 v[4:5], v[8:9], s[100:101]
 
 // GFX90A: v_pk_add_f32 v[4:5], v[8:9], flat_scratch ; encoding: [0x04,0x40,0xb2,0xd3,0x08,0xcd,0x00,0x18]
-// NOT-GFX1010: error: instruction not supported on this GPU
-// NOT-GFX908: error: instruction not supported on this GPU
+// NOT-GFX90A: error: instruction not supported on this GPU
 v_pk_add_f32 v[4:5], v[8:9], flat_scratch
 
 // NOT-GFX90A: error: instruction not supported on this GPU
@@ -303,8 +299,7 @@ v_pk_add_f32 v[4:5], v[8:9], v[16:17] clamp
 v_pk_mov_b32 v[0:1], v[2:3], v[4:5]
 
 // GFX90A: v_pk_mov_b32 v[0:1], flat_scratch, v[4:5] ; encoding: [0x00,0x40,0xb3,0xd3,0x66,0x08,0x02,0x18]
-// NOT-GFX1010: error: instruction not supported on this GPU
-// NOT-GFX908: error: instruction not supported on this GPU
+// NOT-GFX90A: error: instruction not supported on this GPU
 v_pk_mov_b32 v[0:1], flat_scratch, v[4:5]
 
 // NOT-GFX90A: error: instruction not supported on this GPU
@@ -328,20 +323,20 @@ v_pk_mov_b32 v[0:1], v[2:3], v[4:5] op_sel:[1,0]
 v_pk_mov_b32 v[0:1], v[2:3], v[4:5] op_sel:[1,1]
 
 // GFX90A: tbuffer_load_format_xyzw v[4:7], off, s[0:3], 0 scc ; encoding: [0x00,0x80,0x09,0xe8,0x00,0x04,0x20,0x80]
-// NOT-GFX1010: error: not a valid operand.
-// NOT-GFX908: error: failed parsing operand.
+// GFX1010: error: not a valid operand.
+// GFX908: error: scc modifier is not supported on this GPU
 tbuffer_load_format_xyzw v[4:7], off, s[0:3], dfmt:1, nfmt:0, 0 scc
 
 // GFX90A: tbuffer_load_format_xyzw v[4:7], off, s[0:3], 0 glc scc ; encoding: [0x00,0xc0,0x09,0xe8,0x00,0x04,0x20,0x80]
-// NOT-GFX1010: error: not a valid operand.
-// NOT-GFX908: error: failed parsing operand.
+// GFX1010: error: not a valid operand.
+// GFX908: error: scc modifier is not supported on this GPU
 tbuffer_load_format_xyzw v[4:7], off, s[0:3], dfmt:1, nfmt:0, 0 glc scc
 
-// NOT-GFX90A: error: failed parsing operand
+// NOT-GFX90A: error: scc modifier is not supported on this GPU
 // GFX90A: buffer_load_dword v5, off, s[8:11], s3 offset:4095 scc ; encoding: [0xff,0x8f,0x50,0xe0,0x00,0x05,0x02,0x03]
 buffer_load_dword v5, off, s[8:11], s3 offset:4095 scc
 
-// NOT-GFX90A: error: failed parsing operand
+// NOT-GFX90A: error: scc modifier is not supported on this GPU
 // GFX90A: buffer_load_dword v5, off, s[8:11], s3 offset:4095 glc scc ; encoding: [0xff,0xcf,0x50,0xe0,0x00,0x05,0x02,0x03]
 buffer_load_dword v5, off, s[8:11], s3 offset:4095 glc scc
 
@@ -569,11 +564,11 @@ ds_add_rtn_f64 v[4:5], v1, v[2:3] offset:4
 // GFX90A: ds_add_rtn_f64 v[4:5], v1, v[2:3] offset:65535 gds ; encoding: [0xff,0xff,0xf9,0xd8,0x01,0x02,0x00,0x04]
 ds_add_rtn_f64 v[4:5], v1, v[2:3] offset:65535 gds
 
-// NOT-GFX90A: error: failed parsing operand
+// NOT-GFX90A: error: scc modifier is not supported on this GPU
 // GFX90A: flat_load_dword v0, v[0:1] scc ; encoding: [0x00,0x00,0x50,0xde,0x00,0x00,0x00,0x00]
 flat_load_dword v0, v[0:1] scc
 
-// NOT-GFX90A: error: failed parsing operand
+// NOT-GFX90A: error: scc modifier is not supported on this GPU
 // GFX90A: flat_load_dword v0, v[0:1] glc scc ; encoding: [0x00,0x00,0x51,0xde,0x00,0x00,0x00,0x00]
 flat_load_dword v0, v[0:1] glc scc
 
@@ -604,10 +599,6 @@ flat_atomic_add_f64 v[0:1], v[2:3] offset:7
 // NOT-GFX90A: error: instruction not supported on this GPU
 // GFX90A: flat_atomic_add_f64 v[0:1], v[0:1], v[2:3] offset:4095 glc ; encoding: [0xff,0x0f,0x3d,0xdd,0x00,0x02,0x00,0x00]
 flat_atomic_add_f64 v[0:1], v[0:1], v[2:3] offset:4095 glc
-
-// NOT-GFX90A: error: instruction not supported on this GPU
-// GFX90A: flat_atomic_add_f64 v[0:1], v[0:1], v[2:3] offset:4095 glc scc ; encoding: [0xff,0x0f,0x3d,0xdf,0x00,0x02,0x00,0x00]
-flat_atomic_add_f64 v[0:1], v[0:1], v[2:3] offset:4095 glc scc
 
 // NOT-GFX90A: error: instruction not supported on this GPU
 // GFX90A: flat_atomic_add_f64 v[0:1], v[2:3] offset:4095 slc ; encoding: [0xff,0x0f,0x3e,0xdd,0x00,0x02,0x00,0x00]
@@ -689,7 +680,7 @@ global_atomic_min_f64 v[0:1], v[2:3], off
 // GFX90A: global_atomic_max_f64 v[0:1], v[2:3], off ; encoding: [0x00,0x80,0x44,0xdd,0x00,0x02,0x7f,0x00]
 global_atomic_max_f64 v[0:1], v[2:3], off
 
-// NOT-GFX90A: error: failed parsing operand
+// NOT-GFX90A: error: scc modifier is not supported on this GPU
 // GFX90A: image_load v[0:4], v2, s[0:7] dmask:0xf unorm scc ; encoding: [0x80,0x1f,0x00,0xf0,0x02,0x00,0x00,0x00]
 image_load v[0:4], v2, s[0:7] dmask:0xf unorm scc
 
@@ -706,8 +697,8 @@ v_fmac_f64_e32 v[254:255], v[2:3], v[4:5]
 v_fmac_f64_e32 v[4:5], v[254:255], v[4:5]
 
 // GFX90A: v_fmac_f64_e32 v[4:5], flat_scratch, v[4:5] ; encoding: [0x66,0x08,0x08,0x08]
-// NOT-GFX1010: error: instruction not supported on this GPU
-// NOT-GFX908: error: instruction not supported on this GPU
+// GFX1010: error: instruction not supported on this GPU
+// GFX908: error: instruction not supported on this GPU
 v_fmac_f64_e32 v[4:5], flat_scratch, v[4:5]
 
 // NOT-GFX90A: error: instruction not supported on this GPU
@@ -759,8 +750,8 @@ v_fmac_f64_e64 v[254:255], v[2:3], v[8:9]
 v_fmac_f64_e64 v[4:5], v[254:255], v[8:9]
 
 // GFX90A: v_fmac_f64_e64 v[4:5], flat_scratch, v[8:9] ; encoding: [0x04,0x00,0x04,0xd1,0x66,0x10,0x02,0x00]
-// NOT-GFX1010: error: instruction not supported on this GPU
-// NOT-GFX908: error: instruction not supported on this GPU
+// GFX1010: error: instruction not supported on this GPU
+// GFX908: error: instruction not supported on this GPU
 v_fmac_f64_e64 v[4:5], flat_scratch, v[8:9]
 
 // NOT-GFX90A: error: instruction not supported on this GPU
@@ -792,8 +783,8 @@ v_fmac_f64_e64 v[4:5], -4.0, v[8:9]
 v_fmac_f64_e64 v[4:5], v[2:3], v[254:255]
 
 // GFX90A: v_fmac_f64_e64 v[4:5], v[2:3], flat_scratch ; encoding: [0x04,0x00,0x04,0xd1,0x02,0xcd,0x00,0x00]
-// NOT-GFX1010: error: instruction not supported on this GPU
-// NOT-GFX908: error: instruction not supported on this GPU
+// GFX1010: error: instruction not supported on this GPU
+// GFX908: error: instruction not supported on this GPU
 v_fmac_f64_e64 v[4:5], v[2:3], flat_scratch
 
 // NOT-GFX90A: error: instruction not supported on this GPU
@@ -860,112 +851,112 @@ v_fmac_f64_e64 v[4:5], v[2:3], v[8:9] mul:4
 // GFX90A: v_fmac_f64_e64 v[4:5], v[2:3], v[8:9] div:2 ; encoding: [0x04,0x00,0x04,0xd1,0x02,0x11,0x02,0x18]
 v_fmac_f64_e64 v[4:5], v[2:3], v[8:9] div:2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x00]
 v_mul_legacy_f32_e64 v5, v1, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v255, v1, v2 ; encoding: [0xff,0x00,0xa1,0xd2,0x01,0x05,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v255, v1, v2 ; encoding: [0xff,0x00,0xa1,0xd2,0x01,0x05,0x02,0x00]
 v_mul_legacy_f32_e64 v255, v1, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v255, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0xff,0x05,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v255, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0xff,0x05,0x02,0x00]
 v_mul_legacy_f32_e64 v5, v255, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, s1, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x04,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, s1, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x04,0x02,0x00]
 v_mul_legacy_f32_e64 v5, s1, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, s101, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x65,0x04,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, s101, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x65,0x04,0x02,0x00]
 v_mul_legacy_f32_e64 v5, s101, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, vcc_lo, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x6a,0x04,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, vcc_lo, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x6a,0x04,0x02,0x00]
 v_mul_legacy_f32_e64 v5, vcc_lo, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, vcc_hi, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x6b,0x04,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, vcc_hi, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x6b,0x04,0x02,0x00]
 v_mul_legacy_f32_e64 v5, vcc_hi, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, m0, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x7c,0x04,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, m0, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x7c,0x04,0x02,0x00]
 v_mul_legacy_f32_e64 v5, m0, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, exec_lo, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x7e,0x04,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, exec_lo, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x7e,0x04,0x02,0x00]
 v_mul_legacy_f32_e64 v5, exec_lo, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, exec_hi, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x7f,0x04,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, exec_hi, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x7f,0x04,0x02,0x00]
 v_mul_legacy_f32_e64 v5, exec_hi, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, 0, v2  ; encoding: [0x05,0x00,0xa1,0xd2,0x80,0x04,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, 0, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x80,0x04,0x02,0x00]
 v_mul_legacy_f32_e64 v5, 0, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, -1, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0xc1,0x04,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, -1, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0xc1,0x04,0x02,0x00]
 v_mul_legacy_f32_e64 v5, -1, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, 0.5, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0xf0,0x04,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, 0.5, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0xf0,0x04,0x02,0x00]
 v_mul_legacy_f32_e64 v5, 0.5, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, -4.0, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0xf7,0x04,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, -4.0, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0xf7,0x04,0x02,0x00]
 v_mul_legacy_f32_e64 v5, -4.0, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, v255 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xff,0x03,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, v255 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xff,0x03,0x00]
 v_mul_legacy_f32_e64 v5, v1, v255
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, s2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x00,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, s2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x00,0x00]
 v_mul_legacy_f32_e64 v5, v1, s2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, s101 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xcb,0x00,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, s101 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xcb,0x00,0x00]
 v_mul_legacy_f32_e64 v5, v1, s101
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, vcc_lo ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xd5,0x00,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, vcc_lo ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xd5,0x00,0x00]
 v_mul_legacy_f32_e64 v5, v1, vcc_lo
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, vcc_hi ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xd7,0x00,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, vcc_hi ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xd7,0x00,0x00]
 v_mul_legacy_f32_e64 v5, v1, vcc_hi
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, m0 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xf9,0x00,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, m0 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xf9,0x00,0x00]
 v_mul_legacy_f32_e64 v5, v1, m0
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, exec_lo ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xfd,0x00,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, exec_lo ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xfd,0x00,0x00]
 v_mul_legacy_f32_e64 v5, v1, exec_lo
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, exec_hi ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xff,0x00,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, exec_hi ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xff,0x00,0x00]
 v_mul_legacy_f32_e64 v5, v1, exec_hi
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, 0  ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x01,0x01,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, 0 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x01,0x01,0x00]
 v_mul_legacy_f32_e64 v5, v1, 0
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, -1 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x83,0x01,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, -1 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x83,0x01,0x00]
 v_mul_legacy_f32_e64 v5, v1, -1
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, 0.5 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xe1,0x01,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, 0.5 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xe1,0x01,0x00]
 v_mul_legacy_f32_e64 v5, v1, 0.5
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, -4.0 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xef,0x01,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, -4.0 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0xef,0x01,0x00]
 v_mul_legacy_f32_e64 v5, v1, -4.0
 
-// GFX90A: v_mul_legacy_f32_e64 v5, -v1, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x20]
+// GFX90A: v_mul_legacy_f32 v5, -v1, v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x20]
 v_mul_legacy_f32_e64 v5, -v1, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, -v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x40]
+// GFX90A: v_mul_legacy_f32 v5, v1, -v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x40]
 v_mul_legacy_f32_e64 v5, v1, -v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, -v1, -v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x60]
+// GFX90A: v_mul_legacy_f32 v5, -v1, -v2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x60]
 v_mul_legacy_f32_e64 v5, -v1, -v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, |v1|, v2 ; encoding: [0x05,0x01,0xa1,0xd2,0x01,0x05,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, |v1|, v2 ; encoding: [0x05,0x01,0xa1,0xd2,0x01,0x05,0x02,0x00]
 v_mul_legacy_f32_e64 v5, |v1|, v2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, |v2| ; encoding: [0x05,0x02,0xa1,0xd2,0x01,0x05,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, |v2| ; encoding: [0x05,0x02,0xa1,0xd2,0x01,0x05,0x02,0x00]
 v_mul_legacy_f32_e64 v5, v1, |v2|
 
-// GFX90A: v_mul_legacy_f32_e64 v5, |v1|, |v2| ; encoding: [0x05,0x03,0xa1,0xd2,0x01,0x05,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, |v1|, |v2| ; encoding: [0x05,0x03,0xa1,0xd2,0x01,0x05,0x02,0x00]
 v_mul_legacy_f32_e64 v5, |v1|, |v2|
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, v2 clamp ; encoding: [0x05,0x80,0xa1,0xd2,0x01,0x05,0x02,0x00]
+// GFX90A: v_mul_legacy_f32 v5, v1, v2 clamp ; encoding: [0x05,0x80,0xa1,0xd2,0x01,0x05,0x02,0x00]
 v_mul_legacy_f32_e64 v5, v1, v2 clamp
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, v2 mul:2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x08]
+// GFX90A: v_mul_legacy_f32 v5, v1, v2 mul:2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x08]
 v_mul_legacy_f32_e64 v5, v1, v2 mul:2
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, v2 mul:4 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x10]
+// GFX90A: v_mul_legacy_f32 v5, v1, v2 mul:4 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x10]
 v_mul_legacy_f32_e64 v5, v1, v2 mul:4
 
-// GFX90A: v_mul_legacy_f32_e64 v5, v1, v2 div:2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x18]
+// GFX90A: v_mul_legacy_f32 v5, v1, v2 div:2 ; encoding: [0x05,0x00,0xa1,0xd2,0x01,0x05,0x02,0x18]
 v_mul_legacy_f32_e64 v5, v1, v2 div:2
 
 // GFX90A: v_xor_b32_dpp v6, v29, v27  row_newbcast:0 row_mask:0xf bank_mask:0xf ; encoding: [0xfa,0x36,0x0c,0x2a,0x1d,0x50,0x01,0xff]
@@ -981,28 +972,28 @@ v_xor_b32 v6, v29, v27 row_newbcast:7
 v_xor_b32 v6, v29, v27 row_newbcast:15
 
 // GFX90A: buffer_atomic_add_f32 v0, v2, s[4:7], 0 idxen glc ; encoding: [0x00,0x60,0x34,0xe1,0x02,0x00,0x01,0x80]
-// NOT-GFX1010: error: instruction not supported on this GPU
-// NOT-GFX908: error: operands are not valid for this GPU or mode
+// GFX1010: error: instruction not supported on this GPU
+// GFX908: error: instruction must not use glc
 buffer_atomic_add_f32 v0, v2, s[4:7], 0 idxen glc
 
 // GFX90A: buffer_atomic_add_f32 v0, v2, s[4:7], 0 idxen glc ; encoding: [0x00,0x60,0x34,0xe1,0x02,0x00,0x01,0x80]
-// NOT-GFX1010: error: instruction not supported on this GPU
-// NOT-GFX908: error: operands are not valid for this GPU or mode
+// GFX1010: error: instruction not supported on this GPU
+// GFX908: error: instruction must not use glc
 buffer_atomic_add_f32 v0, v2, s[4:7], 0 idxen glc
 
 // GFX90A: buffer_atomic_pk_add_f16 v0, v2, s[4:7], 0 idxen glc ; encoding: [0x00,0x60,0x38,0xe1,0x02,0x00,0x01,0x80]
-// NOT-GFX1010: error: instruction not supported on this GPU
-// NOT-GFX908: error: operands are not valid for this GPU or mode
+// GFX1010: error: instruction not supported on this GPU
+// GFX908: error: instruction must not use glc
 buffer_atomic_pk_add_f16 v0, v2, s[4:7], 0 idxen glc
 
 // GFX90A: global_atomic_add_f32 v0, v[0:1], v2, off glc ; encoding: [0x00,0x80,0x35,0xdd,0x00,0x02,0x7f,0x00]
-// NOT-GFX1010: error: instruction not supported on this GPU
-// NOT-GFX908: error: operands are not valid for this GPU or mode
+// GFX1010: error: instruction not supported on this GPU
+// GFX908: error: operands are not valid for this GPU or mode
 global_atomic_add_f32 v0, v[0:1], v2, off glc
 
 // GFX90A: global_atomic_pk_add_f16 v0, v[0:1], v2, off glc ; encoding: [0x00,0x80,0x39,0xdd,0x00,0x02,0x7f,0x00]
-// NOT-GFX1010: error: instruction not supported on this GPU
-// NOT-GFX908: error: operands are not valid for this GPU or mode
+// GFX1010: error: instruction not supported on this GPU
+// GFX908: error: operands are not valid for this GPU or mode
 global_atomic_pk_add_f16 v0, v[0:1], v2, off glc
 
 // GFX90A: global_atomic_add_f64 v[0:1], v[0:1], v[2:3], off glc ; encoding: [0x00,0x80,0x3d,0xdd,0x00,0x02,0x7f,0x00]
@@ -1028,3 +1019,34 @@ flat_atomic_max_f64 v[0:1], v[0:1], v[2:3] glc
 // GFX90A: flat_atomic_min_f64 v[0:1], v[0:1], v[2:3] glc ; encoding: [0x00,0x00,0x41,0xdd,0x00,0x02,0x00,0x00]
 // NOT-GFX90A: error: instruction not supported on this GPU
 flat_atomic_min_f64 v[0:1], v[0:1], v[2:3] glc
+
+// GFX90A: global_atomic_add  v[2:3], v5, off scc  ; encoding: [0x00,0x80,0x08,0xdf,0x02,0x05,0x7f,0x00]
+// NOT-GFX90A: error: scc modifier is not supported on this GPU
+global_atomic_add v[2:3], v5, off scc
+
+// GFX90A: global_atomic_add_f32  v0, v[0:1], v2, off glc ; encoding: [0x00,0x80,0x35,0xdd,0x00,0x02,0x7f,0x00]
+// GFX908: error: operands are not valid for this GPU or mode
+// GFX1010: error: instruction not supported on this GPU
+global_atomic_add_f32 v0, v[0:1], v2, off glc
+
+// GFX90A: global_atomic_add_f32  v[0:1], v2, off  ; encoding: [0x00,0x80,0x34,0xdd,0x00,0x02,0x7f,0x00]
+// GFX1010: error: instruction not supported on this GPU
+global_atomic_add_f32 v[0:1], v2, off
+
+// GFX90A: global_atomic_add_f32  v0, v2, s[0:1]   ; encoding: [0x00,0x80,0x34,0xdd,0x00,0x02,0x00,0x00]
+// GFX1010: error: instruction not supported on this GPU
+global_atomic_add_f32 v0, v2, s[0:1]
+
+// GFX90A: global_atomic_add_f32  v1, v0, v2, s[0:1] glc
+// GFX908: error: operands are not valid for this GPU or mode
+// GFX1010: error: instruction not supported on this GPU
+global_atomic_add_f32 v1, v0, v2, s[0:1] glc ; encoding: [0x00,0x80,0x35,0xdd,0x00,0x02,0x00,0x01]
+
+// GFX908: error: operands are not valid for this GPU or mode
+// GFX1010: error: instruction not supported on this GPU
+// GFX90A: global_atomic_pk_add_f16  v0, v[0:1], v2, off glc ; encoding: [0x00,0x80,0x39,0xdd,0x00,0x02,0x7f,0x00]
+global_atomic_pk_add_f16 v0, v[0:1], v2, off glc
+
+// NOT-GFX90A: error: scc modifier is not supported on this GPU
+// GFX90A: buffer_atomic_add v4, off, s[8:11], s3 scc ; encoding: [0x00,0x80,0x08,0xe1,0x00,0x04,0x02,0x03]
+buffer_atomic_add v4, off, s[8:11], s3 scc

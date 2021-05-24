@@ -1,6 +1,8 @@
-// RUN: mlir-cuda-runner %s \
-// RUN:   -gpu-to-cubin="gpu-binary-annotation=nvvm.cubin" \
-// RUN:   -gpu-to-llvm="gpu-binary-annotation=nvvm.cubin" \
+// RUN: mlir-opt %s \
+// RUN:   -gpu-kernel-outlining \
+// RUN:   -pass-pipeline='gpu.module(strip-debuginfo,convert-gpu-to-nvvm,gpu-to-cubin)' \
+// RUN:   -gpu-to-llvm \
+// RUN: | mlir-cpu-runner \
 // RUN:   --shared-libs=%linalg_test_lib_dir/libmlir_cuda_runtime%shlibext \
 // RUN:   --shared-libs=%linalg_test_lib_dir/libmlir_runner_utils%shlibext \
 // RUN:   --entry-point-result=void \
@@ -8,12 +10,12 @@
 
 // CHECK: [{{(35, ){34}35}}]
 func @main() {
-  %arg = alloc() : memref<35xf32>
-  %dst = memref_cast %arg : memref<35xf32> to memref<?xf32>
+  %arg = memref.alloc() : memref<35xf32>
+  %dst = memref.cast %arg : memref<35xf32> to memref<?xf32>
   %one = constant 1 : index
   %c0 = constant 0 : index
-  %sx = dim %dst, %c0 : memref<?xf32>
-  %cast_dst = memref_cast %dst : memref<?xf32> to memref<*xf32>
+  %sx = memref.dim %dst, %c0 : memref<?xf32>
+  %cast_dst = memref.cast %dst : memref<?xf32> to memref<*xf32>
   gpu.host_register %cast_dst : memref<*xf32>
   gpu.launch blocks(%bx, %by, %bz) in (%grid_x = %one, %grid_y = %one, %grid_z = %one)
              threads(%tx, %ty, %tz) in (%block_x = %sx, %block_y = %one, %block_z = %one) {
@@ -24,7 +26,7 @@ func @main() {
       "gpu.yield"(%xor) : (i32) -> ()
     }) : (i32) -> (i32)
     %res = sitofp %xor : i32 to f32
-    store %res, %dst[%tx] : memref<?xf32>
+    memref.store %res, %dst[%tx] : memref<?xf32>
     gpu.terminator
   }
   call @print_memref_f32(%cast_dst) : (memref<*xf32>) -> ()

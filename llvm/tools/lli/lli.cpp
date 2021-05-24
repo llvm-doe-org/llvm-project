@@ -84,7 +84,7 @@ static codegen::RegisterCodeGenFlags CGF;
 
 namespace {
 
-  enum class JITKind { MCJIT, OrcLazy };
+  enum class JITKind { MCJIT, Orc, OrcLazy };
   enum class JITLinkerKind { Default, RuntimeDyld, JITLink };
 
   cl::opt<std::string>
@@ -99,8 +99,9 @@ namespace {
 
   cl::opt<JITKind> UseJITKind(
       "jit-kind", cl::desc("Choose underlying JIT kind."),
-      cl::init(JITKind::MCJIT),
+      cl::init(JITKind::Orc),
       cl::values(clEnumValN(JITKind::MCJIT, "mcjit", "MCJIT"),
+                 clEnumValN(JITKind::Orc, "orc", "Orc JIT"),
                  clEnumValN(JITKind::OrcLazy, "orc-lazy",
                             "Orc-based lazy JIT.")));
 
@@ -227,7 +228,7 @@ namespace {
       cl::desc("Do not resolve lli process symbols in JIT'd code"),
       cl::init(false));
 
-  enum class LLJITPlatform { DetectHost, GenericIR, MachO };
+  enum class LLJITPlatform { Inactive, DetectHost, GenericIR, MachO };
 
   cl::opt<LLJITPlatform>
       Platform("lljit-platform", cl::desc("Platform to use with LLJIT"),
@@ -237,7 +238,9 @@ namespace {
                           clEnumValN(LLJITPlatform::GenericIR, "GenericIR",
                                      "Use LLJITGenericIRPlatform"),
                           clEnumValN(LLJITPlatform::MachO, "MachO",
-                                     "Use LLJITMachOPlatform")),
+                                     "Use LLJITMachOPlatform"),
+                          clEnumValN(LLJITPlatform::Inactive, "Inactive",
+                                     "Disable platform support explicitly")),
                cl::Hidden);
 
   enum class DumpKind {
@@ -326,7 +329,8 @@ public:
       return nullptr;
     // Load the object from the cache filename
     ErrorOr<std::unique_ptr<MemoryBuffer>> IRObjectBuffer =
-        MemoryBuffer::getFile(CacheName, -1, false);
+        MemoryBuffer::getFile(CacheName, /*IsText=*/false,
+                              /*RequiresNullTerminator=*/false);
     // If the file isn't there, that's OK.
     if (!IRObjectBuffer)
       return nullptr;
@@ -416,7 +420,7 @@ static void reportError(SMDiagnostic Err, const char *ProgName) {
 }
 
 Error loadDylibs();
-int runOrcLazyJIT(const char *ProgName);
+int runOrcJIT(const char *ProgName);
 void disallowOrcOptions();
 
 //===----------------------------------------------------------------------===//
@@ -443,11 +447,12 @@ int main(int argc, char **argv, char * const *envp) {
 
   ExitOnErr(loadDylibs());
 
-  if (UseJITKind == JITKind::OrcLazy)
-    return runOrcLazyJIT(argv[0]);
-  else
+  if (UseJITKind == JITKind::MCJIT)
     disallowOrcOptions();
+  else
+    return runOrcJIT(argv[0]);
 
+  // Old lli implementation based on ExecutionEngine and MCJIT.
   LLVMContext Context;
 
   // Load the bitcode...
@@ -829,7 +834,7 @@ loadModule(StringRef Path, orc::ThreadSafeContext TSCtx) {
   return orc::ThreadSafeModule(std::move(M), std::move(TSCtx));
 }
 
-int runOrcLazyJIT(const char *ProgName) {
+int runOrcJIT(const char *ProgName) {
   // Start setting up the JIT environment.
 
   // Parse the main module.
@@ -866,6 +871,16 @@ int runOrcLazyJIT(const char *ProgName) {
       .addFeatures(codegen::getFeatureList())
       .setRelocationModel(codegen::getExplicitRelocModel())
       .setCodeModel(codegen::getExplicitCodeModel());
+
+  // FIXME: Setting a dummy call-through manager in non-lazy mode prevents the
+  // JIT builder to instantiate a default (which would fail with an error for
+  // unsupported architectures).
+  if (UseJITKind != JITKind::OrcLazy) {
+    auto ES = std::make_unique<orc::ExecutionSession>();
+    Builder.setLazyCallthroughManager(
+        std::make_unique<orc::LazyCallThroughManager>(*ES, 0, nullptr));
+    Builder.setExecutionSession(std::move(ES));
+  }
 
   Builder.setLazyCompileFailureAddr(
       pointerToJITTargetAddress(exitOnLazyCallThroughFailure));
@@ -911,6 +926,9 @@ int runOrcLazyJIT(const char *ProgName) {
     case LLJITPlatform::MachO:
       Builder.setPlatformSetUp(orc::setUpMachOPlatform);
       ExitOnErr(orc::enableObjCRegistration("libobjc.dylib"));
+      break;
+    case LLJITPlatform::Inactive:
+      Builder.setPlatformSetUp(orc::setUpInactivePlatform);
       break;
     default:
       llvm_unreachable("Unrecognized platform value");
@@ -975,8 +993,17 @@ int runOrcLazyJIT(const char *ProgName) {
         std::make_unique<LLIBuiltinFunctionGenerator>(GenerateBuiltinFunctions,
                                                       Mangle));
 
+  // Regular modules are greedy: They materialize as a whole and trigger
+  // materialization for all required symbols recursively. Lazy modules go
+  // through partitioning and they replace outgoing calls with reexport stubs
+  // that resolve on call-through.
+  auto AddModule = [&](orc::JITDylib &JD, orc::ThreadSafeModule M) {
+    return UseJITKind == JITKind::OrcLazy ? J->addLazyIRModule(JD, std::move(M))
+                                          : J->addIRModule(JD, std::move(M));
+  };
+
   // Add the main module.
-  ExitOnErr(J->addLazyIRModule(std::move(MainModule)));
+  ExitOnErr(AddModule(J->getMainJITDylib(), std::move(MainModule)));
 
   // Create JITDylibs and add any extra modules.
   {
@@ -1004,7 +1031,7 @@ int runOrcLazyJIT(const char *ProgName) {
       assert(EMIdx != 0 && "ExtraModule should have index > 0");
       auto JDItr = std::prev(IdxToDylib.lower_bound(EMIdx));
       auto &JD = *JDItr->second;
-      ExitOnErr(J->addLazyIRModule(JD, std::move(M)));
+      ExitOnErr(AddModule(JD, std::move(M)));
     }
 
     for (auto EAItr = ExtraArchives.begin(), EAEnd = ExtraArchives.end();

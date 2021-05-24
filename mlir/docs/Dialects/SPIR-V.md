@@ -525,14 +525,14 @@ control flow construct. With this approach, it's easier to discover all blocks
 belonging to a structured control flow construct. It is also more idiomatic to
 MLIR system.
 
-We introduce a `spv.selection` and `spv.loop` op for structured selections and
+We introduce a `spv.mlir.selection` and `spv.mlir.loop` op for structured selections and
 loops, respectively. The merge targets are the next ops following them. Inside
 their regions, a special terminator, `spv.mlir.merge` is introduced for branching to
 the merge target.
 
 ### Selection
 
-`spv.selection` defines a selection construct. It contains one region. The
+`spv.mlir.selection` defines a selection construct. It contains one region. The
 region should contain at least two blocks: one selection header block and one
 merge block.
 
@@ -586,7 +586,7 @@ func @selection(%cond: i1) -> () {
   %two = spv.Constant 2: i32
   %x = spv.Variable init(%zero) : !spv.ptr<i32, Function>
 
-  spv.selection {
+  spv.mlir.selection {
     spv.BranchConditional %cond, ^then, ^else
 
   ^then:
@@ -608,7 +608,7 @@ func @selection(%cond: i1) -> () {
 
 ### Loop
 
-`spv.loop` defines a loop construct. It contains one region. The region should
+`spv.mlir.loop` defines a loop construct. It contains one region. The region should
 contain at least four blocks: one entry block, one loop header block, one loop
 continue block, one merge block.
 
@@ -673,7 +673,7 @@ func @loop(%count : i32) -> () {
   %one = spv.Constant 1: i32
   %var = spv.Variable init(%zero) : !spv.ptr<i32, Function>
 
-  spv.loop {
+  spv.mlir.loop {
     spv.Branch ^header
 
   ^header:
@@ -731,7 +731,7 @@ It will be represented as:
 func @foo() -> () {
   %var = spv.Variable : !spv.ptr<i32, Function>
 
-  spv.selection {
+  spv.mlir.selection {
     %true = spv.Constant true
     spv.BranchConditional %true, ^true, ^false
 
@@ -932,9 +932,15 @@ The attribute has a few fields:
 *   Binding number for the corresponding resource variable.
 *   Storage class for the corresponding resource variable.
 
-The SPIR-V dialect provides a [`LowerABIAttributesPass`][MlirSpirvPasses] for
-consuming these attributes and create SPIR-V module complying with the
-interface.
+The SPIR-V dialect provides a [`LowerABIAttributesPass`][MlirSpirvPasses] that
+uses this information to lower the entry point function and its ABI consistent
+with the Vulkan validation rules. Specifically,
+
+*   Creates `spv.GlobalVariable`s for the arguments, and replaces all uses of
+    the argument with this variable. The SSA value used for replacement is
+    obtained using the `spv.mlir.addressof` operation.
+*   Adds the `spv.EntryPoint` and `spv.ExecutionMode` operations into the
+    `spv.module` for the entry function.
 
 ## Serialization and deserialization
 
@@ -969,7 +975,7 @@ the representational differences between SPIR-V dialect and binary format:
 *   Attributes on ops, if not part of the op's binary encoding, are emitted as
     `OpDecorate*` instructions in the SPIR-V binary module section for
     decorations.
-*   `spv.selection`s and `spv.loop`s are emitted as basic blocks with `Op*Merge`
+*   `spv.mlir.selection`s and `spv.mlir.loop`s are emitted as basic blocks with `Op*Merge`
     instructions in the header block as required by the binary format.
 *   Block arguments are materialized as `OpPhi` instructions at the beginning of
     the corresponding blocks.
@@ -991,7 +997,7 @@ Similarly, a few transformations are performed during deserialization:
     `spv.mlir.referenceof` op to turn the symbol of the corresponding
     `spv.SpecConstant` into an SSA value.
 *   `OpPhi` instructions are converted to block arguments.
-*   Structured control flow are placed inside `spv.selection` and `spv.loop`.
+*   Structured control flow are placed inside `spv.mlir.selection` and `spv.mlir.loop`.
 
 ## Conversions
 
@@ -1052,28 +1058,7 @@ is obtained from the layout specification of the memref. The storage class of
 the pointer type are derived from the memref's memory space with
 `SPIRVTypeConverter::getStorageClassForMemorySpace()`.
 
-### `SPIRVOpLowering`
-
-`mlir::SPIRVOpLowering` is a base class that can be used to define the patterns
-used for implementing the lowering. For now this only provides derived classes
-access to an instance of `mlir::SPIRVTypeLowering` class.
-
 ### Utility functions for lowering
-
-#### Setting shader interface
-
-The method `mlir::spirv::setABIAttrs` allows setting the [shader interface
-attributes](#shader-interface-abi) for a function that is to be an entry
-point function within the `spv.module` on lowering. A later pass
-`mlir::spirv::LowerABIAttributesPass` uses this information to lower the entry
-point function and its ABI consistent with the Vulkan validation
-rules. Specifically,
-
-*   Creates `spv.GlobalVariable`s for the arguments, and replaces all uses of
-    the argument with this variable. The SSA value used for replacement is
-    obtained using the `spv.mlir.addressof` operation.
-*   Adds the `spv.EntryPoint` and `spv.ExecutionMode` operations into the
-    `spv.module` for the entry function.
 
 #### Setting layout for shader interface variables
 

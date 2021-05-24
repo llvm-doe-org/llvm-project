@@ -21,6 +21,8 @@
 #include "llvm/Option/Arg.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Option/OptTable.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
@@ -85,6 +87,15 @@ bool Fortran::frontend::ParseDiagnosticArgs(clang::DiagnosticOptions &opts,
   return true;
 }
 
+// Tweak the frontend configuration based on the frontend action
+static void setUpFrontendBasedOnAction(FrontendOptions &opts) {
+  assert(opts.programAction_ != Fortran::frontend::InvalidAction &&
+      "Fortran frontend action not set!");
+
+  if (opts.programAction_ == DebugDumpParsingLog)
+    opts.instrumentedParse_ = true;
+}
+
 static InputKind ParseFrontendArgs(FrontendOptions &opts,
     llvm::opt::ArgList &args, clang::DiagnosticsEngine &diags) {
 
@@ -125,11 +136,17 @@ static InputKind ParseFrontendArgs(FrontendOptions &opts,
     case clang::driver::options::OPT_fdebug_dump_provenance:
       opts.programAction_ = DebugDumpProvenance;
       break;
+    case clang::driver::options::OPT_fdebug_dump_parsing_log:
+      opts.programAction_ = DebugDumpParsingLog;
+      break;
     case clang::driver::options::OPT_fdebug_measure_parse_tree:
       opts.programAction_ = DebugMeasureParseTree;
       break;
     case clang::driver::options::OPT_fdebug_pre_fir_tree:
       opts.programAction_ = DebugPreFIRTree;
+      break;
+    case clang::driver::options::OPT_fget_symbols_sources:
+      opts.programAction_ = GetSymbolsSources;
       break;
 
       // TODO:
@@ -264,7 +281,20 @@ static InputKind ParseFrontendArgs(FrontendOptions &opts,
           << arg->getAsString(args) << argValue;
     }
   }
+
+  setUpFrontendBasedOnAction(opts);
+
   return dashX;
+}
+
+// Generate the path to look for intrinsic modules
+static std::string getIntrinsicDir() {
+  // TODO: Find a system independent API
+  llvm::SmallString<128> driverPath;
+  driverPath.assign(llvm::sys::fs::getMainExecutable(nullptr, nullptr));
+  llvm::sys::path::remove_filename(driverPath);
+  driverPath.append("/../include/flang/");
+  return std::string(driverPath);
 }
 
 /// Parses all preprocessor input arguments and populates the preprocessor
@@ -287,13 +317,20 @@ static void parsePreprocessorArgs(
   // Add the ordered list of -I's.
   for (const auto *currentArg : args.filtered(clang::driver::options::OPT_I))
     opts.searchDirectoriesFromDashI.emplace_back(currentArg->getValue());
+
+  // Prepend the ordered list of -intrinsic-modules-path
+  // to the default location to search.
+  for (const auto *currentArg :
+      args.filtered(clang::driver::options::OPT_fintrinsic_modules_path))
+    opts.searchDirectoriesFromIntrModPath.emplace_back(currentArg->getValue());
 }
 
 /// Parses all semantic related arguments and populates the variables
 /// options accordingly.
-static void parseSemaArgs(std::string &moduleDir, llvm::opt::ArgList &args,
+static void parseSemaArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
     clang::DiagnosticsEngine &diags) {
 
+  // -J/module-dir option
   auto moduleDirList =
       args.getAllArgValues(clang::driver::options::OPT_module_dir);
   // User can only specify -J/-module-dir once
@@ -305,7 +342,12 @@ static void parseSemaArgs(std::string &moduleDir, llvm::opt::ArgList &args,
     diags.Report(diagID);
   }
   if (moduleDirList.size() == 1)
-    moduleDir = moduleDirList[0];
+    res.SetModuleDir(moduleDirList[0]);
+
+  // -fdebug-module-writer option
+  if (args.hasArg(clang::driver::options::OPT_fdebug_module_writer)) {
+    res.SetDebugModuleDir(true);
+  }
 }
 
 /// Parses all Dialect related arguments and populates the variables
@@ -347,6 +389,26 @@ static void parseDialectArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
     res.frontendOpts().features_.Enable(
         Fortran::common::LanguageFeature::OpenMP);
   }
+
+  // -pedantic
+  if (args.hasArg(clang::driver::options::OPT_pedantic)) {
+    res.set_EnableConformanceChecks();
+  }
+  // -std=f2018 (currently this implies -pedantic)
+  // TODO: Set proper options when more fortran standards
+  // are supported.
+  if (args.hasArg(clang::driver::options::OPT_std_EQ)) {
+    auto standard = args.getLastArgValue(clang::driver::options::OPT_std_EQ);
+    // We only allow f2018 as the given standard
+    if (standard.equals("f2018")) {
+      res.set_EnableConformanceChecks();
+    } else {
+      const unsigned diagID =
+          diags.getCustomDiagID(clang::DiagnosticsEngine::Error,
+              "Only -std=f2018 is allowed currently.");
+      diags.Report(diagID);
+    }
+  }
   return;
 }
 
@@ -380,7 +442,7 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &res,
   // Parse the preprocessor args
   parsePreprocessorArgs(res.preprocessorOpts(), args);
   // Parse semantic args
-  parseSemaArgs(res.moduleDir(), args, diags);
+  parseSemaArgs(res, args, diags);
   // Parse dialect arguments
   parseDialectArgs(res, args, diags);
 
@@ -475,15 +537,32 @@ void CompilerInvocation::setFortranOpts() {
 
   collectMacroDefinitions(preprocessorOptions, fortranOptions);
 
+  // Adding search directories specified by -I
   fortranOptions.searchDirectories.insert(
       fortranOptions.searchDirectories.end(),
       preprocessorOptions.searchDirectoriesFromDashI.begin(),
       preprocessorOptions.searchDirectoriesFromDashI.end());
 
+  // Add the ordered list of -intrinsic-modules-path
+  fortranOptions.searchDirectories.insert(
+      fortranOptions.searchDirectories.end(),
+      preprocessorOptions.searchDirectoriesFromIntrModPath.begin(),
+      preprocessorOptions.searchDirectoriesFromIntrModPath.end());
+
+  //  Add the default intrinsic module directory at the end
+  fortranOptions.searchDirectories.emplace_back(getIntrinsicDir());
+
   // Add the directory supplied through -J/-module-dir to the list of search
   // directories
   if (moduleDirJ.compare(".") != 0)
     fortranOptions.searchDirectories.emplace_back(moduleDirJ);
+
+  if (frontendOptions.instrumentedParse_)
+    fortranOptions.instrumentedParse = true;
+
+  if (enableConformanceChecks()) {
+    fortranOptions.features.WarnOnAllNonstandard();
+  }
 }
 
 void CompilerInvocation::setSemanticsOpts(
@@ -493,7 +572,7 @@ void CompilerInvocation::setSemanticsOpts(
   semanticsContext_ = std::make_unique<semantics::SemanticsContext>(
       defaultKinds(), fortranOptions.features, allCookedSources);
 
-  auto &moduleDirJ = moduleDir();
-  semanticsContext_->set_moduleDirectory(moduleDirJ)
-      .set_searchDirectories(fortranOptions.searchDirectories);
+  semanticsContext_->set_moduleDirectory(moduleDir())
+      .set_searchDirectories(fortranOptions.searchDirectories)
+      .set_warnOnNonstandardUsage(enableConformanceChecks());
 }

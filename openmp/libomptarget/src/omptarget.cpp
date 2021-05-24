@@ -267,7 +267,7 @@ void handleTargetOutcome(bool Success, ident_t *Loc) {
         for (auto &Device : PM->Devices)
           dumpTargetPointerMappings(Loc, Device);
       else
-        FAILURE_MESSAGE("Run with LIBOMPTARGET_DEBUG=%d to dump host-target "
+        FAILURE_MESSAGE("Run with LIBOMPTARGET_INFO=%d to dump host-target "
                         "pointer mappings.\n",
                         OMP_INFOTYPE_DUMP_TABLE);
 
@@ -388,6 +388,35 @@ const char *deviceTypeToString(omp_device_t DevType) {
 
 static int32_t getParentIndex(int64_t type) {
   return ((type & OMP_TGT_MAPTYPE_MEMBER_OF) >> 48) - 1;
+}
+
+void *targetAllocExplicit(size_t size, int device_num, int kind,
+                          const char *name) {
+  TIMESCOPE();
+  DP("Call to %s for device %d requesting %zu bytes\n", name, device_num, size);
+
+  if (size <= 0) {
+    DP("Call to %s with non-positive length\n", name);
+    return NULL;
+  }
+
+  void *rc = NULL;
+
+  if (device_num == omp_get_initial_device()) {
+    rc = malloc(size);
+    DP("%s returns host ptr " DPxMOD "\n", name, DPxPTR(rc));
+    return rc;
+  }
+
+  if (!device_is_ready(device_num)) {
+    DP("%s returns NULL ptr\n", name);
+    return NULL;
+  }
+
+  DeviceTy &Device = PM->Devices[device_num];
+  rc = Device.allocData(size, nullptr, kind);
+  DP("%s returns device ptr " DPxMOD "\n", name, DPxPTR(rc));
+  return rc;
 }
 
 /// Call the user-defined mapper function followed by the appropriate
@@ -1167,8 +1196,8 @@ TableMap *getTableMap(void *HostPtr) {
 
 /// Get loop trip count
 /// FIXME: This function will not work right if calling
-/// __kmpc_push_target_tripcount in one thread but doing offloading in another
-/// thread, which might occur when we call task yield.
+/// __kmpc_push_target_tripcount_mapper in one thread but doing offloading in
+/// another thread, which might occur when we call task yield.
 uint64_t getLoopTripCount(int64_t DeviceId) {
   DeviceTy &Device = PM->Devices[DeviceId];
   uint64_t LoopTripCount = 0;

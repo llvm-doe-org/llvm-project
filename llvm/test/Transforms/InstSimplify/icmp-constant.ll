@@ -799,7 +799,7 @@ define i1 @eq_shl_by_constant_produces_poison(i8 %x) {
 
 define i1 @eq_shl_by_variable_produces_poison(i8 %x) {
 ; CHECK-LABEL: @eq_shl_by_variable_produces_poison(
-; CHECK-NEXT:    ret i1 false
+; CHECK-NEXT:    ret i1 poison
 ;
   %clear_high_bit = and i8 %x, 127                 ; 0x7f
   %set_next_high_bits = or i8 %clear_high_bit, 112 ; 0x70
@@ -1064,4 +1064,14 @@ bb2:
 bb3:
   %m = mul nuw i8 %x, 0
   br label %bb2
+}
+
+
+define <2 x i1> @heterogeneous_constvector(<2 x i8> %x) {
+; CHECK-LABEL: @heterogeneous_constvector(
+; CHECK-NEXT:    [[C:%.*]] = icmp ult <2 x i8> [[X:%.*]], <i8 undef, i8 poison>
+; CHECK-NEXT:    ret <2 x i1> [[C]]
+;
+  %c = icmp ult <2 x i8> %x, <i8 undef, i8 poison>
+  ret <2 x i1> %c
 }

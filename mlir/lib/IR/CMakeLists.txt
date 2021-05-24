@@ -35,10 +35,12 @@ add_mlir_library(MLIRIR
   DEPENDS
   MLIRBuiltinAttributesIncGen
   MLIRBuiltinDialectIncGen
+  MLIRBuiltinLocationAttributesIncGen
   MLIRBuiltinOpsIncGen
   MLIRBuiltinTypesIncGen
   MLIRCallInterfacesIncGen
   MLIRCastInterfacesIncGen
+  MLIRDataLayoutInterfacesIncGen
   MLIROpAsmInterfaceIncGen
   MLIRRegionKindInterfaceIncGen
   MLIRSideEffectInterfacesIncGen

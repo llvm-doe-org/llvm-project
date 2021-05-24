@@ -1944,3 +1944,36 @@ OMPTargetTeamsDistributeSimdDirective::CreateEmpty(const ASTContext &C,
       numLoopChildren(CollapsedNum, OMPD_target_teams_distribute_simd),
       CollapsedNum);
 }
+
+OMPInteropDirective *
+OMPInteropDirective::Create(const ASTContext &C, SourceLocation StartLoc,
+                            SourceLocation EndLoc,
+                            ArrayRef<OMPClause *> Clauses) {
+  return createDirective<OMPInteropDirective>(
+      C, Clauses, /*AssociatedStmt=*/nullptr, /*NumChildren=*/0, StartLoc,
+      EndLoc);
+}
+
+OMPInteropDirective *OMPInteropDirective::CreateEmpty(const ASTContext &C,
+                                                      unsigned NumClauses,
+                                                      EmptyShell) {
+  return createEmptyDirective<OMPInteropDirective>(C, NumClauses);
+}
+
+OMPDispatchDirective *OMPDispatchDirective::Create(
+    const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
+    ArrayRef<OMPClause *> Clauses, Stmt *AssociatedStmt,
+    SourceLocation TargetCallLoc) {
+  auto *Dir = createDirective<OMPDispatchDirective>(
+      C, Clauses, AssociatedStmt, /*NumChildren=*/0, StartLoc, EndLoc);
+  Dir->setTargetCallLoc(TargetCallLoc);
+  return Dir;
+}
+
+OMPDispatchDirective *OMPDispatchDirective::CreateEmpty(const ASTContext &C,
+                                                        unsigned NumClauses,
+                                                        EmptyShell) {
+  return createEmptyDirective<OMPDispatchDirective>(C, NumClauses,
+                                                    /*HasAssociatedStmt=*/true,
+                                                    /*NumChildren=*/0);
+}

@@ -42,6 +42,9 @@ enum ActionKind {
   /// Parse ASTs and print them.
   ASTPrint,
 
+  /// Parse OpenACC ASTs and print them.
+  OpenACCASTPrint,
+
   /// Parse ASTs and view them in Graphviz.
   ASTView,
 

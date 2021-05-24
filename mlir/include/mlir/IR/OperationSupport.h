@@ -28,6 +28,10 @@
 #include "llvm/Support/TrailingObjects.h"
 #include <memory>
 
+namespace llvm {
+class BitVector;
+} // end namespace llvm
+
 namespace mlir {
 class Dialect;
 class DictionaryAttr;
@@ -47,9 +51,11 @@ class RewritePattern;
 class Type;
 class Value;
 class ValueRange;
-template <typename ValueRangeT> class ValueTypeRange;
+template <typename ValueRangeT>
+class ValueTypeRange;
 
-class OwningRewritePatternList;
+class RewritePatternSet;
+using OwningRewritePatternList = RewritePatternSet;
 
 //===----------------------------------------------------------------------===//
 // AbstractOperation
@@ -61,7 +67,7 @@ class OwningRewritePatternList;
 /// the concrete operation types.
 class AbstractOperation {
 public:
-  using GetCanonicalizationPatternsFn = void (*)(OwningRewritePatternList &,
+  using GetCanonicalizationPatternsFn = void (*)(RewritePatternSet &,
                                                  MLIRContext *);
   using FoldHookFn = LogicalResult (*)(Operation *, ArrayRef<Attribute>,
                                        SmallVectorImpl<OpFoldResult> &);
@@ -81,6 +87,9 @@ public:
 
   /// Use the specified object to parse this ops custom assembly format.
   ParseResult parseAssembly(OpAsmParser &parser, OperationState &result) const;
+
+  /// Return the static hook for parsing this operation assembly.
+  ParseAssemblyFn getParseAssemblyFn() const { return parseAssemblyFn; }
 
   /// This hook implements the AsmPrinter for this operation.
   void printAssembly(Operation *op, OpAsmPrinter &p) const {
@@ -120,7 +129,7 @@ public:
 
   /// This hook returns any canonicalization pattern rewrites that the operation
   /// supports, for use by the canonicalization pass.
-  void getCanonicalizationPatterns(OwningRewritePatternList &results,
+  void getCanonicalizationPatterns(RewritePatternSet &results,
                                    MLIRContext *context) const {
     return getCanonicalizationPatternsFn(results, context);
   }
@@ -128,14 +137,24 @@ public:
   /// Returns an instance of the concept object for the given interface if it
   /// was registered to this operation, null otherwise. This should not be used
   /// directly.
-  template <typename T> typename T::Concept *getInterface() const {
+  template <typename T>
+  typename T::Concept *getInterface() const {
     return interfaceMap.lookup<T>();
   }
 
+  /// Returns true if this operation has the given interface registered to it.
+  bool hasInterface(TypeID interfaceID) const {
+    return interfaceMap.contains(interfaceID);
+  }
+
   /// Returns true if the operation has a particular trait.
-  template <template <typename T> class Trait> bool hasTrait() const {
+  template <template <typename T> class Trait>
+  bool hasTrait() const {
     return hasTraitFn(TypeID::get<Trait>());
   }
+
+  /// Returns true if the operation has a particular trait.
+  bool hasTrait(TypeID traitID) const { return hasTraitFn(traitID); }
 
   /// Look up the specified operation in the specified MLIRContext and return a
   /// pointer to it if present.  Otherwise, return a null pointer.
@@ -144,7 +163,8 @@ public:
 
   /// This constructor is used by Dialect objects when they register the list of
   /// operations they contain.
-  template <typename T> static void insert(Dialect &dialect) {
+  template <typename T>
+  static void insert(Dialect &dialect) {
     insert(T::getOperationName(), dialect, TypeID::get<T>(),
            T::getParseAssemblyFn(), T::getPrintAssemblyFn(),
            T::getVerifyInvariantsFn(), T::getFoldHookFn(),
@@ -216,7 +236,8 @@ public:
   void append(NamedAttribute attr) { push_back(attr); }
 
   /// Add an array of named attributes.
-  template <typename RangeT> void append(RangeT &&newAttributes) {
+  template <typename RangeT>
+  void append(RangeT &&newAttributes) {
     append(std::begin(newAttributes), std::end(newAttributes));
   }
 
@@ -494,6 +515,10 @@ public:
 
   /// Erase the operands held by the storage within the given range.
   void eraseOperands(unsigned start, unsigned length);
+
+  /// Erase the operands held by the storage that have their corresponding bit
+  /// set in `eraseIndices`.
+  void eraseOperands(const llvm::BitVector &eraseIndices);
 
   /// Get the operation operands held by the storage.
   MutableArrayRef<OpOperand> getOperands() {
@@ -843,7 +868,8 @@ LLVM_ENABLE_BITMASK_ENUMS_IN_NAMESPACE();
 
 namespace llvm {
 // Identifiers hash just like pointers, there is no need to hash the bytes.
-template <> struct DenseMapInfo<mlir::OperationName> {
+template <>
+struct DenseMapInfo<mlir::OperationName> {
   static mlir::OperationName getEmptyKey() {
     auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
     return mlir::OperationName::getFromOpaquePointer(pointer);
@@ -863,7 +889,8 @@ template <> struct DenseMapInfo<mlir::OperationName> {
 /// The pointer inside of an identifier comes from a StringMap, so its alignment
 /// is always at least 4 and probably 8 (on 64-bit machines).  Allow LLVM to
 /// steal the low bits.
-template <> struct PointerLikeTypeTraits<mlir::OperationName> {
+template <>
+struct PointerLikeTypeTraits<mlir::OperationName> {
 public:
   static inline void *getAsVoidPointer(mlir::OperationName I) {
     return const_cast<void *>(I.getAsOpaquePointer());

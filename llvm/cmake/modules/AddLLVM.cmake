@@ -488,6 +488,7 @@ function(llvm_add_library name)
           add_dependencies(${obj_name} ${link_lib})
         endif()
       endforeach()
+      target_link_libraries(${obj_name} ${ARG_LINK_LIBS})
     endif()
   endif()
 
@@ -746,7 +747,7 @@ function(add_llvm_component_library name)
     "COMPONENT_NAME;ADD_TO_COMPONENT"
     ""
     ${ARGN})
-  add_llvm_library(${name} COMPONENT_LIB ${ARG_UNPARSED_ARGUMENTS})
+  add_llvm_library(${name} COMPONENT_LIB OBJECT ${ARG_UNPARSED_ARGUMENTS})
   string(REGEX REPLACE "^LLVM" "" component_name ${name})
   set_property(TARGET ${name} PROPERTY LLVM_COMPONENT_NAME ${component_name})
 
@@ -2105,6 +2106,12 @@ function(llvm_setup_rpath name)
   if (APPLE)
     set(_install_name_dir INSTALL_NAME_DIR "@rpath")
     set(_install_rpath "@loader_path/../lib${LLVM_LIBDIR_SUFFIX}" ${extra_libdir})
+  elseif(${CMAKE_SYSTEM_NAME} MATCHES "AIX" AND BUILD_SHARED_LIBS)
+    # $ORIGIN is not interpreted at link time by aix ld.
+    # Since BUILD_SHARED_LIBS is only recommended for use by developers,
+    # hardcode the rpath to build/install lib dir first in this mode.
+    # FIXME: update this when there is better solution.
+    set(_install_rpath "${LLVM_LIBRARY_OUTPUT_INTDIR}" "${CMAKE_INSTALL_PREFIX}/lib${LLVM_LIBDIR_SUFFIX}" ${extra_libdir})
   elseif(UNIX)
     set(_install_rpath "\$ORIGIN/../lib${LLVM_LIBDIR_SUFFIX}" ${extra_libdir})
     if(${CMAKE_SYSTEM_NAME} MATCHES "(FreeBSD|DragonFly)")

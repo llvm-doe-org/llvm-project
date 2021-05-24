@@ -533,13 +533,13 @@ static Value genOutputBuffer(CodeGen &codegen, PatternRewriter &rewriter,
   // positions for the output tensor. Currently this results in functional,
   // but slightly imprecise IR, so it is put under an experimental option.
   if (codegen.options.fastOutput)
-    return rewriter.create<TensorToMemrefOp>(loc, denseTp, tensor);
+    return rewriter.create<memref::BufferCastOp>(loc, denseTp, tensor);
   // By default, a new buffer is allocated which is initialized to the
   // tensor defined in the outs() clause. This is always correct but
   // introduces a dense initialization component that may negatively
   // impact the running complexity of the sparse kernel.
-  Value init = rewriter.create<TensorToMemrefOp>(loc, denseTp, tensor);
-  Value alloc = rewriter.create<AllocOp>(loc, denseTp, args);
+  Value init = rewriter.create<memref::BufferCastOp>(loc, denseTp, tensor);
+  Value alloc = rewriter.create<memref::AllocOp>(loc, denseTp, args);
   rewriter.create<linalg::CopyOp>(loc, init, alloc);
   return alloc;
 }
@@ -585,8 +585,8 @@ static void genBuffers(Merger &merger, CodeGen &codegen,
       }
       // Find lower and upper bound in current dimension.
       Value up;
-      if (shape[d] == TensorType::kDynamicSize) {
-        up = rewriter.create<DimOp>(loc, tensor, d);
+      if (shape[d] == MemRefType::kDynamicSize) {
+        up = rewriter.create<memref::DimOp>(loc, tensor, d);
         args.push_back(up);
       } else {
         up = rewriter.create<ConstantIndexOp>(loc, shape[d]);
@@ -600,7 +600,7 @@ static void genBuffers(Merger &merger, CodeGen &codegen,
       auto denseTp = MemRefType::get(shape, tensorType.getElementType());
       if (t < numInputs)
         codegen.buffers[t] =
-            rewriter.create<TensorToMemrefOp>(loc, denseTp, tensor);
+            rewriter.create<memref::BufferCastOp>(loc, denseTp, tensor);
       else
         codegen.buffers[t] =
             genOutputBuffer(codegen, rewriter, op, denseTp, args);
@@ -614,18 +614,21 @@ static void genBuffers(Merger &merger, CodeGen &codegen,
   }
 }
 
+/// Constructs vector type.
+static VectorType vectorType(CodeGen &codegen, Type etp) {
+  return VectorType::get(codegen.curVecLength, etp);
+}
+
 /// Constructs vector type from pointer.
 static VectorType vectorType(CodeGen &codegen, Value ptr) {
-  Type etp = ptr.getType().cast<MemRefType>().getElementType();
-  return VectorType::get(codegen.curVecLength, etp);
+  return vectorType(codegen, ptr.getType().cast<MemRefType>().getElementType());
 }
 
 /// Constructs vector iteration mask.
 static Value genVectorMask(CodeGen &codegen, PatternRewriter &rewriter,
                            Value iv, Value lo, Value hi, Value step) {
   Location loc = iv.getLoc();
-  VectorType mtp =
-      VectorType::get(codegen.curVecLength, rewriter.getIntegerType(1));
+  VectorType mtp = vectorType(codegen, rewriter.getIntegerType(1));
   // Special case if the vector length evenly divides the trip count (for
   // example, "for i = 0, 128, 16"). A constant all-true mask is generated
   // so that all subsequent masked memory operations are immediately folded
@@ -635,8 +638,8 @@ static Value genVectorMask(CodeGen &codegen, PatternRewriter &rewriter,
       matchPattern(hi, m_Constant(&hiInt)) &&
       matchPattern(step, m_Constant(&stepInt))) {
     if (((hiInt.getInt() - loInt.getInt()) % stepInt.getInt()) == 0)
-      return rewriter.create<vector::ConstantMaskOp>(
-          loc, mtp, rewriter.getI64ArrayAttr(codegen.curVecLength));
+      return rewriter.create<vector::BroadcastOp>(
+          loc, mtp, rewriter.create<ConstantIntOp>(loc, 1, 1));
   }
   // Otherwise, generate a vector mask that avoids overrunning the upperbound
   // during vector execution. Here we rely on subsequent loop optimizations to
@@ -683,7 +686,7 @@ static void genVectorStore(CodeGen &codegen, PatternRewriter &rewriter,
 /// optimizations to hoist the invariant broadcast out of the vector loop.
 static Value genVectorInvariantValue(CodeGen &codegen,
                                      PatternRewriter &rewriter, Value val) {
-  VectorType vtp = VectorType::get(codegen.curVecLength, val.getType());
+  VectorType vtp = vectorType(codegen, val.getType());
   return rewriter.create<vector::BroadcastOp>(val.getLoc(), vtp, val);
 }
 
@@ -716,16 +719,20 @@ static Value genTensorLoad(Merger &merger, CodeGen &codegen,
   Value ptr = codegen.buffers[tensor];
   if (codegen.curVecLength > 1)
     return genVectorLoad(codegen, rewriter, ptr, args);
-  return rewriter.create<LoadOp>(loc, ptr, args);
+  return rewriter.create<memref::LoadOp>(loc, ptr, args);
 }
 
 /// Generates a store on a dense tensor.
 static void genTensorStore(Merger &merger, CodeGen &codegen,
                            PatternRewriter &rewriter, linalg::GenericOp op,
                            unsigned tensor, Value rhs) {
+  Location loc = op.getLoc();
   // Test if this is a scalarized reduction.
   unsigned lhs = op.getNumShapedOperands() - 1;
   if (lhs == tensor && codegen.redVal) {
+    if (codegen.curVecLength > 1)
+      rhs = rewriter.create<SelectOp>(loc, codegen.curVecMask, rhs,
+                                      codegen.redVal);
     codegen.redVal = rhs;
     return;
   }
@@ -736,23 +743,54 @@ static void genTensorStore(Merger &merger, CodeGen &codegen,
     unsigned idx = map.getDimPosition(i);
     args.push_back(codegen.loops[idx]); // universal dense index
   }
-  Location loc = op.getLoc();
   Value ptr = codegen.buffers[tensor];
   if (codegen.curVecLength > 1)
     genVectorStore(codegen, rewriter, rhs, ptr, args);
   else
-    rewriter.create<StoreOp>(loc, rhs, ptr, args);
+    rewriter.create<memref::StoreOp>(loc, rhs, ptr, args);
 }
 
-/// Generates a pointer/index load from the sparse storage scheme.
+/// Generates a pointer/index load from the sparse storage scheme. Narrower
+/// data types need to be zero extended before casting the value into the
+/// index type used for looping and indexing.
 static Value genLoad(CodeGen &codegen, PatternRewriter &rewriter, Location loc,
                      Value ptr, Value s) {
-  if (codegen.curVecLength > 1)
-    return genVectorLoad(codegen, rewriter, ptr, {s});
-  Value load = rewriter.create<LoadOp>(loc, ptr, s);
-  return load.getType().isa<IndexType>()
-             ? load
-             : rewriter.create<IndexCastOp>(loc, load, rewriter.getIndexType());
+  // See https://llvm.org/docs/GetElementPtr.html for some background on
+  // the complications described below.
+  if (codegen.curVecLength > 1) {
+    // Since the index vector is used in a subsequent gather/scatter operations,
+    // which effectively defines an unsigned pointer + signed index, we must
+    // zero extend the vector to an index width. For 8-bit and 16-bit values,
+    // an 32-bit index width suffices. For 32-bit values, zero extending the
+    // elements into 64-bit loses some performance since the 32-bit indexed
+    // gather/scatter is more efficient than the 64-bit index variant (in
+    // the future, we could introduce a flag that states the negative space
+    // of 32-bit indices is unused). For 64-bit values, there is no good way
+    // to state that the indices are unsigned, with creates the potential of
+    // incorrect address calculations in the unlikely case we need such
+    // extremely large offsets.
+    Type etp = ptr.getType().cast<MemRefType>().getElementType();
+    Value vload = genVectorLoad(codegen, rewriter, ptr, {s});
+    if (etp.getIntOrFloatBitWidth() < 32)
+      vload = rewriter.create<ZeroExtendIOp>(
+          loc, vload, vectorType(codegen, rewriter.getIntegerType(32)));
+    else if (etp.getIntOrFloatBitWidth() < 64)
+      vload = rewriter.create<ZeroExtendIOp>(
+          loc, vload, vectorType(codegen, rewriter.getIntegerType(64)));
+    return vload;
+  }
+  // For the scalar case, we simply zero extend narrower indices into 64-bit
+  // values before casting to index without a performance penalty. Here too,
+  // however, indices that already are 64-bit, in theory, cannot express the
+  // full range as explained above.
+  Value load = rewriter.create<memref::LoadOp>(loc, ptr, s);
+  if (!load.getType().isa<IndexType>()) {
+    if (load.getType().getIntOrFloatBitWidth() < 64)
+      load = rewriter.create<ZeroExtendIOp>(loc, load,
+                                            rewriter.getIntegerType(64));
+    load = rewriter.create<IndexCastOp>(loc, load, rewriter.getIndexType());
+  }
+  return load;
 }
 
 /// Generates an invariant value.
@@ -796,11 +834,11 @@ static void genReductionEnd(Merger &merger, CodeGen &codegen,
   Value red = codegen.redVal;
   if (!red)
     return;
+  assert(codegen.curVecLength == 1);
   codegen.redVal = merger.exp(codegen.redExp).val = Value(); // end chain
   unsigned lhs = op.getNumShapedOperands() - 1;
-  if (codegen.curVecLength > 1) {
+  if (red.getType().isa<VectorType>()) {
     // TODO: assumes + reductions for now
-    codegen.curVecLength = 1;
     Value ld = genTensorLoad(merger, codegen, rewriter, op, codegen.redExp);
     red = rewriter.create<vector::ReductionOp>(
         op.getLoc(), ld.getType(), rewriter.getStringAttr("add"), red, ld);
@@ -944,6 +982,27 @@ static bool isParallelFor(CodeGen &codegen, bool isOuter, bool isReduction,
   llvm_unreachable("unexpected parallelization strategy");
 }
 
+/// Checks unit strides for dense tensors. The iteration graph may have ignored
+/// dense access patterns in order to avoid cycles (sparse access patterns are
+/// always placed innermost), but that means dense access has become strided.
+/// For now, we reject vectorization of such cases.
+/// TODO: implement strided load/stores on dense arrays
+static bool denseUnitStrides(Merger &merger, linalg::GenericOp op,
+                             unsigned idx) {
+  unsigned numTensors = op.getNumShapedOperands();
+  for (unsigned t = 0; t < numTensors; t++) {
+    if (!merger.isSparseTensor(t) && !linkedSparse(op, t)) {
+      auto map = op.getIndexingMap(t);
+      unsigned r = map.getNumResults();
+      for (unsigned i = 0; i < r; i++) {
+        if (map.getDimPosition(i) == idx && i != r - 1)
+          return false;
+      }
+    }
+  }
+  return true;
+}
+
 /// Generates a for-loop on a single index.
 static Operation *genFor(Merger &merger, CodeGen &codegen,
                          PatternRewriter &rewriter, linalg::GenericOp op,
@@ -955,7 +1014,8 @@ static Operation *genFor(Merger &merger, CodeGen &codegen,
   auto iteratorTypes = op.iterator_types().getValue();
   bool isReduction = linalg::isReductionIteratorType(iteratorTypes[idx]);
   bool isSparse = merger.isDim(fb, Dim::kSparse);
-  bool isVector = isVectorFor(codegen, isInner, isSparse);
+  bool isVector = isVectorFor(codegen, isInner, isSparse) &&
+                  denseUnitStrides(merger, op, idx);
   bool isParallel =
       isParallelFor(codegen, isOuter, isReduction, isSparse, isVector);
 
@@ -1276,10 +1336,10 @@ static void genStmt(Merger &merger, CodeGen &codegen, PatternRewriter &rewriter,
   }
 
   // Wrap-up loop sequence.
+  codegen.curVecLength = 1;
   genReductionEnd(merger, codegen, rewriter, op);
   genInvariants(merger, codegen, rewriter, op, exp, ldx, /*hoist=*/false);
   codegen.loops[idx] = Value();
-  codegen.curVecLength = 1;
 }
 
 namespace {
@@ -1322,8 +1382,8 @@ public:
     CodeGen codegen(options, numTensors, numLoops);
     genBuffers(merger, codegen, rewriter, op);
     genStmt(merger, codegen, rewriter, op, topSort, exp.getValue(), 0);
-    Value result =
-        rewriter.create<TensorLoadOp>(op.getLoc(), codegen.buffers.back());
+    Value result = rewriter.create<memref::TensorLoadOp>(
+        op.getLoc(), codegen.buffers.back());
     rewriter.replaceOp(op, result);
     return success();
   }
@@ -1338,7 +1398,6 @@ private:
 /// Populates the given patterns list with rewriting rules required for
 /// the sparsification of linear algebra operations.
 void linalg::populateSparsificationPatterns(
-    MLIRContext *context, OwningRewritePatternList &patterns,
-    const SparsificationOptions &options) {
-  patterns.insert<GenericOpSparsifier>(context, options);
+    RewritePatternSet &patterns, const SparsificationOptions &options) {
+  patterns.add<GenericOpSparsifier>(patterns.getContext(), options);
 }

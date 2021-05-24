@@ -14,7 +14,6 @@
 
 #include "llvm/IR/AutoUpgrade.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "llvm/IR/ObjCARCUtil.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/DebugInfo.h"
@@ -546,6 +545,11 @@ static bool UpgradeIntrinsicFunction1(Function *F, Function *&NewFn) {
   case 'a': {
     if (Name.startswith("arm.rbit") || Name.startswith("aarch64.rbit")) {
       NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::bitreverse,
+                                        F->arg_begin()->getType());
+      return true;
+    }
+    if (Name.startswith("aarch64.neon.frintn")) {
+      NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::roundeven,
                                         F->arg_begin()->getType());
       return true;
     }
@@ -4039,7 +4043,7 @@ bool llvm::UpgradeDebugInfo(Module &M) {
 /// returns true if module is modified.
 static bool UpgradeRetainReleaseMarker(Module &M) {
   bool Changed = false;
-  const char *MarkerKey = objcarc::getRVMarkerModuleFlagStr();
+  const char *MarkerKey = "clang.arc.retainAutoreleasedReturnValueMarker";
   NamedMDNode *ModRetainReleaseMarker = M.getNamedMetadata(MarkerKey);
   if (ModRetainReleaseMarker) {
     MDNode *Op = ModRetainReleaseMarker->getOperand(0);

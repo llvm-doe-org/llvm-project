@@ -12,10 +12,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/IR/OperationSupport.h"
-#include "mlir/IR/Block.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpDefinition.h"
-#include "mlir/IR/Operation.h"
+#include "llvm/ADT/BitVector.h"
+
 using namespace mlir;
 
 //===----------------------------------------------------------------------===//
@@ -237,7 +237,9 @@ detail::OperandStorage::~OperandStorage() {
   if (isDynamicStorage()) {
     TrailingOperandStorage &storage = getDynamicStorage();
     storage.~TrailingOperandStorage();
-    free(&storage);
+    // Workaround false positive in -Wfree-nonheap-object
+    auto *mem = &storage;
+    free(mem);
   } else {
     getInlineStorage().~TrailingOperandStorage();
   }
@@ -300,6 +302,26 @@ void detail::OperandStorage::eraseOperands(unsigned start, unsigned length) {
     operands[storage.numOperands + i].~OpOperand();
 }
 
+void detail::OperandStorage::eraseOperands(
+    const llvm::BitVector &eraseIndices) {
+  TrailingOperandStorage &storage = getStorage();
+  MutableArrayRef<OpOperand> operands = storage.getOperands();
+  assert(eraseIndices.size() == operands.size());
+
+  // Check that at least one operand is erased.
+  int firstErasedIndice = eraseIndices.find_first();
+  if (firstErasedIndice == -1)
+    return;
+
+  // Shift all of the removed operands to the end, and destroy them.
+  storage.numOperands = firstErasedIndice;
+  for (unsigned i = firstErasedIndice + 1, e = operands.size(); i < e; ++i)
+    if (!eraseIndices.test(i))
+      operands[storage.numOperands++] = std::move(operands[i]);
+  for (OpOperand &operand : operands.drop_front(storage.numOperands))
+    operand.~OpOperand();
+}
+
 /// Resize the storage to the given size. Returns the array containing the new
 /// operands.
 MutableArrayRef<OpOperand> detail::OperandStorage::resize(Operation *owner,
@@ -351,8 +373,11 @@ MutableArrayRef<OpOperand> detail::OperandStorage::resize(Operation *owner,
     new (&newOperands[numOperands]) OpOperand(owner);
 
   // If the current storage is also dynamic, free it.
-  if (isDynamicStorage())
-    free(&storage);
+  if (isDynamicStorage()) {
+    // Workaround false positive in -Wfree-nonheap-object
+    auto *mem = &storage;
+    free(mem);
+  }
 
   // Update the storage representation to use the new dynamic storage.
   representation = reinterpret_cast<intptr_t>(newStorage);

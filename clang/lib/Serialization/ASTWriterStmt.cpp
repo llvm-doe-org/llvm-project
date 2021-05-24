@@ -2541,6 +2541,19 @@ void ASTStmtWriter::VisitOMPTargetTeamsDistributeSimdDirective(
   Code = serialization::STMT_OMP_TARGET_TEAMS_DISTRIBUTE_SIMD_DIRECTIVE;
 }
 
+void ASTStmtWriter::VisitOMPInteropDirective(OMPInteropDirective *D) {
+  VisitStmt(D);
+  VisitOMPExecutableDirective(D);
+  Code = serialization::STMT_OMP_INTEROP_DIRECTIVE;
+}
+
+void ASTStmtWriter::VisitOMPDispatchDirective(OMPDispatchDirective *D) {
+  VisitStmt(D);
+  VisitOMPExecutableDirective(D);
+  Record.AddSourceLocation(D->getTargetCallLoc());
+  Code = serialization::STMT_OMP_DISPATCH_DIRECTIVE;
+}
+
 //===----------------------------------------------------------------------===//
 // OpenACC Directives.
 //===----------------------------------------------------------------------===//

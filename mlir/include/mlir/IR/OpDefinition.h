@@ -19,6 +19,7 @@
 #ifndef MLIR_IR_OPDEFINITION_H
 #define MLIR_IR_OPDEFINITION_H
 
+#include "mlir/IR/Dialect.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/Support/PointerLikeTypeTraits.h"
 
@@ -122,27 +123,6 @@ public:
   /// The source location the operation was defined or derived from.
   Location getLoc() { return state->getLoc(); }
 
-  /// Return all of the attributes on this operation.
-  LLVM_ATTRIBUTE_DEPRECATED(
-      ArrayRef<NamedAttribute> getAttrs(),
-      "Use Operation::getAttrs() instead (replace '.' with '->').") {
-    return state->getAttrs();
-  }
-
-  /// Remove the attribute with the specified name if it exists. Return the
-  /// attribute that was erased, or nullptr if there was no attribute with such
-  /// name.
-  LLVM_ATTRIBUTE_DEPRECATED(
-      Attribute removeAttr(Identifier name),
-      "Use Operation::removeAttr() instead (replace '.' with '->').") {
-    return state->removeAttr(name);
-  }
-  LLVM_ATTRIBUTE_DEPRECATED(
-      Attribute removeAttr(StringRef name),
-      "Use Operation::removeAttr() instead (replace '.' with '->').") {
-    return state->removeAttr(Identifier::get(name, getContext()));
-  }
-
   /// Return true if there are no users of any results of this operation.
   bool use_empty() { return state->use_empty(); }
 
@@ -165,19 +145,27 @@ public:
   /// handlers that may be listening.
   InFlightDiagnostic emitRemark(const Twine &message = {});
 
-  /// Walk the operation in postorder, calling the callback for each nested
-  /// operation(including this one).
+  /// Walk the operation by calling the callback for each nested operation
+  /// (including this one), block or region, depending on the callback provided.
+  /// Regions, blocks and operations at the same nesting level are visited in
+  /// lexicographical order. The walk order for enclosing regions, blocks and
+  /// operations with respect to their nested ones is specified by 'Order'
+  /// (post-order by default). A callback on a block or operation is allowed to
+  /// erase that block or operation if either:
+  ///   * the walk is in post-order, or
+  ///   * the walk is in pre-order and the walk is skipped after the erasure.
   /// See Operation::walk for more details.
-  template <typename FnT, typename RetT = detail::walkResultType<FnT>>
+  template <WalkOrder Order = WalkOrder::PostOrder, typename FnT,
+            typename RetT = detail::walkResultType<FnT>>
   RetT walk(FnT &&callback) {
-    return state->walk(std::forward<FnT>(callback));
+    return state->walk<Order>(std::forward<FnT>(callback));
   }
 
   // These are default implementations of customization hooks.
 public:
   /// This hook returns any canonicalization pattern rewrites that the operation
   /// supports, for use by the canonicalization pass.
-  static void getCanonicalizationPatterns(OwningRewritePatternList &results,
+  static void getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {}
 
 protected:
@@ -666,6 +654,11 @@ class VariadicResults
 //===----------------------------------------------------------------------===//
 // Terminator Traits
 
+/// This class indicates that the regions associated with this op don't have
+/// terminators.
+template <typename ConcreteType>
+class NoTerminator : public TraitBase<ConcreteType, NoTerminator> {};
+
 /// This class provides the API for ops that are known to be terminators.
 template <typename ConcreteType>
 class IsTerminator : public TraitBase<ConcreteType, IsTerminator> {
@@ -770,6 +763,87 @@ class VariadicSuccessors
 };
 
 //===----------------------------------------------------------------------===//
+// SingleBlock
+
+/// This class provides APIs and verifiers for ops with regions having a single
+/// block.
+template <typename ConcreteType>
+struct SingleBlock : public TraitBase<ConcreteType, SingleBlock> {
+public:
+  static LogicalResult verifyTrait(Operation *op) {
+    for (unsigned i = 0, e = op->getNumRegions(); i < e; ++i) {
+      Region &region = op->getRegion(i);
+
+      // Empty regions are fine.
+      if (region.empty())
+        continue;
+
+      // Non-empty regions must contain a single basic block.
+      if (!llvm::hasSingleElement(region))
+        return op->emitOpError("expects region #")
+               << i << " to have 0 or 1 blocks";
+
+      if (!ConcreteType::template hasTrait<NoTerminator>()) {
+        Block &block = region.front();
+        if (block.empty())
+          return op->emitOpError() << "expects a non-empty block";
+      }
+    }
+    return success();
+  }
+
+  Block *getBody(unsigned idx = 0) {
+    Region &region = this->getOperation()->getRegion(idx);
+    assert(!region.empty() && "unexpected empty region");
+    return &region.front();
+  }
+  Region &getBodyRegion(unsigned idx = 0) {
+    return this->getOperation()->getRegion(idx);
+  }
+
+  //===------------------------------------------------------------------===//
+  // Single Region Utilities
+  //===------------------------------------------------------------------===//
+
+  /// The following are a set of methods only enabled when the parent
+  /// operation has a single region. Each of these methods take an additional
+  /// template parameter that represents the concrete operation so that we
+  /// can use SFINAE to disable the methods for non-single region operations.
+  template <typename OpT, typename T = void>
+  using enable_if_single_region =
+      typename std::enable_if_t<OpT::template hasTrait<OneRegion>(), T>;
+
+  template <typename OpT = ConcreteType>
+  enable_if_single_region<OpT, Block::iterator> begin() {
+    return getBody()->begin();
+  }
+  template <typename OpT = ConcreteType>
+  enable_if_single_region<OpT, Block::iterator> end() {
+    return getBody()->end();
+  }
+  template <typename OpT = ConcreteType>
+  enable_if_single_region<OpT, Operation &> front() {
+    return *begin();
+  }
+
+  /// Insert the operation into the back of the body.
+  template <typename OpT = ConcreteType>
+  enable_if_single_region<OpT> push_back(Operation *op) {
+    insert(Block::iterator(getBody()->end()), op);
+  }
+
+  /// Insert the operation at the given insertion point.
+  template <typename OpT = ConcreteType>
+  enable_if_single_region<OpT> insert(Operation *insertPt, Operation *op) {
+    insert(Block::iterator(insertPt), op);
+  }
+  template <typename OpT = ConcreteType>
+  enable_if_single_region<OpT> insert(Block::iterator insertPt, Operation *op) {
+    getBody()->getOperations().insert(insertPt, op);
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // SingleBlockImplicitTerminator
 
 /// This class provides APIs and verifiers for ops with regions having a single
@@ -777,8 +851,9 @@ class VariadicSuccessors
 template <typename TerminatorOpType>
 struct SingleBlockImplicitTerminator {
   template <typename ConcreteType>
-  class Impl : public TraitBase<ConcreteType, Impl> {
+  class Impl : public SingleBlock<ConcreteType> {
   private:
+    using Base = SingleBlock<ConcreteType>;
     /// Builds a terminator operation without relying on OpBuilder APIs to avoid
     /// cyclic header inclusion.
     static Operation *buildTerminator(OpBuilder &builder, Location loc) {
@@ -792,22 +867,14 @@ struct SingleBlockImplicitTerminator {
     using ImplicitTerminatorOpT = TerminatorOpType;
 
     static LogicalResult verifyTrait(Operation *op) {
+      if (failed(Base::verifyTrait(op)))
+        return failure();
       for (unsigned i = 0, e = op->getNumRegions(); i < e; ++i) {
         Region &region = op->getRegion(i);
-
         // Empty regions are fine.
         if (region.empty())
           continue;
-
-        // Non-empty regions must contain a single basic block.
-        if (std::next(region.begin()) != region.end())
-          return op->emitOpError("expects region #")
-                 << i << " to have 0 or 1 blocks";
-
-        Block &block = region.front();
-        if (block.empty())
-          return op->emitOpError() << "expects a non-empty block";
-        Operation &terminator = block.back();
+        Operation &terminator = region.front().back();
         if (isa<TerminatorOpType>(terminator))
           continue;
 
@@ -840,39 +907,14 @@ struct SingleBlockImplicitTerminator {
                                            buildTerminator);
     }
 
-    Block *getBody(unsigned idx = 0) {
-      Region &region = this->getOperation()->getRegion(idx);
-      assert(!region.empty() && "unexpected empty region");
-      return &region.front();
-    }
-    Region &getBodyRegion(unsigned idx = 0) {
-      return this->getOperation()->getRegion(idx);
-    }
-
     //===------------------------------------------------------------------===//
     // Single Region Utilities
     //===------------------------------------------------------------------===//
+    using Base::getBody;
 
-    /// The following are a set of methods only enabled when the parent
-    /// operation has a single region. Each of these methods take an additional
-    /// template parameter that represents the concrete operation so that we
-    /// can use SFINAE to disable the methods for non-single region operations.
     template <typename OpT, typename T = void>
     using enable_if_single_region =
         typename std::enable_if_t<OpT::template hasTrait<OneRegion>(), T>;
-
-    template <typename OpT = ConcreteType>
-    enable_if_single_region<OpT, Block::iterator> begin() {
-      return getBody()->begin();
-    }
-    template <typename OpT = ConcreteType>
-    enable_if_single_region<OpT, Block::iterator> end() {
-      return getBody()->end();
-    }
-    template <typename OpT = ConcreteType>
-    enable_if_single_region<OpT, Operation &> front() {
-      return *begin();
-    }
 
     /// Insert the operation into the back of the body, before the terminator.
     template <typename OpT = ConcreteType>
@@ -896,6 +938,27 @@ struct SingleBlockImplicitTerminator {
       body->getOperations().insert(insertPt, op);
     }
   };
+};
+
+/// Check is an op defines the `ImplicitTerminatorOpT` member. This is intended
+/// to be used with `llvm::is_detected`.
+template <class T>
+using has_implicit_terminator_t = typename T::ImplicitTerminatorOpT;
+
+/// Support to check if an operation has the SingleBlockImplicitTerminator
+/// trait. We can't just use `hasTrait` because this class is templated on a
+/// specific terminator op.
+template <class Op, bool hasTerminator =
+                        llvm::is_detected<has_implicit_terminator_t, Op>::value>
+struct hasSingleBlockImplicitTerminator {
+  static constexpr bool value = std::is_base_of<
+      typename OpTrait::SingleBlockImplicitTerminator<
+          typename Op::ImplicitTerminatorOpT>::template Impl<Op>,
+      Op>::value;
+};
+template <class Op>
+struct hasSingleBlockImplicitTerminator<Op, false> {
+  static constexpr bool value = false;
 };
 
 //===----------------------------------------------------------------------===//
@@ -1125,7 +1188,7 @@ public:
 /// A trait of region holding operations that define a new scope for automatic
 /// allocations, i.e., allocations that are freed when control is transferred
 /// back from the operation's region. Any operations performing such allocations
-/// (for eg. std.alloca) will have their allocations automatically freed at
+/// (for eg. memref.alloca) will have their allocations automatically freed at
 /// their closest enclosing operation with this trait.
 template <typename ConcreteType>
 class AutomaticAllocationScope
@@ -1213,8 +1276,7 @@ template <typename ConcrentType>
 struct MemRefsNormalizable
     : public TraitBase<ConcrentType, MemRefsNormalizable> {};
 
-/// This trait tags element-wise ops that operate on scalars, vectors, or
-/// tensors.
+/// This trait tags element-wise ops on vectors or tensors.
 ///
 /// NOTE: Not all ops that are "elementwise" in some abstract sense satisfy this
 /// trait. In particular, broadcasting behavior is not allowed.
@@ -1256,12 +1318,12 @@ struct Elementwise : public TraitBase<ConcreteType, Elementwise> {
 /// This trait tags `Elementwise` operatons that can be systematically
 /// scalarized. All vector/tensor operands and results are then replaced by
 /// scalars of the respective element type. Semantically, this is the operation
-/// on a single element per vector/tensor.
+/// on a single element of the vector/tensor.
 ///
 /// Rationale:
 /// Allow to define the vector/tensor semantics of elementwise operations based
-/// on scalars. This provides a constructive procedure for IR transformations
-/// to, e.g., create scalar loop bodies from tensor ops.
+/// on the same op's behavior on scalars. This provides a constructive procedure
+/// for IR transformations to, e.g., create scalar loop bodies from tensor ops.
 ///
 /// Example:
 /// ```
@@ -1288,13 +1350,13 @@ struct Scalarizable : public TraitBase<ConcreteType, Scalarizable> {
 /// This trait tags `Elementwise` operatons that can be systematically
 /// vectorized. All scalar operands and results are then replaced by vectors
 /// with the respective element type. Semantically, this is the operation on
-/// multiple arguments simultaneously.
+/// multiple elements simultaneously. See also `Tensorizable`.
 ///
 /// Rationale:
 /// Provide the reverse to `Scalarizable` which, when chained together, allows
 /// reasoning about the relationship between the tensor and vector case.
 /// Additionally, it permits reasoning about promoting scalars to vectors via
-/// broadcasting in cases like `%select_scalar_pred` above.
+/// broadcasting in cases like `%select_scalar_pred` below.
 template <typename ConcreteType>
 struct Vectorizable : public TraitBase<ConcreteType, Vectorizable> {
   static LogicalResult verifyTrait(Operation *op) {
@@ -1308,13 +1370,13 @@ struct Vectorizable : public TraitBase<ConcreteType, Vectorizable> {
 /// This trait tags `Elementwise` operatons that can be systematically
 /// tensorized. All scalar operands and results are then replaced by tensors
 /// with the respective element type. Semantically, this is the operation on
-/// multiple arguments simultaneously.
+/// multiple elements simultaneously. See also `Vectorizable`.
 ///
 /// Rationale:
 /// Provide the reverse to `Scalarizable` which, when chained together, allows
 /// reasoning about the relationship between the tensor and vector case.
 /// Additionally, it permits reasoning about promoting scalars to tensors via
-/// broadcasting in cases like `%select_scalar_pred` above.
+/// broadcasting in cases like `%select_scalar_pred` below.
 ///
 /// Examples:
 /// ```
@@ -1323,7 +1385,7 @@ struct Vectorizable : public TraitBase<ConcreteType, Vectorizable> {
 /// can be tensorized to
 /// ```
 /// %tensor = "std.addf"(%a, %b) : (tensor<?xf32>, tensor<?xf32>)
-///               -> tensor<?xf32>)
+///               -> tensor<?xf32>
 /// ```
 ///
 /// ```
@@ -1530,6 +1592,13 @@ public:
 #endif
     return false;
   }
+  /// Provide `classof` support for other OpBase derived classes, such as
+  /// Interfaces.
+  template <typename T>
+  static std::enable_if_t<std::is_base_of<OpState, T>::value, bool>
+  classof(const T *op) {
+    return classof(const_cast<T *>(op)->getOperation());
+  }
 
   /// Expose the type we are instantiated on to template machinery that may want
   /// to introspect traits on this operation.
@@ -1728,7 +1797,20 @@ protected:
   static typename InterfaceBase::Concept *getInterfaceFor(Operation *op) {
     // Access the raw interface from the abstract operation.
     auto *abstractOp = op->getAbstractOperation();
-    return abstractOp ? abstractOp->getInterface<ConcreteType>() : nullptr;
+    if (abstractOp) {
+      if (auto *opIface = abstractOp->getInterface<ConcreteType>())
+        return opIface;
+      // Fallback to the dialect to provide it with a chance to implement this
+      // interface for this operation.
+      return abstractOp->dialect.getRegisteredInterfaceForOp<ConcreteType>(
+          op->getName());
+    }
+    // Fallback to the dialect to provide it with a chance to implement this
+    // interface for this operation.
+    Dialect *dialect = op->getName().getDialect();
+    return dialect ? dialect->getRegisteredInterfaceForOp<ConcreteType>(
+                         op->getName())
+                   : nullptr;
   }
 
   /// Allow access to `getInterfaceFor`.

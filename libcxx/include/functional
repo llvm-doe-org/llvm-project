@@ -166,28 +166,30 @@ struct logical_not : unary_function<T, bool>
 };
 
 template <class T> // <class T=void> in C++14
-struct bit_and : unary_function<T, bool>
+struct bit_and : binary_function<T, T, T>
 {
-    bool operator()(const T& x, const T& y) const;
+    T operator()(const T& x, const T& y) const;
 };
 
 template <class T> // <class T=void> in C++14
-struct bit_or : unary_function<T, bool>
+struct bit_or : binary_function<T, T, T>
 {
-    bool operator()(const T& x, const T& y) const;
+    T operator()(const T& x, const T& y) const;
 };
 
 template <class T> // <class T=void> in C++14
-struct bit_xor : unary_function<T, bool>
+struct bit_xor : binary_function<T, T, T>
 {
-    bool operator()(const T& x, const T& y) const;
+    T operator()(const T& x, const T& y) const;
 };
 
 template <class T=void> // C++14
-struct bit_xor : unary_function<T, bool>
+struct bit_not : unary_function<T, T>
 {
-    bool operator()(const T& x) const;
+    T operator()(const T& x) const;
 };
+
+struct identity; // C++20
 
 template <class Predicate>
 class unary_negate // deprecated in C++17
@@ -3215,21 +3217,18 @@ template <class _Tp>
 using unwrap_ref_decay_t = typename unwrap_ref_decay<_Tp>::type;
 #endif // > C++17
 
-template <class _Container, class _Predicate>
-inline typename _Container::size_type
-__libcpp_erase_if_container(_Container& __c, _Predicate __pred) {
-  typename _Container::size_type __old_size = __c.size();
+#if _LIBCPP_STD_VER > 17
+// [func.identity]
+struct identity {
+    template<class _Tp>
+    constexpr _Tp&& operator()(_Tp&& __t) const noexcept
+    {
+        return _VSTD::forward<_Tp>(__t);
+    }
 
-  const typename _Container::iterator __last = __c.end();
-  for (typename _Container::iterator __iter = __c.begin(); __iter != __last;) {
-    if (__pred(*__iter))
-      __iter = __c.erase(__iter);
-    else
-      ++__iter;
-  }
-
-  return __old_size - __c.size();
-}
+    using is_transparent = void;
+};
+#endif // _LIBCPP_STD_VER > 17
 
 _LIBCPP_END_NAMESPACE_STD
 

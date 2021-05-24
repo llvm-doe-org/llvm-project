@@ -1,8 +1,9 @@
-// RUN: mlir-cuda-runner %s \
-// RUN:   -gpu-to-cubin="gpu-binary-annotation=nvvm.cubin" \
-// RUN:   -gpu-async-region -async-ref-counting \
-// RUN:   -gpu-to-llvm="gpu-binary-annotation=nvvm.cubin" \
+// RUN: mlir-opt %s \
+// RUN:   -gpu-kernel-outlining \
+// RUN:   -pass-pipeline='gpu.module(strip-debuginfo,convert-gpu-to-nvvm,gpu-to-cubin)' \
+// RUN:   -gpu-async-region -async-ref-counting -gpu-to-llvm \
 // RUN:   -async-to-async-runtime -convert-async-to-llvm -convert-std-to-llvm \
+// RUN: | mlir-cpu-runner \
 // RUN:   --shared-libs=%linalg_test_lib_dir/libmlir_cuda_runtime%shlibext \
 // RUN:   --shared-libs=%linalg_test_lib_dir/libmlir_async_runtime%shlibext \
 // RUN:   --shared-libs=%linalg_test_lib_dir/libmlir_runner_utils%shlibext \
@@ -15,13 +16,13 @@ func @main() {
   %count = constant 2 : index
 
   // initialize h0 on host
-  %h0 = alloc(%count) : memref<?xi32>
-  %h0_unranked = memref_cast %h0 : memref<?xi32> to memref<*xi32>
+  %h0 = memref.alloc(%count) : memref<?xi32>
+  %h0_unranked = memref.cast %h0 : memref<?xi32> to memref<*xi32>
   gpu.host_register %h0_unranked : memref<*xi32>
 
   %v0 = constant 42 : i32
-  store %v0, %h0[%c0] : memref<?xi32>
-  store %v0, %h0[%c1] : memref<?xi32>
+  memref.store %v0, %h0[%c0] : memref<?xi32>
+  memref.store %v0, %h0[%c1] : memref<?xi32>
 
   // copy h0 to b0 on device.
   %t0, %f0 = async.execute () -> !async.value<memref<?xi32>> {
@@ -53,10 +54,10 @@ func @main() {
   ) {
     gpu.launch blocks(%bx, %by, %bz) in (%grid_x = %c1, %grid_y = %c1, %grid_z = %c1)
                threads(%tx, %ty, %tz) in (%block_x = %count, %block_y = %c1, %block_z = %c1) {
-      %v1 = load %b1[%tx] : memref<?xi32>
-      %v2 = load %b2[%tx] : memref<?xi32>
+      %v1 = memref.load %b1[%tx] : memref<?xi32>
+      %v2 = memref.load %b2[%tx] : memref<?xi32>
       %sum = addi %v1, %v2 : i32
-      store %sum, %h0[%tx] : memref<?xi32>
+      memref.store %sum, %h0[%tx] : memref<?xi32>
       gpu.terminator
     }
     async.yield

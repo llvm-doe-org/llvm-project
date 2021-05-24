@@ -318,38 +318,62 @@ void SIWholeQuadMode::markDefs(const MachineInstr &UseMI, LiveRange &LR,
   LLVM_DEBUG(dbgs() << "markDefs " << PrintState(Flag) << ": " << UseMI);
 
   LiveQueryResult UseLRQ = LR.Query(LIS->getInstructionIndex(UseMI));
-  if (!UseLRQ.valueIn())
+  const VNInfo *Value = UseLRQ.valueIn();
+  if (!Value)
     return;
 
   // Note: this code assumes that lane masks on AMDGPU completely
   // cover registers.
-  LaneBitmask DefinedLanes;
-  LaneBitmask UseLanes;
-  if (SubReg) {
-    UseLanes = TRI->getSubRegIndexLaneMask(SubReg);
-  } else if (Reg.isVirtual()) {
-    UseLanes = MRI->getMaxLaneMaskForVReg(Reg);
-  }
+  const LaneBitmask UseLanes =
+      SubReg ? TRI->getSubRegIndexLaneMask(SubReg)
+             : (Reg.isVirtual() ? MRI->getMaxLaneMaskForVReg(Reg)
+                                : LaneBitmask::getNone());
 
-  SmallPtrSet<const VNInfo *, 4> Visited;
-  SmallVector<const VNInfo *, 4> ToProcess;
-  ToProcess.push_back(UseLRQ.valueIn());
+  // Perform a depth-first iteration of the LiveRange graph marking defs.
+  // Stop processing of a given branch when all use lanes have been defined.
+  // The first definition stops processing for a physical register.
+  struct PhiEntry {
+    const VNInfo *Phi;
+    unsigned PredIdx;
+    LaneBitmask DefinedLanes;
+
+    PhiEntry(const VNInfo *Phi, unsigned PredIdx, LaneBitmask DefinedLanes)
+        : Phi(Phi), PredIdx(PredIdx), DefinedLanes(DefinedLanes) {}
+  };
+  using VisitKey = std::pair<const VNInfo *, LaneBitmask>;
+  SmallVector<PhiEntry, 2> PhiStack;
+  SmallSet<VisitKey, 4> Visited;
+  LaneBitmask DefinedLanes;
+  unsigned NextPredIdx = 0; // Only used for processing phi nodes
   do {
-    const VNInfo *Value = ToProcess.pop_back_val();
-    Visited.insert(Value);
+    const VNInfo *NextValue = nullptr;
+    const VisitKey Key(Value, DefinedLanes);
+
+    if (!Visited.count(Key)) {
+      Visited.insert(Key);
+      // On first visit to a phi then start processing first predecessor
+      NextPredIdx = 0;
+    }
 
     if (Value->isPHIDef()) {
-      // Need to mark all defs used in the PHI node
+      // Each predecessor node in the phi must be processed as a subgraph
       const MachineBasicBlock *MBB = LIS->getMBBFromIndex(Value->def);
       assert(MBB && "Phi-def has no defining MBB");
-      for (MachineBasicBlock::const_pred_iterator PI = MBB->pred_begin(),
-                                                  PE = MBB->pred_end();
-           PI != PE; ++PI) {
+
+      // Find next predecessor to process
+      unsigned Idx = NextPredIdx;
+      auto PI = MBB->pred_begin() + Idx;
+      auto PE = MBB->pred_end();
+      for (; PI != PE && !NextValue; ++PI, ++Idx) {
         if (const VNInfo *VN = LR.getVNInfoBefore(LIS->getMBBEndIdx(*PI))) {
-          if (!Visited.count(VN))
-            ToProcess.push_back(VN);
+          if (!Visited.count(VisitKey(VN, DefinedLanes)))
+            NextValue = VN;
         }
       }
+
+      // If there are more predecessors to process; add phi to stack
+      if (PI != PE)
+        PhiStack.emplace_back(Value, Idx, DefinedLanes);
     } else {
       MachineInstr *MI = LIS->getInstructionFromIndex(Value->def);
       assert(MI && "Def has no defining instruction");
@@ -370,17 +394,20 @@ void SIWholeQuadMode::markDefs(const MachineInstr &UseMI, LiveRange &LR,
           // Record if this instruction defined any of use
           HasDef |= Overlap.any();
 
-          // Check if all lanes of use have been defined
+          // Mark any lanes defined
           DefinedLanes |= OpLanes;
-          if ((DefinedLanes & UseLanes) != UseLanes) {
-            // Definition not complete; need to process input value
-            LiveQueryResult LRQ = LR.Query(LIS->getInstructionIndex(*MI));
-            if (const VNInfo *VN = LRQ.valueIn()) {
-              if (!Visited.count(VN))
-                ToProcess.push_back(VN);
-            }
+        }
+
+        // Check if all lanes of use have been defined
+        if ((DefinedLanes & UseLanes) != UseLanes) {
+          // Definition not complete; need to process input value
+          LiveQueryResult LRQ = LR.Query(LIS->getInstructionIndex(*MI));
+          if (const VNInfo *VN = LRQ.valueIn()) {
+            if (!Visited.count(VisitKey(VN, DefinedLanes)))
+              NextValue = VN;
           }
         }
+
         // Only mark the instruction if it defines some part of the use
         if (HasDef)
           markInstruction(*MI, Flag, Worklist);
@@ -389,9 +416,18 @@ void SIWholeQuadMode::markDefs(const MachineInstr &UseMI, LiveRange &LR,
         markInstruction(*MI, Flag, Worklist);
       }
     }
-  } while (!ToProcess.empty());
 
-  assert(!Reg.isVirtual() || ((DefinedLanes & UseLanes) == UseLanes));
+    if (!NextValue && !PhiStack.empty()) {
+      // Reach end of chain; revert to processing last phi
+      PhiEntry &Entry = PhiStack.back();
+      NextValue = Entry.Phi;
+      NextPredIdx = Entry.PredIdx;
+      DefinedLanes = Entry.DefinedLanes;
+      PhiStack.pop_back();
+    }
+
+    Value = NextValue;
+  } while (Value);
 }
 
 void SIWholeQuadMode::markOperand(const MachineInstr &MI,

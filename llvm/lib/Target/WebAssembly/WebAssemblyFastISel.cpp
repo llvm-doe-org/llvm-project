@@ -139,12 +139,9 @@ private:
     case MVT::v8i16:
     case MVT::v4i32:
     case MVT::v4f32:
-      if (Subtarget->hasSIMD128())
-        return VT;
-      break;
     case MVT::v2i64:
     case MVT::v2f64:
-      if (Subtarget->hasUnimplementedSIMD128())
+      if (Subtarget->hasSIMD128())
         return VT;
       break;
     default:
@@ -1170,7 +1167,7 @@ bool WebAssemblyFastISel::selectBitCast(const Instruction *I) {
   }
 
   Register Reg = fastEmit_ISD_BITCAST_r(VT.getSimpleVT(), RetVT.getSimpleVT(),
-                                        In, I->getOperand(0)->hasOneUse());
+                                        In);
   if (!Reg)
     return false;
   MachineBasicBlock::iterator Iter = FuncInfo.InsertPt;

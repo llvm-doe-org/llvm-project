@@ -738,13 +738,24 @@ public:
         static_cast<const Value *>(this)->stripInBoundsOffsets(Func));
   }
 
+  /// Return true if the memory object referred to by V can by freed in the
+  /// scope for which the SSA value defining the allocation is statically
+  /// defined.  E.g.  deallocation after the static scope of a value does not
+  /// count, but a deallocation before that does.
+  bool canBeFreed() const;
+
   /// Returns the number of bytes known to be dereferenceable for the
   /// pointer value.
   ///
   /// If CanBeNull is set by this function the pointer can either be null or be
   /// dereferenceable up to the returned number of bytes.
+  ///
+  /// IF CanBeFreed is true, the pointer is known to be dereferenceable at
+  /// point of definition only.  Caller must prove that allocation is not
+  /// deallocated between point of definition and use.
   uint64_t getPointerDereferenceableBytes(const DataLayout &DL,
-                                          bool &CanBeNull) const;
+                                          bool &CanBeNull,
+                                          bool &CanBeFreed) const;
 
   /// Returns an alignment of the pointer value.
   ///

@@ -807,6 +807,12 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::OMPTargetTeamsDistributeSimdDirectiveClass:
     K = CXCursor_OMPTargetTeamsDistributeSimdDirective;
     break;
+  case Stmt::OMPInteropDirectiveClass:
+    K = CXCursor_OMPInteropDirective;
+    break;
+  case Stmt::OMPDispatchDirectiveClass:
+    K = CXCursor_OMPDispatchDirective;
+    break;
   case Stmt::ACCUpdateDirectiveClass:
     K = CXCursor_ACCUpdateDirective;
     break;

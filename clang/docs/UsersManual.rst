@@ -674,6 +674,11 @@ control the crash diagnostics.
 The -fno-crash-diagnostics flag can be helpful for speeding the process
 of generating a delta reduced test case.
 
+.. option:: -fcrash-diagnostics-dir=<dir>
+
+  Specify where to write the crash diagnostics files; defaults to the
+  usual location for temporary files.
+
 Clang is also capable of generating preprocessed source file(s) and associated
 run script(s) even without a crash. This is specially useful when trying to
 generate a reproducer for warnings or errors while using modules.
@@ -2260,14 +2265,14 @@ programs using the same instrumentation method as ``-fprofile-generate``.
 
   The resulted ``cs_code.prodata`` combines ``code.profdata`` and the profile
   generated from binary ``cs_code``. Profile ``cs_code.profata`` can be used by
-  ``-fprofile-use`` compilaton.
+  ``-fprofile-use`` compilation.
 
   .. code-block:: console
 
     $ clang++ -O2 -fprofile-use=cs_code.profdata
 
   The above command will read both profiles to the compiler at the identical
-  point of instrumenations.
+  point of instrumentations.
 
 .. option:: -fprofile-use[=<pathname>]
 
@@ -2568,13 +2573,12 @@ While Clang generally emits standard DWARF debug info (http://dwarfstd.org),
 different debuggers may know how to take advantage of different specific DWARF
 features. You can "tune" the debug info for one of several different debuggers.
 
-.. option:: -ggdb, -glldb, -gsce
+.. option:: -ggdb, -glldb, -gsce, -gdbx
 
-  Tune the debug info for the ``gdb``, ``lldb``, or Sony PlayStation\ |reg|
-  debugger, respectively. Each of these options implies **-g**. (Therefore, if
-  you want both **-gline-tables-only** and debugger tuning, the tuning option
-  must come first.)
-
+  Tune the debug info for the ``gdb``, ``lldb``, Sony PlayStation\ |reg|
+  debugger, or ``dbx``, respectively. Each of these options implies **-g**.
+  (Therefore, if you want both **-gline-tables-only** and debugger tuning, the
+  tuning option must come first.)
 
 Controlling LLVM IR Output
 --------------------------
@@ -3206,9 +3210,9 @@ Clang currently supports C++ for OpenCL v1.0.
 For detailed information about this language refer to the C++ for OpenCL
 Programming Language Documentation available
 in `the latest build
-<https://github.com/KhronosGroup/Khronosdotorg/blob/master/api/opencl/assets/CXX_for_OpenCL.pdf>`_
+<https://www.khronos.org/opencl/assets/CXX_for_OpenCL.html>`_
 or in `the official release
-<https://github.com/KhronosGroup/OpenCL-Docs/releases/tag/cxxforopencl-v1.0-r1>`_.
+<https://github.com/KhronosGroup/OpenCL-Docs/releases/tag/cxxforopencl-v1.0-r2>`_.
 
 To enable the C++ for OpenCL mode, pass one of following command line options when
 compiling ``.cl`` file ``-cl-std=clc++``, ``-cl-std=CLC++``, ``-std=clc++`` or
@@ -3231,6 +3235,18 @@ compiling ``.cl`` file ``-cl-std=clc++``, ``-cl-std=CLC++``, ``-std=clc++`` or
    .. code-block:: console
 
      clang -cl-std=clc++ test.cl
+
+Alternatively, files with ``.clcpp`` extension are compiled with the C++ for OpenCL
+mode.
+
+   .. code-block:: console
+
+     clang test.clcpp
+
+C++ for OpenCL kernel sources can also be compiled online in drivers supporting 
+`cl_ext_cxx_for_opencl
+<https://www.khronos.org/registry/OpenCL/extensions/ext/cl_ext_cxx_for_opencl.html>`_
+extension.
 
 Constructing and destroying global objects
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -3629,6 +3645,8 @@ Execute ``clang-cl /?`` to see a list of supported options:
       -fcomplete-member-pointers
                               Require member pointer base types to be complete if they would be significant under the Microsoft ABI
       -fcoverage-mapping      Generate coverage mapping to enable code coverage analysis
+      -fcrash-diagnostics-dir=<dir>
+                              Put crash-report files in <dir>
       -fdebug-macro           Emit macro debug information
       -fdelayed-template-parsing
                               Parse templated function definitions at the end of the translation unit

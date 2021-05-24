@@ -89,6 +89,7 @@ def Shape_BroadcastOp : Shape_Op<"broadcast", [Commutative, NoSideEffect]> {
   ];
 
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
   let verifier = [{ return ::verify(*this); }];
 }
 
@@ -277,9 +278,10 @@ def Shape_IsBroadcastableOp : Shape_Op<"is_broadcastable",
     };
   }];
 
-  let assemblyFormat = "$shapes attr-dict `:` type($shapes)";
-  let verifier = [{ return ::verify(*this); }];
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
 
+  let assemblyFormat = "$shapes attr-dict `:` type($shapes)";
 }
 
 def Shape_RankOp : Shape_Op<"rank", [NoSideEffect]> {
@@ -604,7 +606,8 @@ def Shape_SplitAtOp : Shape_Op<"split_at", [NoSideEffect]> {
     If `index` is negative, it is treated as indexing from the back of the
     shape. This negative-handling behavior is important when handling unranked
     shapes, where the positive index is not necessarily knowable due to a
-    dynamic number of leading dimensions.
+    dynamic number of leading dimensions. If the result is in extent tensor form
+    out of bounds indices result in undefined behavior.
 
     Examples:
     - split_at([4,5,6], index=0) -> [], [4,5,6]
@@ -623,7 +626,8 @@ def Shape_SplitAtOp : Shape_Op<"split_at", [NoSideEffect]> {
 
   let arguments = (ins Shape_ShapeOrExtentTensorType:$operand,
                        Shape_SizeOrIndexType:$index);
-  let results = (outs Shape_ShapeType:$head, Shape_ShapeType:$tail);
+  let results = (outs Shape_ShapeOrExtentTensorType:$head,
+                      Shape_ShapeOrExtentTensorType:$tail);
   let hasFolder = 1;
 }
 
@@ -709,10 +713,10 @@ def Shape_AssumingAllOp : Shape_Op<"assuming_all", [Commutative, NoSideEffect]> 
   let verifier = [{ return ::verify(*this); }];
 }
 
-def Shape_AssumingOp : Shape_Op<"assuming",
-                           [SingleBlockImplicitTerminator<"AssumingYieldOp">,
-                            DeclareOpInterfaceMethods<RegionBranchOpInterface>,
-                            RecursiveSideEffects]> {
+def Shape_AssumingOp : Shape_Op<"assuming", [
+    SingleBlockImplicitTerminator<"AssumingYieldOp">,
+    DeclareOpInterfaceMethods<RegionBranchOpInterface>,
+    RecursiveSideEffects]> {
   let summary = "Execute the region";
   let description = [{
     Executes the region assuming all witnesses are true.
@@ -738,6 +742,11 @@ def Shape_AssumingOp : Shape_Op<"assuming",
     static void inlineRegionIntoParent(AssumingOp &op, PatternRewriter &rewriter);
   }];
 
+  let builders = [
+    OpBuilder<(ins "Value":$witness,
+        CArg<"function_ref<SmallVector<Value, 2>(OpBuilder &, Location)>">)>
+  ];
+
   let hasCanonicalizer = 1;
 }
 
@@ -753,7 +762,9 @@ def Shape_AssumingYieldOp : Shape_Op<"assuming_yield",
 
   let arguments = (ins Variadic<AnyType>:$operands);
 
-  let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
+  let builders = [
+    OpBuilder<(ins), [{ /* nothing to do */ }]>,
+  ];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
 }
@@ -890,7 +901,7 @@ def Shape_CstrRequireOp : Shape_Op<"cstr_require", []> {
 
 def Shape_FunctionLibraryOp : Shape_Op<"function_library",
     [AffineScope, IsolatedFromAbove, NoRegionArguments, SymbolTable, Symbol,
-     SingleBlockImplicitTerminator<"ShapeFunctionLibraryTerminatorOp">]> {
+     NoTerminator, SingleBlock]> {
   let summary = "Represents shape functions and corresponding ops";
   let description = [{
     Represents a list of shape functions and the ops whose shape transfer
@@ -925,21 +936,6 @@ def Shape_FunctionLibraryOp : Shape_Op<"function_library",
 
   let printer = [{ ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
-}
-
-//===----------------------------------------------------------------------===//
-// ShapeFunctionLibraryTerminatorOp
-//===----------------------------------------------------------------------===//
-
-def ShapeFunctionLibraryTerminatorOp : Shape_Op<"fn_lib_terminator",
-    [Terminator, HasParent<"FunctionLibraryOp">]> {
-  let summary = "A pseudo op that marks the end of a shape function library";
-  let description = [{
-    `shape_fn_lib_terminator` is a special pseudo terminator operation for the
-    shape function library. It has no semantic meaning beyond keeping the body
-    well-formed.
-  }];
-  let assemblyFormat = "attr-dict";
 }
 
 #endif // SHAPE_OPS

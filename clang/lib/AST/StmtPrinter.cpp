@@ -59,6 +59,22 @@
 
 using namespace clang;
 
+StringRef clang::getOpenACCPrintOptionValue(OpenACCPrintKind K) {
+  switch (K) {
+  case OpenACCPrint_ACC:
+    return "acc";
+  case OpenACCPrint_OMP:
+    return "omp";
+  case OpenACCPrint_ACC_OMP:
+    return "acc-omp";
+  case OpenACCPrint_OMP_ACC:
+    return "omp-acc";
+  case OpenACCPrint_OMP_HEAD:
+    llvm_unreachable("unexpected OpenACCPrint_OMP_HEAD as command-line option");
+  }
+  llvm_unreachable("unexpected OpenACCPrintKind");
+}
+
 //===----------------------------------------------------------------------===//
 // StmtPrinter Visitor
 //===----------------------------------------------------------------------===//
@@ -971,6 +987,16 @@ void StmtPrinter::VisitOMPTargetTeamsDistributeSimdDirective(
   PrintOMPExecutableDirective(Node);
 }
 
+void StmtPrinter::VisitOMPInteropDirective(OMPInteropDirective *Node) {
+  Indent() << "#pragma omp interop";
+  PrintOMPExecutableDirective(Node);
+}
+
+void StmtPrinter::VisitOMPDispatchDirective(OMPDispatchDirective *Node) {
+  Indent() << "#pragma omp dispatch";
+  PrintOMPExecutableDirective(Node);
+}
+
 //===----------------------------------------------------------------------===//
 //  OpenACC clauses printing methods
 //===----------------------------------------------------------------------===//
@@ -1563,6 +1589,10 @@ void StmtPrinter::VisitIntegerLiteral(IntegerLiteral *Node) {
   case BuiltinType::ULong:     OS << "UL"; break;
   case BuiltinType::LongLong:  OS << "LL"; break;
   case BuiltinType::ULongLong: OS << "ULL"; break;
+  case BuiltinType::Int128:
+    break; // no suffix.
+  case BuiltinType::UInt128:
+    break; // no suffix.
   }
 }
 

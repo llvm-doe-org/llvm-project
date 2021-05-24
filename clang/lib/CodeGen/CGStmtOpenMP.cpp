@@ -635,6 +635,7 @@ CodeGenFunction::GenerateOpenMPCapturedStmtFunction(const CapturedStmt &S,
       emitOutlinedFunctionPrologue(WrapperCGF, Args, LocalAddrs, VLASizes,
                                    WrapperCGF.CXXThisValue, WrapperFO);
   llvm::SmallVector<llvm::Value *, 4> CallArgs;
+  auto *PI = F->arg_begin();
   for (const auto *Arg : Args) {
     llvm::Value *CallArg;
     auto I = LocalAddrs.find(Arg);
@@ -643,6 +644,11 @@ CodeGenFunction::GenerateOpenMPCapturedStmtFunction(const CapturedStmt &S,
           I->second.second,
           I->second.first ? I->second.first->getType() : Arg->getType(),
           AlignmentSource::Decl);
+      if (LV.getType()->isAnyComplexType())
+        LV.setAddress(WrapperCGF.Builder.CreatePointerBitCastOrAddrSpaceCast(
+            LV.getAddress(WrapperCGF),
+            PI->getType()->getPointerTo(
+                LV.getAddress(WrapperCGF).getAddressSpace())));
       CallArg = WrapperCGF.EmitLoadOfScalar(LV, S.getBeginLoc());
     } else {
       auto EI = VLASizes.find(Arg);
@@ -656,6 +662,7 @@ CodeGenFunction::GenerateOpenMPCapturedStmtFunction(const CapturedStmt &S,
       }
     }
     CallArgs.emplace_back(WrapperCGF.EmitFromMemory(CallArg, Arg->getType()));
+    ++PI;
   }
   CGM.getOpenMPRuntime().emitOutlinedFunctionCall(WrapperCGF, Loc, F, CallArgs);
   WrapperCGF.FinishFunction();
@@ -4133,8 +4140,6 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
     llvm::SmallVector<std::pair<const VarDecl *, Address>, 16> FirstprivatePtrs;
     if (!Data.PrivateVars.empty() || !Data.FirstprivateVars.empty() ||
         !Data.LastprivateVars.empty() || !Data.PrivateLocals.empty()) {
-      llvm::FunctionType *CopyFnTy = llvm::FunctionType::get(
-          CGF.Builder.getVoidTy(), {CGF.Builder.getInt8PtrTy()}, true);
       enum { PrivatesParam = 2, CopyFnParam = 3 };
       llvm::Value *CopyFn = CGF.Builder.CreateLoad(
           CGF.GetAddrOfLocalVar(CS->getCapturedDecl()->getParam(CopyFnParam)));
@@ -4143,13 +4148,16 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
       // Map privates.
       llvm::SmallVector<std::pair<const VarDecl *, Address>, 16> PrivatePtrs;
       llvm::SmallVector<llvm::Value *, 16> CallArgs;
+      llvm::SmallVector<llvm::Type *, 4> ParamTypes;
       CallArgs.push_back(PrivatesPtr);
+      ParamTypes.push_back(PrivatesPtr->getType());
       for (const Expr *E : Data.PrivateVars) {
         const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
         Address PrivatePtr = CGF.CreateMemTemp(
             CGF.getContext().getPointerType(E->getType()), ".priv.ptr.addr");
         PrivatePtrs.emplace_back(VD, PrivatePtr);
         CallArgs.push_back(PrivatePtr.getPointer());
+        ParamTypes.push_back(PrivatePtr.getType());
       }
       for (const Expr *E : Data.FirstprivateVars) {
         const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
@@ -4159,6 +4167,7 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
         PrivatePtrs.emplace_back(VD, PrivatePtr);
         FirstprivatePtrs.emplace_back(VD, PrivatePtr);
         CallArgs.push_back(PrivatePtr.getPointer());
+        ParamTypes.push_back(PrivatePtr.getType());
       }
       for (const Expr *E : Data.LastprivateVars) {
         const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
@@ -4167,6 +4176,7 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
                               ".lastpriv.ptr.addr");
         PrivatePtrs.emplace_back(VD, PrivatePtr);
         CallArgs.push_back(PrivatePtr.getPointer());
+        ParamTypes.push_back(PrivatePtr.getType());
       }
       for (const VarDecl *VD : Data.PrivateLocals) {
         QualType Ty = VD->getType().getNonReferenceType();
@@ -4178,7 +4188,12 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
             CGF.getContext().getPointerType(Ty), ".local.ptr.addr");
         UntiedLocalVars.try_emplace(VD, PrivatePtr, Address::invalid());
         CallArgs.push_back(PrivatePtr.getPointer());
+        ParamTypes.push_back(PrivatePtr.getType());
       }
+      auto *CopyFnTy = llvm::FunctionType::get(CGF.Builder.getVoidTy(),
+                                               ParamTypes, /*isVarArg=*/false);
+      CopyFn = CGF.Builder.CreatePointerBitCastOrAddrSpaceCast(
+          CopyFn, CopyFnTy->getPointerTo());
       CGF.CGM.getOpenMPRuntime().emitOutlinedFunctionCall(
           CGF, S.getBeginLoc(), {CopyFnTy, CopyFn}, CallArgs);
       for (const auto &Pair : LastprivateDstsOrigs) {
@@ -4426,8 +4441,6 @@ void CodeGenFunction::EmitOMPTargetTaskBasedDirective(
     // Set proper addresses for generated private copies.
     OMPPrivateScope Scope(CGF);
     if (!Data.FirstprivateVars.empty()) {
-      llvm::FunctionType *CopyFnTy = llvm::FunctionType::get(
-          CGF.Builder.getVoidTy(), {CGF.Builder.getInt8PtrTy()}, true);
       enum { PrivatesParam = 2, CopyFnParam = 3 };
       llvm::Value *CopyFn = CGF.Builder.CreateLoad(
           CGF.GetAddrOfLocalVar(CS->getCapturedDecl()->getParam(CopyFnParam)));
@@ -4436,7 +4449,9 @@ void CodeGenFunction::EmitOMPTargetTaskBasedDirective(
       // Map privates.
       llvm::SmallVector<std::pair<const VarDecl *, Address>, 16> PrivatePtrs;
       llvm::SmallVector<llvm::Value *, 16> CallArgs;
+      llvm::SmallVector<llvm::Type *, 4> ParamTypes;
       CallArgs.push_back(PrivatesPtr);
+      ParamTypes.push_back(PrivatesPtr->getType());
       for (const Expr *E : Data.FirstprivateVars) {
         const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
         Address PrivatePtr =
@@ -4444,7 +4459,12 @@ void CodeGenFunction::EmitOMPTargetTaskBasedDirective(
                               ".firstpriv.ptr.addr");
         PrivatePtrs.emplace_back(VD, PrivatePtr);
         CallArgs.push_back(PrivatePtr.getPointer());
+        ParamTypes.push_back(PrivatePtr.getType());
       }
+      auto *CopyFnTy = llvm::FunctionType::get(CGF.Builder.getVoidTy(),
+                                               ParamTypes, /*isVarArg=*/false);
+      CopyFn = CGF.Builder.CreatePointerBitCastOrAddrSpaceCast(
+          CopyFn, CopyFnTy->getPointerTo());
       CGF.CGM.getOpenMPRuntime().emitOutlinedFunctionCall(
           CGF, S.getBeginLoc(), {CopyFnTy, CopyFn}, CallArgs);
       for (const auto &Pair : PrivatePtrs) {
@@ -5588,7 +5608,12 @@ static void emitOMPAtomicExpr(CodeGenFunction &CGF, OpenMPClauseKind Kind,
   case OMPC_exclusive:
   case OMPC_uses_allocators:
   case OMPC_affinity:
-  default:
+  case OMPC_init:
+  case OMPC_inbranch:
+  case OMPC_notinbranch:
+  case OMPC_link:
+  case OMPC_use:
+  case OMPC_novariants:
     llvm_unreachable("Clause is not allowed in 'omp atomic'.");
   }
 }
@@ -5620,7 +5645,7 @@ void CodeGenFunction::EmitOMPAtomicDirective(const OMPAtomicDirective &S) {
         C->getClauseKind() != OMPC_acq_rel &&
         C->getClauseKind() != OMPC_acquire &&
         C->getClauseKind() != OMPC_release &&
-        C->getClauseKind() != OMPC_relaxed) {
+        C->getClauseKind() != OMPC_relaxed && C->getClauseKind() != OMPC_hint) {
       Kind = C->getClauseKind();
       break;
     }
@@ -5743,6 +5768,7 @@ static void emitTargetRegion(CodeGenFunction &CGF, const OMPTargetDirective &S,
     CGF.CGM.getOpenMPRuntime().adjustTargetSpecificDataForLambdas(CGF, S);
 
   CGF.EmitStmt(S.getCapturedStmt(OMPD_target)->getCapturedStmt());
+  CGF.EnsureInsertPoint();
 }
 
 void CodeGenFunction::EmitOMPTargetDeviceFunction(CodeGenModule &CGM,

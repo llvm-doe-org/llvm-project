@@ -1056,7 +1056,7 @@ func @transfer_read_1d(%A : memref<?xf32>, %base: index) -> vector<17xf32> {
 //       CHECK: %[[vecPtr:.*]] = llvm.bitcast %[[gep]] :
 //  CHECK-SAME: !llvm.ptr<f32> to !llvm.ptr<vector<17xf32>>
 //       CHECK: %[[C0:.*]] = constant 0 : index
-//       CHECK: %[[DIM:.*]] = dim %{{.*}}, %[[C0]] : memref<?xf32>
+//       CHECK: %[[DIM:.*]] = memref.dim %{{.*}}, %[[C0]] : memref<?xf32>
 //
 // 2. Create a vector with linear indices [ 0 .. vector_length - 1 ].
 //       CHECK: %[[linearIndex:.*]] = constant dense
@@ -1118,7 +1118,7 @@ func @transfer_read_2d_to_1d(%A : memref<?x?xf32>, %base0: index, %base1: index)
 // CHECK-LABEL: func @transfer_read_2d_to_1d
 //  CHECK-SAME: %[[BASE_0:[a-zA-Z0-9]*]]: index, %[[BASE_1:[a-zA-Z0-9]*]]: index) -> vector<17xf32>
 //       CHECK: %[[c1:.*]] = constant 1 : index
-//       CHECK: %[[DIM:.*]] = dim %{{.*}}, %[[c1]] : memref<?x?xf32>
+//       CHECK: %[[DIM:.*]] = memref.dim %{{.*}}, %[[c1]] : memref<?x?xf32>
 //
 // Create offsetVector = [ offset + 0 .. offset + vector_length - 1 ].
 //       CHECK: %[[trunc:.*]] = index_cast %[[BASE_1]] : index to i32
@@ -1152,7 +1152,7 @@ func @transfer_read_1d_non_zero_addrspace(%A : memref<?xf32, 3>, %base: index) -
 //
 // 2. Check address space of the memref is correct.
 //       CHECK: %[[c0:.*]] = constant 0 : index
-//       CHECK: %[[DIM:.*]] = dim %{{.*}}, %[[c0]] : memref<?xf32, 3>
+//       CHECK: %[[DIM:.*]] = memref.dim %{{.*}}, %[[c0]] : memref<?xf32, 3>
 //
 // 3. Check address space for GEP is correct.
 //       CHECK: %[[gep_b:.*]] = llvm.getelementptr {{.*}} :
@@ -1162,13 +1162,13 @@ func @transfer_read_1d_non_zero_addrspace(%A : memref<?xf32, 3>, %base: index) -
 
 // -----
 
-func @transfer_read_1d_not_masked(%A : memref<?xf32>, %base: index) -> vector<17xf32> {
+func @transfer_read_1d_inbounds(%A : memref<?xf32>, %base: index) -> vector<17xf32> {
   %f7 = constant 7.0: f32
-  %f = vector.transfer_read %A[%base], %f7 {masked = [false]} :
+  %f = vector.transfer_read %A[%base], %f7 {in_bounds = [true]} :
     memref<?xf32>, vector<17xf32>
   return %f: vector<17xf32>
 }
-// CHECK-LABEL: func @transfer_read_1d_not_masked
+// CHECK-LABEL: func @transfer_read_1d_inbounds
 //  CHECK-SAME: %[[BASE:[a-zA-Z0-9]*]]: index) -> vector<17xf32>
 //
 // 1. Bitcast to vector form.
@@ -1184,7 +1184,7 @@ func @transfer_read_1d_not_masked(%A : memref<?xf32>, %base: index) -> vector<17
 
 func @transfer_read_1d_cast(%A : memref<?xi32>, %base: index) -> vector<12xi8> {
   %c0 = constant 0: i32
-  %v = vector.transfer_read %A[%base], %c0 {masked = [false]} :
+  %v = vector.transfer_read %A[%base], %c0 {in_bounds = [true]} :
     memref<?xi32>, vector<12xi8>
   return %v: vector<12xi8>
 }

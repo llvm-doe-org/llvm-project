@@ -258,7 +258,7 @@ FOREACH_CASE(AddCase)
 // EXE-ERR-PRESENT-notARRAYEXT-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping)
 //    EXE-ERR-notPASS-parallel-NEXT: Libomptarget error: Call to targetDataBegin failed, abort target.
 //    EXE-ERR-notPASS-parallel-NEXT: Libomptarget error: Failed to process data before launching the kernel.
-//             EXE-ERR-notPASS-NEXT: Libomptarget error: Run with LIBOMPTARGET_DEBUG=4 to dump host-target pointer mappings.
+//             EXE-ERR-notPASS-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
 //             EXE-ERR-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                   # An abort message usually follows.
 //              EXE-ERR-notPASS-NOT: Libomptarget

@@ -48,7 +48,7 @@ def PDL_Dialect : Dialect {
 
       %resultType = pdl.type
       %inputOperand = pdl.operand
-      %root, %results = pdl.operation "foo.op"(%inputOperand) -> %resultType
+      %root = pdl.operation "foo.op"(%inputOperand) -> %resultType
       pdl.rewrite %root {
         pdl.replace %root with (%inputOperand)
       }
@@ -64,6 +64,9 @@ def PDL_Dialect : Dialect {
 
   let name = "pdl";
   let cppNamespace = "::mlir::pdl";
+  let extraClassDeclaration = [{
+    void registerTypes();
+  }];
 }
 
 #endif // MLIR_DIALECT_PDL_IR_PDLDIALECT

@@ -1659,7 +1659,7 @@ void spirv::EntryPointOp::build(OpBuilder &builder, OperationState &state,
                                 spirv::FuncOp function,
                                 ArrayRef<Attribute> interfaceVars) {
   build(builder, state,
-        builder.getI32IntegerAttr(static_cast<int32_t>(executionModel)),
+        spirv::ExecutionModelAttr::get(builder.getContext(), executionModel),
         builder.getSymbolRefAttr(function),
         builder.getArrayAttr(interfaceVars));
 }
@@ -1721,7 +1721,7 @@ void spirv::ExecutionModeOp::build(OpBuilder &builder, OperationState &state,
                                    spirv::ExecutionMode executionMode,
                                    ArrayRef<int32_t> params) {
   build(builder, state, builder.getSymbolRefAttr(function),
-        builder.getI32IntegerAttr(static_cast<int32_t>(executionMode)),
+        spirv::ExecutionModeAttr::get(builder.getContext(), executionMode),
         builder.getI32ArrayAttr(params));
 }
 
@@ -2243,10 +2243,10 @@ static LogicalResult verify(spirv::GroupNonUniformElectOp groupOp) {
 //===----------------------------------------------------------------------===//
 
 void spirv::LoadOp::build(OpBuilder &builder, OperationState &state,
-                          Value basePtr, IntegerAttr memory_access,
+                          Value basePtr, MemoryAccessAttr memoryAccess,
                           IntegerAttr alignment) {
   auto ptrType = basePtr.getType().cast<spirv::PointerType>();
-  build(builder, state, ptrType.getPointeeType(), basePtr, memory_access,
+  build(builder, state, ptrType.getPointeeType(), basePtr, memoryAccess,
         alignment);
 }
 
@@ -2297,7 +2297,7 @@ static LogicalResult verify(spirv::LoadOp loadOp) {
 }
 
 //===----------------------------------------------------------------------===//
-// spv.loop
+// spv.mlir.loop
 //===----------------------------------------------------------------------===//
 
 void spirv::LoopOp::build(OpBuilder &builder, OperationState &state) {
@@ -2463,12 +2463,12 @@ static LogicalResult verify(spirv::MergeOp mergeOp) {
   auto *parentOp = mergeOp->getParentOp();
   if (!parentOp || !isa<spirv::SelectionOp, spirv::LoopOp>(parentOp))
     return mergeOp.emitOpError(
-        "expected parent op to be 'spv.selection' or 'spv.loop'");
+        "expected parent op to be 'spv.mlir.selection' or 'spv.mlir.loop'");
 
   Block &parentLastBlock = mergeOp->getParentRegion()->back();
   if (mergeOp.getOperation() != parentLastBlock.getTerminator())
-    return mergeOp.emitOpError(
-        "can only be used in the last block of 'spv.selection' or 'spv.loop'");
+    return mergeOp.emitOpError("can only be used in the last block of "
+                               "'spv.mlir.selection' or 'spv.mlir.loop'");
   return success();
 }
 
@@ -2696,7 +2696,7 @@ static LogicalResult verify(spirv::SelectOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// spv.selection
+// spv.mlir.selection
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseSelectionOp(OpAsmParser &parser,
@@ -2784,9 +2784,8 @@ void spirv::SelectionOp::addMergeBlock() {
 spirv::SelectionOp spirv::SelectionOp::createIfThen(
     Location loc, Value condition,
     function_ref<void(OpBuilder &builder)> thenBody, OpBuilder &builder) {
-  auto selectionControl = builder.getI32IntegerAttr(
-      static_cast<uint32_t>(spirv::SelectionControl::None));
-  auto selectionOp = builder.create<spirv::SelectionOp>(loc, selectionControl);
+  auto selectionOp =
+      builder.create<spirv::SelectionOp>(loc, spirv::SelectionControl::None);
 
   selectionOp.addMergeBlock();
   Block *mergeBlock = selectionOp.getMergeBlock();

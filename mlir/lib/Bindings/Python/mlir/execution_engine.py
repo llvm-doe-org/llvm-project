@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 # Simply a wrapper around the extension module of the same name.
-from . import _cext
+from ._cext_loader import _cext
 import ctypes
 
 class ExecutionEngine(_cext.execution_engine.ExecutionEngine):
@@ -29,3 +29,11 @@ class ExecutionEngine(_cext.execution_engine.ExecutionEngine):
     for argNum in range(len(ctypes_args)):
       packed_args[argNum] = ctypes.cast(ctypes_args[argNum], ctypes.c_void_p)
     func(packed_args)
+
+  def register_runtime(self, name, ctypes_callback):
+    """Register a runtime function available to the jitted code
+    under the provided `name`. The `ctypes_callback` must be a
+    `CFuncType` that outlives the execution engine.
+    """
+    callback = ctypes.cast(ctypes_callback, ctypes.c_void_p).value
+    self.raw_register_runtime("_mlir_ciface_" + name, callback)

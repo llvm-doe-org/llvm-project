@@ -58,9 +58,15 @@ struct IncomingArgHandler : public CallLowering::IncomingValueHandler {
       : IncomingValueHandler(MIRBuilder, MRI, AssignFn), StackUsed(0) {}
 
   Register getStackAddress(uint64_t Size, int64_t Offset,
-                           MachinePointerInfo &MPO) override {
+                           MachinePointerInfo &MPO,
+                           ISD::ArgFlagsTy Flags) override {
     auto &MFI = MIRBuilder.getMF().getFrameInfo();
-    int FI = MFI.CreateFixedObject(Size, Offset, true);
+
+    // Byval is assumed to be writable memory, but other stack passed arguments
+    // are not.
+    const bool IsImmutable = !Flags.isByVal();
+
+    int FI = MFI.CreateFixedObject(Size, Offset, IsImmutable);
     MPO = MachinePointerInfo::getFixedStack(MIRBuilder.getMF(), FI);
     auto AddrReg = MIRBuilder.buildFrameIndex(LLT::pointer(0, 64), FI);
     StackUsed = std::max(StackUsed, Size + Offset);
@@ -165,12 +171,15 @@ struct OutgoingArgHandler : public CallLowering::OutgoingValueHandler {
         StackSize(0), SPReg(0) {}
 
   Register getStackAddress(uint64_t Size, int64_t Offset,
-                           MachinePointerInfo &MPO) override {
+                           MachinePointerInfo &MPO,
+                           ISD::ArgFlagsTy Flags) override {
     MachineFunction &MF = MIRBuilder.getMF();
     LLT p0 = LLT::pointer(0, 64);
     LLT s64 = LLT::scalar(64);
 
     if (IsTailCall) {
+      assert(!Flags.isByVal() && "byval unhandled with tail calls");
+
       Offset += FPDiff;
       int FI = MF.getFrameInfo().CreateFixedObject(Size, Offset, true);
       auto FIReg = MIRBuilder.buildFrameIndex(p0, FI);
@@ -348,9 +357,14 @@ bool AArch64CallLowering::lowerReturn(MachineIRBuilder &MIRBuilder,
               return false;
             }
           } else {
-            // A scalar extend.
-            CurVReg =
-                MIRBuilder.buildInstr(ExtendOp, {NewLLT}, {CurVReg}).getReg(0);
+            // If the split EVT was a <1 x T> vector, and NewVT is T, then we
+            // don't have to do anything since we don't distinguish between the
+            // two.
+            if (NewLLT != MRI.getType(CurVReg)) {
+              // A scalar extend.
+              CurVReg = MIRBuilder.buildInstr(ExtendOp, {NewLLT}, {CurVReg})
+                            .getReg(0);
+            }
           }
         }
       }
@@ -419,12 +433,19 @@ static void handleMustTailForwardedRegisters(MachineIRBuilder &MIRBuilder,
   }
 }
 
-bool AArch64CallLowering::fallBackToDAGISel(const Function &F) const {
+bool AArch64CallLowering::fallBackToDAGISel(const MachineFunction &MF) const {
+  auto &F = MF.getFunction();
   if (isa<ScalableVectorType>(F.getReturnType()))
     return true;
-  return llvm::any_of(F.args(), [](const Argument &A) {
-    return isa<ScalableVectorType>(A.getType());
-  });
+  if (llvm::any_of(F.args(), [](const Argument &A) {
+        return isa<ScalableVectorType>(A.getType());
+      }))
+    return true;
+  const auto &ST = MF.getSubtarget<AArch64Subtarget>();
+  LLVM_DEBUG(dbgs() << "Falling back to SDAG because we don't support no-NEON");
+  if (!ST.hasNEON() || !ST.hasFPARMv8())
+    return true;
+  return false;
 }
 
 bool AArch64CallLowering::lowerFormalArguments(
@@ -441,7 +462,7 @@ bool AArch64CallLowering::lowerFormalArguments(
     if (DL.getTypeStoreSize(Arg.getType()).isZero())
       continue;
 
-    ArgInfo OrigArg{VRegs[i], Arg.getType()};
+    ArgInfo OrigArg{VRegs[i], Arg};
     setArgFlags(OrigArg, i + AttributeList::FirstArgIndex, DL, F);
 
     splitToValueTypes(OrigArg, SplitArgs, DL, F.getCallingConv());

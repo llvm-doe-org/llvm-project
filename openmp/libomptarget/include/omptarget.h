@@ -98,6 +98,13 @@ enum OpenMPOffloadingRequiresDirFlags {
   OMP_REQ_DYNAMIC_ALLOCATORS      = 0x010
 };
 
+enum TargetAllocTy : int32_t {
+  TARGET_ALLOC_DEVICE = 0,
+  TARGET_ALLOC_HOST,
+  TARGET_ALLOC_SHARED,
+  TARGET_ALLOC_DEFAULT
+};
+
 /// This struct is a record of an entry point or global. For a function
 /// entry point the size is expected to be zero
 struct __tgt_offload_entry {
@@ -215,6 +222,12 @@ void omp_target_map_release(void *ptr, size_t size, int device_num);
 void omp_target_map_delete(void *ptr, size_t size, int device_num);
 void omp_target_update_to(void *ptr, size_t size, int device_num);
 void omp_target_update_from(void *ptr, size_t size, int device_num);
+
+/// Explicit target memory allocators
+/// Using the llvm_ prefix until they become part of the OpenMP standard.
+void *llvm_omp_target_alloc_device(size_t size, int device_num);
+void *llvm_omp_target_alloc_host(size_t size, int device_num);
+void *llvm_omp_target_alloc_shared(size_t size, int device_num);
 
 /// add the clauses of the requires directives in a given file
 void __tgt_register_requires(int64_t flags);
@@ -338,8 +351,10 @@ int __tgt_target_teams_nowait_mapper(
     int32_t thread_limit, int32_t depNum, void *depList, int32_t noAliasDepNum,
     void *noAliasDepList);
 
-void __kmpc_push_target_tripcount(ident_t *loc, int64_t device_id,
-                                  uint64_t loop_tripcount);
+void __kmpc_push_target_tripcount(int64_t device_id, uint64_t loop_tripcount);
+
+void __kmpc_push_target_tripcount_mapper(ident_t *loc, int64_t device_id,
+                                         uint64_t loop_tripcount);
 
 #ifdef __cplusplus
 }

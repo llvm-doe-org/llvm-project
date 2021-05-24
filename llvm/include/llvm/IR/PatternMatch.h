@@ -1707,6 +1707,7 @@ m_Br(const Cond_t &C, const TrueBlock_t &T, const FalseBlock_t &F) {
 template <typename CmpInst_t, typename LHS_t, typename RHS_t, typename Pred_t,
           bool Commutable = false>
 struct MaxMin_match {
+  using PredType = Pred_t;
   LHS_t L;
   RHS_t R;
 
@@ -1735,10 +1736,10 @@ struct MaxMin_match {
       return false;
     // At this point we have a select conditioned on a comparison.  Check that
     // it is the values returned by the select that are being compared.
-    Value *TrueVal = SI->getTrueValue();
-    Value *FalseVal = SI->getFalseValue();
-    Value *LHS = Cmp->getOperand(0);
-    Value *RHS = Cmp->getOperand(1);
+    auto *TrueVal = SI->getTrueValue();
+    auto *FalseVal = SI->getFalseValue();
+    auto *LHS = Cmp->getOperand(0);
+    auto *RHS = Cmp->getOperand(1);
     if ((TrueVal != LHS || FalseVal != RHS) &&
         (TrueVal != RHS || FalseVal != LHS))
       return false;
