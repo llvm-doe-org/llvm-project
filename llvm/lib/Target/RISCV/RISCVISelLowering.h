@@ -172,6 +172,8 @@ enum NodeType : unsigned {
   VECREDUCE_XOR_VL,
   VECREDUCE_FADD_VL,
   VECREDUCE_SEQ_FADD_VL,
+  VECREDUCE_FMIN_VL,
+  VECREDUCE_FMAX_VL,
 
   // Vector binary and unary ops with a mask as a third operand, and VL as a
   // fourth operand.
@@ -509,6 +511,7 @@ private:
   SDValue lowerShiftLeftParts(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerShiftRightParts(SDValue Op, SelectionDAG &DAG, bool IsSRA) const;
   SDValue lowerSPLAT_VECTOR_PARTS(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVectorMaskSplat(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVectorMaskExt(SDValue Op, SelectionDAG &DAG,
                              int64_t ExtTrueVal) const;
   SDValue lowerVectorMaskTrunc(SDValue Op, SelectionDAG &DAG) const;
