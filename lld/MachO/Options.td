@@ -10,6 +10,9 @@ def help : Flag<["-", "--"], "help">,
 def help_hidden : Flag<["--"], "help-hidden">,
     HelpText<"Display help for hidden options">,
     Group<grp_lld>;
+def error_limit_eq : Joined<["--"], "error-limit=">,
+    HelpText<"Maximum number of errors to print before exiting (default: 20)">,
+    Group<grp_lld>;
 def color_diagnostics: Flag<["--"], "color-diagnostics">,
     HelpText<"Alias for --color-diagnostics=always">,
     Group<grp_lld>;
@@ -22,6 +25,9 @@ def color_diagnostics_eq: Joined<["--"], "color-diagnostics=">,
     Group<grp_lld>;
 def threads_eq : Joined<["--"], "threads=">,
     HelpText<"Number of threads. '1' disables multi-threading. By default all available hardware threads are used">,
+    Group<grp_lld>;
+def thinlto_jobs_eq : Joined<["--"], "thinlto-jobs=">,
+    HelpText<"Number of ThinLTO jobs. Default to --threads=">,
     Group<grp_lld>;
 def reproduce: Separate<["--"], "reproduce">,
     Group<grp_lld>;
@@ -186,7 +192,6 @@ def segcreate : MultiArg<["-"], "segcreate", 3>,
     MetaVarName<"<segment> <section> <file>">,
     Alias<sectcreate>,
     HelpText<"Alias for -sectcreate">,
-    Flags<[HelpHidden]>,
     Group<grp_content>;
 def filelist : Separate<["-"], "filelist">,
     MetaVarName<"<file>">,
@@ -332,13 +337,11 @@ def dylib_install_name : Separate<["-"], "dylib_install_name">,
     MetaVarName<"<name>">,
     Alias<install_name>,
     HelpText<"Alias for -install_name">,
-    Flags<[HelpHidden]>,
     Group<grp_dylib>;
 def dylinker_install_name : Separate<["-"], "dylinker_install_name">,
     MetaVarName<"<name>">,
     Alias<install_name>,
     HelpText<"Alias for -install_name">,
-    Flags<[HelpHidden]>,
     Group<grp_dylib>;
 def mark_dead_strippable_dylib : Flag<["-"], "mark_dead_strippable_dylib">,
     HelpText<"Mark output dylib as dead-strippable: When a client links against it but does not use any of its symbols, the dylib will not be added to the client's list of needed dylibs">,
@@ -367,10 +370,10 @@ def dylib_current_version : Separate<["-"], "dylib_current_version">,
 def grp_main : OptionGroup<"main">, HelpText<"MAIN EXECUTABLE">;
 
 def pie : Flag<["-"], "pie">,
-    HelpText<"Build a position independent executable (default for macOS 10.7 and later)">,
+    HelpText<"Build a position independent executable (default)">,
     Group<grp_main>;
 def no_pie : Flag<["-"], "no_pie">,
-    HelpText<"Do not build a position independent executable (default for macOS 10.6 and earlier)">,
+    HelpText<"Do not build a position independent executable">,
     Group<grp_main>;
 def pagezero_size : Separate<["-"], "pagezero_size">,
     MetaVarName<"<size>">,
@@ -478,7 +481,6 @@ def why_load : Flag<["-"], "why_load">,
 def whyload : Flag<["-"], "whyload">,
     Alias<why_load>,
     HelpText<"Alias for -why_load">,
-    Flags<[HelpHidden]>,
     Group<grp_introspect>;
 def why_live : Separate<["-"], "why_live">,
     MetaVarName<"<symbol>">,
@@ -512,7 +514,7 @@ def save_temps : Flag<["-"], "save-temps">,
     HelpText<"Save intermediate LTO compilation results">,
     Group<grp_introspect>;
 
-def grp_symtab : OptionGroup<"symtab">, HelpText<"SYMBOL TABLE OPTIMIZATIONS">;
+def grp_symtab : OptionGroup<"symtab">, HelpText<"SYMBOL TABLE">;
 
 def S : Flag<["-"], "S">,
     HelpText<"Strip debug information (STABS or DWARF) from the output">,
@@ -537,12 +539,15 @@ def oso_prefix : Separate<["-"], "oso_prefix">,
     HelpText<"Remove the prefix <path> from OSO symbols in the debug map">,
     Flags<[HelpHidden]>,
     Group<grp_symtab>;
+def add_ast_path : Separate<["-"], "add_ast_path">,
+    MetaVarName<"<path>">,
+    HelpText<"AST paths will be emitted as STABS">,
+    Group<grp_symtab>;
 
 def grp_bitcode : OptionGroup<"bitcode">, HelpText<"BITCODE BUILD FLOW">;
 
 def bitcode_bundle : Flag<["-"], "bitcode_bundle">,
     HelpText<"Generate an embedded bitcode bundle in the __LLVM,__bundle section of the output">,
-    Flags<[HelpHidden]>,
     Group<grp_bitcode>;
 def bitcode_hide_symbols : Flag<["-"], "bitcode_hide_symbols">,
     HelpText<"With -bitcode_bundle, hide all non-exported symbols from output bitcode bundle.">,
@@ -628,6 +633,16 @@ def rename_segment : MultiArg<["-"], "rename_segment", 2>,
     Group<grp_rare>;
 def trace_symbol_layout : Flag<["-"], "trace_symbol_layout">,
     HelpText<"Show where and why symbols move, as specified by -move_to_ro_segment, -move_to_rw_segment, -rename_section, and -rename_segment">,
+    Flags<[HelpHidden]>,
+    Group<grp_rare>;
+def data_const : Flag<["-"], "data_const">,
+    HelpText<"Force migration of readonly data into __DATA_CONST segment">,
+    Group<grp_rare>;
+def no_data_const : Flag<["-"], "no_data_const">,
+    HelpText<"Block migration of readonly data away from __DATA segment">,
+    Group<grp_rare>;
+def text_exec : Flag<["-"], "text_exec">,
+    HelpText<"Rename __segment TEXT to __TEXT_EXEC for sections __text and __stubs">,
     Flags<[HelpHidden]>,
     Group<grp_rare>;
 def section_order : MultiArg<["-"], "section_order", 2>,
@@ -1093,10 +1108,6 @@ def slow_stubs : Flag<["-"], "slow_stubs">,
 
 def grp_undocumented : OptionGroup<"undocumented">, HelpText<"UNDOCUMENTED">;
 
-def add_ast_path : Flag<["-"], "add_ast_path">,
-    HelpText<"This option is undocumented in ld64">,
-    Flags<[HelpHidden]>,
-    Group<grp_undocumented>;
 def add_linker_option : Flag<["-"], "add_linker_option">,
     HelpText<"This option is undocumented in ld64">,
     Flags<[HelpHidden]>,
@@ -1133,14 +1144,6 @@ def classic_linker : Flag<["-"], "classic_linker">,
     HelpText<"This option is undocumented in ld64">,
     Flags<[HelpHidden]>,
     Group<grp_undocumented>;
-def data_const : Flag<["-"], "data_const">,
-    HelpText<"This option is undocumented in ld64">,
-    Flags<[HelpHidden]>,
-    Group<grp_undocumented>;
-def no_data_const : Flag<["-"], "no_data_const">,
-    HelpText<"This option is undocumented in ld64">,
-    Flags<[HelpHidden]>,
-    Group<grp_undocumented>;
 def data_in_code_info : Flag<["-"], "data_in_code_info">,
     HelpText<"This option is undocumented in ld64">,
     Flags<[HelpHidden]>,
@@ -1160,8 +1163,10 @@ def dyld_env : Flag<["-"], "dyld_env">,
     Flags<[HelpHidden]>,
     Group<grp_undocumented>;
 def encryptable : Flag<["-"], "encryptable">,
-    HelpText<"This option is undocumented in ld64">,
-    Flags<[HelpHidden]>,
+    HelpText<"Generate the LC_ENCRYPTION_INFO load command">,
+    Group<grp_undocumented>;
+def no_encryption : Flag<["-"], "no_encryption">,
+    HelpText<"Do not generate the LC_ENCRYPTION_INFO load command">,
     Group<grp_undocumented>;
 def executable_path : Flag<["-"], "executable_path">,
     HelpText<"This option is undocumented in ld64">,
@@ -1255,10 +1260,6 @@ def no_dtrace_dof : Flag<["-"], "no_dtrace_dof">,
     HelpText<"This option is undocumented in ld64">,
     Flags<[HelpHidden]>,
     Group<grp_undocumented>;
-def no_encryption : Flag<["-"], "no_encryption">,
-    HelpText<"This option is undocumented in ld64">,
-    Flags<[HelpHidden]>,
-    Group<grp_undocumented>;
 def no_new_main : Flag<["-"], "no_new_main">,
     HelpText<"This option is undocumented in ld64">,
     Flags<[HelpHidden]>,
@@ -1284,10 +1285,6 @@ def snapshot_dir : Flag<["-"], "snapshot_dir">,
     Flags<[HelpHidden]>,
     Group<grp_undocumented>;
 def source_version : Flag<["-"], "source_version">,
-    HelpText<"This option is undocumented in ld64">,
-    Flags<[HelpHidden]>,
-    Group<grp_undocumented>;
-def text_exec : Flag<["-"], "text_exec">,
     HelpText<"This option is undocumented in ld64">,
     Flags<[HelpHidden]>,
     Group<grp_undocumented>;

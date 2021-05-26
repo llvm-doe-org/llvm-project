@@ -268,7 +268,12 @@ public:
                          function_ref<ParseResult(bool)> parseElement,
                          OpAsmParser::Delimiter delimiter);
 
-private:
+  /// Parse an AffineExpr where dim and symbol identifiers are SSA ids.
+  ParseResult
+  parseAffineExprOfSSAIds(AffineExpr &expr,
+                          function_ref<ParseResult(bool)> parseElement);
+
+protected:
   /// The Parser is subclassed and reinstantiated.  Do not add additional
   /// non-trivial state here, add it to the ParserState class.
   ParserState &state;

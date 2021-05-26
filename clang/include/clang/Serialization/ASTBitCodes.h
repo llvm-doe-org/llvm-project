@@ -1947,6 +1947,7 @@ enum StmtCode {
   STMT_OMP_TARGET_TEAMS_DISTRIBUTE_SIMD_DIRECTIVE,
   STMT_OMP_INTEROP_DIRECTIVE,
   STMT_OMP_DISPATCH_DIRECTIVE,
+  STMT_OMP_MASKED_DIRECTIVE,
   // TODO: This is also used for OpenACC subarrays.  When OpenACC support is
   // merged upstream, perhaps this can be renamed to something more general like
   // EXPR_ARRAY_RANGE.

@@ -178,6 +178,8 @@ void RTLsTy::LoadRTLs() {
         dlsym(dynlib_handle, "__tgt_rtl_unregister_lib");
     *((void **)&R.supports_empty_images) =
         dlsym(dynlib_handle, "__tgt_rtl_supports_empty_images");
+    *((void **)&R.set_info_flag) =
+        dlsym(dynlib_handle, "__tgt_rtl_set_info_flag");
 
     R.DeviceType = R.get_device_type ? (omp_device_t)R.get_device_type()
                                      : omp_device_none;

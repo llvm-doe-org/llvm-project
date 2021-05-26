@@ -95,7 +95,10 @@ EXTERN int omp_get_initial_device(void) {
 }
 
 #if OMPT_SUPPORT
-// FIXME: Access is not thread-safe.  Does it need to be?
+// Accesses to DeviceAllocSizes must be thread-safe or allocating and
+// deallocating in, for example, an "omp parallel for" crashes (currently,
+// openmp/libomptarget/test/offloading/memory_manager.cpp exercises this case).
+static std::mutex DeviceAllocSizesMtx;
 // FIXME: Does this work if you allocate on multiple devices?  There might be
 // address collisions.  Either key it by device or store it in DeviceTy?
 static std::map<void *, size_t> DeviceAllocSizes;
@@ -132,7 +135,9 @@ EXTERN void *omp_target_alloc(size_t size, int device_num) {
   // runtime is initialized, but maybe we should expose something like
   // __kmpc_initialize_runtime to call here instead.
   __kmpc_get_target_offload();
+  DeviceAllocSizesMtx.lock();
   DeviceAllocSizes[Ptr] = size;
+  DeviceAllocSizesMtx.unlock();
   OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(
       ompt_scope_end, alloc, /*SrcPtr=*/NULL, omp_get_initial_device(), Ptr,
       device_num, size);
@@ -177,10 +182,20 @@ EXTERN void omp_target_free(void *device_ptr, int device_num) {
   // TODO: We have not implemented the ompt_scope_end callback because we don't
   // need it for OpenACC support.
   if (device_num == omp_get_initial_device()) {
+#if OMPT_SUPPORT
+    DeviceAllocSizesMtx.lock();
+    auto AllocSizeItr = DeviceAllocSizes.find(device_ptr);
+    size_t AllocSize = 0;
+    if (AllocSizeItr != DeviceAllocSizes.end()) {
+      AllocSize = AllocSizeItr->second;
+      DeviceAllocSizes.erase(AllocSizeItr);
+    }
+    DeviceAllocSizesMtx.unlock();
     OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(ompt_scope_begin, delete,
                                               /*SrcPtr=*/NULL, device_num,
                                               device_ptr, device_num,
-                                              DeviceAllocSizes[device_ptr]);
+                                              AllocSize);
+#endif
     free(device_ptr);
     DP("omp_target_free deallocated host ptr\n");
     return;
@@ -192,16 +207,23 @@ EXTERN void omp_target_free(void *device_ptr, int device_num) {
   }
 
 #if OMPT_SUPPORT
+  DeviceAllocSizesMtx.lock();
+  auto AllocSizeItr = DeviceAllocSizes.find(device_ptr);
+  size_t AllocSize = 0;
+  if (AllocSizeItr != DeviceAllocSizes.end()) {
+    AllocSize = AllocSizeItr->second;
+    DeviceAllocSizes.erase(AllocSizeItr);
+  }
+  DeviceAllocSizesMtx.unlock();
   OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(
       ompt_scope_begin, delete, /*SrcPtr=*/NULL, omp_get_initial_device(),
-      device_ptr, device_num, DeviceAllocSizes[device_ptr]);
-  DeviceAllocSizes.erase(device_ptr);
+      device_ptr, device_num, AllocSize);
 #endif
   PM->Devices[device_num].deleteData(device_ptr);
   DP("omp_target_free deallocated device ptr\n");
 }
 
-EXTERN int omp_target_is_present(void *ptr, int device_num) {
+EXTERN int omp_target_is_present(const void *ptr, int device_num) {
   TIMESCOPE();
   DP("Call to omp_target_is_present for device %d and address " DPxMOD "\n",
      device_num, DPxPTR(ptr));
@@ -228,7 +250,8 @@ EXTERN int omp_target_is_present(void *ptr, int device_num) {
   DeviceTy &Device = PM->Devices[device_num];
   bool IsLast; // not used
   bool IsHostPtr;
-  void *TgtPtr = Device.getTgtPtrBegin(ptr, 0, IsLast, /*UpdateRefCount=*/false,
+  void *TgtPtr = Device.getTgtPtrBegin(const_cast<void *>(ptr), 0, IsLast,
+                                       /*UpdateRefCount=*/false,
                                        /*UseHoldRefCount=*/false, IsHostPtr);
   int rc = (TgtPtr != NULL);
   // Under unified memory the host pointer can be returned by the
@@ -433,7 +456,7 @@ EXTERN size_t omp_get_accessible_buffer(
   return BufferSize;;
 }
 
-EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
+EXTERN int omp_target_memcpy(void *dst, const void *src, size_t length,
                              size_t dst_offset, size_t src_offset,
                              int dst_device, int src_device) {
   OMPT_DEFINE_IDENT(omp_target_memcpy);
@@ -465,7 +488,7 @@ EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
   }
 
   int rc = OFFLOAD_SUCCESS;
-  void *srcAddr = (char *)src + src_offset;
+  void *srcAddr = (char *)const_cast<void *>(src) + src_offset;
   void *dstAddr = (char *)dst + dst_offset;
 
   // OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t and
@@ -534,13 +557,11 @@ EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
   return rc;
 }
 
-EXTERN int omp_target_memcpy_rect(void *dst, void *src, size_t element_size,
-                                  int num_dims, const size_t *volume,
-                                  const size_t *dst_offsets,
-                                  const size_t *src_offsets,
-                                  const size_t *dst_dimensions,
-                                  const size_t *src_dimensions, int dst_device,
-                                  int src_device) {
+EXTERN int omp_target_memcpy_rect(
+    void *dst, const void *src, size_t element_size, int num_dims,
+    const size_t *volume, const size_t *dst_offsets, const size_t *src_offsets,
+    const size_t *dst_dimensions, const size_t *src_dimensions, int dst_device,
+    int src_device) {
   TIMESCOPE();
   DP("Call to omp_target_memcpy_rect, dst device %d, src device %d, "
      "dst addr " DPxMOD ", src addr " DPxMOD ", dst offsets " DPxMOD ", "
@@ -580,9 +601,10 @@ EXTERN int omp_target_memcpy_rect(void *dst, void *src, size_t element_size,
     for (size_t i = 0; i < volume[0]; ++i) {
       rc = omp_target_memcpy_rect(
           (char *)dst + dst_off + dst_slice_size * i,
-          (char *)src + src_off + src_slice_size * i, element_size,
-          num_dims - 1, volume + 1, dst_offsets + 1, src_offsets + 1,
-          dst_dimensions + 1, src_dimensions + 1, dst_device, src_device);
+          (char *)const_cast<void *>(src) + src_off + src_slice_size * i,
+          element_size, num_dims - 1, volume + 1, dst_offsets + 1,
+          src_offsets + 1, dst_dimensions + 1, src_dimensions + 1, dst_device,
+          src_device);
 
       if (rc) {
         DP("Recursive call to omp_target_memcpy_rect returns unsuccessfully\n");
@@ -595,9 +617,9 @@ EXTERN int omp_target_memcpy_rect(void *dst, void *src, size_t element_size,
   return rc;
 }
 
-EXTERN int omp_target_associate_ptr(void *host_ptr, void *device_ptr,
-                                    size_t size, size_t device_offset,
-                                    int device_num) {
+EXTERN int omp_target_associate_ptr(const void *host_ptr,
+                                    const void *device_ptr, size_t size,
+                                    size_t device_offset, int device_num) {
   OMPT_DEFINE_IDENT(omp_target_associate_ptr);
   TIMESCOPE();
   DP("Call to omp_target_associate_ptr with host_ptr " DPxMOD ", "
@@ -636,15 +658,20 @@ EXTERN int omp_target_associate_ptr(void *host_ptr, void *device_ptr,
   // "A thread dispatches a registered ompt_callback_target_data_op_emi or
   // ompt_callback_target_data_op callback when device memory is allocated or
   // freed, as well as when data is copied to or from a device."
-  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(ompt_scope_beginend, associate,
-                                            host_ptr, omp_get_initial_device(),
-                                            device_addr, device_num, size);
-  int rc = Device.associatePtr(host_ptr, device_addr, size);
+  //
+  // TODO: We have little choice but to cast away const here: OpenMP 5.1
+  // specifies omp_target_associate_ptr with "const void *" but specifies
+  // the associated callback with "void *".
+  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(
+      ompt_scope_beginend, associate, const_cast<void*>(host_ptr),
+      omp_get_initial_device(), device_addr, device_num, size);
+  int rc = Device.associatePtr(const_cast<void *>(host_ptr),
+                               const_cast<void *>(device_addr), size);
   DP("omp_target_associate_ptr returns %d\n", rc);
   return rc;
 }
 
-EXTERN int omp_target_disassociate_ptr(void *host_ptr, int device_num) {
+EXTERN int omp_target_disassociate_ptr(const void *host_ptr, int device_num) {
   OMPT_DEFINE_IDENT(omp_target_disassociate_ptr);
   TIMESCOPE();
   DP("Call to omp_target_disassociate_ptr with host_ptr " DPxMOD ", "
@@ -670,7 +697,8 @@ EXTERN int omp_target_disassociate_ptr(void *host_ptr, int device_num) {
   DeviceTy &Device = PM->Devices[device_num];
   void *TgtPtrBegin;
   int64_t Size;
-  int rc = Device.disassociatePtr(host_ptr, TgtPtrBegin, Size);
+  int rc = Device.disassociatePtr(const_cast<void *>(host_ptr), TgtPtrBegin,
+                                  Size);
   // OpenMP 5.1, sec. 3.8.10, p. 430, L2-9:
   // "The target-data-disassociate event occurs before a thread initiates a
   // device pointer disassociation on a target device."
@@ -686,9 +714,13 @@ EXTERN int omp_target_disassociate_ptr(void *host_ptr, int device_num) {
   // "A thread dispatches a registered ompt_callback_target_data_op_emi or
   // ompt_callback_target_data_op callback when device memory is allocated or
   // freed, as well as when data is copied to or from a device."
-  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(ompt_scope_beginend, disassociate,
-                                            host_ptr, omp_get_initial_device(),
-                                            TgtPtrBegin, device_num, Size);
+  //
+  // TODO: We have little choice but to cast away const here: OpenMP 5.1
+  // specifies omp_target_disassociate_ptr with "const void *" but specifies
+  // the associated callback with "void *".
+  OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(
+      ompt_scope_beginend, disassociate, const_cast<void *>(host_ptr),
+      omp_get_initial_device(), TgtPtrBegin, device_num, Size);
   DP("omp_target_disassociate_ptr returns %d\n", rc);
   return rc;
 }

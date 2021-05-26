@@ -29,6 +29,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/PatternMatch.h"
+#include "llvm/IR/Statepoint.h"
 
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
@@ -261,11 +262,21 @@ Value *VPIntrinsic::getMaskParam() const {
   return nullptr;
 }
 
+void VPIntrinsic::setMaskParam(Value *NewMask) {
+  auto MaskPos = GetMaskParamPos(getIntrinsicID());
+  setArgOperand(*MaskPos, NewMask);
+}
+
 Value *VPIntrinsic::getVectorLengthParam() const {
   auto vlenPos = GetVectorLengthParamPos(getIntrinsicID());
   if (vlenPos)
     return getArgOperand(vlenPos.getValue());
   return nullptr;
+}
+
+void VPIntrinsic::setVectorLengthParam(Value *NewEVL) {
+  auto EVLPos = GetVectorLengthParamPos(getIntrinsicID());
+  setArgOperand(*EVLPos, NewEVL);
 }
 
 Optional<int> VPIntrinsic::GetMaskParamPos(Intrinsic::ID IntrinsicID) {
@@ -411,4 +422,35 @@ unsigned BinaryOpIntrinsic::getNoWrapKind() const {
     return OverflowingBinaryOperator::NoSignedWrap;
   else
     return OverflowingBinaryOperator::NoUnsignedWrap;
+}
+
+const GCStatepointInst *GCProjectionInst::getStatepoint() const {
+  const Value *Token = getArgOperand(0);
+
+  // This takes care both of relocates for call statepoints and relocates
+  // on normal path of invoke statepoint.
+  if (!isa<LandingPadInst>(Token))
+    return cast<GCStatepointInst>(Token);
+
+  // This relocate is on exceptional path of an invoke statepoint
+  const BasicBlock *InvokeBB =
+    cast<Instruction>(Token)->getParent()->getUniquePredecessor();
+
+  assert(InvokeBB && "safepoints should have unique landingpads");
+  assert(InvokeBB->getTerminator() &&
+         "safepoint block should be well formed");
+
+  return cast<GCStatepointInst>(InvokeBB->getTerminator());
+}
+
+Value *GCRelocateInst::getBasePtr() const {
+  if (auto Opt = getStatepoint()->getOperandBundle(LLVMContext::OB_gc_live))
+    return *(Opt->Inputs.begin() + getBasePtrIndex());
+  return *(getStatepoint()->arg_begin() + getBasePtrIndex());
+}
+
+Value *GCRelocateInst::getDerivedPtr() const {
+  if (auto Opt = getStatepoint()->getOperandBundle(LLVMContext::OB_gc_live))
+    return *(Opt->Inputs.begin() + getDerivedPtrIndex());
+  return *(getStatepoint()->arg_begin() + getDerivedPtrIndex());
 }

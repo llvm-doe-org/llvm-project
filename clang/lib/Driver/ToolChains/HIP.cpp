@@ -108,11 +108,12 @@ void AMDGCN::constructHIPFatbinCommand(Compilation &C, const JobAction &JA,
   std::string BundlerTargetArg = "-targets=host-x86_64-unknown-linux";
   std::string BundlerInputArg = "-inputs=" NULL_FILE;
 
-  // TODO: Change the bundle ID as requested by HIP runtime.
   // For code object version 2 and 3, the offload kind in bundle ID is 'hip'
   // for backward compatibility. For code object version 4 and greater, the
   // offload kind in bundle ID is 'hipv4'.
   std::string OffloadKind = "hip";
+  if (getAMDGPUCodeObjectVersion(C.getDriver(), Args) >= 4)
+    OffloadKind = OffloadKind + "v4";
   for (const auto &II : Inputs) {
     const auto* A = II.getAction();
     BundlerTargetArg = BundlerTargetArg + "," + OffloadKind +
@@ -400,14 +401,20 @@ HIPToolChain::getHIPDeviceLibs(const llvm::opt::ArgList &DriverArgs) const {
     // If --hip-device-lib is not set, add the default bitcode libraries.
     // TODO: There are way too many flags that change this. Do we need to check
     // them all?
-    bool DAZ = DriverArgs.hasFlag(options::OPT_fcuda_flush_denormals_to_zero,
-                                  options::OPT_fno_cuda_flush_denormals_to_zero,
+    bool DAZ = DriverArgs.hasFlag(options::OPT_fgpu_flush_denormals_to_zero,
+                                  options::OPT_fno_gpu_flush_denormals_to_zero,
                                   getDefaultDenormsAreZeroForTarget(Kind));
-    // TODO: Check standard C++ flags?
-    bool FiniteOnly = false;
-    bool UnsafeMathOpt = false;
-    bool FastRelaxedMath = false;
-    bool CorrectSqrt = true;
+    bool FiniteOnly =
+        DriverArgs.hasFlag(options::OPT_ffinite_math_only,
+                           options::OPT_fno_finite_math_only, false);
+    bool UnsafeMathOpt =
+        DriverArgs.hasFlag(options::OPT_funsafe_math_optimizations,
+                           options::OPT_fno_unsafe_math_optimizations, false);
+    bool FastRelaxedMath = DriverArgs.hasFlag(
+        options::OPT_ffast_math, options::OPT_fno_fast_math, false);
+    bool CorrectSqrt = DriverArgs.hasFlag(
+        options::OPT_fhip_fp32_correctly_rounded_divide_sqrt,
+        options::OPT_fno_hip_fp32_correctly_rounded_divide_sqrt);
     bool Wave64 = isWave64(DriverArgs, Kind);
 
     if (DriverArgs.hasFlag(options::OPT_fgpu_sanitize,

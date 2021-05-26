@@ -188,7 +188,7 @@ typedef struct {
 #endif
 
 #ifdef __cplusplus
-};
+}
 #endif
 
 #endif

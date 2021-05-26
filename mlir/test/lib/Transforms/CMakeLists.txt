@@ -19,6 +19,7 @@ add_mlir_library(MLIRTestTransforms
   TestGpuRewrite.cpp
   TestInlining.cpp
   TestLinalgCodegenStrategy.cpp
+  TestLinalgElementwiseFusion.cpp
   TestLinalgFusionTransforms.cpp
   TestLinalgHoisting.cpp
   TestLinalgTransforms.cpp
@@ -33,7 +34,6 @@ add_mlir_library(MLIRTestTransforms
   TestMemRefDependenceCheck.cpp
   TestMemRefStrideCalculation.cpp
   TestSCFUtils.cpp
-  TestSparsification.cpp
   TestVectorTransforms.cpp
 
   EXCLUDE_FROM_LIBMLIR
@@ -63,6 +63,8 @@ add_mlir_library(MLIRTestTransforms
   MLIRSCF
   MLIRSCFTransforms
   MLIRStandardOpsTransforms
+  MLIRSparseTensor
+  MLIRSparseTensorTransforms
   MLIRTargetLLVMIRExport
   MLIRTestDialect
   MLIRTransformUtils

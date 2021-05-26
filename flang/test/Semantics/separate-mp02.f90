@@ -1,4 +1,4 @@
-! RUN: %S/test_errors.sh %s %t %f18
+! RUN: %S/test_errors.sh %s %t %flang_fc1
 
 ! When a module subprogram has the MODULE prefix the following must match
 ! with the corresponding separate module procedure interface body:
@@ -109,10 +109,10 @@ contains
     real, intent(out) :: y
     real :: z
   end
-  !ERROR: Dummy argument name 'z' does not match corresponding name 'y' in interface body
   module subroutine s2(x, z)
     real, intent(in) :: x
-    real, intent(out) :: y
+  !ERROR: Dummy argument name 'z' does not match corresponding name 'y' in interface body
+    real, intent(out) :: z
   end
   module subroutine s3(x, y)
     !ERROR: Dummy argument 'x' is a procedure; the corresponding argument in the interface body is not

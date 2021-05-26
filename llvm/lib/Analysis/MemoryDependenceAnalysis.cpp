@@ -457,9 +457,9 @@ MemDepResult MemoryDependenceResults::getSimplePointerDependencyFrom(
         MemoryLocation Loc;
         /*ModRefInfo MR =*/ GetLocation(II, Loc, TLI);
         AliasResult R = BatchAA.alias(Loc, MemLoc);
-        if (R == NoAlias)
+        if (R == AliasResult::NoAlias)
           continue;
-        if (R == MustAlias)
+        if (R == AliasResult::MustAlias)
           return MemDepResult::getDef(II);
         if (ID == Intrinsic::masked_load)
           continue;
@@ -505,23 +505,19 @@ MemDepResult MemoryDependenceResults::getSimplePointerDependencyFrom(
       AliasResult R = BatchAA.alias(LoadLoc, MemLoc);
 
       if (isLoad) {
-        if (R == NoAlias)
+        if (R == AliasResult::NoAlias)
           continue;
 
         // Must aliased loads are defs of each other.
-        if (R == MustAlias)
+        if (R == AliasResult::MustAlias)
           return MemDepResult::getDef(Inst);
-
-#if 0 // FIXME: Temporarily disabled. GVN is cleverly rewriting loads
-      // in terms of clobbering loads, but since it does this by looking
-      // at the clobbering load directly, it doesn't know about any
-      // phi translation that may have happened along the way.
 
         // If we have a partial alias, then return this as a clobber for the
         // client to handle.
-        if (R == PartialAlias)
+        if (R == AliasResult::PartialAlias && R.hasOffset()) {
+          ClobberOffset = R.getOffset();
           return MemDepResult::getClobber(Inst);
-#endif
+        }
 
         // Random may-alias loads don't depend on each other without a
         // dependence.
@@ -529,7 +525,7 @@ MemDepResult MemoryDependenceResults::getSimplePointerDependencyFrom(
       }
 
       // Stores don't depend on other no-aliased accesses.
-      if (R == NoAlias)
+      if (R == AliasResult::NoAlias)
         continue;
 
       // Stores don't alias loads from read-only memory.
@@ -575,9 +571,9 @@ MemDepResult MemoryDependenceResults::getSimplePointerDependencyFrom(
       // If we found a pointer, check if it could be the same as our pointer.
       AliasResult R = BatchAA.alias(StoreLoc, MemLoc);
 
-      if (R == NoAlias)
+      if (R == AliasResult::NoAlias)
         continue;
-      if (R == MustAlias)
+      if (R == AliasResult::MustAlias)
         return MemDepResult::getDef(Inst);
       if (isInvariantLoad)
         continue;
@@ -640,6 +636,7 @@ MemDepResult MemoryDependenceResults::getSimplePointerDependencyFrom(
 }
 
 MemDepResult MemoryDependenceResults::getDependency(Instruction *QueryInst) {
+  ClobberOffset = None;
   Instruction *ScanPos = QueryInst;
 
   // Check for a cached result

@@ -32,7 +32,9 @@ public:
   template <class LP> TargetInfo(LP) {
     // Having these values available in TargetInfo allows us to access them
     // without having to resort to templates.
+    magic = LP::magic;
     pageZeroSize = LP::pageZeroSize;
+    headerSize = sizeof(typename LP::mach_header);
     wordSize = LP::wordSize;
   }
 
@@ -67,10 +69,12 @@ public:
     return getRelocAttrs(type).hasAttr(bit);
   }
 
+  uint32_t magic;
   uint32_t cpuType;
   uint32_t cpuSubtype;
 
   uint64_t pageZeroSize;
+  size_t headerSize;
   size_t stubSize;
   size_t stubHelperHeaderSize;
   size_t stubHelperEntrySize;
@@ -79,15 +83,20 @@ public:
 
 TargetInfo *createX86_64TargetInfo();
 TargetInfo *createARM64TargetInfo();
+TargetInfo *createARM64_32TargetInfo();
+TargetInfo *createARMTargetInfo(uint32_t cpuSubtype);
 
 struct LP64 {
   using mach_header = llvm::MachO::mach_header_64;
   using nlist = structs::nlist_64;
   using segment_command = llvm::MachO::segment_command_64;
   using section = llvm::MachO::section_64;
+  using encryption_info_command = llvm::MachO::encryption_info_command_64;
 
   static constexpr uint32_t magic = llvm::MachO::MH_MAGIC_64;
   static constexpr uint32_t segmentLCType = llvm::MachO::LC_SEGMENT_64;
+  static constexpr uint32_t encryptionInfoLCType =
+      llvm::MachO::LC_ENCRYPTION_INFO_64;
 
   static constexpr uint64_t pageZeroSize = 1ull << 32;
   static constexpr size_t wordSize = 8;
@@ -98,9 +107,12 @@ struct ILP32 {
   using nlist = structs::nlist;
   using segment_command = llvm::MachO::segment_command;
   using section = llvm::MachO::section;
+  using encryption_info_command = llvm::MachO::encryption_info_command;
 
   static constexpr uint32_t magic = llvm::MachO::MH_MAGIC;
   static constexpr uint32_t segmentLCType = llvm::MachO::LC_SEGMENT;
+  static constexpr uint32_t encryptionInfoLCType =
+      llvm::MachO::LC_ENCRYPTION_INFO;
 
   static constexpr uint64_t pageZeroSize = 1ull << 12;
   static constexpr size_t wordSize = 4;

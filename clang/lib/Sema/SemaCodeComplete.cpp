@@ -739,18 +739,17 @@ getRequiredQualification(ASTContext &Context, const DeclContext *CurContext,
 // Filter out names reserved for the implementation if they come from a
 // system header.
 static bool shouldIgnoreDueToReservedName(const NamedDecl *ND, Sema &SemaRef) {
-  const IdentifierInfo *Id = ND->getIdentifier();
-  if (!Id)
-    return false;
-
+  ReservedIdentifierStatus Status = ND->isReserved(SemaRef.getLangOpts());
   // Ignore reserved names for compiler provided decls.
-  if (Id->isReservedName() && ND->getLocation().isInvalid())
+  if ((Status != ReservedIdentifierStatus::NotReserved) &&
+      (Status != ReservedIdentifierStatus::StartsWithUnderscoreAtGlobalScope) &&
+      ND->getLocation().isInvalid())
     return true;
 
   // For system headers ignore only double-underscore names.
   // This allows for system headers providing private symbols with a single
   // underscore.
-  if (Id->isReservedName(/*doubleUnderscoreOnly=*/true) &&
+  if (Status == ReservedIdentifierStatus::StartsWithDoubleUnderscore &&
       SemaRef.SourceMgr.isInSystemHeader(
           SemaRef.SourceMgr.getSpellingLoc(ND->getLocation())))
     return true;
@@ -5257,7 +5256,7 @@ QualType getApproximateType(const Expr *E) {
       Base = Base->getPointeeType(); // could handle unique_ptr etc here?
     RecordDecl *RD = Base.isNull() ? nullptr : getAsRecordDecl(Base);
     if (RD && RD->isCompleteDefinition()) {
-      for (const auto &Member : RD->lookup(CDSME->getMember()))
+      for (const auto *Member : RD->lookup(CDSME->getMember()))
         if (const ValueDecl *VD = llvm::dyn_cast<ValueDecl>(Member))
           return VD->getType().getNonReferenceType();
     }
@@ -5891,7 +5890,7 @@ static QualType getDesignatedType(QualType BaseType, const Designation &Desig) {
       assert(D.isFieldDesignator());
       auto *RD = getAsRecordDecl(BaseType);
       if (RD && RD->isCompleteDefinition()) {
-        for (const auto &Member : RD->lookup(D.getField()))
+        for (const auto *Member : RD->lookup(D.getField()))
           if (const FieldDecl *FD = llvm::dyn_cast<FieldDecl>(Member)) {
             NextType = FD->getType();
             break;

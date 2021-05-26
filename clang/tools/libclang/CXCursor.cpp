@@ -813,6 +813,9 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::OMPDispatchDirectiveClass:
     K = CXCursor_OMPDispatchDirective;
     break;
+  case Stmt::OMPMaskedDirectiveClass:
+    K = CXCursor_OMPMaskedDirective;
+    break;
   case Stmt::ACCUpdateDirectiveClass:
     K = CXCursor_ACCUpdateDirective;
     break;

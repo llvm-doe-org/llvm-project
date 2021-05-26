@@ -68,22 +68,22 @@
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST    tgt-cflags=                                     host-or-dev=HOST)
-// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-dev=DEV )
-// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host-or-dev=DEV )
-// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-dev=DEV )
+// RUN:   (run-if=                tgt-cflags=                                     host-or-dev=HOST)
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-dev=DEV )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host-or-dev=DEV )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-dev=DEV )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %for prt-opts {
-// RUN:     %[run-if] %clang -Xclang -verify %[prt-opt]=omp %acc-includes \
-// RUN:                      -D%[tgt] %s > %t-omp.c \
+// RUN:     %[run-if] %clang -Xclang -verify %[prt-opt]=omp %acc-includes %s \
+// RUN:                      > %t-omp.c \
 // RUN:                      -Wno-openacc-omp-map-hold \
 // RUN:                      -Wno-openacc-omp-map-present \
 // RUN:                      -Wno-openacc-omp-map-no-alloc
 // RUN:     %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:     %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:               %acc-includes -Wno-unused-function -D%[tgt] \
-// RUN:               %[tgt-cflags] -o %t %t-omp.c
+// RUN:               %acc-includes -Wno-unused-function %[tgt-cflags] -o %t \
+// RUN:               %t-omp.c %acc-libs
 // RUN:     %[run-if] %t > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
 // RUN:                         -check-prefixes=EXE,EXE-%[host-or-dev]
@@ -93,8 +93,8 @@
 // Check execution with normal compilation.
 //
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes -D%[tgt] %s \
-// RUN:                    -o %t %[tgt-cflags]
+// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s -o %t \
+// RUN:                    %[tgt-cflags]
 // RUN:   %[run-if] %t > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s \
 // RUN:                       -check-prefixes=EXE,EXE-%[host-or-dev]
@@ -104,7 +104,7 @@
 
 // expected-no-diagnostics
 
-#include <omp.h>
+#include <openacc.h>
 #include <stdbool.h>
 #include <stdio.h>
 
@@ -123,20 +123,12 @@ void setDeviceInt_(int *p, int v) {
 #define printHostInt(Var)   printHostInt_  (#Var, &Var)
 #define printDeviceInt(Var) printDeviceInt_(#Var, &Var)
 
-#if HOST
-bool isPresent(int *Var) { return true; }
-#else
-bool isPresent(int *Var) {
-  return omp_target_is_present(Var, omp_get_default_device());
-}
-#endif
-
 void printHostInt_(const char *Name, int *Var) {
   printf("    host %s %d\n", Name, *Var);
 }
 void printDeviceInt_(const char *Name, int *Var) {
   printf("  device %s ", Name);
-  if (!isPresent(Var))
+  if (!acc_is_present(Var, 0))
     printf("absent");
   else {
     #pragma acc parallel num_gangs(1)

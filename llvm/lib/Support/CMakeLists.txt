@@ -93,6 +93,7 @@ add_llvm_component_library(LLVMSupport
   ARMAttributeParser.cpp
   ARMWinEH.cpp
   Allocator.cpp
+  AutoConvert.cpp
   BinaryStreamError.cpp
   BinaryStreamReader.cpp
   BinaryStreamRef.cpp
@@ -274,5 +275,8 @@ if(LLVM_INTEGRATED_CRT_ALLOC)
 endif()
 
 if(LLVM_WITH_Z3)
-  include_directories(SYSTEM ${Z3_INCLUDE_DIR})
+  target_include_directories(LLVMSupport SYSTEM
+    PRIVATE
+    ${Z3_INCLUDE_DIR}
+    )
 endif()

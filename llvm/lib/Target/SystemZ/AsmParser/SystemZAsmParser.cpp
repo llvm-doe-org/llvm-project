@@ -460,6 +460,12 @@ private:
   // A digit in HLASM is a number from 0 to 9.
   inline bool isHLASMAlnum(char C) { return isHLASMAlpha(C) || isDigit(C); }
 
+  // Are we parsing using the AD_HLASM dialect?
+  inline bool isParsingHLASM() { return getMAIAssemblerDialect() == AD_HLASM; }
+
+  // Are we parsing using the AD_ATT dialect?
+  inline bool isParsingATT() { return getMAIAssemblerDialect() == AD_ATT; }
+
 public:
   SystemZAsmParser(const MCSubtargetInfo &sti, MCAsmParser &parser,
                    const MCInstrInfo &MII,
@@ -824,7 +830,7 @@ SystemZAsmParser::parseRegister(OperandVector &Operands, RegisterKind Kind) {
   }
 
   // Handle register names of the form %<prefix><number>
-  if (Parser.getTok().is(AsmToken::Percent)) {
+  if (isParsingATT() && Parser.getTok().is(AsmToken::Percent)) {
     if (parseRegister(Reg))
       return MatchOperand_ParseFail;
 
@@ -906,6 +912,9 @@ SystemZAsmParser::parseAnyRegister(OperandVector &Operands) {
     Operands.push_back(SystemZOperand::createImm(Register, StartLoc, EndLoc));
   }
   else {
+    if (isParsingHLASM())
+      return MatchOperand_NoMatch;
+
     Register Reg;
     if (parseRegister(Reg))
       return MatchOperand_ParseFail;
@@ -1013,7 +1022,7 @@ bool SystemZAsmParser::parseAddress(bool &HaveReg1, Register &Reg1,
   if (getLexer().is(AsmToken::LParen)) {
     Parser.Lex();
 
-    if (getLexer().is(AsmToken::Percent)) {
+    if (isParsingATT() && getLexer().is(AsmToken::Percent)) {
       // Parse the first register.
       HaveReg1 = true;
       if (parseRegister(Reg1))
@@ -1056,7 +1065,7 @@ bool SystemZAsmParser::parseAddress(bool &HaveReg1, Register &Reg1,
         if (parseIntegerRegister(Reg2, RegGR))
           return true;
       } else {
-        if (parseRegister(Reg2))
+        if (isParsingATT() && parseRegister(Reg2))
           return true;
       }
     }
@@ -1413,7 +1422,7 @@ bool SystemZAsmParser::parseOperand(OperandVector &Operands,
   // a context-dependent parse routine, which gives the required register
   // class.  The code is here to mop up other cases, like those where
   // the instruction isn't recognized.
-  if (Parser.getTok().is(AsmToken::Percent)) {
+  if (isParsingATT() && Parser.getTok().is(AsmToken::Percent)) {
     Register Reg;
     if (parseRegister(Reg))
       return true;
@@ -1533,6 +1542,10 @@ SystemZAsmParser::parsePCRel(OperandVector &Operands, int64_t MinVal,
   // For consistency with the GNU assembler, treat immediates as offsets
   // from ".".
   if (auto *CE = dyn_cast<MCConstantExpr>(Expr)) {
+    if (isParsingHLASM()) {
+      Error(StartLoc, "Expected PC-relative expression");
+      return MatchOperand_ParseFail;
+    }
     if (isOutOfRangeConstant(CE)) {
       Error(StartLoc, "offset out of range");
       return MatchOperand_ParseFail;
@@ -1606,7 +1619,7 @@ SystemZAsmParser::parsePCRel(OperandVector &Operands, int64_t MinVal,
 }
 
 bool SystemZAsmParser::isLabel(AsmToken &Token) {
-  if (getMAIAssemblerDialect() == AD_ATT)
+  if (isParsingATT())
     return true;
 
   // HLASM labels are ordinary symbols.

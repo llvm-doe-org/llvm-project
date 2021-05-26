@@ -31,6 +31,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/BinaryFormat/Magic.h"
+#include "llvm/Config/config.h"
 #include "llvm/LTO/LTO.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Option/ArgList.h"
@@ -43,7 +44,7 @@
 #include "llvm/Support/TarWriter.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/TimeProfiler.h"
-#include "llvm/TextAPI/MachO/PackedVersion.h"
+#include "llvm/TextAPI/PackedVersion.h"
 
 #include <algorithm>
 
@@ -76,16 +77,19 @@ static HeaderFileType getOutputType(const InputArgList &args) {
   }
 }
 
-static Optional<std::string>
-findAlongPathsWithExtensions(StringRef name, ArrayRef<StringRef> extensions) {
+// Search for all possible combinations of `{root}/{name}.{extension}`.
+// If \p extensions are not specified, then just search for `{root}/{name}`.
+static Optional<StringRef>
+findPathCombination(const Twine &name, const std::vector<StringRef> &roots,
+                    ArrayRef<StringRef> extensions = {""}) {
   SmallString<261> base;
-  for (StringRef dir : config->librarySearchPaths) {
+  for (StringRef dir : roots) {
     base = dir;
-    path::append(base, Twine("lib") + name);
+    path::append(base, name);
     for (StringRef ext : extensions) {
       Twine location = base + ext;
       if (fs::exists(location))
-        return location.str();
+        return saver.save(location.str());
       else
         depTracker->logFileNotFound(location);
     }
@@ -93,14 +97,29 @@ findAlongPathsWithExtensions(StringRef name, ArrayRef<StringRef> extensions) {
   return {};
 }
 
-static Optional<std::string> findLibrary(StringRef name) {
+static Optional<StringRef> findLibrary(StringRef name) {
   if (config->searchDylibsFirst) {
-    if (Optional<std::string> path =
-            findAlongPathsWithExtensions(name, {".tbd", ".dylib"}))
+    if (Optional<StringRef> path = findPathCombination(
+            "lib" + name, config->librarySearchPaths, {".tbd", ".dylib"}))
       return path;
-    return findAlongPathsWithExtensions(name, {".a"});
+    return findPathCombination("lib" + name, config->librarySearchPaths,
+                               {".a"});
   }
-  return findAlongPathsWithExtensions(name, {".tbd", ".dylib", ".a"});
+  return findPathCombination("lib" + name, config->librarySearchPaths,
+                             {".tbd", ".dylib", ".a"});
+}
+
+// If -syslibroot is specified, absolute paths to non-object files may be
+// rerooted.
+static StringRef rerootPath(StringRef path) {
+  if (!path::is_absolute(path, path::Style::posix) || path.endswith(".o"))
+    return path;
+
+  if (Optional<StringRef> rerootedPath =
+          findPathCombination(path, config->systemLibraryRoots))
+    return *rerootedPath;
+
+  return path;
 }
 
 static Optional<std::string> findFramework(StringRef name) {
@@ -337,7 +356,7 @@ static InputFile *addFile(StringRef path, bool forceLoadArchive,
 }
 
 static void addLibrary(StringRef name, bool isWeak) {
-  if (Optional<std::string> path = findLibrary(name)) {
+  if (Optional<StringRef> path = findLibrary(name)) {
     auto *dylibFile = dyn_cast_or_null<DylibFile>(addFile(*path, false));
     if (isWeak && dylibFile)
       dylibFile->forceWeakImport = true;
@@ -356,8 +375,9 @@ static void addFramework(StringRef name, bool isWeak) {
   error("framework not found for -framework " + name);
 }
 
-// Parses LC_LINKER_OPTION contents, which can add additional command line flags.
-void macho::parseLCLinkerOption(InputFile* f, unsigned argc, StringRef data) {
+// Parses LC_LINKER_OPTION contents, which can add additional command line
+// flags.
+void macho::parseLCLinkerOption(InputFile *f, unsigned argc, StringRef data) {
   SmallVector<const char *, 4> argv;
   size_t offset = 0;
   for (unsigned i = 0; i < argc && offset < data.size(); ++i) {
@@ -395,7 +415,7 @@ static void addFileList(StringRef path) {
     return;
   MemoryBufferRef mbref = *buffer;
   for (StringRef path : args::getLines(mbref))
-    addFile(path, false);
+    addFile(rerootPath(path), false);
 }
 
 // An order file has one entry per line, in the following format:
@@ -533,8 +553,36 @@ static void replaceCommonSymbols() {
     replaceSymbol<Defined>(sym, sym->getName(), isec->file, isec, /*value=*/0,
                            /*size=*/0,
                            /*isWeakDef=*/false,
-                           /*isExternal=*/true, common->privateExtern);
+                           /*isExternal=*/true, common->privateExtern,
+                           /*isThumb=*/false);
   }
+}
+
+static void initializeSectionRenameMap() {
+  if (config->dataConst) {
+    SmallVector<StringRef> v{section_names::got,
+                             section_names::authGot,
+                             section_names::authPtr,
+                             section_names::nonLazySymbolPtr,
+                             section_names::const_,
+                             section_names::cfString,
+                             section_names::moduleInitFunc,
+                             section_names::moduleTermFunc,
+                             section_names::objcClassList,
+                             section_names::objcNonLazyClassList,
+                             section_names::objcCatList,
+                             section_names::objcNonLazyCatList,
+                             section_names::objcProtoList,
+                             section_names::objcImageInfo};
+    for (StringRef s : v)
+      config->sectionRenameMap[{segment_names::data, s}] = {
+          segment_names::dataConst, s};
+  }
+  config->sectionRenameMap[{segment_names::text, section_names::staticInit}] = {
+      segment_names::text, section_names::text};
+  config->sectionRenameMap[{segment_names::import, section_names::pointers}] = {
+      config->dataConst ? segment_names::dataConst : segment_names::data,
+      section_names::nonLazySymbolPtr};
 }
 
 static inline char toLowerDash(char x) {
@@ -596,13 +644,22 @@ static TargetInfo *createTargetInfo(InputArgList &args) {
     fatal("must specify -arch");
   PlatformKind platform = parsePlatformVersion(args);
 
-  config->target = MachO::Target(getArchitectureFromName(archName), platform);
+  config->platformInfo.target =
+      MachO::Target(getArchitectureFromName(archName), platform);
 
-  switch (getCPUTypeFromArchitecture(config->target.Arch).first) {
+  uint32_t cpuType;
+  uint32_t cpuSubtype;
+  std::tie(cpuType, cpuSubtype) = getCPUTypeFromArchitecture(config->arch());
+
+  switch (cpuType) {
   case CPU_TYPE_X86_64:
     return createX86_64TargetInfo();
   case CPU_TYPE_ARM64:
     return createARM64TargetInfo();
+  case CPU_TYPE_ARM64_32:
+    return createARM64_32TargetInfo();
+  case CPU_TYPE_ARM:
+    return createARMTargetInfo(cpuSubtype);
   default:
     fatal("missing or unsupported -arch " + archName);
   }
@@ -674,27 +731,6 @@ static const char *getReproduceOption(InputArgList &args) {
   return getenv("LLD_REPRODUCE");
 }
 
-static bool isPie(InputArgList &args) {
-  if (config->outputType != MH_EXECUTE || args.hasArg(OPT_no_pie))
-    return false;
-  if (config->target.Arch == AK_arm64 || config->target.Arch == AK_arm64e)
-    return true;
-
-  // TODO: add logic here as we support more archs. E.g. i386 should default
-  // to PIE from 10.7
-  assert(config->target.Arch == AK_x86_64 || config->target.Arch == AK_x86_64h);
-
-  PlatformKind kind = config->target.Platform;
-  if (kind == PlatformKind::macOS &&
-      config->platformInfo.minimum >= VersionTuple(10, 6))
-    return true;
-
-  if (kind == PlatformKind::iOSSimulator || kind == PlatformKind::driverKit)
-    return true;
-
-  return args.hasArg(OPT_pie);
-}
-
 static void parseClangOption(StringRef opt, const Twine &msg) {
   std::string err;
   raw_string_ostream os(err);
@@ -746,6 +782,26 @@ static uint32_t parseProtection(StringRef protStr) {
     }
   }
   return prot;
+}
+
+static bool dataConstDefault(const InputArgList &args) {
+  switch (config->outputType) {
+  case MH_EXECUTE:
+    return !args.hasArg(OPT_no_pie);
+  case MH_BUNDLE:
+    // FIXME: return false when -final_name ...
+    // has prefix "/System/Library/UserEventPlugins/"
+    // or matches "/usr/libexec/locationd" "/usr/libexec/terminusd"
+    return true;
+  case MH_DYLIB:
+    return true;
+  case MH_OBJECT:
+    return false;
+  default:
+    llvm_unreachable(
+        "unsupported output type for determining data-const default");
+  }
+  return false;
 }
 
 void SymbolPatterns::clear() {
@@ -810,18 +866,18 @@ void createFiles(const InputArgList &args) {
 
     switch (opt.getID()) {
     case OPT_INPUT:
-      addFile(arg->getValue(), false);
+      addFile(rerootPath(arg->getValue()), false);
       break;
     case OPT_weak_library:
-      if (auto *dylibFile =
-              dyn_cast_or_null<DylibFile>(addFile(arg->getValue(), false)))
+      if (auto *dylibFile = dyn_cast_or_null<DylibFile>(
+              addFile(rerootPath(arg->getValue()), false)))
         dylibFile->forceWeakImport = true;
       break;
     case OPT_filelist:
       addFileList(arg->getValue());
       break;
     case OPT_force_load:
-      addFile(arg->getValue(), true);
+      addFile(rerootPath(arg->getValue()), true);
       break;
     case OPT_l:
     case OPT_weak_l:
@@ -848,9 +904,13 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
   stderrOS.enable_colors(stderrOS.has_colors());
   // TODO: Set up error handler properly, e.g. the errorLimitExceededMsg
 
-
   MachOOptTable parser;
   InputArgList args = parser.parse(argsArr.slice(1));
+
+  errorHandler().errorLimitExceededMsg =
+      "too many errors emitted, stopping now "
+      "(use --error-limit=0 to see all errors)";
+  errorHandler().errorLimit = args::getInteger(args, OPT_error_limit_eq, 20);
 
   if (args.hasArg(OPT_help_hidden)) {
     parser.printHelp(argsArr[0], /*showHidden=*/true);
@@ -893,8 +953,12 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
       error(arg->getSpelling() + ": expected a positive integer, but got '" +
             arg->getValue() + "'");
     parallel::strategy = hardware_concurrency(threads);
-    // FIXME: use this to configure ThinLTO concurrency too
+    config->thinLTOJobs = v;
   }
+  if (auto *arg = args.getLastArg(OPT_thinlto_jobs_eq))
+    config->thinLTOJobs = arg->getValue();
+  if (!get_threadpool_strategy(config->thinLTOJobs))
+    error("--thinlto-jobs: invalid job count: " + config->thinLTOJobs);
 
   config->entry = symtab->addUndefined(args.getLastArgValue(OPT_e, "_main"),
                                        /*file=*/nullptr,
@@ -909,6 +973,7 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
 
   config->mapFile = args.getLastArgValue(OPT_map);
   config->outputFile = args.getLastArgValue(OPT_o, "a.out");
+  config->astPaths = args.getAllArgValues(OPT_add_ast_path);
   config->headerPad = args::getHex(args, OPT_headerpad, /*Default=*/32);
   config->headerPadMaxInstallNames =
       args.hasArg(OPT_headerpad_max_install_names);
@@ -930,6 +995,18 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
   config->demangle = args.hasArg(OPT_demangle);
   config->implicitDylibs = !args.hasArg(OPT_no_implicit_dylibs);
   config->emitFunctionStarts = !args.hasArg(OPT_no_function_starts);
+  config->emitBitcodeBundle = args.hasArg(OPT_bitcode_bundle);
+
+  std::array<PlatformKind, 3> encryptablePlatforms{
+      PlatformKind::iOS, PlatformKind::watchOS, PlatformKind::tvOS};
+  config->emitEncryptionInfo =
+      args.hasFlag(OPT_encryptable, OPT_no_encryption,
+                   is_contained(encryptablePlatforms, config->platform()));
+
+#ifndef HAVE_LIBXAR
+  if (config->emitBitcodeBundle)
+    error("-bitcode_bundle unsupported because LLD wasn't built with libxar");
+#endif
 
   if (const Arg *arg = args.getLastArg(OPT_install_name)) {
     if (config->outputType != MH_DYLIB)
@@ -972,6 +1049,11 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
       parseDylibVersion(args, OPT_compatibility_version);
   config->dylibCurrentVersion = parseDylibVersion(args, OPT_current_version);
 
+  config->dataConst =
+      args.hasFlag(OPT_data_const, OPT_no_data_const, dataConstDefault(args));
+  // Populate config->sectionRenameMap with builtin default renames.
+  // Options -rename_section and -rename_segment are able to override.
+  initializeSectionRenameMap();
   // Reject every special character except '.' and '$'
   // TODO(gkm): verify that this is the proper set of invalid chars
   StringRef invalidNameChars("!\"#%&'()*+,-/:;<=>?@[\\]^`{|}~");
@@ -994,7 +1076,7 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     StringRef segName = arg->getValue(0);
     uint32_t maxProt = parseProtection(arg->getValue(1));
     uint32_t initProt = parseProtection(arg->getValue(2));
-    if (maxProt != initProt && config->target.Arch != AK_i386)
+    if (maxProt != initProt && config->arch() != AK_i386)
       error("invalid argument '" + arg->getAsString(args) +
             "': max and init must be the same for non-i386 archs");
     if (segName == segment_names::linkEdit)
@@ -1016,24 +1098,25 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
 
   config->adhocCodesign = args.hasFlag(
       OPT_adhoc_codesign, OPT_no_adhoc_codesign,
-      (config->target.Arch == AK_arm64 || config->target.Arch == AK_arm64e) &&
-          config->target.Platform == PlatformKind::macOS);
+      (config->arch() == AK_arm64 || config->arch() == AK_arm64e) &&
+          config->platform() == PlatformKind::macOS);
 
   if (args.hasArg(OPT_v)) {
     message(getLLDVersion());
     message(StringRef("Library search paths:") +
-            (config->librarySearchPaths.size()
-                 ? "\n\t" + join(config->librarySearchPaths, "\n\t")
-                 : ""));
+            (config->librarySearchPaths.empty()
+                 ? ""
+                 : "\n\t" + join(config->librarySearchPaths, "\n\t")));
     message(StringRef("Framework search paths:") +
-            (config->frameworkSearchPaths.size()
-                 ? "\n\t" + join(config->frameworkSearchPaths, "\n\t")
-                 : ""));
+            (config->frameworkSearchPaths.empty()
+                 ? ""
+                 : "\n\t" + join(config->frameworkSearchPaths, "\n\t")));
   }
 
   config->progName = argsArr[0];
 
-  config->timeTraceEnabled = args.hasArg(OPT_time_trace);
+  config->timeTraceEnabled = args.hasArg(
+      OPT_time_trace, OPT_time_trace_granularity_eq, OPT_time_trace_file_eq);
   config->timeTraceGranularity =
       args::getInteger(args, OPT_time_trace_granularity_eq, 500);
 
@@ -1048,21 +1131,28 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
     createFiles(args);
 
     config->isPic = config->outputType == MH_DYLIB ||
-                    config->outputType == MH_BUNDLE || isPie(args);
+                    config->outputType == MH_BUNDLE ||
+                    (config->outputType == MH_EXECUTE &&
+                     args.hasFlag(OPT_pie, OPT_no_pie, true));
 
     // Now that all dylibs have been loaded, search for those that should be
     // re-exported.
-    for (const Arg *arg : args.filtered(OPT_sub_library, OPT_sub_umbrella)) {
-      config->hasReexports = true;
-      StringRef searchName = arg->getValue();
-      std::vector<StringRef> extensions;
-      if (arg->getOption().getID() == OPT_sub_library)
-        extensions = {".dylib", ".tbd"};
-      else
-        extensions = {".tbd"};
-      if (!markReexport(searchName, extensions))
-        error(arg->getSpelling() + " " + searchName +
-              " does not match a supplied dylib");
+    {
+      auto reexportHandler = [](const Arg *arg,
+                                const std::vector<StringRef> &extensions) {
+        config->hasReexports = true;
+        StringRef searchName = arg->getValue();
+        if (!markReexport(searchName, extensions))
+          error(arg->getSpelling() + " " + searchName +
+                " does not match a supplied dylib");
+      };
+      std::vector<StringRef> extensions = {".tbd"};
+      for (const Arg *arg : args.filtered(OPT_sub_umbrella))
+        reexportHandler(arg, extensions);
+
+      extensions.push_back(".dylib");
+      for (const Arg *arg : args.filtered(OPT_sub_library))
+        reexportHandler(arg, extensions);
     }
 
     // Parse LTO options.
@@ -1104,11 +1194,7 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
             "\n>>> referenced from option -exported_symbol(s_list)");
     }
 
-    if (target->wordSize == 8)
-      createSyntheticSections<LP64>();
-    else
-      createSyntheticSections<ILP32>();
-
+    createSyntheticSections();
     createSyntheticSymbols();
 
     for (const Arg *arg : args.filtered(OPT_sectcreate)) {
@@ -1124,7 +1210,7 @@ bool macho::link(ArrayRef<const char *> argsArr, bool canExitEarly,
       TimeTraceScope timeScope("Gathering input sections");
       // Gather all InputSections into one vector.
       for (const InputFile *file : inputFiles) {
-        for (const SubsectionMapping &map : file->subsections)
+        for (const SubsectionMap &map : file->subsections)
           for (const SubsectionEntry &subsectionEntry : map)
             inputSections.push_back(subsectionEntry.isec);
       }

@@ -82,16 +82,38 @@ public:
 
 // Debug logging for transformation and analysis passes.
 class PrintPassInstrumentation {
+  void printWithIdent(bool Expand, const Twine &Msg);
+
 public:
   PrintPassInstrumentation(bool DebugLogging) : DebugLogging(DebugLogging) {}
   void registerCallbacks(PassInstrumentationCallbacks &PIC);
 
 private:
   bool DebugLogging;
+  int Ident = 0;
+};
+
+// Pass structure dumper
+class PassStructurePrinter {
+  int Ident = 0;
+  void printWithIdent(bool Expand, const Twine &Msg);
+
+public:
+  PassStructurePrinter() {}
+  void registerCallbacks(PassInstrumentationCallbacks &PIC);
 };
 
 class PreservedCFGCheckerInstrumentation {
-private:
+public:
+  // Keeps sticky poisoned flag for the given basic block once it has been
+  // deleted or RAUWed.
+  struct BBGuard final : public CallbackVH {
+    BBGuard(const BasicBlock *BB) : CallbackVH(BB) {}
+    void deleted() override { CallbackVH::deleted(); }
+    void allUsesReplacedWith(Value *) override { CallbackVH::deleted(); }
+    bool isPoisoned() const { return !getValPtr(); }
+  };
+
   // CFG is a map BB -> {(Succ, Multiplicity)}, where BB is a non-leaf basic
   // block, {(Succ, Multiplicity)} set of all pairs of the block's successors
   // and the multiplicity of the edge (BB->Succ). As the mapped sets are
@@ -101,40 +123,34 @@ private:
   // in the Graph (BBGuard). That is if any of the block is deleted or RAUWed
   // then the CFG is treated poisoned and no block pointer of the Graph is used.
   struct CFG {
-    struct BBGuard final : public CallbackVH {
-      BBGuard(const BasicBlock *BB) : CallbackVH(BB) {}
-      void deleted() override { CallbackVH::deleted(); }
-      void allUsesReplacedWith(Value *) override { CallbackVH::deleted(); }
-      bool isPoisoned() const { return !getValPtr(); }
-    };
-
     Optional<DenseMap<intptr_t, BBGuard>> BBGuards;
     DenseMap<const BasicBlock *, DenseMap<const BasicBlock *, unsigned>> Graph;
 
-    CFG(const Function *F, bool TrackBBLifetime = false);
+    CFG(const Function *F, bool TrackBBLifetime);
 
     bool operator==(const CFG &G) const {
       return !isPoisoned() && !G.isPoisoned() && Graph == G.Graph;
     }
 
     bool isPoisoned() const {
-      if (BBGuards)
-        for (auto &BB : *BBGuards) {
-          if (BB.second.isPoisoned())
-            return true;
-        }
-      return false;
+      return BBGuards &&
+             std::any_of(BBGuards->begin(), BBGuards->end(),
+                         [](const auto &BB) { return BB.second.isPoisoned(); });
     }
 
     static void printDiff(raw_ostream &out, const CFG &Before,
                           const CFG &After);
+    bool invalidate(Function &F, const PreservedAnalyses &PA,
+                    FunctionAnalysisManager::Invalidator &);
   };
 
-  SmallVector<std::pair<StringRef, Optional<CFG>>, 8> GraphStackBefore;
+#ifndef NDEBUG
+  SmallVector<StringRef, 8> PassStack;
+#endif
 
-public:
   static cl::opt<bool> VerifyPreservedCFG;
-  void registerCallbacks(PassInstrumentationCallbacks &PIC);
+  void registerCallbacks(PassInstrumentationCallbacks &PIC,
+                         FunctionAnalysisManager &FAM);
 };
 
 // Base class for classes that report changes to the IR.
@@ -398,6 +414,7 @@ public:
 class StandardInstrumentations {
   PrintIRInstrumentation PrintIR;
   PrintPassInstrumentation PrintPass;
+  PassStructurePrinter StructurePrinter;
   TimePassesHandler TimePasses;
   OptNoneInstrumentation OptNone;
   OptBisectInstrumentation OptBisect;
@@ -412,7 +429,10 @@ class StandardInstrumentations {
 public:
   StandardInstrumentations(bool DebugLogging, bool VerifyEach = false);
 
-  void registerCallbacks(PassInstrumentationCallbacks &PIC);
+  // Register all the standard instrumentation callbacks. If \p FAM is nullptr
+  // then PreservedCFGChecker is not enabled.
+  void registerCallbacks(PassInstrumentationCallbacks &PIC,
+                         FunctionAnalysisManager *FAM = nullptr);
 
   TimePassesHandler &getTimePasses() { return TimePasses; }
 };

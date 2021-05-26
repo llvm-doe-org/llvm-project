@@ -424,6 +424,7 @@ static Instruction *foldCttzCtlz(IntrinsicInst &II, InstCombinerImpl &IC) {
          "Expected cttz or ctlz intrinsic");
   bool IsTZ = II.getIntrinsicID() == Intrinsic::cttz;
   Value *Op0 = II.getArgOperand(0);
+  Value *Op1 = II.getArgOperand(1);
   Value *X;
   // ctlz(bitreverse(x)) -> cttz(x)
   // cttz(bitreverse(x)) -> ctlz(x)
@@ -437,6 +438,23 @@ static Instruction *foldCttzCtlz(IntrinsicInst &II, InstCombinerImpl &IC) {
     // cttz(-x) -> cttz(x)
     if (match(Op0, m_Neg(m_Value(X))))
       return IC.replaceOperand(II, 0, X);
+
+    // cttz(sext(x)) -> cttz(zext(x))
+    if (match(Op0, m_OneUse(m_SExt(m_Value(X))))) {
+      auto *Zext = IC.Builder.CreateZExt(X, II.getType());
+      auto *CttzZext =
+          IC.Builder.CreateBinaryIntrinsic(Intrinsic::cttz, Zext, Op1);
+      return IC.replaceInstUsesWith(II, CttzZext);
+    }
+
+    // Zext doesn't change the number of trailing zeros, so narrow:
+    // cttz(zext(x)) -> zext(cttz(x)) if the 'ZeroIsUndef' parameter is 'true'.
+    if (match(Op0, m_OneUse(m_ZExt(m_Value(X)))) && match(Op1, m_One())) {
+      auto *Cttz = IC.Builder.CreateBinaryIntrinsic(Intrinsic::cttz, X,
+                                                    IC.Builder.getTrue());
+      auto *ZextCttz = IC.Builder.CreateZExt(Cttz, II.getType());
+      return IC.replaceInstUsesWith(II, ZextCttz);
+    }
 
     // cttz(abs(x)) -> cttz(x)
     // cttz(nabs(x)) -> cttz(x)
@@ -497,11 +515,17 @@ static Instruction *foldCtpop(IntrinsicInst &II, InstCombinerImpl &IC) {
   Type *Ty = II.getType();
   unsigned BitWidth = Ty->getScalarSizeInBits();
   Value *Op0 = II.getArgOperand(0);
-  Value *X;
+  Value *X, *Y;
 
   // ctpop(bitreverse(x)) -> ctpop(x)
   // ctpop(bswap(x)) -> ctpop(x)
   if (match(Op0, m_BitReverse(m_Value(X))) || match(Op0, m_BSwap(m_Value(X))))
+    return IC.replaceOperand(II, 0, X);
+
+  // ctpop(rot(x)) -> ctpop(x)
+  if ((match(Op0, m_FShl(m_Value(X), m_Value(Y), m_Value())) ||
+       match(Op0, m_FShr(m_Value(X), m_Value(Y), m_Value()))) &&
+      X == Y)
     return IC.replaceOperand(II, 0, X);
 
   // ctpop(x | -x) -> bitwidth - cttz(x, false)
@@ -520,6 +544,13 @@ static Instruction *foldCtpop(IntrinsicInst &II, InstCombinerImpl &IC) {
     Function *F =
         Intrinsic::getDeclaration(II.getModule(), Intrinsic::cttz, Ty);
     return CallInst::Create(F, {X, IC.Builder.getFalse()});
+  }
+
+  // Zext doesn't change the number of set bits, so narrow:
+  // ctpop (zext X) --> zext (ctpop X)
+  if (match(Op0, m_OneUse(m_ZExt(m_Value(X))))) {
+    Value *NarrowPop = IC.Builder.CreateUnaryIntrinsic(Intrinsic::ctpop, X);
+    return CastInst::Create(Instruction::ZExt, NarrowPop, Ty);
   }
 
   KnownBits Known(BitWidth);
@@ -690,6 +721,47 @@ static Optional<bool> getKnownSign(Value *Op, Instruction *CxtI,
 
   return isImpliedByDomCondition(
       ICmpInst::ICMP_SLT, Op, Constant::getNullValue(Op->getType()), CxtI, DL);
+}
+
+/// If we have a clamp pattern like max (min X, 42), 41 -- where the output
+/// can only be one of two possible constant values -- turn that into a select
+/// of constants.
+static Instruction *foldClampRangeOfTwo(IntrinsicInst *II,
+                                        InstCombiner::BuilderTy &Builder) {
+  Value *I0 = II->getArgOperand(0), *I1 = II->getArgOperand(1);
+  Value *X;
+  const APInt *C0, *C1;
+  if (!match(I1, m_APInt(C1)) || !I0->hasOneUse())
+    return nullptr;
+
+  CmpInst::Predicate Pred = CmpInst::BAD_ICMP_PREDICATE;
+  switch (II->getIntrinsicID()) {
+  case Intrinsic::smax:
+    if (match(I0, m_SMin(m_Value(X), m_APInt(C0))) && *C0 == *C1 + 1)
+      Pred = ICmpInst::ICMP_SGT;
+    break;
+  case Intrinsic::smin:
+    if (match(I0, m_SMax(m_Value(X), m_APInt(C0))) && *C1 == *C0 + 1)
+      Pred = ICmpInst::ICMP_SLT;
+    break;
+  case Intrinsic::umax:
+    if (match(I0, m_UMin(m_Value(X), m_APInt(C0))) && *C0 == *C1 + 1)
+      Pred = ICmpInst::ICMP_UGT;
+    break;
+  case Intrinsic::umin:
+    if (match(I0, m_UMax(m_Value(X), m_APInt(C0))) && *C1 == *C0 + 1)
+      Pred = ICmpInst::ICMP_ULT;
+    break;
+  default:
+    llvm_unreachable("Expected min/max intrinsic");
+  }
+  if (Pred == CmpInst::BAD_ICMP_PREDICATE)
+    return nullptr;
+
+  // max (min X, 42), 41 --> X > 41 ? 42 : 41
+  // min (max X, 42), 43 --> X < 43 ? 42 : 43
+  Value *Cmp = Builder.CreateICmp(Pred, X, I1);
+  return SelectInst::Create(Cmp, ConstantInt::get(II->getType(), *C0), I1);
 }
 
 /// CallInst simplification. This mostly only handles folding of intrinsic
@@ -910,6 +982,34 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
         return BinaryOperator::CreateNot(InvMaxMin);
       }
     }
+
+    // smax(X, -X) --> abs(X)
+    // smin(X, -X) --> -abs(X)
+    // umax(X, -X) --> -abs(X)
+    // umin(X, -X) --> abs(X)
+    if (isKnownNegation(I0, I1)) {
+      // We can choose either operand as the input to abs(), but if we can
+      // eliminate the only use of a value, that's better for subsequent
+      // transforms/analysis.
+      if (I0->hasOneUse() && !I1->hasOneUse())
+        std::swap(I0, I1);
+
+      // This is some variant of abs(). See if we can propagate 'nsw' to the abs
+      // operation and potentially its negation.
+      bool IntMinIsPoison = isKnownNegation(I0, I1, /* NeedNSW */ true);
+      Value *Abs = Builder.CreateBinaryIntrinsic(
+          Intrinsic::abs, I0,
+          ConstantInt::getBool(II->getContext(), IntMinIsPoison));
+
+      // We don't have a "nabs" intrinsic, so negate if needed based on the
+      // max/min operation.
+      if (IID == Intrinsic::smin || IID == Intrinsic::umax)
+        Abs = Builder.CreateNeg(Abs, "nabs", /* NUW */ false, IntMinIsPoison);
+      return replaceInstUsesWith(CI, Abs);
+    }
+
+    if (Instruction *Sel = foldClampRangeOfTwo(II, Builder))
+      return Sel;
 
     break;
   }
@@ -1557,8 +1657,8 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
     /// argument and remove the assume if it becomes useless.
     /// always returns nullptr for use as a return values.
     auto RemoveConditionFromAssume = [&](Instruction *Assume) -> Instruction * {
-      assert(isa<IntrinsicInst>(Assume));
-      if (isAssumeWithEmptyBundle(*cast<IntrinsicInst>(II)))
+      assert(isa<AssumeInst>(Assume));
+      if (isAssumeWithEmptyBundle(*cast<AssumeInst>(II)))
         return eraseInstFromFunction(CI);
       replaceUse(II->getOperandUse(0), ConstantInt::getTrue(II->getContext()));
       return nullptr;
@@ -1615,7 +1715,7 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
     if (EnableKnowledgeRetention &&
         match(IIOperand, m_Cmp(Pred, m_Value(A), m_Zero())) &&
         Pred == CmpInst::ICMP_NE && A->getType()->isPointerTy()) {
-      if (IntrinsicInst *Replacement = buildAssumeFromKnowledge(
+      if (auto *Replacement = buildAssumeFromKnowledge(
               {RetainedKnowledge{Attribute::NonNull, 0, A}}, Next, &AC, &DT)) {
 
         Replacement->insertBefore(Next);
@@ -1647,7 +1747,7 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
           /// the offset.
           RetainedKnowledge RK{Attribute::Alignment,
                                (unsigned)MinAlign(Offset, AlignMask + 1), A};
-          if (IntrinsicInst *Replacement =
+          if (auto *Replacement =
                   buildAssumeFromKnowledge(RK, Next, &AC, &DT)) {
 
             Replacement->insertAfter(II);
@@ -1662,13 +1762,16 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
     if (EnableKnowledgeRetention && II->hasOperandBundles()) {
       for (unsigned Idx = 0; Idx < II->getNumOperandBundles(); Idx++) {
         auto &BOI = II->bundle_op_info_begin()[Idx];
-        RetainedKnowledge RK = llvm::getKnowledgeFromBundle(*II, BOI);
+        RetainedKnowledge RK =
+          llvm::getKnowledgeFromBundle(cast<AssumeInst>(*II), BOI);
         if (BOI.End - BOI.Begin > 2)
           continue; // Prevent reducing knowledge in an align with offset since
                     // extracting a RetainedKnowledge form them looses offset
                     // information
-        RetainedKnowledge CanonRK = llvm::simplifyRetainedKnowledge(
-            II, RK, &getAssumptionCache(), &getDominatorTree());
+        RetainedKnowledge CanonRK =
+          llvm::simplifyRetainedKnowledge(cast<AssumeInst>(II), RK,
+                                          &getAssumptionCache(),
+                                          &getDominatorTree());
         if (CanonRK == RK)
           continue;
         if (!CanonRK) {
@@ -1694,12 +1797,12 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
     // then this one is redundant, and should be removed.
     KnownBits Known(1);
     computeKnownBits(IIOperand, Known, 0, II);
-    if (Known.isAllOnes() && isAssumeWithEmptyBundle(*II))
+    if (Known.isAllOnes() && isAssumeWithEmptyBundle(cast<AssumeInst>(*II)))
       return eraseInstFromFunction(*II);
 
     // Update the cache of affected values for this assumption (we might be
     // here because we just simplified the condition).
-    AC.updateAffectedValues(II);
+    AC.updateAffectedValues(cast<AssumeInst>(II));
     break;
   }
   case Intrinsic::experimental_guard: {
@@ -2021,7 +2124,7 @@ static IntrinsicInst *findInitTrampoline(Value *Callee) {
   return nullptr;
 }
 
-static void annotateAnyAllocSite(CallBase &Call, const TargetLibraryInfo *TLI) {
+void InstCombinerImpl::annotateAnyAllocSite(CallBase &Call, const TargetLibraryInfo *TLI) {
   unsigned NumArgs = Call.getNumArgOperands();
   ConstantInt *Op0C = dyn_cast<ConstantInt>(Call.getOperand(0));
   ConstantInt *Op1C =
@@ -2040,17 +2143,21 @@ static void annotateAnyAllocSite(CallBase &Call, const TargetLibraryInfo *TLI) {
       Call.addAttribute(AttributeList::ReturnIndex,
                         Attribute::getWithDereferenceableOrNullBytes(
                             Call.getContext(), Op0C->getZExtValue()));
-  } else if (isAlignedAllocLikeFn(&Call, TLI) && Op1C) {
-    Call.addAttribute(AttributeList::ReturnIndex,
-                      Attribute::getWithDereferenceableOrNullBytes(
-                          Call.getContext(), Op1C->getZExtValue()));
+  } else if (isAlignedAllocLikeFn(&Call, TLI)) {
+    if (Op1C)
+      Call.addAttribute(AttributeList::ReturnIndex,
+                        Attribute::getWithDereferenceableOrNullBytes(
+                            Call.getContext(), Op1C->getZExtValue()));
     // Add alignment attribute if alignment is a power of two constant.
-    if (Op0C && Op0C->getValue().ult(llvm::Value::MaximumAlignment)) {
+    if (Op0C && Op0C->getValue().ult(llvm::Value::MaximumAlignment) &&
+        isKnownNonZero(Call.getOperand(1), DL, 0, &AC, &Call, &DT)) {
       uint64_t AlignmentVal = Op0C->getZExtValue();
-      if (llvm::isPowerOf2_64(AlignmentVal))
+      if (llvm::isPowerOf2_64(AlignmentVal)) {
+        Call.removeAttribute(AttributeList::ReturnIndex, Attribute::Alignment);
         Call.addAttribute(AttributeList::ReturnIndex,
                           Attribute::getWithAlignment(Call.getContext(),
                                                       Align(AlignmentVal)));
+      }
     }
   } else if (isReallocLikeFn(&Call, TLI) && Op1C) {
     Call.addAttribute(AttributeList::ReturnIndex,
@@ -2130,9 +2237,14 @@ Instruction *InstCombinerImpl::visitCallBase(CallBase &Call) {
       return &Call;
     }
 
-    // If the call and callee calling conventions don't match, this call must
-    // be unreachable, as the call is undefined.
-    if (CalleeF->getCallingConv() != Call.getCallingConv() &&
+    // If the call and callee calling conventions don't match, and neither one
+    // of the calling conventions is compatible with C calling convention
+    // this call must be unreachable, as the call is undefined.
+    if ((CalleeF->getCallingConv() != Call.getCallingConv() &&
+         !(CalleeF->getCallingConv() == llvm::CallingConv::C &&
+           TargetLibraryInfoImpl::isCallingConvCCompatible(&Call)) &&
+         !(Call.getCallingConv() == llvm::CallingConv::C &&
+           TargetLibraryInfoImpl::isCallingConvCCompatible(CalleeF))) &&
         // Only do this for calls to a function with a body.  A prototype may
         // not actually end up matching the implementation's calling conv for a
         // variety of reasons (e.g. it may be written in assembly).

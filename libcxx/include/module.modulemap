@@ -409,6 +409,13 @@ module std [system] {
     export initializer_list
     export *
   }
+  module ranges {
+    header "ranges"
+    export compare
+    export initializer_list
+    export iterator
+    export *
+  }
   module ratio {
     header "ratio"
     export *

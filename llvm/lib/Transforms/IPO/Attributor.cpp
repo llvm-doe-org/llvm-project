@@ -63,8 +63,6 @@ STATISTIC(NumAttributesValidFixpoint,
           "Number of abstract attributes in a valid fixpoint state");
 STATISTIC(NumAttributesManifested,
           "Number of abstract attributes manifested in IR");
-STATISTIC(NumAttributesFixedDueToRequiredDependences,
-          "Number of abstract attributes fixed due to required dependences");
 
 // TODO: Determine a good default value.
 //
@@ -1910,9 +1908,8 @@ void InformationCache::initializeInformationCache(const Function &CF,
       // Calls are interesting on their own, additionally:
       // For `llvm.assume` calls we also fill the KnowledgeMap as we find them.
       // For `must-tail` calls we remember the caller and callee.
-      if (IntrinsicInst *Assume = dyn_cast<IntrinsicInst>(&I)) {
-        if (Assume->getIntrinsicID() == Intrinsic::assume)
-          fillMapFromAssume(*Assume, KnowledgeMap);
+      if (auto *Assume = dyn_cast<AssumeInst>(&I)) {
+        fillMapFromAssume(*Assume, KnowledgeMap);
       } else if (cast<CallInst>(I).isMustTailCall()) {
         FI.ContainsMustTailCall = true;
         if (const Function *Callee = cast<CallInst>(I).getCalledFunction())
@@ -2413,7 +2410,7 @@ void AADepGraph::dumpGraph() {
 
   std::error_code EC;
 
-  raw_fd_ostream File(Filename, EC, sys::fs::OF_Text);
+  raw_fd_ostream File(Filename, EC, sys::fs::OF_TextWithCRLF);
   if (!EC)
     llvm::WriteGraph(File, this);
 

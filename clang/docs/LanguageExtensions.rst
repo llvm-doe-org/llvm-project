@@ -383,6 +383,18 @@ Builtin Macros
   Defined to a string that captures the Clang marketing version, including the
   Subversion tag or revision number, e.g., "``1.5 (trunk 102332)``".
 
+``__clang_literal_encoding__``
+  Defined to a narrow string literal that represents the current encoding of
+  narrow string literals, e.g., ``"hello"``. This macro typically expands to
+  "UTF-8" (but may change in the future if the
+  ``-fexec-charset="Encoding-Name"`` option is implemented.)
+
+``__clang_wide_literal_encoding__``
+  Defined to a narrow string literal that represents the current encoding of
+  wide string literals, e.g., ``L"hello"``. This macro typically expands to
+  "UTF-16" or "UTF-32" (but may change in the future if the
+  ``-fwide-exec-charset="Encoding-Name"`` option is implemented.)
+
 .. _langext-vectors:
 
 Vectors and Extended Vectors
@@ -1800,6 +1812,23 @@ supporting the variadic arguments e.g. majority of CPU targets.
 
   #pragma OPENCL EXTENSION __cl_clang_variadic_functions : disable
   void bar(int a, ...); // error - variadic prototype is not allowed
+
+Legacy 1.x atomics with generic address space
+---------------------------------------------
+
+Clang allows use of atomic functions from the OpenCL 1.x standards
+with the generic address space pointer in C++ for OpenCL mode.
+
+This is a non-portable feature and might not be supported by all
+targets.
+
+**Example of Use**:
+
+.. code-block:: c++
+
+  void foo(__generic volatile unsigned int* a) {
+    atomic_add(a, 1);
+  }
 
 Builtin Functions
 =================

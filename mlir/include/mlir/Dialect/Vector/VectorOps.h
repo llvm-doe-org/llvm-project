@@ -88,6 +88,14 @@ void populateVectorSlicesLoweringPatterns(RewritePatternSet &patterns);
 /// `vector.store` and `vector.broadcast`.
 void populateVectorTransferLoweringPatterns(RewritePatternSet &patterns);
 
+/// These patterns materialize masks for various vector ops such as transfers.
+void populateVectorMaskMaterializationPatterns(RewritePatternSet &patterns,
+                                               bool enableIndexOptimizations);
+
+// Collect a set of patterns to convert vector.multi_reduction op into
+// a sequence of vector.reduction ops.
+void populateVectorMultiReductionLoweringPatterns(RewritePatternSet &patterns);
+
 /// An attribute that specifies the combining function for `vector.contract`,
 /// and `vector.reduction`.
 class CombiningKindAttr
@@ -165,11 +173,15 @@ struct VectorTransformsOptions {
 ///   ShapeCastOp2DDownCastRewritePattern,
 ///   ShapeCastOp2DUpCastRewritePattern
 ///   BroadcastOpLowering,
-///   TransposeOpLowering
 ///   OuterproductOpLowering
 /// These transformation express higher level vector ops in terms of more
 /// elementary extraction, insertion, reduction, product, and broadcast ops.
 void populateVectorContractLoweringPatterns(
+    RewritePatternSet &patterns,
+    VectorTransformsOptions vectorTransformOptions = VectorTransformsOptions());
+
+/// Insert TransposeLowering patterns into extraction/insertion.
+void populateVectorTransposeLoweringPatterns(
     RewritePatternSet &patterns,
     VectorTransformsOptions vectorTransformOptions = VectorTransformsOptions());
 

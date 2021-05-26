@@ -2648,6 +2648,13 @@ void CastOperation::CheckCXXCStyleCast(bool FunctionalStyle,
       return;
   }
 
+  if (DestType->getAs<MatrixType>() ||
+      SrcExpr.get()->getType()->getAs<MatrixType>()) {
+    if (Self.CheckMatrixCast(OpRange, DestType, SrcExpr.get()->getType(), Kind))
+      SrcExpr = ExprError();
+    return;
+  }
+
   // AltiVec vector initialization with a single literal.
   if (const VectorType *vecTy = DestType->getAs<VectorType>())
     if (vecTy->getVectorKind() == VectorType::AltiVecVector
@@ -2859,7 +2866,8 @@ void CastOperation::CheckCStyleCast() {
     return;
   }
 
-  if (!DestType->isScalarType() && !DestType->isVectorType()) {
+  if (!DestType->isScalarType() && !DestType->isVectorType() &&
+      !DestType->isMatrixType()) {
     const RecordType *DestRecordTy = DestType->getAs<RecordType>();
 
     if (DestRecordTy && Self.Context.hasSameUnqualifiedType(DestType, SrcType)){
@@ -2910,10 +2918,11 @@ void CastOperation::CheckCStyleCast() {
     return;
   }
 
-  // The type we're casting to is known to be a scalar or vector.
+  // The type we're casting to is known to be a scalar, a vector, or a matrix.
 
-  // Require the operand to be a scalar or vector.
-  if (!SrcType->isScalarType() && !SrcType->isVectorType()) {
+  // Require the operand to be a scalar, a vector, or a matrix.
+  if (!SrcType->isScalarType() && !SrcType->isVectorType() &&
+      !SrcType->isMatrixType()) {
     Self.Diag(SrcExpr.get()->getExprLoc(),
               diag::err_typecheck_expect_scalar_operand)
       << SrcType << SrcExpr.get()->getSourceRange();
@@ -2923,6 +2932,12 @@ void CastOperation::CheckCStyleCast() {
 
   if (DestType->isExtVectorType()) {
     SrcExpr = Self.CheckExtVectorCast(OpRange, DestType, SrcExpr.get(), Kind);
+    return;
+  }
+
+  if (DestType->getAs<MatrixType>() || SrcType->getAs<MatrixType>()) {
+    if (Self.CheckMatrixCast(OpRange, DestType, SrcType, Kind))
+      SrcExpr = ExprError();
     return;
   }
 

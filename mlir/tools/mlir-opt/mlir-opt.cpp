@@ -77,6 +77,8 @@ void registerTestGpuParallelLoopMappingPass();
 void registerTestIRVisitorsPass();
 void registerTestInterfaces();
 void registerTestLinalgCodegenStrategy();
+void registerTestLinalgElementwiseFusion();
+void registerTestPushExpandingReshape();
 void registerTestLinalgFusionTransforms();
 void registerTestLinalgTensorFusionTransforms();
 void registerTestLinalgGreedyFusion();
@@ -97,7 +99,6 @@ void registerTestPDLByteCodePass();
 void registerTestPreparationPassWithAllowedMemrefResults();
 void registerTestRecursiveTypesPass();
 void registerTestSCFUtilsPass();
-void registerTestSparsification();
 void registerTestVectorConversions();
 } // namespace test
 } // namespace mlir
@@ -154,6 +155,8 @@ void registerTestPasses() {
   test::registerTestIRVisitorsPass();
   test::registerTestInterfaces();
   test::registerTestLinalgCodegenStrategy();
+  test::registerTestLinalgElementwiseFusion();
+  test::registerTestPushExpandingReshape();
   test::registerTestLinalgFusionTransforms();
   test::registerTestLinalgTensorFusionTransforms();
   test::registerTestLinalgGreedyFusion();
@@ -173,7 +176,6 @@ void registerTestPasses() {
   test::registerTestPDLByteCodePass();
   test::registerTestRecursiveTypesPass();
   test::registerTestSCFUtilsPass();
-  test::registerTestSparsification();
   test::registerTestVectorConversions();
 }
 #endif

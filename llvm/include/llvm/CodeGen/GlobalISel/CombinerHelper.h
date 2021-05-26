@@ -5,13 +5,13 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===--------------------------------------------------------------------===//
-//
+/// \file
 /// This contains common combine transformations that may be used in a combine
 /// pass,or by the target elsewhere.
 /// Targets can pick individual opcode transformations from the helper or use
 /// tryCombine which invokes all transformations. All of the transformations
 /// return true if the MachineInstruction changed and false otherwise.
-//
+///
 //===--------------------------------------------------------------------===//
 
 #ifndef LLVM_CODEGEN_GLOBALISEL_COMBINERHELPER_H
@@ -510,6 +510,8 @@ public:
                     std::function<void(MachineIRBuilder &)> &MatchInfo);
   bool matchFunnelShiftToRotate(MachineInstr &MI);
   void applyFunnelShiftToRotate(MachineInstr &MI);
+  bool matchRotateOutOfRange(MachineInstr &MI);
+  void applyRotateOutOfRange(MachineInstr &MI);
 
   /// Try to transform \p MI by using all of the above
   /// combine functions. Returns true if changed.

@@ -10,6 +10,7 @@
 #define LLD_MACHO_INPUT_FILES_H
 
 #include "MachOStructs.h"
+#include "Target.h"
 
 #include "lld/Common/LLVM.h"
 #include "lld/Common/Memory.h"
@@ -19,7 +20,7 @@
 #include "llvm/DebugInfo/DWARF/DWARFUnit.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/TextAPI/MachO/TextAPIReader.h"
+#include "llvm/TextAPI/TextAPIReader.h"
 
 #include <map>
 #include <vector>
@@ -37,6 +38,7 @@ class TarWriter;
 namespace lld {
 namespace macho {
 
+struct PlatformInfo;
 class InputSection;
 class Symbol;
 struct Reloc;
@@ -53,7 +55,7 @@ struct SubsectionEntry {
   uint64_t offset;
   InputSection *isec;
 };
-using SubsectionMapping = std::vector<SubsectionEntry>;
+using SubsectionMap = std::vector<SubsectionEntry>;
 
 class InputFile {
 public:
@@ -72,7 +74,7 @@ public:
   MemoryBufferRef mb;
 
   std::vector<Symbol *> symbols;
-  std::vector<SubsectionMapping> subsections;
+  std::vector<SubsectionMap> subsections;
   // Provides an easy way to sort InputFiles deterministically.
   const int id;
 
@@ -114,7 +116,7 @@ private:
   Symbol *parseNonSectionSymbol(const NList &sym, StringRef name);
   template <class Section>
   void parseRelocations(ArrayRef<Section> sectionHeaders, const Section &,
-                        SubsectionMapping &);
+                        SubsectionMap &);
   void parseDebugInfo();
 };
 
@@ -157,9 +159,6 @@ public:
   // implemented in the bundle. When used like this, it is very similar
   // to a Dylib, so we re-used the same class to represent it.
   bool isBundleLoader;
-
-private:
-  template <class LP> void parse(DylibFile *umbrella = nullptr);
 };
 
 // .a file
@@ -188,13 +187,16 @@ extern llvm::SetVector<InputFile *> inputFiles;
 
 llvm::Optional<MemoryBufferRef> readFile(StringRef path);
 
-template <class CommandType = llvm::MachO::load_command, class Header>
-const CommandType *findCommand(const Header *hdr, uint32_t type) {
-  const uint8_t *p = reinterpret_cast<const uint8_t *>(hdr) + sizeof(Header);
-
+// anyHdr should be a pointer to either mach_header or mach_header_64
+template <class CommandType = llvm::MachO::load_command, class... Types>
+const CommandType *findCommand(const void *anyHdr, Types... types) {
+  std::initializer_list<uint32_t> typesList{types...};
+  const auto *hdr = reinterpret_cast<const llvm::MachO::mach_header *>(anyHdr);
+  const uint8_t *p =
+      reinterpret_cast<const uint8_t *>(hdr) + target->headerSize;
   for (uint32_t i = 0, n = hdr->ncmds; i < n; ++i) {
     auto *cmd = reinterpret_cast<const CommandType *>(p);
-    if (cmd->cmd == type)
+    if (llvm::is_contained(typesList, cmd->cmd))
       return cmd;
     p += cmd->cmdsize;
   }

@@ -545,6 +545,11 @@ typedef struct {
 #define as_half16(x) __builtin_astype((x), half16)
 #endif // cl_khr_fp16
 
+#define as_size_t(x) __builtin_astype((x), size_t)
+#define as_ptrdiff_t(x) __builtin_astype((x), ptrdiff_t)
+#define as_intptr_t(x) __builtin_astype((x), intptr_t)
+#define as_uintptr_t(x) __builtin_astype((x), uintptr_t)
+
 // OpenCL v1.1 s6.9, v1.2/2.0 s6.10 - Function qualifiers
 
 #define __kernel_exec(X, typen) __kernel \
@@ -562,7 +567,6 @@ int printf(__constant const char* st, ...) __attribute__((format(printf, 1, 2)))
 #endif
 
 #ifdef cl_intel_device_side_avc_motion_estimation
-#pragma OPENCL EXTENSION cl_intel_device_side_avc_motion_estimation : begin
 
 #define CLK_AVC_ME_MAJOR_16x16_INTEL 0x0
 #define CLK_AVC_ME_MAJOR_16x8_INTEL 0x1
@@ -696,7 +700,6 @@ int printf(__constant const char* st, ...) __attribute__((format(printf, 1, 2)))
 #define CLK_AVC_IME_RESULT_DUAL_REFERENCE_STREAMOUT_INITIALIZE_INTEL 0x0
 #define CLK_AVC_IME_RESULT_DUAL_REFERENCE_STREAMIN_INITIALIZE_INTEL 0x0
 
-#pragma OPENCL EXTENSION cl_intel_device_side_avc_motion_estimation : end
 #endif // cl_intel_device_side_avc_motion_estimation
 
 // Disable any extensions we may have enabled previously.

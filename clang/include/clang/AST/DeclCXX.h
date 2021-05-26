@@ -2267,7 +2267,8 @@ public:
 
   // For a pack expansion, returns the location of the ellipsis.
   SourceLocation getEllipsisLoc() const {
-    assert(isPackExpansion() && "Initializer is not a pack expansion");
+    if (!isPackExpansion())
+      return {};
     return MemberOrEllipsisLocation;
   }
 
@@ -2424,12 +2425,12 @@ class CXXConstructorDecl final
                      : ExplicitSpecKind::ResolvedFalse);
   }
 
-  enum TraillingAllocKind {
+  enum TrailingAllocKind {
     TAKInheritsConstructor = 1,
     TAKHasTailExplicit = 1 << 1,
   };
 
-  uint64_t getTraillingAllocKind() const {
+  uint64_t getTrailingAllocKind() const {
     return numTrailingObjects(OverloadToken<InheritedConstructor>()) |
            (numTrailingObjects(OverloadToken<ExplicitSpecifier>()) << 1);
   }

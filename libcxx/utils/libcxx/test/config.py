@@ -130,7 +130,6 @@ class Configuration(object):
         self.configure_compile_flags()
         self.configure_link_flags()
         self.configure_env()
-        self.configure_debug_mode()
         self.configure_sanitizer()
         self.configure_coverage()
         self.configure_modules()
@@ -355,6 +354,12 @@ class Configuration(object):
         self.cxx.compile_flags += ['-nostdinc++']
         if not os.path.isdir(cxx_headers):
             self.lit_config.fatal("cxx_headers='{}' is not a directory.".format(cxx_headers))
+        (path, version) = os.path.split(cxx_headers)
+        (path, cxx) = os.path.split(path)
+        cxx_target_headers = os.path.join(
+            path, self.get_lit_conf('target_triple', None), cxx, version)
+        if os.path.isdir(cxx_target_headers):
+            self.cxx.compile_flags += ['-I' + cxx_target_headers]
         self.cxx.compile_flags += ['-I' + cxx_headers]
         if self.libcxx_obj_root is not None:
             cxxabi_headers = os.path.join(self.libcxx_obj_root, 'include',
@@ -460,6 +465,9 @@ class Configuration(object):
             # libcxx CMakeLists.txt if building targeting msvc.
             self.cxx.link_flags += ['-l%s%s' % (lib, debug_suffix) for lib in
                                     ['vcruntime', 'ucrt', 'msvcrt', 'msvcprt']]
+            # The compiler normally links in oldnames.lib too, but we've
+            # specified -nostdlib above, so we need to specify it manually.
+            self.cxx.link_flags += ['-loldnames']
         elif cxx_abi == 'none' or cxx_abi == 'default':
             if self.target_info.is_windows():
                 debug_suffix = 'd' if self.debug_build else ''
@@ -472,15 +480,6 @@ class Configuration(object):
         if self.get_lit_bool('cxx_ext_threads', default=False):
             self.cxx.link_flags += ['-lc++external_threads']
         self.target_info.add_cxx_link_flags(self.cxx.link_flags)
-
-    def configure_debug_mode(self):
-        debug_level = self.get_lit_conf('debug_level', None)
-        if not debug_level:
-            return
-        if debug_level not in ['0', '1']:
-            self.lit_config.fatal('Invalid value for debug_level "%s".'
-                                  % debug_level)
-        self.cxx.compile_flags += ['-D_LIBCPP_DEBUG=%s' % debug_level]
 
     def configure_sanitizer(self):
         san = self.get_lit_conf('use_sanitizer', '').strip()
@@ -536,6 +535,8 @@ class Configuration(object):
                 self.config.available_features.add('sanitizer-new-delete')
             elif san == 'DataFlow':
                 self.cxx.flags += ['-fsanitize=dataflow']
+            elif san == 'Leaks':
+                self.cxx.link_flags += ['-fsanitize=leaks']
             else:
                 self.lit_config.fatal('unsupported value for '
                                       'use_sanitizer: {0}'.format(san))

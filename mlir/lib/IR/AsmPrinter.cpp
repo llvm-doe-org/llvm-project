@@ -33,6 +33,7 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Endian.h"
 #include "llvm/Support/Regex.h"
 #include "llvm/Support/SaveAndRestore.h"
 using namespace mlir;
@@ -461,12 +462,14 @@ private:
     printOptionalAttrDict(attrs, elidedAttrs);
   }
 
-  /// Return 'nulls' as the output stream, this will ignore any data fed to it.
-  raw_ostream &getStream() const override { return llvm::nulls(); }
+  /// Return a null stream as the output stream, this will ignore any data fed
+  /// to it.
+  raw_ostream &getStream() const override { return os; }
 
   /// The following are hooks of `OpAsmPrinter` that are not necessary for
   /// determining potential aliases.
   void printAffineMapOfSSAIds(AffineMapAttr, ValueRange) override {}
+  void printAffineExprOfSSAIds(AffineExpr, ValueRange, ValueRange) override {}
   void printNewline() override {}
   void printOperand(Value) override {}
   void printOperand(Value, raw_ostream &os) override {
@@ -485,6 +488,9 @@ private:
 
   /// The initializer to use when identifying aliases.
   AliasInitializer &initializer;
+
+  /// A dummy output stream.
+  mutable llvm::raw_null_ostream os;
 };
 } // end anonymous namespace
 
@@ -1866,7 +1872,13 @@ void ModulePrinter::printType(Type type) {
             os << dim;
           os << 'x';
         }
-        os << tensorTy.getElementType() << '>';
+        os << tensorTy.getElementType();
+        // Only print the encoding attribute value if set.
+        if (tensorTy.getEncoding()) {
+          os << ", ";
+          printAttribute(tensorTy.getEncoding());
+        }
+        os << '>';
       })
       .Case<UnrankedTensorType>([&](UnrankedTensorType tensorTy) {
         os << "tensor<*x";
@@ -2340,6 +2352,11 @@ public:
   void printAffineMapOfSSAIds(AffineMapAttr mapAttr,
                               ValueRange operands) override;
 
+  /// Print the given affine expression with the symbol and dimension operands
+  /// printed inline with the expression.
+  void printAffineExprOfSSAIds(AffineExpr expr, ValueRange dimOperands,
+                               ValueRange symOperands) override;
+
   /// Print the given string as a symbol reference.
   void printSymbolName(StringRef symbolRef) override {
     ::printSymbolReference(symbolRef, os);
@@ -2577,6 +2594,19 @@ void OperationPrinter::printAffineMapOfSSAIds(AffineMapAttr mapAttr,
   interleaveComma(map.getResults(), [&](AffineExpr expr) {
     printAffineExpr(expr, printValueName);
   });
+}
+
+void OperationPrinter::printAffineExprOfSSAIds(AffineExpr expr,
+                                               ValueRange dimOperands,
+                                               ValueRange symOperands) {
+  auto printValueName = [&](unsigned pos, bool isSymbol) {
+    if (!isSymbol)
+      return printValueID(dimOperands[pos]);
+    os << "symbol(";
+    printValueID(symOperands[pos]);
+    os << ')';
+  };
+  printAffineExpr(expr, printValueName);
 }
 
 //===----------------------------------------------------------------------===//

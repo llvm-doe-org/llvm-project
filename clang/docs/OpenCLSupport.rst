@@ -334,16 +334,8 @@ to view the full bug list.
 Missing features or with limited support
 ----------------------------------------
 
-- Use of ObjC blocks is disabled and therefore the ``enqueue_kernel`` builtin
-  function is not supported currently. It is expected that if support for this
-  feature is added in the future, it will utilize C++ lambdas instead of ObjC
-  blocks.
-
 - IR generation for global destructors is incomplete (See:
   `PR48047 <https://llvm.org/PR48047>`_).
-
-- There is no distinct file extension for sources that are to be compiled
-  in C++ for OpenCL mode (See: `PR48097 <https://llvm.org/PR48097>`_)
 
 .. _opencl_300:
 
@@ -380,7 +372,7 @@ implementation status.
 +------------------------------+--------------------------------------------------------------+----------------------+---------------------------------------------------------------------------+
 | Feature optionality          | Work group collective functions                              | :part:`worked on`    | https://reviews.llvm.org/D92004                                           |
 +------------------------------+--------------------------------------------------------------+----------------------+---------------------------------------------------------------------------+
-| New functionality            | RGBA vector components                                       | :none:`unclaimed`    |                                                                           |
+| New functionality            | RGBA vector components                                       | :good:`done`         | https://reviews.llvm.org/D99969                                           |
 +------------------------------+--------------------------------------------------------------+----------------------+---------------------------------------------------------------------------+
 | New functionality            | Subgroup functions                                           | :part:`worked on`    | https://reviews.llvm.org/D92004                                           |
 +------------------------------+--------------------------------------------------------------+----------------------+---------------------------------------------------------------------------+
@@ -398,7 +390,7 @@ Feel free to contact us on `cfe-dev
 <https://lists.llvm.org/mailman/listinfo/cfe-dev>`_ or via `Bugzilla
 <https://bugs.llvm.org/>`__.
 
-.. _opencl_experimenal_cxxlibs:
+.. _opencl_experimental_cxxlibs:
 
 C++ libraries for OpenCL
 ------------------------

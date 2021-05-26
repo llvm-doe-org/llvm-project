@@ -607,6 +607,9 @@ void ClangdLSPServer::onInitialize(const InitializeParams &Params,
   if (Opts.FoldingRanges)
     ServerCaps["foldingRangeProvider"] = true;
 
+  if (Opts.InlayHints)
+    ServerCaps["clangdInlayHintsProvider"] = true;
+
   std::vector<llvm::StringRef> Commands;
   for (llvm::StringRef Command : Handlers.CommandHandlers.keys())
     Commands.push_back(Command);
@@ -724,8 +727,8 @@ void ClangdLSPServer::onCommandApplyEdit(const WorkspaceEdit &WE,
 
 void ClangdLSPServer::onCommandApplyTweak(const TweakArgs &Args,
                                           Callback<llvm::json::Value> Reply) {
-  auto Action = [this, Reply = std::move(Reply),
-                 File = Args.file](llvm::Expected<Tweak::Effect> R) mutable {
+  auto Action = [this, Reply = std::move(Reply)](
+                    llvm::Expected<Tweak::Effect> R) mutable {
     if (!R)
       return Reply(R.takeError());
 
@@ -1208,6 +1211,11 @@ void ClangdLSPServer::onCallHierarchyOutgoingCalls(
   Reply(std::vector<CallHierarchyOutgoingCall>{});
 }
 
+void ClangdLSPServer::onInlayHints(const InlayHintsParams &Params,
+                                   Callback<std::vector<InlayHint>> Reply) {
+  Server->inlayHints(Params.textDocument.uri.file(), std::move(Reply));
+}
+
 void ClangdLSPServer::applyConfiguration(
     const ConfigurationSettings &Settings) {
   // Per-file update to the compilation database.
@@ -1471,6 +1479,7 @@ void ClangdLSPServer::bindMethods(LSPBinder &Bind,
   Bind.method("textDocument/documentLink", this, &ClangdLSPServer::onDocumentLink);
   Bind.method("textDocument/semanticTokens/full", this, &ClangdLSPServer::onSemanticTokens);
   Bind.method("textDocument/semanticTokens/full/delta", this, &ClangdLSPServer::onSemanticTokensDelta);
+  Bind.method("clangd/inlayHints", this, &ClangdLSPServer::onInlayHints);
   Bind.method("$/memoryUsage", this, &ClangdLSPServer::onMemoryUsage);
   if (Opts.FoldingRanges)
     Bind.method("textDocument/foldingRange", this, &ClangdLSPServer::onFoldingRange);
