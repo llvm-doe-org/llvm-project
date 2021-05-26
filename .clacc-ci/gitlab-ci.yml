@@ -56,20 +56,21 @@ stages:
   tags: [shell, leconte]
   variables:
     BUILD_ID: leconte
-    MODULES: cmake/3.19.2 gnu/9.2.0 nvhpc/20.11
+    MODULES: cmake/3.19.2 gnu/9.2.0 nvhpc/21.2
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
     CMAKE_BUILD_TYPE: Debug
     CMAKE_OFFLOAD_CONFIG:
       -DCLANG_OPENMP_NVPTX_DEFAULT_ARCH=sm_70
-      -DCLANG_ACC_TEST_EXE_X86_64=False
-      -DCLANG_ACC_TEST_EXE_PPC64LE=True
-      -DCLANG_ACC_TEST_EXE_NVPTX64=True
-      -DCUDA_TOOLKIT_ROOT_DIR=/opt/nvidia/hpc_sdk/Linux_ppc64le/20.11/cuda/11.0
+      -DCLANG_ACC_TEST_EXE_X86_64=0
+      -DCLANG_ACC_TEST_EXE_PPC64LE=4
+      -DCLANG_ACC_TEST_EXE_NVPTX64=6
       -DLIBOMPTARGET_NVPTX_COMPUTE_CAPABILITIES=70
+    PATH_PREPEND:
+      /opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin
     XFAIL:
-      ompt/tasks/task_if0-depend.c
+      Driver/openmp-offload-gpu.c
 
 .kold:
   tags: [shell, kold]
@@ -81,9 +82,11 @@ stages:
     PYTHON: /usr/bin/python3
     CMAKE_BUILD_TYPE: Debug
     CMAKE_OFFLOAD_CONFIG:
-      -DCLANG_ACC_TEST_EXE_X86_64=True
-      -DCLANG_ACC_TEST_EXE_PPC64LE=False
-      -DCLANG_ACC_TEST_EXE_NVPTX64=False
+      -DCLANG_ACC_TEST_EXE_X86_64=4
+      -DCLANG_ACC_TEST_EXE_PPC64LE=0
+      -DCLANG_ACC_TEST_EXE_NVPTX64=0
+    PATH_PREPEND:
+      ""
     XFAIL:
       offloading/bug49334.cpp
 
@@ -95,15 +98,26 @@ stages:
     BUILD_ID: release
     CMAKE_BUILD_TYPE: Release
     XFAIL:
-      Transforms/LoopVectorize/nounroll.ll
       CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
       CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
       CodeGen/AMDGPU/GlobalISel/irtranslator-call-sret.ll
       CodeGen/AMDGPU/GlobalISel/irtranslator-call.ll
       CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
+      CodeGen/AMDGPU/agpr-register-count.ll
+      CodeGen/AMDGPU/call-argument-types.ll
       CodeGen/AMDGPU/call-constant.ll
+      CodeGen/AMDGPU/call-graph-register-usage.ll
+      CodeGen/AMDGPU/call-preserved-registers.ll
+      CodeGen/AMDGPU/call-waitcnt.ll
+      CodeGen/AMDGPU/cc-update.ll
+      CodeGen/AMDGPU/cross-block-use-is-not-abi-copy.ll
       CodeGen/AMDGPU/indirect-call.ll
       CodeGen/AMDGPU/returnaddress.ll
+      CodeGen/AMDGPU/spill-csr-frame-ptr-reg-copy.ll
+      CodeGen/AMDGPU/stack-realign.ll
+      CodeGen/AMDGPU/unstructured-cfg-def-use-issue.ll
+      CodeGen/AMDGPU/vgpr-tuple-allocation.ll
+      CodeGen/MIR/AMDGPU/machine-function-info-no-ir.mir
       offloading/bug49334.cpp
 
 # Not setup or cleanup.
@@ -114,6 +128,9 @@ stages:
   before_script:
     - echo $MODULES
     - module load $MODULES
+    - echo $PATH_PREPEND
+    - if test x"$PATH_PREPEND" != x; then PATH="$PATH_PREPEND:$PATH"; fi
+    - echo $PATH
     - pwd
     - echo $BUILD_DIR
     - cd $BUILD_DIR/build
