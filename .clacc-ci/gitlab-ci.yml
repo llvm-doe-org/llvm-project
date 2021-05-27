@@ -73,6 +73,11 @@ stages:
     PATH_PREPEND:
       /opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin
     LIT_NTHREADS_DIVISOR: 4
+    # This leaves the following failure for leconte as the XFAIL is specified in
+    # the test from upstream:
+    #
+    # Unexpectedly Passed Tests (1):
+    #   libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/api.c
     XFAIL:
       "libomp :: affinity/kmp-hw-subset.c"
 
@@ -108,6 +113,8 @@ stages:
       CodeGen/AMDGPU/GlobalISel/irtranslator-call-sret.ll
       CodeGen/AMDGPU/GlobalISel/irtranslator-call.ll
       CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
+      CodeGen/AMDGPU/GlobalISel/irtranslator-sibling-call.ll
+      CodeGen/AMDGPU/GlobalISel/irtranslator-tail-call.ll
       CodeGen/AMDGPU/call-constant.ll
       CodeGen/AMDGPU/indirect-call.ll
       CodeGen/AMDGPU/returnaddress.ll
