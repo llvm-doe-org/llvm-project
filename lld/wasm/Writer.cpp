@@ -100,7 +100,7 @@ private:
   uint64_t fileSize = 0;
 
   std::vector<WasmInitEntry> initFunctions;
-  llvm::StringMap<std::vector<InputSection *>> customSectionMapping;
+  llvm::StringMap<std::vector<InputChunk *>> customSectionMapping;
 
   // Stable storage for command export wrapper function name strings.
   std::list<std::string> commandExportWrapperNames;
@@ -121,7 +121,7 @@ void Writer::calculateCustomSections() {
   log("calculateCustomSections");
   bool stripDebug = config->stripDebug || config->stripAll;
   for (ObjFile *file : symtab->objectFiles) {
-    for (InputSection *section : file->customSections) {
+    for (InputChunk *section : file->customSections) {
       // Exclude COMDAT sections that are not selected for inclusion
       if (section->discarded)
         continue;
@@ -270,7 +270,7 @@ void Writer::layoutMemory() {
     log(formatv("mem: {0,-15} offset={1,-8} size={2,-8} align={3}", seg->name,
                 memoryPtr, seg->size, seg->alignment));
 
-    if (!config->relocatable && seg->name == ".tdata") {
+    if (!config->relocatable && seg->isTLS()) {
       if (config->sharedMemory) {
         auto *tlsSize = cast<DefinedGlobal>(WasmSym::tlsSize);
         setGlobalPtr(tlsSize, seg->size);
@@ -460,10 +460,8 @@ void Writer::populateTargetFeatures() {
     }
 
     // Find TLS data segments
-    auto isTLS = [](InputSegment *segment) {
-      StringRef name = segment->getName();
-      return segment->live &&
-             (name.startswith(".tdata") || name.startswith(".tbss"));
+    auto isTLS = [](InputChunk *segment) {
+      return segment->live && segment->isTLS();
     };
     tlsUsed = tlsUsed ||
               std::any_of(file->segments.begin(), file->segments.end(), isTLS);
@@ -631,6 +629,12 @@ void Writer::calculateExports() {
     } else if (auto *e = dyn_cast<DefinedEvent>(sym)) {
       export_ = {name, WASM_EXTERNAL_EVENT, e->getEventIndex()};
     } else if (auto *d = dyn_cast<DefinedData>(sym)) {
+      if (d->segment && d->segment->isTLS()) {
+        // We can't currenly export TLS data symbols.
+        if (sym->isExportedExplicit())
+          error("TLS symbols cannot yet be exported: `" + toString(*sym) + "`");
+        continue;
+      }
       out.globalSec->dataAddressGlobals.push_back(d);
       export_ = {name, WASM_EXTERNAL_GLOBAL, globalIndex++};
     } else {
@@ -812,12 +816,12 @@ void Writer::assignIndexes() {
   out.tableSec->assignIndexes();
 }
 
-static StringRef getOutputDataSegmentName(StringRef name) {
-  // We only support one thread-local segment, so we must merge the segments
-  // despite --no-merge-data-segments.
-  // We also need to merge .tbss into .tdata so they share the same offsets.
-  if (name.startswith(".tdata") || name.startswith(".tbss"))
+static StringRef getOutputDataSegmentName(const InputChunk &seg) {
+  // We always merge .tbss and .tdata into a single TLS segment so all TLS
+  // symbols are be relative to single __tls_base.
+  if (seg.isTLS())
     return ".tdata";
+  StringRef name = seg.getName();
   if (!config->mergeDataSegments)
     return name;
   if (name.startswith(".text."))
@@ -848,10 +852,10 @@ OutputSegment *Writer::createOutputSegment(StringRef name) {
 
 void Writer::createOutputSegments() {
   for (ObjFile *file : symtab->objectFiles) {
-    for (InputSegment *segment : file->segments) {
+    for (InputChunk *segment : file->segments) {
       if (!segment->live)
         continue;
-      StringRef name = getOutputDataSegmentName(segment->getName());
+      StringRef name = getOutputDataSegmentName(*segment);
       OutputSegment *s = nullptr;
       // When running in relocatable mode we can't merge segments that are part
       // of comdat groups since the ultimate linker needs to be able exclude or
@@ -864,7 +868,6 @@ void Writer::createOutputSegments() {
         s = segmentMap[name];
       }
       s->addInputSegment(segment);
-      LLVM_DEBUG(dbgs() << "added data: " << name << ": " << s->size << "\n");
     }
   }
 
@@ -884,53 +887,45 @@ void Writer::createOutputSegments() {
 
   for (size_t i = 0; i < segments.size(); ++i)
     segments[i]->index = i;
+
+  // Merge MergeInputSections into a single MergeSyntheticSection.
+  LLVM_DEBUG(dbgs() << "-- finalize input semgments\n");
+  for (OutputSegment *seg : segments)
+    seg->finalizeInputSegments();
 }
 
 void Writer::combineOutputSegments() {
-  // With PIC code we currently only support a single data segment since
-  // we only have a single __memory_base to use as our base address.
-  // This pass combines all non-TLS data segments into a single .data
-  // segment.
+  // With PIC code we currently only support a single active data segment since
+  // we only have a single __memory_base to use as our base address.  This pass
+  // combines all data segments into a single .data segment.
   // This restructions can be relaxed once we have extended constant
   // expressions available:
   // https://github.com/WebAssembly/extended-const
-  assert(config->isPic);
+  assert(config->isPic && !config->sharedMemory);
   if (segments.size() <= 1)
     return;
-  OutputSegment *combined = nullptr;
-  std::vector<OutputSegment *> new_segments;
+  OutputSegment *combined = make<OutputSegment>(".data");
+  combined->startVA = segments[0]->startVA;
   for (OutputSegment *s : segments) {
-    if (s->name == ".tdata") {
-      new_segments.push_back(s);
-    } else {
-      if (!combined) {
-        combined = make<OutputSegment>(".data");
-        combined->startVA = s->startVA;
-        if (config->sharedMemory)
-          combined->initFlags = WASM_DATA_SEGMENT_IS_PASSIVE;
-      }
-      bool first = true;
-      for (InputSegment *inSeg : s->inputSegments) {
-        if (first)
-          inSeg->alignment = std::max(inSeg->alignment, s->alignment);
-        first = false;
+    bool first = true;
+    for (InputChunk *inSeg : s->inputSegments) {
+      if (first)
+        inSeg->alignment = std::max(inSeg->alignment, s->alignment);
+      first = false;
 #ifndef NDEBUG
-        uint64_t oldVA = inSeg->getVA();
+      uint64_t oldVA = inSeg->getVA();
 #endif
-        combined->addInputSegment(inSeg);
+      combined->addInputSegment(inSeg);
 #ifndef NDEBUG
-        uint64_t newVA = inSeg->getVA();
-        assert(oldVA == newVA);
+      uint64_t newVA = inSeg->getVA();
+      LLVM_DEBUG(dbgs() << "added input segment. name=" << inSeg->getName()
+                        << " oldVA=" << oldVA << " newVA=" << newVA << "\n");
+      assert(oldVA == newVA);
 #endif
-      }
     }
   }
-  if (combined) {
-    new_segments.push_back(combined);
-    segments = new_segments;
-    for (size_t i = 0; i < segments.size(); ++i)
-      segments[i]->index = i;
-  }
+
+  segments = {combined};
 }
 
 static void createFunction(DefinedFunction *func, StringRef bodyContent) {
@@ -946,7 +941,7 @@ static void createFunction(DefinedFunction *func, StringRef bodyContent) {
 
 bool Writer::needsPassiveInitialization(const OutputSegment *segment) {
   return segment->initFlags & WASM_DATA_SEGMENT_IS_PASSIVE &&
-         segment->name != ".tdata" && !segment->isBss;
+         !segment->isTLS() && !segment->isBss;
 }
 
 bool Writer::hasPassiveInitializedSegments() {
@@ -1190,7 +1185,7 @@ void Writer::createApplyDataRelocationsFunction() {
     raw_string_ostream os(bodyContent);
     writeUleb128(os, 0, "num locals");
     for (const OutputSegment *seg : segments)
-      for (const InputSegment *inSeg : seg->inputSegments)
+      for (const InputChunk *inSeg : seg->inputSegments)
         inSeg->generateRelocationCode(os);
 
     writeU8(os, WASM_OPCODE_END, "END");
@@ -1392,6 +1387,8 @@ void Writer::run() {
     config->tableBase = 1;
     if (WasmSym::definedTableBase)
       WasmSym::definedTableBase->setVA(config->tableBase);
+    if (WasmSym::definedTableBase32)
+      WasmSym::definedTableBase32->setVA(config->tableBase);
   }
 
   log("-- createOutputSegments");
@@ -1427,7 +1424,9 @@ void Writer::run() {
     }
   }
 
-  if (config->isPic) {
+  if (config->isPic && !config->sharedMemory) {
+    // In shared memory mode all data segments are passive and initilized
+    // via __wasm_init_memory.
     log("-- combineOutputSegments");
     combineOutputSegments();
   }

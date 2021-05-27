@@ -1,13 +1,16 @@
 add_mlir_dialect_library(MLIRLinalgTransforms
   Bufferize.cpp
   CodegenStrategy.cpp
+  ComprehensiveBufferize.cpp
   Detensorize.cpp
+  Distribution.cpp
   DropUnitDims.cpp
   ElementwiseToLinalg.cpp
   Fusion.cpp
   FusionOnTensors.cpp
   Generalization.cpp
   Hoisting.cpp
+  InlineScalarOperands.cpp
   Interchange.cpp
   Loops.cpp
   Promotion.cpp
@@ -26,11 +29,9 @@ add_mlir_dialect_library(MLIRLinalgTransforms
   MLIRAffineUtils
   MLIRAnalysis
   MLIRComplex
-  MLIREDSC
   MLIRIR
   MLIRMemRef
   MLIRLinalgAnalysis
-  MLIRLinalgEDSC
   MLIRLinalg
   MLIRLinalgUtils
   MLIRSCF

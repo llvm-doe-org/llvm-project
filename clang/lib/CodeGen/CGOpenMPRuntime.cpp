@@ -15,6 +15,7 @@
 #include "CGCleanup.h"
 #include "CGRecordLayout.h"
 #include "CodeGenFunction.h"
+#include "clang/AST/APValue.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/OpenMPClause.h"
@@ -3050,8 +3051,7 @@ void CGOpenMPRuntime::OffloadEntriesInfoManagerTy::
   if (CGM.getLangOpts().OpenMPIsDevice) {
     // This could happen if the device compilation is invoked standalone.
     if (!hasTargetRegionEntryInfo(DeviceID, FileID, ParentName, LineNum))
-      initializeTargetRegionEntryInfo(DeviceID, FileID, ParentName, LineNum,
-                                      OffloadingEntriesNum);
+      return;
     auto &Entry =
         OffloadEntriesTargetRegion[DeviceID][FileID][ParentName][LineNum];
     Entry.setAddress(Addr);
@@ -3122,10 +3122,8 @@ void CGOpenMPRuntime::OffloadEntriesInfoManagerTy::
   if (CGM.getLangOpts().OpenMPIsDevice) {
     // This could happen if the device compilation is invoked standalone.
     if (!hasDeviceGlobalVarEntryInfo(VarName))
-      initializeDeviceGlobalVarEntryInfo(VarName, Flags, OffloadingEntriesNum);
+      return;
     auto &Entry = OffloadEntriesDeviceGlobalVar[VarName];
-    assert((!Entry.getAddress() || Entry.getAddress() == Addr) &&
-           "Resetting with the new address.");
     if (Entry.getAddress() && hasDeviceGlobalVarEntryInfo(VarName)) {
       if (Entry.getVarSize().isZero()) {
         Entry.setVarSize(VarSize);
@@ -3141,8 +3139,6 @@ void CGOpenMPRuntime::OffloadEntriesInfoManagerTy::
       auto &Entry = OffloadEntriesDeviceGlobalVar[VarName];
       assert(Entry.isValid() && Entry.getFlags() == Flags &&
              "Entry not initialized!");
-      assert((!Entry.getAddress() || Entry.getAddress() == Addr) &&
-             "Resetting with the new address.");
       if (Entry.getVarSize().isZero()) {
         Entry.setVarSize(VarSize);
         Entry.setLinkage(Linkage);
@@ -6620,7 +6616,7 @@ const Stmt *CGOpenMPRuntime::getSingleCompoundChild(ASTContext &Ctx,
         continue;
       // Analyze declarations.
       if (const auto *DS = dyn_cast<DeclStmt>(S)) {
-        if (llvm::all_of(DS->decls(), [&Ctx](const Decl *D) {
+        if (llvm::all_of(DS->decls(), [](const Decl *D) {
               if (isa<EmptyDecl>(D) || isa<DeclContext>(D) ||
                   isa<TypeDecl>(D) || isa<PragmaCommentDecl>(D) ||
                   isa<PragmaDetectMismatchDecl>(D) || isa<UsingDecl>(D) ||
@@ -6631,10 +6627,7 @@ const Stmt *CGOpenMPRuntime::getSingleCompoundChild(ASTContext &Ctx,
               const auto *VD = dyn_cast<VarDecl>(D);
               if (!VD)
                 return false;
-              return VD->isConstexpr() ||
-                     ((VD->getType().isTrivialType(Ctx) ||
-                       VD->getType()->isReferenceType()) &&
-                      (!VD->hasInit() || isTrivial(Ctx, VD->getInit())));
+              return VD->hasGlobalStorage() || !VD->isUsed();
             }))
           continue;
       }
@@ -10584,17 +10577,28 @@ void CGOpenMPRuntime::scanForTargetRegionsFunctions(const Stmt *S,
     scanForTargetRegionsFunctions(II, ParentName);
 }
 
+static bool isAssumedToBeNotEmitted(const ValueDecl *VD, bool IsDevice) {
+  Optional<OMPDeclareTargetDeclAttr::DevTypeTy> DevTy =
+      OMPDeclareTargetDeclAttr::getDeviceType(VD);
+  if (!DevTy)
+    return false;
+  // Do not emit device_type(nohost) functions for the host.
+  if (!IsDevice && DevTy == OMPDeclareTargetDeclAttr::DT_NoHost)
+    return true;
+  // Do not emit device_type(host) functions for the device.
+  if (IsDevice && DevTy == OMPDeclareTargetDeclAttr::DT_Host)
+    return true;
+  return false;
+}
+
 bool CGOpenMPRuntime::emitTargetFunctions(GlobalDecl GD) {
   // If emitting code for the host, we do not process FD here. Instead we do
   // the normal code generation.
   if (!CGM.getLangOpts().OpenMPIsDevice) {
-    if (const auto *FD = dyn_cast<FunctionDecl>(GD.getDecl())) {
-      Optional<OMPDeclareTargetDeclAttr::DevTypeTy> DevTy =
-          OMPDeclareTargetDeclAttr::getDeviceType(FD);
-      // Do not emit device_type(nohost) functions for the host.
-      if (DevTy && *DevTy == OMPDeclareTargetDeclAttr::DT_NoHost)
+    if (const auto *FD = dyn_cast<FunctionDecl>(GD.getDecl()))
+      if (isAssumedToBeNotEmitted(cast<ValueDecl>(FD),
+                                  CGM.getLangOpts().OpenMPIsDevice))
         return true;
-    }
     return false;
   }
 
@@ -10603,10 +10607,8 @@ bool CGOpenMPRuntime::emitTargetFunctions(GlobalDecl GD) {
   if (const auto *FD = dyn_cast<FunctionDecl>(VD)) {
     StringRef Name = CGM.getMangledName(GD);
     scanForTargetRegionsFunctions(FD->getBody(), Name);
-    Optional<OMPDeclareTargetDeclAttr::DevTypeTy> DevTy =
-        OMPDeclareTargetDeclAttr::getDeviceType(FD);
-    // Do not emit device_type(nohost) functions for the host.
-    if (DevTy && *DevTy == OMPDeclareTargetDeclAttr::DT_Host)
+    if (isAssumedToBeNotEmitted(cast<ValueDecl>(FD),
+                                CGM.getLangOpts().OpenMPIsDevice))
       return true;
   }
 
@@ -10616,6 +10618,10 @@ bool CGOpenMPRuntime::emitTargetFunctions(GlobalDecl GD) {
 }
 
 bool CGOpenMPRuntime::emitTargetGlobalVariable(GlobalDecl GD) {
+  if (isAssumedToBeNotEmitted(cast<ValueDecl>(GD.getDecl()),
+                              CGM.getLangOpts().OpenMPIsDevice))
+    return true;
+
   if (!CGM.getLangOpts().OpenMPIsDevice)
     return false;
 
@@ -10688,6 +10694,13 @@ void CGOpenMPRuntime::registerTargetGlobalVariable(const VarDecl *VD,
   if (CGM.getLangOpts().OMPTargetTriples.empty() &&
       !CGM.getLangOpts().OpenMPIsDevice)
     return;
+
+  // If we have host/nohost variables, they do not need to be registered.
+  Optional<OMPDeclareTargetDeclAttr::DevTypeTy> DevTy =
+      OMPDeclareTargetDeclAttr::getDeviceType(VD);
+  if (DevTy && DevTy.getValue() != OMPDeclareTargetDeclAttr::DT_Any)
+    return;
+
   llvm::Optional<OMPDeclareTargetDeclAttr::MapTypeTy> Res =
       OMPDeclareTargetDeclAttr::isDeclareTargetDeclaration(VD);
   if (!Res) {
@@ -10718,6 +10731,10 @@ void CGOpenMPRuntime::registerTargetGlobalVariable(const VarDecl *VD,
     Linkage = CGM.getLLVMLinkageVarDefinition(VD, /*IsConstant=*/false);
     // Temp solution to prevent optimizations of the internal variables.
     if (CGM.getLangOpts().OpenMPIsDevice && !VD->isExternallyVisible()) {
+      // Do not create a "ref-variable" if the original is not also available
+      // on the host.
+      if (!OffloadEntriesInfoManager.hasDeviceGlobalVarEntryInfo(VarName))
+        return;
       std::string RefName = getName({VarName, "ref"});
       if (!CGM.GetGlobalValue(RefName)) {
         llvm::Constant *AddrRef =

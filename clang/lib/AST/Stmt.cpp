@@ -647,6 +647,8 @@ unsigned GCCAsmStmt::AnalyzeAsmString(SmallVectorImpl<AsmStringPiece>&Pieces,
       continue;
     }
 
+    const TargetInfo &TI = C.getTargetInfo();
+
     // Escaped "%" character in asm string.
     if (CurPtr == StrEnd) {
       // % at end of string is invalid (no escape).
@@ -657,6 +659,11 @@ unsigned GCCAsmStmt::AnalyzeAsmString(SmallVectorImpl<AsmStringPiece>&Pieces,
     char EscapedChar = *CurPtr++;
     switch (EscapedChar) {
     default:
+      // Handle target-specific escaped characters.
+      if (auto MaybeReplaceStr = TI.handleAsmEscapedChar(EscapedChar)) {
+        CurStringPiece += *MaybeReplaceStr;
+        continue;
+      }
       break;
     case '%': // %% -> %
     case '{': // %{ -> {
@@ -689,7 +696,6 @@ unsigned GCCAsmStmt::AnalyzeAsmString(SmallVectorImpl<AsmStringPiece>&Pieces,
       EscapedChar = *CurPtr++;
     }
 
-    const TargetInfo &TI = C.getTargetInfo();
     const SourceManager &SM = C.getSourceManager();
     const LangOptions &LO = C.getLangOpts();
 
@@ -990,10 +996,18 @@ bool IfStmt::isObjCAvailabilityCheck() const {
   return isa<ObjCAvailabilityCheckExpr>(getCond());
 }
 
-Optional<const Stmt*> IfStmt::getNondiscardedCase(const ASTContext &Ctx) const {
+Optional<Stmt *> IfStmt::getNondiscardedCase(const ASTContext &Ctx) {
   if (!isConstexpr() || getCond()->isValueDependent())
     return None;
   return !getCond()->EvaluateKnownConstInt(Ctx) ? getElse() : getThen();
+}
+
+Optional<const Stmt *>
+IfStmt::getNondiscardedCase(const ASTContext &Ctx) const {
+  if (Optional<Stmt *> Result =
+          const_cast<IfStmt *>(this)->getNondiscardedCase(Ctx))
+    return *Result;
+  return None;
 }
 
 ForStmt::ForStmt(const ASTContext &C, Stmt *Init, Expr *Cond, VarDecl *condVar,

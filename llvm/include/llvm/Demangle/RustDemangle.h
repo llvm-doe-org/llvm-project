@@ -12,18 +12,49 @@
 #include "llvm/Demangle/DemangleConfig.h"
 #include "llvm/Demangle/StringView.h"
 #include "llvm/Demangle/Utility.h"
+#include <cstdint>
 
 namespace llvm {
 namespace rust_demangle {
 
 using llvm::itanium_demangle::OutputStream;
 using llvm::itanium_demangle::StringView;
+using llvm::itanium_demangle::SwapAndRestore;
 
 struct Identifier {
   StringView Name;
   bool Punycode;
 
   bool empty() const { return Name.empty(); }
+};
+
+enum class BasicType {
+  Bool,
+  Char,
+  I8,
+  I16,
+  I32,
+  I64,
+  I128,
+  ISize,
+  U8,
+  U16,
+  U32,
+  U64,
+  U128,
+  USize,
+  F32,
+  F64,
+  Str,
+  Placeholder,
+  Unit,
+  Variadic,
+  Never,
+};
+
+enum class InType {
+  No,
+  Yes,
 };
 
 class Demangler {
@@ -37,6 +68,10 @@ class Demangler {
   // Position in the input string.
   size_t Position;
 
+  // When true, print methods append the output to the stream.
+  // When false, the output is suppressed.
+  bool Print;
+
   // True if an error occurred.
   bool Error;
 
@@ -49,19 +84,44 @@ public:
   bool demangle(StringView MangledName);
 
 private:
-  void demanglePath();
+  void demanglePath(InType InType);
+  void demangleImplPath(InType InType);
+  void demangleGenericArg();
+  void demangleType();
+  void demangleFnSig();
+  void demangleConst();
+  void demangleConstInt();
+  void demangleConstBool();
+  void demangleConstChar();
 
   Identifier parseIdentifier();
-  void parseOptionalBase62Number(char Tag);
+  uint64_t parseOptionalBase62Number(char Tag);
   uint64_t parseBase62Number();
   uint64_t parseDecimalNumber();
+  uint64_t parseHexNumber(StringView &HexDigits);
+
+  void print(char C) {
+    if (Error || !Print)
+      return;
+
+    Output += C;
+  }
 
   void print(StringView S) {
-    if (Error)
+    if (Error || !Print)
       return;
 
     Output += S;
   }
+
+  void printDecimalNumber(uint64_t N) {
+    if (Error || !Print)
+      return;
+
+    Output << N;
+  }
+
+  void printBasicType(BasicType);
 
   char look() const {
     if (Error || Position >= Input.size())

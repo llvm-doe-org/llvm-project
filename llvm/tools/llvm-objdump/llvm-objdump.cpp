@@ -1015,7 +1015,7 @@ static void addSymbolizer(
                     LabelAddrs.begin());
   // Add the labels.
   for (unsigned LabelNum = 0; LabelNum != LabelAddrs.size(); ++LabelNum) {
-    std::unique_ptr<std::string> Name(new std::string);
+    auto Name = std::make_unique<std::string>();
     *Name = (Twine("L") + Twine(LabelNum)).str();
     SynthesizedLabelNames.push_back(std::move(Name));
     Symbols.push_back(SymbolInfoTy(
@@ -1076,10 +1076,15 @@ static void disassembleObject(const Target *TheTarget, const ObjectFile *Obj,
     if (Obj->isELF() && getElfSymbolType(Obj, Symbol) == ELF::STT_SECTION)
       continue;
 
-    // Don't ask a Mach-O STAB symbol for its section unless you know that
-    // STAB symbol's section field refers to a valid section index. Otherwise
-    // the symbol may error trying to load a section that does not exist.
     if (MachO) {
+      // __mh_(execute|dylib|dylinker|bundle|preload|object)_header are special
+      // symbols that support MachO header introspection. They do not bind to
+      // code locations and are irrelevant for disassembly.
+      if (NameOrErr->startswith("__mh_") && NameOrErr->endswith("_header"))
+        continue;
+      // Don't ask a Mach-O STAB symbol for its section unless you know that
+      // STAB symbol's section field refers to a valid section index. Otherwise
+      // the symbol may error trying to load a section that does not exist.
       DataRefImpl SymDRI = Symbol.getRawDataRefImpl();
       uint8_t NType = (MachO->is64Bit() ?
                        MachO->getSymbol64TableEntry(SymDRI).n_type:
@@ -1576,10 +1581,11 @@ static void disassembleObject(const ObjectFile *Obj, bool InlineRelocs) {
   if (!MII)
     reportError(Obj->getFileName(),
                 "no instruction info for target " + TripleName);
-  MCObjectFileInfo MOFI;
-  MCContext Ctx(AsmInfo.get(), MRI.get(), &MOFI);
+  MCContext Ctx(Triple(TripleName), AsmInfo.get(), MRI.get(), STI.get());
   // FIXME: for now initialize MCObjectFileInfo with default values
-  MOFI.InitMCObjectFileInfo(Triple(TripleName), false, Ctx);
+  std::unique_ptr<MCObjectFileInfo> MOFI(
+      TheTarget->createMCObjectFileInfo(Ctx, /*PIC=*/false));
+  Ctx.setObjectFileInfo(MOFI.get());
 
   std::unique_ptr<MCDisassembler> DisAsm(
       TheTarget->createMCDisassembler(*STI, Ctx));
@@ -1758,9 +1764,11 @@ void objdump::printSectionHeaders(const ObjectFile *Obj) {
 
     std::string Type = Section.isText() ? "TEXT" : "";
     if (Section.isData())
-      Type += Type.empty() ? "DATA" : " DATA";
+      Type += Type.empty() ? "DATA" : ", DATA";
     if (Section.isBSS())
-      Type += Type.empty() ? "BSS" : " BSS";
+      Type += Type.empty() ? "BSS" : ", BSS";
+    if (Section.isDebugSection())
+      Type += Type.empty() ? "DEBUG" : ", DEBUG";
 
     if (HasLMAColumn)
       outs() << format("%3" PRIu64 " %-*s %08" PRIx64 " ", Idx, NameWidth,
@@ -2419,8 +2427,6 @@ static void parseObjdumpOptions(const llvm::opt::InputArgList &InputArgs) {
   DisassembleSymbols =
       commaSeparatedValues(InputArgs, OBJDUMP_disassemble_symbols_EQ);
   DisassembleZeroes = InputArgs.hasArg(OBJDUMP_disassemble_zeroes);
-  DisassemblerOptions =
-      commaSeparatedValues(InputArgs, OBJDUMP_disassembler_options_EQ);
   if (const opt::Arg *A = InputArgs.getLastArg(OBJDUMP_dwarf_EQ)) {
     DwarfDumpType =
         StringSwitch<DIDumpType>(A->getValue()).Case("frames", DIDT_DebugFrame);
@@ -2466,24 +2472,40 @@ static void parseObjdumpOptions(const llvm::opt::InputArgList &InputArgs) {
 
   parseMachOOptions(InputArgs);
 
-  // Handle options that get forwarded to cl::opt<>s in libraries.
-  // FIXME: Depending on https://reviews.llvm.org/D84191#inline-946075 ,
-  // hopefully remove this again.
-  std::vector<const char *> LLVMArgs;
-  LLVMArgs.push_back("llvm-objdump (LLVM option parsing)");
-  if (const opt::Arg *A = InputArgs.getLastArg(OBJDUMP_x86_asm_syntax_att,
-                                               OBJDUMP_x86_asm_syntax_intel)) {
+  // Parse -M (--disassembler-options) and deprecated
+  // --x86-asm-syntax={att,intel}.
+  //
+  // Note, for x86, the asm dialect (AssemblerDialect) is initialized when the
+  // MCAsmInfo is constructed. MCInstPrinter::applyTargetSpecificCLOption is
+  // called too late. For now we have to use the internal cl::opt option.
+  const char *AsmSyntax = nullptr;
+  for (const auto *A : InputArgs.filtered(OBJDUMP_disassembler_options_EQ,
+                                          OBJDUMP_x86_asm_syntax_att,
+                                          OBJDUMP_x86_asm_syntax_intel)) {
     switch (A->getOption().getID()) {
     case OBJDUMP_x86_asm_syntax_att:
-      LLVMArgs.push_back("--x86-asm-syntax=att");
-      break;
+      AsmSyntax = "--x86-asm-syntax=att";
+      continue;
     case OBJDUMP_x86_asm_syntax_intel:
-      LLVMArgs.push_back("--x86-asm-syntax=intel");
-      break;
+      AsmSyntax = "--x86-asm-syntax=intel";
+      continue;
+    }
+
+    SmallVector<StringRef, 2> Values;
+    llvm::SplitString(A->getValue(), Values, ",");
+    for (StringRef V : Values) {
+      if (V == "att")
+        AsmSyntax = "--x86-asm-syntax=att";
+      else if (V == "intel")
+        AsmSyntax = "--x86-asm-syntax=intel";
+      else
+        DisassemblerOptions.push_back(V.str());
     }
   }
-  LLVMArgs.push_back(nullptr);
-  llvm::cl::ParseCommandLineOptions(LLVMArgs.size() - 1, LLVMArgs.data());
+  if (AsmSyntax) {
+    const char *Argv[] = {"llvm-objdump", AsmSyntax};
+    llvm::cl::ParseCommandLineOptions(2, Argv);
+  }
 
   // objdump defaults to a.out if no filenames specified.
   if (InputFilenames.empty())

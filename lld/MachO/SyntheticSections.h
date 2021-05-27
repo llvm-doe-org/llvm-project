@@ -16,7 +16,7 @@
 #include "OutputSegment.h"
 #include "Target.h"
 
-#include "llvm/ADT/PointerUnion.h"
+#include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -122,6 +122,10 @@ public:
   void writeTo(uint8_t *buf) const override;
 
   void addEntry(Symbol *sym);
+
+  uint64_t getVA(uint32_t gotIndex) const {
+    return addr + gotIndex * target->wordSize;
+  }
 
 private:
   llvm::SetVector<const Symbol *> entries;
@@ -285,11 +289,21 @@ public:
   StubsSection();
   uint64_t getSize() const override;
   bool isNeeded() const override { return !entries.empty(); }
+  void finalize() override;
   void writeTo(uint8_t *buf) const override;
   const llvm::SetVector<Symbol *> &getEntries() const { return entries; }
   // Returns whether the symbol was added. Note that every stubs entry will
   // have a corresponding entry in the LazyPointerSection.
   bool addEntry(Symbol *);
+  uint64_t getVA(uint32_t stubsIndex) const {
+    // ConcatOutputSection::finalize() can seek the address of a
+    // stub before its address is assigned. Before __stubs is
+    // finalized, return a contrived out-of-range address.
+    return isFinal ? addr + stubsIndex * target->stubSize
+                   : TargetInfo::outOfRangeVA;
+  }
+
+  bool isFinal = false; // is address assigned?
 
 private:
   llvm::SetVector<Symbol *> entries;
@@ -500,9 +514,6 @@ private:
   llvm::SmallString<261> xarPath;
   uint64_t xarSize;
 };
-
-static_assert((CodeSignatureSection::blobHeadersSize % 8) == 0, "");
-static_assert((CodeSignatureSection::fixedHeadersSize % 8) == 0, "");
 
 struct InStruct {
   MachHeaderSection *header = nullptr;

@@ -264,6 +264,7 @@ public:
   void VisitBlockDecl(const BlockDecl *D);
 
   void VisitDeclRefExpr(const DeclRefExpr *DRE);
+  void VisitSYCLUniqueStableNameExpr(const SYCLUniqueStableNameExpr *E);
   void VisitPredefinedExpr(const PredefinedExpr *PE);
   void VisitUnaryOperator(const UnaryOperator *UO);
   void VisitBinaryOperator(const BinaryOperator *BO);

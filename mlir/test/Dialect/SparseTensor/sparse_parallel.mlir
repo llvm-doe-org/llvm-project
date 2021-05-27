@@ -9,14 +9,22 @@
 // RUN: mlir-opt %s -sparsification="parallelization-strategy=4" | \
 // RUN:   FileCheck %s --check-prefix=CHECK-PAR4
 
+#DenseMatrix = #sparse_tensor.encoding<{
+  dimLevelType = [ "dense", "dense" ]
+}>
+
+#SparseMatrix = #sparse_tensor.encoding<{
+  dimLevelType = [ "compressed", "compressed" ]
+}>
+
+#CSR = #sparse_tensor.encoding<{
+  dimLevelType = [ "dense", "compressed" ]
+}>
+
 #trait_dd = {
   indexing_maps = [
     affine_map<(i,j) -> (i,j)>,  // A
     affine_map<(i,j) -> (i,j)>   // X (out)
-  ],
-  sparse = [
-    [ "D", "D" ],  // A
-    [ "D", "D" ]   // X
   ],
   iterator_types = ["parallel", "parallel"],
   doc = "X(i,j) = A(i,j) * SCALE"
@@ -48,9 +56,11 @@
 // CHECK-PAR4:           scf.parallel
 // CHECK-PAR4:         return
 //
-func @scale_dd(%scale: f32, %arga: tensor<?x?xf32>, %argx: tensor<?x?xf32>) -> tensor<?x?xf32> {
+func @scale_dd(%scale: f32,
+               %arga: tensor<?x?xf32, #DenseMatrix>,
+	       %argx: tensor<?x?xf32>) -> tensor<?x?xf32> {
   %0 = linalg.generic #trait_dd
-     ins(%arga: tensor<?x?xf32>)
+     ins(%arga: tensor<?x?xf32, #DenseMatrix>)
     outs(%argx: tensor<?x?xf32>) {
       ^bb(%a: f32, %x: f32):
         %0 = mulf %a, %scale : f32
@@ -63,10 +73,6 @@ func @scale_dd(%scale: f32, %arga: tensor<?x?xf32>, %argx: tensor<?x?xf32>) -> t
   indexing_maps = [
     affine_map<(i,j) -> (i,j)>,  // A
     affine_map<(i,j) -> (i,j)>   // X (out)
-  ],
-  sparse = [
-    [ "S", "S" ],  // A
-    [ "D", "D" ]   // X
   ],
   iterator_types = ["parallel", "parallel"],
   doc = "X(i,j) = A(i,j) * SCALE"
@@ -98,9 +104,11 @@ func @scale_dd(%scale: f32, %arga: tensor<?x?xf32>, %argx: tensor<?x?xf32>) -> t
 // CHECK-PAR4:           scf.parallel
 // CHECK-PAR4:         return
 //
-func @scale_ss(%scale: f32, %arga: tensor<?x?xf32>, %argx: tensor<?x?xf32>) -> tensor<?x?xf32> {
+func @scale_ss(%scale: f32,
+               %arga: tensor<?x?xf32, #SparseMatrix>,
+	       %argx: tensor<?x?xf32>) -> tensor<?x?xf32> {
   %0 = linalg.generic #trait_ss
-     ins(%arga: tensor<?x?xf32>)
+     ins(%arga: tensor<?x?xf32, #SparseMatrix>)
     outs(%argx: tensor<?x?xf32>) {
       ^bb(%a: f32, %x: f32):
         %0 = mulf %a, %scale : f32
@@ -114,11 +122,6 @@ func @scale_ss(%scale: f32, %arga: tensor<?x?xf32>, %argx: tensor<?x?xf32>) -> t
     affine_map<(i,j) -> (i,j)>,  // A
     affine_map<(i,j) -> (j)>,    // b
     affine_map<(i,j) -> (i)>     // x (out)
-  ],
-  sparse = [
-    [ "D", "S" ],  // A
-    [ "D" ],       // b
-    [ "D" ]        // x
   ],
   iterator_types = ["parallel", "reduction"],
   doc = "x(i) += A(i,j) * b(j)"
@@ -150,9 +153,11 @@ func @scale_ss(%scale: f32, %arga: tensor<?x?xf32>, %argx: tensor<?x?xf32>) -> t
 // CHECK-PAR4:           scf.for
 // CHECK-PAR4:         return
 //
-func @matvec(%argA: tensor<16x32xf32>, %argb: tensor<32xf32>, %argx: tensor<16xf32>) -> tensor<16xf32> {
+func @matvec(%arga: tensor<16x32xf32, #CSR>,
+             %argb: tensor<32xf32>,
+	     %argx: tensor<16xf32>) -> tensor<16xf32> {
   %0 = linalg.generic #trait_matvec
-      ins(%argA, %argb : tensor<16x32xf32>, tensor<32xf32>)
+      ins(%arga, %argb : tensor<16x32xf32, #CSR>, tensor<32xf32>)
      outs(%argx: tensor<16xf32>) {
     ^bb(%A: f32, %b: f32, %x: f32):
       %0 = mulf %A, %b : f32

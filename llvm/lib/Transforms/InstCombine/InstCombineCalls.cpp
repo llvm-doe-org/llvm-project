@@ -39,6 +39,7 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
@@ -90,9 +91,11 @@ static cl::opt<unsigned> GuardWideningWindow(
     cl::desc("How wide an instruction window to bypass looking for "
              "another guard"));
 
+namespace llvm {
 /// enable preservation of attributes in assume like:
 /// call void @llvm.assume(i1 true) [ "nonnull"(i32* %PTR) ]
 extern cl::opt<bool> EnableKnowledgeRetention;
+} // namespace llvm
 
 /// Return the specified type promoted as it would be to pass though a va_arg
 /// area.
@@ -288,16 +291,20 @@ Value *InstCombinerImpl::simplifyMaskedLoad(IntrinsicInst &II) {
 
   // If the mask is all ones or undefs, this is a plain vector load of the 1st
   // argument.
-  if (maskIsAllOneOrUndef(II.getArgOperand(2)))
-    return Builder.CreateAlignedLoad(II.getType(), LoadPtr, Alignment,
-                                     "unmaskedload");
+  if (maskIsAllOneOrUndef(II.getArgOperand(2))) {
+    LoadInst *L = Builder.CreateAlignedLoad(II.getType(), LoadPtr, Alignment,
+                                            "unmaskedload");
+    L->copyMetadata(II);
+    return L;
+  }
 
   // If we can unconditionally load from this address, replace with a
   // load/select idiom. TODO: use DT for context sensitive query
   if (isDereferenceablePointer(LoadPtr, II.getType(),
                                II.getModule()->getDataLayout(), &II, nullptr)) {
-    Value *LI = Builder.CreateAlignedLoad(II.getType(), LoadPtr, Alignment,
-                                         "unmaskedload");
+    LoadInst *LI = Builder.CreateAlignedLoad(II.getType(), LoadPtr, Alignment,
+                                             "unmaskedload");
+    LI->copyMetadata(II);
     return Builder.CreateSelect(II.getArgOperand(2), LI, II.getArgOperand(3));
   }
 
@@ -320,7 +327,10 @@ Instruction *InstCombinerImpl::simplifyMaskedStore(IntrinsicInst &II) {
   if (ConstMask->isAllOnesValue()) {
     Value *StorePtr = II.getArgOperand(1);
     Align Alignment = cast<ConstantInt>(II.getArgOperand(2))->getAlignValue();
-    return new StoreInst(II.getArgOperand(0), StorePtr, false, Alignment);
+    StoreInst *S =
+        new StoreInst(II.getArgOperand(0), StorePtr, false, Alignment);
+    S->copyMetadata(II);
+    return S;
   }
 
   if (isa<ScalableVectorType>(ConstMask->getType()))
@@ -2314,9 +2324,13 @@ Instruction *InstCombinerImpl::visitCallBase(CallBase &Call) {
   }
 
   if (isa<InlineAsm>(Callee) && !Call.doesNotThrow()) {
-    // Inline asm calls cannot throw - mark them 'nounwind'.
-    Call.setDoesNotThrow();
-    Changed = true;
+    InlineAsm *IA = cast<InlineAsm>(Callee);
+    if (!IA->canThrow()) {
+      // Normal inline asm calls cannot throw - mark them
+      // 'nounwind'.
+      Call.setDoesNotThrow();
+      Changed = true;
+    }
   }
 
   // Try to optimize the call if possible, we require DataLayout for most of

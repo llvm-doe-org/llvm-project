@@ -356,9 +356,8 @@ public:
     return getTLI()->isTypeLegal(VT);
   }
 
-  unsigned getRegUsageForType(Type *Ty) {
-    InstructionCost::CostType Val =
-        *getTLI()->getTypeLegalizationCost(DL, Ty).first.getValue();
+  InstructionCost getRegUsageForType(Type *Ty) {
+    InstructionCost Val = getTLI()->getTypeLegalizationCost(DL, Ty).first;
     assert(Val >= 0 && "Negative cost!");
     return Val;
   }
@@ -448,6 +447,11 @@ public:
 
     Triple TargetTriple = TM.getTargetTriple();
     if (!TargetTriple.isArch64Bit())
+      return false;
+
+    // TODO: Triggers issues on aarch64 on darwin, so temporarily disable it
+    // there.
+    if (TargetTriple.getArch() == Triple::aarch64 && TargetTriple.isOSDarwin())
       return false;
 
     return true;

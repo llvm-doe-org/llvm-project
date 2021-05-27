@@ -124,14 +124,14 @@ enum NodeType : unsigned {
   // Splats an i64 scalar to a vector type (with element type i64) where the
   // scalar is a sign-extended i32.
   SPLAT_VECTOR_I64,
+  // Splats an 64-bit value that has been split into two i32 parts. This is
+  // expanded late to two scalar stores and a stride 0 vector load.
+  SPLAT_VECTOR_SPLIT_I64_VL,
   // Read VLENB CSR
   READ_VLENB,
   // Truncates a RVV integer vector by one power-of-two. Carries both an extra
   // mask and VL operand.
   TRUNCATE_VECTOR_VL,
-  // Unit-stride fault-only-first load
-  VLEFF,
-  VLEFF_MASK,
   // Matches the semantics of vslideup/vslidedown. The first operand is the
   // pass-thru operand, the second is the source vector, the third is the
   // XLenVT index (either constant or non-constant), the fourth is the mask
@@ -471,8 +471,8 @@ public:
                              MVT PartVT, EVT ValueVT,
                              Optional<CallingConv::ID> CC) const override;
 
-  static RISCVVLMUL getLMUL(MVT VT);
-  static unsigned getRegClassIDForLMUL(RISCVVLMUL LMul);
+  static RISCVII::VLMUL getLMUL(MVT VT);
+  static unsigned getRegClassIDForLMUL(RISCVII::VLMUL LMul);
   static unsigned getSubregIndexByMVT(MVT VT, unsigned Index);
   static unsigned getRegClassIDForVecVT(MVT VT);
   static std::pair<unsigned, unsigned>
@@ -543,6 +543,7 @@ private:
                                             SelectionDAG &DAG) const;
   SDValue lowerToScalableOp(SDValue Op, SelectionDAG &DAG, unsigned NewOpc,
                             bool HasMask = true) const;
+  SDValue lowerVPOp(SDValue Op, SelectionDAG &DAG, unsigned RISCVISDOpc) const;
   SDValue lowerFixedLengthVectorExtendToRVV(SDValue Op, SelectionDAG &DAG,
                                             unsigned ExtendOpc) const;
   SDValue lowerGET_ROUNDING(SDValue Op, SelectionDAG &DAG) const;
@@ -559,6 +560,16 @@ private:
       MachineFunction &MF) const;
 
   bool useRVVForFixedLengthVectorVT(MVT VT) const;
+
+  MVT getVPExplicitVectorLengthTy() const override;
+
+  /// RVV code generation for fixed length vectors does not lower all
+  /// BUILD_VECTORs. This makes BUILD_VECTOR legalisation a source of stores to
+  /// merge. However, merging them creates a BUILD_VECTOR that is just as
+  /// illegal as the original, thus leading to an infinite legalisation loop.
+  /// NOTE: Once BUILD_VECTOR can be custom lowered for all legal vector types,
+  /// this override can be removed.
+  bool mergeStoresAfterLegalization(EVT VT) const override;
 };
 
 namespace RISCV {

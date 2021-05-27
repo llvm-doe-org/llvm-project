@@ -1,4 +1,4 @@
-//===- SparseTensorLowering.cpp - Sparse tensor primitives lowering -------===//
+//===- SparseTensorLowering.cpp - Sparse tensor primitives conversion -----===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,9 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Lower sparse tensor primitives to calls into a runtime support library.
-// Note that this is a current implementation choice to keep the lowering
-// simple. In principle, these primitives could also be lowered to actual
+// Convert sparse tensor primitives to calls into a runtime support library.
+// Note that this is a current implementation choice to keep the conversion
+// simple. In principle, these primitives could also be converted to actual
 // elaborate IR code that implements the primitives on the selected sparse
 // tensor storage schemes.
 //
@@ -19,11 +19,54 @@
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
 #include "mlir/Dialect/SparseTensor/Transforms/Passes.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
+using namespace mlir::sparse_tensor;
 
 namespace {
+
+/// Returns internal type encoding for overhead storage.
+static unsigned getOverheadTypeEncoding(unsigned width) {
+  switch (width) {
+  default:
+    return 1;
+  case 32:
+    return 2;
+  case 16:
+    return 3;
+  case 8:
+    return 4;
+  }
+}
+
+/// Returns internal dimension level type encoding.
+static unsigned
+getDimLevelTypeEncoding(SparseTensorEncodingAttr::DimLevelType dlt) {
+  switch (dlt) {
+  case SparseTensorEncodingAttr::DimLevelType::Dense:
+    return 0;
+  case SparseTensorEncodingAttr::DimLevelType::Compressed:
+    return 1;
+  case SparseTensorEncodingAttr::DimLevelType::Singleton:
+    return 2;
+  }
+}
+
+/// Returns integers of given width and values as a constant tensor.
+/// We cast the static shape into a dynamic shape to ensure that the
+/// method signature remains uniform accross different tensor dimensions.
+static Value getTensor(ConversionPatternRewriter &rewriter, unsigned width,
+                       Location loc, ArrayRef<APInt> values) {
+  Type etp = rewriter.getIntegerType(width);
+  unsigned sz = values.size();
+  RankedTensorType tt1 = RankedTensorType::get({sz}, etp);
+  RankedTensorType tt2 = RankedTensorType::get({ShapedType::kDynamicSize}, etp);
+  auto elts =
+      rewriter.create<ConstantOp>(loc, DenseElementsAttr::get(tt1, values));
+  return rewriter.create<tensor::CastOp>(loc, tt2, elts);
+}
 
 /// Returns function reference (first hit also inserts into module).
 static FlatSymbolRefAttr getFunc(Operation *op, StringRef name, Type result,
@@ -41,14 +84,14 @@ static FlatSymbolRefAttr getFunc(Operation *op, StringRef name, Type result,
   return SymbolRefAttr::get(context, name);
 }
 
-/// Sparse conversion rule to remove opaque pointer cast.
-class SparseTensorFromPointerConverter
-    : public OpConversionPattern<sparse_tensor::FromPointerOp> {
+/// Sparse conversion rule for returns.
+class SparseReturnConverter : public OpConversionPattern<ReturnOp> {
+public:
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(sparse_tensor::FromPointerOp op, ArrayRef<Value> operands,
+  matchAndRewrite(ReturnOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOp(op, operands[0]);
+    rewriter.replaceOpWithNewOp<ReturnOp>(op, operands);
     return success();
   }
 };
@@ -71,18 +114,90 @@ public:
   }
 };
 
+/// Sparse conversion rule for the new operator.
+class SparseTensorNewConverter : public OpConversionPattern<NewOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(NewOp op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    Type resType = op.getType();
+    Type eltType = resType.cast<ShapedType>().getElementType();
+    MLIRContext *context = op->getContext();
+    SmallVector<Value, 5> params;
+    // Sparse encoding.
+    auto enc = getSparseTensorEncoding(resType);
+    if (!enc)
+      return failure();
+    // User pointer.
+    params.push_back(operands[0]);
+    // Sparsity annotations in tensor constant form.
+    SmallVector<APInt, 4> attrs;
+    unsigned sz = enc.getDimLevelType().size();
+    for (unsigned i = 0; i < sz; i++)
+      attrs.push_back(
+          APInt(8, getDimLevelTypeEncoding(enc.getDimLevelType()[i])));
+    params.push_back(getTensor(rewriter, 8, loc, attrs));
+    // Dimension order permutation array. This is the "identity"
+    // permutation by default, or otherwise the "reverse" permutation
+    // of a given ordering, so that indices can be mapped quickly
+    // to the right position.
+    SmallVector<APInt, 4> perm(sz);
+    AffineMap p = enc.getDimOrdering();
+    if (p) {
+      assert(p.isPermutation() && p.getNumResults() == sz);
+      for (unsigned i = 0; i < sz; i++)
+        perm[p.getDimPosition(i)] = APInt(64, i);
+    } else {
+      for (unsigned i = 0; i < sz; i++)
+        perm[i] = APInt(64, i);
+    }
+    params.push_back(getTensor(rewriter, 64, loc, perm));
+    // Secondary and primary types encoding.
+    unsigned secPtr = getOverheadTypeEncoding(enc.getPointerBitWidth());
+    unsigned secInd = getOverheadTypeEncoding(enc.getIndexBitWidth());
+    unsigned primary;
+    if (eltType.isF64())
+      primary = 1;
+    else if (eltType.isF32())
+      primary = 2;
+    else if (eltType.isInteger(32))
+      primary = 3;
+    else if (eltType.isInteger(16))
+      primary = 4;
+    else if (eltType.isInteger(8))
+      primary = 5;
+    else
+      return failure();
+    params.push_back(
+        rewriter.create<ConstantOp>(loc, rewriter.getI64IntegerAttr(secPtr)));
+    params.push_back(
+        rewriter.create<ConstantOp>(loc, rewriter.getI64IntegerAttr(secInd)));
+    params.push_back(
+        rewriter.create<ConstantOp>(loc, rewriter.getI64IntegerAttr(primary)));
+    // Generate the call to create new tensor.
+    Type ptrType = LLVM::LLVMPointerType::get(IntegerType::get(context, 8));
+    StringRef name = "newSparseTensor";
+    rewriter.replaceOpWithNewOp<CallOp>(
+        op, ptrType, getFunc(op, name, ptrType, params), params);
+    return success();
+  }
+};
+
 /// Sparse conversion rule for pointer accesses.
 class SparseTensorToPointersConverter
-    : public OpConversionPattern<sparse_tensor::ToPointersOp> {
+    : public OpConversionPattern<ToPointersOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(sparse_tensor::ToPointersOp op, ArrayRef<Value> operands,
+  matchAndRewrite(ToPointersOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     Type resType = op.getType();
     Type eltType = resType.cast<ShapedType>().getElementType();
     StringRef name;
-    if (eltType.isIndex() || eltType.isInteger(64))
+    if (eltType.isIndex())
+      name = "sparsePointers";
+    else if (eltType.isInteger(64))
       name = "sparsePointers64";
     else if (eltType.isInteger(32))
       name = "sparsePointers32";
@@ -99,17 +214,18 @@ public:
 };
 
 /// Sparse conversion rule for index accesses.
-class SparseTensorToIndicesConverter
-    : public OpConversionPattern<sparse_tensor::ToIndicesOp> {
+class SparseTensorToIndicesConverter : public OpConversionPattern<ToIndicesOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(sparse_tensor::ToIndicesOp op, ArrayRef<Value> operands,
+  matchAndRewrite(ToIndicesOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     Type resType = op.getType();
     Type eltType = resType.cast<ShapedType>().getElementType();
     StringRef name;
-    if (eltType.isIndex() || eltType.isInteger(64))
+    if (eltType.isIndex())
+      name = "sparseIndices";
+    else if (eltType.isInteger(64))
       name = "sparseIndices64";
     else if (eltType.isInteger(32))
       name = "sparseIndices32";
@@ -126,12 +242,11 @@ public:
 };
 
 /// Sparse conversion rule for value accesses.
-class SparseTensorToValuesConverter
-    : public OpConversionPattern<sparse_tensor::ToValuesOp> {
+class SparseTensorToValuesConverter : public OpConversionPattern<ToValuesOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(sparse_tensor::ToValuesOp op, ArrayRef<Value> operands,
+  matchAndRewrite(ToValuesOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     Type resType = op.getType();
     Type eltType = resType.cast<ShapedType>().getElementType();
@@ -158,8 +273,10 @@ public:
 
 /// Populates the given patterns list with conversion rules required for
 /// the sparsification of linear algebra operations.
-void mlir::populateSparseTensorConversionPatterns(RewritePatternSet &patterns) {
-  patterns.add<SparseTensorFromPointerConverter, SparseTensorToDimSizeConverter,
-               SparseTensorToPointersConverter, SparseTensorToIndicesConverter,
-               SparseTensorToValuesConverter>(patterns.getContext());
+void mlir::populateSparseTensorConversionPatterns(TypeConverter &typeConverter,
+                                                  RewritePatternSet &patterns) {
+  patterns.add<SparseReturnConverter, SparseTensorToDimSizeConverter,
+               SparseTensorNewConverter, SparseTensorToPointersConverter,
+               SparseTensorToIndicesConverter, SparseTensorToValuesConverter>(
+      typeConverter, patterns.getContext());
 }
