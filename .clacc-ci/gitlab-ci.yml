@@ -32,6 +32,7 @@ variables:
   BUILD_DIR: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-$BUILD_ID
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
+  LIT_NTHREADS_DIVISOR: 1
   XFAIL_COMMON:
     offloading/memory_manager.cpp
     offloading/parallel_offloading_map.cpp
@@ -69,6 +70,7 @@ stages:
       -DLIBOMPTARGET_NVPTX_COMPUTE_CAPABILITIES=70
     PATH_PREPEND:
       /opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin
+    LIT_NTHREADS_DIVISOR: 4
     XFAIL:
       Driver/openmp-offload-gpu.c
 
@@ -376,8 +378,11 @@ release (build):
            $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-build-log.txt
       | grep '^\[[0-9]\+/[0-9]\+]\|\<error:'
+    - NPROC=`nproc`
+    - echo "$NPROC"
+    - echo "$LIT_NTHREADS_DIVISOR"
     - time FILECHECK_OPTS='-dump-input-filter=all -vv -color'
-           LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml --xfail=`cat xfail.txt` --ignore-fail"
+           LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml --xfail=`cat xfail.txt` --ignore-fail -j `expr $NPROC / $LIT_NTHREADS_DIVISOR`"
            $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-log.txt
     - "! grep -c \"'--ignore-fail' was specified\"
