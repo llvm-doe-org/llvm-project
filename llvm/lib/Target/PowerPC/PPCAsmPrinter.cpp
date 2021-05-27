@@ -846,6 +846,10 @@ void PPCAsmPrinter::emitInstruction(const MachineInstr *MI) {
           "This pseudo should only be selected for 32-bit small code model.");
       Exp = getTOCEntryLoadingExprForXCOFF(MOSymbol, Exp, VK);
       TmpInst.getOperand(1) = MCOperand::createExpr(Exp);
+
+      // Print MO for better readability
+      if (isVerbose())
+        OutStreamer->GetCommentOS() << MO << '\n';
       EmitToStreamer(*OutStreamer, TmpInst);
       return;
     }
@@ -912,6 +916,10 @@ void PPCAsmPrinter::emitInstruction(const MachineInstr *MI) {
     const MCExpr *Exp = MCSymbolRefExpr::create(TOCEntry, VKExpr, OutContext);
     TmpInst.getOperand(1) = MCOperand::createExpr(
         IsAIX ? getTOCEntryLoadingExprForXCOFF(MOSymbol, Exp, VK) : Exp);
+
+    // Print MO for better readability
+    if (isVerbose() && IsAIX)
+      OutStreamer->GetCommentOS() << MO << '\n';
     EmitToStreamer(*OutStreamer, TmpInst);
     return;
   }
@@ -2182,6 +2190,15 @@ void PPCAIXAsmPrinter::emitGlobalVariableHelper(const GlobalVariable *GV) {
       !GVKind.isThreadLocal()) // Checks for both ThreadData and ThreadBSS.
     report_fatal_error("Encountered a global variable kind that is "
                        "not supported yet.");
+
+  // Print GV in verbose mode
+  if (isVerbose()) {
+    if (GV->hasInitializer()) {
+      GV->printAsOperand(OutStreamer->GetCommentOS(),
+                         /*PrintType=*/false, GV->getParent());
+      OutStreamer->GetCommentOS() << '\n';
+    }
+  }
 
   MCSectionXCOFF *Csect = cast<MCSectionXCOFF>(
       getObjFileLowering().SectionForGlobal(GV, GVKind, TM));

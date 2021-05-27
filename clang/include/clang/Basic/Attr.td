@@ -2897,6 +2897,10 @@ def NoSanitize : InheritableAttr {
       }
       return Mask;
     }
+
+    bool hasCoverage() const {
+      return llvm::is_contained(sanitizers(), "coverage");
+    }
   }];
 }
 
@@ -3606,6 +3610,7 @@ def OMPDeclareTargetDecl : InheritableAttr {
     void printPrettyPragma(raw_ostream &OS, const PrintingPolicy &Policy) const;
     static llvm::Optional<MapTypeTy>
     isDeclareTargetDeclaration(const ValueDecl *VD);
+    static llvm::Optional<OMPDeclareTargetDeclAttr*> getActiveAttr(const ValueDecl *VD);
     static llvm::Optional<DevTypeTy> getDeviceType(const ValueDecl *VD);
     static llvm::Optional<SourceLocation> getLocation(const ValueDecl *VD);
   }];

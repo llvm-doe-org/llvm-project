@@ -185,11 +185,13 @@ void ASTStmtReader::VisitDefaultStmt(DefaultStmt *S) {
 
 void ASTStmtReader::VisitLabelStmt(LabelStmt *S) {
   VisitStmt(S);
+  bool IsSideEntry = Record.readInt();
   auto *LD = readDeclAs<LabelDecl>();
   LD->setStmt(S);
   S->setDecl(LD);
   S->setSubStmt(Record.readSubStmt());
   S->setIdentLoc(readSourceLocation());
+  S->setSideEntry(IsSideEntry);
 }
 
 void ASTStmtReader::VisitAttributedStmt(AttributedStmt *S) {
@@ -577,6 +579,16 @@ void ASTStmtReader::VisitConstantExpr(ConstantExpr *E) {
   }
 
   E->setSubExpr(Record.readSubExpr());
+}
+
+void ASTStmtReader::VisitSYCLUniqueStableNameExpr(SYCLUniqueStableNameExpr *E) {
+  VisitExpr(E);
+
+  E->setLocation(readSourceLocation());
+  E->setLParenLocation(readSourceLocation());
+  E->setRParenLocation(readSourceLocation());
+
+  E->setTypeSourceInfo(Record.readTypeSourceInfo());
 }
 
 void ASTStmtReader::VisitPredefinedExpr(PredefinedExpr *E) {
@@ -2798,6 +2810,10 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       S = ConstantExpr::CreateEmpty(
           Context, static_cast<ConstantExpr::ResultStorageKind>(
                        /*StorageKind=*/Record[ASTStmtReader::NumExprFields]));
+      break;
+
+    case EXPR_SYCL_UNIQUE_STABLE_NAME:
+      S = SYCLUniqueStableNameExpr::CreateEmpty(Context);
       break;
 
     case EXPR_PREDEFINED:

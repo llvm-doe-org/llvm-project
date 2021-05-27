@@ -1050,15 +1050,15 @@ public:
                       const CFGBlock* PredBlock,
                       const CFGBlock *CurrBlock);
 
-  void intersectAndWarn(FactSet &FSet1, const FactSet &FSet2,
-                        SourceLocation JoinLoc,
-                        LockErrorKind LEK1, LockErrorKind LEK2,
-                        bool Modify=true);
+  bool join(const FactEntry &a, const FactEntry &b);
 
   void intersectAndWarn(FactSet &FSet1, const FactSet &FSet2,
                         SourceLocation JoinLoc, LockErrorKind LEK1,
-                        bool Modify=true) {
-    intersectAndWarn(FSet1, FSet2, JoinLoc, LEK1, LEK1, Modify);
+                        LockErrorKind LEK2);
+
+  void intersectAndWarn(FactSet &FSet1, const FactSet &FSet2,
+                        SourceLocation JoinLoc, LockErrorKind LEK1) {
+    intersectAndWarn(FSet1, FSet2, JoinLoc, LEK1, LEK1);
   }
 
   void runAnalysis(AnalysisDeclContext &AC);
@@ -2188,6 +2188,28 @@ void BuildLockset::VisitDeclStmt(const DeclStmt *S) {
   }
 }
 
+/// Given two facts merging on a join point, decide whether to warn and which
+/// one to keep.
+///
+/// \return  false if we should keep \p A, true if we should keep \p B.
+bool ThreadSafetyAnalyzer::join(const FactEntry &A, const FactEntry &B) {
+  if (A.kind() != B.kind()) {
+    // For managed capabilities, the destructor should unlock in the right mode
+    // anyway. For asserted capabilities no unlocking is needed.
+    if ((A.managed() || A.asserted()) && (B.managed() || B.asserted())) {
+      // The shared capability subsumes the exclusive capability.
+      return B.kind() == LK_Shared;
+    } else {
+      Handler.handleExclusiveAndShared("mutex", B.toString(), B.loc(), A.loc());
+      // Take the exclusive capability to reduce further warnings.
+      return B.kind() == LK_Exclusive;
+    }
+  } else {
+    // The non-asserted capability is the one we want to track.
+    return A.asserted() && !B.asserted();
+  }
+}
+
 /// Compute the intersection of two locksets and issue warnings for any
 /// locks in the symmetric difference.
 ///
@@ -2206,8 +2228,7 @@ void ThreadSafetyAnalyzer::intersectAndWarn(FactSet &FSet1,
                                             const FactSet &FSet2,
                                             SourceLocation JoinLoc,
                                             LockErrorKind LEK1,
-                                            LockErrorKind LEK2,
-                                            bool Modify) {
+                                            LockErrorKind LEK2) {
   FactSet FSet1Orig = FSet1;
 
   // Find locks in FSet2 that conflict or are not in FSet1, and warn.
@@ -2216,18 +2237,8 @@ void ThreadSafetyAnalyzer::intersectAndWarn(FactSet &FSet1,
 
     FactSet::iterator Iter1 = FSet1.findLockIter(FactMan, LDat2);
     if (Iter1 != FSet1.end()) {
-      const FactEntry &LDat1 = FactMan[*Iter1];
-      if (LDat1.kind() != LDat2.kind()) {
-        Handler.handleExclusiveAndShared("mutex", LDat2.toString(), LDat2.loc(),
-                                         LDat1.loc());
-        if (Modify && LDat1.kind() != LK_Exclusive) {
-          // Take the exclusive lock, which is the one in FSet2.
-          *Iter1 = Fact;
-        }
-      } else if (Modify && LDat1.asserted() && !LDat2.asserted()) {
-        // The non-asserted lock in FSet2 is the one we want to track.
+      if (join(FactMan[*Iter1], LDat2) && LEK1 == LEK_LockedSomePredecessors)
         *Iter1 = Fact;
-      }
     } else {
       LDat2.handleRemovalFromIntersection(FSet2, FactMan, JoinLoc, LEK1,
                                           Handler);
@@ -2242,7 +2253,7 @@ void ThreadSafetyAnalyzer::intersectAndWarn(FactSet &FSet1,
     if (!LDat2) {
       LDat1->handleRemovalFromIntersection(FSet1Orig, FactMan, JoinLoc, LEK2,
                                            Handler);
-      if (Modify)
+      if (LEK2 == LEK_LockedSomePredecessors)
         FSet1.removeLock(FactMan, *LDat1);
     }
   }
@@ -2469,8 +2480,7 @@ void ThreadSafetyAnalyzer::runAnalysis(AnalysisDeclContext &AC) {
         // Do not update EntrySet.
         intersectAndWarn(
             CurrBlockInfo->EntrySet, PrevLockset, PrevBlockInfo->ExitLoc,
-            IsLoop ? LEK_LockedSomeLoopIterations : LEK_LockedSomePredecessors,
-            !IsLoop);
+            IsLoop ? LEK_LockedSomeLoopIterations : LEK_LockedSomePredecessors);
       }
     }
 
@@ -2518,10 +2528,8 @@ void ThreadSafetyAnalyzer::runAnalysis(AnalysisDeclContext &AC) {
       CFGBlock *FirstLoopBlock = *SI;
       CFGBlockInfo *PreLoop = &BlockInfo[FirstLoopBlock->getBlockID()];
       CFGBlockInfo *LoopEnd = &BlockInfo[CurrBlockID];
-      intersectAndWarn(LoopEnd->ExitSet, PreLoop->EntrySet,
-                       PreLoop->EntryLoc,
-                       LEK_LockedSomeLoopIterations,
-                       false);
+      intersectAndWarn(LoopEnd->ExitSet, PreLoop->EntrySet, PreLoop->EntryLoc,
+                       LEK_LockedSomeLoopIterations);
     }
   }
 
@@ -2549,11 +2557,8 @@ void ThreadSafetyAnalyzer::runAnalysis(AnalysisDeclContext &AC) {
     ExpectedExitSet.removeLock(FactMan, Lock);
 
   // FIXME: Should we call this function for all blocks which exit the function?
-  intersectAndWarn(ExpectedExitSet, Final->ExitSet,
-                   Final->ExitLoc,
-                   LEK_LockedAtEndOfFunction,
-                   LEK_NotLockedAtEndOfFunction,
-                   false);
+  intersectAndWarn(ExpectedExitSet, Final->ExitSet, Final->ExitLoc,
+                   LEK_LockedAtEndOfFunction, LEK_NotLockedAtEndOfFunction);
 
   Handler.leaveFunction(CurrentFunction);
 }

@@ -32,6 +32,7 @@
 #include "clang/Lex/Lexer.h"
 #include "clang/Lex/LiteralSupport.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <cstring>
@@ -503,6 +504,70 @@ SourceLocation DeclRefExpr::getEndLoc() const {
   return getNameInfo().getEndLoc();
 }
 
+SYCLUniqueStableNameExpr::SYCLUniqueStableNameExpr(SourceLocation OpLoc,
+                                                   SourceLocation LParen,
+                                                   SourceLocation RParen,
+                                                   QualType ResultTy,
+                                                   TypeSourceInfo *TSI)
+    : Expr(SYCLUniqueStableNameExprClass, ResultTy, VK_RValue, OK_Ordinary),
+      OpLoc(OpLoc), LParen(LParen), RParen(RParen) {
+  setTypeSourceInfo(TSI);
+  setDependence(computeDependence(this));
+}
+
+SYCLUniqueStableNameExpr::SYCLUniqueStableNameExpr(EmptyShell Empty,
+                                                   QualType ResultTy)
+    : Expr(SYCLUniqueStableNameExprClass, ResultTy, VK_RValue, OK_Ordinary) {}
+
+SYCLUniqueStableNameExpr *
+SYCLUniqueStableNameExpr::Create(const ASTContext &Ctx, SourceLocation OpLoc,
+                                 SourceLocation LParen, SourceLocation RParen,
+                                 TypeSourceInfo *TSI) {
+  QualType ResultTy = Ctx.getPointerType(Ctx.CharTy.withConst());
+  return new (Ctx)
+      SYCLUniqueStableNameExpr(OpLoc, LParen, RParen, ResultTy, TSI);
+}
+
+SYCLUniqueStableNameExpr *
+SYCLUniqueStableNameExpr::CreateEmpty(const ASTContext &Ctx) {
+  QualType ResultTy = Ctx.getPointerType(Ctx.CharTy.withConst());
+  return new (Ctx) SYCLUniqueStableNameExpr(EmptyShell(), ResultTy);
+}
+
+std::string SYCLUniqueStableNameExpr::ComputeName(ASTContext &Context) const {
+  return SYCLUniqueStableNameExpr::ComputeName(Context,
+                                               getTypeSourceInfo()->getType());
+}
+
+std::string SYCLUniqueStableNameExpr::ComputeName(ASTContext &Context,
+                                                  QualType Ty) {
+  auto MangleCallback = [](ASTContext &Ctx,
+                           const NamedDecl *ND) -> llvm::Optional<unsigned> {
+    // This replaces the 'lambda number' in the mangling with a unique number
+    // based on its order in the declaration.  To provide some level of visual
+    // notability (actual uniqueness from normal lambdas isn't necessary, as
+    // these are used differently), we add 10,000 to the number.
+    // For example:
+    // _ZTSZ3foovEUlvE10005_
+    // Demangles to: typeinfo name for foo()::'lambda10005'()
+    // Note that the mangler subtracts 2, since with normal lambdas the lambda
+    // mangling number '0' is an anonymous struct mangle, and '1' is omitted.
+    // So 10,002 results in the first number being 10,000.
+    if (Ctx.IsSYCLKernelNamingDecl(ND))
+      return 10'002 + Ctx.GetSYCLKernelNamingIndex(ND);
+    return llvm::None;
+  };
+  std::unique_ptr<MangleContext> Ctx{ItaniumMangleContext::create(
+      Context, Context.getDiagnostics(), MangleCallback)};
+
+  std::string Buffer;
+  Buffer.reserve(128);
+  llvm::raw_string_ostream Out(Buffer);
+  Ctx->mangleTypeName(Ty, Out);
+
+  return Out.str();
+}
+
 PredefinedExpr::PredefinedExpr(SourceLocation L, QualType FNTy, IdentKind IK,
                                StringLiteral *SL)
     : Expr(PredefinedExprClass, FNTy, VK_LValue, OK_Ordinary) {
@@ -705,7 +770,9 @@ std::string PredefinedExpr::ComputeName(IdentKind IK, const Decl *CurrentDecl) {
         StringRef Param = Params->getParam(i)->getName();
         if (Param.empty()) continue;
         TOut << Param << " = ";
-        Args.get(i).print(Policy, TOut);
+        Args.get(i).print(
+            Policy, TOut,
+            TemplateParameterList::shouldIncludeTypeForArgument(Params, i));
         TOut << ", ";
       }
     }
@@ -721,7 +788,7 @@ std::string PredefinedExpr::ComputeName(IdentKind IK, const Decl *CurrentDecl) {
         StringRef Param = Params->getParam(i)->getName();
         if (Param.empty()) continue;
         TOut << Param << " = ";
-        Args->get(i).print(Policy, TOut);
+        Args->get(i).print(Policy, TOut, /*IncludeType*/ true);
         TOut << ", ";
       }
     }
@@ -863,6 +930,76 @@ std::string FixedPointLiteral::getValueAsString(unsigned Radix) const {
   FixedPointValueToString(
       S, llvm::APSInt::getUnsigned(getValue().getZExtValue()), Scale);
   return std::string(S.str());
+}
+
+void CharacterLiteral::print(unsigned Val, CharacterKind Kind,
+                             raw_ostream &OS) {
+  switch (Kind) {
+  case CharacterLiteral::Ascii:
+    break; // no prefix.
+  case CharacterLiteral::Wide:
+    OS << 'L';
+    break;
+  case CharacterLiteral::UTF8:
+    OS << "u8";
+    break;
+  case CharacterLiteral::UTF16:
+    OS << 'u';
+    break;
+  case CharacterLiteral::UTF32:
+    OS << 'U';
+    break;
+  }
+
+  switch (Val) {
+  case '\\':
+    OS << "'\\\\'";
+    break;
+  case '\'':
+    OS << "'\\''";
+    break;
+  case '\a':
+    // TODO: K&R: the meaning of '\\a' is different in traditional C
+    OS << "'\\a'";
+    break;
+  case '\b':
+    OS << "'\\b'";
+    break;
+  // Nonstandard escape sequence.
+  /*case '\e':
+    OS << "'\\e'";
+    break;*/
+  case '\f':
+    OS << "'\\f'";
+    break;
+  case '\n':
+    OS << "'\\n'";
+    break;
+  case '\r':
+    OS << "'\\r'";
+    break;
+  case '\t':
+    OS << "'\\t'";
+    break;
+  case '\v':
+    OS << "'\\v'";
+    break;
+  default:
+    // A character literal might be sign-extended, which
+    // would result in an invalid \U escape sequence.
+    // FIXME: multicharacter literals such as '\xFF\xFF\xFF\xFF'
+    // are not correctly handled.
+    if ((Val & ~0xFFu) == ~0xFFu && Kind == CharacterLiteral::Ascii)
+      Val &= 0xFFu;
+    if (Val < 256 && isPrintable((unsigned char)Val))
+      OS << "'" << (char)Val << "'";
+    else if (Val < 256)
+      OS << "'\\x" << llvm::format("%02x", Val) << "'";
+    else if (Val <= 0xFFFF)
+      OS << "'\\u" << llvm::format("%04x", Val) << "'";
+    else
+      OS << "'\\U" << llvm::format("%08x", Val) << "'";
+  }
 }
 
 FloatingLiteral::FloatingLiteral(const ASTContext &C, const llvm::APFloat &V,
@@ -3308,6 +3445,7 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
   case SourceLocExprClass:
   case ConceptSpecializationExprClass:
   case RequiresExprClass:
+  case SYCLUniqueStableNameExprClass:
     // These never have a side-effect.
     return false;
 
