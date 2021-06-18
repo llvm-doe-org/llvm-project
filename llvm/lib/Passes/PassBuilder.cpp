@@ -159,6 +159,7 @@
 #include "llvm/Transforms/Scalar/JumpThreading.h"
 #include "llvm/Transforms/Scalar/LICM.h"
 #include "llvm/Transforms/Scalar/LoopAccessAnalysisPrinter.h"
+#include "llvm/Transforms/Scalar/LoopBoundSplit.h"
 #include "llvm/Transforms/Scalar/LoopDataPrefetch.h"
 #include "llvm/Transforms/Scalar/LoopDeletion.h"
 #include "llvm/Transforms/Scalar/LoopDistribute.h"
@@ -202,7 +203,6 @@
 #include "llvm/Transforms/Scalar/SimpleLoopUnswitch.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
 #include "llvm/Transforms/Scalar/Sink.h"
-#include "llvm/Transforms/Scalar/SpeculateAroundPHIs.h"
 #include "llvm/Transforms/Scalar/SpeculativeExecution.h"
 #include "llvm/Transforms/Scalar/StraightLineStrengthReduce.h"
 #include "llvm/Transforms/Scalar/StructurizeCFG.h"
@@ -293,6 +293,7 @@ PipelineTuningOptions::PipelineTuningOptions() {
 namespace llvm {
 extern cl::opt<unsigned> MaxDevirtIterations;
 extern cl::opt<bool> EnableConstraintElimination;
+extern cl::opt<bool> EnableFunctionSpecialization;
 extern cl::opt<bool> EnableGVNHoist;
 extern cl::opt<bool> EnableGVNSink;
 extern cl::opt<bool> EnableHotColdSplit;
@@ -616,7 +617,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
   FPM.addPass(SimplifyCFGPass());
   FPM.addPass(InstCombinePass());
   if (EnableLoopFlatten)
-    FPM.addPass(LoopFlattenPass());
+    FPM.addPass(createFunctionToLoopPassAdaptor(LoopFlattenPass()));
   // The loop passes in LPM2 (LoopFullUnrollPass) do not preserve MemorySSA.
   // *All* loop passes must preserve it, in order to be able to use it.
   FPM.addPass(createFunctionToLoopPassAdaptor(std::move(LPM2),
@@ -791,7 +792,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
   FPM.addPass(SimplifyCFGPass());
   FPM.addPass(InstCombinePass());
   if (EnableLoopFlatten)
-    FPM.addPass(LoopFlattenPass());
+    FPM.addPass(createFunctionToLoopPassAdaptor(LoopFlattenPass()));
   // The loop passes in LPM2 (LoopIdiomRecognizePass, IndVarSimplifyPass,
   // LoopDeletionPass and LoopFullUnrollPass) do not preserve MemorySSA.
   // *All* loop passes must preserve it, in order to be able to use it.
@@ -1130,6 +1131,10 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
   for (auto &C : PipelineEarlySimplificationEPCallbacks)
     C(MPM, Level);
 
+  // Specialize functions with IPSCCP.
+  if (EnableFunctionSpecialization)
+    MPM.addPass(FunctionSpecializationPass());
+
   // Interprocedural constant propagation now that basic cleanup has occurred
   // and prior to optimizing globals.
   // FIXME: This position in the pipeline hasn't been carefully considered in
@@ -1246,25 +1251,22 @@ void PassBuilder::addVectorPasses(OptimizationLevel Level,
     FPM.addPass(InstCombinePass());
   }
 
-  if (IsLTO) {
-    FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions().hoistCommonInsts(true)));
-  } else {
-    // Now that we've formed fast to execute loop structures, we do further
-    // optimizations. These are run afterward as they might block doing complex
-    // analyses and transforms such as what are needed for loop vectorization.
+  // Now that we've formed fast to execute loop structures, we do further
+  // optimizations. These are run afterward as they might block doing complex
+  // analyses and transforms such as what are needed for loop vectorization.
 
-    // Cleanup after loop vectorization, etc. Simplification passes like CVP and
-    // GVN, loop transforms, and others have already run, so it's now better to
-    // convert to more optimized IR using more aggressive simplify CFG options.
-    // The extra sinking transform can create larger basic blocks, so do this
-    // before SLP vectorization.
-    FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions()
-                                    .forwardSwitchCondToPhi(true)
-                                    .convertSwitchToLookupTable(true)
-                                    .needCanonicalLoops(false)
-                                    .hoistCommonInsts(true)
-                                    .sinkCommonInsts(true)));
-  }
+  // Cleanup after loop vectorization, etc. Simplification passes like CVP and
+  // GVN, loop transforms, and others have already run, so it's now better to
+  // convert to more optimized IR using more aggressive simplify CFG options.
+  // The extra sinking transform can create larger basic blocks, so do this
+  // before SLP vectorization.
+  FPM.addPass(SimplifyCFGPass(SimplifyCFGOptions()
+                                  .forwardSwitchCondToPhi(true)
+                                  .convertSwitchToLookupTable(true)
+                                  .needCanonicalLoops(false)
+                                  .hoistCommonInsts(true)
+                                  .sinkCommonInsts(true)));
+
   if (IsLTO) {
     FPM.addPass(SCCPPass());
     FPM.addPass(InstCombinePass());
@@ -1444,11 +1446,6 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
   // LoopSink (and other loop passes since the last simplifyCFG) might have
   // resulted in single-entry-single-exit or empty blocks. Clean up the CFG.
   OptimizePM.addPass(SimplifyCFGPass());
-
-  // Optimize PHIs by speculating around them when profitable. Note that this
-  // pass needs to be run after any PRE or similar pass as it is essentially
-  // inserting redundancies into the program. This even includes SimplifyCFG.
-  OptimizePM.addPass(SpeculateAroundPHIsPass());
 
   if (PTO.Coroutines)
     OptimizePM.addPass(CoroCleanupPass());
@@ -1700,6 +1697,9 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
     // produce the same result as if we only do promotion here.
     MPM.addPass(PGOIndirectCallPromotion(
         true /* InLTO */, PGOOpt && PGOOpt->Action == PGOOptions::SampleUse));
+
+    if (EnableFunctionSpecialization)
+      MPM.addPass(FunctionSpecializationPass());
     // Propagate constants at call sites into the functions they call.  This
     // opens opportunities for globalopt (and inlining) by substituting function
     // pointers passed as arguments to direct uses of functions.
@@ -1841,7 +1841,7 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
 
   // More loops are countable; try to optimize them.
   if (EnableLoopFlatten && Level.getSpeedupLevel() > 1)
-    MainFPM.addPass(LoopFlattenPass());
+    MainFPM.addPass(createFunctionToLoopPassAdaptor(LoopFlattenPass()));
 
   if (EnableConstraintElimination)
     MainFPM.addPass(ConstraintEliminationPass());

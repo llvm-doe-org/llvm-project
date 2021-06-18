@@ -1,6 +1,4 @@
 ; RUN: opt < %s -dfsan -S | FileCheck %s
-; RUN: opt < %s -dfsan -dfsan-fast-16-labels -S | FileCheck %s
-; RUN: opt < %s -dfsan -dfsan-fast-8-labels -S | FileCheck %s
 ; RUN: opt < %s -passes=dfsan -S | FileCheck %s
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
@@ -50,7 +48,7 @@ lpad:
           catch i8* null
   %1 = extractvalue { i8*, i32 } %0, 0
 
-  ; CHECK: store {{.*}} @__dfsan_arg_tls
+  ; CHECK: store i8 0,{{.*}} @__dfsan_arg_tls
   ; CHECK: call {{.*}} @"dfs$__cxa_begin_catch"
   ; CHECK: load {{.*}} @__dfsan_retval_tls
   %2 = tail call i8* @__cxa_begin_catch(i8* %1)

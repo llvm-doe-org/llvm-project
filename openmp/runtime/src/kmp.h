@@ -138,6 +138,10 @@ typedef unsigned int kmp_hwloc_depth_t;
 #include "ompt-internal.h"
 #endif
 
+#if OMPD_SUPPORT
+#include "ompd-specific.h"
+#endif
+
 #ifndef UNLIKELY
 #define UNLIKELY(x) (x)
 #endif
@@ -847,6 +851,10 @@ extern kmp_nested_proc_bind_t __kmp_nested_proc_bind;
 extern int __kmp_display_affinity;
 extern char *__kmp_affinity_format;
 static const size_t KMP_AFFINITY_FORMAT_SIZE = 512;
+#if OMPT_SUPPORT
+extern int __kmp_tool;
+extern char *__kmp_tool_libraries;
+#endif // OMPT_SUPPORT
 
 #if KMP_AFFINITY_SUPPORTED
 #define KMP_PLACE_ALL (-1)
@@ -2244,15 +2252,24 @@ typedef union kmp_depnode kmp_depnode_t;
 typedef struct kmp_depnode_list kmp_depnode_list_t;
 typedef struct kmp_dephash_entry kmp_dephash_entry_t;
 
+#define KMP_DEP_IN 0x1
+#define KMP_DEP_OUT 0x2
+#define KMP_DEP_INOUT 0x3
+#define KMP_DEP_MTX 0x4
+#define KMP_DEP_SET 0x8
 // Compiler sends us this info:
 typedef struct kmp_depend_info {
   kmp_intptr_t base_addr;
   size_t len;
-  struct {
-    bool in : 1;
-    bool out : 1;
-    bool mtx : 1;
-  } flags;
+  union {
+    kmp_uint8 flag;
+    struct {
+      unsigned in : 1;
+      unsigned out : 1;
+      unsigned mtx : 1;
+      unsigned set : 1;
+    } flags;
+  };
 } kmp_depend_info_t;
 
 // Internal structures to work with task dependencies:
@@ -2286,9 +2303,9 @@ union KMP_ALIGN_CACHE kmp_depnode {
 struct kmp_dephash_entry {
   kmp_intptr_t addr;
   kmp_depnode_t *last_out;
-  kmp_depnode_list_t *last_ins;
-  kmp_depnode_list_t *last_mtxs;
-  kmp_int32 last_flag;
+  kmp_depnode_list_t *last_set;
+  kmp_depnode_list_t *prev_set;
+  kmp_uint8 last_flag;
   kmp_lock_t *mtx_lock; /* is referenced by depnodes w/mutexinoutset dep */
   kmp_dephash_entry_t *next_in_bucket;
 };
@@ -2866,6 +2883,9 @@ typedef struct kmp_base_root {
   kmp_lock_t r_begin_lock;
   volatile int r_begin;
   int r_blocktime; /* blocktime for this root and descendants */
+#if KMP_AFFINITY_SUPPORTED
+  int r_affinity_assigned;
+#endif // KMP_AFFINITY_SUPPORTED
 } kmp_base_root_t;
 
 typedef union KMP_ALIGN_CACHE kmp_root {
@@ -3487,6 +3507,16 @@ extern void __kmp_balanced_affinity(kmp_info_t *th, int team_size);
 #if KMP_OS_LINUX || KMP_OS_FREEBSD
 extern int kmp_set_thread_affinity_mask_initial(void);
 #endif
+static inline void __kmp_assign_root_init_mask() {
+  int gtid = __kmp_entry_gtid();
+  kmp_root_t *r = __kmp_threads[gtid]->th.th_root;
+  if (r->r.r_uber_thread == __kmp_threads[gtid] && !r->r.r_affinity_assigned) {
+    __kmp_affinity_set_init_mask(gtid, TRUE);
+    r->r.r_affinity_assigned = TRUE;
+  }
+}
+#else /* KMP_AFFINITY_SUPPORTED */
+#define __kmp_assign_root_init_mask() /* Nothing */
 #endif /* KMP_AFFINITY_SUPPORTED */
 // No need for KMP_AFFINITY_SUPPORTED guard as only one field in the
 // format string is for affinity, so platforms that do not support
@@ -3991,6 +4021,11 @@ KMP_EXPORT void KMPC_CONVENTION kmpc_set_stacksize_s(size_t);
 KMP_EXPORT void KMPC_CONVENTION kmpc_set_library(int);
 KMP_EXPORT void KMPC_CONVENTION kmpc_set_defaults(char const *);
 KMP_EXPORT void KMPC_CONVENTION kmpc_set_disp_num_buffers(int);
+void KMP_EXPAND_NAME(ompc_set_affinity_format)(char const *format);
+size_t KMP_EXPAND_NAME(ompc_get_affinity_format)(char *buffer, size_t size);
+void KMP_EXPAND_NAME(ompc_display_affinity)(char const *format);
+size_t KMP_EXPAND_NAME(ompc_capture_affinity)(char *buffer, size_t buf_size,
+                                              char const *format);
 
 enum kmp_target_offload_kind {
   tgt_disabled = 0,
@@ -4139,6 +4174,12 @@ int __kmp_execute_tasks_oncore(kmp_info_t *thread, kmp_int32 gtid,
                                void *itt_sync_obj,
 #endif /* USE_ITT_BUILD */
                                kmp_int32 is_constrained);
+
+extern int __kmp_nesting_mode;
+extern int __kmp_nesting_mode_nlevels;
+extern int *__kmp_nesting_nth_level;
+extern void __kmp_init_nesting_mode();
+extern void __kmp_set_nesting_mode_threads();
 
 /// This class safely opens and closes a C-style FILE* object using RAII
 /// semantics. There are also methods which allow using stdout or stderr as

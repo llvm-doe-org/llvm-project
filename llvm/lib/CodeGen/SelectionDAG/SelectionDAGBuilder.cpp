@@ -1248,10 +1248,6 @@ void SelectionDAGBuilder::resolveDanglingDebugInfo(const Value *V,
 }
 
 void SelectionDAGBuilder::salvageUnresolvedDbgValue(DanglingDebugInfo &DDI) {
-  // TODO: For the variadic implementation, instead of only checking the fail
-  // state of `handleDebugValue`, we need know specifically which values were
-  // invalid, so that we attempt to salvage only those values when processing
-  // a DIArgList.
   assert(!DDI.getDI()->hasArgList() &&
          "Not implemented for variadic dbg_values");
   Value *V = DDI.getDI()->getValue(0);
@@ -1275,21 +1271,16 @@ void SelectionDAGBuilder::salvageUnresolvedDbgValue(DanglingDebugInfo &DDI) {
   while (isa<Instruction>(V)) {
     Instruction &VAsInst = *cast<Instruction>(V);
     // Temporary "0", awaiting real implementation.
-    SmallVector<Value *, 4> AdditionalValues;
-    DIExpression *SalvagedExpr =
-        salvageDebugInfoImpl(VAsInst, Expr, StackValue, 0, AdditionalValues);
+    DIExpression *NewExpr = salvageDebugInfoImpl(VAsInst, Expr, StackValue, 0);
 
     // If we cannot salvage any further, and haven't yet found a suitable debug
     // expression, bail out.
-    // TODO: If AdditionalValues isn't empty, then the salvage can only be
-    // represented with a DBG_VALUE_LIST, so we give up. When we have support
-    // here for variadic dbg_values, remove that condition.
-    if (!SalvagedExpr || !AdditionalValues.empty())
+    if (!NewExpr)
       break;
 
     // New value and expr now represent this debuginfo.
     V = VAsInst.getOperand(0);
-    Expr = SalvagedExpr;
+    Expr = NewExpr;
 
     // Some kind of simplification occurred: check whether the operand of the
     // salvaged debug expression can be encoded in this DAG.
@@ -1942,7 +1933,7 @@ void SelectionDAGBuilder::visitRet(const ReturnInst &I) {
 
       bool NeedsRegBlock = TLI.functionArgumentNeedsConsecutiveRegisters(
           I.getOperand(0)->getType(), F->getCallingConv(),
-          /*IsVarArg*/ false);
+          /*IsVarArg*/ false, DL);
 
       ISD::NodeType ExtendKind = ISD::ANY_EXTEND;
       if (F->getAttributes().hasAttribute(AttributeList::ReturnIndex,
@@ -2924,7 +2915,7 @@ void SelectionDAGBuilder::visitInvoke(const InvokeInst &I) {
     // with deopt state.
     LowerCallSiteWithDeoptBundle(&I, getValue(Callee), EHPadBB);
   } else {
-    LowerCallTo(I, getValue(Callee), false, EHPadBB);
+    LowerCallTo(I, getValue(Callee), false, false, EHPadBB);
   }
 
   // If the value of the invoke is used outside of its defining block, make it
@@ -5734,7 +5725,7 @@ void SelectionDAGBuilder::lowerCallToExternalSymbol(const CallInst &I,
   SDValue Callee = DAG.getExternalSymbol(
       FunctionName,
       DAG.getTargetLoweringInfo().getPointerTy(DAG.getDataLayout()));
-  LowerCallTo(I, Callee, I.isTailCall());
+  LowerCallTo(I, Callee, I.isTailCall(), I.isMustTailCall());
 }
 
 /// Given a @llvm.call.preallocated.setup, return the corresponding
@@ -7305,7 +7296,7 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
   SDVTList VTs = DAG.getVTList(ValueVTs);
 
   auto EVLParamPos =
-      VPIntrinsic::GetVectorLengthParamPos(VPIntrin.getIntrinsicID());
+      VPIntrinsic::getVectorLengthParamPos(VPIntrin.getIntrinsicID());
 
   MVT EVLParamVT = TLI.getVPExplicitVectorLengthTy();
   assert(EVLParamVT.isScalarInteger() && EVLParamVT.bitsGE(MVT::i32) &&
@@ -7313,7 +7304,7 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
 
   // Request operands.
   SmallVector<SDValue, 7> OpValues;
-  for (int I = 0; I < (int)VPIntrin.getNumArgOperands(); ++I) {
+  for (unsigned I = 0; I < VPIntrin.getNumArgOperands(); ++I) {
     auto Op = getValue(VPIntrin.getArgOperand(I));
     if (I == EVLParamPos)
       Op = DAG.getNode(ISD::ZERO_EXTEND, DL, EVLParamVT, Op);
@@ -7420,6 +7411,7 @@ SelectionDAGBuilder::lowerInvokable(TargetLowering::CallLoweringInfo &CLI,
 
 void SelectionDAGBuilder::LowerCallTo(const CallBase &CB, SDValue Callee,
                                       bool isTailCall,
+                                      bool isMustTailCall,
                                       const BasicBlock *EHPadBB) {
   auto &DL = DAG.getDataLayout();
   FunctionType *FTy = CB.getFunctionType();
@@ -7436,7 +7428,7 @@ void SelectionDAGBuilder::LowerCallTo(const CallBase &CB, SDValue Callee,
     // attribute.
     auto *Caller = CB.getParent()->getParent();
     if (Caller->getFnAttribute("disable-tail-calls").getValueAsString() ==
-        "true")
+        "true" && !isMustTailCall)
       isTailCall = false;
 
     // We can't tail call inside a function with a swifterror argument. Lowering
@@ -8060,7 +8052,7 @@ void SelectionDAGBuilder::visitCall(const CallInst &I) {
     // Check if we can potentially perform a tail call. More detailed checking
     // is be done within LowerCallTo, after more information about the call is
     // known.
-    LowerCallTo(I, Callee, I.isTailCall());
+    LowerCallTo(I, Callee, I.isTailCall(), I.isMustTailCall());
 }
 
 namespace {
@@ -9440,7 +9432,7 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
     CLI.IsTailCall = false;
   } else {
     bool NeedsRegBlock = functionArgumentNeedsConsecutiveRegisters(
-        CLI.RetTy, CLI.CallConv, CLI.IsVarArg);
+        CLI.RetTy, CLI.CallConv, CLI.IsVarArg, DL);
     for (unsigned I = 0, E = RetTys.size(); I != E; ++I) {
       ISD::ArgFlagsTy Flags;
       if (NeedsRegBlock) {
@@ -9498,9 +9490,9 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
     // FIXME: Split arguments if CLI.IsPostTypeLegalization
     Type *FinalType = Args[i].Ty;
     if (Args[i].IsByVal)
-      FinalType = Args[i].IndirectType;
+      FinalType = cast<PointerType>(Args[i].Ty)->getElementType();
     bool NeedsRegBlock = functionArgumentNeedsConsecutiveRegisters(
-        FinalType, CLI.CallConv, CLI.IsVarArg);
+        FinalType, CLI.CallConv, CLI.IsVarArg, DL);
     for (unsigned Value = 0, NumValues = ValueVTs.size(); Value != NumValues;
          ++Value) {
       EVT VT = ValueVTs[Value];
@@ -9571,10 +9563,11 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
       }
       Align MemAlign;
       if (Args[i].IsByVal || Args[i].IsInAlloca || Args[i].IsPreallocated) {
-        Type *ElementTy = Args[i].IndirectType;
-        assert(ElementTy && "Indirect type not set in ArgListEntry");
+        PointerType *Ty = cast<PointerType>(Args[i].Ty);
+        Type *ElementTy = Ty->getElementType();
 
-        unsigned FrameSize = DL.getTypeAllocSize(ElementTy);
+        unsigned FrameSize = DL.getTypeAllocSize(
+            Args[i].ByValType ? Args[i].ByValType : ElementTy);
         Flags.setByValSize(FrameSize);
 
         // info is not there but there are cases it cannot get right.
@@ -10050,7 +10043,7 @@ void SelectionDAGISel::LowerArguments(const Function &F) {
     if (Arg.hasAttribute(Attribute::ByVal))
       FinalType = Arg.getParamByValType();
     bool NeedsRegBlock = TLI->functionArgumentNeedsConsecutiveRegisters(
-        FinalType, F.getCallingConv(), F.isVarArg());
+        FinalType, F.getCallingConv(), F.isVarArg(), DL);
     for (unsigned Value = 0, NumValues = ValueVTs.size();
          Value != NumValues; ++Value) {
       EVT VT = ValueVTs[Value];

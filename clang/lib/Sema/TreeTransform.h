@@ -1633,6 +1633,20 @@ public:
     return getSema().ActOnOpenMPSizesClause(Sizes, StartLoc, LParenLoc, EndLoc);
   }
 
+  /// Build a new OpenMP 'full' clause.
+  OMPClause *RebuildOMPFullClause(SourceLocation StartLoc,
+                                  SourceLocation EndLoc) {
+    return getSema().ActOnOpenMPFullClause(StartLoc, EndLoc);
+  }
+
+  /// Build a new OpenMP 'partial' clause.
+  OMPClause *RebuildOMPPartialClause(Expr *Factor, SourceLocation StartLoc,
+                                     SourceLocation LParenLoc,
+                                     SourceLocation EndLoc) {
+    return getSema().ActOnOpenMPPartialClause(Factor, StartLoc, LParenLoc,
+                                              EndLoc);
+  }
+
   /// Build a new OpenMP 'allocator' clause.
   ///
   /// By default, performs semantic analysis to build the new OpenMP clause.
@@ -2397,12 +2411,6 @@ public:
 
   StmtResult RebuildSEHFinallyStmt(SourceLocation Loc, Stmt *Block) {
     return SEHFinallyStmt::Create(getSema().getASTContext(), Loc, Block);
-  }
-
-  ExprResult RebuildSYCLUniqueStableNameExpr(SourceLocation OpLoc,
-                                             SourceLocation LParen,
-                                             SourceLocation RParen, Expr *E) {
-    return getSema().BuildSYCLUniqueStableNameExpr(OpLoc, LParen, RParen, E);
   }
 
   ExprResult RebuildSYCLUniqueStableNameExpr(SourceLocation OpLoc,
@@ -3605,7 +3613,7 @@ public:
     FunctionDecl *Builtin = cast<FunctionDecl>(Lookup.front());
     Expr *Callee = new (SemaRef.Context)
         DeclRefExpr(SemaRef.Context, Builtin, false,
-                    SemaRef.Context.BuiltinFnTy, VK_RValue, BuiltinLoc);
+                    SemaRef.Context.BuiltinFnTy, VK_PRValue, BuiltinLoc);
     QualType CalleePtrTy = SemaRef.Context.getPointerType(Builtin->getType());
     Callee = SemaRef.ImpCastExprToType(Callee, CalleePtrTy,
                                        CK_BuiltinFnToFnPtr).get();
@@ -8529,6 +8537,17 @@ TreeTransform<Derived>::TransformOMPTileDirective(OMPTileDirective *D) {
 
 template <typename Derived>
 StmtResult
+TreeTransform<Derived>::TransformOMPUnrollDirective(OMPUnrollDirective *D) {
+  DeclarationNameInfo DirName;
+  getDerived().getSema().StartOpenMPDSABlock(D->getDirectiveKind(), DirName,
+                                             nullptr, D->getBeginLoc());
+  StmtResult Res = getDerived().TransformOMPExecutableDirective(D);
+  getDerived().getSema().EndOpenMPDSABlock(Res.get());
+  return Res;
+}
+
+template <typename Derived>
+StmtResult
 TreeTransform<Derived>::TransformOMPForDirective(OMPForDirective *D) {
   DeclarationNameInfo DirName;
   getDerived().getSema().StartOpenMPDSABlock(OMPD_for, DirName, nullptr,
@@ -9224,6 +9243,28 @@ OMPClause *TreeTransform<Derived>::TransformOMPSizesClause(OMPSizesClause *C) {
     return C;
   return RebuildOMPSizesClause(TransformedSizes, C->getBeginLoc(),
                                C->getLParenLoc(), C->getEndLoc());
+}
+
+template <typename Derived>
+OMPClause *TreeTransform<Derived>::TransformOMPFullClause(OMPFullClause *C) {
+  if (!getDerived().AlwaysRebuild())
+    return C;
+  return RebuildOMPFullClause(C->getBeginLoc(), C->getEndLoc());
+}
+
+template <typename Derived>
+OMPClause *
+TreeTransform<Derived>::TransformOMPPartialClause(OMPPartialClause *C) {
+  ExprResult T = getDerived().TransformExpr(C->getFactor());
+  if (T.isInvalid())
+    return nullptr;
+  Expr *Factor = T.get();
+  bool Changed = Factor != C->getFactor();
+
+  if (!Changed && !getDerived().AlwaysRebuild())
+    return C;
+  return RebuildOMPPartialClause(Factor, C->getBeginLoc(), C->getLParenLoc(),
+                                 C->getEndLoc());
 }
 
 template <typename Derived>
@@ -11592,15 +11633,20 @@ TreeTransform<Derived>::TransformCXXTypeidExpr(CXXTypeidExpr *E) {
                                              TInfo, E->getEndLoc());
   }
 
-  // We don't know whether the subexpression is potentially evaluated until
-  // after we perform semantic analysis.  We speculatively assume it is
-  // unevaluated; it will get fixed later if the subexpression is in fact
-  // potentially evaluated.
-  EnterExpressionEvaluationContext Unevaluated(
-      SemaRef, Sema::ExpressionEvaluationContext::Unevaluated,
-      Sema::ReuseLambdaContextDecl);
+  // Typeid's operand is an unevaluated context, unless it's a polymorphic
+  // type.  We must not unilaterally enter unevaluated context here, as then
+  // semantic processing can re-transform an already transformed operand.
+  Expr *Op = E->getExprOperand();
+  auto EvalCtx = Sema::ExpressionEvaluationContext::Unevaluated;
+  if (E->isGLValue())
+    if (auto *RecordT = Op->getType()->getAs<RecordType>())
+      if (cast<CXXRecordDecl>(RecordT->getDecl())->isPolymorphic())
+        EvalCtx = SemaRef.ExprEvalContexts.back().Context;
 
-  ExprResult SubExpr = getDerived().TransformExpr(E->getExprOperand());
+  EnterExpressionEvaluationContext Unevaluated(SemaRef, EvalCtx,
+                                               Sema::ReuseLambdaContextDecl);
+
+  ExprResult SubExpr = getDerived().TransformExpr(Op);
   if (SubExpr.isInvalid())
     return ExprError();
 
@@ -13283,7 +13329,7 @@ TreeTransform<Derived>::TransformSizeOfPackExpr(SizeOfPackExpr *E) {
         auto *VD = cast<ValueDecl>(Pack);
         ExprResult DRE = getSema().BuildDeclRefExpr(
             VD, VD->getType().getNonLValueExprType(getSema().Context),
-            VD->getType()->isReferenceType() ? VK_LValue : VK_RValue,
+            VD->getType()->isReferenceType() ? VK_LValue : VK_PRValue,
             E->getPackLoc());
         if (DRE.isInvalid())
           return ExprError();
@@ -14389,7 +14435,11 @@ QualType TreeTransform<Derived>::RebuildUnresolvedUsingType(SourceLocation Loc,
 
     // A valid resolved using typename decl points to exactly one type decl.
     assert(++Using->shadow_begin() == Using->shadow_end());
-    Ty = cast<TypeDecl>((*Using->shadow_begin())->getTargetDecl());
+
+    NamedDecl *Target = Using->shadow_begin()->getTargetDecl();
+    if (SemaRef.DiagnoseUseOfDecl(Target, Loc))
+      return QualType();
+    Ty = cast<TypeDecl>(Target);
   } else {
     assert(isa<UnresolvedUsingTypenameDecl>(D) &&
            "UnresolvedUsingTypenameDecl transformed to non-using decl");

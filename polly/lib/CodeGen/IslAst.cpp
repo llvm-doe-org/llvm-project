@@ -570,7 +570,7 @@ isl::ast_expr IslAstInfo::getRunCondition() { return Ast.getRunCondition(); }
 
 IslAstUserPayload *IslAstInfo::getNodePayload(const isl::ast_node &Node) {
   isl::id Id = Node.get_annotation();
-  if (!Id)
+  if (Id.is_null())
     return nullptr;
   IslAstUserPayload *Payload = (IslAstUserPayload *)Id.get_user();
   return Payload;
@@ -623,7 +623,7 @@ bool IslAstInfo::isExecutedInParallel(const isl::ast_node &Node) {
 isl::union_map IslAstInfo::getSchedule(const isl::ast_node &Node) {
   IslAstUserPayload *Payload = getNodePayload(Node);
   if (!Payload)
-    return nullptr;
+    return {};
 
   isl::ast_build Build = isl::manage_copy(Payload->Build);
   return Build.get_schedule();
@@ -632,7 +632,7 @@ isl::union_map IslAstInfo::getSchedule(const isl::ast_node &Node) {
 isl::pw_aff
 IslAstInfo::getMinimalDependenceDistance(const isl::ast_node &Node) {
   IslAstUserPayload *Payload = getNodePayload(Node);
-  return Payload ? Payload->MinimalDependenceDistance : nullptr;
+  return Payload ? Payload->MinimalDependenceDistance : isl::pw_aff();
 }
 
 IslAstInfo::MemoryAccessSet *
@@ -766,11 +766,9 @@ void IslAstInfo::print(raw_ostream &OS) {
   P = isl_ast_node_print(RootNode.get(), P, Options);
   AstStr = isl_printer_get_str(P);
 
-  auto *Schedule = S.getScheduleTree().release();
-
   LLVM_DEBUG({
     dbgs() << S.getContextStr() << "\n";
-    dbgs() << stringFromIslObj(Schedule);
+    dbgs() << stringFromIslObj(S.getScheduleTree(), "null");
   });
   OS << "\nif (" << RtCStr << ")\n\n";
   OS << AstStr << "\n";
@@ -780,7 +778,6 @@ void IslAstInfo::print(raw_ostream &OS) {
   free(RtCStr);
   free(AstStr);
 
-  isl_schedule_free(Schedule);
   isl_printer_free(P);
 }
 

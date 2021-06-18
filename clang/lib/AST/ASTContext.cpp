@@ -1571,6 +1571,21 @@ ASTContext::setInstantiatedFromUsingDecl(NamedDecl *Inst, NamedDecl *Pattern) {
   InstantiatedFromUsingDecl[Inst] = Pattern;
 }
 
+UsingEnumDecl *
+ASTContext::getInstantiatedFromUsingEnumDecl(UsingEnumDecl *UUD) {
+  auto Pos = InstantiatedFromUsingEnumDecl.find(UUD);
+  if (Pos == InstantiatedFromUsingEnumDecl.end())
+    return nullptr;
+
+  return Pos->second;
+}
+
+void ASTContext::setInstantiatedFromUsingEnumDecl(UsingEnumDecl *Inst,
+                                                  UsingEnumDecl *Pattern) {
+  assert(!InstantiatedFromUsingEnumDecl[Inst] && "pattern already exists");
+  InstantiatedFromUsingEnumDecl[Inst] = Pattern;
+}
+
 UsingShadowDecl *
 ASTContext::getInstantiatedFromUsingShadowDecl(UsingShadowDecl *Inst) {
   llvm::DenseMap<UsingShadowDecl*, UsingShadowDecl*>::const_iterator Pos
@@ -11715,25 +11730,27 @@ bool ASTContext::IsSYCLKernelNamingDecl(const NamedDecl *ND) const {
 
 // Filters the Decls list to those that share the lambda mangling with the
 // passed RD.
-static void FilterSYCLKernelNamingDecls(
-    ASTContext &Ctx, const CXXRecordDecl *RD,
+void ASTContext::FilterSYCLKernelNamingDecls(
+    const CXXRecordDecl *RD,
     llvm::SmallVectorImpl<const CXXRecordDecl *> &Decls) {
-  static std::unique_ptr<ItaniumMangleContext> Mangler{
-      ItaniumMangleContext::create(Ctx, Ctx.getDiagnostics())};
+
+  if (!SYCLKernelFilterContext)
+    SYCLKernelFilterContext.reset(
+        ItaniumMangleContext::create(*this, getDiagnostics()));
 
   llvm::SmallString<128> LambdaSig;
   llvm::raw_svector_ostream Out(LambdaSig);
-  Mangler->mangleLambdaSig(RD, Out);
+  SYCLKernelFilterContext->mangleLambdaSig(RD, Out);
 
-  llvm::erase_if(Decls, [&LambdaSig](const CXXRecordDecl *LocalRD) {
+  llvm::erase_if(Decls, [this, &LambdaSig](const CXXRecordDecl *LocalRD) {
     llvm::SmallString<128> LocalLambdaSig;
     llvm::raw_svector_ostream LocalOut(LocalLambdaSig);
-    Mangler->mangleLambdaSig(LocalRD, LocalOut);
+    SYCLKernelFilterContext->mangleLambdaSig(LocalRD, LocalOut);
     return LambdaSig != LocalLambdaSig;
   });
 }
 
-unsigned ASTContext::GetSYCLKernelNamingIndex(const NamedDecl *ND) const {
+unsigned ASTContext::GetSYCLKernelNamingIndex(const NamedDecl *ND) {
   assert(getLangOpts().isSYCL() && "Only valid for SYCL programs");
   assert(IsSYCLKernelNamingDecl(ND) &&
          "Lambda not involved in mangling asked for a naming index?");
@@ -11748,12 +11765,7 @@ unsigned ASTContext::GetSYCLKernelNamingIndex(const NamedDecl *ND) const {
 
   llvm::SmallVector<const CXXRecordDecl *> Decls{Set.begin(), Set.end()};
 
-  // If we are in an itanium situation, the mangling-numbers for a lambda depend
-  // on the mangled signature, so sort by that. Only TargetCXXABI::Microsoft
-  // doesn't use the itanium mangler, and just sets the lambda mangling number
-  // incrementally, with no consideration to the signature.
-  if (Target->getCXXABI().getKind() != TargetCXXABI::Microsoft)
-    FilterSYCLKernelNamingDecls(const_cast<ASTContext &>(*this), RD, Decls);
+  FilterSYCLKernelNamingDecls(RD, Decls);
 
   llvm::sort(Decls, [](const CXXRecordDecl *LHS, const CXXRecordDecl *RHS) {
     return LHS->getLambdaManglingNumber() < RHS->getLambdaManglingNumber();

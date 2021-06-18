@@ -69,7 +69,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
 
   // FIXME: support subtargets which have neon/fp-armv8 disabled.
   if (!ST.hasNEON() || !ST.hasFPARMv8()) {
-    computeTables();
+    getLegacyLegalizerInfo().computeTables();
     return;
   }
 
@@ -251,6 +251,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
       .widenScalarToNextPow2(0);
 
   getActionDefinitionsBuilder({G_SEXTLOAD, G_ZEXTLOAD})
+      .lowerIf(atomicOrderingAtLeastOrStrongerThan(0, AtomicOrdering::Unordered))
       .legalForTypesWithMemDesc({{s32, p0, 8, 8},
                                  {s32, p0, 16, 8},
                                  {s32, p0, 32, 8},
@@ -639,7 +640,10 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
             return Query.Types[1].getNumElements() <= 16;
           },
           0, s8)
-      .minScalarOrElt(0, s8); // Worst case, we need at least s8.
+      .minScalarOrElt(0, s8) // Worst case, we need at least s8.
+      .clampMaxNumElements(1, s64, 2)
+      .clampMaxNumElements(1, s32, 4)
+      .clampMaxNumElements(1, s16, 8);
 
   getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT)
       .legalIf(typeInSet(0, {v8s16, v2s32, v4s32, v2s64}));
@@ -664,6 +668,17 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
           {s32, s64, v8s8, v16s8, v4s16, v8s16, v2s32, v4s32})
       .scalarize(1);
   getActionDefinitionsBuilder(G_CTLZ_ZERO_UNDEF).lower();
+
+  // TODO: Custom lowering for v2s32, v4s32, v2s64.
+  getActionDefinitionsBuilder(G_BITREVERSE).legalFor({s32, s64, v8s8, v16s8});
+
+  getActionDefinitionsBuilder(G_CTTZ_ZERO_UNDEF).lower();
+
+  // TODO: Handle vector types.
+  getActionDefinitionsBuilder(G_CTTZ)
+      .clampScalar(0, s32, s64)
+      .scalarSameSizeAs(1, 0)
+      .customFor({s32, s64});
 
   getActionDefinitionsBuilder(G_SHUFFLE_VECTOR)
       .legalIf([=](const LegalityQuery &Query) {
@@ -748,7 +763,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST)
       .maxScalarEltSameAsIf(always, 1, 0)
       .customFor({{s32, s32}, {s64, s64}});
 
-  computeTables();
+  getLegacyLegalizerInfo().computeTables();
   verify(*ST.getInstrInfo());
 }
 
@@ -783,6 +798,8 @@ bool AArch64LegalizerInfo::legalizeCustom(LegalizerHelper &Helper,
     return legalizeCTPOP(MI, MRI, Helper);
   case TargetOpcode::G_ATOMIC_CMPXCHG:
     return legalizeAtomicCmpxchg128(MI, MRI, Helper);
+  case TargetOpcode::G_CTTZ:
+    return legalizeCTTZ(MI, Helper);
   }
 
   llvm_unreachable("expected switch to return");
@@ -1093,7 +1110,7 @@ bool AArch64LegalizerInfo::legalizeAtomicCmpxchg128(
     //     %out = CASP %in1, ...
     //     %OldLo = G_EXTRACT %out, 0
     //     %OldHi = G_EXTRACT %out, 64
-    auto Ordering = (*MI.memoperands_begin())->getOrdering();
+    auto Ordering = (*MI.memoperands_begin())->getMergedOrdering();
     unsigned Opcode;
     switch (Ordering) {
     case AtomicOrdering::Acquire:
@@ -1147,6 +1164,17 @@ bool AArch64LegalizerInfo::legalizeAtomicCmpxchg128(
                                    *ST->getRegBankInfo());
 
   MIRBuilder.buildMerge(MI.getOperand(0), {DstLo, DstHi});
+  MI.eraseFromParent();
+  return true;
+}
+
+bool AArch64LegalizerInfo::legalizeCTTZ(MachineInstr &MI,
+                                        LegalizerHelper &Helper) const {
+  MachineIRBuilder &MIRBuilder = Helper.MIRBuilder;
+  MachineRegisterInfo &MRI = *MIRBuilder.getMRI();
+  LLT Ty = MRI.getType(MI.getOperand(1).getReg());
+  auto BitReverse = MIRBuilder.buildBitReverse(Ty, MI.getOperand(1));
+  MIRBuilder.buildCTLZ(MI.getOperand(0).getReg(), BitReverse);
   MI.eraseFromParent();
   return true;
 }

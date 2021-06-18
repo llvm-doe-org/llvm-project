@@ -311,8 +311,12 @@ def note_riscv_repeated_interrupt_attribute : Note<
   "repeated RISC-V 'interrupt' attribute is here">;
 def warn_unused_parameter : Warning<"unused parameter %0">,
   InGroup<UnusedParameter>, DefaultIgnore;
+def warn_unused_but_set_parameter : Warning<"parameter %0 set but not used">,
+  InGroup<UnusedButSetParameter>, DefaultIgnore;
 def warn_unused_variable : Warning<"unused variable %0">,
   InGroup<UnusedVariable>, DefaultIgnore;
+def warn_unused_but_set_variable : Warning<"variable %0 set but not used">,
+  InGroup<UnusedButSetVariable>, DefaultIgnore;
 def warn_unused_local_typedef : Warning<
   "unused %select{typedef|type alias}0 %1">,
   InGroup<UnusedLocalTypedef>, DefaultIgnore;
@@ -532,6 +536,10 @@ def err_using_dependent_value_is_type : Error<
   "dependent using declaration resolved to type without 'typename'">;
 def err_using_decl_nested_name_specifier_is_not_class : Error<
   "using declaration in class refers into '%0', which is not a class">;
+def warn_cxx17_compat_using_decl_non_member_enumerator : Warning<
+  "member using declaration naming non-class '%0' enumerator is "
+  "incompatible with C++ standards before C++20">, InGroup<CXXPre20Compat>,
+  DefaultIgnore;
 def err_using_decl_nested_name_specifier_is_current_class : Error<
   "using declaration refers to its own class">;
 def err_using_decl_nested_name_specifier_is_not_base_class : Error<
@@ -540,6 +548,14 @@ def err_using_decl_constructor_not_in_direct_base : Error<
   "%0 is not a direct base of %1, cannot inherit constructors">;
 def err_using_decl_can_not_refer_to_class_member : Error<
   "using declaration cannot refer to class member">;
+def warn_cxx17_compat_using_decl_class_member_enumerator : Warning<
+  "member using declaration naming a non-member enumerator is incompatible "
+  "with C++ standards before C++20">, InGroup<CXXPre20Compat>, DefaultIgnore;
+def ext_using_decl_class_member_enumerator : ExtWarn<
+  "member using declaration naming a non-member enumerator is "
+  "a C++20 extension">, InGroup<CXX20>;
+def err_using_enum_is_dependent : Error<
+  "using-enum cannot name a dependent type">;
 def err_ambiguous_inherited_constructor : Error<
   "constructor of %0 inherited from multiple base class subobjects">;
 def note_ambiguous_inherited_constructor_using : Note<
@@ -549,8 +565,12 @@ def note_using_decl_class_member_workaround : Note<
   "a const variable|a constexpr variable}0 instead">;
 def err_using_decl_can_not_refer_to_namespace : Error<
   "using declaration cannot refer to a namespace">;
-def err_using_decl_can_not_refer_to_scoped_enum : Error<
-  "using declaration cannot refer to a scoped enumerator">;
+def warn_cxx17_compat_using_decl_scoped_enumerator: Warning<
+  "using declaration naming a scoped enumerator is incompatible with "
+  "C++ standards before C++20">, InGroup<CXXPre20Compat>, DefaultIgnore;
+def ext_using_decl_scoped_enumerator : ExtWarn<
+  "using declaration naming a scoped enumerator is a C++20 extension">,
+  InGroup<CXX20>;
 def err_using_decl_constructor : Error<
   "using declaration cannot refer to a constructor">;
 def warn_cxx98_compat_using_decl_constructor : Warning<
@@ -570,6 +590,15 @@ def err_using_decl_conflict_reverse : Error<
 def note_using_decl : Note<"%select{|previous }0using declaration">;
 def err_using_decl_redeclaration_expansion : Error<
   "using declaration pack expansion at block scope produces multiple values">;
+def err_use_of_empty_using_if_exists : Error<
+  "reference to unresolved using declaration">;
+def note_empty_using_if_exists_here : Note<
+  "using declaration annotated with 'using_if_exists' here">;
+def err_using_if_exists_on_ctor : Error<
+  "'using_if_exists' attribute cannot be applied to an inheriting constructor">;
+def err_using_enum_decl_redeclaration : Error<
+  "redeclaration of using-enum declaration">;
+def note_using_enum_decl : Note<"%select{|previous }0using-enum declaration">;
 
 def warn_access_decl_deprecated : Warning<
   "access declarations are deprecated; use using declarations instead">,
@@ -1732,6 +1761,8 @@ def warn_cxx98_compat_sfinae_access_control : Warning<
 // C++ name lookup
 def err_incomplete_nested_name_spec : Error<
   "incomplete type %0 named in nested name specifier">;
+def err_incomplete_enum : Error<
+  "enumeration %0 is incomplete">;
 def err_dependent_nested_name_spec : Error<
   "nested name specifier for a declaration cannot depend on a template "
   "parameter">;
@@ -3956,6 +3987,9 @@ def warn_attribute_sentinel_named_arguments : Warning<
   InGroup<IgnoredAttributes>;
 def warn_attribute_sentinel_not_variadic : Warning<
   "'sentinel' attribute only supported for variadic %select{functions|blocks}0">,
+  InGroup<IgnoredAttributes>;
+def warn_deprecated_ignored_on_using : Warning<
+  "%0 currently has no effect on a using declaration">,
   InGroup<IgnoredAttributes>;
 def err_attribute_sentinel_less_than_zero : Error<
   "'sentinel' parameter 1 less than zero">;
@@ -8321,6 +8355,10 @@ def err_global_call_not_config : Error<
 def err_ref_bad_target : Error<
   "reference to %select{__device__|__global__|__host__|__host__ __device__}0 "
   "%select{function|variable}1 %2 in %select{__device__|__global__|__host__|__host__ __device__}3 function">;
+def note_cuda_const_var_unpromoted : Note<
+  "const variable cannot be emitted on device side due to dynamic initialization">;
+def note_cuda_host_var : Note<
+  "host variable declared here">;
 def err_ref_bad_target_global_initializer : Error<
   "reference to %select{__device__|__global__|__host__|__host__ __device__}0 "
   "function %1 in global initializer">;
@@ -9138,6 +9176,14 @@ def warn_array_index_precedes_bounds : Warning<
 def warn_array_index_exceeds_bounds : Warning<
   "array index %0 is past the end of the array (which contains %1 "
   "element%s2)">, InGroup<ArrayBounds>;
+def warn_ptr_arith_exceeds_max_addressable_bounds : Warning<
+  "the pointer incremented by %0 refers past the last possible element for an array in %1-bit "
+  "address space containing %2-bit (%3-byte) elements (max possible %4 element%s5)">,
+  InGroup<ArrayBounds>;
+def warn_array_index_exceeds_max_addressable_bounds : Warning<
+  "array index %0 refers past the last possible element for an array in %1-bit "
+  "address space containing %2-bit (%3-byte) elements (max possible %4 element%s5)">,
+  InGroup<ArrayBounds>;
 def note_array_declared_here : Note<
   "array %0 declared here">;
 
@@ -10710,6 +10756,9 @@ def err_omp_interop_var_multiple_actions : Error<
 def err_omp_dispatch_statement_call
     : Error<"statement after '#pragma omp dispatch' must be a direct call"
             " to a target function or an assignment to one">;
+def err_omp_unroll_full_variable_trip_count : Error<
+  "loop to be fully unrolled must have a constant trip count">;
+def note_omp_directive_here : Note<"'%0' directive found here">;
 } // end of OpenMP category
 
 let CategoryName = "Related Result Type Issue" in {
