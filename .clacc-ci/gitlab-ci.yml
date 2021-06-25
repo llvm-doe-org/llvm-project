@@ -97,9 +97,7 @@ stages:
     PATH_PREPEND:
       ""
     XFAIL:
-      "offloading/bug49334.cpp
-      libomp :: env/kmp_set_dispatch_buf.c
-      libomp :: worksharing/for/kmp_set_dispatch_buf.c"
+      offloading/bug49334.cpp
 
 # Sometimes bugs cause only release builds to fail.  For example, debugging
 # macros might accidentally be used but not defined in release builds.
