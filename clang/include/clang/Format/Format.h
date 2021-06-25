@@ -2117,6 +2117,26 @@ struct FormatStyle {
   /// For example: BOOST_FOREACH.
   std::vector<std::string> ForEachMacros;
 
+  /// A vector of macros that should be interpreted as conditionals
+  /// instead of as function calls.
+  ///
+  /// These are expected to be macros of the form:
+  /// \code
+  ///   IF(...)
+  ///     <conditional-body>
+  ///   else IF(...)
+  ///     <conditional-body>
+  /// \endcode
+  ///
+  /// In the .clang-format configuration file, this can be configured like:
+  /// \code{.yaml}
+  ///   IfMacros: ['IF']
+  /// \endcode
+  ///
+  /// For example: `KJ_IF_MAYBE
+  /// <https://github.com/capnproto/capnproto/blob/master/kjdoc/tour.md#maybes>`_
+  std::vector<std::string> IfMacros;
+
   /// \brief A vector of macros that should be interpreted as type declarations
   /// instead of as function calls.
   ///
@@ -2517,7 +2537,7 @@ struct FormatStyle {
   /// body to be indented one additional level relative to the parent scope
   /// containing the lambda signature. For callback-heavy code, it may improve
   /// readability to have the signature indented two levels and to use
-  /// ``OuterScope``. The KJ style guide requires ``OuterScope`.
+  /// ``OuterScope``. The KJ style guide requires ``OuterScope``.
   /// `KJ style guide
   /// <https://github.com/capnproto/capnproto/blob/master/kjdoc/style-guide.md>`_
   LambdaBodyIndentationKind LambdaBodyIndentation;
@@ -2705,7 +2725,7 @@ struct FormatStyle {
   /// (counted relative to leading non-whitespace column).
   unsigned PenaltyIndentedWhitespace;
 
-  /// The ``&`` and ``*`` alignment style.
+  /// The ``&``, ``&&`` and ``*`` alignment style.
   enum PointerAlignmentStyle : unsigned char {
     /// Align pointer to the left.
     /// \code
@@ -2799,6 +2819,31 @@ struct FormatStyle {
   ///         CanonicalDelimiter: 'cc'
   /// \endcode
   std::vector<RawStringFormat> RawStringFormats;
+
+  /// \brief The ``&`` and ``&&`` alignment style.
+  enum ReferenceAlignmentStyle {
+    /// Align reference like ``PointerAlignment``.
+    RAS_Pointer,
+    /// Align reference to the left.
+    /// \code
+    ///   int& a;
+    /// \endcode
+    RAS_Left,
+    /// Align reference to the right.
+    /// \code
+    ///   int &a;
+    /// \endcode
+    RAS_Right,
+    /// Align reference in the middle.
+    /// \code
+    ///   int & a;
+    /// \endcode
+    RAS_Middle
+  };
+
+  /// \brief Reference alignment style (overrides ``PointerAlignment`` for
+  /// references).
+  ReferenceAlignmentStyle ReferenceAlignment;
 
   // clang-format off
   /// If ``true``, clang-format will attempt to re-flow comments.
@@ -3033,8 +3078,10 @@ struct FormatStyle {
     /// \endcode
     SBPO_ControlStatements,
     /// Same as ``SBPO_ControlStatements`` except this option doesn't apply to
-    /// ForEach macros. This is useful in projects where ForEach macros are
-    /// treated as function calls instead of control statements.
+    /// ForEach and If macros. This is useful in projects where ForEach/If
+    /// macros are treated as function calls instead of control statements.
+    /// ``SBPO_ControlStatementsExceptForEachMacros`` remains an alias for
+    /// backward compatability.
     /// \code
     ///    void f() {
     ///      Q_FOREACH(...) {
@@ -3042,7 +3089,7 @@ struct FormatStyle {
     ///      }
     ///    }
     /// \endcode
-    SBPO_ControlStatementsExceptForEachMacros,
+    SBPO_ControlStatementsExceptControlMacros,
     /// Put a space before opening parentheses only if the parentheses are not
     /// empty i.e. '()'
     /// \code
@@ -3433,6 +3480,7 @@ struct FormatStyle {
                R.PenaltyBreakTemplateDeclaration &&
            PointerAlignment == R.PointerAlignment &&
            RawStringFormats == R.RawStringFormats &&
+           ReferenceAlignment == R.ReferenceAlignment &&
            ShortNamespaceLines == R.ShortNamespaceLines &&
            SortIncludes == R.SortIncludes &&
            SortJavaStaticImport == R.SortJavaStaticImport &&

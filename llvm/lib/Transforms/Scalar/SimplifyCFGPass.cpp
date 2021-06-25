@@ -94,10 +94,15 @@ static bool tailMergeBlocksWithSimilarFunctionTerminators(Function &F,
 
     auto *Term = BB.getTerminator();
 
-    // Fow now only support `ret` function terminators.
+    // Fow now only support `ret`/`resume` function terminators.
     // FIXME: lift this restriction.
-    if (Term->getOpcode() != Instruction::Ret)
+    switch (Term->getOpcode()) {
+    case Instruction::Ret:
+    case Instruction::Resume:
+      break;
+    default:
       continue;
+    }
 
     // We can't tail-merge block that contains a musttail call.
     if (BB.getTerminatingMustTailCall())
@@ -119,22 +124,6 @@ static bool tailMergeBlocksWithSimilarFunctionTerminators(Function &F,
     if (any_of(Term->operands(),
                [](Value *Op) { return Op->getType()->isTokenTy(); }))
       continue;
-
-    // Only look at the block if it is empty or the only other thing in it is a
-    // single PHI node that is the operand to the return.
-    // FIXME: lift this restriction.
-    if (Term != &BB.front()) {
-      // Check for something else in the block.
-      BasicBlock::iterator I(Term);
-      --I;
-      // Skip over debug info.
-      while (isa<DbgInfoIntrinsic>(I) && I != BB.begin())
-        --I;
-      if (!isa<DbgInfoIntrinsic>(I) &&
-          (!isa<PHINode>(I) || I != BB.begin() || Term->getNumOperands() == 0 ||
-           Term->getOperand(0) != &*I))
-        continue;
-    }
 
     // Canonical blocks are uniqued based on the terminator type (opcode).
     Structure[Term->getOpcode()].emplace_back(&BB);
