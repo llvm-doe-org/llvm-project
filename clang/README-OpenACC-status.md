@@ -452,8 +452,8 @@ OpenACC Runtime Library API and Preprocessor
       cannot be linked.  This implementation facilitates Clacc's
       source-to-source mode together with OpenACC's requirement that
       `acc_on_device` evaluate to a constant when its argument is a
-      constant.  See the comments on `acc_on_device` in Clacc's
-      `openacc.h` for related limitations for source-to-source mode.
+      constant.  See the section "Source-to-Source Mode Limitations"
+      below for caveats for source-to-source mode.
 * Data and memory management routines supported on the host are:
     * `acc_malloc`, `acc_free`
         * OpenACC 3.1 is unclear about handling of a `bytes` argument
@@ -550,8 +550,10 @@ Source-to-Source Mode Limitations
   OpenMP at compile time:
     * `acc_on_device` is implemented in terms of OpenMP fully within
       Clacc's `openacc.h`.  However, support for an OpenMP 5.1
-      extension, enum variants, is required for full support.  See the
-      comments on `acc_on_device` in Clacc's `openacc.h` for details.
+      extension, enum variants, is required for full support.
+      Moreover, it can malfunction when enabling source-to-source mode
+      using `-fopenacc-ast-print`.  See the comments on
+      `acc_on_device` in Clacc's `openacc.h` for details.
     * Other routines are implemented as wrappers around the OpenMP
       Runtime Library Routines and require Clacc's OpenACC runtime
       library to be linked.  See the section "Linking" in

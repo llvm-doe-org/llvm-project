@@ -95,7 +95,8 @@ int acc_get_device_num(acc_device_t dev_type);
 //     compile-time constant argument, it evaluates at compile time to a
 //     constant."
 //   - OpenMP 5.1 doesn't specify enum variants.  Currently, Clang supports this
-//     extension as required here.
+//     extension as required here except when using -fopenacc-ast-print, as
+//     described below.
 //   - If an OpenMP compiler doesn't support enum variants, the preprocessor
 //     macro ACC2OMP_ENUM_VARIANTS_SUPPORTED should be set to 0 before including
 //     this header.  Otherwise, the acc_on_device definition below may fail to
@@ -109,6 +110,10 @@ int acc_get_device_num(acc_device_t dev_type);
 //     not permit acc_on_device calls in contexts where constant expressions are
 //     required.  Even so, compilers might still be able to optimize
 //     acc_on_device calls as constant expressions in other contexts.
+// - When Clang's OpenACC source-to-source mode is enabled by
+//   -fopenacc-ast-print instead of -fopenacc-print, acc_on_device currently
+//   behaves as if always called on the host because Clang's AST printing
+//   facility currently does not print OpenMP variants correctly.
 //----------------------------------------------------------------------------
 
 #ifndef ACC2OMP_ENUM_VARIANTS_SUPPORTED
