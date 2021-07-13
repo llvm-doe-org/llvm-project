@@ -942,13 +942,16 @@ static Value *foldOperationIntoSelectOperand(Instruction &I, Value *SO,
     assert(canConstantFoldCallTo(II, cast<Function>(II->getCalledOperand())) &&
            "Expected constant-foldable intrinsic");
     Intrinsic::ID IID = II->getIntrinsicID();
-    SmallVector<Value *, 2> Args = {SO};
+    if (II->getNumArgOperands() == 1)
+      return Builder.CreateUnaryIntrinsic(IID, SO);
 
-    // Propagate the zero-is-undef argument to the new instruction.
-    if (IID == Intrinsic::ctlz || IID == Intrinsic::cttz)
-      Args.push_back(II->getArgOperand(1));
-
-    return Builder.CreateIntrinsic(IID, I.getType(), Args);
+    // This works for real binary ops like min/max (where we always expect the
+    // constant operand to be canonicalized as op1) and unary ops with a bonus
+    // constant argument like ctlz/cttz.
+    // TODO: Handle non-commutative binary intrinsics as below for binops.
+    assert(II->getNumArgOperands() == 2 && "Expected binary intrinsic");
+    assert(isa<Constant>(II->getArgOperand(1)) && "Expected constant operand");
+    return Builder.CreateBinaryIntrinsic(IID, SO, II->getArgOperand(1));
   }
 
   assert(I.isBinaryOp() && "Unexpected opcode for select folding");
@@ -2867,27 +2870,39 @@ Instruction *InstCombinerImpl::visitReturnInst(ReturnInst &RI) {
   return nullptr;
 }
 
+// WARNING: keep in sync with SimplifyCFGOpt::simplifyUnreachable()!
 Instruction *InstCombinerImpl::visitUnreachableInst(UnreachableInst &I) {
   // Try to remove the previous instruction if it must lead to unreachable.
   // This includes instructions like stores and "llvm.assume" that may not get
   // removed by simple dead code elimination.
-  Instruction *Prev = I.getPrevNonDebugInstruction();
-  if (Prev && !Prev->isEHPad() &&
-      isGuaranteedToTransferExecutionToSuccessor(Prev)) {
+  while (Instruction *Prev = I.getPrevNonDebugInstruction()) {
+    // While we theoretically can erase EH, that would result in a block that
+    // used to start with an EH no longer starting with EH, which is invalid.
+    // To make it valid, we'd need to fixup predecessors to no longer refer to
+    // this block, but that changes CFG, which is not allowed in InstCombine.
+    if (Prev->isEHPad())
+      return nullptr; // Can not drop any more instructions. We're done here.
+
+    if (!isGuaranteedToTransferExecutionToSuccessor(Prev))
+      return nullptr; // Can not drop any more instructions. We're done here.
+    // Otherwise, this instruction can be freely erased,
+    // even if it is not side-effect free.
+
     // Temporarily disable removal of volatile stores preceding unreachable,
     // pending a potential LangRef change permitting volatile stores to trap.
     // TODO: Either remove this code, or properly integrate the check into
     // isGuaranteedToTransferExecutionToSuccessor().
     if (auto *SI = dyn_cast<StoreInst>(Prev))
       if (SI->isVolatile())
-        return nullptr;
+        return nullptr; // Can not drop this instruction. We're done here.
 
     // A value may still have uses before we process it here (for example, in
     // another unreachable block), so convert those to poison.
     replaceInstUsesWith(*Prev, PoisonValue::get(Prev->getType()));
     eraseInstFromFunction(*Prev);
-    return &I;
   }
+  assert(I.getParent()->sizeWithoutDebug() == 1 && "The block is now empty.");
+  // FIXME: recurse into unconditional predecessors?
   return nullptr;
 }
 
@@ -3086,33 +3101,32 @@ Instruction *InstCombinerImpl::visitExtractValueInst(ExtractValueInst &EV) {
       assert(*EV.idx_begin() == 1 &&
              "unexpected extract index for overflow inst");
 
-      // If the normal result of the computation is dead, and the RHS is a
-      // constant, we can transform this into a range comparison for many cases.
-      // TODO: We can generalize these for non-constant rhs when the newly
-      // formed expressions are known to simplify.  Constants are merely one
-      // such case.
-      // TODO: Handle vector splats.
-      switch (WO->getIntrinsicID()) {
-      default:
-        break;
-      case Intrinsic::uadd_with_overflow:
-        // overflow = uadd a, -4  -->  overflow = icmp ugt a, 3
-        if (ConstantInt *CI = dyn_cast<ConstantInt>(WO->getRHS()))
-          return new ICmpInst(ICmpInst::ICMP_UGT, WO->getLHS(),
-                              ConstantExpr::getNot(CI));
-        break;
-      case Intrinsic::umul_with_overflow:
-        // overflow for umul a, C  --> a > UINT_MAX udiv C
-        // (unless C == 0, in which case no overflow ever occurs)
-        if (ConstantInt *CI = dyn_cast<ConstantInt>(WO->getRHS())) {
-          assert(!CI->isZero() && "handled by instruction simplify");
-          auto UMax = APInt::getMaxValue(CI->getType()->getBitWidth());
-          auto *Op =
-            ConstantExpr::getUDiv(ConstantInt::get(CI->getType(), UMax), CI);
-          return new ICmpInst(ICmpInst::ICMP_UGT, WO->getLHS(), Op);
+      // If only the overflow result is used, and the right hand side is a
+      // constant (or constant splat), we can remove the intrinsic by directly
+      // checking for overflow.
+      const APInt *C;
+      if (match(WO->getRHS(), m_APInt(C))) {
+        // Compute the no-wrap range [X,Y) for LHS given RHS=C, then
+        // check for the inverted range using range offset trick (i.e.
+        // use a subtract to shift the range to bottom of either the
+        // signed or unsigned domain and then use a single compare to
+        // check range membership).
+        ConstantRange NWR =
+          ConstantRange::makeExactNoWrapRegion(WO->getBinaryOp(), *C,
+                                               WO->getNoWrapKind());
+        APInt Min = WO->isSigned() ? NWR.getSignedMin() : NWR.getUnsignedMin();
+        NWR = NWR.subtract(Min);
+
+        CmpInst::Predicate Pred;
+        APInt NewRHSC;
+        if (NWR.getEquivalentICmp(Pred, NewRHSC)) {
+          auto *OpTy = WO->getRHS()->getType();
+          auto *NewLHS = Builder.CreateSub(WO->getLHS(),
+                                           ConstantInt::get(OpTy, Min));
+          return new ICmpInst(ICmpInst::getInversePredicate(Pred), NewLHS,
+                              ConstantInt::get(OpTy, NewRHSC));
         }
-        break;
-      };
+      }
     }
   }
   if (LoadInst *L = dyn_cast<LoadInst>(Agg))

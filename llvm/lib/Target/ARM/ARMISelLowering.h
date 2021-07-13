@@ -139,6 +139,8 @@ class VectorType;
     PREDICATE_CAST,  // Predicate cast for MVE i1 types
     VECTOR_REG_CAST, // Reinterpret the current contents of a vector register
 
+    MVETRUNC,     // Legalization aid for truncating two vectors into one.
+
     VCMP,  // Vector compare.
     VCMPZ, // Vector compare to zero.
     VTST,  // Vector test bits.
@@ -417,6 +419,7 @@ class VectorType;
     SDValue PerformBRCONDCombine(SDNode *N, SelectionDAG &DAG) const;
     SDValue PerformCMOVToBFICombine(SDNode *N, SelectionDAG &DAG) const;
     SDValue PerformIntrinsicCombine(SDNode *N, DAGCombinerInfo &DCI) const;
+    SDValue PerformMVETruncCombine(SDNode *N, DAGCombinerInfo &DCI) const;
     SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
 
     bool SimplifyDemandedBitsForTargetNode(SDValue Op,
@@ -629,7 +632,7 @@ class VectorType;
     getExceptionSelectorRegister(const Constant *PersonalityFn) const override;
 
     Instruction *makeDMB(IRBuilderBase &Builder, ARM_MB::MemBOpt Domain) const;
-    Value *emitLoadLinked(IRBuilderBase &Builder, Value *Addr,
+    Value *emitLoadLinked(IRBuilderBase &Builder, Type *ValueTy, Value *Addr,
                           AtomicOrdering Ord) const override;
     Value *emitStoreConditional(IRBuilderBase &Builder, Value *Val, Value *Addr,
                                 AtomicOrdering Ord) const override;

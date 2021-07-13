@@ -8,6 +8,7 @@
 
 #include "mlir/Dialect/StandardOps/Utils/Utils.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Matchers.h"
@@ -17,6 +18,14 @@
 
 using namespace mlir;
 using namespace mlir::tensor;
+
+/// Materialize a single constant operation from a given attribute value with
+/// the desired resultant type.
+Operation *TensorDialect::materializeConstant(OpBuilder &builder,
+                                              Attribute value, Type type,
+                                              Location loc) {
+  return builder.create<mlir::ConstantOp>(loc, type, value);
+}
 
 //===----------------------------------------------------------------------===//
 // CastOp
@@ -181,6 +190,123 @@ struct ChainedTensorCast : public OpRewritePattern<CastOp> {
 void CastOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.add<ChainedTensorCast>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// DimOp
+//===----------------------------------------------------------------------===//
+
+void DimOp::build(OpBuilder &builder, OperationState &result, Value source,
+                  int64_t index) {
+  auto loc = result.location;
+  Value indexValue = builder.create<ConstantIndexOp>(loc, index);
+  build(builder, result, source, indexValue);
+}
+
+void DimOp::build(OpBuilder &builder, OperationState &result, Value source,
+                  Value index) {
+  auto indexTy = builder.getIndexType();
+  build(builder, result, indexTy, source, index);
+}
+
+Optional<int64_t> DimOp::getConstantIndex() {
+  if (auto constantOp = index().getDefiningOp<ConstantOp>())
+    return constantOp.getValue().cast<IntegerAttr>().getInt();
+  return {};
+}
+
+static LogicalResult verify(DimOp op) {
+  // Assume unknown index to be in range.
+  Optional<int64_t> index = op.getConstantIndex();
+  if (!index.hasValue())
+    return success();
+
+  // Check that constant index is not knowingly out of range.
+  auto type = op.source().getType();
+  if (auto tensorType = type.dyn_cast<RankedTensorType>()) {
+    if (index.getValue() >= tensorType.getRank())
+      return op.emitOpError("index is out of range");
+  } else if (type.isa<UnrankedTensorType>()) {
+    // Assume index to be in range.
+  } else {
+    llvm_unreachable("expected operand with tensor type");
+  }
+  return success();
+}
+
+OpFoldResult DimOp::fold(ArrayRef<Attribute> operands) {
+  // All forms of folding require a known index.
+  auto index = operands[1].dyn_cast_or_null<IntegerAttr>();
+  if (!index)
+    return {};
+
+  // Folding for unranked types (UnrankedTensorType) is not supported.
+  auto tensorType = source().getType().dyn_cast<RankedTensorType>();
+  if (!tensorType)
+    return {};
+
+  // Fold if the shape extent along the given index is known.
+  if (!tensorType.isDynamicDim(index.getInt())) {
+    Builder builder(getContext());
+    return builder.getIndexAttr(tensorType.getShape()[index.getInt()]);
+  }
+
+  Operation *definingOp = source().getDefiningOp();
+
+  // Fold dim to the operand of tensor.generate.
+  if (auto fromElements = dyn_cast_or_null<tensor::GenerateOp>(definingOp)) {
+    auto resultType =
+        fromElements.getResult().getType().cast<RankedTensorType>();
+    // The case where the type encodes the size of the dimension is handled
+    // above.
+    assert(resultType.getShape()[index.getInt()] ==
+           RankedTensorType::kDynamicSize);
+
+    // Find the operand of the fromElements that corresponds to this index.
+    auto dynExtents = fromElements.dynamicExtents().begin();
+    for (auto dim : resultType.getShape().take_front(index.getInt()))
+      if (dim == RankedTensorType::kDynamicSize)
+        dynExtents++;
+
+    return Value{*dynExtents};
+  }
+
+  // The size at the given index is now known to be a dynamic size.
+  unsigned unsignedIndex = index.getValue().getZExtValue();
+
+  if (auto sliceOp = dyn_cast_or_null<tensor::ExtractSliceOp>(definingOp)) {
+    assert(sliceOp.isDynamicSize(unsignedIndex) &&
+           "Expected dynamic slice size");
+    return sliceOp.getDynamicSize(unsignedIndex);
+  }
+
+  // dim(cast) -> dim
+  if (succeeded(foldTensorCast(*this)))
+    return getResult();
+
+  return {};
+}
+
+namespace {
+/// Fold dim of a cast into the dim of the source of the tensor cast.
+struct DimOfCastOp : public OpRewritePattern<DimOp> {
+  using OpRewritePattern<DimOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(DimOp dimOp,
+                                PatternRewriter &rewriter) const override {
+    auto castOp = dimOp.source().getDefiningOp<CastOp>();
+    if (!castOp)
+      return failure();
+    Value newSource = castOp.getOperand();
+    rewriter.replaceOpWithNewOp<DimOp>(dimOp, newSource, dimOp.index());
+    return success();
+  }
+};
+} // end anonymous namespace.
+
+void DimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                        MLIRContext *context) {
+  results.add<DimOfCastOp>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -516,32 +642,6 @@ static LogicalResult verify(ReshapeOp op) {
 // ExtractSliceOp
 //===----------------------------------------------------------------------===//
 
-/// Helper function to dispatch an OpFoldResult into either the `dynamicVec` if
-/// it is a Value or into `staticVec` if it is an IntegerAttr.
-/// In the case of a Value, a copy of the `sentinel` value is also pushed to
-/// `staticVec`. This is useful to extract mixed static and dynamic entries that
-/// come from an AttrSizedOperandSegments trait.
-static void dispatchIndexOpFoldResult(OpFoldResult ofr,
-                                      SmallVectorImpl<Value> &dynamicVec,
-                                      SmallVectorImpl<int64_t> &staticVec,
-                                      int64_t sentinel) {
-  if (auto v = ofr.dyn_cast<Value>()) {
-    dynamicVec.push_back(v);
-    staticVec.push_back(sentinel);
-    return;
-  }
-  APInt apInt = ofr.dyn_cast<Attribute>().cast<IntegerAttr>().getValue();
-  staticVec.push_back(apInt.getSExtValue());
-}
-
-static void dispatchIndexOpFoldResults(ArrayRef<OpFoldResult> ofrs,
-                                       SmallVectorImpl<Value> &dynamicVec,
-                                       SmallVectorImpl<int64_t> &staticVec,
-                                       int64_t sentinel) {
-  for (auto ofr : ofrs)
-    dispatchIndexOpFoldResult(ofr, dynamicVec, staticVec, sentinel);
-}
-
 /// An extract_slice op result type can be fully inferred from the source type
 /// and the static representation of offsets, sizes and strides. Special
 /// sentinels encode the dynamic case.
@@ -561,14 +661,6 @@ Type ExtractSliceOp::inferResultType(RankedTensorType sourceRankedTensorType,
                                       numTrailingSizes));
   return RankedTensorType::get(staticSizes,
                                sourceRankedTensorType.getElementType());
-}
-
-/// Extract int64_t values from the assumed ArrayAttr of IntegerAttr.
-static SmallVector<int64_t, 4> extractFromI64ArrayAttr(Attribute attr) {
-  return llvm::to_vector<4>(
-      llvm::map_range(attr.cast<ArrayAttr>(), [](Attribute a) -> int64_t {
-        return a.cast<IntegerAttr>().getInt();
-      }));
 }
 
 Type ExtractSliceOp::inferResultType(
@@ -890,17 +982,16 @@ foldIdentityOffsetSizeAndStrideOpInterface(OffsetSizeAndStrideOpInterface op,
                                            ShapedType shapedType) {
   OpBuilder b(op.getContext());
   for (OpFoldResult ofr : op.getMixedOffsets())
-    if (!isEqualConstantIntOrValue(ofr, b.getIndexAttr(0)))
+    if (getConstantIntValue(ofr) != static_cast<int64_t>(0))
       return failure();
   // Rank-reducing noops only need to inspect the leading dimensions: llvm::zip
   // is appropriate.
   auto shape = shapedType.getShape();
   for (auto it : llvm::zip(op.getMixedSizes(), shape))
-    if (!isEqualConstantIntOrValue(std::get<0>(it),
-                                   b.getIndexAttr(std::get<1>(it))))
+    if (getConstantIntValue(std::get<0>(it)) != std::get<1>(it))
       return failure();
   for (OpFoldResult ofr : op.getMixedStrides())
-    if (!isEqualConstantIntOrValue(ofr, b.getIndexAttr(1)))
+    if (getConstantIntValue(ofr) != static_cast<int64_t>(1))
       return failure();
   return success();
 }

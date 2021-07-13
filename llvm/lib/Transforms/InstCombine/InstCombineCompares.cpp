@@ -502,7 +502,7 @@ static Value *evaluateGEPOffsetExpression(User *GEP, InstCombinerImpl &IC,
 /// Returns true if we can rewrite Start as a GEP with pointer Base
 /// and some integer offset. The nodes that need to be re-written
 /// for this transformation will be added to Explored.
-static bool canRewriteGEPAsOffset(Type *ElemTy, Value *Start, Value *Base,
+static bool canRewriteGEPAsOffset(Value *Start, Value *Base,
                                   const DataLayout &DL,
                                   SetVector<Value *> &Explored) {
   SmallVector<Value *, 16> WorkList(1, Start);
@@ -550,7 +550,7 @@ static bool canRewriteGEPAsOffset(Type *ElemTy, Value *Start, Value *Base,
         // the original pointer type. We could handle more cases in the
         // future.
         if (GEP->getNumIndices() != 1 || !GEP->isInBounds() ||
-            GEP->getSourceElementType() != ElemTy)
+            GEP->getType() != Start->getType())
           return false;
 
         if (Explored.count(GEP->getOperand(0)) == 0)
@@ -626,7 +626,7 @@ static void setInsertionPoint(IRBuilder<> &Builder, Value *V,
 
 /// Returns a re-written value of Start as an indexed GEP using Base as a
 /// pointer.
-static Value *rewriteGEPAsOffset(Type *ElemTy, Value *Start, Value *Base,
+static Value *rewriteGEPAsOffset(Value *Start, Value *Base,
                                  const DataLayout &DL,
                                  SetVector<Value *> &Explored) {
   // Perform all the substitutions. This is a bit tricky because we can
@@ -728,7 +728,8 @@ static Value *rewriteGEPAsOffset(Type *ElemTy, Value *Start, Value *Base,
                                                Start->getName() + "to.ptr");
 
     Value *GEP = Builder.CreateInBoundsGEP(
-        ElemTy, NewBase, makeArrayRef(NewInsts[Val]), Val->getName() + ".ptr");
+        Start->getType()->getPointerElementType(), NewBase,
+        makeArrayRef(NewInsts[Val]), Val->getName() + ".ptr");
 
     if (!Val->getType()->isPointerTy()) {
       Value *Cast = Builder.CreatePointerCast(GEP, Val->getType(),
@@ -745,7 +746,7 @@ static Value *rewriteGEPAsOffset(Type *ElemTy, Value *Start, Value *Base,
 /// the input Value as a constant indexed GEP. Returns a pair containing
 /// the GEPs Pointer and Index.
 static std::pair<Value *, Value *>
-getAsConstantIndexedAddress(Type *ElemTy, Value *V, const DataLayout &DL) {
+getAsConstantIndexedAddress(Value *V, const DataLayout &DL) {
   Type *IndexType = IntegerType::get(V->getContext(),
                                      DL.getIndexTypeSizeInBits(V->getType()));
 
@@ -757,7 +758,7 @@ getAsConstantIndexedAddress(Type *ElemTy, Value *V, const DataLayout &DL) {
       if (!GEP->isInBounds())
         break;
       if (GEP->hasAllConstantIndices() && GEP->getNumIndices() == 1 &&
-          GEP->getSourceElementType() == ElemTy) {
+          GEP->getType() == V->getType()) {
         V = GEP->getOperand(0);
         Constant *GEPIndex = static_cast<Constant *>(GEP->getOperand(1));
         Index = ConstantExpr::getAdd(
@@ -796,14 +797,17 @@ static Instruction *transformToIndexedCompare(GEPOperator *GEPLHS, Value *RHS,
   if (!GEPLHS->hasAllConstantIndices())
     return nullptr;
 
-  Type *ElemTy = GEPLHS->getSourceElementType();
+  // Make sure the pointers have the same type.
+  if (GEPLHS->getType() != RHS->getType())
+    return nullptr;
+
   Value *PtrBase, *Index;
-  std::tie(PtrBase, Index) = getAsConstantIndexedAddress(ElemTy, GEPLHS, DL);
+  std::tie(PtrBase, Index) = getAsConstantIndexedAddress(GEPLHS, DL);
 
   // The set of nodes that will take part in this transformation.
   SetVector<Value *> Nodes;
 
-  if (!canRewriteGEPAsOffset(ElemTy, RHS, PtrBase, DL, Nodes))
+  if (!canRewriteGEPAsOffset(RHS, PtrBase, DL, Nodes))
     return nullptr;
 
   // We know we can re-write this as
@@ -812,7 +816,7 @@ static Instruction *transformToIndexedCompare(GEPOperator *GEPLHS, Value *RHS,
   // can't have overflow on either side. We can therefore re-write
   // this as:
   //   OFFSET1 cmp OFFSET2
-  Value *NewRHS = rewriteGEPAsOffset(ElemTy, RHS, PtrBase, DL, Nodes);
+  Value *NewRHS = rewriteGEPAsOffset(RHS, PtrBase, DL, Nodes);
 
   // RewriteGEPAsOffset has replaced RHS and all of its uses with a re-written
   // GEP having PtrBase as the pointer base, and has returned in NewRHS the
@@ -1436,7 +1440,7 @@ Instruction *InstCombinerImpl::foldICmpWithConstant(ICmpInst &Cmp) {
 
   // icmp(phi(C1, C2, ...), C) -> phi(icmp(C1, C), icmp(C2, C), ...).
   Constant *C = dyn_cast<Constant>(Op1);
-  if (!C)
+  if (!C || C->canTrap())
     return nullptr;
 
   if (auto *Phi = dyn_cast<PHINode>(Op0))
@@ -1497,7 +1501,7 @@ Instruction *InstCombinerImpl::foldICmpWithDominatingICmp(ICmpInst &Cmp) {
     //   br DomCond, CmpBB, FalseBB
     // CmpBB:
     //   Cmp = icmp Pred X, C
-    ConstantRange CR = ConstantRange::makeAllowedICmpRegion(Pred, *C);
+    ConstantRange CR = ConstantRange::makeExactICmpRegion(Pred, *C);
     ConstantRange DominatingCR =
         (CmpBB == TrueBB) ? ConstantRange::makeExactICmpRegion(DomPred, *DomC)
                           : ConstantRange::makeExactICmpRegion(
@@ -2632,7 +2636,26 @@ Instruction *InstCombinerImpl::foldICmpAddConstant(ICmpInst &Cmp,
   // Fold icmp pred (add X, C2), C.
   Value *X = Add->getOperand(0);
   Type *Ty = Add->getType();
-  CmpInst::Predicate Pred = Cmp.getPredicate();
+  const CmpInst::Predicate Pred = Cmp.getPredicate();
+  const APInt SMax = APInt::getSignedMaxValue(Ty->getScalarSizeInBits());
+  const APInt SMin = APInt::getSignedMinValue(Ty->getScalarSizeInBits());
+
+  // Fold compare with offset to opposite sign compare if it eliminates offset:
+  // (X + C2) >u C --> X <s -C2 (if C == C2 + SMAX)
+  if (Pred == CmpInst::ICMP_UGT && C == *C2 + SMax)
+    return new ICmpInst(ICmpInst::ICMP_SLT, X, ConstantInt::get(Ty, -(*C2)));
+
+  // (X + C2) <u C --> X >s ~C2 (if C == C2 + SMIN)
+  if (Pred == CmpInst::ICMP_ULT && C == *C2 + SMin)
+    return new ICmpInst(ICmpInst::ICMP_SGT, X, ConstantInt::get(Ty, ~(*C2)));
+
+  // (X + C2) >s C --> X <u (SMAX - C) (if C == C2 - 1)
+  if (Pred == CmpInst::ICMP_SGT && C == *C2 - 1)
+    return new ICmpInst(ICmpInst::ICMP_ULT, X, ConstantInt::get(Ty, SMax - C));
+
+  // (X + C2) <s C --> X >u (C ^ SMAX) (if C == C2)
+  if (Pred == CmpInst::ICMP_SLT && C == *C2)
+    return new ICmpInst(ICmpInst::ICMP_UGT, X, ConstantInt::get(Ty, C ^ SMax));
 
   // If the add does not wrap, we can always adjust the compare by subtracting
   // the constants. Equality comparisons are handled elsewhere. SGE/SLE/UGE/ULE

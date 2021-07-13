@@ -9,6 +9,8 @@
 #include "mlir/Conversion/AsyncToLLVM/AsyncToLLVM.h"
 
 #include "../PassDetail.h"
+#include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
+#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Dialect/Async/IR/Async.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -596,7 +598,7 @@ public:
   matchAndRewrite(RuntimeCreateGroupOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     TypeConverter *converter = getTypeConverter();
-    Type resultType = op->getResultTypes()[0];
+    Type resultType = op.getResult().getType();
 
     rewriter.replaceOpWithNewOp<CallOp>(
         op, kCreateGroup, converter->convertType(resultType), operands);

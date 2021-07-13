@@ -141,8 +141,6 @@ PIPE_OPERATOR(AAFunctionReachability)
 #undef PIPE_OPERATOR
 } // namespace llvm
 
-namespace {
-
 /// Get pointer operand of memory accessing instruction. If \p I is
 /// not a memory accessing instruction, return nullptr. If \p AllowVolatile,
 /// is set to false and the instruction is volatile, return nullptr.
@@ -1004,22 +1002,11 @@ AAReturnedValuesImpl::getAssumedUniqueReturnValue(Attributor &A) const {
   // multiple, a nullptr is returned indicating there cannot be a unique
   // returned value.
   Optional<Value *> UniqueRV;
+  Type *Ty = getAssociatedFunction()->getReturnType();
 
   auto Pred = [&](Value &RV) -> bool {
-    // If we found a second returned value and neither the current nor the saved
-    // one is an undef, there is no unique returned value. Undefs are special
-    // since we can pretend they have any value.
-    if (UniqueRV.hasValue() && UniqueRV != &RV &&
-        !(isa<UndefValue>(RV) || isa<UndefValue>(UniqueRV.getValue()))) {
-      UniqueRV = nullptr;
-      return false;
-    }
-
-    // Do not overwrite a value with an undef.
-    if (!UniqueRV.hasValue() || !isa<UndefValue>(RV))
-      UniqueRV = &RV;
-
-    return true;
+    UniqueRV = AA::combineOptionalValuesInAAValueLatice(UniqueRV, &RV, Ty);
+    return UniqueRV != Optional<Value *>(nullptr);
   };
 
   if (!A.checkForAllReturnedValues(Pred, *this))
@@ -4514,6 +4501,24 @@ struct AANoCaptureCallSiteReturned final : AANoCaptureImpl {
 };
 
 /// ------------------ Value Simplify Attribute ----------------------------
+
+bool ValueSimplifyStateType::unionAssumed(Optional<Value *> Other) {
+  // FIXME: Add a typecast support.
+  SimplifiedAssociatedValue = AA::combineOptionalValuesInAAValueLatice(
+      SimplifiedAssociatedValue, Other, Ty);
+  if (SimplifiedAssociatedValue == Optional<Value *>(nullptr))
+    return false;
+
+  LLVM_DEBUG({
+    if (SimplifiedAssociatedValue.hasValue())
+      dbgs() << "[ValueSimplify] is assumed to be "
+             << **SimplifiedAssociatedValue << "\n";
+    else
+      dbgs() << "[ValueSimplify] is assumed to be <none>\n";
+  });
+  return true;
+}
+
 struct AAValueSimplifyImpl : AAValueSimplify {
   AAValueSimplifyImpl(const IRPosition &IRP, Attributor &A)
       : AAValueSimplify(IRP, A) {}
@@ -4531,8 +4536,8 @@ struct AAValueSimplifyImpl : AAValueSimplify {
       if (SimplifiedAssociatedValue)
         errs() << "SAV: " << **SimplifiedAssociatedValue << " ";
     });
-    return getAssumed() ? (getKnown() ? "simplified" : "maybe-simple")
-                        : "not-simple";
+    return isValidState() ? (isAtFixpoint() ? "simplified" : "maybe-simple")
+                          : "not-simple";
   }
 
   /// See AbstractAttribute::trackStatistics()
@@ -4540,45 +4545,19 @@ struct AAValueSimplifyImpl : AAValueSimplify {
 
   /// See AAValueSimplify::getAssumedSimplifiedValue()
   Optional<Value *> getAssumedSimplifiedValue(Attributor &A) const override {
-    if (!getAssumed())
+    if (!isValidState())
       return const_cast<Value *>(&getAssociatedValue());
     return SimplifiedAssociatedValue;
   }
 
   /// Helper function for querying AAValueSimplify and updating candicate.
   /// \param IRP The value position we are trying to unify with SimplifiedValue
-  /// \param AccumulatedSimplifiedValue Current simplification result.
-  static bool checkAndUpdate(Attributor &A, const AbstractAttribute &QueryingAA,
-                             const IRPosition &IRP,
-                             Optional<Value *> &AccumulatedSimplifiedValue) {
-    // FIXME: Add a typecast support.
+  bool checkAndUpdate(Attributor &A, const AbstractAttribute &QueryingAA,
+                      const IRPosition &IRP) {
     bool UsedAssumedInformation = false;
     Optional<Value *> QueryingValueSimplified =
         A.getAssumedSimplified(IRP, QueryingAA, UsedAssumedInformation);
-
-    if (!QueryingValueSimplified.hasValue())
-      return true;
-
-    if (!QueryingValueSimplified.getValue())
-      return false;
-
-    Value &QueryingValueSimplifiedUnwrapped =
-        *QueryingValueSimplified.getValue();
-
-    if (AccumulatedSimplifiedValue.hasValue() &&
-        !isa<UndefValue>(AccumulatedSimplifiedValue.getValue()) &&
-        !isa<UndefValue>(QueryingValueSimplifiedUnwrapped))
-      return AccumulatedSimplifiedValue == QueryingValueSimplified;
-    if (AccumulatedSimplifiedValue.hasValue() &&
-        isa<UndefValue>(QueryingValueSimplifiedUnwrapped))
-      return true;
-
-    LLVM_DEBUG(dbgs() << "[ValueSimplify] " << IRP.getAssociatedValue()
-                      << " is assumed to be "
-                      << QueryingValueSimplifiedUnwrapped << "\n");
-
-    AccumulatedSimplifiedValue = QueryingValueSimplified;
-    return true;
+    return unionAssumed(QueryingValueSimplified);
   }
 
   /// Returns a candidate is found or not
@@ -4647,13 +4626,6 @@ struct AAValueSimplifyImpl : AAValueSimplify {
     indicateOptimisticFixpoint();
     return ChangeStatus::CHANGED;
   }
-
-protected:
-  // An assumed simplified value. Initially, it is set to Optional::None, which
-  // means that the value is not clear under current assumption. If in the
-  // pessimistic state, getAssumedSimplifiedValue doesn't return this value but
-  // returns orignal associated value.
-  Optional<Value *> SimplifiedAssociatedValue;
 };
 
 struct AAValueSimplifyArgument final : AAValueSimplifyImpl {
@@ -4713,7 +4685,7 @@ struct AAValueSimplifyArgument final : AAValueSimplifyImpl {
         if (auto *C = dyn_cast<Constant>(&ArgOp))
           if (C->isThreadDependent())
             return false;
-      return checkAndUpdate(A, *this, ACSArgPos, SimplifiedAssociatedValue);
+      return checkAndUpdate(A, *this, ACSArgPos);
     };
 
     // Generate a answer specific to a call site context.
@@ -4751,8 +4723,7 @@ struct AAValueSimplifyReturned : AAValueSimplifyImpl {
 
     auto PredForReturned = [&](Value &V) {
       return checkAndUpdate(A, *this,
-                            IRPosition::value(V, getCallBaseContext()),
-                            SimplifiedAssociatedValue);
+                            IRPosition::value(V, getCallBaseContext()));
     };
 
     if (!A.checkForAllReturnedValues(PredForReturned, *this))
@@ -4908,8 +4879,7 @@ struct AAValueSimplifyFloating : AAValueSimplifyImpl {
         return false;
       }
       return checkAndUpdate(A, *this,
-                            IRPosition::value(V, getCallBaseContext()),
-                            SimplifiedAssociatedValue);
+                            IRPosition::value(V, getCallBaseContext()));
     };
 
     bool Dummy = false;
@@ -5211,8 +5181,9 @@ ChangeStatus AAHeapToStackImpl::updateImpl(Attributor &A) {
           auto Remark = [&](OptimizationRemarkMissed ORM) {
             return ORM << "Could not move globalized variable to the stack. "
                        << "Variable is potentially "
-                       << ((!NoCaptureAA.isAssumedNoCapture()) ? "captured."
-                                                               : "freed.");
+                       << (!NoCaptureAA.isAssumedNoCapture() ? "captured. "
+                                                             : "freed. ")
+                       << "Mark as noescape to override.";
           };
 
           LibFunc IsAllocShared;
@@ -6468,8 +6439,6 @@ void AAMemoryBehaviorFloating::analyzeUseIn(Attributor &A, const Use *U,
     removeAssumedBits(NO_WRITES);
 }
 
-} // namespace
-
 /// -------------------- Memory Locations Attributes ---------------------------
 /// Includes read-none, argmemonly, inaccessiblememonly,
 /// inaccessiblememorargmemonly
@@ -7126,7 +7095,8 @@ struct AAValueConstantRangeImpl : AAValueConstantRange {
     //       Attributor. ex.) If x is assumed to be in [1, 3] and y is known to
     //       evolve to x^2 + x, then we can say that y is in [2, 12].
 
-    if (!CtxI || CtxI == getCtxI())
+    if (!CtxI || CtxI == getCtxI() ||
+        !AA::isValidInScope(getAssociatedValue(), CtxI->getFunction()))
       return getAssumed();
 
     ConstantRange LVIR = getConstantRangeFromLVI(A, CtxI);
@@ -7317,6 +7287,25 @@ struct AAValueConstantRangeFloating : AAValueConstantRangeImpl {
       SmallVectorImpl<const AAValueConstantRange *> &QuerriedAAs) {
     Value *LHS = BinOp->getOperand(0);
     Value *RHS = BinOp->getOperand(1);
+
+    // Simplify the operands first.
+    bool UsedAssumedInformation = false;
+    const auto &SimplifiedLHS =
+        A.getAssumedSimplified(IRPosition::value(*LHS, getCallBaseContext()),
+                               *this, UsedAssumedInformation);
+    if (!SimplifiedLHS.hasValue())
+      return true;
+    if (SimplifiedLHS.getValue())
+      LHS = *SimplifiedLHS;
+
+    const auto &SimplifiedRHS =
+        A.getAssumedSimplified(IRPosition::value(*RHS, getCallBaseContext()),
+                               *this, UsedAssumedInformation);
+    if (!SimplifiedRHS.hasValue())
+      return true;
+    if (SimplifiedRHS.getValue())
+      RHS = *SimplifiedRHS;
+
     // TODO: Allow non integers as well.
     if (!LHS->getType()->isIntegerTy() || !RHS->getType()->isIntegerTy())
       return false;
@@ -7348,12 +7337,23 @@ struct AAValueConstantRangeFloating : AAValueConstantRangeImpl {
       SmallVectorImpl<const AAValueConstantRange *> &QuerriedAAs) {
     assert(CastI->getNumOperands() == 1 && "Expected cast to be unary!");
     // TODO: Allow non integers as well.
-    Value &OpV = *CastI->getOperand(0);
-    if (!OpV.getType()->isIntegerTy())
+    Value *OpV = CastI->getOperand(0);
+
+    // Simplify the operand first.
+    bool UsedAssumedInformation = false;
+    const auto &SimplifiedOpV =
+        A.getAssumedSimplified(IRPosition::value(*OpV, getCallBaseContext()),
+                               *this, UsedAssumedInformation);
+    if (!SimplifiedOpV.hasValue())
+      return true;
+    if (SimplifiedOpV.getValue())
+      OpV = *SimplifiedOpV;
+
+    if (!OpV->getType()->isIntegerTy())
       return false;
 
     auto &OpAA = A.getAAFor<AAValueConstantRange>(
-        *this, IRPosition::value(OpV, getCallBaseContext()),
+        *this, IRPosition::value(*OpV, getCallBaseContext()),
         DepClassTy::REQUIRED);
     QuerriedAAs.push_back(&OpAA);
     T.unionAssumed(
@@ -7367,6 +7367,25 @@ struct AAValueConstantRangeFloating : AAValueConstantRangeImpl {
                    SmallVectorImpl<const AAValueConstantRange *> &QuerriedAAs) {
     Value *LHS = CmpI->getOperand(0);
     Value *RHS = CmpI->getOperand(1);
+
+    // Simplify the operands first.
+    bool UsedAssumedInformation = false;
+    const auto &SimplifiedLHS =
+        A.getAssumedSimplified(IRPosition::value(*LHS, getCallBaseContext()),
+                               *this, UsedAssumedInformation);
+    if (!SimplifiedLHS.hasValue())
+      return true;
+    if (SimplifiedLHS.getValue())
+      LHS = *SimplifiedLHS;
+
+    const auto &SimplifiedRHS =
+        A.getAssumedSimplified(IRPosition::value(*RHS, getCallBaseContext()),
+                               *this, UsedAssumedInformation);
+    if (!SimplifiedRHS.hasValue())
+      return true;
+    if (SimplifiedRHS.getValue())
+      RHS = *SimplifiedRHS;
+
     // TODO: Allow non integers as well.
     if (!LHS->getType()->isIntegerTy() || !RHS->getType()->isIntegerTy())
       return false;
@@ -7378,6 +7397,7 @@ struct AAValueConstantRangeFloating : AAValueConstantRangeImpl {
     auto &RHSAA = A.getAAFor<AAValueConstantRange>(
         *this, IRPosition::value(*RHS, getCallBaseContext()),
         DepClassTy::REQUIRED);
+    QuerriedAAs.push_back(&RHSAA);
     auto LHSAARange = LHSAA.getAssumedConstantRange(A, CtxI);
     auto RHSAARange = RHSAA.getAssumedConstantRange(A, CtxI);
 
@@ -7758,6 +7778,25 @@ struct AAPotentialValuesFloating : AAPotentialValuesImpl {
     auto AssumedBefore = getAssumed();
     Value *LHS = ICI->getOperand(0);
     Value *RHS = ICI->getOperand(1);
+
+    // Simplify the operands first.
+    bool UsedAssumedInformation = false;
+    const auto &SimplifiedLHS =
+        A.getAssumedSimplified(IRPosition::value(*LHS, getCallBaseContext()),
+                               *this, UsedAssumedInformation);
+    if (!SimplifiedLHS.hasValue())
+      return ChangeStatus::UNCHANGED;
+    if (SimplifiedLHS.getValue())
+      LHS = *SimplifiedLHS;
+
+    const auto &SimplifiedRHS =
+        A.getAssumedSimplified(IRPosition::value(*RHS, getCallBaseContext()),
+                               *this, UsedAssumedInformation);
+    if (!SimplifiedRHS.hasValue())
+      return ChangeStatus::UNCHANGED;
+    if (SimplifiedRHS.getValue())
+      RHS = *SimplifiedRHS;
+
     if (!LHS->getType()->isIntegerTy() || !RHS->getType()->isIntegerTy())
       return indicatePessimisticFixpoint();
 
@@ -7820,26 +7859,67 @@ struct AAPotentialValuesFloating : AAPotentialValuesImpl {
     auto AssumedBefore = getAssumed();
     Value *LHS = SI->getTrueValue();
     Value *RHS = SI->getFalseValue();
+
+    // Simplify the operands first.
+    bool UsedAssumedInformation = false;
+    const auto &SimplifiedLHS =
+        A.getAssumedSimplified(IRPosition::value(*LHS, getCallBaseContext()),
+                               *this, UsedAssumedInformation);
+    if (!SimplifiedLHS.hasValue())
+      return ChangeStatus::UNCHANGED;
+    if (SimplifiedLHS.getValue())
+      LHS = *SimplifiedLHS;
+
+    const auto &SimplifiedRHS =
+        A.getAssumedSimplified(IRPosition::value(*RHS, getCallBaseContext()),
+                               *this, UsedAssumedInformation);
+    if (!SimplifiedRHS.hasValue())
+      return ChangeStatus::UNCHANGED;
+    if (SimplifiedRHS.getValue())
+      RHS = *SimplifiedRHS;
+
     if (!LHS->getType()->isIntegerTy() || !RHS->getType()->isIntegerTy())
       return indicatePessimisticFixpoint();
 
-    // TODO: Use assumed simplified condition value
-    auto &LHSAA = A.getAAFor<AAPotentialValues>(*this, IRPosition::value(*LHS),
-                                                DepClassTy::REQUIRED);
-    if (!LHSAA.isValidState())
-      return indicatePessimisticFixpoint();
+    Optional<Constant *> C = A.getAssumedConstant(*SI->getCondition(), *this,
+                                                  UsedAssumedInformation);
 
-    auto &RHSAA = A.getAAFor<AAPotentialValues>(*this, IRPosition::value(*RHS),
-                                                DepClassTy::REQUIRED);
-    if (!RHSAA.isValidState())
-      return indicatePessimisticFixpoint();
+    // Check if we only need one operand.
+    bool OnlyLeft = false, OnlyRight = false;
+    if (C.hasValue() && *C && (*C)->isOneValue())
+      OnlyLeft = true;
+    else if (C.hasValue() && *C && (*C)->isZeroValue())
+      OnlyRight = true;
 
-    if (LHSAA.undefIsContained() && RHSAA.undefIsContained())
+    const AAPotentialValues *LHSAA = nullptr, *RHSAA = nullptr;
+    if (!OnlyRight) {
+      LHSAA = &A.getAAFor<AAPotentialValues>(*this, IRPosition::value(*LHS),
+                                             DepClassTy::REQUIRED);
+      if (!LHSAA->isValidState())
+        return indicatePessimisticFixpoint();
+    }
+    if (!OnlyLeft) {
+      RHSAA = &A.getAAFor<AAPotentialValues>(*this, IRPosition::value(*RHS),
+                                             DepClassTy::REQUIRED);
+      if (!RHSAA->isValidState())
+        return indicatePessimisticFixpoint();
+    }
+
+    if (!LHSAA || !RHSAA) {
+      // select (true/false), lhs, rhs
+      auto *OpAA = LHSAA ? LHSAA : RHSAA;
+
+      if (OpAA->undefIsContained())
+        unionAssumedWithUndef();
+      else
+        unionAssumed(*OpAA);
+
+    } else if (LHSAA->undefIsContained() && RHSAA->undefIsContained()) {
       // select i1 *, undef , undef => undef
       unionAssumedWithUndef();
-    else {
-      unionAssumed(LHSAA);
-      unionAssumed(RHSAA);
+    } else {
+      unionAssumed(*LHSAA);
+      unionAssumed(*RHSAA);
     }
     return AssumedBefore == getAssumed() ? ChangeStatus::UNCHANGED
                                          : ChangeStatus::CHANGED;
@@ -7852,6 +7932,17 @@ struct AAPotentialValuesFloating : AAPotentialValuesImpl {
     assert(CI->getNumOperands() == 1 && "Expected cast to be unary!");
     uint32_t ResultBitWidth = CI->getDestTy()->getIntegerBitWidth();
     Value *Src = CI->getOperand(0);
+
+    // Simplify the operand first.
+    bool UsedAssumedInformation = false;
+    const auto &SimplifiedSrc =
+        A.getAssumedSimplified(IRPosition::value(*Src, getCallBaseContext()),
+                               *this, UsedAssumedInformation);
+    if (!SimplifiedSrc.hasValue())
+      return ChangeStatus::UNCHANGED;
+    if (SimplifiedSrc.getValue())
+      Src = *SimplifiedSrc;
+
     auto &SrcAA = A.getAAFor<AAPotentialValues>(*this, IRPosition::value(*Src),
                                                 DepClassTy::REQUIRED);
     if (!SrcAA.isValidState())
@@ -7873,6 +7964,25 @@ struct AAPotentialValuesFloating : AAPotentialValuesImpl {
     auto AssumedBefore = getAssumed();
     Value *LHS = BinOp->getOperand(0);
     Value *RHS = BinOp->getOperand(1);
+
+    // Simplify the operands first.
+    bool UsedAssumedInformation = false;
+    const auto &SimplifiedLHS =
+        A.getAssumedSimplified(IRPosition::value(*LHS, getCallBaseContext()),
+                               *this, UsedAssumedInformation);
+    if (!SimplifiedLHS.hasValue())
+      return ChangeStatus::UNCHANGED;
+    if (SimplifiedLHS.getValue())
+      LHS = *SimplifiedLHS;
+
+    const auto &SimplifiedRHS =
+        A.getAssumedSimplified(IRPosition::value(*RHS, getCallBaseContext()),
+                               *this, UsedAssumedInformation);
+    if (!SimplifiedRHS.hasValue())
+      return ChangeStatus::UNCHANGED;
+    if (SimplifiedRHS.getValue())
+      RHS = *SimplifiedRHS;
+
     if (!LHS->getType()->isIntegerTy() || !RHS->getType()->isIntegerTy())
       return indicatePessimisticFixpoint();
 
@@ -7920,6 +8030,17 @@ struct AAPotentialValuesFloating : AAPotentialValuesImpl {
     auto AssumedBefore = getAssumed();
     for (unsigned u = 0, e = PHI->getNumIncomingValues(); u < e; u++) {
       Value *IncomingValue = PHI->getIncomingValue(u);
+
+      // Simplify the operand first.
+      bool UsedAssumedInformation = false;
+      const auto &SimplifiedIncomingValue = A.getAssumedSimplified(
+          IRPosition::value(*IncomingValue, getCallBaseContext()), *this,
+          UsedAssumedInformation);
+      if (!SimplifiedIncomingValue.hasValue())
+        continue;
+      if (SimplifiedIncomingValue.getValue())
+        IncomingValue = *SimplifiedIncomingValue;
+
       auto &PotentialValuesAA = A.getAAFor<AAPotentialValues>(
           *this, IRPosition::value(*IncomingValue), DepClassTy::REQUIRED);
       if (!PotentialValuesAA.isValidState())
@@ -8396,9 +8517,7 @@ AACallGraphNode *AACallEdgeIterator::operator*() const {
       &A.getOrCreateAAFor<AACallEdges>(IRPosition::function(**I))));
 }
 
-void AttributorCallGraph::print() {
-  llvm::WriteGraph(outs(), this);
-}
+void AttributorCallGraph::print() { llvm::WriteGraph(outs(), this); }
 
 const char AAReturnedValues::ID = 0;
 const char AANoUnwind::ID = 0;
