@@ -35,9 +35,12 @@ variables:
   LIT_NTHREADS_DIVISOR: 1
   XFAIL_COMMON:
     "libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
-    libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
     libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/memory_manager.cpp
-    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/parallel_offloading_map.cpp"
+    libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
+    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/parallel_offloading_map.cpp
+    libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+    libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
+    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp"
 
 stages:
   - setup
@@ -95,7 +98,7 @@ stages:
     PATH_PREPEND:
       ""
     XFAIL:
-      offloading/bug49334.cpp
+      ""
 
 # Sometimes bugs cause only release builds to fail.  For example, debugging
 # macros might accidentally be used but not defined in release builds.
@@ -116,7 +119,6 @@ stages:
       CodeGen/AMDGPU/call-constant.ll
       CodeGen/AMDGPU/indirect-call.ll
       CodeGen/AMDGPU/returnaddress.ll
-      offloading/bug49334.cpp
 
 # Not setup or cleanup.
 .non-utility:
