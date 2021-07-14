@@ -41,6 +41,8 @@ variables:
     libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
     libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
     libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp"
+  XFAIL_NOT_COMMON:
+    ""
 
 stages:
   - setup
@@ -74,13 +76,10 @@ stages:
     PATH_PREPEND:
       /opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin
     LIT_NTHREADS_DIVISOR: 4
-    # This leaves the following failure for leconte as the XFAIL is specified in
-    # the test from upstream:
-    #
-    # Unexpectedly Passed Tests (1):
-    #   libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/api.c
     XFAIL:
       "libomp :: affinity/kmp-hw-subset.c"
+    XFAIL_NOT:
+      "libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/api.c"
 
 .kold:
   tags: [shell, kold]
@@ -372,8 +371,11 @@ release (build):
     - echo $NINJA
     - $NINJA --version
     - echo "$XFAIL_COMMON" "$XFAIL" |
-      sed 's/\([^:]\)  *\([^:]\)/\1;\2/g' |
+      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' |
       tee xfail.txt
+    - echo "$XFAIL_NOT_COMMON" "$XFAIL_NOT" |
+      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' |
+      tee xfail-not.txt
     - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
            $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-build-log.txt
@@ -382,7 +384,7 @@ release (build):
     - echo "$NPROC"
     - echo "$LIT_NTHREADS_DIVISOR"
     - time FILECHECK_OPTS='-dump-input-filter=all -vv -color'
-           LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml --xfail=\"`cat xfail.txt`\" --ignore-fail -j `expr $NPROC / $LIT_NTHREADS_DIVISOR`"
+           LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml --xfail=\"`cat xfail.txt`\" --xfail-not=\"`cat xfail-not.txt`\" --ignore-fail -j `expr $NPROC / $LIT_NTHREADS_DIVISOR`"
            $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-log.txt
     - "! grep -c \"'--ignore-fail' was specified\"
