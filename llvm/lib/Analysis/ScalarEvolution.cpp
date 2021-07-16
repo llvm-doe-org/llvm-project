@@ -9822,7 +9822,7 @@ bool ScalarEvolution::isKnownNonPositive(const SCEV *S) {
 }
 
 bool ScalarEvolution::isKnownNonZero(const SCEV *S) {
-  return isKnownNegative(S) || isKnownPositive(S);
+  return getUnsignedRangeMin(S) != 0;
 }
 
 std::pair<const SCEV *, const SCEV *>
@@ -11519,6 +11519,15 @@ bool ScalarEvolution::canIVOverflowOnGT(const SCEV *RHS, const SCEV *Stride,
   return (std::move(MinValue) + MaxStrideMinusOne).ugt(MinRHS);
 }
 
+const SCEV *ScalarEvolution::getUDivCeilSCEV(const SCEV *N, const SCEV *D) {
+  // umin(N, 1) + floor((N - umin(N, 1)) / D)
+  // This is equivalent to "1 + floor((N - 1) / D)" for N != 0. The umin
+  // expression fixes the case of N=0.
+  const SCEV *MinNOne = getUMinExpr(N, getOne(N->getType()));
+  const SCEV *NMinusOne = getMinusSCEV(N, MinNOne);
+  return getAddExpr(MinNOne, getUDivExpr(NMinusOne, D));
+}
+
 const SCEV *ScalarEvolution::computeBECount(const SCEV *Delta,
                                             const SCEV *Step) {
   const SCEV *One = getOne(Step->getType());
@@ -11562,8 +11571,8 @@ const SCEV *ScalarEvolution::computeMaxBECountForLT(const SCEV *Start,
   APInt MaxEnd = IsSigned ? APIntOps::smin(getSignedRangeMax(End), Limit)
                           : APIntOps::umin(getUnsignedRangeMax(End), Limit);
 
-  MaxBECount = computeBECount(getConstant(MaxEnd - MinStart) /* Delta */,
-                              getConstant(StrideForMaxBECount) /* Step */);
+  MaxBECount = getUDivCeilSCEV(getConstant(MaxEnd - MinStart) /* Delta */,
+                               getConstant(StrideForMaxBECount) /* Step */);
 
   return MaxBECount;
 }
@@ -11644,6 +11653,36 @@ ScalarEvolution::howManyLessThans(const SCEV *LHS, const SCEV *RHS,
     if (PredicatedIV || !NoWrap || isKnownNonPositive(Stride) ||
         !loopIsFiniteByAssumption(L))
       return getCouldNotCompute();
+
+    // We allow a potentially zero stride, but we need to divide by stride
+    // below.  Since the loop can't be infinite and this check must control
+    // the sole exit, we can infer the exit must be taken on the first
+    // iteration (e.g. backedge count = 0) if the stride is zero.  Given that,
+    // we know the numerator in the divides below must be zero, so we can
+    // pick an arbitrary non-zero value for the denominator (e.g. stride)
+    // and produce the right result.
+    // FIXME: Handle the case where Stride is poison?
+    auto wouldZeroStrideBeUB = [&]() {
+      // If RHS isn't loop invariant, bail out for now. This isn't necessary
+      // for the proof, but isLoopEntryGuardedByCond only works on
+      // loop-invariant values.
+      if (!isLoopInvariant(RHS, L))
+        return false;
+
+      // Proof by contradiction.  Suppose the stride were zero.  If we can
+      // prove that the backedge *is* taken on the first iteration, then since
+      // we know this condition controls the sole exit, we must have an
+      // infinite loop.  We can't have a (well defined) infinite loop per
+      // check just above.
+      // Note: The (Start - Stride) term is used to get the start' term from
+      // (start' + stride,+,stride). Remember that we only care about the
+      // result of this expression when stride == 0 at runtime.
+      auto *StartIfZero = getMinusSCEV(IV->getStart(), Stride);
+      return isLoopEntryGuardedByCond(L, Cond, StartIfZero, RHS);
+    };
+    if (!isKnownNonZero(Stride) && !wouldZeroStrideBeUB()) {
+      Stride = getUMaxExpr(Stride, getOne(Stride->getType()));
+    }
   } else if (!Stride->isOne() && !NoWrap) {
     auto isUBOnWrap = [&]() {
       // Can we prove this loop *must* be UB if overflow of IV occurs?
@@ -11722,21 +11761,65 @@ ScalarEvolution::howManyLessThans(const SCEV *LHS, const SCEV *RHS,
   // and End is the RHS.
   const SCEV *BECountIfBackedgeTaken =
     computeBECount(getMinusSCEV(End, Start), Stride);
-  // If the loop entry is guarded by the result of the backedge test of the
-  // first loop iteration, then we know the backedge will be taken at least
-  // once and so the backedge taken count is as above. If not then we use the
-  // expression (max(End,Start)-Start)/Stride to describe the backedge count,
-  // as if the backedge is taken at least once max(End,Start) is End and so the
-  // result is as above, and if not max(End,Start) is Start so we get a backedge
-  // count of zero.
-  const SCEV *BECount;
-  if (isLoopEntryGuardedByCond(L, Cond, getMinusSCEV(OrigStart, Stride), OrigRHS))
-    BECount = BECountIfBackedgeTaken;
-  else {
+  
+  // We use the expression (max(End,Start)-Start)/Stride to describe the
+  // backedge count, as if the backedge is taken at least once max(End,Start)
+  // is End and so the result is as above, and if not max(End,Start) is Start
+  // so we get a backedge count of zero.
+  const SCEV *BECount = nullptr;
+  auto *StartMinusStride = getMinusSCEV(OrigStart, Stride);
+  // Can we prove (max(RHS,Start) > Start - Stride?
+  if (isLoopEntryGuardedByCond(L, Cond, StartMinusStride, Start) &&
+      isLoopEntryGuardedByCond(L, Cond, StartMinusStride, RHS)) {
+    // In this case, we can use a refined formula for computing backedge taken
+    // count.  The general formula remains:
+    //   "End-Start /uceiling Stride" where "End = max(RHS,Start)"
+    // We want to use the alternate formula:
+    //   "((End - 1) - (Start - Stride)) /u Stride"
+    // Let's do a quick case analysis to show these are equivalent under
+    // our precondition that max(RHS,Start) > Start - Stride.
+    // * For RHS <= Start, the backedge-taken count must be zero.
+    //   "((End - 1) - (Start - Stride)) /u Stride" reduces to
+    //   "((Start - 1) - (Start - Stride)) /u Stride" which simplies to
+    //   "Stride - 1 /u Stride" which is indeed zero for all non-zero values
+    //     of Stride.  For 0 stride, we've use umin(1,Stride) above, reducing
+    //     this to the stride of 1 case.
+    // * For RHS >= Start, the backedge count must be "RHS-Start /uceil Stride".
+    //   "((End - 1) - (Start - Stride)) /u Stride" reduces to
+    //   "((RHS - 1) - (Start - Stride)) /u Stride" reassociates to
+    //   "((RHS - (Start - Stride) - 1) /u Stride".
+    //   Our preconditions trivially imply no overflow in that form.
+    const SCEV *MinusOne = getMinusOne(Stride->getType());
+    const SCEV *Numerator =
+        getMinusSCEV(getAddExpr(RHS, MinusOne), StartMinusStride);
+    if (!isa<SCEVCouldNotCompute>(Numerator)) {
+      BECount = getUDivExpr(Numerator, Stride);
+    }
+  }
+  if (!BECount) {
+    auto canProveRHSGreaterThanEqualStart = [&]() {
+      auto CondGE = IsSigned ? ICmpInst::ICMP_SGE : ICmpInst::ICMP_UGE;
+      if (isLoopEntryGuardedByCond(L, CondGE, OrigRHS, OrigStart))
+        return true;
+
+      // (RHS > Start - 1) implies RHS >= Start.
+      // * "RHS >= Start" is trivially equivalent to "RHS > Start - 1" if
+      //   "Start - 1" doesn't overflow.
+      // * For signed comparison, if Start - 1 does overflow, it's equal
+      //   to INT_MAX, and "RHS >s INT_MAX" is trivially false.
+      // * For unsigned comparison, if Start - 1 does overflow, it's equal
+      //   to UINT_MAX, and "RHS >u UINT_MAX" is trivially false.
+      //
+      // FIXME: Should isLoopEntryGuardedByCond do this for us?
+      auto CondGT = IsSigned ? ICmpInst::ICMP_SGT : ICmpInst::ICMP_UGT;
+      auto *StartMinusOne = getAddExpr(OrigStart,
+                                       getMinusOne(OrigStart->getType()));
+      return isLoopEntryGuardedByCond(L, CondGT, OrigRHS, StartMinusOne);
+    };
+
     // If we know that RHS >= Start in the context of loop, then we know that
     // max(RHS, Start) = RHS at this point.
-    if (isLoopEntryGuardedByCond(
-            L, IsSigned ? ICmpInst::ICMP_SGE : ICmpInst::ICMP_UGE, OrigRHS, OrigStart))
+    if (canProveRHSGreaterThanEqualStart())
       End = RHS;
     else
       End = IsSigned ? getSMaxExpr(RHS, Start) : getUMaxExpr(RHS, Start);
@@ -11847,8 +11930,8 @@ ScalarEvolution::howManyGreaterThans(const SCEV *LHS, const SCEV *RHS,
 
   const SCEV *MaxBECount = isa<SCEVConstant>(BECount)
                                ? BECount
-                               : computeBECount(getConstant(MaxStart - MinEnd),
-                                                getConstant(MinStride));
+                               : getUDivCeilSCEV(getConstant(MaxStart - MinEnd),
+                                                 getConstant(MinStride));
 
   if (isa<SCEVCouldNotCompute>(MaxBECount))
     MaxBECount = BECount;

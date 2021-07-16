@@ -1261,9 +1261,11 @@ public:
                                     const LoopVectorizationPlanner &LVP);
 
   /// Setup cost-based decisions for user vectorization factor.
-  void selectUserVectorizationFactor(ElementCount UserVF) {
+  /// \return true if the UserVF is a feasible VF to be chosen.
+  bool selectUserVectorizationFactor(ElementCount UserVF) {
     collectUniformsAndScalars(UserVF);
     collectInstsToScalarize(UserVF);
+    return expectedCost(UserVF).first.isValid();
   }
 
   /// \return The size (in bits) of the smallest and widest types in the code
@@ -1674,8 +1676,13 @@ private:
   /// Returns the expected execution cost. The unit of the cost does
   /// not matter because we use the 'cost' units to compare different
   /// vector widths. The cost that is returned is *not* normalized by
-  /// the factor width.
-  VectorizationCostTy expectedCost(ElementCount VF);
+  /// the factor width. If \p Invalid is not nullptr, this function
+  /// will add a pair(Instruction*, ElementCount) to \p Invalid for
+  /// each instruction that has an Invalid cost for the given VF.
+  using InstructionVFPair = std::pair<Instruction *, ElementCount>;
+  VectorizationCostTy
+  expectedCost(ElementCount VF,
+               SmallVectorImpl<InstructionVFPair> *Invalid = nullptr);
 
   /// Returns the execution time cost of an instruction for a given vector
   /// width. Vector width of one means scalar.
@@ -5725,8 +5732,14 @@ LoopVectorizationCostModel::computeFeasibleMaxVF(unsigned ConstTripCount,
     auto MaxSafeUserVF =
         UserVF.isScalable() ? MaxSafeScalableVF : MaxSafeFixedVF;
 
-    if (ElementCount::isKnownLE(UserVF, MaxSafeUserVF))
-      return UserVF;
+    if (ElementCount::isKnownLE(UserVF, MaxSafeUserVF)) {
+      // If `VF=vscale x N` is safe, then so is `VF=N`
+      if (UserVF.isScalable())
+        return FixedScalableVFPair(
+            ElementCount::getFixed(UserVF.getKnownMinValue()), UserVF);
+      else
+        return UserVF;
+    }
 
     assert(ElementCount::isKnownGT(UserVF, MaxSafeUserVF));
 
@@ -6067,22 +6080,17 @@ VectorizationFactor LoopVectorizationCostModel::selectVectorizationFactor(
     ChosenFactor.Cost = InstructionCost::getMax();
   }
 
+  SmallVector<InstructionVFPair> InvalidCosts;
   for (const auto &i : VFCandidates) {
     // The cost for scalar VF=1 is already calculated, so ignore it.
     if (i.isScalar())
       continue;
 
-    // Notice that the vector loop needs to be executed less times, so
-    // we need to divide the cost of the vector loops by the width of
-    // the vector elements.
-    VectorizationCostTy C = expectedCost(i);
-
-    assert(C.first.isValid() && "Unexpected invalid cost for vector loop");
+    VectorizationCostTy C = expectedCost(i, &InvalidCosts);
     VectorizationFactor Candidate(i, C.first);
     LLVM_DEBUG(
         dbgs() << "LV: Vector loop of width " << i << " costs: "
-               << (*Candidate.Cost.getValue() /
-                   Candidate.Width.getKnownMinValue())
+               << (Candidate.Cost / Candidate.Width.getKnownMinValue())
                << (i.isScalable() ? " (assuming a minimum vscale of 1)" : "")
                << ".\n");
 
@@ -6101,6 +6109,66 @@ VectorizationFactor LoopVectorizationCostModel::selectVectorizationFactor(
       ChosenFactor = Candidate;
   }
 
+  // Emit a report of VFs with invalid costs in the loop.
+  if (!InvalidCosts.empty()) {
+    // Group the remarks per instruction, keeping the instruction order from
+    // InvalidCosts.
+    std::map<Instruction *, unsigned> Numbering;
+    unsigned I = 0;
+    for (auto &Pair : InvalidCosts)
+      if (!Numbering.count(Pair.first))
+        Numbering[Pair.first] = I++;
+
+    // Sort the list, first on instruction(number) then on VF.
+    llvm::sort(InvalidCosts,
+               [&Numbering](InstructionVFPair &A, InstructionVFPair &B) {
+                 if (Numbering[A.first] != Numbering[B.first])
+                   return Numbering[A.first] < Numbering[B.first];
+                 ElementCountComparator ECC;
+                 return ECC(A.second, B.second);
+               });
+
+    // For a list of ordered instruction-vf pairs:
+    //   [(load, vf1), (load, vf2), (store, vf1)]
+    // Group the instructions together to emit separate remarks for:
+    //   load  (vf1, vf2)
+    //   store (vf1)
+    auto Tail = ArrayRef<InstructionVFPair>(InvalidCosts);
+    auto Subset = ArrayRef<InstructionVFPair>();
+    do {
+      if (Subset.empty())
+        Subset = Tail.take_front(1);
+
+      Instruction *I = Subset.front().first;
+
+      // If the next instruction is different, or if there are no other pairs,
+      // emit a remark for the collated subset. e.g.
+      //   [(load, vf1), (load, vf2))]
+      // to emit:
+      //  remark: invalid costs for 'load' at VF=(vf, vf2)
+      if (Subset == Tail || Tail[Subset.size()].first != I) {
+        std::string OutString;
+        raw_string_ostream OS(OutString);
+        assert(!Subset.empty() && "Unexpected empty range");
+        OS << "Instruction with invalid costs prevented vectorization at VF=(";
+        for (auto &Pair : Subset)
+          OS << (Pair.second == Subset.front().second ? "" : ", ")
+             << Pair.second;
+        OS << "):";
+        if (auto *CI = dyn_cast<CallInst>(I))
+          OS << " call to " << CI->getCalledFunction()->getName();
+        else
+          OS << " " << I->getOpcodeName();
+        OS.flush();
+        reportVectorizationInfo(OutString, "InvalidCost", ORE, TheLoop, I);
+        Tail = Tail.drop_front(Subset.size());
+        Subset = {};
+      } else
+        // Grow the subset by one element
+        Subset = Tail.take_front(Subset.size() + 1);
+    } while (!Tail.empty());
+  }
+
   if (!EnableCondStoresVectorization && NumPredStores) {
     reportVectorizationFailure("There are conditional stores.",
         "store that is conditionally executed prevents vectorization",
@@ -6109,8 +6177,7 @@ VectorizationFactor LoopVectorizationCostModel::selectVectorizationFactor(
   }
 
   LLVM_DEBUG(if (ForceVectorization && !ChosenFactor.Width.isScalar() &&
-                 *ChosenFactor.Cost.getValue() >= *ScalarCost.Cost.getValue())
-                 dbgs()
+                 ChosenFactor.Cost >= ScalarCost.Cost) dbgs()
              << "LV: Vectorization seems to be not beneficial, "
              << "but was forced by a user.\n");
   LLVM_DEBUG(dbgs() << "LV: Selecting VF: " << ChosenFactor.Width << ".\n");
@@ -6438,8 +6505,9 @@ unsigned LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
   // If we did not calculate the cost for VF (because the user selected the VF)
   // then we calculate the cost of VF here.
   if (LoopCost == 0) {
-    assert(expectedCost(VF).first.isValid() && "Expected a valid cost");
-    LoopCost = *expectedCost(VF).first.getValue();
+    InstructionCost C = expectedCost(VF).first;
+    assert(C.isValid() && "Expected to have chosen a VF with valid cost");
+    LoopCost = *C.getValue();
   }
 
   assert(LoopCost && "Non-zero loop cost expected");
@@ -6882,7 +6950,8 @@ int LoopVectorizationCostModel::computePredInstDiscount(
 }
 
 LoopVectorizationCostModel::VectorizationCostTy
-LoopVectorizationCostModel::expectedCost(ElementCount VF) {
+LoopVectorizationCostModel::expectedCost(
+    ElementCount VF, SmallVectorImpl<InstructionVFPair> *Invalid) {
   VectorizationCostTy Cost;
 
   // For each block.
@@ -6901,6 +6970,10 @@ LoopVectorizationCostModel::expectedCost(ElementCount VF) {
       // Check if we should override the cost.
       if (ForceTargetInstructionCost.getNumOccurrences() > 0)
         C.first = InstructionCost(ForceTargetInstructionCost);
+
+      // Keep a list of instructions with invalid costs.
+      if (Invalid && !C.first.isValid())
+        Invalid->emplace_back(&I, VF);
 
       BlockCost.first += C.first;
       BlockCost.second |= C.second;
@@ -7295,6 +7368,8 @@ InstructionCost
 LoopVectorizationCostModel::getScalarizationOverhead(Instruction *I,
                                                      ElementCount VF) const {
 
+  // There is no mechanism yet to create a scalable scalarization loop,
+  // so this is currently Invalid.
   if (VF.isScalable())
     return InstructionCost::getInvalid();
 
@@ -7828,6 +7903,12 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I, ElementCount VF,
   }
   case Instruction::ExtractValue:
     return TTI.getInstructionCost(I, TTI::TCK_RecipThroughput);
+  case Instruction::Alloca:
+    // We cannot easily widen alloca to a scalable alloca, as
+    // the result would need to be a vector of pointers.
+    if (VF.isScalable())
+      return InstructionCost::getInvalid();
+    LLVM_FALLTHROUGH;
   default:
     // This opcode is unknown. Assume that it is the same as 'mul'.
     return TTI.getArithmeticInstrCost(Instruction::Mul, VectorTy, CostKind);
@@ -8013,17 +8094,19 @@ LoopVectorizationPlanner::plan(ElementCount UserVF, unsigned UserIC) {
       UserVF.isScalable() ? MaxFactors.ScalableVF : MaxFactors.FixedVF;
   bool UserVFIsLegal = ElementCount::isKnownLE(UserVF, MaxUserVF);
   if (!UserVF.isZero() && UserVFIsLegal) {
-    LLVM_DEBUG(dbgs() << "LV: Using " << (UserVFIsLegal ? "user" : "max")
-                      << " VF " << UserVF << ".\n");
     assert(isPowerOf2_32(UserVF.getKnownMinValue()) &&
            "VF needs to be a power of two");
     // Collect the instructions (and their associated costs) that will be more
     // profitable to scalarize.
-    CM.selectUserVectorizationFactor(UserVF);
-    CM.collectInLoopReductions();
-    buildVPlansWithVPRecipes(UserVF, UserVF);
-    LLVM_DEBUG(printPlans(dbgs()));
-    return {{UserVF, 0}};
+    if (CM.selectUserVectorizationFactor(UserVF)) {
+      LLVM_DEBUG(dbgs() << "LV: Using user VF " << UserVF << ".\n");
+      CM.collectInLoopReductions();
+      buildVPlansWithVPRecipes(UserVF, UserVF);
+      LLVM_DEBUG(printPlans(dbgs()));
+      return {{UserVF, 0}};
+    } else
+      reportVectorizationInfo("UserVF ignored because of invalid costs.",
+                              "InvalidCost", ORE, OrigLoop);
   }
 
   // Populate the set of Vectorization Factor Candidates.
@@ -8798,8 +8881,6 @@ VPWidenCallRecipe *VPRecipeBuilder::tryToWidenCall(CallInst *CI,
     InstructionCost CallCost = CM.getVectorCallCost(CI, VF, NeedToScalarize);
     InstructionCost IntrinsicCost = ID ? CM.getVectorIntrinsicCost(CI, VF) : 0;
     bool UseVectorIntrinsic = ID && IntrinsicCost <= CallCost;
-    assert((IntrinsicCost.isValid() || CallCost.isValid()) &&
-           "Either the intrinsic cost or vector call cost must be valid");
     return UseVectorIntrinsic || !NeedToScalarize;
   };
 

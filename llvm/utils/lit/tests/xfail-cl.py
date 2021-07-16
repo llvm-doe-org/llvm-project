@@ -10,7 +10,7 @@
 # RUN: %{lit} %{inputs}/xfail-cl \
 # RUN: | FileCheck --check-prefix=CHECK-FILTER %s
 
-# Check that --xfail and LIT_XFAIL_NOT always have precedence.
+# Check that --xfail-not and LIT_XFAIL_NOT always have precedence.
 
 # RUN: env LIT_XFAIL=true-xfail.txt \
 # RUN: %{lit} --xfail true-xfail.txt --xfail-not true-xfail.txt \
