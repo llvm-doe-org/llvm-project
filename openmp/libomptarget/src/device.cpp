@@ -319,14 +319,21 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
        DPxPTR(HstPtrBegin), Size, DPxPTR(lr.Entry->HstPtrBegin),
        lr.Entry->HstPtrEnd - lr.Entry->HstPtrBegin);
     // Explicit extension of mapped data - not allowed.
-    if (HasPresentModifier || !HasNoAllocModifier)
+    int openacc_error_flag = 1;
+    if ((HasPresentModifier && openacc_error_flag == 0) || (!HasNoAllocModifier && openacc_error_flag == 0))
       MESSAGE("explicit extension not allowed: host address specified is "
               DPxMOD " (%" PRId64
               " bytes), but device allocation maps to host at " DPxMOD
               " (%" PRId64 " bytes)",
             DPxPTR(HstPtrBegin), Size, DPxPTR(lr.Entry->HstPtrBegin),
             lr.Entry->HstPtrEnd - lr.Entry->HstPtrBegin);
-    if (HasPresentModifier)
+    if ((HasPresentModifier && openacc_error_flag == 1) || (!HasNoAllocModifier && openacc_error_flag == 0)) {
+      OPENACC_MESSAGE( "var lives at " DPxMOD " size %" PRId64 
+	      " partially present", 
+	      DPxPTR(HstPtrBegin), Size);
+      OPENACC_MESSAGE0("FATAL ERROR: variable in data clause is partially present on the device");
+    }
+    if (HasPresentModifier && openacc_error_flag == 0)
       MESSAGE("device mapping required by 'present' map type modifier does not "
               "exist for host address " DPxMOD " (%" PRId64 " bytes)",
               DPxPTR(HstPtrBegin), Size);

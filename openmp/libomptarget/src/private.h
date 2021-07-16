@@ -15,6 +15,7 @@
 
 #include "device.h"
 #include <Debug.h>
+#include <OpenACCDebug.h>
 #include <SourceInfo.h>
 #include <omptarget.h>
 
