@@ -48,8 +48,13 @@ endif()
 # Clang-dedicated subdirectories.
 if(OPENMP_CLANG_VERSION)
   string(TOLOWER ${CMAKE_SYSTEM_NAME} os_dir)
+  if ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL ppc64le)
+    set(PROC powerpc64le)
+  else()
+    set(PROC ${CMAKE_SYSTEM_PROCESSOR})
+  endif()
   set(OPENMP_CLANG_LIB_SUBDIR
-    clang/${OPENMP_CLANG_VERSION}/lib/${os_dir}/${CMAKE_SYSTEM_PROCESSOR})
+    clang/${OPENMP_CLANG_VERSION}/lib/${os_dir}/${PROC})
   set(OPENMP_CLANG_INCLUDE_SUBDIR clang/${OPENMP_CLANG_VERSION}/include)
 endif()
 
