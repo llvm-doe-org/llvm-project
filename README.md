@@ -87,11 +87,7 @@ below).  Currently, Clacc only supports OpenACC programs with C as the
 base language.
 
 Clacc's compiler is the `clang` executable in the `bin` subdirectory
-of the install directory.  It's also possible to work from the build
-directory, but additional effort is usually then required to help
-`clang` find its own libraries and header files.
-
-Here's a simple example of using Clacc's `clang`, where
+of the install directory.  Here's a simple example of using it, where
 `$CLACC_INSTALL_DIR` is `$LLVM_GIT_DIR/install` when following the
 build procedure above:
 
@@ -134,6 +130,37 @@ int main() {
   return 0;
 }
 ```
+
+## Usage from a Build Directory
+
+Most Clacc users should work from the install directory, as described
+in the previous section.  However, if you plan to modify Clacc, it
+might be easier to work from the build directory instead.  Doing so
+requires setting many environment variables and command-line options
+to ensure `clang` finds its own libraries and header files regardless
+of any like-named files that happen to be installed in system
+directories.  Not setting those can produce unexpected behavior at
+compile time or run time.  This complexity is inherited from LLVM
+upstream and is not unique to Clacc.
+
+For example, to compile and run for an NVIDIA GPU, where
+`$CLACC_BUILD_DIR` is `$LLVM_GIT_DIR/build` when following the build
+procedure above:
+
+```
+$ export PATH=$CLACC_BUILD_DIR/bin:$PATH
+$ export LIBRARY_PATH=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget:$LIBRARY_PATH
+$ export LD_LIBRARY_PATH=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src:$LD_LIBRARY_PATH
+$ clang -fopenacc -fopenmp-targets=nvptx64-nvidia-cuda \
+  -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
+  -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
+  -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
+  -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
+  -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
+  test.c
+$ ./a.out
+```
+
 ## Compiler Options
 
 The most relevant `clang` command-line options are as follows:
