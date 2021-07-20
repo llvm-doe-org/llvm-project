@@ -9358,7 +9358,8 @@ Value *CodeGenFunction::EmitAArch64BuiltinExpr(unsigned BuiltinID,
       llvm::Value *Val = Builder.CreateCall(F, MemAddr);
       llvm::Value *ToRet;
       for (size_t i = 0; i < 8; i++) {
-        llvm::Value *ValOffsetPtr = Builder.CreateGEP(ValPtr, Builder.getInt32(i));
+        llvm::Value *ValOffsetPtr =
+            Builder.CreateGEP(Int64Ty, ValPtr, Builder.getInt32(i));
         Address Addr(ValOffsetPtr, CharUnits::fromQuantity(8));
         ToRet = Builder.CreateStore(Builder.CreateExtractValue(Val, i), Addr);
       }
@@ -9369,7 +9370,8 @@ Value *CodeGenFunction::EmitAArch64BuiltinExpr(unsigned BuiltinID,
       SmallVector<llvm::Value *, 9> Args;
       Args.push_back(MemAddr);
       for (size_t i = 0; i < 8; i++) {
-        llvm::Value *ValOffsetPtr = Builder.CreateGEP(ValPtr, Builder.getInt32(i));
+        llvm::Value *ValOffsetPtr =
+            Builder.CreateGEP(Int64Ty, ValPtr, Builder.getInt32(i));
         Address Addr(ValOffsetPtr, CharUnits::fromQuantity(8));
         Args.push_back(Builder.CreateLoad(Addr));
       }
@@ -14769,7 +14771,7 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
 
     for (int i = 0; i < 6; ++i) {
       Value *Extract = Builder.CreateExtractValue(Call, i + 1);
-      Value *Ptr = Builder.CreateConstGEP1_32(Ops[2], i * 16);
+      Value *Ptr = Builder.CreateConstGEP1_32(Int8Ty, Ops[2], i * 16);
       Ptr = Builder.CreateBitCast(
           Ptr, llvm::PointerType::getUnqual(Extract->getType()));
       Builder.CreateAlignedStore(Extract, Ptr, Align(1));
@@ -14785,7 +14787,7 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
 
     for (int i = 0; i < 7; ++i) {
       Value *Extract = Builder.CreateExtractValue(Call, i + 1);
-      Value *Ptr = Builder.CreateConstGEP1_32(Ops[3], i * 16);
+      Value *Ptr = Builder.CreateConstGEP1_32(Int8Ty, Ops[3], i * 16);
       Ptr = Builder.CreateBitCast(
           Ptr, llvm::PointerType::getUnqual(Extract->getType()));
       Builder.CreateAlignedStore(Extract, Ptr, Align(1));
@@ -14873,7 +14875,7 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
     Value *InOps[9];
     InOps[0] = Ops[2];
     for (int i = 0; i != 8; ++i) {
-      Value *Ptr = Builder.CreateConstGEP1_32(Ops[1], i);
+      Value *Ptr = Builder.CreateConstGEP1_32(Ty, Ops[1], i);
       InOps[i + 1] = Builder.CreateAlignedLoad(Ty, Ptr, Align(16));
     }
 
@@ -14891,7 +14893,7 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
     Builder.SetInsertPoint(NoError);
     for (int i = 0; i != 8; ++i) {
       Value *Extract = Builder.CreateExtractValue(Call, i + 1);
-      Value *Ptr = Builder.CreateConstGEP1_32(Ops[0], i);
+      Value *Ptr = Builder.CreateConstGEP1_32(Extract->getType(), Ops[0], i);
       Builder.CreateAlignedStore(Extract, Ptr, Align(16));
     }
     Builder.CreateBr(End);
@@ -14900,7 +14902,7 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
     for (int i = 0; i != 8; ++i) {
       Value *Out = Builder.CreateExtractValue(Call, i + 1);
       Constant *Zero = llvm::Constant::getNullValue(Out->getType());
-      Value *Ptr = Builder.CreateConstGEP1_32(Ops[0], i);
+      Value *Ptr = Builder.CreateConstGEP1_32(Out->getType(), Ops[0], i);
       Builder.CreateAlignedStore(Zero, Ptr, Align(16));
     }
     Builder.CreateBr(End);
@@ -14948,7 +14950,7 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
       Ops[0] = Builder.CreateBitCast(Ops[0], Int8PtrTy);
     }else {
       Ops[1] = Builder.CreateBitCast(Ops[1], Int8PtrTy);
-      Ops[0] = Builder.CreateGEP(Ops[1], Ops[0]);
+      Ops[0] = Builder.CreateGEP(Int8Ty, Ops[1], Ops[0]);
       Ops.pop_back();
     }
 
@@ -15016,7 +15018,7 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
       Ops[1] = Builder.CreateBitCast(Ops[1], Int8PtrTy);
     }else {
       Ops[2] = Builder.CreateBitCast(Ops[2], Int8PtrTy);
-      Ops[1] = Builder.CreateGEP(Ops[2], Ops[1]);
+      Ops[1] = Builder.CreateGEP(Int8Ty, Ops[2], Ops[1]);
       Ops.pop_back();
     }
 
@@ -15278,6 +15280,7 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
   case PPC::BI__builtin_ppc_recipdivd:
   case PPC::BI__builtin_ppc_rsqrtf:
   case PPC::BI__builtin_ppc_rsqrtd: {
+    FastMathFlags FMF = Builder.getFastMathFlags();
     Builder.getFastMathFlags().setFast();
     llvm::Type *ResultType = ConvertType(E->getType());
     Value *X = EmitScalarExpr(E->getArg(0));
@@ -15285,13 +15288,34 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
     if (BuiltinID == PPC::BI__builtin_ppc_recipdivf ||
         BuiltinID == PPC::BI__builtin_ppc_recipdivd) {
       Value *Y = EmitScalarExpr(E->getArg(1));
-      return Builder.CreateFDiv(X, Y, "recipdiv");
+      Value *FDiv = Builder.CreateFDiv(X, Y, "recipdiv");
+      Builder.getFastMathFlags() &= (FMF);
+      return FDiv;
     }
     auto *One = ConstantFP::get(ResultType, 1.0);
     llvm::Function *F = CGM.getIntrinsic(Intrinsic::sqrt, ResultType);
-    return Builder.CreateFDiv(One, Builder.CreateCall(F, X), "rsqrt");
+    Value *FDiv = Builder.CreateFDiv(One, Builder.CreateCall(F, X), "rsqrt");
+    Builder.getFastMathFlags() &= (FMF);
+    return FDiv;
   }
+  case PPC::BI__builtin_ppc_alignx: {
+    ConstantInt *AlignmentCI = cast<ConstantInt>(Ops[0]);
+    if (AlignmentCI->getValue().ugt(llvm::Value::MaximumAlignment))
+      AlignmentCI = ConstantInt::get(AlignmentCI->getType(),
+                                     llvm::Value::MaximumAlignment);
 
+    emitAlignmentAssumption(Ops[1], E->getArg(1),
+                            /*The expr loc is sufficient.*/ SourceLocation(),
+                            AlignmentCI, nullptr);
+    return Ops[1];
+  }
+  case PPC::BI__builtin_ppc_rdlam: {
+    llvm::Type *Ty = Ops[0]->getType();
+    Value *ShiftAmt = Builder.CreateIntCast(Ops[1], Ty, false);
+    Function *F = CGM.getIntrinsic(Intrinsic::fshl, Ty);
+    Value *Rotate = Builder.CreateCall(F, {Ops[0], Ops[0], ShiftAmt});
+    return Builder.CreateAnd(Rotate, Ops[2]);
+  }
   // FMA variations
   case PPC::BI__builtin_vsx_xvmaddadp:
   case PPC::BI__builtin_vsx_xvmaddasp:
@@ -15556,10 +15580,10 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
       if (BuiltinID == PPC::BI__builtin_vsx_lxvp ||
           BuiltinID == PPC::BI__builtin_mma_lxvp) {
         Ops[1] = Builder.CreateBitCast(Ops[1], Int8PtrTy);
-        Ops[0] = Builder.CreateGEP(Ops[1], Ops[0]);
+        Ops[0] = Builder.CreateGEP(Int8Ty, Ops[1], Ops[0]);
       } else {
         Ops[2] = Builder.CreateBitCast(Ops[2], Int8PtrTy);
-        Ops[1] = Builder.CreateGEP(Ops[2], Ops[1]);
+        Ops[1] = Builder.CreateGEP(Int8Ty, Ops[2], Ops[1]);
       }
       Ops.pop_back();
       llvm::Function *F = CGM.getIntrinsic(ID);
@@ -15627,6 +15651,15 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
     llvm::Function *F = CGM.getIntrinsic(Intrinsic::ppc_mtfsf);
     return Builder.CreateCall(F, {Ops[0], Cast}, "");
   }
+
+  case PPC::BI__builtin_ppc_swdiv_nochk:
+  case PPC::BI__builtin_ppc_swdivs_nochk: {
+    FastMathFlags FMF = Builder.getFastMathFlags();
+    Builder.getFastMathFlags().setFast();
+    Value *FDiv = Builder.CreateFDiv(Ops[0], Ops[1], "swdiv_nochk");
+    Builder.getFastMathFlags() &= (FMF);
+    return FDiv;
+  }
   }
 }
 
@@ -15657,7 +15690,7 @@ Value *EmitAMDGPUWorkGroupSize(CodeGenFunction &CGF, unsigned Index) {
   auto *DP = EmitAMDGPUDispatchPtr(CGF);
   // Indexing the HSA kernel_dispatch_packet struct.
   auto *Offset = llvm::ConstantInt::get(CGF.Int32Ty, XOffset + Index * 2);
-  auto *GEP = CGF.Builder.CreateGEP(DP, Offset);
+  auto *GEP = CGF.Builder.CreateGEP(CGF.Int8Ty, DP, Offset);
   auto *DstTy =
       CGF.Int16Ty->getPointerTo(GEP->getType()->getPointerAddressSpace());
   auto *Cast = CGF.Builder.CreateBitCast(GEP, DstTy);
@@ -15677,7 +15710,7 @@ Value *EmitAMDGPUGridSize(CodeGenFunction &CGF, unsigned Index) {
   auto *DP = EmitAMDGPUDispatchPtr(CGF);
   // Indexing the HSA kernel_dispatch_packet struct.
   auto *Offset = llvm::ConstantInt::get(CGF.Int32Ty, XOffset + Index * 4);
-  auto *GEP = CGF.Builder.CreateGEP(DP, Offset);
+  auto *GEP = CGF.Builder.CreateGEP(CGF.Int8Ty, DP, Offset);
   auto *DstTy =
       CGF.Int32Ty->getPointerTo(GEP->getType()->getPointerAddressSpace());
   auto *Cast = CGF.Builder.CreateBitCast(GEP, DstTy);
@@ -17079,7 +17112,7 @@ CodeGenFunction::EmitNVPTXBuiltinExpr(unsigned BuiltinID, const CallExpr *E) {
         Builder.CreateAlignedStore(
             Builder.CreateBitCast(Builder.CreateExtractValue(Result, i),
                                   Dst.getElementType()),
-            Builder.CreateGEP(Dst.getPointer(),
+            Builder.CreateGEP(Dst.getElementType(), Dst.getPointer(),
                               llvm::ConstantInt::get(IntTy, i)),
             CharUnits::fromQuantity(4));
       }
@@ -17222,7 +17255,8 @@ CodeGenFunction::EmitNVPTXBuiltinExpr(unsigned BuiltinID, const CallExpr *E) {
     for (unsigned i = 0; i < MI.NumEltsD; ++i)
       Builder.CreateAlignedStore(
           Builder.CreateBitCast(Builder.CreateExtractValue(Result, i), DType),
-          Builder.CreateGEP(Dst.getPointer(), llvm::ConstantInt::get(IntTy, i)),
+          Builder.CreateGEP(Dst.getElementType(), Dst.getPointer(),
+                            llvm::ConstantInt::get(IntTy, i)),
           CharUnits::fromQuantity(4));
     return Result;
   }
@@ -17306,7 +17340,7 @@ RValue CodeGenFunction::EmitBuiltinAlignTo(const CallExpr *E, bool AlignUp) {
     // can use an inbounds GEP to enable better optimization.
     Value *Base = EmitCastToVoidPtr(Args.Src);
     if (getLangOpts().isSignedOverflowDefined())
-      Result = Builder.CreateGEP(Base, Difference, "aligned_result");
+      Result = Builder.CreateGEP(Int8Ty, Base, Difference, "aligned_result");
     else
       Result = EmitCheckedInBoundsGEP(Base, Difference,
                                       /*SignedIndices=*/true,

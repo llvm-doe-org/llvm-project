@@ -2163,6 +2163,27 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
     // minimum size. e.g. <vscale x 2 x i32>. VLENB is in bytes so we calculate
     // vscale as VLENB / 8.
     assert(RISCV::RVVBitsPerBlock == 64 && "Unexpected bits per block!");
+    if (isa<ConstantSDNode>(Op.getOperand(0))) {
+      // We assume VLENB is a multiple of 8. We manually choose the best shift
+      // here because SimplifyDemandedBits isn't always able to simplify it.
+      uint64_t Val = Op.getConstantOperandVal(0);
+      if (isPowerOf2_64(Val)) {
+        uint64_t Log2 = Log2_64(Val);
+        if (Log2 < 3)
+          return DAG.getNode(ISD::SRL, DL, VT, VLENB,
+                             DAG.getConstant(3 - Log2, DL, VT));
+        if (Log2 > 3)
+          return DAG.getNode(ISD::SHL, DL, VT, VLENB,
+                             DAG.getConstant(Log2 - 3, DL, VT));
+        return VLENB;
+      }
+      // If the multiplier is a multiple of 8, scale it down to avoid needing
+      // to shift the VLENB value.
+      if ((Val % 8) == 0)
+        return DAG.getNode(ISD::MUL, DL, VT, VLENB,
+                           DAG.getConstant(Val / 8, DL, VT));
+    }
+
     SDValue VScale = DAG.getNode(ISD::SRL, DL, VT, VLENB,
                                  DAG.getConstant(3, DL, VT));
     return DAG.getNode(ISD::MUL, DL, VT, VScale, Op.getOperand(0));
@@ -4711,12 +4732,11 @@ static RISCVISD::NodeType getRISCVWOpcode(unsigned Opcode) {
 // SLLW/DIVUW/.../*W later one because the fact the operation was originally of
 // type i8/i16/i32 is lost.
 static SDValue customLegalizeToWOp(SDNode *N, SelectionDAG &DAG,
-                                   unsigned ExtOpc0 = ISD::ANY_EXTEND,
-                                   unsigned ExtOpc1 = ISD::ANY_EXTEND) {
+                                   unsigned ExtOpc = ISD::ANY_EXTEND) {
   SDLoc DL(N);
   RISCVISD::NodeType WOpcode = getRISCVWOpcode(N->getOpcode());
-  SDValue NewOp0 = DAG.getNode(ExtOpc0, DL, MVT::i64, N->getOperand(0));
-  SDValue NewOp1 = DAG.getNode(ExtOpc1, DL, MVT::i64, N->getOperand(1));
+  SDValue NewOp0 = DAG.getNode(ExtOpc, DL, MVT::i64, N->getOperand(0));
+  SDValue NewOp1 = DAG.getNode(ExtOpc, DL, MVT::i64, N->getOperand(1));
   SDValue NewRes = DAG.getNode(WOpcode, DL, MVT::i64, NewOp0, NewOp1);
   // ReplaceNodeResults requires we maintain the same type for the return value.
   return DAG.getNode(ISD::TRUNCATE, DL, N->getValueType(0), NewRes);
@@ -4881,17 +4901,12 @@ void RISCVTargetLowering::ReplaceNodeResults(SDNode *N,
     // If the input is i32, use ANY_EXTEND since the W instructions don't read
     // the upper 32 bits. For other types we need to sign or zero extend
     // based on the opcode.
-    unsigned ExtOpc0 = ISD::ANY_EXTEND, ExtOpc1 = ISD::ANY_EXTEND;
-    if (VT != MVT::i32) {
-      ExtOpc0 = N->getOpcode() == ISD::SDIV ? ISD::SIGN_EXTEND
-                                            : ISD::ZERO_EXTEND;
-      ExtOpc1 = ExtOpc0;
-    } else if (N->getOperand(0).getOpcode() == ISD::Constant) {
-      // Sign extend i32 constants to improve materialization.
-      ExtOpc0 = ISD::SIGN_EXTEND;
-    }
+    unsigned ExtOpc = ISD::ANY_EXTEND;
+    if (VT != MVT::i32)
+      ExtOpc = N->getOpcode() == ISD::SDIV ? ISD::SIGN_EXTEND
+                                           : ISD::ZERO_EXTEND;
 
-    Results.push_back(customLegalizeToWOp(N, DAG, ExtOpc0, ExtOpc1));
+    Results.push_back(customLegalizeToWOp(N, DAG, ExtOpc));
     break;
   }
   case ISD::UADDO:
@@ -6431,6 +6446,8 @@ void RISCVTargetLowering::computeKnownBitsForTargetNode(const SDValue Op,
   case RISCVISD::READ_VLENB:
     // We assume VLENB is at least 16 bytes.
     Known.Zero.setLowBits(4);
+    // We assume VLENB is no more than 65536 / 8 bytes.
+    Known.Zero.setBitsFrom(14);
     break;
   case ISD::INTRINSIC_W_CHAIN: {
     unsigned IntNo = Op.getConstantOperandVal(1);

@@ -35,7 +35,7 @@ for.end:                                          ; preds = %for.body, %entry
 
 ; Check that we are able to compute trip count of a loop without an entry guard.
 ; CHECK: Determining loop execution counts for: @foo2
-; CHECK: backedge-taken count is ((-1 + (-1 * %s) + (1 umax %s) + (%n smax %s)) /u (1 umax %s))
+; CHECK: backedge-taken count is ((((-1 * (1 umin ((-1 * %s) + (%n smax %s))))<nuw><nsw> + (-1 * %s) + (%n smax %s)) /u (1 umax %s)) + (1 umin ((-1 * %s) + (%n smax %s))))
 
 ; We should have a conservative estimate for the max backedge taken count for
 ; loops with unknown stride.
@@ -85,7 +85,7 @@ for.end:                                          ; preds = %for.body, %entry
 
 ; Same as foo2, but with mustprogress on loop, not function
 ; CHECK: Determining loop execution counts for: @foo4
-; CHECK: backedge-taken count is ((-1 + (-1 * %s) + (1 umax %s) + (%n smax %s)) /u (1 umax %s))
+; CHECK: backedge-taken count is ((((-1 * (1 umin ((-1 * %s) + (%n smax %s))))<nuw><nsw> + (-1 * %s) + (%n smax %s)) /u (1 umax %s)) + (1 umin ((-1 * %s) + (%n smax %s))))
 ; CHECK: max backedge-taken count is -1
 
 define void @foo4(i32* nocapture %A, i32 %n, i32 %s) {
@@ -108,7 +108,7 @@ for.end:                                          ; preds = %for.body, %entry
 
 ; A more complex case with pre-increment compare instead of post-increment.
 ; CHECK-LABEL: Determining loop execution counts for: @foo5
-; CHECK: Loop %for.body: backedge-taken count is ((-1 + (-1 * %start) + (1 umax %s) + (%n smax %start)) /u (1 umax %s))
+; CHECK: Loop %for.body: backedge-taken count is ((((-1 * (1 umin ((-1 * %start) + (%n smax %start))))<nuw><nsw> + (-1 * %start) + (%n smax %start)) /u (1 umax %s)) + (1 umin ((-1 * %start) + (%n smax %start))))
 
 ; We should have a conservative estimate for the max backedge taken count for
 ; loops with unknown stride.
@@ -163,7 +163,7 @@ for.end:                                          ; preds = %for.body, %entry
 ; CHECK: Loop %for.body: Unpredictable predicated backedge-taken count.
 ; Note that this function will always execute undefined behavior and thus
 ; any value is valid for a backedge taken count.
-define void @zero_stride_ub(i32* nocapture %A, i32 %n, i32 %s) {
+define void @zero_stride_ub(i32* nocapture %A) {
 entry:
   br label %for.body
 
@@ -180,6 +180,54 @@ for.body:                                         ; preds = %entry, %for.body
 for.end:                                          ; preds = %for.body, %entry
   ret void
 }
+
+; When %zero = 0, this loop is only well defined if %n < 0 and thus BTC = 0.
+; CHECK-LABEL: Determining loop execution counts for: @zero_stride_symbolic
+; CHECK: Loop %for.body: backedge-taken count is ((((-1 * (1 umin ((-1 * %zero) + (%n smax %zero))))<nuw><nsw> + (-1 * %zero) + (%n smax %zero)) /u (1 umax %zero)) + (1 umin ((-1 * %zero) + (%n smax %zero))))
+; CHECK: Loop %for.body: max backedge-taken count is -1
+
+define void @zero_stride_symbolic(i32* nocapture %A, i32 %n, i32 %zero) {
+entry:
+  br label %for.body
+
+for.body:                                         ; preds = %entry, %for.body
+  %i.05 = phi i32 [ %add, %for.body ], [ 0, %entry ]
+  %arrayidx = getelementptr inbounds i32, i32* %A, i32 %i.05
+  %0 = load i32, i32* %arrayidx, align 4
+  %inc = add nsw i32 %0, 1
+  store i32 %inc, i32* %arrayidx, align 4
+  %add = add nsw i32 %i.05, %zero
+  %cmp = icmp slt i32 %add, %n
+  br i1 %cmp, label %for.body, label %for.end, !llvm.loop !8
+
+for.end:                                          ; preds = %for.body, %entry
+  ret void
+}
+
+
+; CHECK-LABEL: Determining loop execution counts for: @zero_stride_varying_rhs
+; CHECK: Loop %for.body: Unpredictable backedge-taken count.
+; CHECK: Loop %for.body: max backedge-taken count is -1
+
+define void @zero_stride_varying_rhs(i32* nocapture %A, i32* %n_p, i32 %zero) {
+entry:
+  br label %for.body
+
+for.body:                                         ; preds = %entry, %for.body
+  %i.05 = phi i32 [ %add, %for.body ], [ 0, %entry ]
+  %arrayidx = getelementptr inbounds i32, i32* %A, i32 %i.05
+  %0 = load i32, i32* %arrayidx, align 4
+  %inc = add nsw i32 %0, 1
+  store i32 %inc, i32* %arrayidx, align 4
+  %add = add nsw i32 %i.05, %zero
+  %n = load i32, i32* %n_p
+  %cmp = icmp slt i32 %add, %n
+  br i1 %cmp, label %for.body, label %for.end, !llvm.loop !8
+
+for.end:                                          ; preds = %for.body, %entry
+  ret void
+}
+
 
 
 !8 = distinct !{!8, !9}

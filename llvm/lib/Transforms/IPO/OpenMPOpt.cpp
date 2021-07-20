@@ -2759,7 +2759,7 @@ struct AAKernelInfoFunction : AAKernelInfo {
       // __kmpc_target_init or
       // __kmpc_target_deinit call. We will answer this one with the internal
       // state.
-      if (!isValidState())
+      if (!SPMDCompatibilityTracker.isValidState())
         return nullptr;
       if (!SPMDCompatibilityTracker.isAtFixpoint()) {
         if (AA)
@@ -3162,20 +3162,22 @@ struct AAKernelInfoFunction : AAKernelInfo {
     };
 
     bool UsedAssumedInformationInCheckRWInst = false;
-    if (!A.checkForAllReadWriteInstructions(
-            CheckRWInst, *this, UsedAssumedInformationInCheckRWInst))
-      SPMDCompatibilityTracker.indicatePessimisticFixpoint();
+    if (!SPMDCompatibilityTracker.isAtFixpoint())
+      if (!A.checkForAllReadWriteInstructions(
+              CheckRWInst, *this, UsedAssumedInformationInCheckRWInst))
+        SPMDCompatibilityTracker.indicatePessimisticFixpoint();
 
     if (!IsKernelEntry)
       updateReachingKernelEntries(A);
 
     // Callback to check a call instruction.
+    bool AllSPMDStatesWereFixed = true;
     auto CheckCallInst = [&](Instruction &I) {
       auto &CB = cast<CallBase>(I);
       auto &CBAA = A.getAAFor<AAKernelInfo>(
           *this, IRPosition::callsite_function(CB), DepClassTy::OPTIONAL);
-      if (CBAA.getState().isValidState())
-        getState() ^= CBAA.getState();
+      getState() ^= CBAA.getState();
+      AllSPMDStatesWereFixed &= CBAA.SPMDCompatibilityTracker.isAtFixpoint();
       return true;
     };
 
@@ -3183,6 +3185,12 @@ struct AAKernelInfoFunction : AAKernelInfo {
     if (!A.checkForAllCallLikeInstructions(
             CheckCallInst, *this, UsedAssumedInformationInCheckCallInst))
       return indicatePessimisticFixpoint();
+
+    // If we haven't used any assumed information for the SPMD state we can fix
+    // it.
+    if (!UsedAssumedInformationInCheckRWInst &&
+        !UsedAssumedInformationInCheckCallInst && AllSPMDStatesWereFixed)
+      SPMDCompatibilityTracker.indicateOptimisticFixpoint();
 
     return StateBefore == getState() ? ChangeStatus::UNCHANGED
                                      : ChangeStatus::CHANGED;
@@ -3196,8 +3204,8 @@ private:
 
       assert(Caller && "Caller is nullptr");
 
-      auto &CAA =
-          A.getOrCreateAAFor<AAKernelInfo>(IRPosition::function(*Caller));
+      auto &CAA = A.getOrCreateAAFor<AAKernelInfo>(
+          IRPosition::function(*Caller), this, DepClassTy::REQUIRED);
       if (CAA.ReachingKernelEntries.isValidState()) {
         ReachingKernelEntries ^= CAA.ReachingKernelEntries;
         return true;
@@ -3521,12 +3529,17 @@ private:
       // All reaching kernels are in SPMD mode. Update all function calls to
       // __kmpc_is_spmd_exec_mode to 1.
       SimplifiedValue = ConstantInt::get(Type::getInt8Ty(Ctx), true);
-    } else {
+    } else if (KnownNonSPMDCount || AssumedNonSPMDCount) {
       assert(KnownSPMDCount == 0 && AssumedSPMDCount == 0 &&
              "Expected only non-SPMD kernels!");
       // All reaching kernels are in non-SPMD mode. Update all function
       // calls to __kmpc_is_spmd_exec_mode to 0.
       SimplifiedValue = ConstantInt::get(Type::getInt8Ty(Ctx), false);
+    } else {
+      // We have empty reaching kernels, therefore we cannot tell if the
+      // associated call site can be folded. At this moment, SimplifiedValue
+      // must be none.
+      assert(!SimplifiedValue.hasValue() && "SimplifiedValue should be none");
     }
 
     return SimplifiedValue == SimplifiedValueBefore ? ChangeStatus::UNCHANGED
