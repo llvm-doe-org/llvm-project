@@ -40,7 +40,10 @@ variables:
     libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/parallel_offloading_map.cpp
     libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
     libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
-    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp"
+    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
+    libomptarget :: nvptx64-nvidia-cuda :: offloading/taskloop_offload_nowait.cpp
+    libomptarget :: x86_64-pc-linux-gnu :: offloading/taskloop_offload_nowait.cpp
+    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/taskloop_offload_nowait.cpp"
   XFAIL_NOT_COMMON:
     ""
 
