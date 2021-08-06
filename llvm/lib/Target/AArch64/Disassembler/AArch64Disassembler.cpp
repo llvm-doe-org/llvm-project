@@ -118,6 +118,10 @@ static DecodeStatus DecodeZPR4RegisterClass(MCInst &Inst, unsigned RegNo,
 template <unsigned NumBitsForTile>
 static DecodeStatus DecodeMatrixTile(MCInst &Inst, unsigned RegNo,
                                      uint64_t Address, const void *Decoder);
+static DecodeStatus DecodeMatrixTileListRegisterClass(MCInst &Inst,
+                                                      unsigned RegMask,
+                                                      uint64_t Address,
+                                                      const void *Decoder);
 static DecodeStatus DecodePPRRegisterClass(MCInst &Inst, unsigned RegNo,
                                            uint64_t Address,
                                            const void *Decoder);
@@ -221,13 +225,12 @@ static DecodeStatus DecodeXSeqPairsClassRegisterClass(MCInst &Inst,
                                                       unsigned RegNo,
                                                       uint64_t Addr,
                                                       const void *Decoder);
-static DecodeStatus DecodeSVELogicalImmInstruction(llvm::MCInst &Inst,
-                                                   uint32_t insn,
+static DecodeStatus DecodeSVELogicalImmInstruction(MCInst &Inst, uint32_t insn,
                                                    uint64_t Address,
                                                    const void *Decoder);
-template<int Bits>
-static DecodeStatus DecodeSImm(llvm::MCInst &Inst, uint64_t Imm,
-                               uint64_t Address, const void *Decoder);
+template <int Bits>
+static DecodeStatus DecodeSImm(MCInst &Inst, uint64_t Imm, uint64_t Address,
+                               const void *Decoder);
 template <int ElementWidth>
 static DecodeStatus DecodeImm8OptLsl(MCInst &Inst, unsigned Imm,
                                      uint64_t Addr, const void *Decoder);
@@ -292,11 +295,33 @@ DecodeStatus AArch64Disassembler::getInstruction(MCInst &MI, uint64_t &Size,
     // For Scalable Matrix Extension (SME) instructions that have an implicit
     // operand for the accumulator (ZA) which isn't encoded, manually insert
     // operand.
+    case AArch64::LDR_ZA:
+    case AArch64::STR_ZA: {
+      MI.insert(MI.begin(), MCOperand::createReg(AArch64::ZA));
+      // Spill and fill instructions have a single immediate used for both the
+      // vector select offset and optional memory offset. Replicate the decoded
+      // immediate.
+      const MCOperand &Imm4Op = MI.getOperand(2);
+      assert(Imm4Op.isImm() && "Unexpected operand type!");
+      MI.addOperand(Imm4Op);
+      break;
+    }
     case AArch64::LD1_MXIPXX_H_B:
     case AArch64::LD1_MXIPXX_V_B:
     case AArch64::ST1_MXIPXX_H_B:
     case AArch64::ST1_MXIPXX_V_B:
+    case AArch64::INSERT_MXIPZ_H_B:
+    case AArch64::INSERT_MXIPZ_V_B:
+      // e.g.
+      // MOVA ZA0<HV>.B[<Ws>, <imm>], <Pg>/M, <Zn>.B
+      //      ^ insert implicit 8-bit element tile
       MI.insert(MI.begin(), MCOperand::createReg(AArch64::ZAB0));
+      break;
+    case AArch64::EXTRACT_ZPMXI_H_B:
+    case AArch64::EXTRACT_ZPMXI_V_B:
+      // MOVA <Zd>.B, <Pg>/M, ZA0<HV>.B[<Ws>, <imm>]
+      //                      ^ insert implicit 8-bit element tile
+      MI.insert(MI.begin()+2, MCOperand::createReg(AArch64::ZAB0));
       break;
     }
 
@@ -679,6 +704,16 @@ static DecodeStatus DecodeZPR4RegisterClass(MCInst &Inst, unsigned RegNo,
     return Fail;
   unsigned Register = ZZZZDecoderTable[RegNo];
   Inst.addOperand(MCOperand::createReg(Register));
+  return Success;
+}
+
+static DecodeStatus DecodeMatrixTileListRegisterClass(MCInst &Inst,
+                                                      unsigned RegMask,
+                                                      uint64_t Address,
+                                                      const void *Decoder) {
+  if (RegMask > 0xFF)
+    return Fail;
+  Inst.addOperand(MCOperand::createImm(RegMask));
   return Success;
 }
 
@@ -1944,8 +1979,7 @@ static DecodeStatus DecodeXSeqPairsClassRegisterClass(MCInst &Inst,
                                              RegNo, Addr, Decoder);
 }
 
-static DecodeStatus DecodeSVELogicalImmInstruction(llvm::MCInst &Inst,
-                                                   uint32_t insn,
+static DecodeStatus DecodeSVELogicalImmInstruction(MCInst &Inst, uint32_t insn,
                                                    uint64_t Addr,
                                                    const void *Decoder) {
   unsigned Zdn = fieldFromInstruction(insn, 0, 5);
@@ -1961,9 +1995,9 @@ static DecodeStatus DecodeSVELogicalImmInstruction(llvm::MCInst &Inst,
   return Success;
 }
 
-template<int Bits>
-static DecodeStatus DecodeSImm(llvm::MCInst &Inst, uint64_t Imm,
-                               uint64_t Address, const void *Decoder) {
+template <int Bits>
+static DecodeStatus DecodeSImm(MCInst &Inst, uint64_t Imm, uint64_t Address,
+                               const void *Decoder) {
   if (Imm & ~((1LL << Bits) - 1))
       return Fail;
 

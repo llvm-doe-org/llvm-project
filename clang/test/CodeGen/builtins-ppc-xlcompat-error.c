@@ -12,12 +12,16 @@ extern long long lla, llb;
 extern int ia, ib;
 extern unsigned int ui;
 extern unsigned long long ull;
+extern const int cia;
+extern unsigned long ula;
 
 void test_trap(void) {
 #ifdef __PPC64__
-  __tdw(lla, llb, 50); //expected-error {{argument value 50 is outside the valid range [0, 31]}}
+  __tdw(lla, llb, 50); //expected-error {{argument value 50 is outside the valid range [1, 31]}}
+  __tdw(lla, llb, 0); //expected-error {{argument value 0 is outside the valid range [1, 31]}}
 #endif
-  __tw(ia, ib, 50); //expected-error {{argument value 50 is outside the valid range [0, 31]}}
+  __tw(ia, ib, 50); //expected-error {{argument value 50 is outside the valid range [1, 31]}}
+  __tw(ia, ib, 0); //expected-error {{argument value 0 is outside the valid range [1, 31]}}
 }
 
 void test_builtin_ppc_rldimi() {
@@ -93,3 +97,11 @@ unsigned long long testdivdeu(unsigned long long dividend, unsigned long long di
   return __divdeu(dividend, divisor); //expected-error {{this builtin is only available on 64-bit targets}}
 }
 #endif
+
+unsigned long test_mfspr(void) {
+  return __mfspr(cia); //expected-error {{argument to '__builtin_ppc_mfspr' must be a constant integer}}
+}
+
+void test_mtspr(void) {
+   __mtspr(cia, ula); //expected-error {{argument to '__builtin_ppc_mtspr' must be a constant integer}}
+}

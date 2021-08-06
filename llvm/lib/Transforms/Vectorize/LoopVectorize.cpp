@@ -332,8 +332,8 @@ static cl::opt<bool>
                            cl::desc("Prefer in-loop vector reductions, "
                                     "overriding the targets preference."));
 
-cl::opt<bool> EnableStrictReductions(
-    "enable-strict-reductions", cl::init(false), cl::Hidden,
+cl::opt<bool> ForceOrderedReductions(
+    "force-ordered-reductions", cl::init(false), cl::Hidden,
     cl::desc("Enable the vectorisation of loops with in-order (strict) "
              "FP reductions"));
 
@@ -590,12 +590,11 @@ protected:
   /// Handle all cross-iteration phis in the header.
   void fixCrossIterationPHIs(VPTransformState &State);
 
-  /// Fix a first-order recurrence. This is the second phase of vectorizing
-  /// this phi node.
+  /// Create the exit value of first order recurrences in the middle block and
+  /// update their users.
   void fixFirstOrderRecurrence(VPWidenPHIRecipe *PhiR, VPTransformState &State);
 
-  /// Fix a reduction cross-iteration phi. This is the second phase of
-  /// vectorizing this phi node.
+  /// Create code for the loop exit value of the reduction.
   void fixReduction(VPReductionPHIRecipe *Phi, VPTransformState &State);
 
   /// Clear NSW/NUW flags from reduction instructions if necessary.
@@ -1319,7 +1318,7 @@ public:
   /// the IsOrdered flag of RdxDesc is set and we do not allow reordering
   /// of FP operations.
   bool useOrderedReductions(const RecurrenceDescriptor &RdxDesc) {
-    return EnableStrictReductions && !Hints->allowReordering() &&
+    return ForceOrderedReductions && !Hints->allowReordering() &&
            RdxDesc.isOrdered();
   }
 
@@ -1695,9 +1694,9 @@ private:
 
   /// Return the cost of instructions in an inloop reduction pattern, if I is
   /// part of that pattern.
-  InstructionCost getReductionPatternCost(Instruction *I, ElementCount VF,
-                                          Type *VectorTy,
-                                          TTI::TargetCostKind CostKind);
+  Optional<InstructionCost>
+  getReductionPatternCost(Instruction *I, ElementCount VF, Type *VectorTy,
+                          TTI::TargetCostKind CostKind);
 
   /// Calculate vectorization cost of memory instruction \p I.
   InstructionCost getMemoryInstructionCost(Instruction *I, ElementCount VF);
@@ -4049,19 +4048,17 @@ void InnerLoopVectorizer::truncateToMinimalBitwidths(VPTransformState &State) {
         // Don't do anything with the operands, just extend the result.
         continue;
       } else if (auto *IE = dyn_cast<InsertElementInst>(I)) {
-        auto Elements = cast<FixedVectorType>(IE->getOperand(0)->getType())
-                            ->getNumElements();
+        auto Elements =
+            cast<VectorType>(IE->getOperand(0)->getType())->getElementCount();
         auto *O0 = B.CreateZExtOrTrunc(
-            IE->getOperand(0),
-            FixedVectorType::get(ScalarTruncatedTy, Elements));
+            IE->getOperand(0), VectorType::get(ScalarTruncatedTy, Elements));
         auto *O1 = B.CreateZExtOrTrunc(IE->getOperand(1), ScalarTruncatedTy);
         NewI = B.CreateInsertElement(O0, O1, IE->getOperand(2));
       } else if (auto *EE = dyn_cast<ExtractElementInst>(I)) {
-        auto Elements = cast<FixedVectorType>(EE->getOperand(0)->getType())
-                            ->getNumElements();
+        auto Elements =
+            cast<VectorType>(EE->getOperand(0)->getType())->getElementCount();
         auto *O0 = B.CreateZExtOrTrunc(
-            EE->getOperand(0),
-            FixedVectorType::get(ScalarTruncatedTy, Elements));
+            EE->getOperand(0), VectorType::get(ScalarTruncatedTy, Elements));
         NewI = B.CreateExtractElement(O0, EE->getOperand(2));
       } else {
         // If we don't know what to do, be conservative and don't do anything.
@@ -4224,17 +4221,12 @@ void InnerLoopVectorizer::fixFirstOrderRecurrence(VPWidenPHIRecipe *PhiR,
   // After execution completes the vector loop, we extract the next value of
   // the recurrence (x) to use as the initial value in the scalar loop.
 
-  auto *IdxTy = Builder.getInt32Ty();
-  auto *VecPhi = cast<PHINode>(State.get(PhiR, 0));
-
-  // Fix the latch value of the new recurrence in the vector loop.
-  VPValue *PreviousDef = PhiR->getBackedgeValue();
-  Value *Incoming = State.get(PreviousDef, UF - 1);
-  VecPhi->addIncoming(Incoming, LI->getLoopFor(LoopVectorBody)->getLoopLatch());
-
   // Extract the last vector element in the middle block. This will be the
   // initial value for the recurrence when jumping to the scalar loop.
+  VPValue *PreviousDef = PhiR->getBackedgeValue();
+  Value *Incoming = State.get(PreviousDef, UF - 1);
   auto *ExtractForScalar = Incoming;
+  auto *IdxTy = Builder.getInt32Ty();
   if (VF.isVector()) {
     auto *One = ConstantInt::get(IdxTy, 1);
     Builder.SetInsertPoint(LoopMiddleBlock->getTerminator());
@@ -4309,22 +4301,6 @@ void InnerLoopVectorizer::fixReduction(VPReductionPHIRecipe *PhiR,
 
   // Wrap flags are in general invalid after vectorization, clear them.
   clearReductionWrapFlags(RdxDesc, State);
-
-  // Fix the vector-loop phi.
-
-  // Reductions do not have to start at zero. They can start with
-  // any loop invariant values.
-  BasicBlock *VectorLoopLatch = LI->getLoopFor(LoopVectorBody)->getLoopLatch();
-
-  unsigned LastPartForNewPhi = PhiR->isOrdered() ? 1 : UF;
-  for (unsigned Part = 0; Part < LastPartForNewPhi; ++Part) {
-    Value *VecRdxPhi = State.get(PhiR->getVPSingleValue(), Part);
-    Value *Val = State.get(PhiR->getBackedgeValue(), Part);
-    if (PhiR->isOrdered())
-      Val = State.get(PhiR->getBackedgeValue(), UF - 1);
-
-    cast<PHINode>(VecRdxPhi)->addIncoming(Val, VectorLoopLatch);
-  }
 
   // Before each round, move the insertion point right between
   // the PHIs and the values we are going to write.
@@ -5125,13 +5101,12 @@ void LoopVectorizationCostModel::collectLoopScalars(ElementCount VF) {
   auto evaluatePtrUse = [&](Instruction *MemAccess, Value *Ptr) {
     if (isScalarPtrInduction(MemAccess, Ptr)) {
       Worklist.insert(cast<Instruction>(Ptr));
-      Instruction *Update = cast<Instruction>(
-          cast<PHINode>(Ptr)->getIncomingValueForBlock(Latch));
-      Worklist.insert(Update);
       LLVM_DEBUG(dbgs() << "LV: Found new scalar instruction: " << *Ptr
                         << "\n");
-      LLVM_DEBUG(dbgs() << "LV: Found new scalar instruction: " << *Update
-                        << "\n");
+
+      Instruction *Update = cast<Instruction>(
+          cast<PHINode>(Ptr)->getIncomingValueForBlock(Latch));
+      ScalarPtrs.insert(Update);
       return;
     }
     // We only care about bitcast and getelementptr instructions contained in
@@ -5435,6 +5410,30 @@ void LoopVectorizationCostModel::collectLoopUniforms(ElementCount VF) {
   // lane 0 demanded or b) are uses which demand only lane 0 of their operand.
   for (auto *BB : TheLoop->blocks())
     for (auto &I : *BB) {
+      if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(&I)) {
+        switch (II->getIntrinsicID()) {
+        case Intrinsic::sideeffect:
+        case Intrinsic::experimental_noalias_scope_decl:
+        case Intrinsic::assume:
+        case Intrinsic::lifetime_start:
+        case Intrinsic::lifetime_end:
+          if (TheLoop->hasLoopInvariantOperands(&I))
+            addToWorklistIfAllowed(&I);
+          break;
+        default:
+          break;
+        }
+      }
+
+      // ExtractValue instructions must be uniform, because the operands are
+      // known to be loop-invariant.
+      if (auto *EVI = dyn_cast<ExtractValueInst>(&I)) {
+        assert(isOutOfScope(EVI->getAggregateOperand()) &&
+               "Expected aggregate value to be loop invariant");
+        addToWorklistIfAllowed(EVI);
+        continue;
+      }
+
       // If there's no pointer operand, there's nothing to do.
       auto *Ptr = getLoadStorePointerOperand(&I);
       if (!Ptr)
@@ -5818,6 +5817,12 @@ LoopVectorizationCostModel::computeMaxVF(ElementCount UserVF, unsigned UserIC) {
       return MaxFactors;
     }
   }
+
+  // For scalable vectors, don't use tail folding as this is currently not yet
+  // supported. The code is likely to have ended up here if the tripcount is
+  // low, in which case it makes sense not to use scalable vectors.
+  if (MaxFactors.ScalableVF.isVector())
+    MaxFactors.ScalableVF = ElementCount::getScalable(0);
 
   // If we don't know the precise trip count, or if the trip count that we
   // found modulo the vectorization factor is not zero, try to fold the tail
@@ -6469,9 +6474,21 @@ unsigned LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
 
     // If we have a scalar reduction (vector reductions are already dealt with
     // by this point), we can increase the critical path length if the loop
-    // we're interleaving is inside another loop. Limit, by default to 2, so the
-    // critical path only gets increased by one reduction operation.
+    // we're interleaving is inside another loop. For tree-wise reductions
+    // set the limit to 2, and for ordered reductions it's best to disable
+    // interleaving entirely.
     if (HasReductions && TheLoop->getLoopDepth() > 1) {
+      bool HasOrderedReductions =
+          any_of(Legal->getReductionVars(), [&](auto &Reduction) -> bool {
+            const RecurrenceDescriptor &RdxDesc = Reduction.second;
+            return RdxDesc.isOrdered();
+          });
+      if (HasOrderedReductions) {
+        LLVM_DEBUG(
+            dbgs() << "LV: Not interleaving scalar ordered reductions.\n");
+        return 1;
+      }
+
       unsigned F = static_cast<unsigned>(MaxNestedScalarReductionIC);
       SmallIC = std::min(SmallIC, F);
       StoresIC = std::min(StoresIC, F);
@@ -6745,9 +6762,11 @@ void LoopVectorizationCostModel::collectInstsToScalarize(ElementCount VF) {
     for (Instruction &I : *BB)
       if (isScalarWithPredication(&I)) {
         ScalarCostsTy ScalarCosts;
+        // Do not apply discount if scalable, because that would lead to
+        // invalid scalarization costs.
         // Do not apply discount logic if hacked cost is needed
         // for emulated masked memrefs.
-        if (!useEmulatedMaskMemRefHack(&I) &&
+        if (!VF.isScalable() && !useEmulatedMaskMemRefHack(&I) &&
             computePredInstDiscount(&I, ScalarCosts, VF) >= 0)
           ScalarCostsVF.insert(ScalarCosts.begin(), ScalarCosts.end());
         // Remember that BB will remain after vectorization.
@@ -6887,7 +6906,8 @@ LoopVectorizationCostModel::expectedCost(
       VectorizationCostTy C = getInstructionCost(&I, VF);
 
       // Check if we should override the cost.
-      if (ForceTargetInstructionCost.getNumOccurrences() > 0)
+      if (C.first.isValid() &&
+          ForceTargetInstructionCost.getNumOccurrences() > 0)
         C.first = InstructionCost(ForceTargetInstructionCost);
 
       // Keep a list of instructions with invalid costs.
@@ -7125,11 +7145,12 @@ LoopVectorizationCostModel::getInterleaveGroupCost(Instruction *I,
   return Cost;
 }
 
-InstructionCost LoopVectorizationCostModel::getReductionPatternCost(
+Optional<InstructionCost> LoopVectorizationCostModel::getReductionPatternCost(
     Instruction *I, ElementCount VF, Type *Ty, TTI::TargetCostKind CostKind) {
+  using namespace llvm::PatternMatch;
   // Early exit for no inloop reductions
   if (InLoopReductionChains.empty() || VF.isScalar() || !isa<VectorType>(Ty))
-    return InstructionCost::getInvalid();
+    return None;
   auto *VectorTy = cast<VectorType>(Ty);
 
   // We are looking for a pattern of, and finding the minimal acceptable cost:
@@ -7145,23 +7166,22 @@ InstructionCost LoopVectorizationCostModel::getReductionPatternCost(
   // it is not we return an invalid cost specifying the orignal cost method
   // should be used.
   Instruction *RetI = I;
-  if ((RetI->getOpcode() == Instruction::SExt ||
-       RetI->getOpcode() == Instruction::ZExt)) {
+  if (match(RetI, m_ZExtOrSExt(m_Value()))) {
     if (!RetI->hasOneUser())
-      return InstructionCost::getInvalid();
+      return None;
     RetI = RetI->user_back();
   }
-  if (RetI->getOpcode() == Instruction::Mul &&
+  if (match(RetI, m_Mul(m_Value(), m_Value())) &&
       RetI->user_back()->getOpcode() == Instruction::Add) {
     if (!RetI->hasOneUser())
-      return InstructionCost::getInvalid();
+      return None;
     RetI = RetI->user_back();
   }
 
   // Test if the found instruction is a reduction, and if not return an invalid
   // cost specifying the parent to use the original cost modelling.
   if (!InLoopReductionImmediateChains.count(RetI))
-    return InstructionCost::getInvalid();
+    return None;
 
   // Find the reduction this chain is a part of and calculate the basic cost of
   // the reduction on its own.
@@ -7172,8 +7192,15 @@ InstructionCost LoopVectorizationCostModel::getReductionPatternCost(
 
   const RecurrenceDescriptor &RdxDesc =
       Legal->getReductionVars()[cast<PHINode>(ReductionPhi)];
-  InstructionCost BaseCost =
-      TTI.getArithmeticReductionCost(RdxDesc.getOpcode(), VectorTy, CostKind);
+
+  InstructionCost BaseCost = TTI.getArithmeticReductionCost(
+      RdxDesc.getOpcode(), VectorTy, RdxDesc.getFastMathFlags(), CostKind);
+
+  // If we're using ordered reductions then we can just return the base cost
+  // here, since getArithmeticReductionCost calculates the full ordered
+  // reduction cost when FP reassociation is not allowed.
+  if (useOrderedReductions(RdxDesc))
+    return BaseCost;
 
   // Get the operand that was not the reduction chain and match it to one of the
   // patterns, returning the better cost if it is found.
@@ -7183,8 +7210,43 @@ InstructionCost LoopVectorizationCostModel::getReductionPatternCost(
 
   VectorTy = VectorType::get(I->getOperand(0)->getType(), VectorTy);
 
-  if (RedOp && (isa<SExtInst>(RedOp) || isa<ZExtInst>(RedOp)) &&
-      !TheLoop->isLoopInvariant(RedOp)) {
+  Instruction *Op0, *Op1;
+  if (RedOp &&
+      match(RedOp,
+            m_ZExtOrSExt(m_Mul(m_Instruction(Op0), m_Instruction(Op1)))) &&
+      match(Op0, m_ZExtOrSExt(m_Value())) &&
+      Op0->getOpcode() == Op1->getOpcode() &&
+      Op0->getOperand(0)->getType() == Op1->getOperand(0)->getType() &&
+      !TheLoop->isLoopInvariant(Op0) && !TheLoop->isLoopInvariant(Op1) &&
+      (Op0->getOpcode() == RedOp->getOpcode() || Op0 == Op1)) {
+
+    // Matched reduce(ext(mul(ext(A), ext(B)))
+    // Note that the extend opcodes need to all match, or if A==B they will have
+    // been converted to zext(mul(sext(A), sext(A))) as it is known positive,
+    // which is equally fine.
+    bool IsUnsigned = isa<ZExtInst>(Op0);
+    auto *ExtType = VectorType::get(Op0->getOperand(0)->getType(), VectorTy);
+    auto *MulType = VectorType::get(Op0->getType(), VectorTy);
+
+    InstructionCost ExtCost =
+        TTI.getCastInstrCost(Op0->getOpcode(), MulType, ExtType,
+                             TTI::CastContextHint::None, CostKind, Op0);
+    InstructionCost MulCost =
+        TTI.getArithmeticInstrCost(Instruction::Mul, MulType, CostKind);
+    InstructionCost Ext2Cost =
+        TTI.getCastInstrCost(RedOp->getOpcode(), VectorTy, MulType,
+                             TTI::CastContextHint::None, CostKind, RedOp);
+
+    InstructionCost RedCost = TTI.getExtendedAddReductionCost(
+        /*IsMLA=*/true, IsUnsigned, RdxDesc.getRecurrenceType(), ExtType,
+        CostKind);
+
+    if (RedCost.isValid() &&
+        RedCost < ExtCost * 2 + MulCost + Ext2Cost + BaseCost)
+      return I == RetI ? RedCost : 0;
+  } else if (RedOp && match(RedOp, m_ZExtOrSExt(m_Value())) &&
+             !TheLoop->isLoopInvariant(RedOp)) {
+    // Matched reduce(ext(A))
     bool IsUnsigned = isa<ZExtInst>(RedOp);
     auto *ExtType = VectorType::get(RedOp->getOperand(0)->getType(), VectorTy);
     InstructionCost RedCost = TTI.getExtendedAddReductionCost(
@@ -7195,44 +7257,43 @@ InstructionCost LoopVectorizationCostModel::getReductionPatternCost(
         TTI.getCastInstrCost(RedOp->getOpcode(), VectorTy, ExtType,
                              TTI::CastContextHint::None, CostKind, RedOp);
     if (RedCost.isValid() && RedCost < BaseCost + ExtCost)
-      return I == RetI ? *RedCost.getValue() : 0;
-  } else if (RedOp && RedOp->getOpcode() == Instruction::Mul) {
-    Instruction *Mul = RedOp;
-    Instruction *Op0 = dyn_cast<Instruction>(Mul->getOperand(0));
-    Instruction *Op1 = dyn_cast<Instruction>(Mul->getOperand(1));
-    if (Op0 && Op1 && (isa<SExtInst>(Op0) || isa<ZExtInst>(Op0)) &&
+      return I == RetI ? RedCost : 0;
+  } else if (RedOp &&
+             match(RedOp, m_Mul(m_Instruction(Op0), m_Instruction(Op1)))) {
+    if (match(Op0, m_ZExtOrSExt(m_Value())) &&
         Op0->getOpcode() == Op1->getOpcode() &&
         Op0->getOperand(0)->getType() == Op1->getOperand(0)->getType() &&
         !TheLoop->isLoopInvariant(Op0) && !TheLoop->isLoopInvariant(Op1)) {
       bool IsUnsigned = isa<ZExtInst>(Op0);
       auto *ExtType = VectorType::get(Op0->getOperand(0)->getType(), VectorTy);
-      // reduce(mul(ext, ext))
+      // Matched reduce(mul(ext, ext))
       InstructionCost ExtCost =
           TTI.getCastInstrCost(Op0->getOpcode(), VectorTy, ExtType,
                                TTI::CastContextHint::None, CostKind, Op0);
       InstructionCost MulCost =
-          TTI.getArithmeticInstrCost(Mul->getOpcode(), VectorTy, CostKind);
+          TTI.getArithmeticInstrCost(Instruction::Mul, VectorTy, CostKind);
 
       InstructionCost RedCost = TTI.getExtendedAddReductionCost(
           /*IsMLA=*/true, IsUnsigned, RdxDesc.getRecurrenceType(), ExtType,
           CostKind);
 
       if (RedCost.isValid() && RedCost < ExtCost * 2 + MulCost + BaseCost)
-        return I == RetI ? *RedCost.getValue() : 0;
-    } else {
+        return I == RetI ? RedCost : 0;
+    } else if (!match(I, m_ZExtOrSExt(m_Value()))) {
+      // Matched reduce(mul())
       InstructionCost MulCost =
-          TTI.getArithmeticInstrCost(Mul->getOpcode(), VectorTy, CostKind);
+          TTI.getArithmeticInstrCost(Instruction::Mul, VectorTy, CostKind);
 
       InstructionCost RedCost = TTI.getExtendedAddReductionCost(
           /*IsMLA=*/true, true, RdxDesc.getRecurrenceType(), VectorTy,
           CostKind);
 
       if (RedCost.isValid() && RedCost < MulCost + BaseCost)
-        return I == RetI ? *RedCost.getValue() : 0;
+        return I == RetI ? RedCost : 0;
     }
   }
 
-  return I == RetI ? BaseCost : InstructionCost::getInvalid();
+  return I == RetI ? Optional<InstructionCost>(BaseCost) : None;
 }
 
 InstructionCost
@@ -7410,8 +7471,6 @@ void LoopVectorizationCostModel::setCostBasedWideningDecision(ElementCount VF) {
         Decision = CM_GatherScatter;
         Cost = GatherScatterCost;
       } else {
-        assert(!VF.isScalable() &&
-               "We cannot yet scalarise for scalable vectors");
         Decision = CM_Scalarize;
         Cost = ScalarizationCost;
       }
@@ -7546,6 +7605,9 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I, ElementCount VF,
       ScalarPredicatedBB = true;
 
     if (ScalarPredicatedBB) {
+      // Not possible to scalarize scalable vector with predicated instructions.
+      if (VF.isScalable())
+        return InstructionCost::getInvalid();
       // Return cost for branches around scalarized and predicated blocks.
       auto *Vec_i1Ty =
           VectorType::get(IntegerType::getInt1Ty(RetTy->getContext()), VF);
@@ -7637,10 +7699,8 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I, ElementCount VF,
       return 0;
 
     // Detect reduction patterns
-    InstructionCost RedCost;
-    if ((RedCost = getReductionPatternCost(I, VF, VectorTy, CostKind))
-            .isValid())
-      return RedCost;
+    if (auto RedCost = getReductionPatternCost(I, VF, VectorTy, CostKind))
+      return *RedCost;
 
     // Certain instructions can be cheaper to vectorize if they have a constant
     // second vector operand. One example of this are shifts on x86.
@@ -7781,10 +7841,8 @@ LoopVectorizationCostModel::getInstructionCost(Instruction *I, ElementCount VF,
     }
 
     // Detect reduction patterns
-    InstructionCost RedCost;
-    if ((RedCost = getReductionPatternCost(I, VF, VectorTy, CostKind))
-            .isValid())
-      return RedCost;
+    if (auto RedCost = getReductionPatternCost(I, VF, VectorTy, CostKind))
+      return *RedCost;
 
     Type *SrcScalarTy = I->getOperand(0)->getType();
     Type *SrcVecTy =
@@ -8892,6 +8950,37 @@ VPBasicBlock *VPRecipeBuilder::handleReplication(
   bool IsPredicated = LoopVectorizationPlanner::getDecisionAndClampRange(
       [&](ElementCount VF) { return CM.isPredicatedInst(I); }, Range);
 
+  // Even if the instruction is not marked as uniform, there are certain
+  // intrinsic calls that can be effectively treated as such, so we check for
+  // them here. Conservatively, we only do this for scalable vectors, since
+  // for fixed-width VFs we can always fall back on full scalarization.
+  if (!IsUniform && Range.Start.isScalable() && isa<IntrinsicInst>(I)) {
+    switch (cast<IntrinsicInst>(I)->getIntrinsicID()) {
+    case Intrinsic::assume:
+    case Intrinsic::lifetime_start:
+    case Intrinsic::lifetime_end:
+      // For scalable vectors if one of the operands is variant then we still
+      // want to mark as uniform, which will generate one instruction for just
+      // the first lane of the vector. We can't scalarize the call in the same
+      // way as for fixed-width vectors because we don't know how many lanes
+      // there are.
+      //
+      // The reasons for doing it this way for scalable vectors are:
+      //   1. For the assume intrinsic generating the instruction for the first
+      //      lane is still be better than not generating any at all. For
+      //      example, the input may be a splat across all lanes.
+      //   2. For the lifetime start/end intrinsics the pointer operand only
+      //      does anything useful when the input comes from a stack object,
+      //      which suggests it should always be uniform. For non-stack objects
+      //      the effect is to poison the object, which still allows us to
+      //      remove the call.
+      IsUniform = true;
+      break;
+    default:
+      break;
+    }
+  }
+
   auto *Recipe = new VPReplicateRecipe(I, Plan->mapToVPValues(I->operands()),
                                        IsUniform, IsPredicated);
   setRecipe(I, Recipe);
@@ -9325,8 +9414,11 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
         RecipeBuilder.getRecipe(IG->getInsertPos()));
     SmallVector<VPValue *, 4> StoredValues;
     for (unsigned i = 0; i < IG->getFactor(); ++i)
-      if (auto *SI = dyn_cast_or_null<StoreInst>(IG->getMember(i)))
-        StoredValues.push_back(Plan->getOrAddVPValue(SI->getOperand(0)));
+      if (auto *SI = dyn_cast_or_null<StoreInst>(IG->getMember(i))) {
+        auto *StoreR =
+            cast<VPWidenMemoryInstructionRecipe>(RecipeBuilder.getRecipe(SI));
+        StoredValues.push_back(StoreR->getStoredValue());
+      }
 
     auto *VPIG = new VPInterleaveRecipe(IG, Recipe->getAddr(), StoredValues,
                                         Recipe->getMask());
@@ -9492,9 +9584,22 @@ void VPInterleaveRecipe::print(raw_ostream &O, const Twine &Indent,
     O << ", ";
     Mask->printAsOperand(O, SlotTracker);
   }
-  for (unsigned i = 0; i < IG->getFactor(); ++i)
-    if (Instruction *I = IG->getMember(i))
-      O << "\n" << Indent << "  " << VPlanIngredient(I) << " " << i;
+
+  unsigned OpIdx = 0;
+  for (unsigned i = 0; i < IG->getFactor(); ++i) {
+    if (!IG->getMember(i))
+      continue;
+    if (getNumStoreOperands() > 0) {
+      O << "\n" << Indent << "  store ";
+      getOperand(1 + OpIdx)->printAsOperand(O, SlotTracker);
+      O << " to index " << i;
+    } else {
+      O << "\n" << Indent << "  ";
+      getVPValue(OpIdx)->printAsOperand(O, SlotTracker);
+      O << " = load from index " << i;
+    }
+    ++OpIdx;
+  }
 }
 #endif
 
@@ -10076,7 +10181,7 @@ bool LoopVectorizePass::processLoop(Loop *L) {
     return false;
   }
 
-  if (!LVL.canVectorizeFPMath(EnableStrictReductions)) {
+  if (!LVL.canVectorizeFPMath(ForceOrderedReductions)) {
     ORE->emit([&]() {
       auto *ExactFPMathInst = Requirements.getExactFPInst();
       return OptimizationRemarkAnalysisFPCommute(DEBUG_TYPE, "CantReorderFPOps",

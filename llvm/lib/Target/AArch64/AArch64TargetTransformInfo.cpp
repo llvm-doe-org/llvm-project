@@ -14,6 +14,7 @@
 #include "llvm/CodeGen/BasicTTIImpl.h"
 #include "llvm/CodeGen/CostTable.h"
 #include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/IntrinsicsAArch64.h"
 #include "llvm/IR/PatternMatch.h"
@@ -220,19 +221,15 @@ AArch64TTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
   auto *RetTy = ICA.getReturnType();
   switch (ICA.getID()) {
   case Intrinsic::umin:
-  case Intrinsic::umax: {
-    auto LT = TLI->getTypeLegalizationCost(DL, RetTy);
-    // umin(x,y) -> sub(x,usubsat(x,y))
-    // umax(x,y) -> add(x,usubsat(y,x))
-    if (LT.second == MVT::v2i64)
-      return LT.first * 2;
-    LLVM_FALLTHROUGH;
-  }
+  case Intrinsic::umax:
   case Intrinsic::smin:
   case Intrinsic::smax: {
     static const auto ValidMinMaxTys = {MVT::v8i8,  MVT::v16i8, MVT::v4i16,
                                         MVT::v8i16, MVT::v2i32, MVT::v4i32};
     auto LT = TLI->getTypeLegalizationCost(DL, RetTy);
+    // v2i64 types get converted to cmp+bif hence the cost of 2
+    if (LT.second == MVT::v2i64)
+      return LT.first * 2;
     if (any_of(ValidMinMaxTys, [&LT](MVT M) { return M == LT.second; }))
       return LT.first;
     break;
@@ -1543,14 +1540,9 @@ InstructionCost AArch64TTIImpl::getGatherScatterOpCost(
     return InstructionCost::getInvalid();
 
   ElementCount LegalVF = LT.second.getVectorElementCount();
-  Optional<unsigned> MaxNumVScale = getMaxVScale();
-  assert(MaxNumVScale && "Expected valid max vscale value");
-
   InstructionCost MemOpCost =
       getMemoryOpCost(Opcode, VT->getElementType(), Alignment, 0, CostKind, I);
-  unsigned MaxNumElementsPerGather =
-      MaxNumVScale.getValue() * LegalVF.getKnownMinValue();
-  return LT.first * MaxNumElementsPerGather * MemOpCost;
+  return LT.first * MemOpCost * getMaxNumElements(LegalVF);
 }
 
 bool AArch64TTIImpl::useNeonVector(const Type *Ty) const {
@@ -1710,9 +1702,10 @@ getFalkorUnrollingPreferences(Loop *L, ScalarEvolution &SE,
 }
 
 void AArch64TTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
-                                             TTI::UnrollingPreferences &UP) {
+                                             TTI::UnrollingPreferences &UP,
+                                             OptimizationRemarkEmitter *ORE) {
   // Enable partial unrolling and runtime unrolling.
-  BaseT::getUnrollingPreferences(L, SE, UP);
+  BaseT::getUnrollingPreferences(L, SE, UP, ORE);
 
   // For inner loop, it is more likely to be a hot one, and the runtime check
   // can be promoted out from LICM pass, so the overhead is less, let's try
@@ -1907,23 +1900,23 @@ InstructionCost
 AArch64TTIImpl::getMinMaxReductionCost(VectorType *Ty, VectorType *CondTy,
                                        bool IsUnsigned,
                                        TTI::TargetCostKind CostKind) {
-  if (!isa<ScalableVectorType>(Ty))
-    return BaseT::getMinMaxReductionCost(Ty, CondTy, IsUnsigned, CostKind);
-  assert((isa<ScalableVectorType>(Ty) && isa<ScalableVectorType>(CondTy)) &&
-         "Both vector needs to be scalable");
-
   std::pair<InstructionCost, MVT> LT = TLI->getTypeLegalizationCost(DL, Ty);
+
+  if (LT.second.getScalarType() == MVT::f16 && !ST->hasFullFP16())
+    return BaseT::getMinMaxReductionCost(Ty, CondTy, IsUnsigned, CostKind);
+
+  assert((isa<ScalableVectorType>(Ty) == isa<ScalableVectorType>(CondTy)) &&
+         "Both vector needs to be equally scalable");
+
   InstructionCost LegalizationCost = 0;
   if (LT.first > 1) {
     Type *LegalVTy = EVT(LT.second).getTypeForEVT(Ty->getContext());
-    unsigned CmpOpcode =
-        Ty->isFPOrFPVectorTy() ? Instruction::FCmp : Instruction::ICmp;
-    LegalizationCost =
-        getCmpSelInstrCost(CmpOpcode, LegalVTy, LegalVTy,
-                           CmpInst::BAD_ICMP_PREDICATE, CostKind) +
-        getCmpSelInstrCost(Instruction::Select, LegalVTy, LegalVTy,
-                           CmpInst::BAD_ICMP_PREDICATE, CostKind);
-    LegalizationCost *= LT.first - 1;
+    unsigned MinMaxOpcode =
+        Ty->isFPOrFPVectorTy()
+            ? Intrinsic::maxnum
+            : (IsUnsigned ? Intrinsic::umin : Intrinsic::smin);
+    IntrinsicCostAttributes Attrs(MinMaxOpcode, LegalVTy, {LegalVTy, LegalVTy});
+    LegalizationCost = getIntrinsicInstrCost(Attrs, CostKind) * (LT.first - 1);
   }
 
   return LegalizationCost + /*Cost of horizontal reduction*/ 2;
@@ -1956,7 +1949,22 @@ InstructionCost AArch64TTIImpl::getArithmeticReductionCostSVE(
 
 InstructionCost
 AArch64TTIImpl::getArithmeticReductionCost(unsigned Opcode, VectorType *ValTy,
+                                           Optional<FastMathFlags> FMF,
                                            TTI::TargetCostKind CostKind) {
+  if (TTI::requiresOrderedReduction(FMF)) {
+    if (!isa<ScalableVectorType>(ValTy))
+      return BaseT::getArithmeticReductionCost(Opcode, ValTy, FMF, CostKind);
+
+    if (Opcode != Instruction::FAdd)
+      return InstructionCost::getInvalid();
+
+    auto *VTy = cast<ScalableVectorType>(ValTy);
+    InstructionCost Cost =
+        getArithmeticInstrCost(Opcode, VTy->getScalarType(), CostKind);
+    Cost *= getMaxNumElements(VTy->getElementCount());
+    return Cost;
+  }
+
   if (isa<ScalableVectorType>(ValTy))
     return getArithmeticReductionCostSVE(Opcode, ValTy, CostKind);
 
@@ -1966,18 +1974,19 @@ AArch64TTIImpl::getArithmeticReductionCost(unsigned Opcode, VectorType *ValTy,
   assert(ISD && "Invalid opcode");
 
   // Horizontal adds can use the 'addv' instruction. We model the cost of these
-  // instructions as normal vector adds. This is the only arithmetic vector
-  // reduction operation for which we have an instruction.
+  // instructions as twice a normal vector add, plus 1 for each legalization
+  // step (LT.first). This is the only arithmetic vector reduction operation for
+  // which we have an instruction.
   // OR, XOR and AND costs should match the codegen from:
   // OR: llvm/test/CodeGen/AArch64/reduce-or.ll
   // XOR: llvm/test/CodeGen/AArch64/reduce-xor.ll
   // AND: llvm/test/CodeGen/AArch64/reduce-and.ll
   static const CostTblEntry CostTblNoPairwise[]{
-      {ISD::ADD, MVT::v8i8,   1},
-      {ISD::ADD, MVT::v16i8,  1},
-      {ISD::ADD, MVT::v4i16,  1},
-      {ISD::ADD, MVT::v8i16,  1},
-      {ISD::ADD, MVT::v4i32,  1},
+      {ISD::ADD, MVT::v8i8,   2},
+      {ISD::ADD, MVT::v16i8,  2},
+      {ISD::ADD, MVT::v4i16,  2},
+      {ISD::ADD, MVT::v8i16,  2},
+      {ISD::ADD, MVT::v4i32,  2},
       {ISD::OR,  MVT::v8i8,  15},
       {ISD::OR,  MVT::v16i8, 17},
       {ISD::OR,  MVT::v4i16,  7},
@@ -2005,7 +2014,7 @@ AArch64TTIImpl::getArithmeticReductionCost(unsigned Opcode, VectorType *ValTy,
     break;
   case ISD::ADD:
     if (const auto *Entry = CostTableLookup(CostTblNoPairwise, ISD, MTy))
-      return LT.first * Entry->Cost;
+      return (LT.first - 1) + Entry->Cost;
     break;
   case ISD::XOR:
   case ISD::AND:
@@ -2030,7 +2039,7 @@ AArch64TTIImpl::getArithmeticReductionCost(unsigned Opcode, VectorType *ValTy,
     }
     break;
   }
-  return BaseT::getArithmeticReductionCost(Opcode, ValTy, CostKind);
+  return BaseT::getArithmeticReductionCost(Opcode, ValTy, FMF, CostKind);
 }
 
 InstructionCost AArch64TTIImpl::getSpliceCost(VectorType *Tp, int Index) {
@@ -2123,13 +2132,20 @@ InstructionCost AArch64TTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
       { TTI::SK_Select, MVT::v4f32, 2 }, // rev+trn (or similar).
       { TTI::SK_Select, MVT::v2f64, 1 }, // mov.
       // PermuteSingleSrc shuffle kinds.
-      // TODO: handle vXi8/vXi16.
       { TTI::SK_PermuteSingleSrc, MVT::v2i32, 1 }, // mov.
       { TTI::SK_PermuteSingleSrc, MVT::v4i32, 3 }, // perfectshuffle worst case.
       { TTI::SK_PermuteSingleSrc, MVT::v2i64, 1 }, // mov.
       { TTI::SK_PermuteSingleSrc, MVT::v2f32, 1 }, // mov.
       { TTI::SK_PermuteSingleSrc, MVT::v4f32, 3 }, // perfectshuffle worst case.
       { TTI::SK_PermuteSingleSrc, MVT::v2f64, 1 }, // mov.
+      { TTI::SK_PermuteSingleSrc, MVT::v4i16, 3 }, // perfectshuffle worst case.
+      { TTI::SK_PermuteSingleSrc, MVT::v4f16, 3 }, // perfectshuffle worst case.
+      { TTI::SK_PermuteSingleSrc, MVT::v4bf16, 3 }, // perfectshuffle worst case.
+      { TTI::SK_PermuteSingleSrc, MVT::v8i16, 8 }, // constpool + load + tbl
+      { TTI::SK_PermuteSingleSrc, MVT::v8f16, 8 }, // constpool + load + tbl
+      { TTI::SK_PermuteSingleSrc, MVT::v8bf16, 8 }, // constpool + load + tbl
+      { TTI::SK_PermuteSingleSrc, MVT::v8i8, 8 }, // constpool + load + tbl
+      { TTI::SK_PermuteSingleSrc, MVT::v16i8, 8 }, // constpool + load + tbl
       // Reverse can be lowered with `rev`.
       { TTI::SK_Reverse, MVT::v2i32, 1 }, // mov.
       { TTI::SK_Reverse, MVT::v4i32, 2 }, // REV64; EXT

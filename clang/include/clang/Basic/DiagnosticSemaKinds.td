@@ -82,11 +82,11 @@ def err_typecheck_converted_constant_expression_indirect : Error<
   "bind reference to a temporary">;
 def err_expr_not_cce : Error<
   "%select{case value|enumerator value|non-type template argument|"
-  "array size|explicit specifier argument}0 "
+  "array size|explicit specifier argument|noexcept specifier argument}0 "
   "is not a constant expression">;
 def ext_cce_narrowing : ExtWarn<
   "%select{case value|enumerator value|non-type template argument|"
-  "array size|explicit specifier argument}0 "
+  "array size|explicit specifier argument|noexcept specifier argument}0 "
   "%select{cannot be narrowed from type %2 to %3|"
   "evaluates to %2, which cannot be narrowed to type %3}1">,
   InGroup<CXX11Narrowing>, DefaultError, SFINAEFailure;
@@ -816,6 +816,11 @@ def warn_fortify_source_size_mismatch : Warning<
   "'%0' size argument is too large; destination buffer has size %1,"
   " but size argument is %2">, InGroup<FortifySource>;
 
+def warn_fortify_strlen_overflow: Warning<
+  "'%0' will always overflow; destination buffer has size %1,"
+  " but the source string has length %2 (including NUL byte)">,
+  InGroup<FortifySource>;
+
 def warn_fortify_source_format_overflow : Warning<
   "'%0' will always overflow; destination buffer has size %1,"
   " but format string expands to at least %2">,
@@ -933,7 +938,8 @@ def warn_pragma_pack_pop_identifier_and_alignment : Warning<
 def warn_pragma_pop_failed : Warning<"#pragma %0(pop, ...) failed: %1">,
   InGroup<IgnoredPragmas>;
 def err_pragma_fc_pp_scope : Error<
-  "'#pragma float_control push/pop' can only appear at file scope or namespace scope">;
+  "'#pragma float_control push/pop' can only appear at file or namespace scope "
+  "or within a language linkage specification">;
 def err_pragma_fc_noprecise_requires_nofenv : Error<
   "'#pragma float_control(precise, off)' is illegal when fenv_access is enabled">;
 def err_pragma_fc_except_requires_precise : Error<
@@ -2980,6 +2986,8 @@ def err_alignas_mismatch : Error<
   "redeclaration has different alignment requirement (%1 vs %0)">;
 def err_alignas_underaligned : Error<
   "requested alignment is less than minimum alignment of %1 for type %0">;
+def warn_aligned_attr_underaligned : Warning<err_alignas_underaligned.Text>,
+  InGroup<IgnoredAttributes>;
 def err_attribute_sizeless_type : Error<
   "%0 attribute cannot be applied to sizeless type %1">;
 def err_attribute_argument_n_type : Error<
@@ -3548,6 +3556,10 @@ def warn_at_available_unchecked_use : Warning<
   "%select{@available|__builtin_available}0 does not guard availability here; "
   "use if (%select{@available|__builtin_available}0) instead">,
   InGroup<DiagGroup<"unsupported-availability-guard">>;
+
+def warn_missing_sdksettings_for_availability_checking : Warning<
+  "%0 availability is ignored without a valid 'SDKSettings.json' in the SDK">,
+  InGroup<DiagGroup<"ignored-availability-without-sdk-settings">>;
 
 // Thread Safety Attributes
 def warn_thread_attribute_ignored : Warning<
@@ -5723,7 +5735,7 @@ def warn_typecheck_function_qualifiers_unspecified : Warning<
   "'%0' qualifier on function type %1 has unspecified behavior">;
 def warn_typecheck_reference_qualifiers : Warning<
   "'%0' qualifier on reference type %1 has no effect">,
-  InGroup<IgnoredQualifiers>;
+  InGroup<IgnoredReferenceQualifiers>;
 def err_typecheck_invalid_restrict_not_pointer : Error<
   "restrict requires a pointer or reference (%0 is invalid)">;
 def err_typecheck_invalid_restrict_not_pointer_noarg : Error<
@@ -10096,8 +10108,6 @@ def err_opencl_requires_extension : Error<
 def ext_opencl_double_without_pragma : Extension<
   "Clang permits use of type 'double' regardless pragma if 'cl_khr_fp64' is"
   " supported">;
-def err_opencl_double_requires_extension :  Error<
-    "use of type 'double' requires %select{cl_khr_fp64|cl_khr_fp64 and __opencl_c_fp64}0 support">;
 def warn_opencl_generic_address_space_arg : Warning<
   "passing non-generic address space pointer to %0"
   " may cause dynamic conversion affecting performance">,
