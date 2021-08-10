@@ -385,6 +385,8 @@ release (build):
     - NPROC=`nproc`
     - echo "$NPROC"
     - echo "$LIT_NTHREADS_DIVISOR"
+    - ulimit -t `expr $NPROC / $LIT_NTHREADS_DIVISOR \* 3600`
+    - ulimit -t
     - time FILECHECK_OPTS='-dump-input-filter=all -vv -color'
            LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml --xfail=\"`cat xfail.txt`\" --xfail-not=\"`cat xfail-not.txt`\" --ignore-fail -j `expr $NPROC / $LIT_NTHREADS_DIVISOR`"
            $NINJA -l `nproc` check-all
