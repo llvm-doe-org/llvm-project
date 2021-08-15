@@ -240,7 +240,7 @@ Run-Time Environment Variables
     * Appearing within a `parallel` construct and any number of levels
       of nesting within other `loop` directives are supported.
     * Appearing outside a `parallel` construct (that is, an orphaned
-      loop) is not yet supported.
+      `loop` construct) is not yet supported.
 * Use without clauses is supported.
 * Supported partitionability clauses
     * Implicit `independent`
@@ -317,10 +317,10 @@ Subarrays
 Device-Side Directives
 ----------------------
 
-Nesting of an `update`, `data`, `parallel`, or `parallel loop`
-directive inside a `parallel`, `loop`, or `parallel loop` construct is
-not yet supported.  We're not aware of any OpenACC implementation that
-supports this yet.
+Nesting of an `update`, `enter data`, `exit data`, `data`, `parallel`,
+or `parallel loop` directive inside a `parallel`, `loop`, or `parallel
+loop` construct is not yet supported.  We're not aware of any OpenACC
+implementation that supports such cases yet.
 
 OpenACC Runtime Library API and Preprocessor
 --------------------------------------------
