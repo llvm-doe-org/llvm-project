@@ -91,7 +91,7 @@ struct PrintingPolicy {
         MSVCFormatting(false), ConstantsAsWritten(false),
         SuppressImplicitBase(false), FullyQualifiedName(false),
         PrintCanonicalTypes(false), PrintInjectedClassNameWithArguments(true),
-	OpenACCPrint(OpenACCPrint_ACC) {}
+        OpenACCPrint(OpenACCPrint_ACC) {}
 
   /// Adjust this printing policy for cases where it's known that we're
   /// printing C++ code (for instance, if AST dumping reaches a C++-only
