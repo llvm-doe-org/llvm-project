@@ -2507,11 +2507,20 @@ BitsInit *Record::getValueAsBitsInit(StringRef FieldName) const {
 }
 
 ListInit *Record::getValueAsListInit(StringRef FieldName) const {
-  const RecordVal *R = getValue(FieldName);
-  if (!R || !R->getValue())
+  llvm::Optional<ListInit*> LI = getValueAsOptionalListInit(FieldName);
+  if (!LI.hasValue())
     PrintFatalError(getLoc(), "Record `" + getName() +
       "' does not have a field named `" + FieldName + "'!\n");
+  return LI.getValue();
+}
 
+llvm::Optional<ListInit*>
+Record::getValueAsOptionalListInit(StringRef FieldName) const {
+  const RecordVal *R = getValue(FieldName);
+  if (!R || !R->getValue())
+    return llvm::Optional<ListInit*>();
+  if (isa<UnsetInit>(R->getValue()))
+    return llvm::Optional<ListInit*>();
   if (ListInit *LI = dyn_cast<ListInit>(R->getValue()))
     return LI;
   PrintFatalError(getLoc(), "Record `" + getName() + "', field `" + FieldName + 
@@ -2520,9 +2529,21 @@ ListInit *Record::getValueAsListInit(StringRef FieldName) const {
 
 std::vector<Record*>
 Record::getValueAsListOfDefs(StringRef FieldName) const {
-  ListInit *List = getValueAsListInit(FieldName);
+  llvm::Optional<std::vector<Record*>> List =
+      getValueAsOptionalListOfDefs(FieldName);
+  if (!List.hasValue())
+    PrintFatalError(getLoc(), "Record `" + getName() +
+      "' does not have a field named `" + FieldName + "'!\n");
+  return List.getValue();
+}
+
+llvm::Optional<std::vector<Record*>>
+Record::getValueAsOptionalListOfDefs(StringRef FieldName) const {
+  llvm::Optional<ListInit*> List = getValueAsOptionalListInit(FieldName);
+  if (!List.hasValue())
+    return llvm::Optional<std::vector<Record*>>();
   std::vector<Record*> Defs;
-  for (Init *I : List->getValues()) {
+  for (Init *I : List.getValue()->getValues()) {
     if (DefInit *DI = dyn_cast<DefInit>(I))
       Defs.push_back(DI->getDef());
     else

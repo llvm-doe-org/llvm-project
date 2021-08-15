@@ -25,6 +25,7 @@ enum Kind {
   First##CLASS = FIRST_NAME,                    \
   Last##CLASS = LAST_NAME,
 #include "clang/Basic/AttrList.inc"
+  UnknownAttr
 };
 
 } // end namespace attr

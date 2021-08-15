@@ -1719,10 +1719,22 @@ public:
   /// or if the value is not the right type.
   ListInit *getValueAsListInit(StringRef FieldName) const;
 
+  /// This method looks up the specified field and returns its value as a
+  /// ListInit, throwing an exception if the value is not the right type or
+  /// returning llvm::Optional() if the field does not exist.
+  llvm::Optional<ListInit*> getValueAsOptionalListInit(StringRef FieldName)
+      const;
+
   /// This method looks up the specified field and
   /// returns its value as a vector of records, throwing an exception if the
   /// field does not exist or if the value is not the right type.
   std::vector<Record*> getValueAsListOfDefs(StringRef FieldName) const;
+
+  /// This method looks up the specified field and returns its value as a vector
+  /// of records, throwing an exception if the value is not a vector of records
+  /// or returning llvm::Optional() if the field does not exist.
+  llvm::Optional<std::vector<Record*>> getValueAsOptionalListOfDefs(
+      StringRef FieldName) const;
 
   /// This method looks up the specified field and
   /// returns its value as a vector of integers, throwing an exception if the

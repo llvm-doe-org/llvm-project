@@ -1295,6 +1295,22 @@ namespace {
 
 } // end anonymous namespace
 
+// Get arguments specified by Attr's "Args" field and by each super class Foo's
+// "FooArgs" field.
+static std::vector<Record *> getAllAttrArgs(const Record *Attr) {
+  std::vector<Record *> Args = Attr->getValueAsListOfDefs("Args");
+  for (auto SuperClassAndRange : Attr->getSuperClasses()) {
+    Record *SuperClass = SuperClassAndRange.first;
+    std::string FieldName = SuperClass->getName().str() + "Args";
+    if (llvm::Optional<std::vector<Record *>> FieldVal =
+            SuperClass->getValueAsOptionalListOfDefs(FieldName.c_str())) {
+      for (Record *Arg : FieldVal.getValue())
+        Args.push_back(Arg);
+    }
+  }
+  return Args;
+}
+
 static std::unique_ptr<Argument>
 createArgument(const Record &Arg, StringRef Attr,
                const Record *Search = nullptr) {
@@ -2144,7 +2160,7 @@ static void emitClangAttrTypeArgList(RecordKeeper &Records, raw_ostream &OS) {
 
   for (const auto *Attr : Attrs) {
     // Determine whether the first argument is a type.
-    std::vector<Record *> Args = Attr->getValueAsListOfDefs("Args");
+    std::vector<Record *> Args = getAllAttrArgs(Attr);
     if (Args.empty())
       continue;
 
@@ -2202,7 +2218,7 @@ static void emitClangAttrVariadicIdentifierArgList(RecordKeeper &Records,
   std::vector<Record *> Attrs = Records.getAllDerivedDefinitions("Attr");
   for (const auto *A : Attrs) {
     // Determine whether the first argument is a variadic identifier.
-    std::vector<Record *> Args = A->getValueAsListOfDefs("Args");
+    std::vector<Record *> Args = getAllAttrArgs(A);
     if (Args.empty() || !isVariadicIdentifierArgument(Args[0]))
       continue;
 
@@ -2223,7 +2239,7 @@ static void emitClangAttrIdentifierArgList(RecordKeeper &Records, raw_ostream &O
 
   for (const auto *Attr : Attrs) {
     // Determine whether the first argument is an identifier.
-    std::vector<Record *> Args = Attr->getValueAsListOfDefs("Args");
+    std::vector<Record *> Args = getAllAttrArgs(Attr);
     if (Args.empty() || !isIdentifierArgument(Args[0]))
       continue;
 
@@ -2249,7 +2265,7 @@ static void emitClangAttrThisIsaIdentifierArgList(RecordKeeper &Records,
   std::vector<Record *> Attrs = Records.getAllDerivedDefinitions("Attr");
   for (const auto *A : Attrs) {
     // Determine whether the first argument is a variadic identifier.
-    std::vector<Record *> Args = A->getValueAsListOfDefs("Args");
+    std::vector<Record *> Args = getAllAttrArgs(A);
     if (Args.empty() || !keywordThisIsaIdentifierInArgument(Args[0]))
       continue;
 
@@ -2315,7 +2331,7 @@ static void emitAttributes(RecordKeeper &Records, raw_ostream &OS,
     else
       OS << "\n// " << R.getName() << "Attr implementation\n\n";
 
-    std::vector<Record*> ArgRecords = R.getValueAsListOfDefs("Args");
+    std::vector<Record *> ArgRecords = getAllAttrArgs(&R);
     std::vector<std::unique_ptr<Argument>> Args;
     Args.reserve(ArgRecords.size());
 
@@ -2592,6 +2608,14 @@ static void emitAttributes(RecordKeeper &Records, raw_ostream &OS,
 
     if (Header) {
       OS << R.getValueAsString("AdditionalMembers");
+      for (auto SuperClassAndRange : Attr->getSuperClasses()) {
+        Record *SuperClass = SuperClassAndRange.first;
+        std::string FieldName =
+            SuperClass->getName().str() + "AdditionalMembers";
+        if (llvm::Optional<StringRef> FieldVal =
+                SuperClass->getValueAsOptionalString(FieldName.c_str()))
+          OS << FieldVal.getValue();
+      }
       OS << "\n\n";
 
       OS << "  static bool classof(const Attr *A) { return A->getKind() == "
@@ -2935,7 +2959,7 @@ void EmitClangAttrPCHRead(RecordKeeper &Records, raw_ostream &OS) {
       OS << "    bool isInherited = Record.readInt();\n";
     OS << "    bool isImplicit = Record.readInt();\n";
     OS << "    bool isPackExpansion = Record.readInt();\n";
-    ArgRecords = R.getValueAsListOfDefs("Args");
+    ArgRecords = getAllAttrArgs(&R);
     Args.clear();
     for (const auto *Arg : ArgRecords) {
       Args.emplace_back(createArgument(*Arg, R.getName()));
@@ -2970,7 +2994,7 @@ void EmitClangAttrPCHWrite(RecordKeeper &Records, raw_ostream &OS) {
     if (!R.getValueAsBit("ASTNode"))
       continue;
     OS << "  case attr::" << R.getName() << ": {\n";
-    Args = R.getValueAsListOfDefs("Args");
+    Args = getAllAttrArgs(&R);
     if (R.isSubClassOf(InhClass) || !Args.empty())
       OS << "    const auto *SA = cast<" << R.getName()
          << "Attr>(A);\n";
@@ -3261,7 +3285,7 @@ void EmitClangAttrASTVisitor(RecordKeeper &Records, raw_ostream &OS) {
        << "  if (!getDerived().Visit" << R.getName() << "Attr(A))\n"
        << "    return false;\n";
 
-    std::vector<Record*> ArgRecords = R.getValueAsListOfDefs("Args");
+    std::vector<Record*> ArgRecords = getAllAttrArgs(&R);
     for (const auto *Arg : ArgRecords)
       createArgument(*Arg, R.getName())->writeASTVisitorTraversal(OS);
 
@@ -3322,7 +3346,7 @@ void EmitClangAttrTemplateInstantiateHelper(const std::vector<Record *> &Attrs,
       continue;
     }
 
-    std::vector<Record*> ArgRecords = R.getValueAsListOfDefs("Args");
+    std::vector<Record*> ArgRecords = getAllAttrArgs(&R);
     std::vector<std::unique_ptr<Argument>> Args;
     Args.reserve(ArgRecords.size());
 
@@ -3389,7 +3413,7 @@ static void emitArgInfo(const Record &R, raw_ostream &OS) {
   // This function will count the number of arguments specified for the
   // attribute and emit the number of required arguments followed by the
   // number of optional arguments.
-  std::vector<Record *> Args = R.getValueAsListOfDefs("Args");
+  std::vector<Record *> Args = getAllAttrArgs(&R);
   unsigned ArgCount = 0, OptCount = 0;
   bool HasVariadic = false;
   for (const auto *Arg : Args) {
@@ -4151,7 +4175,7 @@ void EmitClangAttrTextNodeDump(RecordKeeper &Records, raw_ostream &OS) {
     if (Spellings.size() > 1 && !SpellingNamesAreCommon(Spellings))
       SS << "    OS << \" \" << A->getSpelling();\n";
 
-    Args = R.getValueAsListOfDefs("Args");
+    Args = getAllAttrArgs(&R);
     for (const auto *Arg : Args)
       createArgument(*Arg, R.getName())->writeDump(SS);
 
@@ -4179,7 +4203,7 @@ void EmitClangAttrNodeTraverse(RecordKeeper &Records, raw_ostream &OS) {
     std::string FunctionContent;
     llvm::raw_string_ostream SS(FunctionContent);
 
-    Args = R.getValueAsListOfDefs("Args");
+    Args = getAllAttrArgs(&R);
     for (const auto *Arg : Args)
       createArgument(*Arg, R.getName())->writeDumpChildren(SS);
     if (SS.tell()) {

@@ -506,6 +506,12 @@ class Attr {
   // The things to which an attribute can appertain
   SubjectList Subjects;
   // The arguments allowed on an attribute
+  //
+  // If a subclass named Foo specifies a field named FooArgs, the field must be
+  // of type list<Argument>, and the arguments in FooArgs are appended to the
+  // Args field in every definition for which Foo is a super class.  To provide
+  // accessors from Foo, Foo can declare virtual functions that correspond to
+  // the generated accessors in the definition.
   list<Argument> Args = [];
   // Accessors which should be generated for the attribute.
   list<Accessor> Accessors = [];
@@ -547,6 +553,10 @@ class Attr {
   // Any additional text that should be included verbatim in the class.
   // Note: Any additional data members will leak and should be constructed
   // externally on the ASTContext.
+  //
+  // If a subclass named Foo specifies a field named FooAdditionalMembers, the
+  // field must be of type code, and it is appended to the AdditionalMembers
+  // field in every definition for which Foo is a super class.
   code AdditionalMembers = [{}];
   // Any documentation that should be associated with the attribute. Since an
   // attribute may be documented under multiple categories, more than one
