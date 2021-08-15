@@ -11255,7 +11255,7 @@ private:
 
 public:
   /// Called on start of new data attribute block.
-  void StartOpenACCDABlock(OpenACCDirectiveKind RealDKind, SourceLocation Loc);
+  bool StartOpenACCDABlock(OpenACCDirectiveKind RealDKind, SourceLocation Loc);
   /// Start analysis of clauses.
   void StartOpenACCClause(OpenACCClauseKind K);
   /// End analysis of clauses.

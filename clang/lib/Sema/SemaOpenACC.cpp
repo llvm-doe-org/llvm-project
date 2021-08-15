@@ -556,7 +556,7 @@ void Sema::InitOpenACCDirectiveStack() {
 
 void Sema::DestroyOpenACCDirectiveStack() { delete DirStack; }
 
-void Sema::StartOpenACCDABlock(OpenACCDirectiveKind RealDKind,
+bool Sema::StartOpenACCDABlock(OpenACCDirectiveKind RealDKind,
                                SourceLocation Loc) {
   switch (RealDKind) {
   case ACCD_update:
@@ -576,6 +576,23 @@ void Sema::StartOpenACCDABlock(OpenACCDirectiveKind RealDKind,
   }
   PushExpressionEvaluationContext(
       ExpressionEvaluationContext::PotentiallyEvaluated);
+
+  // Check directive nesting.
+  SourceLocation ParentLoc;
+  OpenACCDirectiveKind ParentDKind =
+      DirStack->getRealParentDirective(ParentLoc);
+  if (!isAllowedParentForDirective(RealDKind, ParentDKind)) {
+    if (ParentDKind == ACCD_unknown)
+      Diag(Loc, diag::err_acc_orphaned_directive) << getOpenACCName(RealDKind);
+    else {
+      Diag(Loc, diag::err_acc_directive_bad_nesting)
+          << getOpenACCName(ParentDKind) << getOpenACCName(RealDKind);
+      Diag(ParentLoc, diag::note_acc_enclosing_directive)
+          << getOpenACCName(ParentDKind);
+    }
+    return true;
+  }
+  return false;
 }
 
 void Sema::StartOpenACCClause(OpenACCClauseKind K) {
@@ -1309,22 +1326,6 @@ bool Sema::ActOnOpenACCRegionStart(OpenACCDirectiveKind DKind,
                                    ArrayRef<ACCClause *> Clauses,
                                    SourceLocation StartLoc) {
   bool ErrorFound = false;
-  // Check directive nesting.
-  SourceLocation ParentLoc;
-  OpenACCDirectiveKind ParentDKind =
-      DirStack->getRealParentDirective(ParentLoc);
-  if (!isAllowedParentForDirective(DKind, ParentDKind)) {
-    if (ParentDKind == ACCD_unknown)
-      Diag(StartLoc, diag::err_acc_orphaned_directive)
-          << getOpenACCName(DKind);
-    else {
-      Diag(StartLoc, diag::err_acc_directive_bad_nesting)
-          << getOpenACCName(ParentDKind) << getOpenACCName(DKind);
-      Diag(ParentLoc, diag::note_acc_enclosing_directive)
-          << getOpenACCName(ParentDKind);
-    }
-    ErrorFound = true;
-  }
   if (isOpenACCLoopDirective(DKind)) {
     ACCPartitioningKind LoopKind;
     // Set implicit partitionability.

@@ -179,7 +179,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
     if (isOpenACCLoopDirective(DKind))
       ScopeFlags |= Scope::OpenACCLoopDirectiveScope;
     ParseScope ACCDirectiveScope(this, ScopeFlags);
-    Actions.StartOpenACCDABlock(DKind, Loc);
+    bool ErrorFound = Actions.StartOpenACCDABlock(DKind, Loc);
 
     SmallVector<ACCClause *, 5> Clauses;
     ParseOpenACCClauses(DKind, Clauses);
@@ -188,7 +188,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
     // Consume final annot_pragma_openacc_end.
     ConsumeAnnotationToken();
 
-    bool ErrorFound = Actions.ActOnOpenACCRegionStart(DKind, Clauses, Loc);
+    ErrorFound |= Actions.ActOnOpenACCRegionStart(DKind, Clauses, Loc);
     StmtResult AssociatedStmt;
     if (HasAssociatedStatement)
       AssociatedStmt = ParseStatement();

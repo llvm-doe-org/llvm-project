@@ -10492,7 +10492,8 @@ StmtResult TreeTransform<Derived>::TransformACCExecutableDirective(
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCUpdateDirective(ACCUpdateDirective *D) {
-  getDerived().getSema().StartOpenACCDABlock(ACCD_update, D->getBeginLoc());
+  if (getDerived().getSema().StartOpenACCDABlock(ACCD_update, D->getBeginLoc()))
+    return StmtError();
   StmtResult Res = getDerived().TransformACCExecutableDirective(D);
   getDerived().getSema().EndOpenACCDABlock();
   return Res;
@@ -10501,7 +10502,9 @@ TreeTransform<Derived>::TransformACCUpdateDirective(ACCUpdateDirective *D) {
 template <typename Derived>
 StmtResult TreeTransform<Derived>::TransformACCEnterDataDirective(
     ACCEnterDataDirective *D) {
-  getDerived().getSema().StartOpenACCDABlock(ACCD_enter_data, D->getBeginLoc());
+  if (getDerived().getSema().StartOpenACCDABlock(ACCD_enter_data,
+                                                 D->getBeginLoc()))
+    return StmtError();
   StmtResult Res = getDerived().TransformACCExecutableDirective(D);
   getDerived().getSema().EndOpenACCDABlock();
   return Res;
@@ -10510,7 +10513,9 @@ StmtResult TreeTransform<Derived>::TransformACCEnterDataDirective(
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCExitDataDirective(ACCExitDataDirective *D) {
-  getDerived().getSema().StartOpenACCDABlock(ACCD_exit_data, D->getBeginLoc());
+  if (getDerived().getSema().StartOpenACCDABlock(ACCD_exit_data,
+                                                 D->getBeginLoc()))
+    return StmtError();
   StmtResult Res = getDerived().TransformACCExecutableDirective(D);
   getDerived().getSema().EndOpenACCDABlock();
   return Res;
@@ -10519,7 +10524,8 @@ TreeTransform<Derived>::TransformACCExitDataDirective(ACCExitDataDirective *D) {
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCDataDirective(ACCDataDirective *D) {
-  getDerived().getSema().StartOpenACCDABlock(ACCD_data, D->getBeginLoc());
+  if (getDerived().getSema().StartOpenACCDABlock(ACCD_data, D->getBeginLoc()))
+    return StmtError();
   StmtResult Res = getDerived().TransformACCExecutableDirective(D);
   getDerived().getSema().EndOpenACCDABlock();
   return Res;
@@ -10528,7 +10534,9 @@ TreeTransform<Derived>::TransformACCDataDirective(ACCDataDirective *D) {
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCParallelDirective(ACCParallelDirective *D) {
-  getDerived().getSema().StartOpenACCDABlock(ACCD_parallel, D->getBeginLoc());
+  if (getDerived().getSema().StartOpenACCDABlock(ACCD_parallel,
+                                                 D->getBeginLoc()))
+    return StmtError();
   StmtResult Res = getDerived().TransformACCExecutableDirective(D);
   getDerived().getSema().EndOpenACCDABlock();
   return Res;
@@ -10537,7 +10545,8 @@ TreeTransform<Derived>::TransformACCParallelDirective(ACCParallelDirective *D) {
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCLoopDirective(ACCLoopDirective *D) {
-  getDerived().getSema().StartOpenACCDABlock(ACCD_loop, D->getBeginLoc());
+  if (getDerived().getSema().StartOpenACCDABlock(ACCD_loop, D->getBeginLoc()))
+    return StmtError();
   StmtResult Res = getDerived().TransformACCExecutableDirective(D);
   getDerived().getSema().EndOpenACCDABlock();
   return Res;
@@ -10547,8 +10556,9 @@ template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCParallelLoopDirective(
     ACCParallelLoopDirective *D) {
-  getDerived().getSema().StartOpenACCDABlock(ACCD_parallel_loop,
-                                             D->getBeginLoc());
+  if (getDerived().getSema().StartOpenACCDABlock(ACCD_parallel_loop,
+                                                 D->getBeginLoc()))
+    return StmtError();
   StmtResult Res = getDerived().TransformACCExecutableDirective(D);
   getDerived().getSema().EndOpenACCDABlock();
   return Res;
