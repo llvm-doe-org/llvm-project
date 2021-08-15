@@ -78,6 +78,26 @@ OpenACCDirectiveKind parseOpenACCDirectiveKind(Parser &P) {
 }
 } // namespace
 
+void Parser::ParseOpenACCClauses(OpenACCDirectiveKind DKind,
+                                 SmallVectorImpl<ACCClause *> &Clauses) {
+  SmallVector<bool, ACCC_unknown + 1> FirstClauses(ACCC_unknown + 1);
+  ConsumeToken();
+  while (Tok.isNot(tok::annot_pragma_openacc_end)) {
+    OpenACCClauseKind CKind = Tok.isAnnotation()
+                                  ? ACCC_unknown
+                                  : getOpenACCClauseKind(PP.getSpelling(Tok));
+    Actions.StartOpenACCClause(CKind);
+    ACCClause *Clause = ParseOpenACCClause(DKind, CKind, FirstClauses);
+    FirstClauses[CKind] = true;
+    if (Clause)
+      Clauses.push_back(Clause);
+    // Skip ',' if any.
+    if (Tok.is(tok::comma))
+      ConsumeToken();
+    Actions.EndOpenACCClause();
+  }
+}
+
 /// Parsing of declarative OpenACC directives.  None are supported yet, but
 /// we want to give a better diagnostic than a syntax error.
 ///
@@ -122,8 +142,6 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
     ParsedStmtContext StmtCtx) {
   assert(Tok.is(tok::annot_pragma_openacc) && "Not an OpenACC directive!");
   ParenBraceBracketBalancer BalancerRAIIObj(*this);
-  SmallVector<ACCClause *, 5> Clauses;
-  SmallVector<bool, ACCC_unknown + 1> FirstClauses(ACCC_unknown + 1);
   unsigned ScopeFlags =
       Scope::FnScope | Scope::DeclScope | Scope::OpenACCDirectiveScope;
   SourceLocation Loc = ConsumeAnnotationToken(), EndLoc;
@@ -158,28 +176,13 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
   case ACCD_parallel:
   case ACCD_loop:
   case ACCD_parallel_loop: {
-    ConsumeToken();
-
     if (isOpenACCLoopDirective(DKind))
       ScopeFlags |= Scope::OpenACCLoopDirectiveScope;
     ParseScope ACCDirectiveScope(this, ScopeFlags);
     Actions.StartOpenACCDABlock(DKind, Loc);
 
-    while (Tok.isNot(tok::annot_pragma_openacc_end)) {
-      OpenACCClauseKind CKind =
-          Tok.isAnnotation()
-              ? ACCC_unknown : getOpenACCClauseKind(PP.getSpelling(Tok));
-      Actions.StartOpenACCClause(CKind);
-      ACCClause *Clause = ParseOpenACCClause(DKind, CKind, FirstClauses);
-      FirstClauses[CKind] = true;
-      if (Clause)
-        Clauses.push_back(Clause);
-
-      // Skip ',' if any.
-      if (Tok.is(tok::comma))
-        ConsumeToken();
-      Actions.EndOpenACCClause();
-    }
+    SmallVector<ACCClause *, 5> Clauses;
+    ParseOpenACCClauses(DKind, Clauses);
     // End location of the directive.
     EndLoc = Tok.getLocation();
     // Consume final annot_pragma_openacc_end.
