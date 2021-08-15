@@ -144,7 +144,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
   ParenBraceBracketBalancer BalancerRAIIObj(*this);
   unsigned ScopeFlags =
       Scope::FnScope | Scope::DeclScope | Scope::OpenACCDirectiveScope;
-  SourceLocation Loc = ConsumeAnnotationToken(), EndLoc;
+  SourceLocation StartLoc = ConsumeAnnotationToken(), EndLoc;
   OpenACCDirectiveKind DKind = parseOpenACCDirectiveKind(*this);
   StmtResult Directive = StmtError();
   bool HasAssociatedStatement = true;
@@ -179,7 +179,8 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
     if (isOpenACCLoopDirective(DKind))
       ScopeFlags |= Scope::OpenACCLoopDirectiveScope;
     ParseScope ACCDirectiveScope(this, ScopeFlags);
-    bool ErrorFound = Actions.StartOpenACCDABlock(DKind, Loc);
+    bool ErrorFound =
+        Actions.StartOpenACCDirectiveAndAssociate(DKind, StartLoc);
 
     SmallVector<ACCClause *, 5> Clauses;
     ParseOpenACCClauses(DKind, Clauses);
@@ -188,16 +189,17 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
     // Consume final annot_pragma_openacc_end.
     ConsumeAnnotationToken();
 
-    ErrorFound |= Actions.ActOnOpenACCRegionStart(DKind, Clauses, Loc);
+    ErrorFound |=
+        Actions.StartOpenACCAssociatedStatement(DKind, Clauses, StartLoc);
     StmtResult AssociatedStmt;
     if (HasAssociatedStatement)
       AssociatedStmt = ParseStatement();
-    ErrorFound |= Actions.ActOnOpenACCRegionEnd();
+    ErrorFound |= Actions.EndOpenACCAssociatedStatement();
     Directive = Actions.ActOnOpenACCExecutableDirective(
-        DKind, Clauses, AssociatedStmt.get(), Loc, EndLoc);
+        DKind, Clauses, AssociatedStmt.get(), StartLoc, EndLoc);
 
     // Exit scope.
-    Actions.EndOpenACCDABlock();
+    Actions.EndOpenACCDirectiveAndAssociate();
     ACCDirectiveScope.Exit();
     // Don't bother translating to OpenMP if we've encountered errors or we
     // might end up with redundant diagnostics, some of which might mention

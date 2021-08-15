@@ -556,8 +556,9 @@ void Sema::InitOpenACCDirectiveStack() {
 
 void Sema::DestroyOpenACCDirectiveStack() { delete DirStack; }
 
-bool Sema::StartOpenACCDABlock(OpenACCDirectiveKind RealDKind,
-                               SourceLocation Loc) {
+bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
+                                             SourceLocation StartLoc) {
+  // Push onto the directive stack.
   switch (RealDKind) {
   case ACCD_update:
   case ACCD_enter_data:
@@ -565,14 +566,14 @@ bool Sema::StartOpenACCDABlock(OpenACCDirectiveKind RealDKind,
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
-    DirStack->push(RealDKind, RealDKind, Loc);
+    DirStack->push(RealDKind, RealDKind, StartLoc);
     break;
   case ACCD_parallel_loop:
-    DirStack->push(RealDKind, ACCD_parallel, Loc);
-    DirStack->push(ACCD_unknown, ACCD_loop, Loc);
+    DirStack->push(RealDKind, ACCD_parallel, StartLoc);
+    DirStack->push(ACCD_unknown, ACCD_loop, StartLoc);
     break;
   case ACCD_unknown:
-    llvm_unreachable("expected acc directive");
+    llvm_unreachable("expected OpenACC directive");
   }
   PushExpressionEvaluationContext(
       ExpressionEvaluationContext::PotentiallyEvaluated);
@@ -583,9 +584,10 @@ bool Sema::StartOpenACCDABlock(OpenACCDirectiveKind RealDKind,
       DirStack->getRealParentDirective(ParentLoc);
   if (!isAllowedParentForDirective(RealDKind, ParentDKind)) {
     if (ParentDKind == ACCD_unknown)
-      Diag(Loc, diag::err_acc_orphaned_directive) << getOpenACCName(RealDKind);
+      Diag(StartLoc, diag::err_acc_orphaned_directive)
+          << getOpenACCName(RealDKind);
     else {
-      Diag(Loc, diag::err_acc_directive_bad_nesting)
+      Diag(StartLoc, diag::err_acc_directive_bad_nesting)
           << getOpenACCName(ParentDKind) << getOpenACCName(RealDKind);
       Diag(ParentLoc, diag::note_acc_enclosing_directive)
           << getOpenACCName(ParentDKind);
@@ -679,7 +681,7 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
 void Sema::EndOpenACCClause() {
 }
 
-void Sema::EndOpenACCDABlock() {
+void Sema::EndOpenACCDirectiveAndAssociate() {
   // For a combined directive, the first DirStack->pop() happens after the
   // inner effective directive is "acted upon" (AST node is constructed), so
   // this is the second DirStack->pop(), which happens after the entire
@@ -1322,9 +1324,9 @@ public:
 };
 } // namespace
 
-bool Sema::ActOnOpenACCRegionStart(OpenACCDirectiveKind DKind,
-                                   ArrayRef<ACCClause *> Clauses,
-                                   SourceLocation StartLoc) {
+bool Sema::StartOpenACCAssociatedStatement(OpenACCDirectiveKind DKind,
+                                           ArrayRef<ACCClause *> Clauses,
+                                           SourceLocation StartLoc) {
   bool ErrorFound = false;
   if (isOpenACCLoopDirective(DKind)) {
     ACCPartitioningKind LoopKind;
@@ -1412,7 +1414,7 @@ bool Sema::ActOnOpenACCRegionStart(OpenACCDirectiveKind DKind,
   return ErrorFound;
 }
 
-bool Sema::ActOnOpenACCRegionEnd() { return false; }
+bool Sema::EndOpenACCAssociatedStatement() { return false; }
 
 StmtResult Sema::ActOnOpenACCExecutableDirective(
     OpenACCDirectiveKind DKind, ArrayRef<ACCClause *> Clauses,
