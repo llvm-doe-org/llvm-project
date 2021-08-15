@@ -146,12 +146,11 @@ namespace {
                                      bool ForceNoStmt = false);
     Stmt *PrintOMPExecutableDirectiveHead(Stmt *S, bool Com,
                                           int EffectiveDirectives);
-    void PrintACCExecutableDirectiveHead(ACCExecutableDirective *S,
-                                         bool ComACC,
-                                         bool ComDirectiveDiscardedForOMP);
+    void PrintACCDirectiveStmtHead(ACCDirectiveStmt *S, bool ComACC,
+                                   bool ComDirectiveDiscardedForOMP);
     void PrintOMPExecutableDirectiveBody(Stmt *S);
-    void PrintACCExecutableDirectiveBody(ACCExecutableDirective *S);
-    void PrintACCExecutableDirective(ACCExecutableDirective *S);
+    void PrintACCDirectiveStmtBody(ACCDirectiveStmt *S);
+    void PrintACCDirectiveStmt(ACCDirectiveStmt *S);
 
     void PrintExpr(Expr *E) {
       if (E)
@@ -1235,8 +1234,8 @@ Stmt *StmtPrinter::PrintOMPExecutableDirectiveHead(Stmt *S, bool Com,
       EffectiveDirectives - 1);
 }
 
-void StmtPrinter::PrintACCExecutableDirectiveHead(
-    ACCExecutableDirective *S, bool ComACC, bool ComDirectiveDiscardedForOMP) {
+void StmtPrinter::PrintACCDirectiveStmtHead(ACCDirectiveStmt *S, bool ComACC,
+                                            bool ComDirectiveDiscardedForOMP) {
   Indent() << (ComACC?"// ":"") << "#pragma acc "
            << getOpenACCName(S->getDirectiveKind());
   ACCClausePrinter Printer(OS, Policy);
@@ -1273,15 +1272,15 @@ void StmtPrinter::PrintOMPExecutableDirectiveBody(Stmt *S) {
   }
 }
 
-void StmtPrinter::PrintACCExecutableDirectiveBody(ACCExecutableDirective *S) {
+void StmtPrinter::PrintACCDirectiveStmtBody(ACCDirectiveStmt *S) {
   if (S->hasAssociatedStmt())
     PrintStmt(S->getAssociatedStmt());
 }
 
-void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
+void StmtPrinter::PrintACCDirectiveStmt(ACCDirectiveStmt *S) {
   if (!S->hasOMPNode()) {
-    PrintACCExecutableDirectiveHead(S, false, false);
-    PrintACCExecutableDirectiveBody(S);
+    PrintACCDirectiveStmtHead(S, false, false);
+    PrintACCDirectiveStmtBody(S);
     return;
   }
 #ifndef NDEBUG
@@ -1290,15 +1289,15 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
   bool OMPHasAssociatedStmt = !OMPDir || (OMPDir->hasAssociatedStmt() &&
                                           !OMPDir->isStandaloneDirective());
   assert(S->hasAssociatedStmt() == OMPHasAssociatedStmt &&
-         "ACCExecutableDirective and its OMP node must either both or neither "
-         "have an associated statement");
+         "ACCDirectiveStmt and its OMP node must either both or neither have "
+         "an associated statement");
 #endif
   int EffectiveDirectives =
       getOpenACCEffectiveDirectives(S->getDirectiveKind());
   switch (Policy.OpenACCPrint) {
   case OpenACCPrint_ACC:
-    PrintACCExecutableDirectiveHead(S, false, false);
-    PrintACCExecutableDirectiveBody(S);
+    PrintACCDirectiveStmtHead(S, false, false);
+    PrintACCDirectiveStmtBody(S);
     break;
   case OpenACCPrint_OMP: {
     Stmt *OMPInnerDir = PrintOMPExecutableDirectiveHead(S->getOMPNode(), false,
@@ -1309,11 +1308,11 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
   case OpenACCPrint_ACC_OMP:
     if (S->ompStmtPrintsDifferently(Policy, Context)) {
       Indent() << "// v----------ACC----------v\n";
-      PrintACCExecutableDirectiveHead(S, false, false);
+      PrintACCDirectiveStmtHead(S, false, false);
       PrintingPolicy ACCPolicy(Policy);
       ACCPolicy.OpenACCPrint = OpenACCPrint_ACC;
       StmtPrinter ACCPrinter(OS, Helper, ACCPolicy, IndentLevel, NL, Context);
-      ACCPrinter.PrintACCExecutableDirectiveBody(S);
+      ACCPrinter.PrintACCDirectiveStmtBody(S);
       Indent() << "// ---------ACC->OMP--------\n";
       clang::commented_raw_ostream ComStream(OS, IndentLevel*2, false, 1,
                                              true);
@@ -1324,10 +1323,10 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
       Indent() << "// ^----------OMP----------^\n";
     }
     else {
-      PrintACCExecutableDirectiveHead(S, false, true);
+      PrintACCDirectiveStmtHead(S, false, true);
       PrintOMPExecutableDirectiveHead(S->getOMPNode(), true,
                                       EffectiveDirectives);
-      PrintACCExecutableDirectiveBody(S);
+      PrintACCDirectiveStmtBody(S);
     }
     break;
   case OpenACCPrint_OMP_ACC: {
@@ -1342,15 +1341,15 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
       PrintingPolicy ACCPolicy(Policy);
       ACCPolicy.OpenACCPrint = OpenACCPrint_ACC;
       StmtPrinter ComPrinter(ComStream, Helper, ACCPolicy, 0, NL, Context);
-      ComPrinter.PrintACCExecutableDirectiveHead(S, false, false);
-      ComPrinter.PrintACCExecutableDirectiveBody(S);
+      ComPrinter.PrintACCDirectiveStmtHead(S, false, false);
+      ComPrinter.PrintACCDirectiveStmtBody(S);
       Indent() << "// ^----------ACC----------^\n";
     }
     else {
       PrintOMPExecutableDirectiveHead(S->getOMPNode(), false,
                                       EffectiveDirectives);
-      PrintACCExecutableDirectiveHead(S, true, true);
-      PrintACCExecutableDirectiveBody(S);
+      PrintACCDirectiveStmtHead(S, true, true);
+      PrintACCDirectiveStmtBody(S);
     }
     break;
   }
@@ -1362,32 +1361,32 @@ void StmtPrinter::PrintACCExecutableDirective(ACCExecutableDirective *S) {
 }
 
 void StmtPrinter::VisitACCUpdateDirective(ACCUpdateDirective *Node) {
-  PrintACCExecutableDirective(Node);
+  PrintACCDirectiveStmt(Node);
 }
 
 void StmtPrinter::VisitACCEnterDataDirective(ACCEnterDataDirective *Node) {
-  PrintACCExecutableDirective(Node);
+  PrintACCDirectiveStmt(Node);
 }
 
 void StmtPrinter::VisitACCExitDataDirective(ACCExitDataDirective *Node) {
-  PrintACCExecutableDirective(Node);
+  PrintACCDirectiveStmt(Node);
 }
 
 void StmtPrinter::VisitACCDataDirective(ACCDataDirective *Node) {
-  PrintACCExecutableDirective(Node);
+  PrintACCDirectiveStmt(Node);
 }
 
 void StmtPrinter::VisitACCParallelDirective(ACCParallelDirective *Node) {
-  PrintACCExecutableDirective(Node);
+  PrintACCDirectiveStmt(Node);
 }
 
 void StmtPrinter::VisitACCLoopDirective(ACCLoopDirective *Node) {
-  PrintACCExecutableDirective(Node);
+  PrintACCDirectiveStmt(Node);
 }
 
 void StmtPrinter::VisitACCParallelLoopDirective(
     ACCParallelLoopDirective *Node) {
-  PrintACCExecutableDirective(Node);
+  PrintACCDirectiveStmt(Node);
 }
 
 //===----------------------------------------------------------------------===//

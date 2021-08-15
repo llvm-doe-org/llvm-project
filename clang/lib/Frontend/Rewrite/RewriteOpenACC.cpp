@@ -81,18 +81,17 @@ public:
     Context = nullptr;
   }
   bool TraverseStmt(Stmt *S, DataRecursionQueue *Queue = nullptr) {
-    // When our VisitACCExecutableDirective returns false, it's to indicate
-    // that children of the ACCNode shouldn't be visited, but we still want to
+    // When our VisitACCDirectiveStmt returns false, it's to indicate that
+    // children of the ACCNode shouldn't be visited, but we still want to
     // continue on to other parts of the tree, so we return true here.
-    if (ACCExecutableDirective *ACCNode =
-            dyn_cast_or_null<ACCExecutableDirective>(S)) {
-      if (VisitACCExecutableDirective(ACCNode) && ACCNode->hasAssociatedStmt())
+    if (ACCDirectiveStmt *ACCNode = dyn_cast_or_null<ACCDirectiveStmt>(S)) {
+      if (VisitACCDirectiveStmt(ACCNode) && ACCNode->hasAssociatedStmt())
         return TraverseStmt(ACCNode->getAssociatedStmt(), Queue);
       return true;
     }
     return RecursiveASTVisitor<RewriteOpenACC>::TraverseStmt(S, Queue);
   }
-  bool VisitACCExecutableDirective(ACCExecutableDirective *ACCNode) {
+  bool VisitACCDirectiveStmt(ACCDirectiveStmt *ACCNode) {
     SourceManager &SM = Context->getSourceManager();
     const LangOptions &LO = Context->getLangOpts();
 

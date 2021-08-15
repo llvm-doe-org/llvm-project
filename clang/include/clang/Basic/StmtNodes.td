@@ -24,7 +24,7 @@ def SwitchCase : StmtNode<Stmt, 1>;
 def CaseStmt : StmtNode<SwitchCase>;
 def DefaultStmt : StmtNode<SwitchCase>;
 def CapturedStmt : StmtNode<Stmt>;
-def ExecutableDirective : StmtNode<Stmt, 1>;
+def DirectiveStmt : StmtNode<Stmt, 1>;
 
 // Statements that might produce a value (for example, as the last non-null
 // statement in a GNU statement-expression).
@@ -219,7 +219,7 @@ def AsTypeExpr : StmtNode<Expr>;
 
 // OpenMP Directives.
 def OMPCanonicalLoop : StmtNode<Stmt>;
-def OMPExecutableDirective : StmtNode<ExecutableDirective, 1>;
+def OMPExecutableDirective : StmtNode<DirectiveStmt, 1>;
 def OMPLoopBasedDirective : StmtNode<OMPExecutableDirective, 1>;
 def OMPLoopDirective : StmtNode<OMPLoopBasedDirective, 1>;
 def OMPParallelDirective : StmtNode<OMPExecutableDirective>;
@@ -282,11 +282,11 @@ def OMPDispatchDirective : StmtNode<OMPExecutableDirective>;
 def OMPMaskedDirective : StmtNode<OMPExecutableDirective>;
 
 // OpenACC Directives.
-def ACCExecutableDirective : StmtNode<ExecutableDirective, 1>;
-def ACCUpdateDirective : StmtNode<ACCExecutableDirective>;
-def ACCEnterDataDirective : StmtNode<ACCExecutableDirective>;
-def ACCExitDataDirective : StmtNode<ACCExecutableDirective>;
-def ACCDataDirective : StmtNode<ACCExecutableDirective>;
-def ACCParallelDirective : StmtNode<ACCExecutableDirective>;
-def ACCLoopDirective : StmtNode<ACCExecutableDirective>;
-def ACCParallelLoopDirective : StmtNode<ACCExecutableDirective>;
+def ACCDirectiveStmt : StmtNode<DirectiveStmt, 1>;
+def ACCUpdateDirective : StmtNode<ACCDirectiveStmt>;
+def ACCEnterDataDirective : StmtNode<ACCDirectiveStmt>;
+def ACCExitDataDirective : StmtNode<ACCDirectiveStmt>;
+def ACCDataDirective : StmtNode<ACCDirectiveStmt>;
+def ACCParallelDirective : StmtNode<ACCDirectiveStmt>;
+def ACCLoopDirective : StmtNode<ACCDirectiveStmt>;
+def ACCParallelLoopDirective : StmtNode<ACCDirectiveStmt>;

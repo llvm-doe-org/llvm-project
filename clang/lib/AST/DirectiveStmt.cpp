@@ -1,4 +1,4 @@
-//===--- StmtDirective.cpp - Base class for directives --------------------===//
+//===--- DirectiveStmt.cpp - Base class for directives --------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,19 +7,18 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the AST base class for OpenMP and OpenACC executable
-// directives declared in StmtDirective.h.
+// This file implements the AST base class, declared in DirectiveStmt.h, for
+// OpenMP and OpenACC executable directives and constructs.
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/AST/StmtDirective.h"
+#include "clang/AST/DirectiveStmt.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/SourceManager.h"
 
 using namespace clang;
 
-SourceRange ExecutableDirective::getConstructRange(
-    bool *FinalSemicolonIsNext) const {
+SourceRange DirectiveStmt::getConstructRange(bool *FinalSemicolonIsNext) const {
   // TODO: We haven't found a clean way to determine the location of the last
   // token from an AST node, so we implemented the following.  The switch below
   // has cases for AST node types that are known to require special handling,
@@ -31,9 +30,9 @@ SourceRange ExecutableDirective::getConstructRange(
   // AST node types' overriding implementations come from the other cases.
   //
   // Instead of all this, we previously tried to use getSourceRange (after
-  // fixing it for ExecutableDirective), but it doesn't work when a ForStmt's
-  // body is an ExecutableDirective because ForStmt's getSourceRange then calls
-  // the ExecutableDirective's getEndLoc instead of its getSourceRange.
+  // fixing it for DirectiveStmt), but it doesn't work when a ForStmt's body is
+  // an DirectiveStmt because ForStmt's getSourceRange then calls the
+  // DirectiveStmt's getEndLoc instead of its getSourceRange.
   //
   // We also tried to implement one general approach that works for all AST
   // node types by descending through the AST looking for the node with the
@@ -57,10 +56,10 @@ SourceRange ExecutableDirective::getConstructRange(
     default:
       // For most AST node types, the last child has the last token.  In at
       // least some cases, calling getEndLoc on the node itself doesn't return
-      // that token's location.  For example, when ExecutableDirective has an
+      // that token's location.  For example, when DirectiveStmt has an
       // associated statement (which is then its child), getEndLoc on the
-      // ExecutableDirective points to the end of the directive only, so the
-      // child must be examined.
+      // DirectiveStmt points to the end of the directive only, so the child
+      // must be examined.
       //
       // TODO: It should be more efficient to add a special case for every AST
       // node type that has multiple children such that the child with the last

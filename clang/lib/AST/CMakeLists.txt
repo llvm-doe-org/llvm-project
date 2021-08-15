@@ -46,6 +46,7 @@ add_clang_library(clangAST
   DeclOpenMP.cpp
   DeclPrinter.cpp
   DeclTemplate.cpp
+  DirectiveStmt.cpp
   ParentMapContext.cpp
   Expr.cpp
   ExprClassification.cpp
@@ -100,7 +101,6 @@ add_clang_library(clangAST
   SelectorLocationsKind.cpp
   Stmt.cpp
   StmtCXX.cpp
-  StmtDirective.cpp
   StmtIterator.cpp
   StmtObjC.cpp
   StmtOpenACC.cpp

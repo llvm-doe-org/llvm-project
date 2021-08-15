@@ -676,10 +676,10 @@ public:
       Visit(C);
   }
 
-  void VisitACCExecutableDirective(const ACCExecutableDirective *Node) {
+  void VisitACCDirectiveStmt(const ACCDirectiveStmt *Node) {
     for (const auto *C : Node->clauses())
       Visit(C);
-    if (ACCExecutableDirective *Effect = Node->getEffectiveDirective())
+    if (ACCDirectiveStmt *Effect = Node->getEffectiveDirective())
       Visit(Effect, "effect");
     else if (Node->hasOMPNode())
       Visit(Node->getOMPNode(), "impl");

@@ -74,7 +74,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
 
   public:
     /// Push D's data onto Transform.DirStack.
-    DirStackEntryRAII(TransformACCToOMP &Transform, ACCExecutableDirective *D)
+    DirStackEntryRAII(TransformACCToOMP &Transform, ACCDirectiveStmt *D)
         : Transform(Transform) {
       DirStackEntry &DirEntry = Transform.DirStack.emplace_back();
 
@@ -169,14 +169,13 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     const SourceLocation LocStart;
     const SourceLocation LParenLoc;
     const SourceLocation LocEnd;
-    ExplicitClauseLocs(ACCExecutableDirective *D, ACCClause *C,
+    ExplicitClauseLocs(ACCDirectiveStmt *D, ACCClause *C,
                        SourceLocation LParenLoc)
-      // So far, it appears that only LocStart is used to decide if the
-      // directive is implicit.
-      : LocStart(D && C->getBeginLoc().isInvalid() ? D->getEndLoc()
-                                                   : C->getBeginLoc()),
-        LParenLoc(LParenLoc), LocEnd(C->getEndLoc())
-    {
+        // So far, it appears that only LocStart is used to decide if the
+        // directive is implicit.
+        : LocStart(D && C->getBeginLoc().isInvalid() ? D->getEndLoc()
+                                                     : C->getBeginLoc()),
+          LParenLoc(LParenLoc), LocEnd(C->getEndLoc()) {
       // So far, we have found that, if the clause's LocStart is invalid, all
       // the clause's locations are invalid.  Otherwise, setting LocStart to
       // the directive end might produce locations that are out of order.
@@ -188,8 +187,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     }
   };
 
-  void transformACCClauses(ACCExecutableDirective *D,
-                           OpenMPDirectiveKind TDKind,
+  void transformACCClauses(ACCDirectiveStmt *D, OpenMPDirectiveKind TDKind,
                            llvm::SmallVectorImpl<OMPClause *> &TClauses,
                            size_t &TClausesEmptyCount,
                            size_t &NumClausesAdded) {
@@ -215,7 +213,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     }
   }
 
-  StmtResult transformACCAssociatedStmt(ACCExecutableDirective *D,
+  StmtResult transformACCAssociatedStmt(ACCDirectiveStmt *D,
                                         OpenMPDirectiveKind TKind,
                                         ArrayRef<OMPClause *> TClauses) {
     getSema().ActOnOpenMPRegionStart(TKind, /*CurScope=*/nullptr);
@@ -245,11 +243,10 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     return false;
   }
 
-  template<typename Derived>
-  bool transformACCVarList(
-      ACCExecutableDirective *D, ACCVarListClause<Derived> *C,
-      const llvm::DenseSet<const VarDecl *> &SkipVars,
-      llvm::SmallVector<Expr *, 16> &Vars) {
+  template <typename Derived>
+  bool transformACCVarList(ACCDirectiveStmt *D, ACCVarListClause<Derived> *C,
+                           const llvm::DenseSet<const VarDecl *> &SkipVars,
+                           llvm::SmallVector<Expr *, 16> &Vars) {
     Vars.reserve(C->varlist_size());
     return iterateACCVarList(C, [&SkipVars, &Vars, this](Expr *RefExpr,
                                                          VarDecl *VD) {
@@ -263,11 +260,12 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     });
   }
 
-  template<typename Derived, typename RebuilderType>
-  OMPClauseResult transformACCVarListClause(
-      ACCExecutableDirective *D, ACCVarListClause<Derived> *C,
-      OpenMPClauseKind TCKind, const llvm::DenseSet<const VarDecl *> &SkipVars,
-      RebuilderType Rebuilder) {
+  template <typename Derived, typename RebuilderType>
+  OMPClauseResult
+  transformACCVarListClause(ACCDirectiveStmt *D, ACCVarListClause<Derived> *C,
+                            OpenMPClauseKind TCKind,
+                            const llvm::DenseSet<const VarDecl *> &SkipVars,
+                            RebuilderType Rebuilder) {
     OpenMPStartEndClauseRAII ClauseRAII(getSema(), TCKind);
     llvm::SmallVector<Expr *, 16> Vars;
     if (transformACCVarList(D, C, SkipVars, Vars))
@@ -278,10 +276,10 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     return Rebuilder(Vars, L);
   }
 
-  template<typename Derived, typename RebuilderType>
-  OMPClauseResult transformACCVarListClause(
-      ACCExecutableDirective *D, ACCVarListClause<Derived> *C,
-      OpenMPClauseKind TCKind, RebuilderType Rebuilder) {
+  template <typename Derived, typename RebuilderType>
+  OMPClauseResult
+  transformACCVarListClause(ACCDirectiveStmt *D, ACCVarListClause<Derived> *C,
+                            OpenMPClauseKind TCKind, RebuilderType Rebuilder) {
     return transformACCVarListClause(
         D, C, TCKind, llvm::DenseSet<const VarDecl *>(), Rebuilder);
   }
@@ -302,7 +300,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     }
   };
 
-  void addHoldMapTypeModifier(ACCExecutableDirective *D, ACCClause *C,
+  void addHoldMapTypeModifier(ACCDirectiveStmt *D, ACCClause *C,
                               SmallVectorImpl<OpenMPMapModifierKind> &MapMods) {
     switch (D->getDirectiveKind()) {
     case ACCD_enter_data:
@@ -852,9 +850,8 @@ public:
     return Res;
   }
 
-  OMPClauseResult TransformACCClause(ACCExecutableDirective *D,
-                                     OpenMPDirectiveKind TDKind,
-                                     ACCClause *C) {
+  OMPClauseResult TransformACCClause(ACCDirectiveStmt *D,
+                                     OpenMPDirectiveKind TDKind, ACCClause *C) {
     if (!C)
       return OMPClauseError();
 
@@ -872,7 +869,7 @@ public:
     }
   }
 
-  OMPClauseResult TransformACCNumGangsClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCNumGangsClause(ACCDirectiveStmt *D,
                                              OpenMPDirectiveKind TDKind,
                                              ACCNumGangsClause *C) {
     OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_num_teams);
@@ -884,19 +881,19 @@ public:
         E.get(), L.LocStart, L.LParenLoc, L.LocEnd);
   }
 
-  OMPClauseResult TransformACCNumWorkersClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCNumWorkersClause(ACCDirectiveStmt *D,
                                                OpenMPDirectiveKind TDKind,
                                                ACCNumWorkersClause *C) {
     return OMPClauseEmpty();
   }
 
-  OMPClauseResult TransformACCVectorLengthClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCVectorLengthClause(ACCDirectiveStmt *D,
                                                  OpenMPDirectiveKind TDKind,
                                                  ACCVectorLengthClause *C) {
     return OMPClauseEmpty();
   }
 
-  OMPClauseResult TransformACCCollapseClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCCollapseClause(ACCDirectiveStmt *D,
                                              OpenMPDirectiveKind TDKind,
                                              ACCCollapseClause *C) {
     ExplicitClauseLocs L(D, C, C->getLParenLoc());
@@ -904,7 +901,7 @@ public:
         C->getCollapse(), L.LocStart, L.LParenLoc, L.LocEnd);
   }
 
-  OMPClauseResult TransformACCNomapClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCNomapClause(ACCDirectiveStmt *D,
                                           OpenMPDirectiveKind TDKind,
                                           ACCNomapClause *C) {
     // For each nomap shared variable:
@@ -951,7 +948,7 @@ public:
         });
   }
 
-  OMPClauseResult TransformACCPresentClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCPresentClause(ACCDirectiveStmt *D,
                                             OpenMPDirectiveKind TDKind,
                                             ACCPresentClause *C) {
     SmallVector<OpenMPMapModifierKind, 2> MapMods;
@@ -987,7 +984,7 @@ public:
         });
   }
 
-  OMPClauseResult TransformACCCopyClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCCopyClause(ACCDirectiveStmt *D,
                                          OpenMPDirectiveKind TDKind,
                                          ACCCopyClause *C) {
     SmallVector<OpenMPMapModifierKind, 1> MapMods;
@@ -1006,7 +1003,7 @@ public:
         });
   }
 
-  OMPClauseResult TransformACCCopyinClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCCopyinClause(ACCDirectiveStmt *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCCopyinClause *C) {
     SmallVector<OpenMPMapModifierKind, 1> MapMods;
@@ -1025,7 +1022,7 @@ public:
         });
   }
 
-  OMPClauseResult TransformACCCopyoutClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCCopyoutClause(ACCDirectiveStmt *D,
                                             OpenMPDirectiveKind TDKind,
                                             ACCCopyoutClause *C) {
     SmallVector<OpenMPMapModifierKind, 1> MapMods;
@@ -1044,7 +1041,7 @@ public:
         });
   }
 
-  OMPClauseResult TransformACCCreateClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCCreateClause(ACCDirectiveStmt *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCCreateClause *C) {
     SmallVector<OpenMPMapModifierKind, 1> MapMods;
@@ -1063,7 +1060,7 @@ public:
         });
   }
 
-  OMPClauseResult TransformACCNoCreateClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCNoCreateClause(ACCDirectiveStmt *D,
                                              OpenMPDirectiveKind TDKind,
                                              ACCNoCreateClause *C) {
     SmallVector<OpenMPMapModifierKind, 2> MapMods;
@@ -1099,7 +1096,7 @@ public:
         });
   }
 
-  OMPClauseResult TransformACCDeleteClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCDeleteClause(ACCDirectiveStmt *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCDeleteClause *C) {
     return transformACCVarListClause<ACCDeleteClause>(
@@ -1113,7 +1110,7 @@ public:
         });
   }
 
-  OMPClauseResult TransformACCSharedClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCSharedClause(ACCDirectiveStmt *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCSharedClause *C) {
     // OpenMP distribute or simd directives without parallel do not accept
@@ -1134,7 +1131,7 @@ public:
             this, &TransformACCToOMP::RebuildOMPSharedClause));
   }
 
-  OMPClauseResult TransformACCPrivateClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCPrivateClause(ACCDirectiveStmt *D,
                                             OpenMPDirectiveKind TDKind,
                                             ACCPrivateClause *C) {
     // An OpenACC loop control variable that is assigned but not declared in
@@ -1163,7 +1160,7 @@ public:
             this, &TransformACCToOMP::RebuildOMPPrivateClause));
   }
 
-  OMPClauseResult TransformACCFirstprivateClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCFirstprivateClause(ACCDirectiveStmt *D,
                                                  OpenMPDirectiveKind TDKind,
                                                  ACCFirstprivateClause *C) {
     return transformACCVarListClause<ACCFirstprivateClause>(
@@ -1172,7 +1169,7 @@ public:
             this, &TransformACCToOMP::RebuildOMPFirstprivateClause));
   }
 
-  OMPClauseResult TransformACCReductionClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCReductionClause(ACCDirectiveStmt *D,
                                               OpenMPDirectiveKind TDKind,
                                               ACCReductionClause *C) {
     // OpenMP distribute directives without parallel and simd do not accept
@@ -1192,7 +1189,7 @@ public:
         });
   }
 
-  OMPClauseResult TransformACCIfClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCIfClause(ACCDirectiveStmt *D,
                                        OpenMPDirectiveKind TDKind,
                                        ACCIfClause *C) {
     OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_if);
@@ -1205,7 +1202,7 @@ public:
                                            L.LParenLoc, L.LocEnd);
   }
 
-  OMPClauseResult TransformACCIfPresentClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCIfPresentClause(ACCDirectiveStmt *D,
                                               OpenMPDirectiveKind TDKind,
                                               ACCIfPresentClause *C) {
     return OMPClauseEmpty();
@@ -1214,7 +1211,7 @@ public:
 private:
   template <typename ClauseType>
   OMPClauseResult TransformACCSelfOrDeviceClause(
-      ACCExecutableDirective *D, OpenMPDirectiveKind TDKind, ClauseType *C,
+      ACCDirectiveStmt *D, OpenMPDirectiveKind TDKind, ClauseType *C,
       OpenMPClauseKind TCKind,
       OMPClause *(TransformACCToOMP::*Rebuilder)(
           ArrayRef<OpenMPMotionModifierKind> MotionMods,
@@ -1256,51 +1253,51 @@ private:
   }
 
 public:
-  OMPClauseResult TransformACCSelfClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCSelfClause(ACCDirectiveStmt *D,
                                          OpenMPDirectiveKind TDKind,
                                          ACCSelfClause *C) {
     return TransformACCSelfOrDeviceClause(
         D, TDKind, C, OMPC_from, &TransformACCToOMP::RebuildOMPFromClause);
   }
 
-  OMPClauseResult TransformACCDeviceClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCDeviceClause(ACCDirectiveStmt *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCDeviceClause *C) {
     return TransformACCSelfOrDeviceClause(
         D, TDKind, C, OMPC_to, &TransformACCToOMP::RebuildOMPToClause);
   }
 
-  OMPClauseResult TransformACCSeqClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCSeqClause(ACCDirectiveStmt *D,
                                         OpenMPDirectiveKind TDKind,
                                         ACCSeqClause *C) {
     return OMPClauseEmpty();
   }
 
-  OMPClauseResult TransformACCIndependentClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCIndependentClause(ACCDirectiveStmt *D,
                                                 OpenMPDirectiveKind TDKind,
                                                 ACCIndependentClause *C) {
     return OMPClauseEmpty();
   }
 
-  OMPClauseResult TransformACCAutoClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCAutoClause(ACCDirectiveStmt *D,
                                          OpenMPDirectiveKind TDKind,
                                          ACCAutoClause *C) {
     return OMPClauseEmpty();
   }
 
-  OMPClauseResult TransformACCGangClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCGangClause(ACCDirectiveStmt *D,
                                          OpenMPDirectiveKind TDKind,
                                          ACCGangClause *C) {
     return OMPClauseEmpty();
   }
 
-  OMPClauseResult TransformACCWorkerClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCWorkerClause(ACCDirectiveStmt *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCWorkerClause *C) {
     return OMPClauseEmpty();
   }
 
-  OMPClauseResult TransformACCVectorClause(ACCExecutableDirective *D,
+  OMPClauseResult TransformACCVectorClause(ACCDirectiveStmt *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCVectorClause *C) {
     return OMPClauseEmpty();
@@ -1308,7 +1305,7 @@ public:
 };
 } // namespace
 
-bool Sema::transformACCToOMP(ACCExecutableDirective *D) {
+bool Sema::transformACCToOMP(ACCDirectiveStmt *D) {
   if (isInOpenACCDirective())
     return false;
   return TransformACCToOMP(*this).TransformStmt(D).isInvalid();

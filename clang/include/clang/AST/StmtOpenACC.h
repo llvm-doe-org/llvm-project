@@ -15,9 +15,9 @@
 #ifndef LLVM_CLANG_AST_STMTOPENACC_H
 #define LLVM_CLANG_AST_STMTOPENACC_H
 
+#include "clang/AST/DirectiveStmt.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/OpenACCClause.h"
-#include "clang/AST/StmtDirective.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/OpenACCKinds.h"
 #include "clang/Basic/SourceLocation.h"
@@ -28,10 +28,9 @@ namespace clang {
 // AST classes for directives.
 //===----------------------------------------------------------------------===//
 
-/// This is a basic class for representing single OpenACC executable
-/// directive.
-///
-class ACCExecutableDirective : public ExecutableDirective {
+/// This is a base class for representing an OpenACC executable directive (e.g.,
+/// 'acc update') or construct (e.g., 'acc parallel').
+class ACCDirectiveStmt : public DirectiveStmt {
   friend class ASTStmtReader;
   /// Kind of the directive.
   OpenACCDirectiveKind Kind;
@@ -50,7 +49,7 @@ class ACCExecutableDirective : public ExecutableDirective {
   /// followed by NumChildren pointers to child stmts/exprs (if the directive
   /// type requires an associated stmt, then it has to be the first of them).
   const unsigned ClausesOffset;
-  ACCExecutableDirective *EffectiveDirective = nullptr;
+  ACCDirectiveStmt *EffectiveDirective = nullptr;
   Stmt *OMPNode;
   bool DirectiveDiscardedForOMP;
 
@@ -91,11 +90,11 @@ protected:
   /// \param NumChildren Number of child nodes.
   ///
   template <typename T>
-  ACCExecutableDirective(const T *, StmtClass SC, OpenACCDirectiveKind K,
-                         SourceLocation StartLoc, SourceLocation EndLoc,
-                         unsigned NumClauses, unsigned MaxAddClauses,
-                         unsigned NumChildren)
-      : ExecutableDirective(SC), Kind(K), StartLoc(std::move(StartLoc)),
+  ACCDirectiveStmt(const T *, StmtClass SC, OpenACCDirectiveKind K,
+                   SourceLocation StartLoc, SourceLocation EndLoc,
+                   unsigned NumClauses, unsigned MaxAddClauses,
+                   unsigned NumChildren)
+      : DirectiveStmt(SC), Kind(K), StartLoc(std::move(StartLoc)),
         EndLoc(std::move(EndLoc)), NumClauses(NumClauses),
         MaxAddClauses(MaxAddClauses), NumChildren(NumChildren),
         ClausesOffset(llvm::alignTo(sizeof(T), alignof(ACCClause *))),
@@ -128,7 +127,7 @@ protected:
   ///
   /// \param D Effective directive.
   ///
-  void setEffectiveDirective(ACCExecutableDirective *D) {
+  void setEffectiveDirective(ACCDirectiveStmt *D) {
     assert(isOpenACCCombinedDirective(Kind) &&
            "expected combined OpenACC directive");
     EffectiveDirective = D;
@@ -136,8 +135,8 @@ protected:
 
 public:
   static bool classof(const Stmt *S) {
-    return S->getStmtClass() >= firstACCExecutableDirectiveConstant &&
-           S->getStmtClass() <= lastACCExecutableDirectiveConstant;
+    return S->getStmtClass() >= firstACCDirectiveStmtConstant &&
+           S->getStmtClass() <= lastACCDirectiveStmtConstant;
   }
 
   /// Set the statement to which this directive has been translated for OpenMP.
@@ -296,9 +295,7 @@ public:
   /// Returns the outermost effective directive (whose associated statement is
   /// the nested effective directive, etc.) if this is a combined directive,
   /// and returns nullptr otherwise.
-  ACCExecutableDirective *getEffectiveDirective() const {
-    return EffectiveDirective;
-  }
+  ACCDirectiveStmt *getEffectiveDirective() const { return EffectiveDirective; }
 
   OpenACCDirectiveKind getDirectiveKind() const { return Kind; }
 
@@ -312,13 +309,13 @@ public:
   ArrayRef<ACCClause *> clauses() { return getClauses(); }
 
   ArrayRef<ACCClause *> clauses() const {
-    return const_cast<ACCExecutableDirective *>(this)->getClauses();
+    return const_cast<ACCDirectiveStmt *>(this)->getClauses();
   }
 };
 
 /// This represents '#pragma acc update' directive.
 ///
-class ACCUpdateDirective : public ACCExecutableDirective {
+class ACCUpdateDirective : public ACCDirectiveStmt {
   friend class ASTStmtReader;
 
   /// Build directive with the given start and end location.
@@ -329,14 +326,14 @@ class ACCUpdateDirective : public ACCExecutableDirective {
   ///
   ACCUpdateDirective(SourceLocation StartLoc, SourceLocation EndLoc,
                      unsigned NumClauses)
-      : ACCExecutableDirective(this, ACCUpdateDirectiveClass, ACCD_update,
-                               StartLoc, EndLoc, NumClauses, 0, 0) {}
+      : ACCDirectiveStmt(this, ACCUpdateDirectiveClass, ACCD_update, StartLoc,
+                         EndLoc, NumClauses, 0, 0) {}
 
   /// Build an empty directive.
   explicit ACCUpdateDirective(unsigned NumClauses)
-      : ACCExecutableDirective(this, ACCUpdateDirectiveClass, ACCD_update,
-                               SourceLocation(), SourceLocation(), NumClauses,
-                               0, 0) {}
+      : ACCDirectiveStmt(this, ACCUpdateDirectiveClass, ACCD_update,
+                         SourceLocation(), SourceLocation(), NumClauses, 0, 0) {
+  }
 
 public:
   /// Creates directive.
@@ -365,7 +362,7 @@ public:
 
 /// This represents '#pragma acc enter data' directive.
 ///
-class ACCEnterDataDirective : public ACCExecutableDirective {
+class ACCEnterDataDirective : public ACCDirectiveStmt {
   friend class ASTStmtReader;
 
   /// Build directive with the given start and end location.
@@ -376,15 +373,14 @@ class ACCEnterDataDirective : public ACCExecutableDirective {
   ///
   ACCEnterDataDirective(SourceLocation StartLoc, SourceLocation EndLoc,
                         unsigned NumClauses)
-      : ACCExecutableDirective(this, ACCEnterDataDirectiveClass,
-                               ACCD_enter_data, StartLoc, EndLoc, NumClauses, 0,
-                               0) {}
+      : ACCDirectiveStmt(this, ACCEnterDataDirectiveClass, ACCD_enter_data,
+                         StartLoc, EndLoc, NumClauses, 0, 0) {}
 
   /// Build an empty directive.
   explicit ACCEnterDataDirective(unsigned NumClauses)
-      : ACCExecutableDirective(this, ACCEnterDataDirectiveClass,
-                               ACCD_enter_data, SourceLocation(),
-                               SourceLocation(), NumClauses, 0, 0) {}
+      : ACCDirectiveStmt(this, ACCEnterDataDirectiveClass, ACCD_enter_data,
+                         SourceLocation(), SourceLocation(), NumClauses, 0, 0) {
+  }
 
 public:
   /// Creates directive.
@@ -413,7 +409,7 @@ public:
 
 /// This represents '#pragma acc exit data' directive.
 ///
-class ACCExitDataDirective : public ACCExecutableDirective {
+class ACCExitDataDirective : public ACCDirectiveStmt {
   friend class ASTStmtReader;
 
   /// Build directive with the given start and end location.
@@ -424,14 +420,14 @@ class ACCExitDataDirective : public ACCExecutableDirective {
   ///
   ACCExitDataDirective(SourceLocation StartLoc, SourceLocation EndLoc,
                        unsigned NumClauses)
-      : ACCExecutableDirective(this, ACCExitDataDirectiveClass, ACCD_exit_data,
-                               StartLoc, EndLoc, NumClauses, 0, 0) {}
+      : ACCDirectiveStmt(this, ACCExitDataDirectiveClass, ACCD_exit_data,
+                         StartLoc, EndLoc, NumClauses, 0, 0) {}
 
   /// Build an empty directive.
   explicit ACCExitDataDirective(unsigned NumClauses)
-      : ACCExecutableDirective(this, ACCExitDataDirectiveClass, ACCD_exit_data,
-                               SourceLocation(), SourceLocation(), NumClauses,
-                               0, 0) {}
+      : ACCDirectiveStmt(this, ACCExitDataDirectiveClass, ACCD_exit_data,
+                         SourceLocation(), SourceLocation(), NumClauses, 0, 0) {
+  }
 
 public:
   /// Creates directive.
@@ -460,7 +456,7 @@ public:
 
 /// This represents '#pragma acc data' directive.
 ///
-class ACCDataDirective : public ACCExecutableDirective {
+class ACCDataDirective : public ACCDirectiveStmt {
   friend class ASTStmtReader;
 
   /// Build directive with the given start and end location.
@@ -471,16 +467,14 @@ class ACCDataDirective : public ACCExecutableDirective {
   ///
   ACCDataDirective(SourceLocation StartLoc, SourceLocation EndLoc,
                    unsigned NumClauses)
-      : ACCExecutableDirective(this, ACCDataDirectiveClass, ACCD_data,
-                               StartLoc, EndLoc, NumClauses, 0, 1)
-        {}
+      : ACCDirectiveStmt(this, ACCDataDirectiveClass, ACCD_data, StartLoc,
+                         EndLoc, NumClauses, 0, 1) {}
 
   /// Build an empty directive.
   explicit ACCDataDirective(unsigned NumClauses)
-      : ACCExecutableDirective(this, ACCDataDirectiveClass, ACCD_data,
-                               SourceLocation(), SourceLocation(), NumClauses,
-                               0, 1)
-        {}
+      : ACCDirectiveStmt(this, ACCDataDirectiveClass, ACCD_data,
+                         SourceLocation(), SourceLocation(), NumClauses, 0, 1) {
+  }
 
 public:
   /// Creates directive.
@@ -509,7 +503,7 @@ public:
 
 /// This represents '#pragma acc parallel' directive.
 ///
-class ACCParallelDirective : public ACCExecutableDirective {
+class ACCParallelDirective : public ACCDirectiveStmt {
   friend class ASTStmtReader;
   bool NestedWorkerPartitioning = false;
 
@@ -521,16 +515,14 @@ class ACCParallelDirective : public ACCExecutableDirective {
   ///
   ACCParallelDirective(SourceLocation StartLoc, SourceLocation EndLoc,
                        unsigned NumClauses)
-      : ACCExecutableDirective(this, ACCParallelDirectiveClass, ACCD_parallel,
-                               StartLoc, EndLoc, NumClauses, 0, 1)
-        {}
+      : ACCDirectiveStmt(this, ACCParallelDirectiveClass, ACCD_parallel,
+                         StartLoc, EndLoc, NumClauses, 0, 1) {}
 
   /// Build an empty directive.
   explicit ACCParallelDirective(unsigned NumClauses)
-      : ACCExecutableDirective(this, ACCParallelDirectiveClass, ACCD_parallel,
-                               SourceLocation(), SourceLocation(), NumClauses,
-                               0, 1)
-        {}
+      : ACCDirectiveStmt(this, ACCParallelDirectiveClass, ACCD_parallel,
+                         SourceLocation(), SourceLocation(), NumClauses, 0, 1) {
+  }
 
   /// Record whether a (separate or combined with this directive) acc loop
   /// directive with worker partitioning is nested here.
@@ -722,7 +714,7 @@ public:
 /// with the variables 'a' and 'b' and 'reduction' with operator '+' and
 /// variables 'c' and 'd'.
 ///
-class ACCLoopDirective : public ACCExecutableDirective {
+class ACCLoopDirective : public ACCDirectiveStmt {
   friend class ASTStmtReader;
   MutableArrayRef<VarDecl *> LCVs;
   ACCPartitioningKind Partitioning;
@@ -751,10 +743,10 @@ class ACCLoopDirective : public ACCExecutableDirective {
   ///
   ACCLoopDirective(SourceLocation StartLoc, SourceLocation EndLoc,
                    unsigned NumClauses, unsigned NumLCVs)
-      : ACCExecutableDirective(this, ACCLoopDirectiveClass, ACCD_loop,
-                               StartLoc, EndLoc, NumClauses,
-                               /*MaxAddClauses*/ 1, /*NumChildren*/ 1),
-        LCVs(reserveLCVs(this, NumClauses, /*MaxAddClauses*/ 1, NumLCVs)) {}
+      : ACCDirectiveStmt(this, ACCLoopDirectiveClass, ACCD_loop, StartLoc,
+                         EndLoc, NumClauses, /*MaxAddClauses=*/1,
+                         /*NumChildren=*/1),
+        LCVs(reserveLCVs(this, NumClauses, /*MaxAddClauses=*/1, NumLCVs)) {}
 
   /// Build an empty directive.
   ///
@@ -765,10 +757,10 @@ class ACCLoopDirective : public ACCExecutableDirective {
   ///        directive.
   ///
   explicit ACCLoopDirective(unsigned NumClauses, unsigned NumLCVs)
-      : ACCExecutableDirective(this, ACCLoopDirectiveClass, ACCD_loop,
-                               SourceLocation(), SourceLocation(), NumClauses,
-                               /*MaxAddClauses*/ 0, /*NumChildren*/ 1),
-        LCVs(reserveLCVs(this, NumClauses, /*MaxAddClauses*/ 0, NumLCVs)) {}
+      : ACCDirectiveStmt(this, ACCLoopDirectiveClass, ACCD_loop,
+                         SourceLocation(), SourceLocation(), NumClauses,
+                         /*MaxAddClauses=*/0, /*NumChildren=*/1),
+        LCVs(reserveLCVs(this, NumClauses, /*MaxAddClauses=*/0, NumLCVs)) {}
 
   /// Set the loop control variables that are assigned but not declared in the
   /// inits of the for loops associated with the directive.
@@ -857,7 +849,7 @@ public:
 /// with the variables 'a' and 'b' and 'reduction' with operator '+' and
 /// variables 'c' and 'd'.
 ///
-class ACCParallelLoopDirective : public ACCExecutableDirective {
+class ACCParallelLoopDirective : public ACCDirectiveStmt {
   /// Build directive with the given start and end location.
   ///
   /// \param StartLoc Starting location of the directive (directive keyword).
@@ -866,15 +858,15 @@ class ACCParallelLoopDirective : public ACCExecutableDirective {
   ///
   ACCParallelLoopDirective(SourceLocation StartLoc, SourceLocation EndLoc,
                            unsigned NumClauses)
-      : ACCExecutableDirective(this, ACCParallelLoopDirectiveClass,
-                               ACCD_parallel_loop, StartLoc, EndLoc,
-                               NumClauses, 0, 1) {}
+      : ACCDirectiveStmt(this, ACCParallelLoopDirectiveClass,
+                         ACCD_parallel_loop, StartLoc, EndLoc, NumClauses, 0,
+                         1) {}
 
   /// Build an empty directive.
   explicit ACCParallelLoopDirective(unsigned NumClauses)
-      : ACCExecutableDirective(this, ACCParallelLoopDirectiveClass,
-                               ACCD_parallel_loop, SourceLocation(),
-                               SourceLocation(), NumClauses, 0, 1) {}
+      : ACCDirectiveStmt(this, ACCParallelLoopDirectiveClass,
+                         ACCD_parallel_loop, SourceLocation(), SourceLocation(),
+                         NumClauses, 0, 1) {}
 
 public:
   /// Creates directive.

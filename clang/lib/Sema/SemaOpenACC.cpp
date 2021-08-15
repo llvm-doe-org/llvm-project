@@ -699,7 +699,7 @@ namespace {
 /// document.
 class ImplicitGangAdder : public StmtVisitor<ImplicitGangAdder> {
 public:
-  void VisitACCExecutableDirective(ACCExecutableDirective *D) {
+  void VisitACCDirectiveStmt(ACCDirectiveStmt *D) {
     if (isOpenACCLoopDirective(D->getDirectiveKind())) {
       auto *LD = cast<ACCLoopDirective>(D);
       ACCPartitioningKind Part = LD->getPartitioning();
@@ -904,8 +904,8 @@ public:
           //
           // See the section "Loop Control Variables" in the Clang OpenACC
           // design document for the interpretation used here.
-          // Sema::ActOnOpenACCExecutableDirective handles the case without a
-          // seq clause.
+          // Sema::ActOnOpenACCDirectiveStmt handles the case without a seq
+          // clause.
           assert((!Stack->hasLoopControlVariable(VD) ||
                   Stack->getLoopPartitioning().hasSeqExplicit()) &&
                  "expected predetermined private for loop control variable "
@@ -959,7 +959,7 @@ public:
   void VisitMemberExpr(MemberExpr *E) {
     Visit(E->getBase());
   }
-  void VisitACCExecutableDirective(ACCExecutableDirective *D) {
+  void VisitACCDirectiveStmt(ACCDirectiveStmt *D) {
     // Push space for local definitions in this construct.  It's important to
     // force a copy construct call here so that, if the vector is resized, the
     // pass-by-reference parameter isn't invalidated before it's copied.
@@ -1122,7 +1122,7 @@ public:
       LocalDefinitions.back().insert(*I);
     BaseVisitor::VisitDeclStmt(S);
   }
-  void VisitACCExecutableDirective(ACCExecutableDirective *D) {
+  void VisitACCDirectiveStmt(ACCDirectiveStmt *D) {
     // If this is an acc loop, compute gang reductions implied here.
     if (isOpenACCLoopDirective(D->getDirectiveKind())) {
       for (ACCReductionClause *C : D->getClausesOfKind<ACCReductionClause>()) {
@@ -1238,7 +1238,7 @@ class NestedReductionChecker : public StmtVisitor<NestedReductionChecker> {
   bool Error = false;
 
 public:
-  void VisitACCExecutableDirective(ACCExecutableDirective *D) {
+  void VisitACCDirectiveStmt(ACCDirectiveStmt *D) {
     // Push space for privates in this construct.  It's important to force a
     // copy construct call here so that, if the vector is resized, the
     // pass-by-reference parameter isn't invalidated before it's copied.
@@ -1416,9 +1416,10 @@ bool Sema::StartOpenACCAssociatedStatement(OpenACCDirectiveKind DKind,
 
 bool Sema::EndOpenACCAssociatedStatement() { return false; }
 
-StmtResult Sema::ActOnOpenACCExecutableDirective(
-    OpenACCDirectiveKind DKind, ArrayRef<ACCClause *> Clauses,
-    Stmt *AStmt, SourceLocation StartLoc, SourceLocation EndLoc) {
+StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
+                                           ArrayRef<ACCClause *> Clauses,
+                                           Stmt *AStmt, SourceLocation StartLoc,
+                                           SourceLocation EndLoc) {
   StmtResult Res = StmtError();
 
   // Our strategy for combined directives is to "act on" the clauses (already
@@ -1838,7 +1839,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
       Diag(LoopStmt->getBeginLoc(), diag::err_acc_not_for)
           << getOpenACCName(DirStack->getRealDirective());
       auto CollapseClauses =
-          ACCExecutableDirective::getClausesOfKind<ACCCollapseClause>(Clauses);
+          ACCDirectiveStmt::getClausesOfKind<ACCCollapseClause>(Clauses);
       if (CollapseClauses.begin() != CollapseClauses.end()) {
         Expr *E = CollapseClauses.begin()->getCollapse();
         Diag(E->getExprLoc(), diag::note_acc_collapse_expr)
@@ -1890,8 +1891,8 @@ StmtResult Sema::ActOnOpenACCParallelLoopDirective(
   }
 
   // Build the effective loop directive.
-  StmtResult Res = ActOnOpenACCExecutableDirective(ACCD_loop, LoopClauses,
-                                                   AStmt, StartLoc, EndLoc);
+  StmtResult Res = ActOnOpenACCDirectiveStmt(ACCD_loop, LoopClauses, AStmt,
+                                             StartLoc, EndLoc);
   // The second DirStack->pop() happens in EndOpenACCDABlock.
   DirStack->pop();
   if (Res.isInvalid())
@@ -1899,8 +1900,8 @@ StmtResult Sema::ActOnOpenACCParallelLoopDirective(
   ACCLoopDirective *LoopDir = cast<ACCLoopDirective>(Res.get());
 
   // Build the effective parallel directive.
-  Res = ActOnOpenACCExecutableDirective(ACCD_parallel, ParallelClauses,
-                                        LoopDir, StartLoc, EndLoc);
+  Res = ActOnOpenACCDirectiveStmt(ACCD_parallel, ParallelClauses, LoopDir,
+                                  StartLoc, EndLoc);
   if (Res.isInvalid())
     return StmtError();
   ACCParallelDirective *ParallelDir = cast<ACCParallelDirective>(Res.get());

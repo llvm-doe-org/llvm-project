@@ -2576,7 +2576,7 @@ void ASTStmtWriter::VisitOMPMaskedDirective(OMPMaskedDirective *D) {
 // OpenACC Directives.
 //===----------------------------------------------------------------------===//
 
-void ASTStmtWriter::VisitACCExecutableDirective(ACCExecutableDirective *E) {
+void ASTStmtWriter::VisitACCDirectiveStmt(ACCDirectiveStmt *E) {
   Record.AddSourceLocation(E->getBeginLoc());
   Record.AddSourceLocation(E->getEndLoc());
   for (unsigned i = 0; i < E->getNumClauses(); ++i)
@@ -2595,35 +2595,35 @@ void ASTStmtWriter::VisitACCExecutableDirective(ACCExecutableDirective *E) {
 void ASTStmtWriter::VisitACCUpdateDirective(ACCUpdateDirective *D) {
   VisitStmt(D);
   Record.push_back(D->getNumClauses());
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
   Code = serialization::STMT_ACC_UPDATE_DIRECTIVE;
 }
 
 void ASTStmtWriter::VisitACCEnterDataDirective(ACCEnterDataDirective *D) {
   VisitStmt(D);
   Record.push_back(D->getNumClauses());
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
   Code = serialization::STMT_ACC_ENTER_DATA_DIRECTIVE;
 }
 
 void ASTStmtWriter::VisitACCExitDataDirective(ACCExitDataDirective *D) {
   VisitStmt(D);
   Record.push_back(D->getNumClauses());
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
   Code = serialization::STMT_ACC_EXIT_DATA_DIRECTIVE;
 }
 
 void ASTStmtWriter::VisitACCDataDirective(ACCDataDirective *D) {
   VisitStmt(D);
   Record.push_back(D->getNumClauses());
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
   Code = serialization::STMT_ACC_DATA_DIRECTIVE;
 }
 
 void ASTStmtWriter::VisitACCParallelDirective(ACCParallelDirective *D) {
   VisitStmt(D);
   Record.push_back(D->getNumClauses());
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
   Code = serialization::STMT_ACC_PARALLEL_DIRECTIVE;
   Record.push_back(D->getNestedWorkerPartitioning());
 }
@@ -2633,7 +2633,7 @@ void ASTStmtWriter::VisitACCLoopDirective(ACCLoopDirective *D) {
   Record.push_back(D->getNumClauses());
   const ArrayRef<VarDecl *> &LCVs = D->getLoopControlVariables();
   Record.push_back(LCVs.size());
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
   for (VarDecl *LCV : LCVs)
     Record.AddDeclRef(LCV);
   Code = serialization::STMT_ACC_LOOP_DIRECTIVE;
@@ -2648,7 +2648,7 @@ void ASTStmtWriter::VisitACCParallelLoopDirective(
     ACCParallelLoopDirective *D) {
   VisitStmt(D);
   Record.push_back(D->getNumClauses());
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
   Code = serialization::STMT_ACC_PARALLEL_LOOP_DIRECTIVE;
 }
 

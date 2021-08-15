@@ -505,7 +505,7 @@ private:
   /// Process clauses with pre-initis.
   bool VisitOMPClauseWithPreInit(OMPClauseWithPreInit *Node);
   bool VisitOMPClauseWithPostUpdate(OMPClauseWithPostUpdate *Node);
-  bool TraverseACCExecutableDirective(ACCExecutableDirective *S);
+  bool TraverseACCDirectiveStmt(ACCDirectiveStmt *S);
   bool TraverseACCClause(ACCClause *C);
 #define OPENACC_CLAUSE(Name, Class) bool Visit##Class(Class *C);
 #include "clang/Basic/OpenACCKinds.def"
@@ -3647,34 +3647,31 @@ bool RecursiveASTVisitor<Derived>::VisitOMPFilterClause(OMPFilterClause *C) {
 
 // OpenACC directives.
 template <typename Derived>
-bool RecursiveASTVisitor<Derived>::TraverseACCExecutableDirective(
-    ACCExecutableDirective *S) {
+bool RecursiveASTVisitor<Derived>::TraverseACCDirectiveStmt(
+    ACCDirectiveStmt *S) {
   for (auto *C : S->clauses()) {
     TRY_TO(TraverseACCClause(C));
   }
   return true;
 }
 
-DEF_TRAVERSE_STMT(ACCUpdateDirective,
-                  { TRY_TO(TraverseACCExecutableDirective(S)); })
+DEF_TRAVERSE_STMT(ACCUpdateDirective, { TRY_TO(TraverseACCDirectiveStmt(S)); })
 
 DEF_TRAVERSE_STMT(ACCEnterDataDirective,
-                  { TRY_TO(TraverseACCExecutableDirective(S)); })
+                  { TRY_TO(TraverseACCDirectiveStmt(S)); })
 
 DEF_TRAVERSE_STMT(ACCExitDataDirective,
-                  { TRY_TO(TraverseACCExecutableDirective(S)); })
+                  { TRY_TO(TraverseACCDirectiveStmt(S)); })
 
-DEF_TRAVERSE_STMT(ACCDataDirective,
-                  { TRY_TO(TraverseACCExecutableDirective(S)); })
+DEF_TRAVERSE_STMT(ACCDataDirective, { TRY_TO(TraverseACCDirectiveStmt(S)); })
 
 DEF_TRAVERSE_STMT(ACCParallelDirective,
-                  { TRY_TO(TraverseACCExecutableDirective(S)); })
+                  { TRY_TO(TraverseACCDirectiveStmt(S)); })
 
-DEF_TRAVERSE_STMT(ACCLoopDirective,
-                  { TRY_TO(TraverseACCExecutableDirective(S)); })
+DEF_TRAVERSE_STMT(ACCLoopDirective, { TRY_TO(TraverseACCDirectiveStmt(S)); })
 
 DEF_TRAVERSE_STMT(ACCParallelLoopDirective,
-                  { TRY_TO(TraverseACCExecutableDirective(S)); })
+                  { TRY_TO(TraverseACCDirectiveStmt(S)); })
 
 // OpenACC clauses.
 template <typename Derived>

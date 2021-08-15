@@ -1275,8 +1275,7 @@ void ACCClauseProfiler::VisitACCCollapseClause(const ACCCollapseClause *C) {
     Profiler->VisitStmt(C->getCollapse());
 }
 
-void
-StmtProfiler::VisitACCExecutableDirective(const ACCExecutableDirective *S) {
+void StmtProfiler::VisitACCDirectiveStmt(const ACCDirectiveStmt *S) {
   VisitStmt(S);
   ACCClauseProfiler P(this);
   ArrayRef<ACCClause *> Clauses = S->clauses();
@@ -1287,32 +1286,32 @@ StmtProfiler::VisitACCExecutableDirective(const ACCExecutableDirective *S) {
 }
 
 void StmtProfiler::VisitACCUpdateDirective(const ACCUpdateDirective *S) {
-  VisitACCExecutableDirective(S);
+  VisitACCDirectiveStmt(S);
 }
 
 void StmtProfiler::VisitACCEnterDataDirective(const ACCEnterDataDirective *S) {
-  VisitACCExecutableDirective(S);
+  VisitACCDirectiveStmt(S);
 }
 
 void StmtProfiler::VisitACCExitDataDirective(const ACCExitDataDirective *S) {
-  VisitACCExecutableDirective(S);
+  VisitACCDirectiveStmt(S);
 }
 
 void StmtProfiler::VisitACCDataDirective(const ACCDataDirective *S) {
-  VisitACCExecutableDirective(S);
+  VisitACCDirectiveStmt(S);
 }
 
 void StmtProfiler::VisitACCParallelDirective(const ACCParallelDirective *S) {
-  VisitACCExecutableDirective(S);
+  VisitACCDirectiveStmt(S);
 }
 
 void StmtProfiler::VisitACCLoopDirective(const ACCLoopDirective *S) {
-  VisitACCExecutableDirective(S);
+  VisitACCDirectiveStmt(S);
 }
 
 void StmtProfiler::VisitACCParallelLoopDirective(
     const ACCParallelLoopDirective *S) {
-  VisitACCExecutableDirective(S);
+  VisitACCDirectiveStmt(S);
 }
 
 void StmtProfiler::VisitExpr(const Expr *S) {

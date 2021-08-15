@@ -1,4 +1,4 @@
-//===- StmtDirective.h - Base class for directives --------------*- C++ -*-===//
+//===- DirectiveStmt.h - Base class for directives -------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -8,19 +8,19 @@
 //===----------------------------------------------------------------------===//
 /// \file
 /// This file defines an AST base class for OpenMP and OpenACC executable
-/// directives.
+/// directives and constructs.
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_AST_STMTDIRECTIVE_H
-#define LLVM_CLANG_AST_STMTDIRECTIVE_H
+#ifndef LLVM_CLANG_AST_DIRECTIVESTMT_H
+#define LLVM_CLANG_AST_DIRECTIVESTMT_H
 
 #include "clang/AST/Expr.h"
 #include "clang/Basic/SourceLocation.h"
 
 namespace clang {
 /// This is a base class for representing a single OpenMP or OpenACC
-/// executable directive.
+/// executable directive or construct.
 ///
 /// TODO: Much more common functionality could be migrated into this class.
 /// However, until OpenACC support goes upstream, to facilitate merging
@@ -30,12 +30,13 @@ namespace clang {
 /// functionality and that already appears in upstream OpenMP, CRTP could be
 /// used to expose it here.  For example, we could have a getAssociatedStmt
 /// here that calls static_cast<Derived&>(*this).getAssociatedStmt().)
-class ExecutableDirective : public Stmt {
+class DirectiveStmt : public Stmt {
 protected:
   /// Build instance of directive.
   ///
   /// \param SC Statement class.
-  ExecutableDirective(StmtClass SC) : Stmt(SC) {}
+  DirectiveStmt(StmtClass SC) : Stmt(SC) {}
+
 public:
   /// Gets the source range covering the '#pragma' through the end of any
   /// associated statement but potentially without any final semicolon.
@@ -65,8 +66,8 @@ public:
   }
 
   static bool classof(const Stmt *S) {
-    return S->getStmtClass() >= firstExecutableDirectiveConstant &&
-           S->getStmtClass() <= lastExecutableDirectiveConstant;
+    return S->getStmtClass() >= firstDirectiveStmtConstant &&
+           S->getStmtClass() <= lastDirectiveStmtConstant;
   }
 };
 } // end namespace clang

@@ -211,11 +211,11 @@ int main() {
   //
   // Check for corruption due to the way Clang records the end location of a
   // statement.  RewriteOpenACC and the getConstructRange function it calls
-  // on ACCExecutableDirective have to handle many cases.  Important issues
-  // include whether the end location of the outer ACCExecutableDirective's
-  // associated statement is actually for its last token or the token before
-  // that, whether each of those tokens is represented by any descendant node,
-  // and whether each of those tokens is part of a macro expansion.
+  // on ACCDirectiveStmt have to handle many cases.  Important issues include
+  // whether the end location of the outer ACCDirectiveStmt's associated
+  // statement is actually for its last token or the token before that, whether
+  // each of those tokens is represented by any descendant node, and whether
+  // each of those tokens is part of a macro expansion.
   // fopenacc-print-messages.c covers macro expansion cases that cannot be
   // handled and so produce error diagnostics.
   //

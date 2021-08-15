@@ -7165,8 +7165,7 @@ void CodeGenFunction::EmitSimpleOMPExecutableDirective(
   checkForLastprivateConditionalUpdate(*this, D);
 }
 
-void
-CodeGenFunction::EmitACCExecutableDirective(const ACCExecutableDirective &D) {
+void CodeGenFunction::EmitACCDirectiveStmt(const ACCDirectiveStmt &D) {
   CGM.getOpenMPRuntime().enterOpenACCConstruct();
   EmitStmt(D.getOMPNode());
   CGM.getOpenMPRuntime().exitOpenACCConstruct();

@@ -15,10 +15,10 @@
 #define LLVM_CLANG_AST_STMTOPENMP_H
 
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/DirectiveStmt.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/StmtCXX.h"
-#include "clang/AST/StmtDirective.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/SourceLocation.h"
 
@@ -263,7 +263,7 @@ public:
 /// This is a basic class for representing single OpenMP executable
 /// directive.
 ///
-class OMPExecutableDirective : public ExecutableDirective {
+class OMPExecutableDirective : public DirectiveStmt {
   friend class ASTStmtReader;
   friend class ASTStmtWriter;
 
@@ -294,7 +294,7 @@ protected:
   ///
   OMPExecutableDirective(StmtClass SC, OpenMPDirectiveKind K,
                          SourceLocation StartLoc, SourceLocation EndLoc)
-      : ExecutableDirective(SC), Kind(K), StartLoc(std::move(StartLoc)),
+      : DirectiveStmt(SC), Kind(K), StartLoc(std::move(StartLoc)),
         EndLoc(std::move(EndLoc)) {}
 
   template <typename T, typename... Params>

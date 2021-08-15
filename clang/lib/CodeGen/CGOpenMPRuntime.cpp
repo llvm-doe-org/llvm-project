@@ -10428,7 +10428,7 @@ void CGOpenMPRuntime::scanForTargetRegionsFunctions(const Stmt *S,
   if (!S)
     return;
 
-  if (const auto *A = dyn_cast<ACCExecutableDirective>(S)) {
+  if (const auto *A = dyn_cast<ACCDirectiveStmt>(S)) {
     scanForTargetRegionsFunctions(A->getOMPNode(), ParentName);
     return;
   }

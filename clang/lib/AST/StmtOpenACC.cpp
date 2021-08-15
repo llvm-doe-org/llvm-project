@@ -18,13 +18,13 @@
 
 using namespace clang;
 
-void ACCExecutableDirective::setClauses(ArrayRef<ACCClause *> Clauses) {
+void ACCDirectiveStmt::setClauses(ArrayRef<ACCClause *> Clauses) {
   assert(Clauses.size() == NumClauses &&
          "Number of clauses is not the same as specified during construction");
   std::copy(Clauses.begin(), Clauses.end(), getClauses().begin());
 }
 
-void ACCExecutableDirective::addClause(ACCClause *Clause) {
+void ACCDirectiveStmt::addClause(ACCClause *Clause) {
   assert(MaxAddClauses > 0 &&
          "Number of clauses is too many for the preallocated buffer");
   getClauseStorage()[NumClauses++] = Clause;
@@ -51,8 +51,8 @@ void ACCExecutableDirective::addClause(ACCClause *Clause) {
 // read somewhere about a clang mechanism or extension for that) so that large
 // strings wouldn't need to be generated and so that nested OpenACC regions
 // could be skipped entirely during the diff.
-bool ACCExecutableDirective::ompStmtPrintsDifferently(
-    const PrintingPolicy &Policy, const ASTContext *Context) {
+bool ACCDirectiveStmt::ompStmtPrintsDifferently(const PrintingPolicy &Policy,
+                                                const ASTContext *Context) {
   if (!hasAssociatedStmt())
     return false;
   Stmt *ACCStmt = getAssociatedStmt();
@@ -63,7 +63,7 @@ bool ACCExecutableDirective::ompStmtPrintsDifferently(
   // via the OpenACC node but progressively indented when printing the OpenMP
   // nodes directly.  A difference in indentation is not a good reason to
   // return true.
-  if (auto *ACCDir = dyn_cast<ACCExecutableDirective>(ACCStmt)) {
+  if (auto *ACCDir = dyn_cast<ACCDirectiveStmt>(ACCStmt)) {
     if (ACCDir->hasOMPNode())
       ACCStmt = ACCDir->getOMPNode();
   }

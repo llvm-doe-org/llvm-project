@@ -4742,7 +4742,7 @@ private:
   llvm::Value *FormResolverCondition(const MultiVersionResolverOption &RO);
 
 public:
-  void EmitACCExecutableDirective(const ACCExecutableDirective &D);
+  void EmitACCDirectiveStmt(const ACCDirectiveStmt &D);
 };
 
 /// TargetFeatures - This class is used to check whether the builtin function

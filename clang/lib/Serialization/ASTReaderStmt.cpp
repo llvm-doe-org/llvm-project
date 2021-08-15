@@ -2619,7 +2619,7 @@ void ASTStmtReader::VisitOMPMaskedDirective(OMPMaskedDirective *D) {
 // OpenACC Directives.
 //===----------------------------------------------------------------------===//
 
-void ASTStmtReader::VisitACCExecutableDirective(ACCExecutableDirective *E) {
+void ASTStmtReader::VisitACCDirectiveStmt(ACCDirectiveStmt *E) {
   E->setLocStart(readSourceLocation());
   E->setLocEnd(readSourceLocation());
   SmallVector<ACCClause *, 5> Clauses;
@@ -2630,7 +2630,7 @@ void ASTStmtReader::VisitACCExecutableDirective(ACCExecutableDirective *E) {
     E->setAssociatedStmt(Record.readSubStmt());
   Stmt *EffectiveDirective = Record.readSubStmt();
   if (EffectiveDirective)
-    E->setEffectiveDirective(cast<ACCExecutableDirective>(EffectiveDirective));
+    E->setEffectiveDirective(cast<ACCDirectiveStmt>(EffectiveDirective));
   Stmt *OMPNode = Record.readSubStmt();
   bool DirectiveDiscardedForOMP = OMPNode && Record.readInt();
   E->setOMPNode(OMPNode, DirectiveDiscardedForOMP);
@@ -2640,35 +2640,35 @@ void ASTStmtReader::VisitACCUpdateDirective(ACCUpdateDirective *D) {
   VisitStmt(D);
   // The NumClauses field was read in ReadStmtFromStream.
   Record.skipInts(1);
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
 }
 
 void ASTStmtReader::VisitACCEnterDataDirective(ACCEnterDataDirective *D) {
   VisitStmt(D);
   // The NumClauses field was read in ReadStmtFromStream.
   Record.skipInts(1);
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
 }
 
 void ASTStmtReader::VisitACCExitDataDirective(ACCExitDataDirective *D) {
   VisitStmt(D);
   // The NumClauses field was read in ReadStmtFromStream.
   Record.skipInts(1);
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
 }
 
 void ASTStmtReader::VisitACCDataDirective(ACCDataDirective *D) {
   VisitStmt(D);
   // The NumClauses field was read in ReadStmtFromStream.
   Record.skipInts(1);
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
 }
 
 void ASTStmtReader::VisitACCParallelDirective(ACCParallelDirective *D) {
   VisitStmt(D);
   // The NumClauses field was read in ReadStmtFromStream.
   Record.skipInts(1);
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
   D->setNestedWorkerPartitioning(Record.readInt());
 }
 
@@ -2676,7 +2676,7 @@ void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
   VisitStmt(D);
   // The NumClauses and NumLCVs fields were read in ReadStmtFromStream.
   Record.skipInts(2);
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
   uint64_t NumLCVs  = D->getLoopControlVariables().size();
   SmallVector<VarDecl *, 5> LCVs(NumLCVs);
   for (uint64_t I = 0; I < NumLCVs; ++I)
@@ -2694,7 +2694,7 @@ void ASTStmtReader::VisitACCParallelLoopDirective(ACCParallelLoopDirective *D)
   VisitStmt(D);
   // The NumClauses field was read in ReadStmtFromStream.
   Record.skipInts(1);
-  VisitACCExecutableDirective(D);
+  VisitACCDirectiveStmt(D);
 }
 
 //===----------------------------------------------------------------------===//

@@ -129,17 +129,15 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
   return nullptr;
 }
 
-///  Parsing of declarative or executable OpenACC directives.
+/// Parsing of OpenACC executable directives and constructs.
 ///
-///       executable-directive:
-///         annot_pragma_openacc
-///         'update' | 'enter data' | 'exit data' | 'data' | 'parallel' | 'loop'
-///         | 'parallel loop'
-///         {clause}
-///         annot_pragma_openacc_end
-///
-StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
-    ParsedStmtContext StmtCtx) {
+///   executable-directive:
+///     annot_pragma_openacc
+///     'update' | 'enter data' | 'exit data' | 'data' | 'parallel' | 'loop'
+///     | 'parallel loop'
+///     {clause}
+///     annot_pragma_openacc_end
+StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
   assert(Tok.is(tok::annot_pragma_openacc) && "Not an OpenACC directive!");
   ParenBraceBracketBalancer BalancerRAIIObj(*this);
   unsigned ScopeFlags =
@@ -195,7 +193,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
     if (HasAssociatedStatement)
       AssociatedStmt = ParseStatement();
     ErrorFound |= Actions.EndOpenACCAssociatedStatement();
-    Directive = Actions.ActOnOpenACCExecutableDirective(
+    Directive = Actions.ActOnOpenACCDirectiveStmt(
         DKind, Clauses, AssociatedStmt.get(), StartLoc, EndLoc);
 
     // Exit scope.
@@ -207,8 +205,7 @@ StmtResult Parser::ParseOpenACCDeclarativeOrExecutableDirective(
     if (!Actions.getDiagnostics().hasErrorOccurred()) {
       assert(!Directive.isInvalid()
              && "Invalid OpenACC directive without diagnostic");
-      if (Actions.transformACCToOMP(cast<ACCExecutableDirective>(
-              Directive.get())))
+      if (Actions.transformACCToOMP(cast<ACCDirectiveStmt>(Directive.get())))
         ErrorFound = true;
     }
     if (ErrorFound)

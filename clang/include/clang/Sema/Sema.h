@@ -11283,9 +11283,10 @@ public:
   void ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
                                       Scope *CurScope);
 
-  StmtResult ActOnOpenACCExecutableDirective(
-      OpenACCDirectiveKind Kind, ArrayRef<ACCClause *> Clauses, Stmt *AStmt,
-      SourceLocation StartLoc, SourceLocation EndLoc);
+  StmtResult ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind Kind,
+                                       ArrayRef<ACCClause *> Clauses,
+                                       Stmt *AStmt, SourceLocation StartLoc,
+                                       SourceLocation EndLoc);
   /// Called on well-formed '\#pragma acc update'.
   StmtResult ActOnOpenACCUpdateDirective(ArrayRef<ACCClause *> Clauses,
                                          SourceLocation StartLoc,
@@ -11463,7 +11464,7 @@ public:
   /// \c getOMPNode then returns the corresponding OpenMP directive.  Otherwise,
   /// this function does nothing so that we only transform each OpenACC region
   /// to OpenMP once, in its entirety.
-  bool transformACCToOMP(ACCExecutableDirective *D);
+  bool transformACCToOMP(ACCDirectiveStmt *D);
 
   /// The kind of conversion being performed.
   enum CheckedConversionKind {
