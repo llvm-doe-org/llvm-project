@@ -1293,6 +1293,59 @@ namespace {
     }
   };
 
+  class OMPDeclAttrArgument : public SimpleArgument {
+  public:
+    OMPDeclAttrArgument(const Record &Arg, StringRef Attr)
+        : SimpleArgument(Arg, Attr, "attr::Kind") {}
+    void writeAccessors(raw_ostream &OS) const override {
+      OS << "  " << getType() << " get" << getUpperName() << "() const {\n"
+         << "    return " << getLowerName() << ";\n"
+         << "  }\n"
+         << "  void checkOMPNodeKind() const {\n"
+         << "#ifndef NDEBUG\n"
+         << "    switch (" << getLowerName() << ") {\n"
+         << "#define ATTR(X)\n"
+         << "#define OMP_DECL_ATTR(X) \\\n"
+         << "    case attr::X:\n"
+         << "#include \"clang/Basic/AttrList.inc\"\n"
+         << "    case attr::UnknownAttr:\n"
+         << "      break;\n"
+         << "    default:\n"
+         << "      llvm_unreachable(\"expected OMPDeclAttr\");\n"
+         << "      break;\n"
+         << "    }\n"
+         << "#endif\n"
+         << "  }\n";
+    }
+    void writeCtorBody(raw_ostream &OS) const override {
+      OS << "    checkOMPNodeKind();\n";
+    }
+    void writeCtorDefaultInitializers(raw_ostream &OS) const override {
+      OS << getLowerName() << "(attr::UnknownAttr)";
+    }
+    void writePCHReadDecls(raw_ostream &OS) const override {
+      OS << "    " << getType() << " " << getLowerName() << " = readEnum<"
+         << getType() << ">();\n";
+    }
+    void writeDump(raw_ostream &OS) const override {
+      OS << "    OS << \" " << getUpperName() << "=\";\n"
+         << "    switch (SA->get" << getUpperName() << "()) {\n"
+         << "#define ATTR(X)\n"
+         << "#define OMP_DECL_ATTR(X) \\\n"
+         << "    case attr::X:        \\\n"
+         << "      OS << #X;          \\\n"
+         << "      break;\n"
+         << "#include \"clang/Basic/AttrList.inc\"\n"
+         << "    case attr::UnknownAttr:\n"
+         << "      OS << \"unknown\";\n"
+         << "      break;\n"
+         << "    default:\n"
+         << "      llvm_unreachable(\"expected OMPDeclAttr\");\n"
+         << "      break;\n"
+         << "    }\n";
+    }
+  };
+
 } // end anonymous namespace
 
 // Get arguments specified by Attr's "Args" field and by each super class Foo's
@@ -1367,6 +1420,8 @@ createArgument(const Record &Arg, StringRef Attr,
     Ptr = std::make_unique<VersionArgument>(Arg, Attr);
   else if (ArgName == "OMPTraitInfoArgument")
     Ptr = std::make_unique<SimpleArgument>(Arg, Attr, "OMPTraitInfo *");
+  else if (ArgName == "OMPDeclAttrArgument")
+    Ptr = std::make_unique<OMPDeclAttrArgument>(Arg, Attr);
 
   if (!Ptr) {
     // Search in reverse order so that the most-derived type is handled first.
@@ -2722,7 +2777,9 @@ static const AttrClassDescriptor AttrClassDescriptors[] = {
   { "INHERITABLE_ATTR", "InheritableAttr" },
   { "DECL_OR_TYPE_ATTR", "DeclOrTypeAttr" },
   { "INHERITABLE_PARAM_ATTR", "InheritableParamAttr" },
-  { "PARAMETER_ABI_ATTR", "ParameterABIAttr" }
+  { "PARAMETER_ABI_ATTR", "ParameterABIAttr" },
+  { "OMP_DECL_ATTR", "OMPDeclAttr" },
+  { "ACC_DECL_ATTR", "ACCDeclAttr" }
 };
 
 static void emitDefaultDefine(raw_ostream &OS, StringRef name,

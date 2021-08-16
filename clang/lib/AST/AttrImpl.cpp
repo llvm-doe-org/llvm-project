@@ -197,4 +197,60 @@ void OMPDeclareVariantAttr::printPrettyPragma(
   OS << " match(" << traitInfos << ")";
 }
 
+void ACCDeclAttr::setOMPNodeKind(attr::Kind K) {
+  switch (getKind()) {
+#define ATTR(X)
+#define ACC_DECL_ATTR(X)                                                       \
+  case attr::X:                                                                \
+    cast<X##Attr>(this)->setOMPNodeKind(K);                                    \
+    break;
+#include "clang/Basic/AttrList.inc"
+  default:
+    llvm_unreachable("expected ACCDeclAttr kind");
+  }
+}
+
+attr::Kind ACCDeclAttr::getOMPNodeKind() const {
+  switch (getKind()) {
+#define ATTR(X)
+#define ACC_DECL_ATTR(X)                                                       \
+  case attr::X:                                                                \
+    return cast<X##Attr>(this)->getOMPNodeKind();
+#include "clang/Basic/AttrList.inc"
+  default:
+    llvm_unreachable("expected ACCDeclAttr kind");
+  }
+}
+
+void ACCDeclAttr::setOMPNode(Decl *D, InheritableAttr *OMPNode) {
+  attr::Kind OMPNodeKind = OMPNode->getKind();
+  setOMPNodeKind(OMPNodeKind);
+#ifndef NDEBUG
+  assert(D->getAttr(getKind()) == this &&
+         "expected D to be the Decl on which this ACCDeclAttr appears");
+  OMPDeclAttr *OMPAttr = cast<OMPDeclAttr>(D->getAttr(OMPNodeKind));
+  assert(OMPNode == OMPAttr &&
+         "expected D to be the Decl on which OMPNode appears");
+  assert(OMPAttr->getIsOpenACCTranslation() &&
+         "expected OMPNode to be marked as an OpenACC translation");
+#endif
+}
+
+InheritableAttr *ACCDeclAttr::getOMPNode(Decl *D) const {
+  assert(D->getAttr(getKind()) == this &&
+         "expected D to be the Decl on which this ACCDeclAttr appears");
+  attr::Kind OMPNodeKind = getOMPNodeKind();
+  if (OMPNodeKind == attr::UnknownAttr)
+    return nullptr;
+  OMPDeclAttr *OMPAttr = cast<OMPDeclAttr>(D->getAttr(OMPNodeKind));
+  assert(OMPAttr->getIsOpenACCTranslation() &&
+         "expected ACCDeclAttr's OpenMP node to be marked as such");
+  return OMPAttr;
+}
+
+void ACCRoutineDeclAttr::printPrettyPragma(raw_ostream &OS,
+                                           const PrintingPolicy &Policy) const {
+  OS << ' ' << ConvertPartitioningTyToStr(getPartitioning());
+}
+
 #include "clang/AST/AttrImpl.inc"

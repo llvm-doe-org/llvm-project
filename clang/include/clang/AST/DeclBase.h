@@ -544,6 +544,8 @@ public:
     return hasAttrs() ? getSpecificAttr<T>(getAttrs()) : nullptr;
   }
 
+  Attr *getAttr(attr::Kind K) const;
+
   template<typename T> bool hasAttr() const {
     return hasAttrs() && hasSpecificAttr<T>(getAttrs());
   }

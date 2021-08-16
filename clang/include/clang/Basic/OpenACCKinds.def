@@ -112,6 +112,9 @@
 #ifndef OPENACC_PARALLEL_LOOP_CLAUSE
 #  define OPENACC_PARALLEL_LOOP_CLAUSE(Name)
 #endif
+#ifndef OPENACC_ROUTINE_CLAUSE
+#  define OPENACC_ROUTINE_CLAUSE(Name)
+#endif
 #ifndef OPENACC_UPDATE_PARENT
 #  define OPENACC_UPDATE_PARENT(Name)
 #endif
@@ -132,6 +135,9 @@
 #endif
 #ifndef OPENACC_PARALLEL_LOOP_PARENT
 #  define OPENACC_PARALLEL_LOOP_PARENT(Name)
+#endif
+#ifndef OPENACC_ROUTINE_PARENT
+#  define OPENACC_ROUTINE_PARENT(Name)
 #endif
 
 #define OPENACC_ALIASED_CLAUSE(Def, Name, Class) \
@@ -173,6 +179,7 @@ OPENACC_DIRECTIVE(data)
 OPENACC_DIRECTIVE(parallel)
 OPENACC_DIRECTIVE(loop)
 OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
+OPENACC_DIRECTIVE(routine)
 
 // Specifying and iterating OpenACC clauses, data attributes (DAs), data
 // mapping attributes (DMAs), data sharing attributes (DSAs), and clause
@@ -407,6 +414,9 @@ OPENACC_PARALLEL_LOOP_CLAUSE(worker)
 OPENACC_PARALLEL_LOOP_CLAUSE(vector)
 OPENACC_PARALLEL_LOOP_CLAUSE(collapse)
 
+// Explicit clauses allowed for OpenACC directive 'routine'.
+OPENACC_ROUTINE_CLAUSE(seq)
+
 // Parent directives allowed for 'update'.
 OPENACC_UPDATE_PARENT(unknown)
 OPENACC_UPDATE_PARENT(data)
@@ -439,6 +449,9 @@ OPENACC_LOOP_PARENT(parallel_loop)
 // Parent directives allowed for 'parallel_loop'.
 OPENACC_PARALLEL_LOOP_PARENT(unknown)
 OPENACC_PARALLEL_LOOP_PARENT(data)
+
+// Parent directives allowed for 'routine'.
+OPENACC_ROUTINE_PARENT(unknown)
 
 #undef OPENACC_DIRECTIVE
 #undef OPENACC_DIRECTIVE_EXT
@@ -473,6 +486,7 @@ OPENACC_PARALLEL_LOOP_PARENT(data)
 #undef OPENACC_PARALLEL_CLAUSE
 #undef OPENACC_LOOP_CLAUSE
 #undef OPENACC_PARALLEL_LOOP_CLAUSE
+#undef OPENACC_ROUTINE_CLAUSE
 #undef OPENACC_UPDATE_PARENT
 #undef OPENACC_ENTER_DATA_PARENT
 #undef OPENACC_EXIT_DATA_PARENT
@@ -480,6 +494,7 @@ OPENACC_PARALLEL_LOOP_PARENT(data)
 #undef OPENACC_PARALLEL_PARENT
 #undef OPENACC_LOOP_PARENT
 #undef OPENACC_PARALLEL_LOOP_PARENT
+#undef OPENACC_ROUTINE_PARENT
 #undef OPENACC_ALIASED_CLAUSE
 #undef OPENACC_CLAUSE_AND_DMA
 #undef OPENACC_CLAUSE_AND_DSA_MAPPABLE

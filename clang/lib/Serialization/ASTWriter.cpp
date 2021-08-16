@@ -4991,12 +4991,15 @@ void ASTWriter::WriteDeclUpdatesBlocks(RecordDataImpl &OffsetsRecord) {
         break;
       }
 
-      case UPD_DECL_MARKED_OPENMP_DECLARETARGET:
-        Record.push_back(D->getAttr<OMPDeclareTargetDeclAttr>()->getMapType());
-        Record.AddSourceRange(
-            D->getAttr<OMPDeclareTargetDeclAttr>()->getRange());
+      case UPD_DECL_MARKED_OPENMP_DECLARETARGET: {
+        OMPDeclareTargetDeclAttr *Attr = D->getAttr<OMPDeclareTargetDeclAttr>();
+        Record.push_back(Attr->getMapType());
+        Record.push_back(Attr->getDevType());
+        Record.push_back(Attr->getLevel());
+        Record.push_back(Attr->getIsOpenACCTranslation());
+        Record.AddSourceRange(Attr->getRange());
         break;
-
+      }
       case UPD_DECL_EXPORTED:
         Record.push_back(getSubmoduleID(Update.getModule()));
         break;

@@ -425,6 +425,14 @@ ASTMutationListener *Decl::getASTMutationListener() const {
   return getASTContext().getASTMutationListener();
 }
 
+Attr *Decl::getAttr(attr::Kind K) const {
+  for (Attr *A : getAttrs()) {
+    if (A->getKind() == K)
+      return A;
+  }
+  return nullptr;
+}
+
 unsigned Decl::getMaxAlignment() const {
   if (!hasAttrs())
     return 0;

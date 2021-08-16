@@ -23,30 +23,132 @@
 
 /* noerrs-no-diagnostics */
 
-// PRT:int main() {
-int main() {
-  // PRT-NEXT:  int non_const_expr = 2;
-  // PRT-NEXT:  int i;
-  int non_const_expr = 2;
-  int i;
+//      PRT:int i;
+// PRT-NEXT:int non_const_expr = 2;
+int i;
+int non_const_expr = 2;
 
-  //--------------------------------------------------
-  // Translatable constructs are translated before any error.
-  //--------------------------------------------------
+//--------------------------------------------------
+// Translatable directives are translated before any error.
+//--------------------------------------------------
 
+// PRT-NEXT:void beforeError() {
+void beforeError() {
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams
   //  PRT-O-NEXT:  #pragma omp target teams
   // PRT-OA-NEXT:  // #pragma acc parallel
-  //    PRT-NEXT:    ;
+  //    PRT-NEXT:  ;
   #pragma acc parallel
-    ;
+  ;
 
-  //--------------------------------------------------
-  // Directive in macro expansion: yes
-  // No associated statement.
-  //--------------------------------------------------
+  //  PRT-A-NEXT:  #pragma acc update device(i)
+  // PRT-AO-NEXT:  // #pragma omp target update to(present: i)
+  //  PRT-O-NEXT:  #pragma omp target update to(present: i)
+  // PRT-OA-NEXT:  // #pragma acc update device(i)
+  #pragma acc update device(i)
+}// PRT-NEXT:}
 
+//  PRT-A-NEXT:#pragma acc routine seq
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq
+//    PRT-NEXT:void beforeError_routine();
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq
+void beforeError_routine();
+
+//--------------------------------------------------
+// No directive.
+//
+// OpenMP directives are added to a function definition because an OpenACC
+// routine directive appears on a later declaration of that function.
+//--------------------------------------------------
+
+// PRT-NEXT:#define MAC void noDirective_routineWhole() {}
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:MAC
+// PRT-NEXT:#undef MAC
+#define MAC void noDirective_routineWhole() {}
+/* expected-error@+1 {{for implicit OpenACC routine directive, cannot rewrite associated function declaration that starts within a macro expansion}} */
+MAC
+#undef MAC
+
+// PRT-NEXT:#define MAC void
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:MAC noDirective_routineFirstToken() {}
+// PRT-NEXT:#undef MAC
+#define MAC void
+/* expected-error@+1 {{for implicit OpenACC routine directive, cannot rewrite associated function declaration that starts within a macro expansion}} */
+MAC noDirective_routineFirstToken() {}
+#undef MAC
+
+// PRT-NEXT:#define MAC {}
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:void noDirective_routineLastTwoTokens() MAC
+// PRT-NEXT:#undef MAC
+#define MAC {}
+/* expected-error@+1 {{for implicit OpenACC routine directive, cannot rewrite associated function declaration that ends within a macro expansion}} */
+void noDirective_routineLastTwoTokens() MAC
+#undef MAC
+
+// PRT-NEXT:#define MAC }
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:void noDirective_routineLastToken() {MAC
+// PRT-NEXT:#undef MAC
+#define MAC }
+/* expected-error@+1 {{for implicit OpenACC routine directive, cannot rewrite associated function declaration that ends within a macro expansion}} */
+void noDirective_routineLastToken() {MAC
+#undef MAC
+
+//  PRT-A-NEXT:#pragma acc routine seq
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq
+//    PRT-NEXT:void noDirective_routineWhole();
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq
+void noDirective_routineWhole();
+
+//  PRT-A-NEXT:#pragma acc routine seq
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq
+//    PRT-NEXT:void noDirective_routineFirstToken();
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq
+void noDirective_routineFirstToken();
+
+//  PRT-A-NEXT:#pragma acc routine seq
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq
+//    PRT-NEXT:void noDirective_routineLastTwoTokens();
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq
+void noDirective_routineLastTwoTokens();
+
+//  PRT-A-NEXT:#pragma acc routine seq
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq
+//    PRT-NEXT:void noDirective_routineLastToken();
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq
+void noDirective_routineLastToken();
+
+//--------------------------------------------------
+// Directive in macro expansion: yes
+// No associated code.
+//--------------------------------------------------
+
+// PRT-NEXT:void inMacroNoAssoc() {
+void inMacroNoAssoc() {
   // PRT-NEXT:  #define MAC _Pragma("acc update device(i)")
   // PRT-NEXT:  /* expected-error{{.*}} */
   // PRT-NEXT:  MAC
@@ -55,33 +157,50 @@ int main() {
   /* expected-error@+1 {{cannot rewrite OpenACC construct starting within a macro expansion}} */
   MAC
   #undef MAC
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // Directive in macro expansion: yes
-  // Associated statement ends in macro expansion: no
-  //--------------------------------------------------
+//--------------------------------------------------
+// Directive in macro expansion: yes
+// Associated code ends in macro expansion: no
+//--------------------------------------------------
 
+// PRT-NEXT:void inMacroAssocEndNotInMacro() {
+void inMacroAssocEndNotInMacro() {
   // PRT-NEXT:  #define MAC _Pragma("acc parallel")
   // PRT-NEXT:  /* expected-error{{.*}} */
   // PRT-NEXT:  MAC
-  // PRT-NEXT:    ;
+  // PRT-NEXT:  ;
   // PRT-NEXT:  #undef MAC
   #define MAC _Pragma("acc parallel")
   /* expected-error@+1 {{cannot rewrite OpenACC construct starting within a macro expansion}} */
   MAC
-    ;
+  ;
   #undef MAC
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // Directive in macro expansion: yes
-  // Associated statement ends in macro expansion: yes
-  //
-  // Null statements, compound statements, and expression statements exercise
-  // different code paths, so check all of them.  For expression statements,
-  // whether the token preceding the semicolon is part of the same macro
-  // expansion also affects the code path.
-  //--------------------------------------------------
+// PRT-NEXT:#define MAC _Pragma("acc routine seq")
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:MAC
+// PRT-NEXT:void inMacroAssocEndNotInMacro_routine();
+// PRT-NEXT:#undef MAC
+#define MAC _Pragma("acc routine seq")
+/* expected-error@+1 {{cannot rewrite OpenACC routine directive that appears within a _Pragma operator}} */
+MAC
+void inMacroAssocEndNotInMacro_routine();
+#undef MAC
 
+//--------------------------------------------------
+// Directive in macro expansion: yes
+// Associated code ends in macro expansion: yes
+//
+// Associated null statements, compound statements, and expression statements
+// exercise different code paths, so check all of them.  For expression
+// statements, whether the token preceding the semicolon is part of the same
+// macro expansion also affects the code path.
+//--------------------------------------------------
+
+// PRT-NEXT:void inMacroAssocEndInMacro() {
+void inMacroAssocEndInMacro() {
   // PRT-NEXT:  #define MAC _Pragma("acc parallel") ;
   // PRT-NEXT:  /* expected-error{{.*}} */
   // PRT-NEXT:  MAC
@@ -187,31 +306,108 @@ int main() {
   #undef MAC1
   #undef MAC2
   #undef MAC3
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // Directive in macro expansion: no
-  // No associated statement.
-  //--------------------------------------------------
+// PRT-NEXT:#define MAC _Pragma("acc routine seq") void inMacroAssocEndInMacro_routineAllIn();
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:MAC
+// PRT-NEXT:#undef MAC
+#define MAC _Pragma("acc routine seq") void inMacroAssocEndInMacro_routineAllIn();
+/* expected-error@+1 {{cannot rewrite OpenACC routine directive that appears within a _Pragma operator}} */
+MAC
+#undef MAC
 
+// PRT-NEXT:#define MAC1 _Pragma("acc routine seq")
+// PRT-NEXT:#define MAC2 void inMacroAssocEndInMacro_routineSplit();
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:MAC1
+// PRT-NEXT:MAC2
+// PRT-NEXT:#undef MAC1
+// PRT-NEXT:#undef MAC2
+#define MAC1 _Pragma("acc routine seq")
+#define MAC2 void inMacroAssocEndInMacro_routineSplit();
+/* expected-error@+1 {{cannot rewrite OpenACC routine directive that appears within a _Pragma operator}} */
+MAC1
+MAC2
+#undef MAC1
+#undef MAC2
+
+// PRT-NEXT:#define MAC1 _Pragma("acc routine seq")
+// PRT-NEXT:#define MAC2 ;
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:MAC1
+// PRT-NEXT:void inMacroAssocEndInMacro_routineSemiIn() MAC2
+// PRT-NEXT:#undef MAC1
+// PRT-NEXT:#undef MAC2
+#define MAC1 _Pragma("acc routine seq")
+#define MAC2 ;
+/* expected-error@+1 {{cannot rewrite OpenACC routine directive that appears within a _Pragma operator}} */
+MAC1
+void inMacroAssocEndInMacro_routineSemiIn() MAC2
+#undef MAC1
+#undef MAC2
+
+// PRT-NEXT:#define MAC1 _Pragma("acc routine seq")
+// PRT-NEXT:#define MAC2 void inMacroAssocEndInMacro_routineThree()
+// PRT-NEXT:#define MAC3 ;
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:MAC1
+// PRT-NEXT:MAC2 MAC3
+// PRT-NEXT:#undef MAC1
+// PRT-NEXT:#undef MAC2
+// PRT-NEXT:#undef MAC3
+#define MAC1 _Pragma("acc routine seq")
+#define MAC2 void inMacroAssocEndInMacro_routineThree()
+#define MAC3 ;
+/* expected-error@+1 {{cannot rewrite OpenACC routine directive that appears within a _Pragma operator}} */
+MAC1
+MAC2 MAC3
+#undef MAC1
+#undef MAC2
+#undef MAC3
+
+//--------------------------------------------------
+// Directive in macro expansion: no
+// No associated code.
+//--------------------------------------------------
+
+// PRT-NEXT:void notInMacroNoAssoc() {
+void notInMacroNoAssoc() {
   // PRT-NEXT:  /* expected-error{{.*}} */
   // PRT-NEXT:  _Pragma("acc update device(i)")
   /* expected-error@+1 {{cannot rewrite OpenACC directive that has no associated statement and that appears within a _Pragma operator}} */
   _Pragma("acc update device(i)")
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // Directive in macro expansion: no
-  // Associated statement ends in macro expansion: yes
-  //
-  // This only exercises cases where the associated statement must be
-  // rewritten.  The #pragma case where only the directive needs to be
-  // rewritten succeeds and thus is exercised in fopenacc-print-torture.c.
-  //
-  // Null statements, compound statements, and expression statements exercise
-  // different code paths, so check all of them.  For expression statements,
-  // whether the token preceding the semicolon is part of the same macro
-  // expansion also affects the code path.
-  //--------------------------------------------------
+//--------------------------------------------------
+// Directive in macro expansion: no
+// Associated code ends in macro expansion: no
+//--------------------------------------------------
 
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:_Pragma("acc routine seq")
+// PRT-NEXT:void notInMacroAssocEndNotInMacro_routine();
+/* expected-error@+1 {{cannot rewrite OpenACC routine directive that appears within a _Pragma operator}} */
+_Pragma("acc routine seq")
+void notInMacroAssocEndNotInMacro_routine();
+
+//--------------------------------------------------
+// Directive in macro expansion: no
+// Associated code ends in macro expansion: yes
+//
+// This exercises only cases where the associated code must be rewritten.  The
+// #pragma case where only the directive needs to be rewritten succeeds and
+// thus is exercised in fopenacc-print-torture.c.
+//
+// Associated null statements, compound statements, expression statements,
+// function prototypes, and function definitions exercise different code paths,
+// so check all of them.  For expression statements and function prototypes,
+// whether the token preceding the semicolon is part of the same macro expansion
+// also affects the code path.
+//--------------------------------------------------
+
+// PRT-NEXT:void notInMacroAssocEndInMacro() {
+void notInMacroAssocEndInMacro() {
   // PRT-NEXT:  #define MAC ;
   // PRT-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   // PRT-NEXT:  #pragma acc loop worker
@@ -375,18 +571,90 @@ int main() {
   i = MAC1 MAC2
   #undef MAC1
   #undef MAC2
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // Translatable constructs are translated after any error.
-  //--------------------------------------------------
+// PRT-NEXT:#define MAC void notInMacroAssocEndInMacro_routineWhole();
+// PRT-NEXT:#pragma acc routine seq
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:MAC
+// PRT-NEXT:#undef MAC
+#define MAC void notInMacroAssocEndInMacro_routineWhole();
+#pragma acc routine seq
+/* expected-error@+1 {{for OpenACC routine directive, cannot rewrite associated function declaration that ends within a macro expansion}} */
+MAC
+#undef MAC
 
+// PRT-NEXT:#define MAC {}
+// PRT-NEXT:#pragma acc routine seq
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:void notInMacroAssocEndInMacro_routineDefLastTwoTokens() MAC
+// PRT-NEXT:#undef MAC
+#define MAC {}
+#pragma acc routine seq
+/* expected-error@+1 {{for OpenACC routine directive, cannot rewrite associated function declaration that ends within a macro expansion}} */
+void notInMacroAssocEndInMacro_routineDefLastTwoTokens() MAC
+#undef MAC
+
+// PRT-NEXT:#define MAC }
+// PRT-NEXT:#pragma acc routine seq
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:void notInMacroAssocEndInMacro_routineDefLastToken() {MAC
+// PRT-NEXT:#undef MAC
+#define MAC }
+#pragma acc routine seq
+/* expected-error@+1 {{for OpenACC routine directive, cannot rewrite associated function declaration that ends within a macro expansion}} */
+void notInMacroAssocEndInMacro_routineDefLastToken() {MAC
+#undef MAC
+
+// PRT-NEXT:#define MAC );
+// PRT-NEXT:#pragma acc routine seq
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:void notInMacroAssocEndInMacro_routineProtoLastTwoTokens(MAC
+// PRT-NEXT:#undef MAC
+#define MAC );
+#pragma acc routine seq
+/* expected-error@+1 {{for OpenACC routine directive, cannot rewrite associated function declaration that ends within a macro expansion}} */
+void notInMacroAssocEndInMacro_routineProtoLastTwoTokens(MAC
+#undef MAC
+
+// PRT-NEXT:#define MAC ;
+// PRT-NEXT:#pragma acc routine seq
+// PRT-NEXT:/* expected-error{{.*}} */
+// PRT-NEXT:void notInMacroAssocEndInMacro_routineProtoLastToken() MAC
+// PRT-NEXT:#undef MAC
+#define MAC ;
+#pragma acc routine seq
+/* expected-error@+1 {{for OpenACC routine directive, cannot rewrite associated function declaration that ends within a macro expansion}} */
+void notInMacroAssocEndInMacro_routineProtoLastToken() MAC
+#undef MAC
+
+//--------------------------------------------------
+// Translatable directives are translated after any error.
+//--------------------------------------------------
+
+// PRT-NEXT:void afterError() {
+void afterError() {
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams
   //  PRT-O-NEXT:  #pragma omp target teams
   // PRT-OA-NEXT:  // #pragma acc parallel
+  //    PRT-NEXT:  ;
   #pragma acc parallel
-    // PRT-NEXT:    ;
-    ;
+  ;
 
-  return 0;
-}
+  //  PRT-A-NEXT:  #pragma acc update device(i)
+  // PRT-AO-NEXT:  // #pragma omp target update to(present: i)
+  //  PRT-O-NEXT:  #pragma omp target update to(present: i)
+  // PRT-OA-NEXT:  // #pragma acc update device(i)
+  #pragma acc update device(i)
+}// PRT-NEXT:}
+
+//  PRT-A-NEXT:#pragma acc routine seq
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq
+//    PRT-NEXT:void afterError_routine();
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq
+void afterError_routine();

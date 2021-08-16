@@ -14784,6 +14784,8 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
       DeclsToCheckForDeferredDiags.insert(FD);
   }
 
+  if (LangOpts.OpenACC)
+    ActOnFunctionDefinitionForOpenACC(FD);
   return dcl;
 }
 

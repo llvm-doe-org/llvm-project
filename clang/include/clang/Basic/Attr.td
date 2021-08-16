@@ -256,6 +256,11 @@ class VariadicEnumArgument<string name, string type, list<string> values,
   list<string> Enums = enums;
 }
 
+// An argument whose value is either attr::UnknownAttr or an attr::Kind for an
+// OpenMP attribute that derives from OMPDeclAttr.
+class OMPDeclAttrArgument<string name, bit opt = 0, bit fake = 0>
+    : Argument<name, opt, fake>;
+
 // This handles one spelling of an attribute.
 class Spelling<string name, string variety> {
   string Name = name;
@@ -617,6 +622,27 @@ class InheritableParamAttr : InheritableAttr;
 /// An attribute which changes the ABI rules for a specific parameter.
 class ParameterABIAttr : InheritableParamAttr {
   let Subjects = SubjectList<[ParmVar]>;
+}
+
+/// An OpenMP declaration attribute that can be produced by the OpenACC
+/// translation of an \c ACCDeclAttr.
+class OMPDeclAttr : InheritableAttr {
+  list<Argument> OMPDeclAttrArgs = [
+    BoolArgument<"IsOpenACCTranslation", /*opt=*/0, /*fake=*/1>
+  ];
+}
+
+/// An OpenACC declaration attribute.
+class ACCDeclAttr : InheritableAttr {
+  list<Argument> ACCDeclAttrArgs = [
+    /// When constructing attributes while reading AST files or while inheriting
+    /// attributes, it is easier to store the kind than to find the address of
+    /// the actual OpenMP attribute, which might not be constructed until later.
+    OMPDeclAttrArgument<"OMPNodeKind", /*opt=*/1, /*fake=*/1>
+  ];
+  code ACCDeclAttrAdditionalMembers = [{
+    void setOMPNodeKind(attr::Kind V) { oMPNodeKind = V; checkOMPNodeKind(); }
+  }];
 }
 
 /// An ignored attribute, which we parse but discard with no checking.
@@ -3602,7 +3628,7 @@ def OMPDeclareSimdDecl : Attr {
   }];
 }
 
-def OMPDeclareTargetDecl : InheritableAttr {
+def OMPDeclareTargetDecl : OMPDeclAttr {
   let Spellings = [Pragma<"omp", "declare target">];
   let SemaHandler = 0;
   let Subjects = SubjectList<[Function, SharedVar]>;
@@ -3666,6 +3692,21 @@ def OMPDeclareVariant : InheritableAttr {
     OMPTraitInfo &getTraitInfo() { return *traitInfos; }
     void printPrettyPragma(raw_ostream & OS, const PrintingPolicy &Policy)
         const;
+  }];
+}
+
+def ACCRoutineDecl : ACCDeclAttr {
+  let Spellings = [Pragma<"acc", "routine">];
+  let SemaHandler = 0;
+  let Subjects = SubjectList<[Function]>;
+  let Args = [
+    EnumArgument<"Partitioning", "PartitioningTy",
+                 [ "seq" ],
+                 [ "Seq" ]>
+  ];
+  let Documentation = [Undocumented];
+  let AdditionalMembers = [{
+    void printPrettyPragma(raw_ostream &OS, const PrintingPolicy &Policy) const;
   }];
 }
 

@@ -188,8 +188,10 @@ any associated code region and constructing the OpenACC subtree to
 represent them, Clacc passes the OpenACC subtree to
 `TransformACCToOMP` to construct the corresponding OpenMP subtree.
 Clacc adds the resulting OpenMP subtree to the AST, associates it with
-the OpenACC subtree, and then parsing continues.  We consider
-directives that form statements in the next section.
+the OpenACC subtree, and then parsing continues.  However, the manner
+in which Clacc associates an OpenMP subtree with its OpenACC subtree
+differs depending on whether the directive forms a statement or a
+declaration.  We consider each case in the following sections.
 
 `ACCDirectiveStmt`: Directives as Statements
 --------------------------------------------
@@ -265,6 +267,79 @@ to an `OMPTargetTeamsDirective`, which becomes the normal parent for
 the `OMPDistributeDirective` and the hidden OpenMP child for the
 `ACCParallelDirective`.
 
+`ACCDeclAttr`: Declarative Directives as Attributes
+---------------------------------------------------
+
+In this section, we describe how `TransformACCToOMP` handles OpenACC
+declarative directives.  So far, Clacc supports the following
+declarative directives:
+
+* The `routine` directive.
+
+For example, consider this declaration written in OpenACC, where
+comments show the equivalent OpenMP:
+
+```
+  #pragma acc routine seq // #pragma omp declare target
+  void foo();
+  // #pragma omp end declare target
+```
+
+The AST that Clacc constructs is depicted below:
+
+```
+                 TranslationUnitDecl
+                          |
+                     FunctionDecl
+                    /            \
+  ACCRoutineDeclAttr --OMPNode--> OMPDeclareTargetDeclAttr
+          |                                  |
+         Seq                     IsOpenACCTranslation=true
+```
+
+Clacc's `ACCDeclAttr` is a base class for any attribute node
+representing an OpenACC declarative directive, such as the
+`ACCRoutineDeclAttr` in the above example.  Clacc's `OMPDeclAttr` is a
+base class for any corresponding OpenMP attribute node, such as the
+`OMPDeclareTargetDeclAttr` in the above example.  `InheritableAttr`,
+which also exists upstream, is a base class for both `ACCDeclAttr` and
+`OMPDeclAttr` in Clacc.  `Decl`, which also exists upstream, is a base
+class for associated declaration nodes, such as the `FunctionDecl` in
+the above example.
+
+Unlike a directive that forms a statement, a declarative directive is
+not represented in a Clang AST as the root node of a subtree that also
+contains the associated code.  Instead, it is represented as an
+attribute node attached to an associated declaration.  Moreover,
+`TransformACCToOMP` inserts an `ACCDeclAttr` and its `OMPDeclAttr`
+into the Clang AST as siblings: both are attached directly to the same
+`Decl`.  In the above example, the `ACCRoutineDeclAttr` and
+`OMPDeclareTargetDeclAttr` are both attached to the `FunctionDecl`.
+
+If, instead, `TransformACCToOMP` were to store an `OMPDeclAttr` as a
+hidden child of an `ACCDeclAttr`, as it does for an
+`OMPExecutableDirective` and `ACCDirectiveStmt`, significant
+refactoring of the existing OpenMP semantic analysis and LLVM IR
+codegen implementation would be required for those analyses to find
+the `OMPDeclAttr`.  The reason is that, unlike Clang's implementation
+for statements, Clang's implementation for OpenMP attributes does not
+have a few large switches or if-then-else blocks over node kinds that
+can easily be extended for new node kinds.  Instead, it retrieves
+specific attributes at many points throughout the implementation.
+
+Nevertheless, `TransformACCToOMP` does record the relationship between
+an `ACCDeclAttr` and its `OMPDeclAttr`.  First, like
+`ACCDirectiveStmt`, `ACCDeclAttr` has a `getOMPNode` member function,
+which retrieves the `OMPDeclAttr`.  Second, `OMPDeclAttr` has a
+`getIsOpenACCTranslation` member function, which returns true to
+indicate that it does not represent an OpenMP directive appearing in
+the original source code.  These properties make it easier for
+analyses, in particular AST printing and source-to-source translation,
+to select which attribute nodes to visit and what their relationship
+is.  That is, they can do so without having to maintain a separate
+encoding of the general mapping that `TransformACCToOMP` already
+maintains between OpenACC and OpenMP declarative directives.
+
 `TreeTransform` Caveats and AST Traversals
 ------------------------------------------
 
@@ -283,14 +358,21 @@ Clacc overcomes the `TreeTransform` caveats discussed in the section
 * **Redundant AST subtrees**: AST traversals are typically based on
   Clang's `RecursiveASTVisitor` facility.  Most AST traversal
   developers and users likely expect for traversals to visit an AST
-  representing the original source code only.  Because the
-  `OMPExecutableDirective` to which an `ACCDirectiveStmt` is
-  translated is not recorded as a normal child of the
-  `ACCDirectiveStmt`, `RecursiveASTVisitor` visits the
-  `ACCDirectiveStmt` but skips its hidden `OMPExecutableDirective`
-  child.  However, while visiting an `ACCDirectiveStmt`, a visitor can
-  be written to call its `getOMPNode` member function to access the
-  `OMPExecutableDirective`, possibly for a recursive visitation.
+  representing the original source code only.
+    * `ACCDirectiveStmt`: Because the `OMPExecutableDirective` to
+      which an `ACCDirectiveStmt` is translated is not recorded as a
+      normal child of the `ACCDirectiveStmt`, `RecursiveASTVisitor`
+      visits the `ACCDirectiveStmt` but skips its hidden
+      `OMPExecutableDirective` child.  However, while visiting an
+      `ACCDirectiveStmt`, a visitor can be written to call its
+      `getOMPNode` member function to access the
+      `OMPExecutableDirective`, possibly for a recursive visitation.
+    * `ACCDeclAttr`: If an AST traversal should visit only the
+      original OpenACC source, it must be implemented to ignore any
+      `OMPDeclAttr` whose `getIsOpenACCTranslation` returns true.
+      Fortunately, an `ACCDeclAttr` and its `OMPDeclAttr` have no
+      redundant children that an AST traversal might mistakenly
+      recurse into.
 
 As a result, Clacc supports at least three kinds of AST traversals:
 
@@ -301,17 +383,21 @@ As a result, Clacc supports at least three kinds of AST traversals:
   version of it, Clacc extends it for OpenACC not to include the
   OpenMP translation.  In the examples from the previous two sections,
   `-ast-print` thus visits the `ACCParallelDirective`, the
-  `ACCLoopDirective`, and the original `ForStmt` subtree but not the
-  `OMPTargetTeamsDirective`, the `OMPDistributeDirective`, or the
-  translated `ForStmt` subtree.
+  `ACCLoopDirective`, the original `ForStmt` subtree, and the
+  `ACCRoutineDeclAttr` but not the `OMPTargetTeamsDirective`, the
+  `OMPDistributeDirective`, the translated `ForStmt` subtree, or the
+  `OMPDeclareTargetDeclAttr`.
 * **Delegate to OpenMP**: For example, one of the major motivations
   for translating the OpenACC AST to an OpenMP AST is to reuse the
   existing LLVM IR codegen implementation for OpenMP.  Thus, for LLVM
   IR codegen, each `ACCDirectiveStmt` delegates to its hidden
-  `OMPExecutableDirective` child.  In the previous examples, the
+  `OMPExecutableDirective` child, and each `ACCDeclAttr` is skipped in
+  favor of its `OMPDeclAttr`.  In the previous examples, the
   `ACCParallelDirective` delegates LLVM IR codegen to the
   `OMPTargetTeamsDirective` and its subtree, and the normal subtree of
-  the `ACCParallelDirective` is not visited.
+  the `ACCParallelDirective` is not visited.  The `ACCRoutineDeclAttr`
+  is ignored, and normal OpenMP codegen is performed for the
+  `OMPDeclareTargetDeclAttr`.
 * **Visit OpenACC and OpenMP**: For example, `-ast-dump` is an
   existing Clang command-line option for printing a textual
   representation of the AST structure, including parent-child
@@ -320,7 +406,10 @@ As a result, Clacc supports at least three kinds of AST traversals:
   useful for Clang developers.  For each `ACCDirectiveStmt`, Clacc
   extends this feature to always produce a full representation of that
   node's subtree including, as a specially marked child, the OpenMP
-  subtree to which it translates.
+  subtree to which it translates.  Clacc also adds a representation of
+  each `ACCDeclAttr`, including the kind of its `OMPDeclAttr`, which
+  is printed as a separate attribute, including its
+  `IsOpenACCTranslation` property.
 
 Redundant AST nodes might at first seem to be a disadvantage of
 employing `TreeTransform` in `TransformACCToOMP`.  However, because it
@@ -348,6 +437,11 @@ through AST nodes looking for OpenMP target regions to emit in
 separate device functions.  Thus, Clacc extends this scan to look for
 OpenACC AST nodes and, as before, to delegate the required codegen to
 their hidden OpenMP children.
+
+Clacc makes no changes to LLVM IR codegen for the sake of
+`ACCDeclAttr` nodes, which are thus ignored.  The corresponding
+`OMPDeclAttr` nodes are seen directly by codegen and are handled as
+they would be in an OpenMP program.
 
 Source-to-Source Translation
 ============================
@@ -1851,6 +1945,41 @@ as follows:
 * Predetermined and implicit attributes do not require a mapping to
   the effective directives because there are none because semantic
   analysis computes them only on the effective directives.
+
+Routine Directive
+-----------------
+
+Clacc's current mapping of an `acc routine` directive and its clauses
+to OpenMP is as follows:
+
+* `acc routine seq` -> `omp declare target` plus an
+  `omp end declare target` following the associated function
+  declaration.
+
+In the Clang AST, a single `OMPDeclareTargetDeclAttr` represents an
+`omp declare target` and `omp end declare target` pair.
+
+If a function's first occurrence of the `acc routine` directive
+appears on a declaration of the function after the function's
+definition, then Clacc adds `omp declare target` and
+`omp end declare target` directives around the function definition as
+well.  Otherwise, upstream Clang's current OpenMP support would not
+compile the function for offloading.  However, both behaviors might
+change in the future as the OpenMP behavior does not appear to fully
+support OpenMP 5.1, sec. 2.14.7 "Declare Target Directive", p. 212,
+L15-16: "If a function appears in a **to** clause in the same
+compilation unit in which the definition of the function occurs then a
+device-specific version of the function is created."
+
+In the AST, `TransformACCToOMP` adds an `ACCRoutineDeclAttr` where it
+adds the `OMPDeclareTargetDeclAttr` to the aforementioned function
+definition.  This behavior enables the `OMPNode` and
+`IsOpenACCTranslation` properties to be consistent with other nodes.
+However, `TransformACCToOMP` also marks these nodes as implicit, and
+`-ast-print` and source-to-source mode generally do not print an
+implicit `ACCDeclAttr` because, unlike the directives represented by
+an implicit `OMPDeclAttr` in OpenMP source, the directive it
+represents isn't necessary in the OpenACC source.
 
 Potentially Unmappable Features
 -------------------------------

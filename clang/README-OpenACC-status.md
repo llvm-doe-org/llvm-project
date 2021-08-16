@@ -303,6 +303,32 @@ Run-Time Environment Variables
 * A `reduction` clause implies a `copy` clause (overriding the
   implicit `firstprivate` clause).
 
+`routine` Directive
+-------------------
+
+* Lexical context
+    * Appearing at file scope is supported.
+    * Appearing within a function definition is not supported.
+* Supported clauses
+    * `seq` (required)
+* Associated declaration
+    * A lone function definition or prototype is supported.
+    * A declaration containing multiple declarators is not supported.
+      For example, `void foo(), bar();`.
+* Function definition body
+    * Appearance of any OpenACC directive produces a compile-time
+      error diagnostic.  Thus, orphaned `loop` constructs are not yet
+      supported.
+    * Declaration of a static local variable produces a compile-time
+      error diagnostic.
+
+As described in the section "Routine Directive" in
+`README-OpenACC-design.md`, and as revealed by source-to-source mode,
+Clacc sometimes propagates the OpenMP translation of the `routine`
+directive to the function's definition for compatibility with Clang's
+OpenMP support.  This behavior might be eliminated in the future if it
+proves to be no longer necessary.
+
 Subarrays
 ---------
 
@@ -319,7 +345,8 @@ Device-Side Directives
 
 Nesting of an `update`, `enter data`, `exit data`, `data`, `parallel`,
 or `parallel loop` directive inside a `parallel`, `loop`, or `parallel
-loop` construct is not yet supported.  We're not aware of any OpenACC
+loop` construct or inside a function attributed with a `routine`
+directive is not yet supported.  We're not aware of any OpenACC
 implementation that supports such cases yet.
 
 OpenACC Runtime Library API and Preprocessor
@@ -587,20 +614,26 @@ Source-to-Source Mode Limitations
   sometimes prevent OpenACC directives from being translated:
     * Clacc cannot translate an OpenACC directive if it meets any of
       the following conditions:
-        * The directive is expanded from a preprocessor macro and thus
-          uses `_Pragma` form.
-        * The directive uses `_Pragma` form and has no associated
-          statement.
-        * The associated statement must be rewritten but its last
-          token is expanded from a preprocessor macro:
+        * The directive is expanded entirely from a preprocessor macro
+          (and thus uses `_Pragma` form).
+        * The directive uses `_Pragma` form and is either an
+          executable directive or the `routine` directive.
+        * The associated code must be rewritten but its last token is
+          expanded from a preprocessor macro:
+            * In the case of a `routine` directive, the associated
+              function declaration must always be rewritten.
+            * In the case of `_Pragma` form, the associated code must
+              always be rewritten.
             * In the case of `#pragma` form, whether the associated
-              statement must be rewritten depends on Clacc's mapping
-              for the construct to OpenMP.
-            * In the case of `_Pragma` form, currently the associated
-              statement must always be rewritten.
+              code must be rewritten depends on Clacc's mapping for
+              the directive to OpenMP.
+        * In the case of a `routine` directive, an OpenMP directive is
+          added to a previous definition of the associated function,
+          but the definition's first or last token is expanded from a
+          preprocessor macro.
     * Clacc reports an error diagnostic for every such OpenACC
-      construct in the source file.  Clacc then prints a version of
-      the source in which all OpenACC constructs are transformed
+      directive in the source file.  Clacc then prints a version of
+      the source in which all OpenACC directives are transformed
       except the reported ones.
     * For a full transformation of the source file in this case, try
       `-fopenacc-ast-print` instead.  However, its output looks like

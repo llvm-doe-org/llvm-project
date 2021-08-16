@@ -48,21 +48,66 @@
 /* expected-no-diagnostics */
 #endif
 
-// PRT-NEXT:int main() {
-int main() {
-  // PRT-NEXT:  float f = 0;
-  // PRT-NEXT:  int non_const_expr = 2;
-  // PRT-NEXT:  int var, i;
-  // PRT-NEXT:  const int *ptr = 0;
-  float f = 0;
-  int non_const_expr = 2;
-  int var, i;
-  const int *ptr = 0;
+// PRT-NEXT:float f = 0;
+// PRT-NEXT:int non_const_expr = 2;
+// PRT-NEXT:int var, i;
+// PRT-NEXT:const int *ptr = 0;
+float f = 0;
+int non_const_expr = 2;
+int var, i;
+const int *ptr = 0;
 
-  //--------------------------------------------------
-  // Directive only rewrite, not nested.
-  //--------------------------------------------------
+//--------------------------------------------------
+// No directive.
+//
+// OpenMP directives are added to a function definition because an OpenACC
+// routine directive appears on a later declaration of that function.
+//--------------------------------------------------
 
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-AO-NEXT:// #pragma omp declare target
+//    PRT-NEXT:void noDirective_routineNoMacro() {int i = 5;}
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+void noDirective_routineNoMacro() {int i = 5;}
+
+//    PRT-NEXT:#define MAC noDirective_routineMacro() {int i = 5;
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-AO-NEXT:// #pragma omp declare target
+//    PRT-NEXT:void MAC}
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+//    PRT-NEXT:#undef MAC
+#define MAC noDirective_routineMacro() {int i = 5;
+void MAC}
+#undef MAC
+
+//  PRT-A-NEXT:#pragma acc routine seq
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq
+//    PRT-NEXT:void noDirective_routineNoMacro();
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq
+void noDirective_routineNoMacro();
+
+//  PRT-A-NEXT:#pragma acc routine seq
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq
+//    PRT-NEXT:void noDirective_routineMacro();
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq
+void noDirective_routineMacro();
+
+//--------------------------------------------------
+// Directive only rewrite, not nested.
+//--------------------------------------------------
+
+// PRT-NEXT:void dirOnlyRewriteNotNested() {
+void dirOnlyRewriteNotNested() {
   //  PRT-A-NEXT:  #pragma acc update device(i)
   // PRT-AO-NEXT:  // #pragma omp target update to(present: i)
   //  PRT-O-NEXT:  #pragma omp target update to(present: i)
@@ -73,9 +118,9 @@ int main() {
   // PRT-AO-NEXT:  // #pragma omp target teams
   //  PRT-O-NEXT:  #pragma omp target teams
   // PRT-OA-NEXT:  // #pragma acc parallel
+  //    PRT-NEXT:  ;
   #pragma acc parallel
-    // PRT-NEXT:    ;
-    ;
+  ;
 
   //  PRT-A-NEXT:  #pragma acc parallel loop gang
   // PRT-AO-NEXT:  // #pragma omp target teams
@@ -89,10 +134,43 @@ int main() {
       // PRT-NEXT:      ;
       ;
 
-  //--------------------------------------------------
-  // Directive only rewrite, nested.
-  //--------------------------------------------------
+  // Directive appears to end in macro expansion, but Clang doesn't record
+  // #pragma end locations that way, so rewrite succeeds.
 
+  //    PRT-NEXT:  #define MAC num_gangs(1)
+  //  PRT-A-NEXT:  #pragma acc parallel MAC
+  // PRT-AO-NEXT:  // #pragma omp target teams num_teams(1)
+  //  PRT-O-NEXT:  #pragma omp target teams num_teams(1)
+  // PRT-OA-NEXT:  // #pragma acc parallel MAC
+  //    PRT-NEXT:  ;
+  //    PRT-NEXT:  #undef MAC
+  #define MAC num_gangs(1)
+  #pragma acc parallel MAC
+  ;
+  #undef MAC
+
+  // Associated statement end is in macro expansion, but only directive needs
+  // to be rewritten, so rewrite succeeds.
+
+  //    PRT-NEXT:  #define MAC ;
+  //  PRT-A-NEXT:  #pragma acc parallel
+  // PRT-AO-NEXT:  // #pragma omp target teams
+  //  PRT-O-NEXT:  #pragma omp target teams
+  // PRT-OA-NEXT:  // #pragma acc parallel
+  //    PRT-NEXT:  MAC
+  //    PRT-NEXT:  #undef MAC
+  #define MAC ;
+  #pragma acc parallel
+  MAC
+  #undef MAC
+}// PRT-NEXT:}
+
+//--------------------------------------------------
+// Directive only rewrite, nested.
+//--------------------------------------------------
+
+// PRT-NEXT:void dirOnlyRewriteNested() {
+void dirOnlyRewriteNested() {
   //  PRT-A-NEXT:  #pragma acc data copy(i)
   // PRT-AO-NEXT:  // #pragma omp target data map(hold,tofrom: i)
   //  PRT-A-NEXT:  {
@@ -171,11 +249,14 @@ int main() {
   for (int i = 0; i < 5; ++i)
     // PRT-NEXT:    ;
     ;
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // Directive only rewrite, but directive discarded.
-  //--------------------------------------------------
+//--------------------------------------------------
+// Directive only rewrite, but directive discarded.
+//--------------------------------------------------
 
+// PRT-NEXT:void dirOnlyRewriteDirDiscard() {
+void dirOnlyRewriteDirDiscard() {
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams
   //  PRT-O-NEXT:  #pragma omp target teams
@@ -205,24 +286,27 @@ int main() {
     for (int j = 0; j < 5; ++j)
       // PRT-NEXT:      ;
       ;
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // Full construct rewrite, outer directive only.
-  //
-  // Check for corruption due to the way Clang records the end location of a
-  // statement.  RewriteOpenACC and the getConstructRange function it calls
-  // on ACCDirectiveStmt have to handle many cases.  Important issues include
-  // whether the end location of the outer ACCDirectiveStmt's associated
-  // statement is actually for its last token or the token before that, whether
-  // each of those tokens is represented by any descendant node, and whether
-  // each of those tokens is part of a macro expansion.
-  // fopenacc-print-messages.c covers macro expansion cases that cannot be
-  // handled and so produce error diagnostics.
-  //
-  // FIXME: In the cases of macro expansions within associated statements, the
-  // OpenMP version is fully expanded.  Eventually, we'd like to prevent that.
-  //--------------------------------------------------
+//--------------------------------------------------
+// Directive and associate rewrite, outer directive only.
+//
+// Check for corruption due to the way Clang records the end location of a
+// statement.  RewriteOpenACC and the getConstructRange function it calls
+// on ACCDirectiveStmt have to handle many cases.  Important issues include
+// whether the end location of the outer ACCDirectiveStmt's associated
+// statement is actually for its last token or the token before that, whether
+// each of those tokens is represented by any descendant node, and whether
+// each of those tokens is part of a macro expansion.
+// fopenacc-print-messages.c covers macro expansion cases that cannot be
+// handled and so produce error diagnostics.
+//
+// FIXME: In the cases of macro expansions within associated statements, the
+// OpenMP version is fully expanded.  Eventually, we'd like to prevent that.
+//--------------------------------------------------
 
+// PRT-NEXT:void fullRewriteOuterDirOnly() {
+void fullRewriteOuterDirOnly() {
   // Null statement: There are no descendants, and the end location is from the
   // final semicolon.
 
@@ -827,10 +911,70 @@ int main() {
   for (i = 0; i < 5; ++i)
     var = sizeof(i);
 
-  //--------------------------------------------------
-  // Full construct rewrite, inner directive only.
-  //--------------------------------------------------
+}// PRT-NEXT:}
 
+//  PRT-A-NEXT:#pragma acc routine seq
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq
+//    PRT-NEXT:void fullRewriteOuterDirOnly_routineProtoNoMacro();
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq
+void fullRewriteOuterDirOnly_routineProtoNoMacro();
+
+//  PRT-A-NEXT:#pragma acc routine seq
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq
+//    PRT-NEXT:void fullRewriteOuterDirOnly_routineDefNoMacro() {}
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq
+void fullRewriteOuterDirOnly_routineDefNoMacro() {}
+
+//    PRT-NEXT:#define MAC1 seq
+//    PRT-NEXT:#define MAC2 void fullRewriteOuterDirOnly_routineProtoMacros()
+//  PRT-A-NEXT:#pragma acc routine MAC1
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine MAC1
+//    PRT-NEXT:MAC2;
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+//    PRT-NEXT:#undef MAC1
+//    PRT-NEXT:#undef MAC2
+#define MAC1 seq
+#define MAC2 void fullRewriteOuterDirOnly_routineProtoMacros()
+#pragma acc routine MAC1
+MAC2;
+#undef MAC1
+#undef MAC2
+
+//    PRT-NEXT:#define MAC1 routine seq
+//    PRT-NEXT:#define MAC2 void fullRewriteOuterDirOnly_routineDefMacros() {
+//  PRT-A-NEXT:#pragma acc MAC1
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc MAC1
+//    PRT-NEXT:MAC2}
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+//    PRT-NEXT:#undef MAC1
+//    PRT-NEXT:#undef MAC2
+#define MAC1 routine seq
+#define MAC2 void fullRewriteOuterDirOnly_routineDefMacros() {
+#pragma acc MAC1
+MAC2}
+#undef MAC1
+#undef MAC2
+
+//--------------------------------------------------
+// Directive and associate rewrite, inner directive only.
+//--------------------------------------------------
+
+// PRT-NEXT:void fullRewriteInnerDirOnly() {
+void fullRewriteInnerDirOnly() {
   // Null statement: There are no descendants, and the end location is from the
   // final semicolon.
 
@@ -1183,11 +1327,14 @@ int main() {
     for (i = 0; i < 5; ++i)
       printf("hello world\n");
   }
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // Full construct rewrite, outer and inner directive.
-  //--------------------------------------------------
+//--------------------------------------------------
+// Directive and associate rewrite, outer and inner directive.
+//--------------------------------------------------
 
+// PRT-NEXT:void fullRewriteOuterAndInnerDir() {
+void fullRewriteOuterAndInnerDir() {
   // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker vector
@@ -1321,11 +1468,14 @@ int main() {
     #pragma acc loop seq private(var)
     for (var = 0; var < 5; ++var)
       ;
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // Full construct rewrite with discarded directive.
-  //--------------------------------------------------
+//--------------------------------------------------
+// Directive and associate rewrite with discarded directive.
+//--------------------------------------------------
 
+// PRT-NEXT:void fullRewriteDirDiscard() {
+void fullRewriteDirDiscard() {
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
   // PRT-AO-NEXT:  // v----------ACC----------v
@@ -1386,14 +1536,17 @@ int main() {
   #pragma acc parallel loop seq private(i)
   for (i = 0; i < 5; ++i)
     var = non_const_expr;
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // cpp macro expansion in clauses.
-  //
-  // FIXME: The OpenMP version is fully expanded.  Eventually, we'd like to
-  // prevent that.
-  //--------------------------------------------------
+//--------------------------------------------------
+// cpp macro expansion in clauses.
+//
+// FIXME: The OpenMP version is fully expanded.  Eventually, we'd like to
+// prevent that.
+//--------------------------------------------------
 
+// PRT-NEXT:void macroInClauses() {
+void macroInClauses() {
   //  PRT-A-NEXT:  #pragma acc parallel vector_length(TWO)
   // PRT-AO-NEXT:  // #pragma omp target teams
   //  PRT-O-NEXT:  #pragma omp target teams
@@ -1431,16 +1584,19 @@ int main() {
     ;
   //    PRT-NEXT:  #undef MAC
   #undef MAC
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // _Pragma form forces full construct rewrite.
-  //
-  // If _Pragma were in a macro expansion, the rewrite would just fail with a
-  // diagnostic.  FIXME: However, when outside a macro expansion, the end
-  // location Clang assigns the _Pragma is unusable unfortunately, so a full
-  // rewrite is required.
-  //--------------------------------------------------
+//--------------------------------------------------
+// _Pragma form forces rewrite of directive and associate.
+//
+// If _Pragma were in a macro expansion, the rewrite would just fail with a
+// diagnostic.  FIXME: However, when outside a macro expansion, the end
+// location Clang assigns the _Pragma is unusable unfortunately, so a full
+// rewrite is required.
+//--------------------------------------------------
 
+// PRT-NEXT:void pragmaFormForcesFullRewrite() {
+void pragmaFormForcesFullRewrite() {
   // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  _Pragma("acc parallel")
   //  PRT-A-NEXT:  #pragma acc loop gang
@@ -1497,33 +1653,14 @@ int main() {
   _Pragma("acc loop gang")
   for (int i = 0; i < 5; ++i)
     ;
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // Associated statement end is in macro expansion, but only directive needs
-  // to be rewritten.   Directive appears to end in macro expansion, but Clang
-  // doesn't record #pragma end locations that way.  Thus, rewrite succeeds.
-  //--------------------------------------------------
+//--------------------------------------------------
+// Line continuations.
+//--------------------------------------------------
 
-  //    PRT-NEXT:  #define MAC1 num_gangs(1)
-  //    PRT-NEXT:  #define MAC2 ;
-  //  PRT-A-NEXT:  #pragma acc parallel MAC1
-  // PRT-AO-NEXT:  // #pragma omp target teams num_teams(1)
-  //  PRT-O-NEXT:  #pragma omp target teams num_teams(1)
-  // PRT-OA-NEXT:  // #pragma acc parallel MAC1
-  //    PRT-NEXT:    MAC2
-  //    PRT-NEXT:  #undef MAC1
-  //    PRT-NEXT:  #undef MAC2
-  #define MAC1 num_gangs(1)
-  #define MAC2 ;
-  #pragma acc parallel MAC1
-    MAC2
-  #undef MAC1
-  #undef MAC2
-
-  //--------------------------------------------------
-  // Line continuations.
-  //--------------------------------------------------
-
+// PRT-NEXT:void lineContinuations() {
+void lineContinuations() {
   // Adequate indentation, which is reused in commented OpenACC.
 
   //  PRT-A-NEXT:  #pragma acc parallel \
@@ -1532,10 +1669,10 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams num_teams(5)
   // PRT-OA-NEXT:  // #pragma acc parallel \
   // PRT-OA-NEXT:  //         num_gangs(5)
+  //    PRT-NEXT:  ;
   #pragma acc parallel \
           num_gangs(5)
-    // PRT-NEXT:    ;
-    ;
+  ;
 
   // Inadequate indentation, which is extended in commented OpenACC.
 
@@ -1545,15 +1682,55 @@ int main() {
   //  PRT-O-NEXT:  #pragma omp target teams num_teams(5)
   // PRT-OA-NEXT:  // #pragma acc parallel \
   // PRT-OA-NEXT:  // num_gangs(5)
+  //    PRT-NEXT:  ;
   #pragma acc parallel \
  num_gangs(5)
-    // PRT-NEXT:    ;
-    ;
+  ;
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // Associated statement inadequate indentation extended in commented OpenACC.
-  //--------------------------------------------------
+// Adequate indentation, which is reused in commented OpenACC.
 
+// PRT-AO-NEXT:  // #pragma omp declare target
+//  PRT-O-NEXT:  #pragma omp declare target
+//    PRT-NEXT:  void lineContinuations_routineAdequateIndent() {}
+//  PRT-O-NEXT:  #pragma omp end declare target
+// PRT-AO-NEXT:  // #pragma omp end declare target
+  void lineContinuations_routineAdequateIndent() {}
+
+//  PRT-A-NEXT: #pragma acc routine \
+//  PRT-A-NEXT:             seq
+// PRT-AO-NEXT: // #pragma omp declare target
+//  PRT-O-NEXT: #pragma omp declare target
+// PRT-OA-NEXT: // #pragma acc routine \
+// PRT-OA-NEXT: //             seq
+//    PRT-NEXT:void lineContinuations_routineAdequateIndent();
+//  PRT-O-NEXT: #pragma omp end declare target
+// PRT-AO-NEXT: // #pragma omp end declare target
+ #pragma acc routine \
+             seq
+void lineContinuations_routineAdequateIndent();
+
+// Inadequate indentation, which is extended in commented OpenACC.
+
+//  PRT-A-NEXT: #pragma acc routine \
+//  PRT-A-NEXT:seq
+// PRT-AO-NEXT: // #pragma omp declare target
+//  PRT-O-NEXT: #pragma omp declare target
+// PRT-OA-NEXT: // #pragma acc routine \
+// PRT-OA-NEXT: // seq
+//    PRT-NEXT:void lineContinuations_routineInadequateIndent();
+//  PRT-O-NEXT: #pragma omp end declare target
+// PRT-AO-NEXT: // #pragma omp end declare target
+ #pragma acc routine \
+seq
+void lineContinuations_routineInadequateIndent();
+
+//--------------------------------------------------
+// Associated statement inadequate indentation extended in commented OpenACC.
+//--------------------------------------------------
+
+// PRT-NEXT:void associateInadequateIndentation() {
+void associateInadequateIndentation() {
   //  PRT-A-NEXT:  #pragma acc parallel
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
   // PRT-AO-NEXT:  // v----------ACC----------v
@@ -1597,18 +1774,65 @@ for (i = 0; i < 5; ++i) {
  var = 5;
   var = non_const_expr ;
 }
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // Directive only rewrite, comment after.
-  //--------------------------------------------------
+//--------------------------------------------------
+// No directive, text preceding associate.
+//--------------------------------------------------
 
+//  PRT-O-NEXT:  #pragma omp declare target
+// PRT-AO-NEXT:  // #pragma omp declare target
+//    PRT-NEXT:  void noDirectiveButPrecedingText_routineWs() {}
+//  PRT-O-NEXT:  #pragma omp end declare target
+// PRT-AO-NEXT:  // #pragma omp end declare target
+  void noDirectiveButPrecedingText_routineWs() {}
+
+// PRT-AA-NEXT:  int noDirectiveButPrecedingText_var; void noDirectiveButPrecedingText_routineNonWs() {}
+//
+// PRT-AO-NEXT:  int noDirectiveButPrecedingText_var;{{ }}
+// PRT-AO-NEXT:  // #pragma omp declare target
+// PRT-AO-NEXT:  void noDirectiveButPrecedingText_routineNonWs() {}
+// PRT-AO-NEXT:  // #pragma omp end declare target
+//
+//  PRT-O-NEXT:  int noDirectiveButPrecedingText_var;{{ }}
+//  PRT-O-NEXT:  #pragma omp declare target
+//  PRT-O-NEXT:  void noDirectiveButPrecedingText_routineNonWs() {}
+//  PRT-O-NEXT:  #pragma omp end declare target
+  int noDirectiveButPrecedingText_var; void noDirectiveButPrecedingText_routineNonWs() {}
+
+//  PRT-A-NEXT:#pragma acc routine seq
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq
+//    PRT-NEXT:void noDirectiveButPrecedingText_routineWs();
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq
+void noDirectiveButPrecedingText_routineWs();
+
+//  PRT-A-NEXT:#pragma acc routine seq
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq
+//    PRT-NEXT:void noDirectiveButPrecedingText_routineNonWs();
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq
+void noDirectiveButPrecedingText_routineNonWs();
+
+//--------------------------------------------------
+// Directive only rewrite, comment after.
+//--------------------------------------------------
+
+// PRT-NEXT:void commentAfterDirOnlyRewrite() {
+void commentAfterDirOnlyRewrite() {
   //  PRT-A-NEXT:  #pragma acc parallel /*comment*/
   // PRT-AO-NEXT:  // #pragma omp target teams
   //  PRT-O-NEXT:  #pragma omp target teams
   // PRT-OA-NEXT:  // #pragma acc parallel /*comment*/
+  //    PRT-NEXT:  ;
   #pragma acc parallel /*comment*/
-    // PRT-NEXT:    ;
-    ;
+  ;
 
   //  PRT-A-NEXT:  #pragma acc parallel /*multi-line
   //  PRT-A-NEXT:                         comment*/
@@ -1616,15 +1840,41 @@ for (i = 0; i < 5; ++i) {
   //  PRT-O-NEXT:  #pragma omp target teams
   // PRT-OA-NEXT:  // #pragma acc parallel /*multi-line
   // PRT-OA-NEXT:  //                        comment*/
+  //    PRT-NEXT:  ;
   #pragma acc parallel /*multi-line
                          comment*/
-    // PRT-NEXT:    ;
-    ;
+  ;
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // Full construct rewrite, trailing text.
-  //--------------------------------------------------
+//  PRT-A-NEXT:#pragma acc routine seq /*comment*/
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq /*comment*/
+//    PRT-NEXT:void commentAfterDirOnlyRewrite_routine();
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq /*comment*/
+void commentAfterDirOnlyRewrite_routine();
 
+//  PRT-A-NEXT:#pragma acc routine seq /*multi-line
+//  PRT-A-NEXT:                          comment*/
+// PRT-AO-NEXT:// #pragma omp declare target
+//  PRT-O-NEXT:#pragma omp declare target
+// PRT-OA-NEXT:// #pragma acc routine seq /*multi-line
+// PRT-OA-NEXT://                           comment*/
+//    PRT-NEXT:void commentAfterDirOnlyRewrite_routineMultiline();
+//  PRT-O-NEXT:#pragma omp end declare target
+// PRT-AO-NEXT:// #pragma omp end declare target
+#pragma acc routine seq /*multi-line
+                          comment*/
+void commentAfterDirOnlyRewrite_routineMultiline();
+
+//--------------------------------------------------
+// Directive and associate rewrite, trailing text.
+//--------------------------------------------------
+
+// PRT-NEXT:void trailingTextAfterFullRewrite() {
+void trailingTextAfterFullRewrite() {
   // PRT-AO-NEXT:  // v----------ACC----------v
   //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
   //  PRT-A-NEXT:  #pragma acc loop worker
@@ -1702,13 +1952,80 @@ for (i = 0; i < 5; ++i) {
   #pragma acc loop worker
   for (int i = 0; i < 5; ++i)
     ;  // comment stripped by a RUN command, but it shows intended whitespace
+}// PRT-NEXT:}
 
-  //--------------------------------------------------
-  // After an error, all translation of OpenACC subtrees to OpenMP is
-  // suppressed, so RewriteOpenACC has nothing to do.  Make sure it's handled
-  // gracefully, in nested directives and subsequent directives.
-  //--------------------------------------------------
+//  PRT-A-NEXT: #pragma acc routine seq
+// PRT-AO-NEXT: // #pragma omp declare target
+// PRT-AA-NEXT: void trailingTextAfterFullRewrite_routineProtoNonWs() ;int trailingTextAfterFullRewrite_protoVar;
+// PRT-AO-NEXT: void trailingTextAfterFullRewrite_routineProtoNonWs() ;
+// PRT-AO-NEXT: // #pragma omp end declare target
+// PRT-AO-NEXT:int trailingTextAfterFullRewrite_protoVar;
+//
+//  PRT-O-NEXT: #pragma omp declare target
+// PRT-OA-NEXT: // #pragma acc routine seq
+//  PRT-O-NEXT: void trailingTextAfterFullRewrite_routineProtoNonWs() ;
+//  PRT-O-NEXT: #pragma omp end declare target
+//  PRT-O-NEXT:int trailingTextAfterFullRewrite_protoVar;
+ #pragma acc routine seq
+ void trailingTextAfterFullRewrite_routineProtoNonWs() ;int trailingTextAfterFullRewrite_protoVar;
+// "int" is flush with semicolon for same reasons described above.
 
+//  PRT-A-NEXT: #pragma acc routine seq
+// PRT-AO-NEXT: // #pragma omp declare target
+//  PRT-A-NEXT: void trailingTextAfterFullRewrite_routineDefNonWs(){
+// PRT-AA-NEXT: }int trailingTextAfterFullRewrite_defVar;
+// PRT-AO-NEXT: }
+// PRT-AO-NEXT: // #pragma omp end declare target
+// PRT-AO-NEXT:int trailingTextAfterFullRewrite_defVar;
+//
+//  PRT-O-NEXT: #pragma omp declare target
+// PRT-OA-NEXT: // #pragma acc routine seq
+//  PRT-O-NEXT: void trailingTextAfterFullRewrite_routineDefNonWs(){
+//  PRT-O-NEXT: }
+//  PRT-O-NEXT: #pragma omp end declare target
+//  PRT-O-NEXT:int trailingTextAfterFullRewrite_defVar;
+ #pragma acc routine seq
+ void trailingTextAfterFullRewrite_routineDefNonWs(){
+ }int trailingTextAfterFullRewrite_defVar;
+// "int" is flush with semicolon for same reasons described above.
+
+//  PRT-A-NEXT: #pragma acc routine seq
+// PRT-AO-NEXT: // #pragma omp declare target
+// PRT-AA-NEXT: void trailingTextAfterFullRewrite_routineProtoWs() ;{{  }}
+// PRT-AO-NEXT: void trailingTextAfterFullRewrite_routineProtoWs() ;
+// PRT-AO-NEXT: // #pragma omp end declare target{{  }}
+//
+//  PRT-O-NEXT: #pragma omp declare target
+// PRT-OA-NEXT: // #pragma acc routine seq
+//  PRT-O-NEXT: void trailingTextAfterFullRewrite_routineProtoWs() ;
+//  PRT-O-NEXT: #pragma omp end declare target{{  }}
+ #pragma acc routine seq
+ void trailingTextAfterFullRewrite_routineProtoWs() ;  // comment stripped by a RUN command, but it shows intended whitespace
+
+//  PRT-A-NEXT: #pragma acc routine seq
+// PRT-AO-NEXT: // #pragma omp declare target
+//  PRT-A-NEXT: void trailingTextAfterFullRewrite_routineDefWs(){
+// PRT-AA-NEXT: }{{  }}
+// PRT-AO-NEXT: }
+// PRT-AO-NEXT: // #pragma omp end declare target{{  }}
+//
+//  PRT-O-NEXT: #pragma omp declare target
+// PRT-OA-NEXT: // #pragma acc routine seq
+//  PRT-O-NEXT: void trailingTextAfterFullRewrite_routineDefWs(){
+//  PRT-O-NEXT: }
+//  PRT-O-NEXT: #pragma omp end declare target{{  }}
+ #pragma acc routine seq
+ void trailingTextAfterFullRewrite_routineDefWs(){
+ }  // comment stripped by a RUN command, but it shows intended whitespace
+
+//--------------------------------------------------
+// After an error, all translation of OpenACC subtrees to OpenMP is
+// suppressed, so RewriteOpenACC has nothing to do.  Make sure it's handled
+// gracefully, in nested directives and subsequent directives.
+//--------------------------------------------------
+
+// PRT-NEXT:void afterError() {
+void afterError() {
 // PRT-NEXT:#if ERRS
 #if ERRS
   // PRT-NEXT:  /* expected-error{{.*}} */
@@ -1735,7 +2052,6 @@ for (i = 0; i < 5; ++i) {
 
 // PRT-NEXT:#endif
 #endif
-
 }// PRT-NEXT:}
 // PRT-EMPTY:
 // PRT-NEXT:{{  }}

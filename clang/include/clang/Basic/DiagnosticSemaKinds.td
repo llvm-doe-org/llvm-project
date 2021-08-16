@@ -10842,6 +10842,22 @@ def note_acc_disable_diag : Note<
 def err_acc_no_self_host_device_clause : Error<
   "expected at least one 'self', 'host', or 'device' clause for '#pragma acc "
   "update'">;
+// TODO: Once the other clauses are supported, this should say:
+//   "expected at least one 'gang', 'worker', 'vector', or 'seq' clause for "
+//   "'#pragma acc routine'"
+def err_acc_no_gang_worker_vector_seq_clause : Error<
+  "expected 'seq' clause for '#pragma acc routine'">;
+def err_acc_expected_function_after_directive : Error<
+  "'#pragma acc %0' must be followed by a lone function prototype or "
+  "definition">;
+def err_acc_routine_unexpected_directive : Error<
+  "'#pragma acc %0' is not permitted within function '%1' because the latter "
+  "is attributed with '#pragma acc routine'">;
+def err_acc_routine_static_local : Error<
+  "static local variable '%0' is not permitted within function '%1' because "
+  "the latter is attributed with '#pragma acc routine'">;
+def note_acc_routine : Note<
+  "function '%0' attributed with '#pragma acc routine' here">;
 } // end of OpenACC category
 
 let CategoryName = "Related Result Type Issue" in {

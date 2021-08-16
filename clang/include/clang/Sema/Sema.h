@@ -11282,6 +11282,9 @@ public:
   /// directive.
   void ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
                                       Scope *CurScope);
+  /// Check a function definition against any OpenACC restrictions (such as any
+  /// OpenACC routine directive).
+  void ActOnFunctionDefinitionForOpenACC(FunctionDecl *FD);
 
   StmtResult ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind Kind,
                                        ArrayRef<ACCClause *> Clauses,
@@ -11320,6 +11323,10 @@ public:
   StmtResult ActOnOpenACCParallelLoopDirective(
       ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
       SourceLocation EndLoc);
+  /// Called on well-formed '\#pragma acc routine'.
+  void ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
+                                    SourceLocation StartLoc,
+                                    SourceLocation EndLoc, DeclGroupRef Decl);
 
   ACCClause *ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
                                           Expr *Expr,
@@ -11465,6 +11472,9 @@ public:
   /// this function does nothing so that we only transform each OpenACC region
   /// to OpenMP once, in its entirety.
   bool transformACCToOMP(ACCDirectiveStmt *D);
+  /// Transform the OpenACC attribute \a ACCAttr on the function declaration or
+  /// definition \a FD to an OpenMP attribute, and attach the latter to \a FD.
+  void transformACCToOMP(ACCDeclAttr *ACCAttr, FunctionDecl *FD);
 
   /// The kind of conversion being performed.
   enum CheckedConversionKind {

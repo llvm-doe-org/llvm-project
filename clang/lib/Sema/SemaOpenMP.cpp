@@ -20123,8 +20123,9 @@ void Sema::ActOnOpenMPDeclareTargetName(
   if (ActiveAttr.hasValue() && ActiveAttr.getValue()->getLevel() == Level)
     return;
 
-  auto *A = OMPDeclareTargetDeclAttr::CreateImplicit(Context, MT, DT, Level,
-                                                     SourceRange(Loc, Loc));
+  auto *A = OMPDeclareTargetDeclAttr::CreateImplicit(
+      Context, MT, DT, Level, /*IsOpenACCTranslation=*/false,
+      SourceRange(Loc, Loc));
   ND->addAttr(A);
   if (ASTMutationListener *ML = Context.getASTMutationListener())
     ML->DeclarationMarkedOpenMPDeclareTarget(ND, A);
@@ -20217,7 +20218,7 @@ void Sema::checkDeclIsAllowedInOpenMPTarget(Expr *E, Decl *D,
         DeclareTargetContextInfo &DTCI = DeclareTargetNesting.back();
         auto *A = OMPDeclareTargetDeclAttr::CreateImplicit(
             Context, OMPDeclareTargetDeclAttr::MT_To, DTCI.DT, Level,
-            SourceRange(DTCI.Loc, DTCI.Loc));
+            /*IsOpenACCTranslation=*/false, SourceRange(DTCI.Loc, DTCI.Loc));
         D->addAttr(A);
         if (ASTMutationListener *ML = Context.getASTMutationListener())
           ML->DeclarationMarkedOpenMPDeclareTarget(D, A);

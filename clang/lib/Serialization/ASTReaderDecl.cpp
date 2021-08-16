@@ -4693,9 +4693,10 @@ void ASTDeclReader::UpdateDecl(Decl *D,
       auto MapType = Record.readEnum<OMPDeclareTargetDeclAttr::MapTypeTy>();
       auto DevType = Record.readEnum<OMPDeclareTargetDeclAttr::DevTypeTy>();
       unsigned Level = Record.readInt();
+      bool IsOpenACCTranslation = Record.readBool();
       D->addAttr(OMPDeclareTargetDeclAttr::CreateImplicit(
-          Reader.getContext(), MapType, DevType, Level, readSourceRange(),
-          AttributeCommonInfo::AS_Pragma));
+          Reader.getContext(), MapType, DevType, Level, IsOpenACCTranslation,
+          readSourceRange(), AttributeCommonInfo::AS_Pragma));
       break;
     }
 

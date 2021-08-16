@@ -223,6 +223,61 @@ public:
    }
 };
 
+class OMPDeclAttr : public InheritableAttr {
+protected:
+  OMPDeclAttr(ASTContext &Context, const AttributeCommonInfo &CommonInfo,
+              attr::Kind AK, bool IsLateParsed,
+              bool InheritEvenIfAlreadyPresent)
+      : InheritableAttr(Context, CommonInfo, AK, IsLateParsed,
+                        InheritEvenIfAlreadyPresent) {}
+
+public:
+  virtual ~OMPDeclAttr() {}
+  virtual bool getIsOpenACCTranslation() const = 0;
+  // Implement isa/cast/dyncast/etc.
+  static bool classof(const Attr *A) {
+    return A->getKind() >= attr::FirstOMPDeclAttr &&
+           A->getKind() <= attr::LastOMPDeclAttr;
+  }
+};
+
+class ACCDeclAttr : public InheritableAttr {
+  ///@{
+  /// These functions are needed specifically for (1) reading and writing an AST
+  /// file, (2) derived classes' clone member functions, which are called for
+  /// attribute inheritance, and (3) AST dumps.  In these cases, the OpenMP
+  /// attribute might not have been created yet or might be difficult to store
+  /// or access.  In other cases, use \c getOMPNode and \c setOMPNode, which
+  /// have more careful assertions.
+  void setOMPNodeKind(attr::Kind K);
+  attr::Kind getOMPNodeKind() const;
+  ///@}
+
+protected:
+  ACCDeclAttr(ASTContext &Context, const AttributeCommonInfo &CommonInfo,
+              attr::Kind AK, bool IsLateParsed,
+              bool InheritEvenIfAlreadyPresent)
+      : InheritableAttr(Context, CommonInfo, AK, IsLateParsed,
+                        InheritEvenIfAlreadyPresent) {}
+
+public:
+  virtual ~ACCDeclAttr() {}
+  ///@{
+  /// Set or get the OpenMP attribute to which this OpenACC attribute was
+  /// translated, both of which must already have been attached to \a D, and
+  /// \c getIsOpenACCTranslation() must already return true for the OpenMP
+  /// attribute.
+  InheritableAttr *getOMPNode(Decl *D) const;
+  void setOMPNode(Decl *D, InheritableAttr *OMPNode);
+  ///@}
+
+  // Implement isa/cast/dyncast/etc.
+  static bool classof(const Attr *A) {
+    return A->getKind() >= attr::FirstACCDeclAttr &&
+           A->getKind() <= attr::LastACCDeclAttr;
+  }
+};
+
 /// A single parameter index whose accessors require each use to make explicit
 /// the parameter index encoding needed.
 class ParamIdx {
