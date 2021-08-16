@@ -1,18 +1,27 @@
 This document describes the current design of Clacc, which extends
 Clang and LLVM with support for OpenACC.
 
-Design Rationale
-================
+Publications
+============
 
 This document focuses on the details of the current Clacc design and
 only summarizes the design rationale.  A more complete description of
-the design rationale, including a presentation of several design
-alternatives that were considered, appears in sections I through II.D
-of the following paper:
+the original design rationale, including a presentation of several
+design alternatives that were considered, appears in sections I
+through II.D of the following paper:
 
 > Clacc: Translating OpenACC to OpenMP in Clang, Joel E. Denny, Seyong
 > Lee, and Jeffrey S. Vetter, 2018 IEEE/ACM 5th Workshop on the LLVM
-> Compiler Infrastructure in HPC (LLVM- HPC), Dallas, TX, USA, (2018).
+> Compiler Infrastructure in HPC (LLVM-HPC), Dallas, TX, USA, (2018).
+
+The follow paper is an earlier description of Clacc's support for the
+OpenACC Profiling Interface, but some details have evolved since then:
+
+> OpenACC Profiling Support for Clang and LLVM using Clacc and TAU,
+> Camille Coti, Joel E. Denny, Kevin Huck, Seyong Lee, Allen
+> D. Malony, Sameer Shende, and Jeffrey S. Vetter, Workshop on
+> Programming and Performance Visualization Tools (ProTools), GA, USA
+> (2020).
 
 High-Level Design
 =================
@@ -49,17 +58,17 @@ following figure:
 The components of this diagram are as follows:
 
 * **OpenACC source** is C application source code containing OpenACC
-  constructs.  C++ will be supported in the future.  Currently,
-  Fortran support is not planned and would not be based on Clang.
+  directives.  C++ will be supported in the future.  Fortran support
+  is being developed for Flang in a separate project.
 * **Parser** is the existing Clang parser and semantic analyzer
   extended for OpenACC.
-* **OpenACC AST** is a Clang AST in which OpenACC constructs are
+* **OpenACC AST** is a Clang AST in which OpenACC directives are
   represented by OpenACC node types, which are a Clacc extension to
   Clang.
 * **`TransformACCToOMP`** is a new Clang component introduced by Clacc
   to transform OpenACC to OpenMP entirely at the AST level.
-* **OpenMP AST** is a Clang AST in which OpenACC constructs have been
-  lowered to OpenMP constructs represented by OpenMP node types, which
+* **OpenMP AST** is a Clang AST in which OpenACC directives have been
+  lowered to OpenMP directives represented by OpenMP node types, which
   exist in Clang independently of Clacc.
 * **Codegen** is the existing Clang backend, which lowers the OpenMP
   AST to LLVM IR.
@@ -168,59 +177,99 @@ However, there are also some caveats to consider for `TreeTransform`:
   AST iterations must take special care not to visit both when they're
   expecting only one version of the source.
 
-Design
-------
+General Design
+--------------
 
 Clacc's `TransformACCToOMP` component is implemented as a class
 derived via CRTP from `TreeTransform`.  As mentioned earlier,
 `TransformACCToOMP` does not represent a distinct compiler phase.
-Instead, immediately after parsing each OpenACC region and
-constructing an associated OpenACC subtree, Clacc passes the OpenACC
-subtree to `TransformACCToOMP` to construct the corresponding OpenMP
-subtree.  Clacc adds the resulting OpenMP subtree's root as a hidden
-child of the OpenACC subtree's root, and then parsing continues.
+Instead, immediately after parsing each OpenACC directive along with
+any associated code region and constructing the OpenACC subtree to
+represent them, Clacc passes the OpenACC subtree to
+`TransformACCToOMP` to construct the corresponding OpenMP subtree.
+Clacc adds the resulting OpenMP subtree to the AST, associates it with
+the OpenACC subtree, and then parsing continues.  We consider
+directives that form statements in the next section.
+
+`ACCDirectiveStmt`: Directives as Statements
+--------------------------------------------
+
+In this section, we describe how `TransformACCToOMP` handles OpenACC
+directives that form C or C++ statements.  There are two kinds:
+
+* OpenACC constructs, such as the `parallel` directive.
+* OpenACC executable directives, such as the `update` directive.
 
 For example, consider this function written in OpenACC, where comments
 show the equivalent OpenMP:
 
 ```
-void foo() {
-  #pragma acc parallel  // #pragma omp target teams
-  #pragma acc loop gang // #pragma omp distribute
-  for (int i=0; i<2; ++i)
-    // loop body
-}
+  void foo() {
+    #pragma acc parallel  // #pragma omp target teams
+    #pragma acc loop gang // #pragma omp distribute
+    for (int i=0; i<2; ++i)
+      // loop body
+  }
 ```
 
 The AST that Clacc constructs is depicted below:
 
 ```
-       TranslationUnit
-              |
-         FunctionDecl
-              |
-         CompoundStmt
-              |
-     ACCParallelDirective
-              |          `-OMPNode-> OMPTargetTeamsDirective
-       ACCLoopDirective                         |
-            /   \      `---OMPNode---> OMPDistributeDirective
-ACCGangClause   ForStmt                         |
-                   |                         ForStmt
-                                                |
+       TranslationUnitDecl
+                |
+           FunctionDecl
+                |
+           CompoundStmt
+                |
+       ACCParallelDirective
+                |          `-OMPNode-> OMPTargetTeamsDirective
+         ACCLoopDirective                         |
+              /   \      `---OMPNode---> OMPDistributeDirective
+  ACCGangClause   ForStmt                         |
+                     |                         ForStmt
+                                                  |
 ```
 
-Thus, the `ForStmt` node and its subtree are duplicated.  The
-`ACCLoopDirective` node is translated to an `OMPDistributeDirective`
-node, which becomes the normal parent for the translated `ForStmt`
-node and the hidden OpenMP child for the `ACCLoopDirective` node.
-Finally, the `ACCParallelDirective` is translated to an
-`OMPTargetTeamsDirective` node, which becomes the normal parent for
-the `OMPDistributeDirective` node and the hidden OpenMP child for the
-`ACCParallelDirective` node.
+Clacc's `ACCDirectiveStmt` is a base class for any node representing
+an OpenACC directive that forms a statement, such as the
+`ACCParallelDirective` and `ACCLoopDirective` in the above example.
+`OMPExecutableDirective`, which also exists upstream, is a base class
+for any corresponding OpenMP node, such as the
+`OMPTargetTeamsDirective` and `OMPDistributeDirective` in the above
+example.  Clacc's `DirectiveStmt` is a base class for both
+`ACCDirectiveStmt` and `OMPExecutableDirective`.
 
-Clacc overcomes the `TreeTransform` caveats discussed in the previous
-section as follows:
+Each such directive node serves as the root of a subtree that also
+contains any associated statement.  In the above example, the
+associated statement of the `ACCParallelDirective` is the
+`ACCLoopDirective`, whose associated statement is a `ForStmt`.  The
+associated statement of the `OMPTargetTeamsDirective` is the
+`OMPDistributeDirective`, whose associated statement is the other
+`ForStmt`.
+
+Inserting an `ACCDirectiveStmt` and its `OMPExecutableDirective` into
+the Clang AST as siblings would yield confusing semantics for analysis
+tools, implying both statements are to be executed in sequence.  Thus,
+as in the above example, `TransformACCToOMP` instead adds an
+`OMPExecutableDirective` as a hidden child of an `ACCDirectiveStmt`.
+The `OMPExecutableDirective` can be retrieved using the `getOMPNode`
+member function of the `ACCDirectiveStmt`.
+
+`TransformACCToOMP` translates directives bottom-up.  Thus, in the
+above example, `TransformACCToOMP` first duplicates the `ForStmt` and
+its subtree.  Then, it translates the `ACCLoopDirective` to an
+`OMPDistributeDirective`, which becomes the normal parent for the
+translated `ForStmt` and the hidden OpenMP child for the
+`ACCLoopDirective`.  Finally, it translates the `ACCParallelDirective`
+to an `OMPTargetTeamsDirective`, which becomes the normal parent for
+the `OMPDistributeDirective` and the hidden OpenMP child for the
+`ACCParallelDirective`.
+
+`TreeTransform` Caveats and AST Traversals
+------------------------------------------
+
+Clacc overcomes the `TreeTransform` caveats discussed in the section
+"Background: TreeTransform" as follows:
 
 * **Transitory semantic data**: Because Clacc calls
   `TransformACCToOMP` immediately after constructing an OpenACC
@@ -234,13 +283,14 @@ section as follows:
 * **Redundant AST subtrees**: AST traversals are typically based on
   Clang's `RecursiveASTVisitor` facility.  Most AST traversal
   developers and users likely expect for traversals to visit an AST
-  representing the original source code only.  Because the OpenMP node
-  to which an OpenACC node is translated is not recorded as a normal
-  child of the OpenACC node, `RecursiveASTVisitor` visits the OpenACC
-  node but skips its hidden OpenMP child.  However, while visiting an
-  OpenACC node, a visitor can be written to call the node's
-  `getOMPNode` member function to access the OpenMP node, possibly for
-  a recursive visitation.
+  representing the original source code only.  Because the
+  `OMPExecutableDirective` to which an `ACCDirectiveStmt` is
+  translated is not recorded as a normal child of the
+  `ACCDirectiveStmt`, `RecursiveASTVisitor` visits the
+  `ACCDirectiveStmt` but skips its hidden `OMPExecutableDirective`
+  child.  However, while visiting an `ACCDirectiveStmt`, a visitor can
+  be written to call its `getOMPNode` member function to access the
+  `OMPExecutableDirective`, possibly for a recursive visitation.
 
 As a result, Clacc supports at least three kinds of AST traversals:
 
@@ -249,45 +299,45 @@ As a result, Clacc supports at least three kinds of AST traversals:
   source.  Because the output of `-ast-print` has thus always
   corresponded to the original preprocessed input and never a lowered
   version of it, Clacc extends it for OpenACC not to include the
-  OpenMP translation.  In the previous example, `-ast-print` thus
-  visits the `ACCParallelDirective` node, the `ACCLoopDirective` node,
-  and the original `ForStmt` subtree but not the
-  `OMPTargetTeamsDirective` node, the `OMPDistributeDirective` node,
-  or the translated `ForStmt` subtree.
+  OpenMP translation.  In the examples from the previous two sections,
+  `-ast-print` thus visits the `ACCParallelDirective`, the
+  `ACCLoopDirective`, and the original `ForStmt` subtree but not the
+  `OMPTargetTeamsDirective`, the `OMPDistributeDirective`, or the
+  translated `ForStmt` subtree.
 * **Delegate to OpenMP**: For example, one of the major motivations
   for translating the OpenACC AST to an OpenMP AST is to reuse the
   existing LLVM IR codegen implementation for OpenMP.  Thus, for LLVM
-  IR codegen, each OpenACC node delegates to its hidden OpenMP child.
-  In the previous example, the `ACCParallelDirective` node delegates
-  LLVM IR codegen to the `OMPTargetTeamsDirective` node and its
-  subtree, and the normal subtree of the `ACCParallelDirective` node
-  is not visited.
+  IR codegen, each `ACCDirectiveStmt` delegates to its hidden
+  `OMPExecutableDirective` child.  In the previous examples, the
+  `ACCParallelDirective` delegates LLVM IR codegen to the
+  `OMPTargetTeamsDirective` and its subtree, and the normal subtree of
+  the `ACCParallelDirective` is not visited.
 * **Visit OpenACC and OpenMP**: For example, `-ast-dump` is an
   existing Clang command-line option for printing a textual
   representation of the AST structure, including parent-child
   relationships, source location information, and computed types.
   This feature is clearly designed for debugging ASTs and is very
-  useful for Clang developers.  For each OpenACC AST node, Clacc
+  useful for Clang developers.  For each `ACCDirectiveStmt`, Clacc
   extends this feature to always produce a full representation of that
   node's subtree including, as a specially marked child, the OpenMP
   subtree to which it translates.
 
-Redundant AST subtrees might at first seem to be a disadvantage of
+Redundant AST nodes might at first seem to be a disadvantage of
 employing `TreeTransform` in `TransformACCToOMP`.  However, because it
 results in a representation of the chosen mapping from OpenACC to
 OpenMP, we believe it augments the potential for constructing flexible
 debugging and analysis tools on top of Clacc.  The capabilities of
 `-ast-dump`, as described above, and `-fopenacc-print`, as described
-in the next section, are simple examples.
+in the section "Source-to-Source Translation", are simple examples.
 
 Codegen
 =======
 
-As mentioned in the previous section, an OpenACC AST node implements
-LLVM IR codegen by delegating to its hidden OpenMP child.  The most
-obvious points for this implementation are the OpenACC cases in the
-main switch on AST node types within Clang codegen's
-`CodeGenFunction::EmitStmt`.
+As mentioned in the previous section, an OpenACC AST node of type
+`ACCDirectiveStmt` implements LLVM IR codegen by delegating to its
+hidden OpenMP child.  The most obvious points for this implementation
+are the OpenACC cases in the main switch on AST node types within
+Clang codegen's `CodeGenFunction::EmitStmt`.
 
 While necessary, those implementation points are insufficient for
 offloading support.  The trouble is that the OpenMP codegen
@@ -302,9 +352,9 @@ their hidden OpenMP children.
 Source-to-Source Translation
 ============================
 
-The `TransformACCToOMP` section described how Clacc uses Clang's
-`TreeTransform` facility to construct and attach hidden OpenMP
-subtrees to OpenACC subtrees.  It also mentions that `-ast-print`
+The `TransformACCToOMP` section above described how Clacc uses Clang's
+`TreeTransform` facility to construct OpenMP subtrees and associate
+them with OpenACC subtrees.  It also mentioned that `-ast-print`
 prints only OpenACC.  In this section, we describe Clang's `Rewrite`
 facility, which is normally used in Clang for source-to-source
 translation, and we describe how Clacc prints OpenMP source.
@@ -341,24 +391,25 @@ Clacc supports two new Clang command-line options: `-fopenacc-print`,
 which is built on `Rewrite`, and `-fopenacc-ast-print`, which is built
 on `-ast-print`.  Each takes any of the following values:
 
-* `acc`: OpenACC constructs are printed and the OpenMP constructs to
+* `acc`: OpenACC directives are printed and the OpenMP directives to
   which they were translated are ignored.  Thus, this value is likely
   not helpful to users but can be helpful to developers for debugging
   the Clacc implementation.  That is, `-fopenacc-print=acc` merely
   prints the original source without modification, and
-  `-fopenacc-ast-print=acc` is a more convenient form of `-Xclang
-  -ast-print -fsyntax-only -fopenacc`.
-* `omp`: OpenMP constructs are printed, and the OpenACC constructs
+  `-fopenacc-ast-print=acc` is a more convenient form of
+  `-Xclang -ast-print -fsyntax-only -fopenacc`.
+* `omp`: OpenMP directives are printed, and the OpenACC directives
   from which they were translated are ignored.
-* `acc-omp`: OpenACC constructs are printed and the OpenMP constructs
+* `acc-omp`: OpenACC directives are printed and the OpenMP directives
   to which they were translated are printed in neighboring comments.
-* `omp-acc`: OpenMP constructs are printed and the OpenACC constructs
-  from which they were translated are printed in neighboring comments.
+* `omp-acc`: OpenMP directives printed and the OpenACC directives from
+  which they were translated are printed in neighboring comments.
 
 In the last two cases, Clacc will avoid duplicating the code block
 associated with a directive if that code block prints identically in
 both the OpenACC and OpenMP versions.  The output then looks similar
-to the code passage in the previous example.
+to the code passages in the examples in the `TransformACCToOMP`
+section.
 
 Originally, Clacc only supported the functionality of
 `-fopenacc-ast-print` (but under a different name).  Because it's
@@ -514,11 +565,11 @@ must be used instead.
 OpenACC to OpenMP Mapping
 =========================
 
-This section details Clacc's planned mapping from OpenACC directives
-and clauses to OpenMP directives and clauses.  If an OpenACC directive
-or clause does not appear in this section, we haven't planned it yet.
-`README-OpenACC-status.md` lists which OpenACC directives and clauses
-Clacc already implements.
+This section details Clacc's mapping from OpenACC directives and
+clauses to OpenMP directives and clauses.  If an OpenACC directive or
+clause does not appear in this section, we haven't implemented it yet.
+`README-OpenACC-status.md` also lists which OpenACC directives and
+clauses Clacc currently implements.
 
 Notation
 --------
@@ -644,17 +695,17 @@ clarify these points in future versions of the OpenACC specification.
         * `nomap` indicates no data mapping of a variable between
           device and host.
         * `shared` indicates no privatization of a variable.  That is,
-          references to the variable within the construct refer to the
-          original variable, which is shared among the gangs, workers,
-          or vector lanes executing the construct.
+          references to the variable within the construct refer to a
+          single variable that is shared among the gangs, workers, or
+          vector lanes executing the construct.
     * Notes:
-        * The OpenACC 3.0 specification does not categorize DAs into
+        * The OpenACC 3.1 specification does not categorize DAs into
           these groups, and this categorization is not strictly
           necessary to specify OpenACC semantics unambiguously.
           However, Clacc employs this categorization as it seems to
           simplify and clarify documentation, discussion, and
           implementation.
-        * The OpenMP 5.0 specification does employ these two groups
+        * The OpenMP 5.1 specification does employ these two groups
           with the same high-level semantics (but the DAs within the
           groups are not precisely the same as in Clacc).  Thus,
           additional benefits of employing this categorization in
@@ -662,7 +713,7 @@ clarify these points in future versions of the OpenACC specification.
           Clacc contributors and that it facilitates OpenACC
           translation to OpenMP.
         * The default DA in each group is not specified as a DA by
-          OpenACC 3.0:
+          OpenACC 3.1:
             * As noted in the mappings below, Clacc's translation
               sometimes discards `nomap`, which is then merely a
               placeholder indicating no mapping attribute was
@@ -675,7 +726,7 @@ clarify these points in future versions of the OpenACC specification.
               *exp* `shared`, so Clacc then relies on OpenMP *imp*
               DSAs, and the semantics are the desired OpenACC
               semantics.
-        * Otherwise, the DMAs are listed in OpenACC 3.0 sec. 2.7 "Data
+        * Otherwise, the DMAs are listed in OpenACC 3.1 sec. 2.7 "Data
           Clauses", and the DSAs are described in the sections for the
           directives that permit them.
 * It is an error if, on any OpenACC directive, a variable appears more
@@ -691,12 +742,12 @@ clarify these points in future versions of the OpenACC specification.
       as errors, it would have to discard them when generating OpenMP.
 * It is an error if, on any OpenACC directive, a variable appears in
   more than one *exp* DMA.  Notes:
-    * In OpenACC 3.0, it seems clear that DMAs are intended to be
+    * In OpenACC 3.1, it seems clear that DMAs are intended to be
       mutually exclusive options along a single dimension.  For
       example, `copy`, `copyin`, and `copyout` have contradictory
       specifications for initialization of the local copy of the
       variable and for storing data back to the original variable.
-    * No *pre* DMA is specified by OpenACC 3.0 or implemented by
+    * No *pre* DMA is specified by OpenACC 3.1 or implemented by
       Clacc.
 * It is an error if, on any OpenACC directive, a variable appears in
   more than one *exp*|*pre* DSA.  Notes:
@@ -721,7 +772,7 @@ clarify these points in future versions of the OpenACC specification.
     * That seems equally true on a combined directive even though DMAs
       apply to the effective `acc parallel` while `private` applies to
       the effective `acc loop`.
-    * The only mappable *exp* DSA is `reduction`.  In OpenACC 3.0, it
+    * The only mappable *exp* DSA is `reduction`.  In OpenACC 3.1, it
       is specifically meant to combine with DMAs and even implies a
       DMA, `copy`.
     * TODO: Does any existing OpenACC code combine a DMA with either
@@ -789,13 +840,6 @@ clarify these points in future versions of the OpenACC specification.
     * It assumes the host and device copies of the variable have
       different values and one must be updated from the other, but
       doing so would violate `const`.
-* A `copyout` or `delete` clause on `acc exit data` performs no action
-  for any variable that is not currently present on the device.
-  Notes:
-    * OpenACC 3.0 specifies a runtime error instead.
-    * [A correction has been
-      proposed](https://github.com/OpenACC/openacc-spec/pull/306) and
-      should appear in the OpenACC spec after 3.0.
 * It is an error to specify subarrays with no `:` and one integer.
   Notes:
     * This notation is syntactically identical to an array subscript.
@@ -803,14 +847,16 @@ clarify these points in future versions of the OpenACC specification.
       section has no `:` and one integer, the one integer is the start
       index and the length is one.  That's also how Clang implements
       it for OpenMP.
-    * OpenACC 2.7 does not appear to specify a behavior for this
+    * OpenACC 3.1 does not appear to specify a behavior for this
       notation.  However, in our experiments, pgcc 19.4-0 implements
       it instead as if the start index is zero and the one integer is
-      the length.
-    * If OpenACC grows a specification for this behavior, we will
-      extend Clacc to implement it.  If, before then, we discover
-      multiple applications that depend on PGI's current behavior, we
-      will consider extending Clacc to implement that.
+      the length.  On 2021/07/30 in an OpenACC Slack channel, NVIDIA
+      explained that recent versions of NVHPC warn that behavior will
+      eventually change: no `:` will mean the integer is an array
+      subscript indicating a single element.
+    * We will continue to follow the OpenACC specification, NVHPC
+      behavior, and the requirements of applications to implement
+      compatible support in Clacc.
 * It is an error to use subarrays in `firstprivate` and `private`
   clauses.  Notes:
     * While pgcc 19.4-0 does permit subarrays in these clauses,
@@ -821,8 +867,8 @@ clarify these points in future versions of the OpenACC specification.
       OpenMP 5.0 sec. 2.1.5 p. 46 L10.  Thus, this feature is
       currently listed under "Potentially Unmappable Features" below.
 * Behavior is undefined if a subarray specified for a variable in a
-  DMA on an `acc enter data`, `acc exit data`, `acc data`, or `acc
-  parallel` directive is not fully contained within any subarray
+  DMA on an `acc enter data`, `acc exit data`, `acc data`, or
+  `acc parallel` directive is not fully contained within any subarray
   specified for the same variable in a DMA on any enclosing `acc data`
   directive.  Notes:
     * This case does not appear to be well defined by OpenACC 3.0 or
@@ -831,10 +877,6 @@ clarify these points in future versions of the OpenACC specification.
       the OpenMP implementation's handling.
     * For further discussion, see the notes on the translation of
       `nomap` in the "Parallel Directives" section below.
-* An *imp* `copy` for a reduction variable overrides an *imp*
-  `firstprivate` when the variable is a scalar.  Text to make this
-  overriding behavior clear has been proposed for inclusion in the
-  OpenACC spec after 2.7.
 * Identifying a DA as *pre* instead of *imp* only matters for combined
   directives.  Notes:
     * OpenACC 3.0 sec. 2.6 "Data Environment" says "Variables with
