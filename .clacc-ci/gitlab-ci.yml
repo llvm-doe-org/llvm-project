@@ -377,10 +377,10 @@ release (build):
     - echo $NINJA
     - $NINJA --version
     - echo "$XFAIL_COMMON" "$XFAIL" |
-      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' |
+      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//' |
       tee xfail.txt
     - echo "$XFAIL_NOT_COMMON" "$XFAIL_NOT" |
-      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' |
+      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//' |
       tee xfail-not.txt
     - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
            $NINJA -l `nproc` check-all
