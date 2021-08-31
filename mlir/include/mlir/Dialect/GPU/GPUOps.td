@@ -378,10 +378,10 @@ def GPU_LaunchFuncOp : GPU_Op<"launch_func",
     unsigned getNumKernelOperands();
 
     /// The name of the kernel's containing module.
-    StringRef getKernelModuleName();
+    StringAttr getKernelModuleName();
 
     /// The name of the kernel.
-    StringRef getKernelName();
+    StringAttr getKernelName();
 
     /// The i-th operand passed to the kernel function.
     Value getKernelOperand(unsigned i);
@@ -834,6 +834,8 @@ def GPU_AllocOp : GPU_Op<"alloc", [
     custom<AsyncDependencies>(type($asyncToken), $asyncDependencies) ` `
     `(` $dynamicSizes `)` (`` `[` $symbolOperands^ `]`)? attr-dict `:` type($memref)
   }];
+
+  let hasCanonicalizer = 1;
 }
 
 def GPU_DeallocOp : GPU_Op<"dealloc", [GPU_AsyncOpInterface]> {
@@ -1040,7 +1042,7 @@ def GPU_SubgroupMmaConstantMatrixOp : GPU_Op<"subgroup_mma_constant_matrix",
     the same value.
 
     This op is meant to be used along with `gpu.subgroup_mma_compute`.
-    
+
     Example:
 
     ```mlir
