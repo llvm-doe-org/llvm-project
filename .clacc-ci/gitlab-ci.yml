@@ -34,7 +34,7 @@ variables:
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
   LIT_NTHREADS_DIVISOR: 1
   XFAIL_COMMON:
-    "libomptarget :: nvptx64-nvidia-cuda :: mapping/reduction_implicit_map.cpp
+    "
     libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
     libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/memory_manager.cpp
     libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
@@ -44,9 +44,7 @@ variables:
     libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
     libomptarget :: x86_64-pc-linux-gnu :: offloading/taskloop_offload_nowait.cpp
     libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/taskloop_offload_nowait.cpp
-    Clang :: OpenMP/nvptx_target_parallel_reduction_codegen.cpp
-    Clang :: OpenMP/nvptx_target_parallel_reduction_codegen_tbaa_PR46146.cpp
-    Clang :: OpenMP/nvptx_teams_reduction_codegen.cpp"
+    "
   XFAIL_NOT_COMMON:
     ""
 
@@ -113,17 +111,20 @@ stages:
     BUILD_ID: release
     CMAKE_BUILD_TYPE: Release
     XFAIL:
+      "
       Headers/wasm.c
-      CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
-      CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
-      CodeGen/AMDGPU/GlobalISel/irtranslator-call-sret.ll
-      CodeGen/AMDGPU/GlobalISel/irtranslator-call.ll
-      CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
-      CodeGen/AMDGPU/GlobalISel/irtranslator-sibling-call.ll
-      CodeGen/AMDGPU/GlobalISel/irtranslator-tail-call.ll
-      CodeGen/AMDGPU/call-constant.ll
-      CodeGen/AMDGPU/indirect-call.ll
-      CodeGen/AMDGPU/returnaddress.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-sret.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-sibling-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-tail-call.ll
+      LLVM :: CodeGen/AMDGPU/call-constant.ll
+      LLVM :: CodeGen/AMDGPU/indirect-call.ll
+      LLVM :: CodeGen/AMDGPU/returnaddress.ll
+      "
 
 # Not setup or cleanup.
 .non-utility:
