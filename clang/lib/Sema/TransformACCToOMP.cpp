@@ -700,7 +700,7 @@ public:
           ExprResult Res = getSema().BuildDeclRefExpr(
               DirEntry.NumWorkersVarDecl,
               DirEntry.NumWorkersVarDecl->getType().getNonReferenceType(),
-              VK_RValue, D->getEndLoc());
+              VK_PRValue, D->getEndLoc());
           assert(!Res.isInvalid() &&
                  "expected valid reference to num_workers variable");
           AddNumThreadsExpr = Res.get();

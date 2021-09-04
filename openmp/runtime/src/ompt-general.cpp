@@ -338,7 +338,7 @@ ompt_try_start_tool(unsigned int omp_version, const char *runtime_version) {
                                 fname);
         start_tool = (ompt_start_tool_t)GetProcAddress(h, "ompt_start_tool");
         if (!start_tool) {
-          OMPT_VERBOSE_INIT_CONTINUED_PRINT("Failed: Error %s\n",
+          OMPT_VERBOSE_INIT_CONTINUED_PRINT("Failed: Error %u\n",
                                             GetLastError());
         } else
 #else
@@ -575,7 +575,10 @@ void ompt_fini() {
       KMP_INTERNAL_FREE(ompt_device_inits);
       ompt_device_inits = NULL;
     }
-    ompt_start_tool_result->finalize(&(ompt_start_tool_result->tool_data));
+#if OMPD_SUPPORT
+    if (ompt_start_tool_result && ompt_start_tool_result->finalize)
+#endif
+      ompt_start_tool_result->finalize(&(ompt_start_tool_result->tool_data));
   }
 
   if (ompt_tool_module)

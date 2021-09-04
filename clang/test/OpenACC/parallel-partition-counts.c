@@ -67,13 +67,14 @@
 // Check execution with normal compilation.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                    )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
+// RUN:   (run-if=                tgt-cflags=                                     tgt=host   )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  tgt=x86_64 )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple tgt=ppc64le)
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple tgt=nvptx64)
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %s -o %t %[tgt-cflags]
+// RUN:   %[run-if] %clang -Xclang -verify=expected,%[tgt] -fopenacc %s -o %t \
+// RUN:                    %[tgt-cflags]
 // RUN:   %[run-if] %t 2 > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s -check-prefixes=EXE
 // RUN: }
@@ -2277,3 +2278,23 @@ int main(int argc, char *argv[]) {
   return 0;
 } // PRT-NEXT: }
 // EXE-NOT: {{.}}
+
+// FIXME: Clang produces spurious note diagnostics here.  This issue is not
+// limited to Clacc.  For example, using upstream Clang, the same spurious notes
+// follow the unused variable warnings for i in this example:
+//
+//   $ cat test.c
+//   #include <assert.h>
+//   #include <stdlib.h>
+//
+//   int main(int argc, char *argv[]) {
+//     assert(argc == 2);
+//     int i = atoi(argv[1]);
+//     return 0;
+//   }
+//   $ clang test.c -fopenmp -fopenmp-targets=nvptx64-nvidia-cuda \
+//                  -Wunused-variable
+//
+// Strangely, expecting 1+ occurrences eliminates the notes, so -verify then
+// complains.
+/* nvptx64-note@__clang_cuda_device_functions.h:* 0+ {{used here}} */

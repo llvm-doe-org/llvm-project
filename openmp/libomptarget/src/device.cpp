@@ -87,18 +87,21 @@ int DeviceTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size) {
   }
 
   // Mapping does not exist, allocate it with refCount=INF
-  HostDataToTargetTy newEntry((uintptr_t) HstPtrBegin /*HstPtrBase*/,
-                              (uintptr_t) HstPtrBegin /*HstPtrBegin*/,
-                              (uintptr_t) HstPtrBegin + Size /*HstPtrEnd*/,
-                              (uintptr_t) TgtPtrBegin /*TgtPtrBegin*/,
-                              false /*UseHoldRefCount*/, nullptr /*Name*/,
-                              true /*IsRefCountINF*/);
-
+  const HostDataToTargetTy &newEntry =
+      *HostDataToTargetMap
+           .emplace(
+               /*HstPtrBase=*/(uintptr_t)HstPtrBegin,
+               /*HstPtrBegin=*/(uintptr_t)HstPtrBegin,
+               /*HstPtrEnd=*/(uintptr_t)HstPtrBegin + Size,
+               /*TgtPtrBegin=*/(uintptr_t)TgtPtrBegin,
+               /*UseHoldRefCount=*/false, /*Name=*/nullptr,
+               /*IsRefCountINF=*/true)
+           .first;
   DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD
-     ", HstEnd=" DPxMOD ", TgtBegin=" DPxMOD "\n",
+     ", HstEnd=" DPxMOD ", TgtBegin=" DPxMOD ", RefCount=%s\n",
      DPxPTR(newEntry.HstPtrBase), DPxPTR(newEntry.HstPtrBegin),
-     DPxPTR(newEntry.HstPtrEnd), DPxPTR(newEntry.TgtPtrBegin));
-  HostDataToTargetMap.insert(newEntry);
+     DPxPTR(newEntry.HstPtrEnd), DPxPTR(newEntry.TgtPtrBegin),
+     newEntry.refCountToStr().c_str());
 
   DataMapMtx.unlock();
 
@@ -298,18 +301,16 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
       ((lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) && IsImplicit)) {
     auto &HT = *lr.Entry;
     IsNew = false;
-
     if (UpdateRefCount)
       HT.incRefCount(HasHoldModifier);
-
     uintptr_t tp = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
     INFO(OMP_INFOTYPE_MAPPING_EXISTS, DeviceID,
          "Mapping exists%s with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD
          ", "
-         "Size=%" PRId64 ",%s RefCount=%s, Name=%s\n",
+         "Size=%" PRId64 ", RefCount=%s (%s), Name=%s\n",
          (IsImplicit ? " (implicit)" : ""), DPxPTR(HstPtrBegin), DPxPTR(tp),
-         Size, (UpdateRefCount ? " updated" : ""),
-         HT.isRefCountInf() ? "INF" : std::to_string(HT.getRefCount()).c_str(),
+         Size, HT.refCountToStr().c_str(),
+         UpdateRefCount ? "incremented" : "update suppressed",
          (HstPtrName) ? getNameFromMapping(HstPtrName).c_str() : "unknown");
     rc = (void *)tp;
   } else if ((lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) && !IsImplicit) {
@@ -339,9 +340,9 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
     // In addition to the mapping rules above, the close map modifier forces the
     // mapping of the variable to the device.
     if (Size) {
-      DP("Return HstPtrBegin " DPxMOD " Size=%" PRId64 " RefCount=%s\n",
-         DPxPTR((uintptr_t)HstPtrBegin), Size,
-         (UpdateRefCount ? " updated" : ""));
+      DP("Return HstPtrBegin " DPxMOD " Size=%" PRId64 " for unified shared "
+         "memory\n",
+         DPxPTR((uintptr_t)HstPtrBegin), Size);
       IsHostPtr = true;
       rc = HstPtrBegin;
     }
@@ -416,15 +417,19 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
           /*codeptr_ra=*/NULL);
     }
 #endif
+    const HostDataToTargetTy &newEntry =
+        *HostDataToTargetMap
+             .emplace((uintptr_t)HstPtrBase, (uintptr_t)HstPtrBegin,
+                      (uintptr_t)HstPtrBegin + Size, tp, HasHoldModifier,
+                      HstPtrName)
+             .first;
     INFO(OMP_INFOTYPE_MAPPING_CHANGED, DeviceID,
          "Creating new map entry with "
-         "HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", Size=%ld, Name=%s\n",
+         "HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", Size=%ld, "
+         "RefCount=%s, Name=%s\n",
          DPxPTR(HstPtrBegin), DPxPTR(tp), Size,
+         newEntry.refCountToStr().c_str(),
          (HstPtrName) ? getNameFromMapping(HstPtrName).c_str() : "unknown");
-    HostDataToTargetMap.emplace(
-        HostDataToTargetTy((uintptr_t)HstPtrBase, (uintptr_t)HstPtrBegin,
-                           (uintptr_t)HstPtrBegin + Size, tp, HasHoldModifier,
-                           HstPtrName, /*IsINF=*/false));
     rc = (void *)tp;
   }
 
@@ -438,7 +443,7 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase,
 void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
                                bool UpdateRefCount, bool UseHoldRefCount,
                                bool &IsHostPtr, bool MustContain,
-                               bool HasDeleteModifier) {
+                               bool ForceDelete) {
   void *rc = NULL;
   IsHostPtr = false;
   IsLast = false;
@@ -448,30 +453,45 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
   if (lr.Flags.IsContained ||
       (!MustContain && (lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter))) {
     auto &HT = *lr.Entry;
-    IsLast = (HT.getRefCount() == 1 && HT.getRefCount(UseHoldRefCount) == 1) ||
-             (HasDeleteModifier && !HT.getRefCount(/*UseHoldRefCount=*/true) &&
-              !HT.isRefCountInf());
-
-    if (!IsLast && UpdateRefCount && HT.getRefCount(UseHoldRefCount) > 0) {
-      if (HasDeleteModifier)
-        HT.resetRefCount();
+    // We do not zero the total reference count here.  deallocTgtPtr does that
+    // atomically with removing the mapping.  Otherwise, before this thread
+    // removed the mapping in deallocTgtPtr, another thread could retrieve the
+    // mapping, increment and decrement back to zero, and then both threads
+    // would try to remove the mapping, resulting in a double free.
+    IsLast = HT.decShouldRemove(UseHoldRefCount, ForceDelete);
+    const char *RefCountAction;
+    if (!UpdateRefCount) {
+      RefCountAction = " (update suppressed)";
+    } else if (ForceDelete) {
+      HT.resetRefCount(UseHoldRefCount);
+      assert(IsLast == HT.decShouldRemove(UseHoldRefCount) &&
+             "expected correct IsLast prediction for reset");
+      if (IsLast)
+        RefCountAction = " (reset, deferred final decrement)";
+      else {
+        HT.decRefCount(UseHoldRefCount);
+        RefCountAction = " (reset)";
+      }
+    } else if (IsLast) {
+      RefCountAction = " (deferred final decrement)";
+    } else {
       HT.decRefCount(UseHoldRefCount);
+      RefCountAction = " (decremented)";
     }
-
     uintptr_t tp = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
-    DP("Mapping exists with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", "
-       "Size=%" PRId64 ",%s RefCount=%s\n",
-       DPxPTR(HstPtrBegin), DPxPTR(tp), Size,
-       (UpdateRefCount ? " updated" : ""),
-       HT.isRefCountInf() ? "INF" : std::to_string(HT.getRefCount()).c_str());
+    INFO(OMP_INFOTYPE_MAPPING_EXISTS, DeviceID,
+         "Mapping exists with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", "
+         "Size=%" PRId64 ", RefCount=%s (%s)\n",
+         DPxPTR(HstPtrBegin), DPxPTR(tp), Size, HT.refCountToStr().c_str(),
+         RefCountAction);
     rc = (void *)tp;
   } else if (PM->RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY) {
     // If the value isn't found in the mapping and unified shared memory
     // is on then it means we have stumbled upon a value which we need to
     // use directly from the host.
-    DP("Get HstPtrBegin " DPxMOD " Size=%" PRId64 " RefCount=%s\n",
-       DPxPTR((uintptr_t)HstPtrBegin), Size,
-       (UpdateRefCount ? " updated" : ""));
+    DP("Get HstPtrBegin " DPxMOD " Size=%" PRId64 " for unified shared "
+       "memory\n",
+       DPxPTR((uintptr_t)HstPtrBegin), Size);
     IsHostPtr = true;
     rc = HstPtrBegin;
   }
@@ -494,7 +514,7 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size) {
   return NULL;
 }
 
-int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
+int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size,
                             bool HasCloseModifier, bool HasHoldModifier) {
   if (PM->RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY &&
       !HasCloseModifier)
@@ -505,8 +525,6 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
   LookupResult lr = lookupMapping(HstPtrBegin, Size);
   if (lr.Flags.IsContained || lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) {
     auto &HT = *lr.Entry;
-    if (ForceDelete)
-      HT.resetRefCount();
     if (HT.decRefCount(HasHoldModifier) == 0) {
       DP("Deleting tgt data " DPxMOD " of size %" PRId64 "\n",
          DPxPTR(HT.TgtPtrBegin), Size);
@@ -562,10 +580,9 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size, bool ForceDelete,
 #endif
       deleteData((void *)HT.TgtPtrBegin);
       INFO(OMP_INFOTYPE_MAPPING_CHANGED, DeviceID,
-           "Removing%s map entry with HstPtrBegin=" DPxMOD
-           ", TgtPtrBegin=" DPxMOD ", Size=%" PRId64 ", Name=%s\n",
-           (ForceDelete ? " (forced)" : ""), DPxPTR(HT.HstPtrBegin),
-           DPxPTR(HT.TgtPtrBegin), Size,
+           "Removing map entry with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD
+           ", Size=%" PRId64 ", Name=%s\n",
+           DPxPTR(HT.HstPtrBegin), DPxPTR(HT.TgtPtrBegin), Size,
            (HT.HstPtrName) ? getNameFromMapping(HT.HstPtrName).c_str()
                            : "unknown");
       HostDataToTargetMap.erase(lr.Entry);
@@ -669,6 +686,18 @@ int32_t DeviceTy::deleteData(void *TgtPtrBegin) {
 // Submit data to device
 int32_t DeviceTy::submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
                              AsyncInfoTy &AsyncInfo) {
+  if (getInfoLevel() & OMP_INFOTYPE_DATA_TRANSFER) {
+    LookupResult LR = lookupMapping(HstPtrBegin, Size);
+    auto *HT = &*LR.Entry;
+
+    INFO(OMP_INFOTYPE_DATA_TRANSFER, DeviceID,
+         "Copying data from host to device, HstPtr=" DPxMOD ", TgtPtr=" DPxMOD
+         ", Size=%" PRId64 ", Name=%s\n",
+         DPxPTR(HstPtrBegin), DPxPTR(TgtPtrBegin), Size,
+         (HT && HT->HstPtrName) ? getNameFromMapping(HT->HstPtrName).c_str()
+                                : "unknown");
+  }
+
   if (!AsyncInfo || !RTL->data_submit_async || !RTL->synchronize)
     return RTL->data_submit(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size
                             OMPT_SUPPORT_IF(, &OmptApi));
@@ -680,6 +709,17 @@ int32_t DeviceTy::submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
 // Retrieve data from device
 int32_t DeviceTy::retrieveData(void *HstPtrBegin, void *TgtPtrBegin,
                                int64_t Size, AsyncInfoTy &AsyncInfo) {
+  if (getInfoLevel() & OMP_INFOTYPE_DATA_TRANSFER) {
+    LookupResult LR = lookupMapping(HstPtrBegin, Size);
+    auto *HT = &*LR.Entry;
+    INFO(OMP_INFOTYPE_DATA_TRANSFER, DeviceID,
+         "Copying data from device to host, TgtPtr=" DPxMOD ", HstPtr=" DPxMOD
+         ", Size=%" PRId64 ", Name=%s\n",
+         DPxPTR(TgtPtrBegin), DPxPTR(HstPtrBegin), Size,
+         (HT && HT->HstPtrName) ? getNameFromMapping(HT->HstPtrName).c_str()
+                                : "unknown");
+  }
+
   if (!RTL->data_retrieve_async || !RTL->synchronize)
     return RTL->data_retrieve(RTLDeviceID, HstPtrBegin, TgtPtrBegin, Size
                               OMPT_SUPPORT_IF(, &OmptApi));

@@ -523,6 +523,64 @@ float matrices and add the result to a third 4x4 matrix.
     return a + b * c;
   }
 
+The matrix type extension also supports operations on a matrix and a scalar.
+
+.. code-block:: c++
+
+  typedef float m4x4_t __attribute__((matrix_type(4, 4)));
+
+  m4x4_t f(m4x4_t a) {
+    return (a + 23) * 12;
+  }
+
+The matrix type extension supports division on a matrix and a scalar but not on a matrix and a matrix.
+
+.. code-block:: c++
+
+  typedef float m4x4_t __attribute__((matrix_type(4, 4)));
+
+  m4x4_t f(m4x4_t a) {
+    a = a / 3.0;
+    return a;
+  }
+
+The matrix type extension supports compound assignments for addition, subtraction, and multiplication on matrices
+and on a matrix and a scalar, provided their types are consistent.
+
+.. code-block:: c++
+
+  typedef float m4x4_t __attribute__((matrix_type(4, 4)));
+
+  m4x4_t f(m4x4_t a, m4x4_t b) {
+    a += b;
+    a -= b;
+    a *= b;
+    a += 23;
+    a -= 12;
+    return a;
+  }
+
+The matrix type extension supports explicit casts. Implicit type conversion between matrix types is not allowed.
+
+.. code-block:: c++
+
+  typedef int ix5x5 __attribute__((matrix_type(5, 5)));
+  typedef float fx5x5 __attribute__((matrix_type(5, 5)));
+
+  fx5x5 f1(ix5x5 i, fx5x5 f) {
+    return (fx5x5) i;
+  }
+
+
+  template <typename X>
+  using matrix_4_4 = X __attribute__((matrix_type(4, 4)));
+
+  void f2() {
+    matrix_5_5<double> d;
+    matrix_5_5<int> i;
+    i = (matrix_5_5<int>)d;
+    i = static_cast<matrix_5_5<int>>(d);
+  }
 
 Half-Precision Floating Point
 =============================
@@ -631,6 +689,20 @@ after the enumerator name and before any initializer, like so:
 Attributes on the ``enum`` declaration do not apply to individual enumerators.
 
 Query for this feature with ``__has_extension(enumerator_attributes)``.
+
+C++11 Attributes on using-declarations
+======================================
+
+Clang allows C++-style ``[[]]`` attributes to be written on using-declarations.
+For instance:
+
+.. code-block:: c++
+
+  [[clang::using_if_exists]] using foo::bar;
+  using foo::baz [[clang::using_if_exists]];
+
+You can test for support for this extension with
+``__has_extension(cxx_attributes_on_using_declarations)``.
 
 'User-Specified' System Frameworks
 ==================================

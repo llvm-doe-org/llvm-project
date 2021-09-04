@@ -2588,33 +2588,37 @@ enum CXCursorKind {
    */
   CXCursor_OMPMaskedDirective = 292,
 
+  /** OpenMP unroll directive.
+   */
+  CXCursor_OMPUnrollDirective = 293,
+
   /** OpenACC update directive.
    */
-  CXCursor_ACCUpdateDirective = 293,
+  CXCursor_ACCUpdateDirective = 294,
 
   /** OpenACC enter data directive.
    */
-  CXCursor_ACCEnterDataDirective = 294,
+  CXCursor_ACCEnterDataDirective = 295,
 
   /** OpenACC exit data directive.
    */
-  CXCursor_ACCExitDataDirective = 295,
+  CXCursor_ACCExitDataDirective = 296,
 
   /** OpenACC data directive.
    */
-  CXCursor_ACCDataDirective = 296,
+  CXCursor_ACCDataDirective = 297,
 
   /** OpenACC parallel directive.
    */
-  CXCursor_ACCParallelDirective = 297,
+  CXCursor_ACCParallelDirective = 298,
 
   /** OpenACC loop directive.
    */
-  CXCursor_ACCLoopDirective = 298,
+  CXCursor_ACCLoopDirective = 299,
 
   /** OpenACC parallel loop directive.
    */
-  CXCursor_ACCParallelLoopDirective = 299,
+  CXCursor_ACCParallelLoopDirective = 300,
 
   CXCursor_LastStmt = CXCursor_ACCParallelLoopDirective,
 
@@ -2624,7 +2628,7 @@ enum CXCursorKind {
    * The translation unit cursor exists primarily to act as the root
    * cursor for traversing the contents of a translation unit.
    */
-  CXCursor_TranslationUnit = 300,
+  CXCursor_TranslationUnit = 301,
 
   /* Attributes */
   CXCursor_FirstAttr = 400,

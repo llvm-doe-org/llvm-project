@@ -80,13 +80,12 @@ public:
     return UseHoldRefCount ? HoldRefCount : RefCount;
   }
 
-  /// Reset the dynamic reference count only and return the total reference
-  /// count.
-  uint64_t resetRefCount() const {
-    if (RefCount != INFRefCount)
-      RefCount = 1;
-
-    return getRefCount();
+  /// Reset the specified reference count unless it's infinity.  Reset to 1
+  /// (even if currently 0) so it can be followed by a decrement.
+  void resetRefCount(bool UseHoldRefCount) const {
+    uint64_t &ThisRefCount = UseHoldRefCount ? HoldRefCount : RefCount;
+    if (ThisRefCount != INFRefCount)
+      ThisRefCount = 1;
   }
 
   /// Increment the specified reference count and return the total reference
@@ -103,22 +102,38 @@ public:
     return getRefCount();
   }
 
-  /// Decrement the specified reference count and return the total reference
-  /// count.
+  /// Decrement the specified reference count unless it's infinity or zero, and
+  /// return the total reference count.
   uint64_t decRefCount(bool UseHoldRefCount) const {
-    if (UseHoldRefCount) {
-      assert(HoldRefCount > 0 && "hold refcount underflow");
-      --HoldRefCount;
-    } else if (RefCount != INFRefCount) {
-      assert(RefCount > 0 && "refcount underflow");
-      --RefCount;
+    uint64_t &ThisRefCount = UseHoldRefCount ? HoldRefCount : RefCount;
+    uint64_t OtherRefCount = UseHoldRefCount ? RefCount : HoldRefCount;
+    if (ThisRefCount != INFRefCount) {
+      if (ThisRefCount > 0)
+        --ThisRefCount;
+      else
+        assert(OtherRefCount > 0 && "total refcount underflow");
     }
-
     return getRefCount();
   }
 
   /// Is the dynamic (and thus total) reference count infinite?
   bool isRefCountInf() const { return RefCount == INFRefCount; }
+
+  std::string refCountToStr() const {
+    return isRefCountInf() ? "INF" : std::to_string(getRefCount());
+  }
+
+  /// Should one decrement of the specified reference count (after resetting it
+  /// if \c AfterReset) remove this mapping?
+  bool decShouldRemove(bool UseHoldRefCount, bool AfterReset = false) const {
+    uint64_t ThisRefCount = UseHoldRefCount ? HoldRefCount : RefCount;
+    uint64_t OtherRefCount = UseHoldRefCount ? RefCount : HoldRefCount;
+    if (OtherRefCount > 0)
+      return false;
+    if (AfterReset)
+      return ThisRefCount != INFRefCount;
+    return ThisRefCount == 1;
+  }
 };
 
 typedef uintptr_t HstPtrBeginTy;
@@ -213,8 +228,8 @@ struct DeviceTy {
   void *getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
                        bool UpdateRefCount, bool UseHoldRefCount,
                        bool &IsHostPtr, bool MustContain = false,
-                       bool HasDeleteModifier = false);
-  int deallocTgtPtr(void *TgtPtrBegin, int64_t Size, bool ForceDelete,
+                       bool ForceDelete = false);
+  int deallocTgtPtr(void *TgtPtrBegin, int64_t Size,
                     bool HasCloseModifier, bool HasHoldModifier);
   int associatePtr(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size);
   int disassociatePtr(void *HstPtrBegin, void *&TgtPtrBegin, int64_t &Size);

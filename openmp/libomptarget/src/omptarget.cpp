@@ -685,8 +685,6 @@ struct DeallocTgtPtrInfo {
   void *HstPtrBegin;
   /// Size of the data
   int64_t DataSize;
-  /// Whether it is forced to be removed from the map table
-  bool ForceDelete;
   /// Whether it has \p close modifier
   bool HasCloseModifier;
   /// Whether it has \p hold modifier
@@ -697,9 +695,9 @@ struct DeallocTgtPtrInfo {
 #endif
 
   DeallocTgtPtrInfo(
-      void *HstPtr, int64_t Size, bool ForceDelete, bool HasCloseModifier,
+      void *HstPtr, int64_t Size, bool HasCloseModifier,
       bool HasHoldModifier OMPT_SUPPORT_IF(, map_var_info_t HstPtrName))
-      : HstPtrBegin(HstPtr), DataSize(Size), ForceDelete(ForceDelete),
+      : HstPtrBegin(HstPtr), DataSize(Size),
         HasCloseModifier(HasCloseModifier), HasHoldModifier(HasHoldModifier)
         OMPT_SUPPORT_IF(, HstPtrName(HstPtrName)) {}
 };
@@ -906,9 +904,8 @@ int targetDataEnd(ident_t *loc, DeviceTy &Device, int32_t ArgNum,
 
       // Add pointer to the buffer for later deallocation
       if (DelEntry)
-        DeallocTgtPtrs.emplace_back(HstPtrBegin, DataSize, ForceDelete,
-                                    HasCloseModifier, HasHoldModifier,
-                                    HstPtrName);
+        DeallocTgtPtrs.emplace_back(HstPtrBegin, DataSize, HasCloseModifier,
+                                    HasHoldModifier, HstPtrName);
     }
   }
 
@@ -926,7 +923,7 @@ int targetDataEnd(ident_t *loc, DeviceTy &Device, int32_t ArgNum,
       continue;
     OmptMapVarInfoRAII TheOmptMapVarInfoRAII(Info.HstPtrName);
     Ret =
-        Device.deallocTgtPtr(Info.HstPtrBegin, Info.DataSize, Info.ForceDelete,
+        Device.deallocTgtPtr(Info.HstPtrBegin, Info.DataSize,
                              Info.HasCloseModifier, Info.HasHoldModifier);
     if (Ret != OFFLOAD_SUCCESS) {
       REPORT("Deallocating data from device failed.\n");

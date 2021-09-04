@@ -1352,11 +1352,9 @@ void acc_memcpy_d2d(void *data_arg_dest, void *data_arg_src, size_t bytes,
  ****************************************************************************/
 
 extern "C" void acc2omp_set_omp_default_device() {
-  // Check that the typedef declaration matches the definition.  Keep the
-  // assignment separate from the declaration to avoid an unused variable
-  // warning.
-  acc2omp_set_omp_default_device_t FnPtr;
-  FnPtr = acc2omp_set_omp_default_device;
+  // Check that the typedef declaration matches the definition.
+  acc2omp_set_omp_default_device_t FnPtr = acc2omp_set_omp_default_device;
+  (void)FnPtr; // Avoid unused variable warning.
 
   const char *DevTypeEnv = getenv("ACC_DEVICE_TYPE");
   const char *DevNumEnv = getenv("ACC_DEVICE_NUM");
