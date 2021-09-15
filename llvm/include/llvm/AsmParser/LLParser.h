@@ -93,21 +93,6 @@ namespace llvm {
     ModuleSummaryIndex *Index;
     SlotMapping *Slots;
 
-    // Instruction metadata resolution.  Each instruction can have a list of
-    // MDRef info associated with them.
-    //
-    // The simpler approach of just creating temporary MDNodes and then calling
-    // RAUW on them when the definition is processed doesn't work because some
-    // instruction metadata kinds, such as dbg, get stored in the IR in an
-    // "optimized" format which doesn't participate in the normal value use
-    // lists. This means that RAUW doesn't work, even on temporary MDNodes
-    // which otherwise support RAUW. Instead, we defer resolving MDNode
-    // references until the definitions have been processed.
-    struct MDRef {
-      SMLoc Loc;
-      unsigned MDKind, MDSlot;
-    };
-
     SmallVector<Instruction*, 64> InstsWithTBAATag;
 
     // Type resolution handling data structures.  The location is set when we
@@ -258,8 +243,15 @@ namespace llvm {
       return parseOptionalAddrSpace(
           AddrSpace, M->getDataLayout().getProgramAddressSpace());
     };
-    bool parseOptionalParamAttrs(AttrBuilder &B);
-    bool parseOptionalReturnAttrs(AttrBuilder &B);
+    bool parseEnumAttribute(Attribute::AttrKind Attr, AttrBuilder &B,
+                            bool InAttrGroup);
+    bool parseOptionalParamOrReturnAttrs(AttrBuilder &B, bool IsParam);
+    bool parseOptionalParamAttrs(AttrBuilder &B) {
+      return parseOptionalParamOrReturnAttrs(B, true);
+    }
+    bool parseOptionalReturnAttrs(AttrBuilder &B) {
+      return parseOptionalParamOrReturnAttrs(B, false);
+    }
     bool parseOptionalLinkage(unsigned &Res, bool &HasLinkage,
                               unsigned &Visibility, unsigned &DLLStorageClass,
                               bool &DSOLocal);
@@ -328,10 +320,8 @@ namespace llvm {
     bool parseFnAttributeValuePairs(AttrBuilder &B,
                                     std::vector<unsigned> &FwdRefAttrGrps,
                                     bool inAttrGrp, LocTy &BuiltinLoc);
-    bool parseRequiredTypeAttr(Type *&Result, lltok::Kind AttrName);
-    bool parsePreallocated(Type *&Result);
-    bool parseInalloca(Type *&Result);
-    bool parseByRef(Type *&Result);
+    bool parseRequiredTypeAttr(AttrBuilder &B, lltok::Kind AttrToken,
+                               Attribute::AttrKind AttrKind);
 
     // Module Summary Index Parsing.
     bool skipModuleSummaryEntry();
@@ -507,7 +497,8 @@ namespace llvm {
                             PerFunctionState &PFS);
 
     // Constant Parsing.
-    bool parseValID(ValID &ID, PerFunctionState *PFS = nullptr);
+    bool parseValID(ValID &ID, PerFunctionState *PFS,
+                    Type *ExpectedTy = nullptr);
     bool parseGlobalValue(Type *Ty, Constant *&C);
     bool parseGlobalTypeAndValue(Constant *&V);
     bool parseGlobalValueVector(SmallVectorImpl<Constant *> &Elts,

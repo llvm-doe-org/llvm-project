@@ -23,6 +23,7 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/Type.h"
 #include "clang/Basic/CharInfo.h"
+#include "clang/Basic/DarwinSDKInfo.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetBuiltins.h"
@@ -2093,7 +2094,7 @@ static void handleAnalyzerNoReturnAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
     ValueDecl *VD = dyn_cast<ValueDecl>(D);
     if (!VD || (!VD->getType()->isBlockPointerType() &&
                 !VD->getType()->isFunctionPointerType())) {
-      S.Diag(AL.getLoc(), AL.isCXX11Attribute()
+      S.Diag(AL.getLoc(), AL.isStandardAttributeSyntax()
                               ? diag::err_attribute_wrong_decl_type
                               : diag::warn_attribute_wrong_decl_type)
           << AL << ExpectedFunctionMethodOrBlock;
@@ -2556,6 +2557,83 @@ static void handleAvailabilityAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
       if (NewAttr)
         D->addAttr(NewAttr);
       }
+  } else if (S.Context.getTargetInfo().getTriple().getOS() ==
+                 llvm::Triple::IOS &&
+             S.Context.getTargetInfo().getTriple().isMacCatalystEnvironment()) {
+    auto GetSDKInfo = [&]() {
+      return S.getDarwinSDKInfoForAvailabilityChecking(AL.getRange().getBegin(),
+                                                       "macOS");
+    };
+
+    // Transcribe "ios" to "maccatalyst" (and add a new attribute).
+    IdentifierInfo *NewII = nullptr;
+    if (II->getName() == "ios")
+      NewII = &S.Context.Idents.get("maccatalyst");
+    else if (II->getName() == "ios_app_extension")
+      NewII = &S.Context.Idents.get("maccatalyst_app_extension");
+    if (NewII) {
+      auto MinMacCatalystVersion = [](const VersionTuple &V) {
+        if (V.empty())
+          return V;
+        if (V.getMajor() < 13 ||
+            (V.getMajor() == 13 && V.getMinor() && *V.getMinor() < 1))
+          return VersionTuple(13, 1); // The min Mac Catalyst version is 13.1.
+        return V;
+      };
+      AvailabilityAttr *NewAttr = S.mergeAvailabilityAttr(
+          ND, AL.getRange(), NewII, true /*Implicit*/,
+          MinMacCatalystVersion(Introduced.Version),
+          MinMacCatalystVersion(Deprecated.Version),
+          MinMacCatalystVersion(Obsoleted.Version), IsUnavailable, Str,
+          IsStrict, Replacement, Sema::AMK_None,
+          PriorityModifier + Sema::AP_InferredFromOtherPlatform);
+      if (NewAttr)
+        D->addAttr(NewAttr);
+    } else if (II->getName() == "macos" && GetSDKInfo() &&
+               (!Introduced.Version.empty() || !Deprecated.Version.empty() ||
+                !Obsoleted.Version.empty())) {
+      if (const auto *MacOStoMacCatalystMapping =
+              GetSDKInfo()->getVersionMapping(
+                  DarwinSDKInfo::OSEnvPair::macOStoMacCatalystPair())) {
+        // Infer Mac Catalyst availability from the macOS availability attribute
+        // if it has versioned availability. Don't infer 'unavailable'. This
+        // inferred availability has lower priority than the other availability
+        // attributes that are inferred from 'ios'.
+        NewII = &S.Context.Idents.get("maccatalyst");
+        auto RemapMacOSVersion =
+            [&](const VersionTuple &V) -> Optional<VersionTuple> {
+          if (V.empty())
+            return None;
+          // API_TO_BE_DEPRECATED is 100000.
+          if (V.getMajor() == 100000)
+            return VersionTuple(100000);
+          // The minimum iosmac version is 13.1
+          return MacOStoMacCatalystMapping->map(V, VersionTuple(13, 1), None);
+        };
+        Optional<VersionTuple> NewIntroduced =
+                                   RemapMacOSVersion(Introduced.Version),
+                               NewDeprecated =
+                                   RemapMacOSVersion(Deprecated.Version),
+                               NewObsoleted =
+                                   RemapMacOSVersion(Obsoleted.Version);
+        if (NewIntroduced || NewDeprecated || NewObsoleted) {
+          auto VersionOrEmptyVersion =
+              [](const Optional<VersionTuple> &V) -> VersionTuple {
+            return V ? *V : VersionTuple();
+          };
+          AvailabilityAttr *NewAttr = S.mergeAvailabilityAttr(
+              ND, AL.getRange(), NewII, true /*Implicit*/,
+              VersionOrEmptyVersion(NewIntroduced),
+              VersionOrEmptyVersion(NewDeprecated),
+              VersionOrEmptyVersion(NewObsoleted), /*IsUnavailable=*/false, Str,
+              IsStrict, Replacement, Sema::AMK_None,
+              PriorityModifier + Sema::AP_InferredFromOtherPlatform +
+                  Sema::AP_InferredFromOtherPlatform);
+          if (NewAttr)
+            D->addAttr(NewAttr);
+        }
+      }
+    }
   }
 }
 
@@ -2863,7 +2941,7 @@ static void handleWarnUnusedResult(Sema &S, Decl *D, const ParsedAttr &AL) {
     }
 
   StringRef Str;
-  if ((AL.isCXX11Attribute() || AL.isC2xAttribute()) && !AL.getScopeName()) {
+  if (AL.isStandardAttributeSyntax() && !AL.getScopeName()) {
     // The standard attribute cannot be applied to variable declarations such
     // as a function pointer.
     if (isa<VarDecl>(D))
@@ -3953,6 +4031,12 @@ void Sema::AddAlignedAttr(Decl *D, const AttributeCommonInfo &CI, Expr *E,
     return;
 
   uint64_t AlignVal = Alignment.getZExtValue();
+  // 16 byte ByVal alignment not due to a vector member is not honoured by XL
+  // on AIX. Emit a warning here that users are generating binary incompatible
+  // code to be safe.
+  if (AlignVal >= 16 && isa<FieldDecl>(D) &&
+      Context.getTargetInfo().getTriple().isOSAIX())
+    Diag(AttrLoc, diag::warn_not_xl_compatible) << E->getSourceRange();
 
   // C++11 [dcl.align]p2:
   //   -- if the constant expression evaluates to zero, the alignment
@@ -4561,6 +4645,9 @@ static void handleCallConvAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   case ParsedAttr::AT_SwiftCall:
     D->addAttr(::new (S.Context) SwiftCallAttr(S.Context, AL));
     return;
+  case ParsedAttr::AT_SwiftAsyncCall:
+    D->addAttr(::new (S.Context) SwiftAsyncCallAttr(S.Context, AL));
+    return;
   case ParsedAttr::AT_VectorCall:
     D->addAttr(::new (S.Context) VectorCallAttr(S.Context, AL));
     return;
@@ -4724,6 +4811,9 @@ bool Sema::CheckCallingConvAttr(const ParsedAttr &Attrs, CallingConv &CC,
     break;
   case ParsedAttr::AT_SwiftCall:
     CC = CC_Swift;
+    break;
+  case ParsedAttr::AT_SwiftAsyncCall:
+    CC = CC_SwiftAsync;
     break;
   case ParsedAttr::AT_VectorCall:
     CC = CC_X86VectorCall;
@@ -7280,8 +7370,8 @@ static void handleDeprecatedAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
       !S.checkStringLiteralArgumentAttr(AL, 0, Str))
     return;
 
-  // Only support a single optional message for Declspec and CXX11.
-  if (AL.isDeclspecAttribute() || AL.isCXX11Attribute())
+  // Support a single optional message only for Declspec and [[]] spellings.
+  if (AL.isDeclspecAttribute() || AL.isStandardAttributeSyntax())
     AL.checkAtMostNumArgs(S, 1);
   else if (AL.isArgExpr(1) && AL.getArgAsExpr(1) &&
            !S.checkStringLiteralArgumentAttr(AL, 1, Replacement))
@@ -7348,7 +7438,7 @@ static void handleNoSanitizeSpecificAttr(Sema &S, Decl *D,
   // getSpelling() or prettyPrint() on the resulting semantic attribute object
   // without failing assertions.
   unsigned TranslatedSpellingIndex = 0;
-  if (AL.isC2xAttribute() || AL.isCXX11Attribute())
+  if (AL.isStandardAttributeSyntax())
     TranslatedSpellingIndex = 1;
 
   AttributeCommonInfo Info = AL;
@@ -7389,16 +7479,24 @@ static void handleOpenCLAccessAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
     }
   }
 
-  // OpenCL v2.0 s6.6 - read_write can be used for image types to specify that an
-  // image object can be read and written.
-  // OpenCL v2.0 s6.13.6 - A kernel cannot read from and write to the same pipe
-  // object. Using the read_write (or __read_write) qualifier with the pipe
-  // qualifier is a compilation error.
+  // OpenCL v2.0 s6.6 - read_write can be used for image types to specify that
+  // an image object can be read and written. OpenCL v2.0 s6.13.6 - A kernel
+  // cannot read from and write to the same pipe object. Using the read_write
+  // (or __read_write) qualifier with the pipe qualifier is a compilation error.
+  // OpenCL v3.0 s6.8 - For OpenCL C 2.0, or with the
+  // __opencl_c_read_write_images feature, image objects specified as arguments
+  // to a kernel can additionally be declared to be read-write.
+  // C++ for OpenCL inherits rule from OpenCL C v2.0.
   if (const auto *PDecl = dyn_cast<ParmVarDecl>(D)) {
     const Type *DeclTy = PDecl->getType().getCanonicalType().getTypePtr();
     if (AL.getAttrName()->getName().find("read_write") != StringRef::npos) {
+      bool ReadWriteImagesUnsupportedForOCLC =
+          (S.getLangOpts().OpenCLVersion < 200) ||
+          (S.getLangOpts().OpenCLVersion == 300 &&
+           !S.getOpenCLOptions().isSupported("__opencl_c_read_write_images",
+                                             S.getLangOpts()));
       if ((!S.getLangOpts().OpenCLCPlusPlus &&
-           S.getLangOpts().OpenCLVersion < 200) ||
+           ReadWriteImagesUnsupportedForOCLC) ||
           DeclTy->isPipeType()) {
         S.Diag(AL.getLoc(), diag::err_opencl_invalid_read_write)
             << AL << PDecl->getType() << DeclTy->isImageType();
@@ -8101,6 +8199,7 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
   case ParsedAttr::AT_Pascal:
   case ParsedAttr::AT_RegCall:
   case ParsedAttr::AT_SwiftCall:
+  case ParsedAttr::AT_SwiftAsyncCall:
   case ParsedAttr::AT_VectorCall:
   case ParsedAttr::AT_MSABI:
   case ParsedAttr::AT_SysVABI:

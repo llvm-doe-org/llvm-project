@@ -5,9 +5,9 @@ else()
 endif()
 
 if(EXISTS ${LIBC_TARGET_ARCHITECTURE})
-  set(FENV_IMPL ${LIBC_TARGET_ARCHITECTURE}/FEnv.h)
+  set(FENV_IMPL ${LIBC_TARGET_ARCHITECTURE}/FEnvImpl.h)
 else()
-  set(FENV_IMPL DummyFEnv.h)
+  set(FENV_IMPL DummyFEnvImpl.h)
 endif()
 
 add_header_library(
@@ -16,11 +16,8 @@ add_header_library(
     ${LONG_DOUBLE_HDR}
     ${FENV_IMPL}
     BasicOperations.h
-    BitPatterns.h
-    ClassificationFunctions.h
     DivisionAndRemainderOperations.h
-    FEnv.h
-    FloatOperations.h
+    FEnvUtils.h
     FloatProperties.h
     FPBits.h
     BasicOperations.h

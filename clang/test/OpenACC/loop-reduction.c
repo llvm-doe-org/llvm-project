@@ -74,14 +74,23 @@
 
 // Check execution with normal compilation.
 //
+// FIXME: Several upstream compiler bugs were recently introduced that break
+// behavior when offloading to nvptx64 unless we add -O1 or higher, but that
+// causes many diagnostics like:
+//
+//   loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+//
+// To avoid all this until upstream fixes it, we add -O1 and drop
+// -Xclang -verify for nvptx64 offloading.
+//
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST    tgt-cflags=                                    )
-// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
-// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
-// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
+// RUN:   (run-if=                tgt=HOST    tgt-cflags='                                     -Xclang -verify')
+// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify')
+// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify')
+// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1')
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %s -o %t %libatomic \
+// RUN:   %[run-if] %clang -fopenacc %s -o %t %libatomic \
 // RUN:                    %[tgt-cflags] -DTGT_%[tgt]_EXE
 // RUN:   %[run-if] %t 2 > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s \

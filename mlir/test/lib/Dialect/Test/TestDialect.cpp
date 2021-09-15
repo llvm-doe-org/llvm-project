@@ -11,7 +11,6 @@
 #include "TestInterfaces.h"
 #include "TestTypes.h"
 #include "mlir/Dialect/DLTI/DLTI.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -25,6 +24,8 @@
 
 using namespace mlir;
 using namespace mlir::test;
+
+#include "TestOpsDialect.cpp.inc"
 
 void mlir::test::registerTestDialect(DialectRegistry &registry) {
   registry.insert<TestDialect>();
@@ -66,6 +67,7 @@ struct TestOpAsmInterface : public OpAsmDialectInterface {
                   StringRef("test_alias_conflict0"))
             .Case("alias_test:sanitize_conflict_b",
                   StringRef("test_alias_conflict0_"))
+            .Case("alias_test:tensor_encoding", StringRef("test_encoding"))
             .Default(llvm::None);
     if (!aliasName)
       return failure();
@@ -779,11 +781,11 @@ LogicalResult OpWithInferTypeInterfaceOp::inferReturnTypes(
 }
 
 LogicalResult OpWithShapedTypeInferTypeInterfaceOp::inferReturnTypeComponents(
-    MLIRContext *context, Optional<Location> location, ValueRange operands,
+    MLIRContext *context, Optional<Location> location, ValueShapeRange operands,
     DictionaryAttr attributes, RegionRange regions,
     SmallVectorImpl<ShapedTypeComponents> &inferredReturnShapes) {
   // Create return type consisting of the last element of the first operand.
-  auto operandType = *operands.getTypes().begin();
+  auto operandType = operands.front().getType();
   auto sval = operandType.dyn_cast<ShapedType>();
   if (!sval) {
     return emitOptionalError(location, "only shaped type operands allowed");
@@ -799,7 +801,7 @@ LogicalResult OpWithShapedTypeInferTypeInterfaceOp::reifyReturnTypeShapes(
     OpBuilder &builder, ValueRange operands,
     llvm::SmallVectorImpl<Value> &shapes) {
   shapes = SmallVector<Value, 1>{
-      builder.createOrFold<memref::DimOp>(getLoc(), operands.front(), 0)};
+      builder.createOrFold<tensor::DimOp>(getLoc(), operands.front(), 0)};
   return success();
 }
 
@@ -813,7 +815,7 @@ LogicalResult OpWithResultShapeInterfaceOp::reifyReturnTypeShapes(
         llvm::seq<int64_t>(
             0, operand.getType().cast<RankedTensorType>().getRank()),
         [&](int64_t dim) -> Value {
-          return builder.createOrFold<memref::DimOp>(loc, operand, dim);
+          return builder.createOrFold<tensor::DimOp>(loc, operand, dim);
         }));
     shapes.push_back(builder.create<tensor::FromElementsOp>(
         getLoc(), builder.getIndexType(), currShape));
@@ -821,10 +823,8 @@ LogicalResult OpWithResultShapeInterfaceOp::reifyReturnTypeShapes(
   return success();
 }
 
-LogicalResult
-OpWithResultShapePerDimInterfaceOp ::reifyReturnTypeShapesPerResultDim(
-    OpBuilder &builder,
-    llvm::SmallVectorImpl<llvm::SmallVector<Value>> &shapes) {
+LogicalResult OpWithResultShapePerDimInterfaceOp::reifyResultShapes(
+    OpBuilder &builder, ReifiedRankedShapedTypeDims &shapes) {
   Location loc = getLoc();
   shapes.reserve(getNumOperands());
   for (Value operand : llvm::reverse(getOperands())) {
@@ -832,43 +832,7 @@ OpWithResultShapePerDimInterfaceOp ::reifyReturnTypeShapesPerResultDim(
         llvm::seq<int64_t>(
             0, operand.getType().cast<RankedTensorType>().getRank()),
         [&](int64_t dim) -> Value {
-          return builder.createOrFold<memref::DimOp>(loc, operand, dim);
-        }));
-    shapes.emplace_back(std::move(currShape));
-  }
-  return success();
-}
-
-LogicalResult OpWithResultShapeAndPerDimInterfaceOp::reifyReturnTypeShapes(
-    OpBuilder &builder, ValueRange operands,
-    llvm::SmallVectorImpl<Value> &shapes) {
-  Location loc = getLoc();
-  shapes.reserve(operands.size());
-  for (Value operand : llvm::reverse(operands)) {
-    auto currShape = llvm::to_vector<4>(llvm::map_range(
-        llvm::seq<int64_t>(
-            0, operand.getType().cast<RankedTensorType>().getRank()),
-        [&](int64_t dim) -> Value {
-          return builder.createOrFold<memref::DimOp>(loc, operand, dim);
-        }));
-    shapes.push_back(builder.create<tensor::FromElementsOp>(
-        getLoc(), builder.getIndexType(), currShape));
-  }
-  return success();
-}
-
-LogicalResult
-OpWithResultShapeAndPerDimInterfaceOp ::reifyReturnTypeShapesPerResultDim(
-    OpBuilder &builder,
-    llvm::SmallVectorImpl<llvm::SmallVector<Value>> &shapes) {
-  Location loc = getLoc();
-  shapes.reserve(getNumOperands());
-  for (Value operand : llvm::reverse(getOperands())) {
-    auto currShape = llvm::to_vector<4>(llvm::map_range(
-        llvm::seq<int64_t>(
-            0, operand.getType().cast<RankedTensorType>().getRank()),
-        [&](int64_t dim) -> Value {
-          return builder.createOrFold<memref::DimOp>(loc, operand, dim);
+          return builder.createOrFold<tensor::DimOp>(loc, operand, dim);
         }));
     shapes.emplace_back(std::move(currShape));
   }

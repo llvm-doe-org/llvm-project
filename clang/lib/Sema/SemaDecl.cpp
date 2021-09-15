@@ -6424,7 +6424,11 @@ void Sema::deduceOpenCLAddressSpace(ValueDecl *Decl) {
     if (Type->isSamplerT() || Type->isVoidType())
       return;
     LangAS ImplAS = LangAS::opencl_private;
-    if ((getLangOpts().OpenCLCPlusPlus || getLangOpts().OpenCLVersion >= 200) &&
+    // OpenCL C v3.0 s6.7.8 - For OpenCL C 2.0 or with the
+    // __opencl_c_program_scope_global_variables feature, the address space
+    // for a variable at program scope or a static or extern variable inside
+    // a function are inferred to be __global.
+    if (getOpenCLOptions().areProgramScopeVariablesSupported(getLangOpts()) &&
         Var->hasGlobalStorage())
       ImplAS = LangAS::opencl_global;
     // If the original type from a decayed type is an array type and that array
@@ -8018,23 +8022,16 @@ void Sema::CheckVariableDeclarationType(VarDecl *NewVD) {
       }
     }
 
-    // OpenCL C v1.2 s6.5 - All program scope variables must be declared in the
-    // __constant address space.
-    // OpenCL C v2.0 s6.5.1 - Variables defined at program scope and static
-    // variables inside a function can also be declared in the global
-    // address space.
-    // C++ for OpenCL inherits rule from OpenCL C v2.0.
     // FIXME: Adding local AS in C++ for OpenCL might make sense.
     if (NewVD->isFileVarDecl() || NewVD->isStaticLocal() ||
         NewVD->hasExternalStorage()) {
-      if (!T->isSamplerT() &&
-          !T->isDependentType() &&
+      if (!T->isSamplerT() && !T->isDependentType() &&
           !(T.getAddressSpace() == LangAS::opencl_constant ||
             (T.getAddressSpace() == LangAS::opencl_global &&
-             (getLangOpts().OpenCLVersion == 200 ||
-              getLangOpts().OpenCLCPlusPlus)))) {
+             getOpenCLOptions().areProgramScopeVariablesSupported(
+                 getLangOpts())))) {
         int Scope = NewVD->isStaticLocal() | NewVD->hasExternalStorage() << 1;
-        if (getLangOpts().OpenCLVersion == 200 || getLangOpts().OpenCLCPlusPlus)
+        if (getOpenCLOptions().areProgramScopeVariablesSupported(getLangOpts()))
           Diag(NewVD->getLocation(), diag::err_opencl_global_invalid_addr_space)
               << Scope << "global or constant";
         else
@@ -8822,7 +8819,7 @@ static void checkIsValidOpenCLKernelParameter(
     // OpenCL v3.0 s6.11.a:
     // A kernel function argument cannot be declared as a pointer to a pointer
     // type. [...] This restriction only applies to OpenCL C 1.2 or below.
-    if (S.getLangOpts().OpenCLVersion < 120 &&
+    if (S.getLangOpts().OpenCLVersion <= 120 &&
         !S.getLangOpts().OpenCLCPlusPlus) {
       S.Diag(Param->getLocation(), diag::err_opencl_ptrptr_kernel_param);
       D.setInvalidType();
@@ -13310,16 +13307,6 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
     CheckCompleteDecompositionDeclaration(DD);
 }
 
-/// Determines if a variable's alignment is dependent.
-static bool hasDependentAlignment(VarDecl *VD) {
-  if (VD->getType()->isDependentType())
-    return true;
-  for (auto *I : VD->specific_attrs<AlignedAttr>())
-    if (I->isAlignmentDependent())
-      return true;
-  return false;
-}
-
 /// Check if VD needs to be dllexport/dllimport due to being in a
 /// dllexport/import function.
 void Sema::CheckStaticLocalForDllExport(VarDecl *VD) {
@@ -13408,8 +13395,7 @@ void Sema::FinalizeDeclaration(Decl *ThisDecl) {
   if (unsigned MaxAlign = Context.getTargetInfo().getMaxTLSAlign()) {
     // Protect the check so that it's not performed on dependent types and
     // dependent alignments (we can't determine the alignment in that case).
-    if (VD->getTLSKind() && !hasDependentAlignment(VD) &&
-        !VD->isInvalidDecl()) {
+    if (VD->getTLSKind() && !VD->hasDependentAlignment()) {
       CharUnits MaxAlignChars = Context.toCharUnitsFromBits(MaxAlign);
       if (Context.getDeclAlign(VD) > MaxAlignChars) {
         Diag(VD->getLocation(), diag::err_tls_var_aligned_over_maximum)
@@ -16698,14 +16684,9 @@ ExprResult Sema::VerifyBitField(SourceLocation FieldLoc,
     if (CStdConstraintViolation || MSBitfieldViolation) {
       unsigned DiagWidth =
           CStdConstraintViolation ? TypeWidth : TypeStorageSize;
-      if (FieldName)
-        return Diag(FieldLoc, diag::err_bitfield_width_exceeds_type_width)
-               << FieldName << toString(Value, 10)
-               << !CStdConstraintViolation << DiagWidth;
-
-      return Diag(FieldLoc, diag::err_anon_bitfield_width_exceeds_type_width)
-             << toString(Value, 10) << !CStdConstraintViolation
-             << DiagWidth;
+      return Diag(FieldLoc, diag::err_bitfield_width_exceeds_type_width)
+             << (bool)FieldName << FieldName << toString(Value, 10)
+             << !CStdConstraintViolation << DiagWidth;
     }
 
     // Warn on types where the user might conceivably expect to get all

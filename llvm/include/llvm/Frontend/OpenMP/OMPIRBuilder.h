@@ -639,6 +639,31 @@ public:
   createOffloadMapnames(SmallVectorImpl<llvm::Constant *> &Names,
                         std::string VarName);
 
+  struct MapperAllocas {
+    AllocaInst *ArgsBase = nullptr;
+    AllocaInst *Args = nullptr;
+    AllocaInst *ArgSizes = nullptr;
+  };
+
+  /// Create the allocas instruction used in call to mapper functions.
+  void createMapperAllocas(const LocationDescription &Loc,
+                           InsertPointTy AllocaIP, unsigned NumOperands,
+                           struct MapperAllocas &MapperAllocas);
+
+  /// Create the call for the target mapper function.
+  /// \param Loc The source location description.
+  /// \param MapperFunc Function to be called.
+  /// \param SrcLocInfo Source location information global.
+  /// \param MaptypesArgs
+  /// \param MapnamesArg
+  /// \param MapperAllocas The AllocaInst used for the call.
+  /// \param DeviceID Device ID for the call.
+  /// \param TotalNbOperand Number of operand in the call.
+  void emitMapperCall(const LocationDescription &Loc, Function *MapperFunc,
+                      Value *SrcLocInfo, Value *MaptypesArg, Value *MapnamesArg,
+                      struct MapperAllocas &MapperAllocas, int64_t DeviceID,
+                      unsigned NumOperands);
+
 public:
   /// Generator for __kmpc_copyprivate
   ///
@@ -781,6 +806,29 @@ public:
                                       llvm::Value *Pointer,
                                       llvm::ConstantInt *Size,
                                       const llvm::Twine &Name = Twine(""));
+
+  /// The `omp target` interface
+  ///
+  /// For more information about the usage of this interface,
+  /// \see openmp/libomptarget/deviceRTLs/common/include/target.h
+  ///
+  ///{
+
+  /// Create a runtime call for kmpc_target_init
+  ///
+  /// \param Loc The insert and source location description.
+  /// \param IsSPMD Flag to indicate if the kernel is an SPMD kernel or not.
+  /// \param RequiresFullRuntime Indicate if a full device runtime is necessary.
+  InsertPointTy createTargetInit(const LocationDescription &Loc, bool IsSPMD, bool RequiresFullRuntime);
+
+  /// Create a runtime call for kmpc_target_deinit
+  ///
+  /// \param Loc The insert and source location description.
+  /// \param IsSPMD Flag to indicate if the kernel is an SPMD kernel or not.
+  /// \param RequiresFullRuntime Indicate if a full device runtime is necessary.
+  void createTargetDeinit(const LocationDescription &Loc, bool IsSPMD, bool RequiresFullRuntime);
+
+  ///}
 
   /// Declarations for LLVM-IR types (simple, array, function and structure) are
   /// generated below. Their names are defined and used in OpenMPKinds.def. Here

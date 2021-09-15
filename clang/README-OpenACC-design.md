@@ -2903,9 +2903,10 @@ support currently include:
                       libraries, Clacc will be adjusted in the future
                       to fully conform to the spec.
                     * There exists at least one case where this field
-                      is not yet supported and thus is set to `NULL`:
-                      `acc_ev_create` events for firstprivate `const`
-                      arrays.  Please report additional cases.
+                      is not supported and thus is set to `NULL`: when
+                      the implementation choses to pack multiple small
+                      firstprivate arrays into one allocation.  Please
+                      report additional cases.
                 * When compiling the OpenACC application using Clacc's
                   compiler in source-to-source mode followed by OpenMP
                   compilation, this field is set to `NULL` by default.

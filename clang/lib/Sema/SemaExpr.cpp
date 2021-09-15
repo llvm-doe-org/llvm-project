@@ -525,9 +525,13 @@ ExprResult Sema::DefaultFunctionArrayConversion(Expr *E, bool Diagnose) {
     // An lvalue or rvalue of type "array of N T" or "array of unknown bound of
     // T" can be converted to an rvalue of type "pointer to T".
     //
-    if (getLangOpts().C99 || getLangOpts().CPlusPlus || E->isLValue())
-      E = ImpCastExprToType(E, Context.getArrayDecayedType(Ty),
-                            CK_ArrayToPointerDecay).get();
+    if (getLangOpts().C99 || getLangOpts().CPlusPlus || E->isLValue()) {
+      ExprResult Res = ImpCastExprToType(E, Context.getArrayDecayedType(Ty),
+                                         CK_ArrayToPointerDecay);
+      if (Res.isInvalid())
+        return ExprError();
+      E = Res.get();
+    }
   }
   return E;
 }
@@ -1540,11 +1544,6 @@ QualType Sema::UsualArithmeticConversions(ExprResult &LHS, ExprResult &RHS,
   // If both types are identical, no conversion is needed.
   if (LHSType == RHSType)
     return LHSType;
-
-  // ExtInt types aren't subject to conversions between them or normal integers,
-  // so this fails.
-  if(LHSType->isExtIntType() || RHSType->isExtIntType())
-    return QualType();
 
   // At this point, we have two different arithmetic types.
 
@@ -4054,6 +4053,10 @@ ExprResult Sema::ActOnNumericConstant(const Token &Tok, Scope *UDLScope) {
 
 ExprResult Sema::ActOnParenExpr(SourceLocation L, SourceLocation R, Expr *E) {
   assert(E && "ActOnParenExpr() missing expr");
+  QualType ExprTy = E->getType();
+  if (getLangOpts().ProtectParens && CurFPFeatures.getAllowFPReassociate() &&
+      !E->isLValue() && ExprTy->hasFloatingRepresentation())
+    return BuildBuiltinCallExpr(R, Builtin::BI__arithmetic_fence, E);
   return new (Context) ParenExpr(L, R, E);
 }
 
@@ -5577,7 +5580,7 @@ Sema::CreateBuiltinArraySubscriptExpr(Expr *Base, SourceLocation LLoc,
     BaseExpr = LHSExp;    // vectors: V[123]
     IndexExpr = RHSExp;
     // We apply C++ DR1213 to vector subscripting too.
-    if (getLangOpts().CPlusPlus11 && LHSExp->getValueKind() == VK_PRValue) {
+    if (getLangOpts().CPlusPlus11 && LHSExp->isPRValue()) {
       ExprResult Materialized = TemporaryMaterializationConversion(LHSExp);
       if (Materialized.isInvalid())
         return ExprError();
@@ -5958,6 +5961,7 @@ Sema::ConvertArgumentsForCall(CallExpr *Call, Expr *Fn,
   for (unsigned i = 0; i < TotalNumArgs; ++i)
     Call->setArg(i, AllArgs[i]);
 
+  Call->computeDependence();
   return false;
 }
 
@@ -6594,6 +6598,29 @@ ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
                                ExecConfig, IsExecConfig);
 }
 
+/// BuildBuiltinCallExpr - Create a call to a builtin function specified by Id
+//  with the specified CallArgs
+Expr *Sema::BuildBuiltinCallExpr(SourceLocation Loc, Builtin::ID Id,
+                                 MultiExprArg CallArgs) {
+  StringRef Name = Context.BuiltinInfo.getName(Id);
+  LookupResult R(*this, &Context.Idents.get(Name), Loc,
+                 Sema::LookupOrdinaryName);
+  LookupName(R, TUScope, /*AllowBuiltinCreation=*/true);
+
+  auto *BuiltInDecl = R.getAsSingle<FunctionDecl>();
+  assert(BuiltInDecl && "failed to find builtin declaration");
+
+  ExprResult DeclRef =
+      BuildDeclRefExpr(BuiltInDecl, BuiltInDecl->getType(), VK_LValue, Loc);
+  assert(DeclRef.isUsable() && "Builtin reference cannot fail");
+
+  ExprResult Call =
+      BuildCallExpr(/*Scope=*/nullptr, DeclRef.get(), Loc, CallArgs, Loc);
+
+  assert(!Call.isInvalid() && "Call to builtin cannot fail!");
+  return Call.get();
+}
+
 /// Parse a __builtin_astype expression.
 ///
 /// __builtin_astype( value, dst type )
@@ -6870,6 +6897,7 @@ ExprResult Sema::BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
 
       TheCall->setArg(i, Arg);
     }
+    TheCall->computeDependence();
   }
 
   if (CXXMethodDecl *Method = dyn_cast_or_null<CXXMethodDecl>(FDecl))
@@ -7712,7 +7740,7 @@ ExprResult Sema::BuildVectorLiteral(SourceLocation LParenLoc,
   // initializers must be one or must match the size of the vector.
   // If a single value is specified in the initializer then it will be
   // replicated to all the components of the vector
-  if (VTy->getVectorKind() == VectorType::AltiVecVector) {
+  if (ShouldSplatAltivecScalarInCast(VTy)) {
     // The number of initializers must be one or must match the size of the
     // vector. If a single value is specified in the initializer then it will
     // be replicated to all the components of the vector
@@ -10165,7 +10193,7 @@ QualType Sema::CheckVectorOperands(ExprResult &LHS, ExprResult &RHS,
                                     RHSType, DiagID))
         return RHSType;
     } else {
-      if (LHS.get()->getValueKind() == VK_LValue ||
+      if (LHS.get()->isLValue() ||
           !tryGCCVectorConvertAndSplat(*this, &LHS, &RHS))
         return RHSType;
     }
@@ -10434,6 +10462,22 @@ static void diagnoseArithmeticOnNullPointer(Sema &S, SourceLocation Loc,
       << Pointer->getSourceRange();
   else
     S.Diag(Loc, diag::warn_pointer_arith_null_ptr)
+      << S.getLangOpts().CPlusPlus << Pointer->getSourceRange();
+}
+
+/// Diagnose invalid subraction on a null pointer.
+///
+static void diagnoseSubtractionOnNullPointer(Sema &S, SourceLocation Loc,
+                                             Expr *Pointer, bool BothNull) {
+  // Null - null is valid in C++ [expr.add]p7
+  if (BothNull && S.getLangOpts().CPlusPlus)
+    return;
+
+  // Is this s a macro from a system header?
+  if (S.Diags.getSuppressSystemWarnings() && S.SourceMgr.isInSystemMacro(Loc))
+    return;
+
+  S.Diag(Loc, diag::warn_pointer_sub_null_ptr)
       << S.getLangOpts().CPlusPlus << Pointer->getSourceRange();
 }
 
@@ -10868,7 +10912,16 @@ QualType Sema::CheckSubtractionOperands(ExprResult &LHS, ExprResult &RHS,
                                                LHS.get(), RHS.get()))
         return QualType();
 
-      // FIXME: Add warnings for nullptr - ptr.
+      bool LHSIsNullPtr = LHS.get()->IgnoreParenCasts()->isNullPointerConstant(
+          Context, Expr::NPC_ValueDependentIsNotNull);
+      bool RHSIsNullPtr = RHS.get()->IgnoreParenCasts()->isNullPointerConstant(
+          Context, Expr::NPC_ValueDependentIsNotNull);
+
+      // Subtracting nullptr or from nullptr is suspect
+      if (LHSIsNullPtr)
+        diagnoseSubtractionOnNullPointer(*this, Loc, LHS.get(), RHSIsNullPtr);
+      if (RHSIsNullPtr)
+        diagnoseSubtractionOnNullPointer(*this, Loc, RHS.get(), LHSIsNullPtr);
 
       // The pointee type may have zero size.  As an extension, a structure or
       // union may have zero size or an array may have zero length.  In this
@@ -12258,11 +12311,30 @@ QualType Sema::CheckVectorCompareOperands(ExprResult &LHS, ExprResult &RHS,
 
   QualType LHSType = LHS.get()->getType();
 
-  // If AltiVec, the comparison results in a numeric type, i.e.
-  // bool for C++, int for C
-  if (getLangOpts().AltiVec &&
-      vType->castAs<VectorType>()->getVectorKind() == VectorType::AltiVecVector)
-    return Context.getLogicalOperationType();
+  // Determine the return type of a vector compare. By default clang will return
+  // a scalar for all vector compares except vector bool and vector pixel.
+  // With the gcc compiler we will always return a vector type and with the xl
+  // compiler we will always return a scalar type. This switch allows choosing
+  // which behavior is prefered.
+  if (getLangOpts().AltiVec) {
+    switch (getLangOpts().getAltivecSrcCompat()) {
+    case LangOptions::AltivecSrcCompatKind::Mixed:
+      // If AltiVec, the comparison results in a numeric type, i.e.
+      // bool for C++, int for C
+      if (vType->castAs<VectorType>()->getVectorKind() ==
+          VectorType::AltiVecVector)
+        return Context.getLogicalOperationType();
+      else
+        Diag(Loc, diag::warn_deprecated_altivec_src_compat);
+      break;
+    case LangOptions::AltivecSrcCompatKind::GCC:
+      // For GCC we always return the vector type.
+      break;
+    case LangOptions::AltivecSrcCompatKind::XL:
+      return Context.getLogicalOperationType();
+      break;
+    }
+  }
 
   // For non-floating point types, check for self-comparisons of the form
   // x == x, x != x, x < x, etc.  These always evaluate to a constant, and
@@ -14901,7 +14973,7 @@ ExprResult Sema::CreateBuiltinUnaryOp(SourceLocation OpLoc,
     // complex l-values to ordinary l-values and all other values to r-values.
     if (Input.isInvalid()) return ExprError();
     if (Opc == UO_Real || Input.get()->getType()->isAnyComplexType()) {
-      if (Input.get()->getValueKind() != VK_PRValue &&
+      if (Input.get()->isGLValue() &&
           Input.get()->getObjectKind() == OK_Ordinary)
         VK = Input.get()->getValueKind();
     } else if (!getLangOpts().CPlusPlus) {
@@ -16756,8 +16828,10 @@ void Sema::PopExpressionEvaluationContext() {
 
   if (!Rec.Lambdas.empty()) {
     using ExpressionKind = ExpressionEvaluationContextRecord::ExpressionKind;
-    if (Rec.ExprContext == ExpressionKind::EK_TemplateArgument || Rec.isUnevaluated() ||
-        (Rec.isConstantEvaluated() && !getLangOpts().CPlusPlus17)) {
+    if (!getLangOpts().CPlusPlus20 &&
+        (Rec.ExprContext == ExpressionKind::EK_TemplateArgument ||
+         Rec.isUnevaluated() ||
+         (Rec.isConstantEvaluated() && !getLangOpts().CPlusPlus17))) {
       unsigned D;
       if (Rec.isUnevaluated()) {
         // C++11 [expr.prim.lambda]p2:
@@ -19136,7 +19210,7 @@ namespace {
       Expr *SubExpr = SubResult.get();
       E->setSubExpr(SubExpr);
       E->setType(S.Context.getPointerType(SubExpr->getType()));
-      assert(E->getValueKind() == VK_PRValue);
+      assert(E->isPRValue());
       assert(E->getObjectKind() == OK_Ordinary);
       return E;
     }
@@ -19146,7 +19220,7 @@ namespace {
 
       E->setType(VD->getType());
 
-      assert(E->getValueKind() == VK_PRValue);
+      assert(E->isPRValue());
       if (S.getLangOpts().CPlusPlus &&
           !(isa<CXXMethodDecl>(VD) &&
             cast<CXXMethodDecl>(VD)->isInstance()))
@@ -19237,7 +19311,7 @@ namespace {
         return ExprError();
       }
 
-      assert(E->getValueKind() == VK_PRValue);
+      assert(E->isPRValue());
       assert(E->getObjectKind() == OK_Ordinary);
       E->setType(DestType);
 
@@ -19397,7 +19471,7 @@ ExprResult RebuildUnknownAnyExpr::VisitObjCMessageExpr(ObjCMessageExpr *E) {
 ExprResult RebuildUnknownAnyExpr::VisitImplicitCastExpr(ImplicitCastExpr *E) {
   // The only case we should ever see here is a function-to-pointer decay.
   if (E->getCastKind() == CK_FunctionToPointerDecay) {
-    assert(E->getValueKind() == VK_PRValue);
+    assert(E->isPRValue());
     assert(E->getObjectKind() == OK_Ordinary);
 
     E->setType(DestType);
@@ -19411,7 +19485,7 @@ ExprResult RebuildUnknownAnyExpr::VisitImplicitCastExpr(ImplicitCastExpr *E) {
     E->setSubExpr(Result.get());
     return E;
   } else if (E->getCastKind() == CK_LValueToRValue) {
-    assert(E->getValueKind() == VK_PRValue);
+    assert(E->isPRValue());
     assert(E->getObjectKind() == OK_Ordinary);
 
     assert(isa<BlockPointerType>(E->getType()));
@@ -19778,16 +19852,26 @@ Sema::ActOnObjCBoolLiteral(SourceLocation OpLoc, tok::TokenKind Kind) {
 ExprResult Sema::ActOnObjCAvailabilityCheckExpr(
     llvm::ArrayRef<AvailabilitySpec> AvailSpecs, SourceLocation AtLoc,
     SourceLocation RParen) {
-
-  StringRef Platform = getASTContext().getTargetInfo().getPlatformName();
-
-  auto Spec = llvm::find_if(AvailSpecs, [&](const AvailabilitySpec &Spec) {
-    return Spec.getPlatform() == Platform;
-  });
+  auto FindSpecVersion = [&](StringRef Platform) -> Optional<VersionTuple> {
+    auto Spec = llvm::find_if(AvailSpecs, [&](const AvailabilitySpec &Spec) {
+      return Spec.getPlatform() == Platform;
+    });
+    // Transcribe the "ios" availability check to "maccatalyst" when compiling
+    // for "maccatalyst" if "maccatalyst" is not specified.
+    if (Spec == AvailSpecs.end() && Platform == "maccatalyst") {
+      Spec = llvm::find_if(AvailSpecs, [&](const AvailabilitySpec &Spec) {
+        return Spec.getPlatform() == "ios";
+      });
+    }
+    if (Spec == AvailSpecs.end())
+      return None;
+    return Spec->getVersion();
+  };
 
   VersionTuple Version;
-  if (Spec != AvailSpecs.end())
-    Version = Spec->getVersion();
+  if (auto MaybeVersion =
+          FindSpecVersion(Context.getTargetInfo().getPlatformName()))
+    Version = *MaybeVersion;
 
   // The use of `@available` in the enclosing context should be analyzed to
   // warn when it's used inappropriately (i.e. not if(@available)).

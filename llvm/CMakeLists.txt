@@ -11,7 +11,7 @@ endif()
 set(CMAKE_BUILD_WITH_INSTALL_NAME_DIR ON)
 
 if(NOT DEFINED LLVM_VERSION_MAJOR)
-  set(LLVM_VERSION_MAJOR 13)
+  set(LLVM_VERSION_MAJOR 14)
 endif()
 if(NOT DEFINED LLVM_VERSION_MINOR)
   set(LLVM_VERSION_MINOR 0)
@@ -64,7 +64,7 @@ endif()
 # LLVM_EXTERNAL_${project}_SOURCE_DIR using LLVM_ALL_PROJECTS
 # This allows an easy way of setting up a build directory for llvm and another
 # one for llvm+clang+... using the same sources.
-set(LLVM_ALL_PROJECTS "clang;clang-tools-extra;compiler-rt;debuginfo-tests;libc;libclc;libcxx;libcxxabi;libunwind;lld;lldb;mlir;openmp;parallel-libs;polly;pstl")
+set(LLVM_ALL_PROJECTS "clang;clang-tools-extra;compiler-rt;cross-project-tests;libc;libclc;libcxx;libcxxabi;libunwind;lld;lldb;mlir;openmp;parallel-libs;polly;pstl")
 # The flang project is not yet part of "all" projects (see C++ requirements)
 set(LLVM_EXTRA_PROJECTS "flang")
 # List of all known projects in the mono repo
@@ -788,8 +788,28 @@ endif()
 set(TENSORFLOW_C_LIB_PATH "" CACHE PATH "Path to TensorFlow C library install")
 if (TENSORFLOW_C_LIB_PATH)
   find_library(tensorflow_c_api tensorflow PATHS ${TENSORFLOW_C_LIB_PATH}/lib NO_DEFAULT_PATH REQUIRED)
+  # Currently, the protobuf headers are distributed with the pip package that corresponds to the version
+  # of the C API library.
+  find_library(tensorflow_fx tensorflow_framework PATHS ${TENSORFLOW_C_LIB_PATH}/lib NO_DEFAULT_PATH REQUIRED)
   set(LLVM_HAVE_TF_API "ON" CACHE BOOL "Full Tensorflow API available")
   include_directories(${TENSORFLOW_C_LIB_PATH}/include)
+  if (NOT TF_PROTO_HEADERS)
+    message(STATUS "TF_PROTO_HEADERS not defined. Looking for tensorflow pip package.")
+    execute_process(COMMAND 
+      ${Python3_EXECUTABLE} "-m" "pip" "show" "tensorflow" 
+      OUTPUT_VARIABLE TF_PIP_OUT)
+    if ("${TF_PIP_OUT}" STREQUAL "")
+      message(FATAL ERROR "Tensorflow pip package is also required for 'development' mode (protobuf headers)")
+    endif()
+    string(REGEX MATCH "Location: ([^\n]*\n)" TF_PIP_LOC "${TF_PIP_OUT}")
+    string(REPLACE "Location: " "" TF_PIP ${TF_PIP_LOC})
+    string(STRIP ${TF_PIP} TF_PIP)
+    set(TF_PROTO_HEADERS "${TF_PIP}/tensorflow/include")
+  endif()
+  message(STATUS "Using Tensorflow headers under: ${TF_PROTO_HEADERS}")
+  include_directories(${TF_PROTO_HEADERS})
+  add_definitions("-DGOOGLE_PROTOBUF_NO_RTTI")
+  add_definitions("-D_GLIBCXX_USE_CXX11_ABI=0")
 endif()
 
 # For up-to-date instructions for installing the Tensorflow dependency, refer to

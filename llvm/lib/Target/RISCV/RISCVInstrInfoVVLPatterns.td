@@ -89,6 +89,12 @@ def riscv_smin_vl  : SDNode<"RISCVISD::SMIN_VL",  SDT_RISCVIntBinOp_VL>;
 def riscv_smax_vl  : SDNode<"RISCVISD::SMAX_VL",  SDT_RISCVIntBinOp_VL>;
 def riscv_umin_vl  : SDNode<"RISCVISD::UMIN_VL",  SDT_RISCVIntBinOp_VL>;
 def riscv_umax_vl  : SDNode<"RISCVISD::UMAX_VL",  SDT_RISCVIntBinOp_VL>;
+
+def riscv_saddsat_vl   : SDNode<"RISCVISD::SADDSAT_VL", SDT_RISCVIntBinOp_VL>;
+def riscv_uaddsat_vl   : SDNode<"RISCVISD::UADDSAT_VL", SDT_RISCVIntBinOp_VL>;
+def riscv_ssubsat_vl   : SDNode<"RISCVISD::SSUBSAT_VL", SDT_RISCVIntBinOp_VL>;
+def riscv_usubsat_vl   : SDNode<"RISCVISD::USUBSAT_VL", SDT_RISCVIntBinOp_VL>;
+
 def riscv_fadd_vl  : SDNode<"RISCVISD::FADD_VL",  SDT_RISCVFPBinOp_VL, [SDNPCommutative]>;
 def riscv_fsub_vl  : SDNode<"RISCVISD::FSUB_VL",  SDT_RISCVFPBinOp_VL>;
 def riscv_fmul_vl  : SDNode<"RISCVISD::FMUL_VL",  SDT_RISCVFPBinOp_VL, [SDNPCommutative]>;
@@ -215,6 +221,15 @@ def riscv_trunc_vector_vl : SDNode<"RISCVISD::TRUNCATE_VECTOR_VL",
                                                         SDTCVecEltisVT<2, i1>,
                                                         SDTCisVT<3, XLenVT>]>>;
 
+def SDT_RISCVVWMUL_VL : SDTypeProfile<1, 4, [SDTCisVec<0>,
+                                             SDTCisSameNumEltsAs<0, 1>,
+                                             SDTCisSameAs<1, 2>,
+                                             SDTCisSameNumEltsAs<1, 3>,
+                                             SDTCVecEltisVT<3, i1>,
+                                             SDTCisVT<4, XLenVT>]>;
+def riscv_vwmul_vl  : SDNode<"RISCVISD::VWMUL_VL",  SDT_RISCVVWMUL_VL, [SDNPCommutative]>;
+def riscv_vwmulu_vl : SDNode<"RISCVISD::VWMULU_VL", SDT_RISCVVWMUL_VL, [SDNPCommutative]>;
+
 def SDTRVVVecReduce : SDTypeProfile<1, 4, [
   SDTCisVec<0>, SDTCisVec<1>, SDTCisSameAs<0, 2>, SDTCVecEltisVT<3, i1>,
   SDTCisSameNumEltsAs<1, 3>, SDTCisVT<4, XLenVT>
@@ -223,6 +238,18 @@ def SDTRVVVecReduce : SDTypeProfile<1, 4, [
 def riscv_mul_vl_oneuse : PatFrag<(ops node:$A, node:$B, node:$C, node:$D),
                                   (riscv_mul_vl node:$A, node:$B, node:$C,
                                                 node:$D), [{
+  return N->hasOneUse();
+}]>;
+
+def riscv_vwmul_vl_oneuse : PatFrag<(ops node:$A, node:$B, node:$C, node:$D),
+                                    (riscv_vwmul_vl node:$A, node:$B, node:$C,
+                                                    node:$D), [{
+  return N->hasOneUse();
+}]>;
+
+def riscv_vwmulu_vl_oneuse : PatFrag<(ops node:$A, node:$B, node:$C, node:$D),
+                                     (riscv_vwmulu_vl node:$A, node:$B, node:$C,
+                                                      node:$D), [{
   return N->hasOneUse();
 }]>;
 
@@ -323,6 +350,20 @@ multiclass VPatBinaryVL_VV_VX_VI<SDNode vop, string instruction_name,
                            vti.LMul, vti.RegClass, vti.RegClass,
                            !cast<ComplexPattern>(SplatPat#_#ImmType),
                            ImmType>;
+  }
+}
+
+multiclass VPatBinaryWVL_VV_VX<SDNode vop, string instruction_name> {
+  foreach VtiToWti = AllWidenableIntVectors in {
+    defvar vti = VtiToWti.Vti;
+    defvar wti = VtiToWti.Wti;
+    defm : VPatBinaryVL_VV<vop, instruction_name,
+                           wti.Vector, vti.Vector, vti.Mask, vti.Log2SEW,
+                           vti.LMul, wti.RegClass, vti.RegClass>;
+    defm : VPatBinaryVL_XI<vop, instruction_name, "VX",
+                           wti.Vector, vti.Vector, vti.Mask, vti.Log2SEW,
+                           vti.LMul, wti.RegClass, vti.RegClass,
+                           SplatPat, GPR>;
   }
 }
 
@@ -642,7 +683,15 @@ defm : VPatBinaryVL_VV_VX_VI<riscv_shl_vl, "PseudoVSLL", uimm5>;
 defm : VPatBinaryVL_VV_VX_VI<riscv_srl_vl, "PseudoVSRL", uimm5>;
 defm : VPatBinaryVL_VV_VX_VI<riscv_sra_vl, "PseudoVSRA", uimm5>;
 
-
+foreach vti = AllIntegerVectors in {
+  // Emit shift by 1 as an add since it might be faster.
+  def : Pat<(riscv_shl_vl (vti.Vector vti.RegClass:$rs1),
+                          (riscv_vmv_v_x_vl 1, (XLenVT srcvalue)),
+                          (vti.Mask true_mask),
+                          VLOpFrag),
+            (!cast<Instruction>("PseudoVADD_VV_"# vti.LMul.MX)
+                 vti.RegClass:$rs1, vti.RegClass:$rs1, GPR:$vl, vti.Log2SEW)>;
+}
 
 // 12.7. Vector Narrowing Integer Right Shift Instructions
 foreach vtiTowti = AllWidenableIntVectors in {
@@ -737,6 +786,10 @@ defm : VPatBinaryVL_VV_VX<riscv_sdiv_vl, "PseudoVDIV">;
 defm : VPatBinaryVL_VV_VX<riscv_urem_vl, "PseudoVREMU">;
 defm : VPatBinaryVL_VV_VX<riscv_srem_vl, "PseudoVREM">;
 
+// 12.12. Vector Widening Integer Multiply Instructions
+defm : VPatBinaryWVL_VV_VX<riscv_vwmul_vl, "PseudoVWMUL">;
+defm : VPatBinaryWVL_VV_VX<riscv_vwmulu_vl, "PseudoVWMULU">;
+
 // 12.13 Vector Single-Width Integer Multiply-Add Instructions
 foreach vti = AllIntegerVectors in {
   // NOTE: We choose VMADD because it has the most commuting freedom. So it
@@ -784,6 +837,49 @@ foreach vti = AllIntegerVectors in {
                  GPR:$vl, vti.Log2SEW)>;
 }
 
+// 12.14. Vector Widening Integer Multiply-Add Instructions
+foreach vtiTowti = AllWidenableIntVectors in {
+  defvar vti = vtiTowti.Vti;
+  defvar wti = vtiTowti.Wti;
+  def : Pat<(wti.Vector
+             (riscv_add_vl wti.RegClass:$rd,
+                           (riscv_vwmul_vl_oneuse vti.RegClass:$rs1,
+                                                  (vti.Vector vti.RegClass:$rs2),
+                                                  (vti.Mask true_mask), VLOpFrag),
+                           (vti.Mask true_mask), VLOpFrag)),
+            (!cast<Instruction>("PseudoVWMACC_VV_" # vti.LMul.MX # "_TA")
+                 wti.RegClass:$rd, vti.RegClass:$rs1, vti.RegClass:$rs2,
+                 GPR:$vl, vti.Log2SEW)>;
+  def : Pat<(wti.Vector
+             (riscv_add_vl wti.RegClass:$rd,
+                           (riscv_vwmulu_vl_oneuse vti.RegClass:$rs1,
+                                                   (vti.Vector vti.RegClass:$rs2),
+                                                   (vti.Mask true_mask), VLOpFrag),
+                           (vti.Mask true_mask), VLOpFrag)),
+            (!cast<Instruction>("PseudoVWMACCU_VV_" # vti.LMul.MX # "_TA")
+                 wti.RegClass:$rd, vti.RegClass:$rs1, vti.RegClass:$rs2,
+                 GPR:$vl, vti.Log2SEW)>;
+
+  def : Pat<(wti.Vector
+             (riscv_add_vl wti.RegClass:$rd,
+                           (riscv_vwmul_vl_oneuse (SplatPat XLenVT:$rs1),
+                                                  (vti.Vector vti.RegClass:$rs2),
+                                                  (vti.Mask true_mask), VLOpFrag),
+                           (vti.Mask true_mask), VLOpFrag)),
+            (!cast<Instruction>("PseudoVWMACC_VX_" # vti.LMul.MX # "_TA")
+                 wti.RegClass:$rd, vti.ScalarRegClass:$rs1, vti.RegClass:$rs2,
+                 GPR:$vl, vti.Log2SEW)>;
+  def : Pat<(wti.Vector
+             (riscv_add_vl wti.RegClass:$rd,
+                           (riscv_vwmulu_vl_oneuse (SplatPat XLenVT:$rs1),
+                                                   (vti.Vector vti.RegClass:$rs2),
+                                                   (vti.Mask true_mask), VLOpFrag),
+                           (vti.Mask true_mask), VLOpFrag)),
+            (!cast<Instruction>("PseudoVWMACCU_VX_" # vti.LMul.MX # "_TA")
+                 wti.RegClass:$rd, vti.ScalarRegClass:$rs1, vti.RegClass:$rs2,
+                 GPR:$vl, vti.Log2SEW)>;
+}
+
 // 12.15. Vector Integer Merge Instructions
 foreach vti = AllIntegerVectors in {
   def : Pat<(vti.Vector (riscv_vselect_vl (vti.Mask VMV0:$vm),
@@ -820,6 +916,12 @@ foreach vti = AllIntegerVectors in {
             (!cast<Instruction>("PseudoVMV_V_I_"#vti.LMul.MX)
              XLenVT:$imm5, GPR:$vl, vti.Log2SEW)>;
 }
+
+// 12.1. Vector Single-Width Saturating Add and Subtract
+defm : VPatBinaryVL_VV_VX_VI<riscv_saddsat_vl, "PseudoVSADD">;
+defm : VPatBinaryVL_VV_VX_VI<riscv_uaddsat_vl, "PseudoVSADDU">;
+defm : VPatBinaryVL_VV_VX<riscv_ssubsat_vl, "PseudoVSSUB">;
+defm : VPatBinaryVL_VV_VX<riscv_usubsat_vl, "PseudoVSSUBU">;
 
 } // Predicates = [HasStdExtV]
 

@@ -496,6 +496,7 @@ namespace clang {
     ExpectedDecl VisitAccessSpecDecl(AccessSpecDecl *D);
     ExpectedDecl VisitStaticAssertDecl(StaticAssertDecl *D);
     ExpectedDecl VisitTranslationUnitDecl(TranslationUnitDecl *D);
+    ExpectedDecl VisitBindingDecl(BindingDecl *D);
     ExpectedDecl VisitNamespaceDecl(NamespaceDecl *D);
     ExpectedDecl VisitNamespaceAliasDecl(NamespaceAliasDecl *D);
     ExpectedDecl VisitTypedefNameDecl(TypedefNameDecl *D, bool IsAlias);
@@ -2291,6 +2292,35 @@ ExpectedDecl ASTNodeImporter::VisitTranslationUnitDecl(TranslationUnitDecl *D) {
   return ToD;
 }
 
+ExpectedDecl ASTNodeImporter::VisitBindingDecl(BindingDecl *D) {
+  DeclContext *DC, *LexicalDC;
+  DeclarationName Name;
+  SourceLocation Loc;
+  NamedDecl *ToND;
+  if (Error Err = ImportDeclParts(D, DC, LexicalDC, Name, ToND, Loc))
+    return std::move(Err);
+  if (ToND)
+    return ToND;
+
+  BindingDecl *ToD;
+  if (GetImportedOrCreateDecl(ToD, D, Importer.getToContext(), DC, Loc,
+                              Name.getAsIdentifierInfo()))
+    return ToD;
+
+  Error Err = Error::success();
+  QualType ToType = importChecked(Err, D->getType());
+  Expr *ToBinding = importChecked(Err, D->getBinding());
+  ValueDecl *ToDecomposedDecl = importChecked(Err, D->getDecomposedDecl());
+  if (Err)
+    return std::move(Err);
+
+  ToD->setBinding(ToType, ToBinding);
+  ToD->setDecomposedDecl(ToDecomposedDecl);
+  addDeclToContexts(D, ToD);
+
+  return ToD;
+}
+
 ExpectedDecl ASTNodeImporter::VisitAccessSpecDecl(AccessSpecDecl *D) {
   ExpectedSLoc LocOrErr = import(D->getLocation());
   if (!LocOrErr)
@@ -4068,14 +4098,26 @@ ExpectedDecl ASTNodeImporter::VisitVarDecl(VarDecl *D) {
   if (Err)
     return std::move(Err);
 
-  // Create the imported variable.
   VarDecl *ToVar;
-  if (GetImportedOrCreateDecl(ToVar, D, Importer.getToContext(), DC,
-                              ToInnerLocStart, Loc,
-                              Name.getAsIdentifierInfo(),
-                              ToType, ToTypeSourceInfo,
-                              D->getStorageClass()))
-    return ToVar;
+  if (auto *FromDecomp = dyn_cast<DecompositionDecl>(D)) {
+    SmallVector<BindingDecl *> Bindings(FromDecomp->bindings().size());
+    if (Error Err =
+            ImportArrayChecked(FromDecomp->bindings(), Bindings.begin()))
+      return std::move(Err);
+    DecompositionDecl *ToDecomp;
+    if (GetImportedOrCreateDecl(
+            ToDecomp, FromDecomp, Importer.getToContext(), DC, ToInnerLocStart,
+            Loc, ToType, ToTypeSourceInfo, D->getStorageClass(), Bindings))
+      return ToDecomp;
+    ToVar = ToDecomp;
+  } else {
+    // Create the imported variable.
+    if (GetImportedOrCreateDecl(ToVar, D, Importer.getToContext(), DC,
+                                ToInnerLocStart, Loc,
+                                Name.getAsIdentifierInfo(), ToType,
+                                ToTypeSourceInfo, D->getStorageClass()))
+      return ToVar;
+  }
 
   ToVar->setTSCSpec(D->getTSCSpec());
   ToVar->setQualifierInfo(ToQualifierLoc);

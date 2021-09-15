@@ -20,6 +20,7 @@
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/MDBuilder.h"
+#include "llvm/IR/Value.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -2207,6 +2208,70 @@ CallInst *OpenMPIRBuilder::createCachedThreadPrivate(
   return Builder.CreateCall(Fn, Args);
 }
 
+OpenMPIRBuilder::InsertPointTy
+OpenMPIRBuilder::createTargetInit(const LocationDescription &Loc, bool IsSPMD, bool RequiresFullRuntime) {
+  if (!updateToLocation(Loc))
+    return Loc.IP;
+
+  Constant *SrcLocStr = getOrCreateSrcLocStr(Loc);
+  Value *Ident = getOrCreateIdent(SrcLocStr);
+  ConstantInt *IsSPMDVal = ConstantInt::getBool(Int32->getContext(), IsSPMD);
+  ConstantInt *UseGenericStateMachine =
+      ConstantInt::getBool(Int32->getContext(), !IsSPMD);
+  ConstantInt *RequiresFullRuntimeVal = ConstantInt::getBool(Int32->getContext(), RequiresFullRuntime);
+
+  Function *Fn = getOrCreateRuntimeFunctionPtr(
+      omp::RuntimeFunction::OMPRTL___kmpc_target_init);
+
+  CallInst *ThreadKind =
+      Builder.CreateCall(Fn, {Ident, IsSPMDVal, UseGenericStateMachine, RequiresFullRuntimeVal});
+
+  Value *ExecUserCode = Builder.CreateICmpEQ(
+      ThreadKind, ConstantInt::get(ThreadKind->getType(), -1), "exec_user_code");
+
+  // ThreadKind = __kmpc_target_init(...)
+  // if (ThreadKind == -1)
+  //   user_code
+  // else
+  //   return;
+
+  auto *UI = Builder.CreateUnreachable();
+  BasicBlock *CheckBB = UI->getParent();
+  BasicBlock *UserCodeEntryBB = CheckBB->splitBasicBlock(UI, "user_code.entry");
+
+  BasicBlock *WorkerExitBB = BasicBlock::Create(
+      CheckBB->getContext(), "worker.exit", CheckBB->getParent());
+  Builder.SetInsertPoint(WorkerExitBB);
+  Builder.CreateRetVoid();
+
+  auto *CheckBBTI = CheckBB->getTerminator();
+  Builder.SetInsertPoint(CheckBBTI);
+  Builder.CreateCondBr(ExecUserCode, UI->getParent(), WorkerExitBB);
+
+  CheckBBTI->eraseFromParent();
+  UI->eraseFromParent();
+
+  // Continue in the "user_code" block, see diagram above and in
+  // openmp/libomptarget/deviceRTLs/common/include/target.h .
+  return InsertPointTy(UserCodeEntryBB, UserCodeEntryBB->getFirstInsertionPt());
+}
+
+void OpenMPIRBuilder::createTargetDeinit(const LocationDescription &Loc,
+                                         bool IsSPMD, bool RequiresFullRuntime) {
+  if (!updateToLocation(Loc))
+    return;
+
+  Constant *SrcLocStr = getOrCreateSrcLocStr(Loc);
+  Value *Ident = getOrCreateIdent(SrcLocStr);
+  ConstantInt *IsSPMDVal = ConstantInt::getBool(Int32->getContext(), IsSPMD);
+  ConstantInt *RequiresFullRuntimeVal = ConstantInt::getBool(Int32->getContext(), RequiresFullRuntime);
+
+  Function *Fn = getOrCreateRuntimeFunctionPtr(
+      omp::RuntimeFunction::OMPRTL___kmpc_target_deinit);
+
+  Builder.CreateCall(Fn, {Ident, IsSPMDVal, RequiresFullRuntimeVal});
+}
+
 std::string OpenMPIRBuilder::getNameWithSeparators(ArrayRef<StringRef> Parts,
                                                    StringRef FirstSeparator,
                                                    StringRef Separator) {
@@ -2267,6 +2332,51 @@ OpenMPIRBuilder::createOffloadMaptypes(SmallVectorImpl<uint64_t> &Mappings,
       VarName);
   MaptypesArrayGlobal->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
   return MaptypesArrayGlobal;
+}
+
+void OpenMPIRBuilder::createMapperAllocas(const LocationDescription &Loc,
+                                          InsertPointTy AllocaIP,
+                                          unsigned NumOperands,
+                                          struct MapperAllocas &MapperAllocas) {
+  if (!updateToLocation(Loc))
+    return;
+
+  auto *ArrI8PtrTy = ArrayType::get(Int8Ptr, NumOperands);
+  auto *ArrI64Ty = ArrayType::get(Int64, NumOperands);
+  Builder.restoreIP(AllocaIP);
+  AllocaInst *ArgsBase = Builder.CreateAlloca(ArrI8PtrTy);
+  AllocaInst *Args = Builder.CreateAlloca(ArrI8PtrTy);
+  AllocaInst *ArgSizes = Builder.CreateAlloca(ArrI64Ty);
+  Builder.restoreIP(Loc.IP);
+  MapperAllocas.ArgsBase = ArgsBase;
+  MapperAllocas.Args = Args;
+  MapperAllocas.ArgSizes = ArgSizes;
+}
+
+void OpenMPIRBuilder::emitMapperCall(const LocationDescription &Loc,
+                                     Function *MapperFunc, Value *SrcLocInfo,
+                                     Value *MaptypesArg, Value *MapnamesArg,
+                                     struct MapperAllocas &MapperAllocas,
+                                     int64_t DeviceID, unsigned NumOperands) {
+  if (!updateToLocation(Loc))
+    return;
+
+  auto *ArrI8PtrTy = ArrayType::get(Int8Ptr, NumOperands);
+  auto *ArrI64Ty = ArrayType::get(Int64, NumOperands);
+  Value *ArgsBaseGEP =
+      Builder.CreateInBoundsGEP(ArrI8PtrTy, MapperAllocas.ArgsBase,
+                                {Builder.getInt32(0), Builder.getInt32(0)});
+  Value *ArgsGEP =
+      Builder.CreateInBoundsGEP(ArrI8PtrTy, MapperAllocas.Args,
+                                {Builder.getInt32(0), Builder.getInt32(0)});
+  Value *ArgSizesGEP =
+      Builder.CreateInBoundsGEP(ArrI64Ty, MapperAllocas.ArgSizes,
+                                {Builder.getInt32(0), Builder.getInt32(0)});
+  Value *NullPtr = Constant::getNullValue(Int8Ptr->getPointerTo());
+  Builder.CreateCall(MapperFunc,
+                     {SrcLocInfo, Builder.getInt64(DeviceID),
+                      Builder.getInt32(NumOperands), ArgsBaseGEP, ArgsGEP,
+                      ArgSizesGEP, MaptypesArg, MapnamesArg, NullPtr});
 }
 
 bool OpenMPIRBuilder::checkAndEmitFlushAfterAtomic(

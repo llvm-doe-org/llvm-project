@@ -1260,8 +1260,50 @@ installed.
 Controlling Floating Point Behavior
 -----------------------------------
 
-Clang provides a number of ways to control floating point behavior. The options
-are listed below.
+Clang provides a number of ways to control floating point behavior, including
+with command line options and source pragmas. This section
+describes the various floating point semantic modes and the corresponding options.
+
+.. csv-table:: Floating Point Semantic Modes
+  :header: "Mode", "Values"
+  :widths: 15, 30, 30
+
+  "except_behavior", "{ignore, strict, may_trap}", "ffp-exception-behavior"
+  "fenv_access", "{off, on}", "(none)"
+  "rounding_mode", "{dynamic, tonearest, downward, upward, towardzero}", "frounding-math"
+  "contract", "{on, off, fast}", "ffp-contract"
+  "denormal_fp_math", "{IEEE, PreserveSign, PositiveZero}", "fdenormal-fp-math"
+  "denormal_fp32_math", "{IEEE, PreserveSign, PositiveZero}", "fdenormal-fp-math-fp32"
+  "support_math_errno", "{on, off}", "fmath-errno"
+  "no_honor_nans", "{on, off}", "fhonor-nans"
+  "no_honor_infinities", "{on, off}", "fhonor-infinities"
+  "no_signed_zeros", "{on, off}", "fsigned-zeros"
+  "allow_reciprocal", "{on, off}", "freciprocal-math"
+  "allow_approximate_fns", "{on, off}", "(none)"
+  "allow_reassociation", "{on, off}", "fassociative-math"
+
+
+This table describes the option settings that correspond to the three
+floating point semantic models: precise (the default), strict, and fast.
+
+
+.. csv-table:: Floating Point Models
+  :header: "Mode", "Precise", "Strict", "Fast"
+  :widths: 25, 15, 15, 15
+
+  "except_behavior", "ignore", "strict", "ignore"
+  "fenv_access", "off", "on", "off"
+  "rounding_mode", "tonearest", "dynamic", "tonearest"
+  "contract", "on", "off", "fast"
+  "denormal_fp_math", "IEEE", "IEEE", "PreserveSign"
+  "denormal_fp32_math", "IEEE","IEEE", "PreserveSign"
+  "support_math_errno", "on", "on", "off"
+  "no_honor_nans", "off", "off", "on"
+  "no_honor_infinities", "off", "off", "on"
+  "no_signed_zeros", "off", "off", "on"
+  "allow_reciprocal", "off", "off", "on"
+  "allow_approximate_fns", "off", "off", "on"
+  "allow_reassociation", "off", "off", "on"
 
 .. option:: -ffast-math
 
@@ -1456,7 +1498,7 @@ Note that floating-point operations performed as part of constant initialization
    and ``fast``.
    Details:
 
-   * ``precise`` Disables optimizations that are not value-safe on floating-point data, although FP contraction (FMA) is enabled (``-ffp-contract=fast``).  This is the default behavior.
+   * ``precise`` Disables optimizations that are not value-safe on floating-point data, although FP contraction (FMA) is enabled (``-ffp-contract=on``).  This is the default behavior.
    * ``strict`` Enables ``-frounding-math`` and ``-ffp-exception-behavior=strict``, and disables contractions (FMA).  All of the ``-ffast-math`` enablements are disabled. Enables ``STDC FENV_ACCESS``: by default ``FENV_ACCESS`` is disabled. This option setting behaves as though ``#pragma STDC FENV_ACESS ON`` appeared at the top of the source file.
    * ``fast`` Behaves identically to specifying both ``-ffast-math`` and ``ffp-contract=fast``
 
@@ -1478,6 +1520,26 @@ Note that floating-point operations performed as part of constant initialization
    * ``maytrap`` The compiler avoids transformations that may raise exceptions that would not have been raised by the original code. Constant folding performed by the compiler is exempt from this option.
    * ``strict`` The compiler ensures that all transformations strictly preserve the floating point exception semantics of the original code.
 
+.. option:: -f[no-]protect-parens:
+
+   This option pertains to floating-point types, complex types with
+   floating-point components, and vectors of these types. Some arithmetic
+   expression transformations that are mathematically correct and permissible
+   according to the C and C++ language standards may be incorrect when dealing
+   with floating-point types, such as reassociation and distribution. Further,
+   the optimizer may ignore parentheses when computing arithmetic expressions
+   in circumstances where the parenthesized and unparenthesized expression
+   express the same mathematical value. For example (a+b)+c is the same
+   mathematical value as a+(b+c), but the optimizer is free to evaluate the 
+   additions in any order regardless of the parentheses. When enabled, this
+   option forces the optimizer to honor the order of operations with respect
+   to parentheses in all circumstances.
+
+   Note that floating-point contraction (option `-ffp-contract=`) is disabled
+   when `-fprotect-parens` is enabled.  Also note that in safe floating-point
+   modes, such as `-ffp-model=precise` or `-ffp-model=strict`, this option
+   has no effect because the optimizer is prohibited from making unsafe
+   transformations.
 
 .. _fp-constant-eval:
 
@@ -1628,6 +1690,14 @@ are listed below.
 
    Enable simple code coverage in addition to certain sanitizers.
    See :doc:`SanitizerCoverage` for more details.
+
+**-f[no-]sanitize-address-outline-instrumentation**
+
+   Controls how address sanitizer code is generated. If enabled will always use
+   a function call instead of inlining the code. Turning this option on could
+   reduce the binary size, but might result in a worse run-time performance.
+
+   See :doc: `AddressSanitizer` for more details.
 
 **-f[no-]sanitize-stats**
 
@@ -2535,7 +2605,8 @@ below. If multiple flags are present, the last one is used.
    non-trivial, non-aggregate C++ class in the modules that contain a
    definition of one of its constructors. This relies on the additional
    assumption that all classes that are not trivially constructible have a
-   non-trivial constructor that is used somewhere.
+   non-trivial constructor that is used somewhere. The negation,
+   -fno-use-ctor-homing, ensures that constructor homing is not used.
 
    This flag is not enabled by default, and needs to be used with -cc1 or
    -Xclang.
@@ -3724,6 +3795,8 @@ Execute ``clang-cl /?`` to see a list of supported options:
                               Enable linker dead stripping of globals in AddressSanitizer
       -fsanitize-address-poison-custom-array-cookie
                               Enable poisoning array cookies when using custom operator new[] in AddressSanitizer
+      -fsanitize-address-use-after-return=<mode>
+                              Select the mode of detecting stack use-after-return in AddressSanitizer: never | runtime (default) | always
       -fsanitize-address-use-after-scope
                               Enable use-after-scope detection in AddressSanitizer
       -fsanitize-address-use-odr-indicator

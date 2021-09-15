@@ -1483,7 +1483,7 @@ bool ASTReader::ReadSLocEntry(int ID) {
   }
 
   BitstreamCursor &SLocEntryCursor = F->SLocEntryCursor;
-  unsigned BaseOffset = F->SLocEntryBaseOffset;
+  SourceLocation::UIntTy BaseOffset = F->SLocEntryBaseOffset;
 
   ++NumSLocEntriesRead;
   Expected<llvm::BitstreamEntry> MaybeEntry = SLocEntryCursor.advance();
@@ -2765,7 +2765,7 @@ ASTReader::ReadControlBlock(ModuleFile &F,
         // If requested by the caller and the module hasn't already been read
         // or compiled, mark modules on error as out-of-date.
         if ((ClientLoadCapabilities & ARR_TreatModuleWithErrorsAsOutOfDate) &&
-            !ModuleMgr.getModuleCache().isPCMFinal(F.FileName))
+            canRecoverFromOutOfDate(F.FileName, ClientLoadCapabilities))
           return OutOfDate;
 
         if (!AllowASTWithCompilerErrors) {
@@ -2851,9 +2851,14 @@ ASTReader::ReadControlBlock(ModuleFile &F,
                                   StoredSignature, Capabilities);
 
         // If we diagnosed a problem, produce a backtrace.
-        if (isDiagnosedResult(Result, Capabilities))
+        bool recompilingFinalized =
+            Result == OutOfDate && (Capabilities & ARR_OutOfDate) &&
+            getModuleManager().getModuleCache().isPCMFinal(F.FileName);
+        if (isDiagnosedResult(Result, Capabilities) || recompilingFinalized)
           Diag(diag::note_module_file_imported_by)
               << F.FileName << !F.ModuleName.empty() << F.ModuleName;
+        if (recompilingFinalized)
+          Diag(diag::note_module_file_conflict);
 
         switch (Result) {
         case Failure: return Failure;
@@ -2919,7 +2924,7 @@ ASTReader::ReadControlBlock(ModuleFile &F,
             F.Kind != MK_ExplicitModule && F.Kind != MK_PrebuiltModule) {
           auto BuildDir = PP.getFileManager().getDirectory(Blob);
           if (!BuildDir || *BuildDir != M->Directory) {
-            if ((ClientLoadCapabilities & ARR_OutOfDate) == 0)
+            if (!canRecoverFromOutOfDate(F.FileName, ClientLoadCapabilities))
               Diag(diag::err_imported_module_relocated)
                   << F.ModuleName << Blob << M->Directory->getName();
             return OutOfDate;
@@ -3405,7 +3410,7 @@ ASTReader::ReadASTBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
     case SOURCE_LOCATION_OFFSETS: {
       F.SLocEntryOffsets = (const uint32_t *)Blob.data();
       F.LocalNumSLocEntries = Record[0];
-      unsigned SLocSpaceSize = Record[1];
+      SourceLocation::UIntTy SLocSpaceSize = Record[1];
       F.SLocEntryOffsetsBase = Record[2] + F.SourceManagerBlockStartOffset;
       std::tie(F.SLocEntryBaseID, F.SLocEntryBaseOffset) =
           SourceMgr.AllocateLoadedSLocEntries(F.LocalNumSLocEntries,
@@ -3423,7 +3428,7 @@ ASTReader::ReadASTBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
       F.FirstLoc = SourceLocation::getFromRawEncoding(F.SLocEntryBaseOffset);
 
       // SLocEntryBaseOffset is lower than MaxLoadedOffset and decreasing.
-      assert((F.SLocEntryBaseOffset & (1U << 31U)) == 0);
+      assert((F.SLocEntryBaseOffset & SourceLocation::MacroIDBit) == 0);
       GlobalSLocOffsetMap.insert(
           std::make_pair(SourceManager::MaxLoadedOffset - F.SLocEntryBaseOffset
                            - SLocSpaceSize,&F));
@@ -3432,8 +3437,8 @@ ASTReader::ReadASTBlock(ModuleFile &F, unsigned ClientLoadCapabilities) {
       // Invalid stays invalid.
       F.SLocRemap.insertOrReplace(std::make_pair(0U, 0));
       // This module. Base was 2 when being compiled.
-      F.SLocRemap.insertOrReplace(std::make_pair(2U,
-                                  static_cast<int>(F.SLocEntryBaseOffset - 2)));
+      F.SLocRemap.insertOrReplace(std::make_pair(
+          2U, static_cast<SourceLocation::IntTy>(F.SLocEntryBaseOffset - 2)));
 
       TotalNumSLocEntries += F.LocalNumSLocEntries;
       break;
@@ -3834,8 +3839,11 @@ void ASTReader::ReadModuleOffsetMap(ModuleFile &F) const {
   }
 
   // Continuous range maps we may be updating in our module.
+  using SLocRemapBuilder =
+      ContinuousRangeMap<SourceLocation::UIntTy, SourceLocation::IntTy,
+                         2>::Builder;
   using RemapBuilder = ContinuousRangeMap<uint32_t, int, 2>::Builder;
-  RemapBuilder SLocRemap(F.SLocRemap);
+  SLocRemapBuilder SLocRemap(F.SLocRemap);
   RemapBuilder IdentifierRemap(F.IdentifierRemap);
   RemapBuilder MacroRemap(F.MacroRemap);
   RemapBuilder PreprocessedEntityRemap(F.PreprocessedEntityRemap);
@@ -3866,7 +3874,7 @@ void ASTReader::ReadModuleOffsetMap(ModuleFile &F) const {
       return;
     }
 
-    uint32_t SLocOffset =
+    SourceLocation::UIntTy SLocOffset =
         endian::readNext<uint32_t, little, unaligned>(Data);
     uint32_t IdentifierIDOffset =
         endian::readNext<uint32_t, little, unaligned>(Data);
@@ -3883,15 +3891,21 @@ void ASTReader::ReadModuleOffsetMap(ModuleFile &F) const {
     uint32_t TypeIndexOffset =
         endian::readNext<uint32_t, little, unaligned>(Data);
 
-    uint32_t None = std::numeric_limits<uint32_t>::max();
-
     auto mapOffset = [&](uint32_t Offset, uint32_t BaseOffset,
                          RemapBuilder &Remap) {
+      constexpr uint32_t None = std::numeric_limits<uint32_t>::max();
       if (Offset != None)
         Remap.insert(std::make_pair(Offset,
                                     static_cast<int>(BaseOffset - Offset)));
     };
-    mapOffset(SLocOffset, OM->SLocEntryBaseOffset, SLocRemap);
+
+    constexpr SourceLocation::UIntTy SLocNone =
+        std::numeric_limits<SourceLocation::UIntTy>::max();
+    if (SLocOffset != SLocNone)
+      SLocRemap.insert(std::make_pair(
+          SLocOffset, static_cast<SourceLocation::IntTy>(
+                          OM->SLocEntryBaseOffset - SLocOffset)));
+
     mapOffset(IdentifierIDOffset, OM->BaseIdentifierID, IdentifierRemap);
     mapOffset(MacroIDOffset, OM->BaseMacroID, MacroRemap);
     mapOffset(PreprocessedEntityIDOffset, OM->BasePreprocessedEntityID,
@@ -3929,7 +3943,7 @@ ASTReader::ReadModuleMapFileBlock(RecordData &Record, ModuleFile &F,
     if (!bool(PP.getPreprocessorOpts().DisablePCHOrModuleValidation &
               DisableValidationForModuleKind::Module) &&
         !ModMap) {
-      if ((ClientLoadCapabilities & ARR_OutOfDate) == 0) {
+      if (!canRecoverFromOutOfDate(F.FileName, ClientLoadCapabilities)) {
         if (auto ASTFE = M ? M->getASTFile() : None) {
           // This module was defined by an imported (explicit) module.
           Diag(diag::err_module_file_conflict) << F.ModuleName << F.FileName
@@ -3960,7 +3974,7 @@ ASTReader::ReadModuleMapFileBlock(RecordData &Record, ModuleFile &F,
       assert((ImportedBy || F.Kind == MK_ImplicitModule) &&
              "top-level import should be verified");
       bool NotImported = F.Kind == MK_ImplicitModule && !ImportedBy;
-      if ((ClientLoadCapabilities & ARR_OutOfDate) == 0)
+      if (!canRecoverFromOutOfDate(F.FileName, ClientLoadCapabilities))
         Diag(diag::err_imported_module_modmap_changed)
             << F.ModuleName << (NotImported ? F.FileName : ImportedBy->FileName)
             << ModMap->getName() << F.ModuleMapPath << NotImported;
@@ -3971,13 +3985,13 @@ ASTReader::ReadModuleMapFileBlock(RecordData &Record, ModuleFile &F,
     for (unsigned I = 0, N = Record[Idx++]; I < N; ++I) {
       // FIXME: we should use input files rather than storing names.
       std::string Filename = ReadPath(F, Record, Idx);
-      auto F = FileMgr.getFile(Filename, false, false);
-      if (!F) {
-        if ((ClientLoadCapabilities & ARR_OutOfDate) == 0)
+      auto SF = FileMgr.getFile(Filename, false, false);
+      if (!SF) {
+        if (!canRecoverFromOutOfDate(F.FileName, ClientLoadCapabilities))
           Error("could not find file '" + Filename +"' referenced by AST file");
         return OutOfDate;
       }
-      AdditionalStoredMaps.insert(*F);
+      AdditionalStoredMaps.insert(*SF);
     }
 
     // Check any additional module map files (e.g. module.private.modulemap)
@@ -3987,7 +4001,7 @@ ASTReader::ReadModuleMapFileBlock(RecordData &Record, ModuleFile &F,
         // Remove files that match
         // Note: SmallPtrSet::erase is really remove
         if (!AdditionalStoredMaps.erase(ModMap)) {
-          if ((ClientLoadCapabilities & ARR_OutOfDate) == 0)
+          if (!canRecoverFromOutOfDate(F.FileName, ClientLoadCapabilities))
             Diag(diag::err_module_different_modmap)
               << F.ModuleName << /*new*/0 << ModMap->getName();
           return OutOfDate;
@@ -3998,7 +4012,7 @@ ASTReader::ReadModuleMapFileBlock(RecordData &Record, ModuleFile &F,
     // Check any additional module map files that are in the pcm, but not
     // found in header search. Cases that match are already removed.
     for (const FileEntry *ModMap : AdditionalStoredMaps) {
-      if ((ClientLoadCapabilities & ARR_OutOfDate) == 0)
+      if (!canRecoverFromOutOfDate(F.FileName, ClientLoadCapabilities))
         Diag(diag::err_module_different_modmap)
           << F.ModuleName << /*not new*/1 << ModMap->getName();
       return OutOfDate;
@@ -5925,6 +5939,12 @@ ASTReader::getModulePreprocessedEntities(ModuleFile &Mod) const {
                           PreprocessingRecord::iterator());
 }
 
+bool ASTReader::canRecoverFromOutOfDate(StringRef ModuleFileName,
+                                        unsigned int ClientLoadCapabilities) {
+  return ClientLoadCapabilities & ARR_OutOfDate &&
+         !getModuleManager().getModuleCache().isPCMFinal(ModuleFileName);
+}
+
 llvm::iterator_range<ASTReader::ModuleDeclIterator>
 ASTReader::getModuleFileLevelDecls(ModuleFile &Mod) {
   return llvm::make_range(
@@ -7174,6 +7194,11 @@ void ASTReader::CompleteRedeclChain(const Decl *D) {
     // but that it's not actually complete yet, so we know we still need to
     // complete it later.
     PendingIncompleteDeclChains.push_back(const_cast<Decl*>(D));
+    return;
+  }
+
+  if (!D->getDeclContext()) {
+    assert(isa<TranslationUnitDecl>(D) && "Not a TU?");
     return;
   }
 

@@ -37,9 +37,6 @@ VERSION {
         ompt_set_map_var_info;
         ompt_clear_map_var_info;
 
-        # icc drops weak attribute at linking step without the following line:
-        Annotate*;           # TSAN annotation
-
         ompc_*;    # omp.h renames some standard functions to ompc_*.
         kmp_*;     # Intel extensions.
         kmpc_*;    # Intel extensions.

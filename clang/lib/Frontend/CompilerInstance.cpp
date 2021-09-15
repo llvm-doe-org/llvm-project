@@ -142,7 +142,7 @@ bool CompilerInstance::createTarget() {
   // Inform the target of the language options.
   // FIXME: We shouldn't need to do this, the target should be immutable once
   // created. This complexity should be lifted elsewhere.
-  getTarget().adjust(getLangOpts());
+  getTarget().adjust(getDiagnostics(), getLangOpts());
 
   // Adjust target options based on codegen options.
   getTarget().adjustTargetOptions(getCodeGenOpts(), getTargetOpts());
@@ -457,7 +457,7 @@ void CompilerInstance::createPreprocessor(TranslationUnitKind TUKind) {
                                       getSourceManager(), *HeaderInfo, *this,
                                       /*IdentifierInfoLookup=*/nullptr,
                                       /*OwnsHeaderSearch=*/true, TUKind);
-  getTarget().adjust(getLangOpts());
+  getTarget().adjust(getDiagnostics(), getLangOpts());
   PP->Initialize(getTarget(), getAuxTarget());
 
   if (PPOpts.DetailedRecord)
@@ -551,7 +551,7 @@ void CompilerInstance::createASTContext() {
   Preprocessor &PP = getPreprocessor();
   auto *Context = new ASTContext(getLangOpts(), PP.getSourceManager(),
                                  PP.getIdentifierTable(), PP.getSelectorTable(),
-                                 PP.getBuiltinInfo());
+                                 PP.getBuiltinInfo(), PP.TUKind);
   Context->InitBuiltinTypes(getTarget(), getAuxTarget());
   setASTContext(Context);
 }
@@ -1053,6 +1053,15 @@ compileModuleImpl(CompilerInstance &ImportingInstance, SourceLocation ImportLoc,
                   llvm::function_ref<void(CompilerInstance &)> PostBuildStep =
                       [](CompilerInstance &) {}) {
   llvm::TimeTraceScope TimeScope("Module Compile", ModuleName);
+
+  // Never compile a module that's already finalized - this would cause the
+  // existing module to be freed, causing crashes if it is later referenced
+  if (ImportingInstance.getModuleCache().isPCMFinal(ModuleFileName)) {
+    ImportingInstance.getDiagnostics().Report(
+        ImportLoc, diag::err_module_rebuild_finalized)
+        << ModuleName;
+    return false;
+  }
 
   // Construct a compiler invocation for creating this module.
   auto Invocation =
