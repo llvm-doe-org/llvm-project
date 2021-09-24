@@ -224,15 +224,16 @@
 // Check execution with normal compilation.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST    tgt-cflags='                                     -Xclang -verify' host-or-tgt=host)
-// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host-or-tgt=tgt )
-// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-tgt=tgt )
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' host-or-tgt=host)
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host-or-tgt=tgt )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' host-or-tgt=tgt )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-tgt=tgt )
 // RUN: }
 // RUN: %for directives {
 // RUN:   %for exes {
 // RUN:     %for tgts {
 // RUN:       %[run-if] %clang -fopenacc %s -o %t \
-// RUN:                        -DMODE=%[mode] -DTGT_%[tgt]_EXE \
+// RUN:                        -DMODE=%[mode] -DEXE_ON_%[host-or-tgt] \
 // RUN:                        %[cflags] %[tgt-cflags] %[dir-cflags]
 // RUN:       %[run-if] %t > %t.out 2>&1
 // RUN:       %[run-if] FileCheck -input-file %t.out %s \
@@ -369,7 +370,7 @@
 // FIXME: When OpenMP offloading is activated by -fopenmp-targets, pointers
 // pass into acc parallel as null, but otherwise they pass in just fine.
 // What does the OpenMP spec say is supposed to happen?
-#if !TGT_X86_64_EXE && !TGT_NVPTX64_EXE
+#if EXE_ON_host
 # define DEREF_PTR(Ptr) (*(Ptr))
 #else
 # define DEREF_PTR(Ptr) 9999
