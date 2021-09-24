@@ -19,6 +19,10 @@
 #define OMPT_FOR_LIBOMPTARGET
 #include "../../runtime/src/ompt-internal.h"
 
+#if OMPT_SUPPORT
+#include "../src/ompt-target.h"
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

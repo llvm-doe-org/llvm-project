@@ -23,6 +23,10 @@
 #define OMPT_FOR_LIBOMPTARGET
 #include "../../runtime/src/ompt-internal.h"
 
+#if OMPT_SUPPORT
+#include "ompt-target.h"
+#endif
+
 // Forward declarations.
 struct DeviceTy;
 struct __tgt_bin_desc;

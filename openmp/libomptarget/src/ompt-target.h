@@ -44,4 +44,34 @@ libomp_start_tool(
     ompt_target_callbacks_active_t *libomptarget_ompt_enabled,
     ompt_target_callbacks_internal_t *libomptarget_ompt_callbacks);
 
+/// This struct is passed into target plugins where OMPT callbacks require
+/// additional data.
+///
+/// It may be tempting to export and weakly link libomptarget symbols (functions
+/// or data) in order to access them in the plugins.  While that works in many
+/// cases, the test openmp/libomptarget/test/offloading/dynamic_module_load.c
+/// reveals that, if a dlopen'ed OpenMP application happens to require a
+/// plugin function that depends on that symbol, dlsym will then fail.  For
+/// example, a plugin's __tgt_rtl_run_target_team_region_async must access
+/// ompt_target_enabled and ompt_target_callbacks via this struct instead of
+/// directly in order not to break that test.
+///
+/// FIXME: Some functions are being accessed directly in plugins because they
+/// don't happen to be depended upon by plugin functions required in that test.
+/// For example, omp_get_initial_device.  If they were called directly from
+/// __tgt_rtl_run_target_team_region_async, they would break that test.  Other
+/// examples of dlopen are surely already broken as a result but they don't
+/// happen to be tested.  We should also pass such functions via this struct.
+typedef struct {
+  /// This is the same as \c DeviceTy::DeviceID.  (\c DeviceTy::RTLDeviceID is
+  /// already passed to some target plugin functions using a parameter name like
+  /// \c DeviceID, but it's not the same when there are multiple RTLs loaded.)
+  int32_t global_device_id;
+  /// Registered callbacks.
+  /// @{
+  ompt_target_callbacks_active_t *ompt_target_enabled;
+  ompt_target_callbacks_internal_t *ompt_target_callbacks;
+  /// @}
+} ompt_plugin_api_t;
+
 #endif // LIBOMPTARGET_OMPT_TARGET_H
