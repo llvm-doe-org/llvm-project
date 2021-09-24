@@ -235,6 +235,13 @@ void __tgt_register_requires(int64_t flags);
 /// adds a target shared library to the target execution image
 void __tgt_register_lib(__tgt_bin_desc *desc);
 
+/// Initialize sufficiently for OMPT even if offloading is disabled.
+///
+/// That is, ensure __kmpc_get_target_offload, ompt_start_tool, and
+/// libomp_start_tool have been called so that OMPT target callbacks can be
+/// dispatched appropriately even if offloading is disabled.
+void __tgt_load_rtls();
+
 /// Initialize all RTLs at once
 void __tgt_init_all_rtls();
 

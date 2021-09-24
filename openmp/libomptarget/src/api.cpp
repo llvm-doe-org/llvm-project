@@ -56,12 +56,12 @@ static void ompt_dispatch_callback_target_data_op_emi(
     const ident_t &Ident, ompt_scope_endpoint_t EndPoint,
     ompt_target_data_op_t OpKind, void *SrcPtr, int SrcDevNum, void *DestPtr,
     int DestDevNum, size_t Size) {
-  if (ompt_get_enabled().ompt_callback_target_data_op_emi) {
+  if (ompt_target_enabled.ompt_callback_target_data_op_emi) {
     OMPT_SET_TRIGGER_IDENT();
     // FIXME: We don't yet need the target_task_data, target_data, host_op_id,
     // and codeptr_ra arguments for OpenACC support, so we haven't bothered to
     // implement them yet.
-    ompt_get_callbacks().ompt_callback(ompt_callback_target_data_op_emi)(
+    ompt_target_callbacks.ompt_callback(ompt_callback_target_data_op_emi)(
         EndPoint, /*target_task_data=*/NULL, /*target_data=*/NULL,
         /*host_op_id=*/NULL, OpKind, SrcPtr, SrcDevNum, DestPtr, DestDevNum,
         Size, /*codeptr_ra=*/NULL);
@@ -129,12 +129,11 @@ EXTERN void *omp_target_alloc(size_t size, int device_num) {
   // TODO: We have not implemented the ompt_scope_begin callback because we
   // don't need it for OpenACC support.
 #if OMPT_SUPPORT
-  // TODO: If offloading is disabled, the runtime might not be initialized.  In
-  // that case, ompt_start_tool hasn't been called, so we don't know what OMPT
-  // callbacks to dispatch.  Calling __kmpc_get_target_offload guarantees the
-  // runtime is initialized, but maybe we should expose something like
-  // __kmpc_initialize_runtime to call here instead.
-  __kmpc_get_target_offload();
+  // If offloading is disabled, the runtime might not be initialized.  In that
+  // case, ompt_start_tool and libomp_start_tool haven't been called, so we
+  // don't know what OMPT callbacks to dispatch.  Calling __tgt_load_rtls
+  // guarantees all those calls are made.
+  __tgt_load_rtls();
   DeviceAllocSizesMtx.lock();
   DeviceAllocSizes[Ptr] = size;
   DeviceAllocSizesMtx.unlock();

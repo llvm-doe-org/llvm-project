@@ -81,8 +81,8 @@
 // RUN:                      -Wno-openacc-omp-update-present \
 // RUN:                      -Wno-openacc-omp-map-hold \
 // RUN:                      > %t-omp.c
-// RUN:     %[run-if] echo "// none""-no-diagnostics" >> %t-omp.c
-// RUN:     %[run-if] %clang -Xclang -verify=none -fopenmp %fopenmp-version \
+// RUN:     %[run-if] grep "^/\* link-" %s >> %t-omp.c
+// RUN:     %[run-if] %clang -Xclang -verify=link -fopenmp %fopenmp-version \
 // RUN:                      %[tgt-cflags] -o %t.exe %t-omp.c \
 // RUN:                      -Wno-literal-conversion \
 // RUN:                      -Wno-pointer-bool-conversion
@@ -95,7 +95,7 @@
 // Check execution with normal compilation.
 //
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify=expected,acc -fopenacc \
+// RUN:   %[run-if] %clang -Xclang -verify=expected,acc,link -fopenacc \
 // RUN:             %[tgt-cflags] -o %t.exe %s
 // RUN:   %[run-if] %t.exe > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s\
@@ -103,6 +103,11 @@
 // RUN: }
 
 // END.
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+/* link-warning@*:* 0+ {{Linking two modules of different data layouts}} */
+/* link-warning@*:* 0+ {{Linking two modules of different target triples}} */
 
 #include <stdio.h>
 

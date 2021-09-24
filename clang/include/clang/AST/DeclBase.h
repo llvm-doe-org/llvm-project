@@ -1999,6 +1999,12 @@ public:
     return const_cast<DeclContext*>(this)->getNonClosureAncestor();
   }
 
+  // Retrieve the nearest context that is not a transparent context.
+  DeclContext *getNonTransparentContext();
+  const DeclContext *getNonTransparentContext() const {
+    return const_cast<DeclContext *>(this)->getNonTransparentContext();
+  }
+
   /// getPrimaryContext - There may be many different
   /// declarations of the same entity (including forward declarations
   /// of classes, multiple definitions of namespaces, etc.), each with

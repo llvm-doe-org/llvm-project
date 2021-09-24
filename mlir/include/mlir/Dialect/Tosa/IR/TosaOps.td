@@ -1227,6 +1227,8 @@ def Tosa_ReduceAllOp : Tosa_Op<"reduce_all", [
   let results = (outs
     Tosa_Tensor1Dto4D:$output
   );
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1250,6 +1252,8 @@ def Tosa_ReduceAnyOp : Tosa_Op<"reduce_any", [
   let results = (outs
     Tosa_Tensor1Dto4D:$output
   );
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1273,6 +1277,8 @@ def Tosa_ReduceMaxOp : Tosa_Op<"reduce_max", [
   let results = (outs
     Tosa_Tensor1Dto4D:$output
   );
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1296,6 +1302,8 @@ def Tosa_ReduceMinOp : Tosa_Op<"reduce_min", [
   let results = (outs
     Tosa_Tensor1Dto4D:$output
   );
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1319,6 +1327,8 @@ def Tosa_ReduceProdOp : Tosa_Op<"reduce_prod", [
   let results = (outs
     Tosa_Tensor1Dto4D:$output
   );
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1342,6 +1352,8 @@ def Tosa_ReduceSumOp : Tosa_Op<"reduce_sum", [
   let results = (outs
     Tosa_Tensor1Dto4D:$output
   );
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1371,6 +1383,8 @@ def Tosa_ConcatOp : Tosa_Op<"concat", [
   let results = (outs
     Tosa_RankedTensor:$output
   );
+
+  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1413,6 +1427,9 @@ def Tosa_ReshapeOp: Tosa_Op<"reshape", [
     specified by the shape argument. Reshape may operate on tensors of any rank.
     No data conversion happens during a reshape operation.
   }];
+
+  let hasCanonicalizer = 1;
+  let hasFolder = 1;
 
   let arguments = (ins
     Tosa_Tensor:$input1,
@@ -1471,6 +1488,8 @@ def Tosa_SliceOp: Tosa_Op<"slice", [
   let results = (outs
     Tosa_Tensor1Dto6D:$output
   );
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1493,6 +1512,8 @@ def Tosa_TileOp: Tosa_Op<"tile", [
   let results = (outs
     Tosa_Tensor1Dto4D:$output
   );
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1516,6 +1537,8 @@ def Tosa_TransposeOp : Tosa_Op<"transpose", [
   let results = (
     outs Tosa_Tensor1Dto6D:$output
   );
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1580,7 +1603,10 @@ def Tosa_ScatterOp : Tosa_Op<"scatter", [
 //===----------------------------------------------------------------------===//
 // Operator: resize
 //===----------------------------------------------------------------------===//
-def Tosa_ResizeOp : Tosa_Op<"resize", [NoSideEffect]> {
+def Tosa_ResizeOp : Tosa_Op<"resize", [
+      DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+                              ["inferReturnTypeComponents"]>,
+      NoSideEffect]> {
 
   let summary = "Resize operation, supports various resize/upsample modes";
 
@@ -1615,7 +1641,9 @@ def Tosa_ResizeOp : Tosa_Op<"resize", [NoSideEffect]> {
 //===----------------------------------------------------------------------===//
 // Operator: cast
 //===----------------------------------------------------------------------===//
-def Tosa_CastOp: Tosa_Op<"cast", [NoSideEffect]> {
+def Tosa_CastOp: Tosa_Op<"cast", [NoSideEffect,
+      DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+                              ["inferReturnTypeComponents"]>]> {
 
   let summary = "Cast operation";
 
@@ -1648,12 +1676,16 @@ def Tosa_CastOp: Tosa_Op<"cast", [NoSideEffect]> {
   let results = (outs
     Tosa_Tensor:$output
   );
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
 // Operator: rescale
 //===----------------------------------------------------------------------===//
-def Tosa_RescaleOp: Tosa_Op<"rescale", [NoSideEffect]> {
+def Tosa_RescaleOp: Tosa_Op<"rescale", [NoSideEffect, 
+      DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+                              ["inferReturnTypeComponents"]>]> {
   let summary = "Tosa rescale operator";
 
   let description = [{
@@ -1721,7 +1753,9 @@ def Tosa_ConstOp : Tosa_Op<"const", [ConstantLike, NoSideEffect,
 //===----------------------------------------------------------------------===//
 // Operator: identity
 //===----------------------------------------------------------------------===//
-def Tosa_IdentityOp: Tosa_Op<"identity", [NoSideEffect]> {
+def Tosa_IdentityOp: Tosa_Op<"identity", [NoSideEffect,
+      DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+                              ["inferReturnTypeComponents"]>]> {
   let summary = "Identity operator";
   let description = [{
     Returns a tensor with the same shape, size, type
@@ -1778,6 +1812,8 @@ def Tosa_CustomOp : Tosa_Op<"custom"> {
 // Further described in docs/Rationale/RationaleTOSADialect.md .
 //===----------------------------------------------------------------------===//
 def Tosa_IfOp : Tosa_Op<"cond_if", [
+      DeclareOpInterfaceMethods<InferShapedTypeOpInterface,
+                                ["inferReturnTypeComponents"]>,
        SingleBlockImplicitTerminator<"YieldOp">,
        RecursiveSideEffects]> {
   let summary = "Conditional if operator";

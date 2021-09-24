@@ -2,12 +2,12 @@
 // ACC_DEVICE_TYPE and ACC_DEVICE_NUM, for example.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                                  cflags=                                                         tgt0=host    tgt1=host    bad-tgt=not_host not-host-ndevs=0                    )
-// RUN:   (run-if=%run-if-x86_64                    cflags=-fopenmp-targets=%run-x86_64-triple                      tgt0=x86_64  tgt1=x86_64  bad-tgt=ppc64le  not-host-ndevs=%x86_64-ndevs        )
-// RUN:   (run-if=%run-if-ppc64le                   cflags=-fopenmp-targets=%run-ppc64le-triple                     tgt0=ppc64le tgt1=ppc64le bad-tgt=nvidia   not-host-ndevs=%ppc64le-ndevs       )
-// RUN:   (run-if=%run-if-nvptx64                   cflags=-fopenmp-targets=%run-nvptx64-triple                     tgt0=nvidia  tgt1=nvidia  bad-tgt=x86_64   not-host-ndevs=%nvidia-ndevs        )
-// RUN:   (run-if='%run-if-x86_64 %run-if-nvptx64'  cflags=-fopenmp-targets=%run-x86_64-triple,%run-nvptx64-triple  tgt0=x86_64  tgt1=nvidia  bad-tgt=ppc64le  not-host-ndevs=%x86_64-nvidia-ndevs )
-// RUN:   (run-if='%run-if-ppc64le %run-if-nvptx64' cflags=-fopenmp-targets=%run-ppc64le-triple,%run-nvptx64-triple tgt0=ppc64le tgt1=nvidia  bad-tgt=x86_64   not-host-ndevs=%ppc64le-nvidia-ndevs)
+// RUN:   (run-if=                                  cflags='                                                         -Xclang -verify' tgt0=host    tgt1=host    bad-tgt=not_host not-host-ndevs=0                    )
+// RUN:   (run-if=%run-if-x86_64                    cflags='-fopenmp-targets=%run-x86_64-triple                      -Xclang -verify' tgt0=x86_64  tgt1=x86_64  bad-tgt=ppc64le  not-host-ndevs=%x86_64-ndevs        )
+// RUN:   (run-if=%run-if-ppc64le                   cflags='-fopenmp-targets=%run-ppc64le-triple                     -Xclang -verify' tgt0=ppc64le tgt1=ppc64le bad-tgt=nvidia   not-host-ndevs=%ppc64le-ndevs       )
+// RUN:   (run-if=%run-if-nvptx64                   cflags='-fopenmp-targets=%run-nvptx64-triple                     -Xclang -verify=nvptx64' tgt0=nvidia  tgt1=nvidia  bad-tgt=x86_64   not-host-ndevs=%nvidia-ndevs        )
+// RUN:   (run-if='%run-if-x86_64 %run-if-nvptx64'  cflags='-fopenmp-targets=%run-x86_64-triple,%run-nvptx64-triple  -Xclang -verify=nvptx64' tgt0=x86_64  tgt1=nvidia  bad-tgt=ppc64le  not-host-ndevs=%x86_64-nvidia-ndevs )
+// RUN:   (run-if='%run-if-ppc64le %run-if-nvptx64' cflags='-fopenmp-targets=%run-ppc64le-triple,%run-nvptx64-triple -Xclang -verify=nvptx64' tgt0=ppc64le tgt1=nvidia  bad-tgt=x86_64   not-host-ndevs=%ppc64le-nvidia-ndevs)
 // RUN: }
 // RUN: %data run-envs {
 //        # Invalid ACC_DEVICE_TYPE.
@@ -68,8 +68,7 @@
 // RUN:    err='ACC_DEVICE_NUM=%[not-host-ndevs] is invalid for ACC_DEVICE_TYPE=not_host')
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[cflags] \
-// RUN:                    -o %t.exe %s
+// RUN:   %[run-if] %clang -fopenacc %acc-includes %[cflags] -o %t.exe %s
 // RUN:   %for run-envs {
 // RUN:     %[run-if] %[run-env] %not --crash %t.exe > %t.out 2> %t.err
 // RUN:     %[run-if] FileCheck -input-file %t.out %s -allow-empty \
@@ -82,6 +81,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 // OUT-NOT:{{.}}
 

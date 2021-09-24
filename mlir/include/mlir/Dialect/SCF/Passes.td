@@ -17,6 +17,29 @@ def SCFBufferize : FunctionPass<"scf-bufferize"> {
   let dependentDialects = ["memref::MemRefDialect"];
 }
 
+// Note: Making this a canonicalization pattern would require a dependency
+// of the SCF dialect on the Affine dialect or vice versa.
+def SCFAffineOpCanonicalization
+    : FunctionPass<"canonicalize-scf-affine-op"> {
+  let summary = "Canonicalize affine.min and affine.max ops in the context of "
+                "SCF loops with known bounds";
+  let constructor = "mlir::createSCFAffineOpCanonicalizationPass()";
+  let dependentDialects = ["AffineDialect"];
+}
+
+def SCFForLoopPeeling
+    : FunctionPass<"for-loop-peeling"> {
+  let summary = "Peel `for` loops at their upper bounds.";
+  let constructor = "mlir::createForLoopPeelingPass()";
+  let options = [
+    Option<"skipPartial", "skip-partial", "bool",
+           /*default=*/"true",
+           "Do not peel loops inside of the last, partial iteration of another "
+           "already peeled loop.">
+  ];
+  let dependentDialects = ["AffineDialect"];
+}
+
 def SCFForLoopSpecialization
     : FunctionPass<"for-loop-specialization"> {
   let summary = "Specialize `for` loops for vectorization";
@@ -40,7 +63,11 @@ def SCFParallelLoopTiling : FunctionPass<"parallel-loop-tiling"> {
   let options = [
     ListOption<"tileSizes", "parallel-loop-tile-sizes", "int64_t",
                "Factors to tile parallel loops by",
-               "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">
+               "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">,
+    Option<"noMinMaxBounds", "no-min-max-bounds", "bool",
+           /*default=*/"false",
+           "Perform tiling with fixed upper bound with inbound check "
+           "inside the internal loops">
   ];
   let dependentDialects = ["AffineDialect"];
 }

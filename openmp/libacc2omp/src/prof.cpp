@@ -373,10 +373,11 @@ static void acc_ompt_callback_device_finalize(int device_num) {
   acc_ev_device_shutdown_end_callback(&pi, &ei, &ai);
 }
 
-static unsigned acc_ompt_callback_target_reg_counter = 0;
-static void acc_ompt_callback_target(
+static unsigned acc_ompt_callback_target_emi_reg_counter = 0;
+static void acc_ompt_callback_target_emi(
     ompt_target_t kind, ompt_scope_endpoint_t endpoint, int device_num,
-    ompt_data_t *task_data, ompt_id_t target_id, const void *codeptr_ra) {
+    ompt_data_t *task_data, ompt_data_t *target_task_data,
+    ompt_data_t *target_data, const void *codeptr_ra) {
   acc_event_t event_type;
   acc_prof_callback acc_cb = nullptr;
   switch (kind) {
@@ -392,9 +393,9 @@ static void acc_ompt_callback_target(
       break;
     case ompt_scope_beginend:
       // OpenMP 5.1 does not specify ompt_scope_beginend for
-      // ompt_callback_target.
+      // ompt_callback_target_emi.
       ACC2OMP_UNREACHABLE("unexpected ompt_scope_beginend for "
-                          "ompt_callback_target");
+                          "ompt_callback_target_emi");
       return;
     }
     break;
@@ -411,9 +412,9 @@ static void acc_ompt_callback_target(
       break;
     case ompt_scope_beginend:
       // OpenMP 5.1 does not specify ompt_scope_beginend for
-      // ompt_callback_target.
+      // ompt_callback_target_emi.
       ACC2OMP_UNREACHABLE("unexpected ompt_scope_beginend for "
-                          "ompt_callback_target");
+                          "ompt_callback_target_emi");
       return;
     }
     break;
@@ -430,9 +431,9 @@ static void acc_ompt_callback_target(
       break;
     case ompt_scope_beginend:
       // OpenMP 5.1 does not specify ompt_scope_beginend for
-      // ompt_callback_target.
+      // ompt_callback_target_emi.
       ACC2OMP_UNREACHABLE("unexpected ompt_scope_beginend for "
-                          "ompt_callback_target");
+                          "ompt_callback_target_emi");
       return;
     }
     break;
@@ -448,9 +449,9 @@ static void acc_ompt_callback_target(
       break;
     case ompt_scope_beginend:
       // OpenMP 5.1 does not specify ompt_scope_beginend for
-      // ompt_callback_target.
+      // ompt_callback_target_emi.
       ACC2OMP_UNREACHABLE("unexpected ompt_scope_beginend for "
-                          "ompt_callback_target");
+                          "ompt_callback_target_emi");
       return;
     }
     break;
@@ -460,7 +461,7 @@ static void acc_ompt_callback_target(
   case ompt_target_update_nowait:
     // TODO: Our OMPT support does not yet implement these, and our OpenACC
     // support does not yet implement features that would dispatch them.
-    ACC2OMP_UNREACHABLE("unexpected ompt_callback_target nowait kind");
+    ACC2OMP_UNREACHABLE("unexpected ompt_callback_target_emi nowait kind");
     return;
   }
   if (acc_cb) {
@@ -676,14 +677,14 @@ static bool acc_event_callback(
   ACC_EVENT_CASE(acc_ev_delete,                  ompt_callback_target_data_op_emi)
   ACC_EVENT_CASE(acc_ev_alloc,                   ompt_callback_target_data_op_emi)
   ACC_EVENT_CASE(acc_ev_free,                    ompt_callback_target_data_op_emi)
-  ACC_EVENT_CASE(acc_ev_enter_data_start,        ompt_callback_target)
-  ACC_EVENT_CASE(acc_ev_enter_data_end,          ompt_callback_target)
-  ACC_EVENT_CASE(acc_ev_exit_data_start,         ompt_callback_target)
-  ACC_EVENT_CASE(acc_ev_exit_data_end,           ompt_callback_target)
-  ACC_EVENT_CASE(acc_ev_update_start,            ompt_callback_target)
-  ACC_EVENT_CASE(acc_ev_update_end,              ompt_callback_target)
-  ACC_EVENT_CASE(acc_ev_compute_construct_start, ompt_callback_target)
-  ACC_EVENT_CASE(acc_ev_compute_construct_end,   ompt_callback_target)
+  ACC_EVENT_CASE(acc_ev_enter_data_start,        ompt_callback_target_emi)
+  ACC_EVENT_CASE(acc_ev_enter_data_end,          ompt_callback_target_emi)
+  ACC_EVENT_CASE(acc_ev_exit_data_start,         ompt_callback_target_emi)
+  ACC_EVENT_CASE(acc_ev_exit_data_end,           ompt_callback_target_emi)
+  ACC_EVENT_CASE(acc_ev_update_start,            ompt_callback_target_emi)
+  ACC_EVENT_CASE(acc_ev_update_end,              ompt_callback_target_emi)
+  ACC_EVENT_CASE(acc_ev_compute_construct_start, ompt_callback_target_emi)
+  ACC_EVENT_CASE(acc_ev_compute_construct_end,   ompt_callback_target_emi)
   ACC_EVENT_CASE(acc_ev_enqueue_launch_start,    ompt_callback_target_submit_emi)
   ACC_EVENT_CASE(acc_ev_enqueue_launch_end,      ompt_callback_target_submit_emi)
   ACC_EVENT_CASE(acc_ev_enqueue_upload_start,    ompt_callback_target_data_op_emi)
@@ -717,7 +718,7 @@ static void acc_ompt_event_callback(ompt_callbacks_t ompt_event,
   OMPT_EVENT_CASE(ompt_callback_device_initialize)
   OMPT_EVENT_CASE(ompt_callback_device_finalize_start)
   OMPT_EVENT_CASE(ompt_callback_device_finalize)
-  OMPT_EVENT_CASE(ompt_callback_target)
+  OMPT_EVENT_CASE(ompt_callback_target_emi)
   OMPT_EVENT_CASE(ompt_callback_target_submit_emi)
   OMPT_EVENT_CASE(ompt_callback_target_data_op_emi)
 #undef OMPT_EVENT_CASE

@@ -68,10 +68,10 @@
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     host-or-dev=HOST)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-dev=DEV )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host-or-dev=DEV )
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-dev=DEV )
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' host-or-dev=HOST)
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host-or-dev=DEV )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' host-or-dev=DEV )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-dev=DEV )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %for prt-opts {
@@ -81,7 +81,8 @@
 // RUN:                      -Wno-openacc-omp-map-present \
 // RUN:                      -Wno-openacc-omp-map-no-alloc
 // RUN:     %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
+// RUN:     %[run-if] grep "^// nvptx64-" %s >> %t-omp.c
+// RUN:     %[run-if] %clang -fopenmp %fopenmp-version \
 // RUN:               %acc-includes -Wno-unused-function %[tgt-cflags] -o %t \
 // RUN:               %t-omp.c %acc-libs
 // RUN:     %[run-if] %t > %t.out 2>&1
@@ -93,7 +94,7 @@
 // Check execution with normal compilation.
 //
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s -o %t \
+// RUN:   %[run-if] %clang -fopenacc %acc-includes %s -o %t \
 // RUN:                    %[tgt-cflags]
 // RUN:   %[run-if] %t > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s \
@@ -103,6 +104,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <openacc.h>
 #include <stdbool.h>

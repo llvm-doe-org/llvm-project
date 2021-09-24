@@ -30,6 +30,9 @@ class OMPClause;
 #define GEN_CLANG_CLAUSE_CLASS
 #define CLAUSE_CLASS(Enum, Str, Class) class Class;
 #include "llvm/Frontend/OpenMP/OMP.inc"
+class Attr;
+#define ATTR(A) class A##Attr;
+#include "clang/Basic/AttrList.inc"
 class ACCClause;
 #define OPENACC_CLAUSE(KIND, CLASSNAME) class CLASSNAME;
 #include "clang/Basic/OpenACCKinds.def"

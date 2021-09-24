@@ -1,9 +1,8 @@
 //===- DFAJumpThreading.cpp - Threads a switch statement inside a loop ----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -84,8 +83,6 @@
 #include "llvm/Transforms/Utils/ValueMapper.h"
 #include <algorithm>
 #include <deque>
-#include <unordered_map>
-#include <unordered_set>
 
 using namespace llvm;
 
@@ -174,6 +171,7 @@ public:
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<AssumptionCacheTracker>();
     AU.addRequired<DominatorTreeWrapperPass>();
+    AU.addPreserved<DominatorTreeWrapperPass>();
     AU.addRequired<TargetTransformInfoWrapperPass>();
     AU.addRequired<OptimizationRemarkEmitterWrapperPass>();
   }
@@ -350,7 +348,7 @@ struct ClonedBlock {
 
 typedef std::deque<BasicBlock *> PathType;
 typedef std::vector<PathType> PathsType;
-typedef std::set<const BasicBlock *> VisitedBlocks;
+typedef SmallPtrSet<const BasicBlock *, 8> VisitedBlocks;
 typedef std::vector<ClonedBlock> CloneList;
 
 // This data structure keeps track of all blocks that have been cloned.  If two
@@ -533,7 +531,7 @@ private:
       return false;
 
     if (isa<PHINode>(SIUse) &&
-        SIBB->getSingleSuccessor() != dyn_cast<Instruction>(SIUse)->getParent())
+        SIBB->getSingleSuccessor() != cast<Instruction>(SIUse)->getParent())
       return false;
 
     // If select will not be sunk during unfolding, and it is in the same basic
@@ -621,13 +619,9 @@ private:
     // Some blocks have multiple edges to the same successor, and this set
     // is used to prevent a duplicate path from being generated
     SmallSet<BasicBlock *, 4> Successors;
-
-    for (succ_iterator SI = succ_begin(BB), E = succ_end(BB); SI != E; ++SI) {
-      BasicBlock *Succ = *SI;
-
-      if (Successors.find(Succ) != Successors.end())
+    for (BasicBlock *Succ : successors(BB)) {
+      if (!Successors.insert(Succ).second)
         continue;
-      Successors.insert(Succ);
 
       // Found a cycle through the SwitchBlock
       if (Succ == SwitchBlock) {
@@ -636,7 +630,7 @@ private:
       }
 
       // We have encountered a cycle, do not get caught in it
-      if (Visited.find(Succ) != Visited.end())
+      if (Visited.contains(Succ))
         continue;
 
       PathsType SuccPaths = paths(Succ, Visited, PathDepth + 1);

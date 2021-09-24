@@ -97,14 +97,14 @@
 // Check execution with normal compilation.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST    tgt-cflags=                                    )
-// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
-// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
-// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
+// RUN:   (run-if=                tgt=HOST    tgt-cflags='                                     -Xclang -verify')
+// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify')
+// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify')
+// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64')
 // RUN: }
 // RUN: %for directives {
 // RUN:   %for tgts {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %s -o %t %libatomic \
+// RUN:     %[run-if] %clang -fopenacc %s -o %t %libatomic \
 // RUN:                      %[tgt-cflags] %[dir-cflags] -DTGT_%[tgt]_EXE
 // RUN:     %[run-if] %t 2 > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
@@ -115,6 +115,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <assert.h>
 #include <complex.h>

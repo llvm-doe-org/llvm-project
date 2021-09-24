@@ -1,10 +1,10 @@
 // Check data and memory management routines.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                cflags=                                     tgt-host-or-off=HOST tgt-not-if-host='%not --crash' tgt-not-if-off=              )
-// RUN:   (run-if=%run-if-x86_64  cflags=-fopenmp-targets=%run-x86_64-triple  tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
-// RUN:   (run-if=%run-if-ppc64le cflags=-fopenmp-targets=%run-ppc64le-triple tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
-// RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
+// RUN:   (run-if=                cflags='                                     -Xclang -verify' tgt-host-or-off=HOST tgt-not-if-host='%not --crash' tgt-not-if-off=              )
+// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
+// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
+// RUN:   (run-if=%run-if-nvptx64 cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
 // RUN: }
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  host-or-off=%[tgt-host-or-off] not-if-host=%[tgt-not-if-host] not-if-off=%[tgt-not-if-off])
@@ -91,7 +91,7 @@
 // RUN: }
 // RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[cflags] \
+// RUN:   %[run-if] %clang -fopenacc %acc-includes %[cflags] \
 // RUN:                    -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
 // RUN:   %for run-envs {
 // RUN:     %for cases {
@@ -110,6 +110,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <openacc.h>
 #include <stdbool.h>
@@ -1565,8 +1570,8 @@ CASE(caseCopyinExtendsAfter) {
   // ERR-caseCopyinExtendsAfter-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseCopyinExtendsAfter-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#HOST]] ([[#ELE_SIZE]] bytes)
-  //                                       # FIXME: getOrAllocTgtPtr is meaningless to users.
-  //  ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //                                       # FIXME: getTargetPointer is meaningless to users.
+  //  ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
   //  ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
   //  ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget error: Source location information not present. Compile with -g or -gline-tables-only.
   //  ERR-caseCopyinExtendsAfter-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
@@ -1583,8 +1588,8 @@ CASE(caseCopyinExtendsBefore) {
   // ERR-caseCopyinExtendsBefore-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseCopyinExtendsBefore-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
-  //                                        # FIXME: getOrAllocTgtPtr is meaningless to users.
-  //  ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //                                        # FIXME: getTargetPointer is meaningless to users.
+  //  ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
   //  ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
   //  ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget error: Source location information not present. Compile with -g or -gline-tables-only.
   //  ERR-caseCopyinExtendsBefore-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
@@ -1602,8 +1607,8 @@ CASE(caseCopyinSubsumes) {
   // ERR-caseCopyinSubsumes-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
   // ERR-caseCopyinSubsumes-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
   //  ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
-  //                                   # FIXME: getOrAllocTgtPtr is meaningless to users.
-  //  ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //                                   # FIXME: getTargetPointer is meaningless to users.
+  //  ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
   //  ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
   //  ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget error: Source location information not present. Compile with -g or -gline-tables-only.
   //  ERR-caseCopyinSubsumes-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
@@ -1622,8 +1627,8 @@ CASE(caseCopyinConcat2) {
   // ERR-caseCopyinConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
   // ERR-caseCopyinConcat2-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
   //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST]] ([[#ELE_SIZE]] bytes)
-  //                                  # FIXME: getOrAllocTgtPtr is meaningless to users.
-  //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //                                  # FIXME: getTargetPointer is meaningless to users.
+  //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
   //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
   //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget error: Source location information not present. Compile with -g or -gline-tables-only.
   //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
@@ -1643,8 +1648,8 @@ CASE(caseCreateExtendsAfter) {
   // ERR-caseCreateExtendsAfter-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseCreateExtendsAfter-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#HOST]] ([[#ELE_SIZE]] bytes)
-  //                                       # FIXME: getOrAllocTgtPtr is meaningless to users.
-  //  ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //                                       # FIXME: getTargetPointer is meaningless to users.
+  //  ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
   //  ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
   //  ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget error: Source location information not present. Compile with -g or -gline-tables-only.
   //  ERR-caseCreateExtendsAfter-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
@@ -1661,8 +1666,8 @@ CASE(caseCreateExtendsBefore) {
   // ERR-caseCreateExtendsBefore-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
   // ERR-caseCreateExtendsBefore-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
   //  ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
-  //                                        # FIXME: getOrAllocTgtPtr is meaningless to users.
-  //  ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //                                        # FIXME: getTargetPointer is meaningless to users.
+  //  ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
   //  ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
   //  ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget error: Source location information not present. Compile with -g or -gline-tables-only.
   //  ERR-caseCreateExtendsBefore-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
@@ -1680,8 +1685,8 @@ CASE(caseCreateSubsumes) {
   // ERR-caseCreateSubsumes-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
   // ERR-caseCreateSubsumes-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
   //  ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST + ELE_SIZE]] ([[#ELE_SIZE]] bytes)
-  //                                   # FIXME: getOrAllocTgtPtr is meaningless to users.
-  //  ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //                                   # FIXME: getTargetPointer is meaningless to users.
+  //  ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
   //  ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
   //  ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget error: Source location information not present. Compile with -g or -gline-tables-only.
   //  ERR-caseCreateSubsumes-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
@@ -1700,8 +1705,8 @@ CASE(caseCreateConcat2) {
   // ERR-caseCreateConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
   // ERR-caseCreateConcat2-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
   //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST]] ([[#ELE_SIZE]] bytes)
-  //                                  # FIXME: getOrAllocTgtPtr is meaningless to users.
-  //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+  //                                  # FIXME: getTargetPointer is meaningless to users.
+  //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
   //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
   //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget error: Source location information not present. Compile with -g or -gline-tables-only.
   //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory

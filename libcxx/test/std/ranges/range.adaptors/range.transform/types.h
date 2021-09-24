@@ -7,9 +7,6 @@
 
 int globalBuff[8] = {0,1,2,3,4,5,6,7};
 
-template<class T, class F>
-concept ValidDropView = requires { typename std::ranges::transform_view<T, F>; };
-
 struct ContiguousView : std::ranges::view_base {
   int start_;
   int *ptr_;
@@ -132,15 +129,19 @@ struct ThreeWayCompView : std::ranges::view_base {
   constexpr ThreeWayCompIter end() const { return ThreeWayCompIter(globalBuff + 8); }
 };
 
-struct Increment {
+struct TimesTwo {
+  constexpr int operator()(int x) const { return x * 2; }
+};
+
+struct PlusOneMutable {
   constexpr int operator()(int x) { return x + 1; }
 };
 
-struct IncrementConst {
+struct PlusOne {
   constexpr int operator()(int x) const { return x + 1; }
 };
 
-struct IncrementRef {
+struct Increment {
   constexpr int& operator()(int& x) { return ++x; }
 };
 
@@ -148,7 +149,7 @@ struct IncrementRvalueRef {
   constexpr int&& operator()(int& x) { return std::move(++x); }
 };
 
-struct IncrementNoexcept {
+struct PlusOneNoexcept {
   constexpr int operator()(int x) noexcept { return x + 1; }
 };
 

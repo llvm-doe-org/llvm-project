@@ -15,6 +15,10 @@
 #include "device.h"
 #include "private.h"
 
+#if OMPT_SUPPORT
+#include "ompt-target.h"
+#endif
+
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
@@ -71,7 +75,10 @@ void RTLsTy::LoadRTLs() {
   PM->TargetOffloadPolicy =
       (kmp_target_offload_kind_t)__kmpc_get_target_offload();
   if (PM->TargetOffloadPolicy == tgt_disabled) {
-    return;
+    // FIXME: We should eliminate this goto when upstreaming.  We use the goto
+    // as a way to skip loading RTLs without having to indent all that code,
+    // which would cause conflicts when merging from upstream.
+    goto after_loading_rtls;
   }
 
   DP("Loading RTLs...\n");
@@ -182,6 +189,14 @@ void RTLsTy::LoadRTLs() {
         dlsym(dynlib_handle, "__tgt_rtl_set_info_flag");
     *((void **)&R.print_device_info) =
         dlsym(dynlib_handle, "__tgt_rtl_print_device_info");
+    *((void **)&R.create_event) =
+        dlsym(dynlib_handle, "__tgt_rtl_create_event");
+    *((void **)&R.record_event) =
+        dlsym(dynlib_handle, "__tgt_rtl_record_event");
+    *((void **)&R.wait_event) = dlsym(dynlib_handle, "__tgt_rtl_wait_event");
+    *((void **)&R.sync_event) = dlsym(dynlib_handle, "__tgt_rtl_sync_event");
+    *((void **)&R.destroy_event) =
+        dlsym(dynlib_handle, "__tgt_rtl_destroy_event");
 
     R.DeviceType = R.get_device_type ? (omp_device_t)R.get_device_type()
                                      : omp_device_none;
@@ -192,6 +207,20 @@ void RTLsTy::LoadRTLs() {
   }
 
   DP("RTLs loaded!\n");
+
+after_loading_rtls:
+#if OMPT_SUPPORT
+  DP("OMPT_SUPPORT is enabled in libomptarget\n");
+  DP("Init OMPT for libomptarget\n");
+  if (libomp_start_tool) {
+    DP("Retrieve libomp_start_tool successfully\n");
+    if (!libomp_start_tool(&ompt_target_enabled, &ompt_target_callbacks)) {
+      DP("Turn off OMPT in libomptarget because libomp_start_tool returns "
+         "false\n");
+      memset(&ompt_target_enabled, 0, sizeof(ompt_target_enabled));
+    }
+  }
+#endif
 
   return;
 }

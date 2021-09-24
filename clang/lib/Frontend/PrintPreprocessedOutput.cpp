@@ -182,7 +182,7 @@ public:
   /// implicitly when at the beginning of the file.
   ///
   /// @param Tok                 Token where to move to.
-  /// @param RequiresStartOfLine Whether the next line depends on being in the
+  /// @param RequireStartOfLine  Whether the next line depends on being in the
   ///                            first column, such as a directive.
   ///
   /// @return Whether column adjustments are necessary.
@@ -276,20 +276,27 @@ bool PrintPPOutputPPCallbacks::MoveToLine(unsigned LineNo,
   // otherwise print a #line directive.
   if (CurLine == LineNo) {
     // Nothing to do if we are already on the correct line.
-  } else if (!StartedNewLine && (!MinimizeWhitespace || !DisableLineMarkers) &&
-             LineNo - CurLine == 1) {
+  } else if (MinimizeWhitespace && DisableLineMarkers) {
+    // With -E -P -fminimize-whitespace, don't emit anything if not necessary.
+  } else if (!StartedNewLine && LineNo - CurLine == 1) {
     // Printing a single line has priority over printing a #line directive, even
     // when minimizing whitespace which otherwise would print #line directives
     // for every single line.
     OS << '\n';
     StartedNewLine = true;
-  } else if (!MinimizeWhitespace && LineNo - CurLine <= 8) {
-    const char *NewLines = "\n\n\n\n\n\n\n\n";
-    OS.write(NewLines, LineNo - CurLine);
-    StartedNewLine = true;
   } else if (!DisableLineMarkers) {
-    // Emit a #line or line marker.
-    WriteLineInfo(LineNo, nullptr, 0);
+    if (LineNo - CurLine <= 8) {
+      const char *NewLines = "\n\n\n\n\n\n\n\n";
+      OS.write(NewLines, LineNo - CurLine);
+    } else {
+      // Emit a #line or line marker.
+      WriteLineInfo(LineNo, nullptr, 0);
+    }
+    StartedNewLine = true;
+  } else if (EmittedTokensOnThisLine) {
+    // If we are not on the correct line and don't need to be line-correct,
+    // at least ensure we start on a new line.
+    OS << '\n';
     StartedNewLine = true;
   }
 
@@ -639,7 +646,9 @@ void PrintPPOutputPPCallbacks::HandleWhitespaceBeforeTok(const Token &Tok,
        !Tok.is(tok::annot_module_begin) && !Tok.is(tok::annot_module_end)))
     return;
 
-  if (!RequireSameLine && MoveToLine(Tok, /*RequireStartOfLine=*/false)) {
+  // EmittedDirectiveOnThisLine takes priority over RequireSameLine.
+  if ((!RequireSameLine || EmittedDirectiveOnThisLine) &&
+      MoveToLine(Tok, /*RequireStartOfLine=*/EmittedDirectiveOnThisLine)) {
     if (MinimizeWhitespace) {
       // Avoid interpreting hash as a directive under -fpreprocessed.
       if (Tok.is(tok::hash))

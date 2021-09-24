@@ -33,9 +33,9 @@
 
 # if OMPT_SUPPORT
 struct DeviceTy;
-void ompt_dispatch_callback_target(ompt_target_t Kind,
-                                   ompt_scope_endpoint_t Endpoint,
-                                   DeviceTy &Device);
+void ompt_dispatch_callback_target_emi(ompt_target_t Kind,
+                                       ompt_scope_endpoint_t Endpoint,
+                                       DeviceTy &Device);
 # endif
 
 #else
@@ -58,23 +58,65 @@ using map_var_info_t = void *;
 
 #define ompt_callback(e) e##_callback
 
+#define ompt_emi_callback(e) e##_emi_callback
+
+#define ompt_emi_callback_type(e) e##_emi_t
+
+#define ompt_emi_wrapper(e) e##_emi_wrapper
+
+#define ompt_emi_event(e) e##_emi
+
+/* Struct to collect host callback pointers */
 typedef struct ompt_callbacks_internal_s {
 #define ompt_event_macro(event, callback, eventid)                             \
   callback ompt_callback(event);
 
-  FOREACH_OMPT_EVENT(ompt_event_macro)
+  FOREACH_OMPT_HOST_EVENT(ompt_event_macro)
 
 #undef ompt_event_macro
 } ompt_callbacks_internal_t;
 
+/* Struct to collect target callback pointers */
+typedef struct ompt_target_callbacks_internal_s {
+#define ompt_event_macro(event, callback, eventid)                             \
+  callback ompt_callback(event);
+
+  FOREACH_OMPT_51_TARGET_EVENT(ompt_event_macro)
+  FOREACH_OMPT_DEVICE_EXT_EVENT(ompt_event_macro)
+
+#undef ompt_event_macro
+} ompt_target_callbacks_internal_t;
+
+/* Struct to collect noemi callback pointers */
+typedef struct ompt_callbacks_internal_noemi_s {
+#define ompt_event_macro(event, callback, eventid)                             \
+  callback ompt_callback(event);
+
+  FOREACH_OMPT_NOEMI_EVENT(ompt_event_macro)
+
+#undef ompt_event_macro
+} ompt_callbacks_internal_noemi_t;
+
+/* Bitmap to mark OpenMP 5.1 host events as registered*/
 typedef struct ompt_callbacks_active_s {
   unsigned int enabled : 1;
 #define ompt_event_macro(event, callback, eventid) unsigned int event : 1;
 
-  FOREACH_OMPT_EVENT(ompt_event_macro)
+  FOREACH_OMPT_HOST_EVENT(ompt_event_macro)
 
 #undef ompt_event_macro
 } ompt_callbacks_active_t;
+
+/* Bitmap to mark OpenMP 5.1 target events as registered*/
+typedef struct ompt_target_callbacks_active_s {
+  unsigned int enabled : 1;
+#define ompt_event_macro(event, callback, eventid) unsigned int event : 1;
+
+  FOREACH_OMPT_51_TARGET_EVENT(ompt_event_macro)
+  FOREACH_OMPT_DEVICE_EXT_EVENT(ompt_event_macro)
+
+#undef ompt_event_macro
+} ompt_target_callbacks_active_t;
 
 #define TASK_TYPE_DETAILS_FORMAT(info)                                         \
   ((info->td_flags.task_serial || info->td_flags.tasking_ser)                  \
@@ -116,6 +158,8 @@ typedef struct {
 } ompt_thread_info_t;
 
 extern ompt_callbacks_internal_t ompt_callbacks;
+extern ompt_target_callbacks_internal_t ompt_target_callbacks;
+extern ompt_callbacks_internal_noemi_t ompt_callbacks_noemi;
 
 #if OMPT_SUPPORT && OMPT_OPTIONAL
 #if USE_FAST_MEMORY
@@ -141,8 +185,8 @@ void ompt_fini(void);
 int __kmp_control_tool(uint64_t command, uint64_t modifier, void *arg);
 
 extern ompt_callbacks_active_t ompt_enabled;
-ompt_callbacks_active_t ompt_get_enabled(void) OMPT_LIBOMPTARGET_WEAK;
-ompt_callbacks_internal_t ompt_get_callbacks(void) OMPT_LIBOMPTARGET_WEAK;
+extern ompt_target_callbacks_active_t ompt_target_enabled;
+
 uint64_t ompt_get_unique_id(void) OMPT_LIBOMPTARGET_WEAK;
 void ompt_record_device_init(int32_t device_num) OMPT_LIBOMPTARGET_WEAK;
 int ompt_get_target_info(uint64_t *device_num, ompt_id_t *target_id,
@@ -159,24 +203,34 @@ void ompt_set_map_var_info(map_var_info_t map_var_info) OMPT_LIBOMPTARGET_WEAK;
 void ompt_clear_map_var_info() OMPT_LIBOMPTARGET_WEAK;
 int omp_get_initial_device(void) OMPT_LIBOMPTARGET_WEAK;
 
-// This struct is passed into target plugins where they require global_device_id
-// or OMPT functions from libomp.so.  Target plugins must call such functions
-// via this struct rather than depend on weak linking of them (above), or else
-// openmp/libomptarget/test/offloading/dynamic_module_load.c will fail.
-// However, weak linking of the above functions is still required so that
-// libomptarget.so can see them and assign the fields of this struct.
-//
-// The issue is that, target plugins successfully link against such libomp.so
-// functions when the OpenMP application and thus libomp.so and libomptarget.so
-// are not dlopened.  However, if the OpenMP application is dlopened, as in the
-// aforementioned test case, then libomp.so symbols are not visible to target
-// plugins.
-//
-// TODO: Is there a better way to do this?
+/// This struct is passed into target plugins where OMPT callbacks require
+/// additional data.
+///
+/// It may be tempting to export and weakly link libomptarget symbols (functions
+/// or data) in order to access them in the plugins.  While that works in many
+/// cases, the test openmp/libomptarget/test/offloading/dynamic_module_load.c
+/// reveals that, if a dlopen'ed OpenMP application happens to require a
+/// plugin function that depends on that symbol, dlsym will then fail.  For
+/// example, a plugin's __tgt_rtl_run_target_team_region_async must access
+/// ompt_target_enabled and ompt_target_callbacks via this struct instead of
+/// directly in order not to break that test.
+///
+/// FIXME: Some functions are being accessed directly in plugins because they
+/// don't happen to be depended upon by plugin functions required in that test.
+/// For example, omp_get_initial_device.  If they were called directly from
+/// __tgt_rtl_run_target_team_region_async, they would break that test.  Other
+/// examples of dlopen are surely already broken as a result but they don't
+/// happen to be tested.  We should also pass such functions via this struct.
 typedef struct {
+  /// This is the same as \c DeviceTy::DeviceID.  (\c DeviceTy::RTLDeviceID is
+  /// already passed to some target plugin functions using a parameter name like
+  /// \c DeviceID, but it's not the same when there are multiple RTLs loaded.)
   int32_t global_device_id;
-  ompt_callbacks_active_t (*ompt_get_enabled)(void);
-  ompt_callbacks_internal_t (*ompt_get_callbacks)(void);
+  /// Registered callbacks.
+  /// @{
+  ompt_target_callbacks_active_t *ompt_target_enabled;
+  ompt_target_callbacks_internal_t *ompt_target_callbacks;
+  /// @}
 } ompt_plugin_api_t;
 
 #if KMP_OS_WINDOWS

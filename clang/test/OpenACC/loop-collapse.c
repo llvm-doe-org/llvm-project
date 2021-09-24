@@ -70,14 +70,20 @@
 //
 //   loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
 //
-// To avoid all this until upstream fixes it, we add -O1 and drop
-// -Xclang -verify for nvptx64 offloading.
+// To avoid all this until upstream fixes it, we add -O1 -Wno-pass-failed.
+//
+// FIXME: Later, more bugs were introduced that cause this compile error if -O1
+// is used for nvptx64 offloading:
+//
+//   fatal error: error in backend: initial value of '_ZL32SharedMemVariableSharingSpacePtr' is not allowed in addrspace(3)
+//
+// Increasing to -O2 works around that.
 //
 // RUN: %data tgts {
 // RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify')
 // RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify')
 // RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify')
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1')
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O2 -Wno-pass-failed -Xclang -verify=nvptx64')
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -fopenacc %s -o %t %[tgt-cflags]
@@ -89,6 +95,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <stdio.h>
 

@@ -9,17 +9,16 @@
 
 // RUN: %data opts {
 // RUN:   (opt=-O0)
-//        # Process seems to hang at -O1, so skip it for now.
-// XUN:   (opt=-O1)
+// RUN:   (opt=-O1)
 // RUN:   (opt=-O2)
 // RUN:   (opt=-O3)
 // RUN:   (opt=-Ofast)
 // RUN: }
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt=                                    )
-// RUN:   (run-if=%run-if-x86_64  tgt=-fopenmp-targets=%run-x86_64-triple )
-// RUN:   (run-if=%run-if-ppc64le tgt=-fopenmp-targets=%run-ppc64le-triple)
-// RUN:   (run-if=%run-if-nvptx64 tgt=-fopenmp-targets=%run-nvptx64-triple)
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify')
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify')
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify')
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64')
 // RUN: }
 // RUN: %data run-envs {
 // RUN:   (run-env=                                 )
@@ -28,8 +27,8 @@
 // RUN: }
 // RUN: %for opts {
 // RUN:   %for tgts {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[tgt] \
-// RUN:               %[opt] %s -o %t
+// RUN:     %[run-if] %clang -fopenacc %acc-includes %[tgt-cflags] %[opt] %s \
+// RUN:                      -o %t
 // RUN:     %for run-envs {
 // RUN:       %[run-if] %[run-env] %t > %t.out 2>&1
 // RUN:       %[run-if] FileCheck -match-full-lines -input-file %t.out %s
@@ -40,6 +39,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <openacc.h>
 #include <stdio.h>

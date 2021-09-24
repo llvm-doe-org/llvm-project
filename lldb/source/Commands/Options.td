@@ -73,7 +73,7 @@ let Command = "breakpoint modify" in {
     "index matches this argument.">;
   def breakpoint_modify_thread_id : Option<"thread-id", "t">, Group<1>,
     Arg<"ThreadID">, Desc<"The breakpoint stops only for the thread whose TID "
-    "matches this argument.">;
+    "matches this argument.  The token 'current' resolves to the current thread's ID.">;
   def breakpoint_modify_thread_name : Option<"thread-name", "T">, Group<1>,
     Arg<"ThreadName">, Desc<"The breakpoint stops only for the thread whose "
     "thread name matches this argument.">;
@@ -151,10 +151,10 @@ let Command = "breakpoint set" in {
   def breakpoint_set_selector : Option<"selector", "S">, Group<5>,
     Arg<"Selector">, Required,
     Desc<"Set the breakpoint by ObjC selector name. Can be repeated multiple "
-    "times tomake one breakpoint for multiple Selectors.">;
+    "times to make one breakpoint for multiple Selectors.">;
   def breakpoint_set_method : Option<"method", "M">, Group<6>, Arg<"Method">,
     Required, Desc<"Set the breakpoint by C++ method names.  Can be repeated "
-    "multiple times tomake one breakpoint for multiple methods.">;
+    "multiple times to make one breakpoint for multiple methods.">;
   def breakpoint_set_func_regex : Option<"func-regex", "r">, Group<7>,
     Arg<"RegularExpression">, Required, Desc<"Set the breakpoint by function "
     "name, evaluating a regular-expression to find the function name(s).">;
@@ -504,6 +504,14 @@ let Command = "memory write" in {
     Desc<"Start writing bytes from an offset within the input file.">;
 }
 
+let Command = "memory tag write" in {
+  def memory_write_end_addr : Option<"end-addr", "e">, Group<1>,
+  Arg<"AddressOrExpression">, Desc<
+    "Set tags for start address to end-addr, repeating tags as needed"
+    " to cover the range. (instead of calculating the range from the"
+    " number of tags given)">;
+}
+
 let Command = "register read" in {
   def register_read_alternate : Option<"alternate", "A">,
     Desc<"Display register names using the alternate register name if there "
@@ -734,6 +742,14 @@ let Command = "process save_core" in {
   def process_save_core_style : Option<"style", "s">, Group<1>,
     EnumArg<"SaveCoreStyle", "SaveCoreStyles()">, Desc<"Request a specific style "
     "of corefile to be saved.">;
+}
+
+let Command = "process trace save" in {
+  def process_trace_save_directory: Option<"directory", "d">,
+    Group<1>,
+    Arg<"Value">, Required,
+    Desc<"The directory where the trace will be saved."
+        "It will be created if it does not exist.">;
 }
 
 let Command = "script import" in {

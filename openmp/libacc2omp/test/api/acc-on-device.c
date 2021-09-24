@@ -19,10 +19,10 @@
 // RUN:   (context-cflags='-DACC2OMP_ENUM_VARIANTS_SUPPORTED=0 -DSKIP_CONST_EXPRS' const-expr=NO-CONST-EXPR)
 // RUN: }
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     tgt-type=host   )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  tgt-type=x86_64 )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple tgt-type=ppc64le)
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple tgt-type=nvptx64)
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' tgt-type=host   )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' tgt-type=x86_64 )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' tgt-type=ppc64le)
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-type=nvptx64)
 // RUN: }
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  kern-type=%[tgt-type])
@@ -37,9 +37,9 @@
 // RUN:   %clang -Xclang -verify -fopenacc-print=omp %acc-includes \
 // RUN:       %[context-cflags] -Wno-openacc-omp-map-hold %s > %t-omp.c
 // RUN:   %for tgts {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %acc-includes \
+// RUN:     %[run-if] %clang -fopenacc %acc-includes \
 // RUN:         %[context-cflags] %[tgt-cflags] -o %t.exe %s
-// RUN:     %[run-if] %clang -Xclang -verify -fopenmp %acc-includes \
+// RUN:     %[run-if] %clang -fopenmp %acc-includes \
 // RUN:         %[context-cflags] %[tgt-cflags] %acc-libs -o %t-s2s.exe %t-omp.c
 // RUN:     %for run-envs {
 // RUN:       %for exes {
@@ -56,6 +56,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <openacc.h>
 #include <stdio.h>

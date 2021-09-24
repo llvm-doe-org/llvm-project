@@ -1538,7 +1538,7 @@ void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
   TypeInfo FieldInfo = Context.getTypeInfo(D->getType());
   uint64_t StorageUnitSize = FieldInfo.Width;
   unsigned FieldAlign = FieldInfo.Align;
-  bool AlignIsRequired = FieldInfo.AlignIsRequired;
+  bool AlignIsRequired = FieldInfo.isAlignRequired();
 
   // UnfilledBitsInLastUnit is the difference between the end of the
   // last allocated bitfield (i.e. the first bit offset available for
@@ -1775,11 +1775,18 @@ void ItaniumRecordLayoutBuilder::LayoutBitField(const FieldDecl *D) {
       !D->getIdentifier())
     FieldAlign = UnpackedFieldAlign = 1;
 
-  // On AIX, zero-width bitfields pad out to the alignment boundary, but then
-  // do not affect overall record alignment if there is a pragma pack or
-  // pragma align(packed).
-  if (isAIXLayout(Context) && !MaxFieldAlignment.isZero() && !FieldSize)
-    FieldAlign = std::min(FieldAlign, MaxFieldAlignmentInBits);
+  // On AIX, zero-width bitfields pad out to the natural alignment boundary,
+  // but do not increase the alignment greater than the MaxFieldAlignment, or 1
+  // if packed.
+  if (isAIXLayout(Context) && !FieldSize) {
+    if (FieldPacked)
+      FieldAlign = 1;
+    if (!MaxFieldAlignment.isZero()) {
+      UnpackedFieldAlign =
+          std::min(UnpackedFieldAlign, MaxFieldAlignmentInBits);
+      FieldAlign = std::min(FieldAlign, MaxFieldAlignmentInBits);
+    }
+  }
 
   // Diagnose differences in layout due to padding or packing.
   if (!UseExternalLayout)
@@ -1882,7 +1889,7 @@ void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
 
   bool FieldPacked = Packed || D->hasAttr<PackedAttr>();
 
-  bool AlignIsRequired = false;
+  AlignRequirementKind AlignRequirement = AlignRequirementKind::None;
   CharUnits FieldSize;
   CharUnits FieldAlign;
   // The amount of this class's dsize occupied by the field.
@@ -1897,7 +1904,7 @@ void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
     // aligned appropriately for their element type.
     EffectiveFieldSize = FieldSize =
         IsIncompleteArrayType ? CharUnits::Zero() : TI.Width;
-    AlignIsRequired = TI.AlignIsRequired;
+    AlignRequirement = TI.AlignRequirement;
   };
 
   if (D->getType()->isIncompleteArrayType()) {
@@ -1971,7 +1978,8 @@ void ItaniumRecordLayoutBuilder::LayoutField(const FieldDecl *D,
   // and zero-width bit-fields count as prior members; members of empty class
   // types marked `no_unique_address` are not considered to be prior members.
   CharUnits PreferredAlign = FieldAlign;
-  if (DefaultsToAIXPowerAlignment && !AlignIsRequired &&
+  if (DefaultsToAIXPowerAlignment &&
+      AlignRequirement == AlignRequirementKind::None &&
       (FoundFirstNonOverlappingEmptyFieldForAIX || IsNaturalAlign)) {
     auto performBuiltinTypeAlignmentUpgrade = [&](const BuiltinType *BTy) {
       if (BTy->getKind() == BuiltinType::Double ||

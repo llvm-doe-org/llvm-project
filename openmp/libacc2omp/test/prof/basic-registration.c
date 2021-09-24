@@ -1,14 +1,13 @@
 // Check various basic registration/unregistration scenarios.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     fc=HOST       )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  fc=OFF,X86_64 )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple fc=OFF,PPC64LE)
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple fc=OFF,NVPTX64)
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' fc=HOST       )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' fc=OFF,X86_64 )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' fc=OFF,PPC64LE)
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' fc=OFF,NVPTX64)
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s -o %t \
-// RUN:                    %[tgt-cflags]
+// RUN:   %[run-if] %clang -fopenacc %acc-includes %s -o %t %[tgt-cflags]
 // RUN:   %[run-if] %t > %t.out 2> %t.err
 // RUN:   %[run-if] FileCheck -input-file %t.err %s \
 // RUN:       -match-full-lines -strict-whitespace -check-prefix=ERR
@@ -20,6 +19,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <acc_prof.h>
 __attribute__((unused)) static void register_all_callbacks(acc_prof_reg reg);

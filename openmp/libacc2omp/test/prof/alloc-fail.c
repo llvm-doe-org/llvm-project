@@ -1,10 +1,10 @@
 // Check that no callbacks are missed upon a device allocation failure.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     host-or-off-pre-env=HOST not-if-off-pre-env=              )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' host-or-off-pre-env=HOST not-if-off-pre-env=              )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
 // RUN: }
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  host-or-off-post-env=%[host-or-off-pre-env] not-if-off-post-env=%[not-if-off-pre-env])
@@ -12,8 +12,7 @@
 // RUN:   (run-env='env ACC_DEVICE_TYPE=host'        host-or-off-post-env=HOST                   not-if-off-post-env=                     )
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s -o %t \
-// RUN:                    %[tgt-cflags]
+// RUN:   %[run-if] %clang -fopenacc %acc-includes %s -o %t %[tgt-cflags]
 // RUN:   %for run-envs {
 // RUN:     %[run-if] %[not-if-off-post-env] %[run-env] %t > %t.out 2> %t.err
 // RUN:     %[run-if] FileCheck -input-file %t.err -allow-empty %s \
@@ -30,6 +29,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include "callbacks.h"
 #include <stdlib.h>
@@ -71,8 +75,8 @@ int main() {
 //                   ERR:addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
 //              ERR-NEXT:addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
 // ERR-OFF-POST-ENV-NEXT:Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
-//                       # FIXME: getOrAllocTgtPtr is meaningless to users.
-// ERR-OFF-POST-ENV-NEXT:Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping).
+//                       # FIXME: getTargetPointer is meaningless to users.
+// ERR-OFF-POST-ENV-NEXT:Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
 // ERR-OFF-POST-ENV-NEXT:Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
 // ERR-OFF-POST-ENV-NEXT:Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                       # An abort message usually follows.

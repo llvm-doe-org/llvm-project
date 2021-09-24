@@ -3,10 +3,10 @@
 // routines.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                cflags=                                     tgt-acc-device=acc_device_host    tgt-host-or-off=HOST tgt-copy=COPY-DIRECT )
-// RUN:   (run-if=%run-if-x86_64  cflags=-fopenmp-targets=%run-x86_64-triple  tgt-acc-device=acc_device_x86_64  tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
-// RUN:   (run-if=%run-if-ppc64le cflags=-fopenmp-targets=%run-ppc64le-triple tgt-acc-device=acc_device_ppc64le tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
-// RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple tgt-acc-device=acc_device_nvidia  tgt-host-or-off=OFF  tgt-copy=COPY-DIRECT )
+// RUN:   (run-if=                cflags='                                     -Xclang -verify' tgt-acc-device=acc_device_host    tgt-host-or-off=HOST tgt-copy=COPY-DIRECT )
+// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' tgt-acc-device=acc_device_x86_64  tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
+// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' tgt-acc-device=acc_device_ppc64le tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
+// RUN:   (run-if=%run-if-nvptx64 cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-acc-device=acc_device_nvidia  tgt-host-or-off=OFF  tgt-copy=COPY-DIRECT )
 // RUN: }
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  host-or-off=%[tgt-host-or-off] copy=%[tgt-copy])
@@ -14,8 +14,7 @@
 // RUN:   (run-env='env ACC_DEVICE_TYPE=host'        host-or-off=HOST               copy=COPY-DIRECT)
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s \
-// RUN:                    %[cflags] -o %t
+// RUN:   %[run-if] %clang -fopenacc %acc-includes %s %[cflags] -o %t
 // RUN:   %for run-envs {
 // RUN:     %[run-if] %[run-env] %t %[host-or-off] > %t.out 2> %t.err
 // RUN:     %[run-if] FileCheck -input-file %t.err %s \
@@ -32,6 +31,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include "../callbacks.h"
 #include <stdbool.h>

@@ -10,9 +10,9 @@
 // - Data types and subarray cases: The Clang OpenACC test suite checks this.
 
 // RUN: %data tgts {
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify')
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify')
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64')
 // RUN: }
 // RUN: %data directives {
 // RUN:   (directive=data     data-or-par=DATA)
@@ -20,7 +20,7 @@
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %for directives {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s -o %t \
+// RUN:     %[run-if] %clang -fopenacc %acc-includes %s -o %t \
 // RUN:         %[tgt-cflags] -DDIRECTIVE=%'directive'
 // RUN:     %[run-if] %t > %t.out 2> %t.err
 // RUN:     %[run-if] FileCheck -input-file %t.err -allow-empty %s \
@@ -35,6 +35,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <stdio.h>
 #include <string.h>

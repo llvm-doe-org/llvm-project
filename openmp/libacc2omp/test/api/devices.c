@@ -6,20 +6,19 @@
 // variables here.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                                  cflags=                                                         tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt0=host   )
-// RUN:   (run-if=%run-if-x86_64                    cflags=-fopenmp-targets=%run-x86_64-triple                      tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt0=x86_64 )
-// RUN:   (run-if=%run-if-ppc64le                   cflags=-fopenmp-targets=%run-ppc64le-triple                     tgt-nd-x86_64=0             tgt-nd-ppc64le=%ppc64le-ndevs tgt-nd-nvptx64=0              tgt0=ppc64le)
-// RUN:   (run-if=%run-if-nvptx64                   cflags=-fopenmp-targets=%run-nvptx64-triple                     tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=%nvptx64-ndevs tgt0=nvidia )
-// RUN:   (run-if='%run-if-x86_64 %run-if-nvptx64'  cflags=-fopenmp-targets=%run-x86_64-triple,%run-nvptx64-triple  tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=%nvptx64-ndevs tgt0=x86_64 )
-// RUN:   (run-if='%run-if-ppc64le %run-if-nvptx64' cflags=-fopenmp-targets=%run-ppc64le-triple,%run-nvptx64-triple tgt-nd-x86_64=0             tgt-nd-ppc64le=%ppc64le-ndevs tgt-nd-nvptx64=%nvptx64-ndevs tgt0=ppc64le)
+// RUN:   (run-if=                                  cflags='                                                         -Xclang -verify' tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt0=host   )
+// RUN:   (run-if=%run-if-x86_64                    cflags='-fopenmp-targets=%run-x86_64-triple                      -Xclang -verify' tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt0=x86_64 )
+// RUN:   (run-if=%run-if-ppc64le                   cflags='-fopenmp-targets=%run-ppc64le-triple                     -Xclang -verify' tgt-nd-x86_64=0             tgt-nd-ppc64le=%ppc64le-ndevs tgt-nd-nvptx64=0              tgt0=ppc64le)
+// RUN:   (run-if=%run-if-nvptx64                   cflags='-fopenmp-targets=%run-nvptx64-triple                     -Xclang -verify=nvptx64' tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=%nvptx64-ndevs tgt0=nvidia )
+// RUN:   (run-if='%run-if-x86_64 %run-if-nvptx64'  cflags='-fopenmp-targets=%run-x86_64-triple,%run-nvptx64-triple  -Xclang -verify=nvptx64' tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=%nvptx64-ndevs tgt0=x86_64 )
+// RUN:   (run-if='%run-if-ppc64le %run-if-nvptx64' cflags='-fopenmp-targets=%run-ppc64le-triple,%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-nd-x86_64=0             tgt-nd-ppc64le=%ppc64le-ndevs tgt-nd-nvptx64=%nvptx64-ndevs tgt0=ppc64le)
 // RUN: }
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  nd-x86_64=%[tgt-nd-x86_64] nd-ppc64le=%[tgt-nd-ppc64le] nd-nvptx64=%[tgt-nd-nvptx64] dev-type-init=%[tgt0])
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' nd-x86_64=0                nd-ppc64le=0                 nd-nvptx64=0                 dev-type-init=host   )
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[cflags] \
-// RUN:                    -o %t.exe %s
+// RUN:   %[run-if] %clang -fopenacc %acc-includes %[cflags] -o %t.exe %s
 // RUN:   %for run-envs {
 // RUN:     %[run-if] %[run-env] %t.exe > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
@@ -34,6 +33,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <assert.h>
 #include <openacc.h>

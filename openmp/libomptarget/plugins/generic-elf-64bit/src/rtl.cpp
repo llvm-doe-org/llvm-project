@@ -302,14 +302,14 @@ int32_t __tgt_rtl_data_submit(
   // FIXME: We don't yet need the target_task_data, target_data, host_op_id, and
   // codeptr_ra arguments for OpenACC support, so we haven't bothered to
   // implement them yet.
-  if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op_emi) {
-    ompt_api->ompt_get_callbacks().ompt_callback(
+  if (ompt_api->ompt_target_enabled->ompt_callback_target_data_op_emi) {
+    ompt_api->ompt_target_callbacks->ompt_callback(
         ompt_callback_target_data_op_emi)(
         ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
         /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, hst_ptr,
         omp_get_initial_device(), tgt_ptr, ompt_api->global_device_id, size,
         /*codeptr_ra=*/NULL);
-    ompt_api->ompt_get_callbacks().ompt_callback(
+    ompt_api->ompt_target_callbacks->ompt_callback(
         ompt_callback_target_data_op_emi)(
         ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
         /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, hst_ptr,
@@ -347,14 +347,14 @@ int32_t __tgt_rtl_data_retrieve(
   // FIXME: We don't yet need the target_task_data, target_data, host_op_id, and
   // codeptr_ra arguments for OpenACC support, so we haven't bothered to
   // implement them yet.
-  if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op_emi) {
-    ompt_api->ompt_get_callbacks().ompt_callback(
+  if (ompt_api->ompt_target_enabled->ompt_callback_target_data_op_emi) {
+    ompt_api->ompt_target_callbacks->ompt_callback(
         ompt_callback_target_data_op_emi)(
         ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
         /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, tgt_ptr,
         ompt_api->global_device_id, hst_ptr, omp_get_initial_device(), size,
         /*codeptr_ra=*/NULL);
-    ompt_api->ompt_get_callbacks().ompt_callback(
+    ompt_api->ompt_target_callbacks->ompt_callback(
         ompt_callback_target_data_op_emi)(
         ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
         /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, tgt_ptr,
@@ -419,15 +419,15 @@ int32_t __tgt_rtl_run_target_team_region(
   //
   // FIXME: We don't yet need the target_data or host_op_id argument for OpenACC
   // support, so we haven't bothered to implement it yet.
-  if (ompt_api->ompt_get_enabled().ompt_callback_target_submit_emi) {
-    ompt_api->ompt_get_callbacks().ompt_callback(
-        ompt_callback_target_submit_emi)(ompt_scope_begin, /*target_data=*/NULL,
-                                         /*host_op_id=*/NULL,
-                                         /*requested_num_teams=*/team_num);
-    ompt_api->ompt_get_callbacks().ompt_callback(
-        ompt_callback_target_submit_emi)(ompt_scope_end, /*target_data=*/NULL,
-                                         /*host_op_id=*/NULL,
-                                         /*requested_num_teams=*/team_num);
+  if (ompt_api->ompt_target_enabled->ompt_callback_target_submit_emi) {
+    ompt_api->ompt_target_callbacks->ompt_callback(
+        ompt_callback_target_submit_emi)(
+        ompt_scope_begin, /*target_data=*/NULL, /*host_op_id=*/NULL,
+        /*requested_num_teams=*/team_num);
+    ompt_api->ompt_target_callbacks->ompt_callback(
+        ompt_callback_target_submit_emi)(
+        ompt_scope_end, /*target_data=*/NULL, /*host_op_id=*/NULL,
+        /*requested_num_teams=*/team_num);
   }
 #endif
 

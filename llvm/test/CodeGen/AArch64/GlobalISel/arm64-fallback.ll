@@ -12,8 +12,7 @@ target datalayout = "e-m:o-i64:64-i128:128-n32:64-S128"
 target triple = "aarch64--"
 
 ; BIG-ENDIAN: unable to translate in big endian mode
-
-; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: G_STORE %3:_(<3 x s32>), %4:_(p0) :: (store (<3 x s32>) into %ir.addr + 16, align 16, basealign 32) (in function: odd_vector)
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: %{{[0-9]+}}:_(<28 x s32>) = G_CONCAT_VECTORS %{{[0-9]+}}:_(<4 x s32>), %{{[0-9]+}}:_(<4 x s32>), %{{[0-9]+}}:_(<4 x s32>), %{{[0-9]+}}:_(<4 x s32>), %{{[0-9]+}}:_(<4 x s32>), %{{[0-9]+}}:_(<4 x s32>), %{{[0-9]+}}:_(<4 x s32>) (in function: odd_vector)
 ; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for odd_vector
 ; FALLBACK-WITH-REPORT-OUT-LABEL: odd_vector:
 define void @odd_vector(<7 x i32>* %addr) {
@@ -50,30 +49,6 @@ block:
 end:
   %vec = load <2 x i16*>, <2 x i16*>* undef
   br label %block
-}
-
-; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: cannot select: %{{[0-9]+}}:gpr(s32), %{{[0-9]+}}:gpr(s32) = G_UNMERGE_VALUES %{{[0-9]+}}:gpr(s64) (in function: nonpow2_add_narrowing)
-; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for nonpow2_add_narrowing
-; FALLBACK-WITH-REPORT-OUT-LABEL: nonpow2_add_narrowing:
-define void @nonpow2_add_narrowing(i128 %x, i128 %y) {
-  %a = add i128 %x, %y
-  %b = trunc i128 %a to i96
-  %dummy = add i96 %b, %b
-  store i96 %dummy, i96* undef
-  ret void
-}
-
-; Currently can't handle vector lengths that aren't an exact multiple of
-; natively supported vector lengths. Test that the fall-back works for those.
-; FALLBACK-WITH-REPORT-ERR-G_IMPLICIT_DEF-LEGALIZABLE: (FIXME: this is what is expected once we can legalize non-pow-of-2 G_IMPLICIT_DEF) remark: <unknown>:0:0: unable to legalize instruction: %1:_(<7 x s64>) = G_ADD %0, %0 (in function: nonpow2_vector_add_fewerelements
-; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: %47:_(<14 x s64>) = G_CONCAT_VECTORS %41:_(<2 x s64>), %42:_(<2 x s64>), %43:_(<2 x s64>), %44:_(<2 x s64>), %29:_(<2 x s64>), %29:_(<2 x s64>), %29:_(<2 x s64>) (in function: nonpow2_vector_add_fewerelements)
-; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for nonpow2_vector_add_fewerelements
-; FALLBACK-WITH-REPORT-OUT-LABEL: nonpow2_vector_add_fewerelements:
-define void @nonpow2_vector_add_fewerelements() {
-  %dummy = add <7 x i64> undef, undef
-  %ex = extractelement <7 x i64> %dummy, i64 0
-  store i64 %ex, i64* undef
-  ret void
 }
 
 ; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: cannot select: RET_ReallyLR implicit $x0 (in function: strict_align_feature)
@@ -137,7 +112,45 @@ entry:
   ret void
 }
 
+%struct.foo = type { [8 x i64] }
+
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to translate instruction:{{.*}}ld64b{{.*}}asm_output_ls64
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for asm_output_ls64
+; FALLBACK-WITH-REPORT-OUT-LABEL: asm_output_ls64
+define void @asm_output_ls64(%struct.foo* %output, i8* %addr) #2 {
+entry:
+  %val = call i512 asm sideeffect "ld64b $0,[$1]", "=r,r,~{memory}"(i8* %addr)
+  %outcast = bitcast %struct.foo* %output to i512*
+  store i512 %val, i512* %outcast, align 8
+  ret void
+}
+
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to translate instruction:{{.*}}st64b{{.*}}asm_input_ls64
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for asm_input_ls64
+; FALLBACK-WITH-REPORT-OUT-LABEL: asm_input_ls64
+define void @asm_input_ls64(%struct.foo* %input, i8* %addr) #2 {
+entry:
+  %incast = bitcast %struct.foo* %input to i512*
+  %val = load i512, i512* %incast, align 8
+  call void asm sideeffect "st64b $0,[$1]", "r,r,~{memory}"(i512 %val, i8* %addr)
+  ret void
+}
+
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: %4:_(s128), %5:_(s1) = G_UMULO %0:_, %6:_ (in function: umul_s128)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for umul_s128
+; FALLBACK-WITH-REPORT-OUT-LABEL: umul_s128
+declare {i128, i1} @llvm.umul.with.overflow.i128(i128, i128) nounwind readnone
+define zeroext i1 @umul_s128(i128 %v1, i128* %res) {
+entry:
+  %t = call {i128, i1} @llvm.umul.with.overflow.i128(i128 %v1, i128 2)
+  %val = extractvalue {i128, i1} %t, 0
+  %obit = extractvalue {i128, i1} %t, 1
+  store i128 %val, i128* %res
+  ret i1 %obit
+}
+
 attributes #1 = { "target-features"="+sve" }
+attributes #2 = { "target-features"="+ls64" }
 
 declare <vscale x 16 x i1> @llvm.aarch64.sve.ptrue.nxv16i1(i32 %pattern)
 declare <vscale x 16 x i8> @llvm.aarch64.sve.ld1.nxv16i8(<vscale x 16 x i1>, i8*)

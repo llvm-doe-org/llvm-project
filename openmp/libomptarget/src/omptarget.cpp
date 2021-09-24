@@ -191,11 +191,11 @@ static int InitLibrary(DeviceTy &Device) {
         // picked up immediately before entering the first target region.  Is
         // that OK?  Will that affect the timings one might collect using the
         // corresponding OpenACC callbacks?
-        if (Device.OmptApi.ompt_get_enabled()
-                .ompt_callback_target_data_op_emi) {
+        if (Device.OmptApi.ompt_target_enabled->
+            ompt_callback_target_data_op_emi) {
           // FIXME: We don't yet need the host_op_id and codeptr_ra arguments
           // for OpenACC support, so we haven't bothered to implement them yet.
-          Device.OmptApi.ompt_get_callbacks().ompt_callback(
+          Device.OmptApi.ompt_target_callbacks->ompt_callback(
               ompt_callback_target_data_op_emi)(
               ompt_scope_beginend, /*target_task_data=*/NULL,
               /*target_data=*/NULL, /*host_op_id=*/NULL,
@@ -576,7 +576,7 @@ int targetDataBegin(ident_t *loc, DeviceTy &Device, int32_t arg_num,
       PointerTgtPtrBegin = Pointer_TPR.TargetPointer;
       IsHostPtr = Pointer_TPR.Flags.IsHostPointer;
       if (!PointerTgtPtrBegin) {
-        REPORT("Call to getOrAllocTgtPtr returned null pointer (%s).\n",
+        REPORT("Call to getTargetPointer returned null pointer (%s).\n",
                HasPresentModifier ? "'present' map type modifier"
                                   : "device failure or illegal mapping");
         return OFFLOAD_FAIL;
@@ -600,7 +600,7 @@ int targetDataBegin(ident_t *loc, DeviceTy &Device, int32_t arg_num,
     const bool HasFlagAlways = arg_types[i] & OMP_TGT_MAPTYPE_ALWAYS;
     if (HasFlagTo && (!UseUSM || HasCloseModifier))
       MoveData = HasFlagAlways ? MoveDataStateTy::REQUIRED
-                               : MoveData = MoveDataStateTy::UNKNOWN;
+                               : MoveDataStateTy::UNKNOWN;
 
     auto TPR = Device.getTargetPointer(
         HstPtrBegin, HstPtrBase, data_size, HstPtrName, MoveData, IsImplicit,
@@ -612,11 +612,11 @@ int targetDataBegin(ident_t *loc, DeviceTy &Device, int32_t arg_num,
     // NULL, so getOrAlloc() returning NULL is not an error.
     if (!TgtPtrBegin && (data_size || HasPresentModifier)) {
       if (!HasPresentModifier && HasNoAllocModifier) {
-        DP("Call to getOrAllocTgtPtr returned null pointer ('no_alloc' map "
+        DP("Call to getTargetPointer returned null pointer ('no_alloc' map "
            "type modifier).\n");
         continue;
       }
-      REPORT("Call to getOrAllocTgtPtr returned null pointer (%s).\n",
+      REPORT("Call to getTargetPointer returned null pointer (%s).\n",
              HasPresentModifier ? "'present' map type modifier"
                                 : "device failure or illegal mapping");
       return OFFLOAD_FAIL;
@@ -845,9 +845,8 @@ int targetDataEnd(ident_t *loc, DeviceTy &Device, int32_t ArgNum,
         bool CopyMember = false;
         if (!(PM->RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY) ||
             HasCloseModifier) {
-          if ((ArgTypes[I] & OMP_TGT_MAPTYPE_MEMBER_OF) &&
-              !(ArgTypes[I] & OMP_TGT_MAPTYPE_PTR_AND_OBJ))
-            CopyMember = IsLast;
+          if (IsLast)
+            CopyMember = true;
         }
 
         if ((DelEntry || Always || CopyMember) &&
@@ -938,19 +937,20 @@ int targetDataEnd(ident_t *loc, DeviceTy &Device, int32_t ArgNum,
 }
 
 #if OMPT_SUPPORT
-void ompt_dispatch_callback_target(ompt_target_t Kind,
-                                   ompt_scope_endpoint_t Endpoint,
-                                   DeviceTy &Device) {
+void ompt_dispatch_callback_target_emi(ompt_target_t Kind,
+                                       ompt_scope_endpoint_t Endpoint,
+                                       DeviceTy &Device) {
   bool SubRegion = Kind == ompt_target_region_enter_data ||
                    Kind == ompt_target_region_exit_data;
   if (!SubRegion && Endpoint == ompt_scope_begin)
     ompt_set_target_info(Device.DeviceID);
   // FIXME: We don't yet need the task_data, target_id, or codeptr_ra argument
   // for OpenACC support, so we haven't bothered to implement them yet.
-  if (Device.OmptApi.ompt_get_enabled().ompt_callback_target) {
-    Device.OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_target)(
+  if (Device.OmptApi.ompt_target_enabled->ompt_callback_target_emi) {
+    Device.OmptApi.ompt_target_callbacks->ompt_callback(
+        ompt_callback_target_emi)(
         Kind, Endpoint, Device.DeviceID, /*task_data=*/NULL,
-        /*target_id=*/ompt_id_none, /*codeptr_ra=*/NULL);
+        /*target_task_data=*/NULL, /*target_data=*/NULL, /*codeptr_ra=*/NULL);
   }
   if (!SubRegion && Endpoint == ompt_scope_end)
     ompt_clear_target_info();
@@ -1338,16 +1338,17 @@ public:
       // The callback for ompt_target_data_associate should follow the callback
       // for ompt_target_data_alloc to reflect the order in which these events
       // must occur.
-      if (Device.OmptApi.ompt_get_enabled().ompt_callback_target_data_op_emi) {
+      if (Device.OmptApi.ompt_target_enabled->
+          ompt_callback_target_data_op_emi) {
         // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
         // OpenACC support, so we haven't bothered to implement them yet.
-        Device.OmptApi.ompt_get_callbacks().ompt_callback(
+        Device.OmptApi.ompt_target_callbacks->ompt_callback(
             ompt_callback_target_data_op_emi)(
             ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
             /*host_op_id=*/NULL, ompt_target_data_alloc, HstPtr,
             omp_get_initial_device(), TgtPtr, Device.DeviceID, ArgSize,
             /*codeptr_ra=*/NULL);
-        Device.OmptApi.ompt_get_callbacks().ompt_callback(
+        Device.OmptApi.ompt_target_callbacks->ompt_callback(
             ompt_callback_target_data_op_emi)(
             ompt_scope_beginend, /*target_task_data=*/NULL,
             /*target_data=*/NULL, /*host_op_id=*/NULL,
@@ -1472,16 +1473,17 @@ public:
       // dispatch the ompt_target_data_associate per host address, but doing so
       // for ompt_target_data_alloc would incorrectly communicate multiple
       // allocations.  We choose to be correct and consistent.
-      if (Device.OmptApi.ompt_get_enabled().ompt_callback_target_data_op_emi) {
+      if (Device.OmptApi.ompt_target_enabled->
+          ompt_callback_target_data_op_emi) {
         // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
         // OpenACC support, so we haven't bothered to implement them yet.
-        Device.OmptApi.ompt_get_callbacks().ompt_callback(
+        Device.OmptApi.ompt_target_callbacks->ompt_callback(
             ompt_callback_target_data_op_emi)(
             ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
             /*host_op_id=*/NULL, ompt_target_data_alloc,
             FirstPrivateArgBuffer.data(), omp_get_initial_device(), TgtPtr,
             Device.DeviceID, FirstPrivateArgSize, /*codeptr_ra=*/nullptr);
-        Device.OmptApi.ompt_get_callbacks().ompt_callback(
+        Device.OmptApi.ompt_target_callbacks->ompt_callback(
             ompt_callback_target_data_op_emi)(
             ompt_scope_beginend, /*target_task_data=*/NULL,
             /*target_data=*/NULL, /*host_op_id=*/NULL,
@@ -1555,17 +1557,17 @@ public:
       // these events logically occur, even if that's not how the underlying
       // actions are coded here.  Moreover, this ordering is for symmetry with
       // ompt_target_data_alloc and ompt_target_data_associate.
-      if (Device.OmptApi.ompt_get_enabled().ompt_callback_target_data_op_emi) {
+      if (Device.OmptApi.ompt_target_enabled->ompt_callback_target_data_op_emi) {
         // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
         // OpenACC support, so we haven't bothered to implement them yet.
-        Device.OmptApi.ompt_get_callbacks().ompt_callback(
+        Device.OmptApi.ompt_target_callbacks->ompt_callback(
             ompt_callback_target_data_op_emi)(
             ompt_scope_beginend, /*target_task_data=*/NULL,
             /*target_data=*/NULL, /*host_op_id=*/NULL,
             ompt_target_data_disassociate, Info.HstPtr,
             omp_get_initial_device(), Info.TgtPtr, Device.DeviceID, Info.Size,
             /*codeptr_ra=*/nullptr);
-        Device.OmptApi.ompt_get_callbacks().ompt_callback(
+        Device.OmptApi.ompt_target_callbacks->ompt_callback(
             ompt_callback_target_data_op_emi)(
             ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
             /*host_op_id=*/NULL, ompt_target_data_delete, Info.HstPtr,
@@ -1781,7 +1783,7 @@ static int processDataAfter(ident_t *loc, int64_t DeviceId, void *HostPtr,
 // events below.  Moreover, these callbacks are also dispatched in
 // kmp_runtime.cpp for the case of no offloading, and there are similar
 // questions about the right places.  See the fixme on
-// ompt_dispatch_callback_target there.
+// ompt_dispatch_callback_target_emi there.
 int target(ident_t *loc, DeviceTy &Device, void *HostPtr, int32_t ArgNum,
            void **ArgBases, void **Args, int64_t *ArgSizes, int64_t *ArgTypes,
            map_var_info_t *ArgNames, void **ArgMappers, int32_t TeamNum,
@@ -1819,14 +1821,14 @@ int target(ident_t *loc, DeviceTy &Device, void *HostPtr, int32_t ArgNum,
     // "When the program encounters a compute construct with explicit data
     // clauses or with implicit data allocation added by the compiler, it
     // creates a data region that has a duration of the compute construct."
-    ompt_dispatch_callback_target(ompt_target_region_enter_data,
-                                  ompt_scope_begin, Device);
+    ompt_dispatch_callback_target_emi(ompt_target_region_enter_data,
+                                      ompt_scope_begin, Device);
     // Process data, such as data mapping, before launching the kernel
     Ret = processDataBefore(loc, DeviceId, HostPtr, ArgNum, ArgBases, Args,
                             ArgSizes, ArgTypes, ArgNames, ArgMappers, TgtArgs,
                             TgtOffsets, PrivateArgumentManager, AsyncInfo);
-    ompt_dispatch_callback_target(ompt_target_region_enter_data,
-                                  ompt_scope_end, Device);
+    ompt_dispatch_callback_target_emi(ompt_target_region_enter_data,
+                                      ompt_scope_end, Device);
     if (Ret != OFFLOAD_SUCCESS) {
       REPORT("Failed to process data before launching the kernel.\n");
       return OFFLOAD_FAIL;
@@ -1865,15 +1867,15 @@ int target(ident_t *loc, DeviceTy &Device, void *HostPtr, int32_t ArgNum,
     // "When the program encounters a compute construct with explicit data
     // clauses or with implicit data allocation added by the compiler, it
     // creates a data region that has a duration of the compute construct."
-    ompt_dispatch_callback_target(ompt_target_region_exit_data,
-                                  ompt_scope_begin, Device);
+    ompt_dispatch_callback_target_emi(ompt_target_region_exit_data,
+                                      ompt_scope_begin, Device);
     // Transfer data back and deallocate target memory for (first-)private
     // variables
     Ret = processDataAfter(loc, DeviceId, HostPtr, ArgNum, ArgBases, Args,
                            ArgSizes, ArgTypes, ArgNames, ArgMappers,
                            PrivateArgumentManager, AsyncInfo);
-    ompt_dispatch_callback_target(ompt_target_region_exit_data,
-                                  ompt_scope_end, Device);
+    ompt_dispatch_callback_target_emi(ompt_target_region_exit_data,
+                                      ompt_scope_end, Device);
     if (Ret != OFFLOAD_SUCCESS) {
       REPORT("Failed to process data after launching the kernel.\n");
       return OFFLOAD_FAIL;

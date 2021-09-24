@@ -40,10 +40,10 @@
 // RUN:   (present-opt='-DIF_PRESENT=if_present -fopenacc-update-present-omp=no-present'                                  present=            if-present=IF_PRESENT not-if-present=    not-crash-if-present=             )
 // RUN: }
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     host-or-dev=HOST not-if-off-and-present=                  not-crash-if-off-and-present=                        not-if-off=    not-crash-if-off=             )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-dev=DEV  not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host-or-dev=DEV  not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-dev=DEV  not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' host-or-dev=HOST not-if-off-and-present=                  not-crash-if-off-and-present=                        not-if-off=    not-crash-if-off=             )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host-or-dev=DEV  not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' host-or-dev=DEV  not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-dev=DEV  not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
 // RUN: }
 // RUN: %data cases {
 // RUN:   (case=caseNoParentPresent      not-if-fail=                          not-crash-if-fail=                               )
@@ -151,7 +151,8 @@
 // RUN:                 -DCASES_HEADER='"%t-cases.h"' \
 // RUN:                 -Wno-openacc-omp-map-hold %s > %t-omp.c
 // RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:       %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
+// RUN:       %[run-if] grep "^// nvptx64-" %s >> %t-omp.c
+// RUN:       %[run-if] %clang -fopenmp %fopenmp-version \
 // RUN:                 %[tgt-cflags] -DCASES_HEADER='"%t-cases.h"' -o %t.exe \
 // RUN:                 -gline-tables-only %t-omp.c
 // RUN:       %for cases {
@@ -173,7 +174,7 @@
 //
 // RUN: %for present-opts {
 // RUN:   %for tgts {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %[present-opt] \
+// RUN:     %[run-if] %clang -fopenacc %[present-opt] \
 // RUN:               %[tgt-cflags] -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
 // RUN:     %for cases {
 // RUN:       %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2> %t.err
@@ -192,6 +193,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <stdio.h>
 #include <string.h>

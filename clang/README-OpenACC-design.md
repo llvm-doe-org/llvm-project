@@ -2285,33 +2285,33 @@ The following table shows, for each OpenACC event for which an OpenACC
 profiling library registers a callback, the OMPT callbacks that are
 registered by Clacc's OpenACC Profiling Interface support.
 
-| OpenACC Event                     | OMPT Callback                                                                                                       |
-|:----------------------------------|:--------------------------------------------------------------------------------------------------------------------|
-| `acc_ev_device_init_start`        | **`ompt_callback_device_initialize_start`**                                                                         |
-| `acc_ev_device_init_end`          | `ompt_callback_device_initialize`                                                                                   |
-| `acc_ev_device_shutdown_start`    | **`ompt_callback_device_finalize_start`**                                                                           |
-| `acc_ev_device_shutdown_end`      | `ompt_callback_device_finalize`                                                                                     |
-| `acc_ev_runtime_shutdown`         | `finalize` set by `ompt_start_tool`                                                                                 |
-| `acc_ev_create`                   | `ompt_callback_target_data_op_emi(optype=ompt_target_data_associate, endpoint=ompt_scope_beginend)`                 |
-| `acc_ev_delete`                   | `ompt_callback_target_data_op_emi(optype=ompt_target_data_disassociate, endpoint=ompt_scope_beginend)`              |
-| `acc_ev_alloc`                    | `ompt_callback_target_data_op_emi(optype=ompt_target_data_alloc, endpoint=ompt_scope_end)`                          |
-| `acc_ev_free`                     | `ompt_callback_target_data_op_emi(optype=ompt_target_data_delete, endpoint=ompt_scope_begin)`                       |
-| `acc_ev_enter_data_start`         | `ompt_callback_target(kind=ompt_target_enter_data|`**`ompt_target_region_enter_data`**`, endpoint=ompt_scope_begin)`|
-| `acc_ev_enter_data_end`           | `ompt_callback_target(kind=ompt_target_enter_data|`**`ompt_target_region_enter_data`**`, endpoint=ompt_scope_end)`  |
-| `acc_ev_exit_data_start`          | `ompt_callback_target(kind=ompt_target_exit_data|`**`ompt_target_region_exit_data`**`, endpoint=ompt_scope_begin)`  |
-| `acc_ev_exit_data_end`            | `ompt_callback_target(kind=ompt_target_exit_data|`**`ompt_target_region_exit_data`**`, endpoint=ompt_scope_end)`    |
-| `acc_ev_update_start`             | `ompt_callback_target(kind=ompt_target_update, endpoint=ompt_scope_begin)`                                          |
-| `acc_ev_update_end`               | `ompt_callback_target(kind=ompt_target_update, endpoint=ompt_scope_end)`                                            |
-| `acc_ev_compute_construct_start`  | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_begin)`                                                 |
-| `acc_ev_compute_construct_end`    | `ompt_callback_target(kind=ompt_target, endpoint=ompt_scope_end)`                                                   |
-| `acc_ev_enqueue_launch_start`     | `ompt_callback_target_submit_emi(endpoint=ompt_scope_begin)`                                                        |
-| `acc_ev_enqueue_launch_end`       | `ompt_callback_target_submit_emi(endpoint=ompt_scope_end)`                                                          |
-| `acc_ev_enqueue_upload_start`     | `ompt_callback_target_data_op_emi(optype=ompt_target_data_transfer_to_device, endpoint=ompt_scope_begin)`           |
-| `acc_ev_enqueue_upload_end`       | `ompt_callback_target_data_op_emi(optype=ompt_target_data_transfer_to_device, endpoint=ompt_scope_end)`             |
-| `acc_ev_enqueue_download_start`   | `ompt_callback_target_data_op_emi(optype=ompt_target_data_transfer_from_device, endpoint=ompt_scope_begin)`         |
-| `acc_ev_enqueue_download_end`     | `ompt_callback_target_data_op_emi(optype=ompt_target_data_transfer_from_device, endpoint=ompt_scope_end)`           |
-| `acc_ev_wait_start`               | *unimplemented*                                                                                                     |
-| `acc_ev_wait_end`                 | *unimplemented*                                                                                                     |
+| OpenACC Event                     | OMPT Callback                                                                                                           |
+|:----------------------------------|:------------------------------------------------------------------------------------------------------------------------|
+| `acc_ev_device_init_start`        | **`ompt_callback_device_initialize_start`**                                                                             |
+| `acc_ev_device_init_end`          | `ompt_callback_device_initialize`                                                                                       |
+| `acc_ev_device_shutdown_start`    | **`ompt_callback_device_finalize_start`**                                                                               |
+| `acc_ev_device_shutdown_end`      | `ompt_callback_device_finalize`                                                                                         |
+| `acc_ev_runtime_shutdown`         | `finalize` set by `ompt_start_tool`                                                                                     |
+| `acc_ev_create`                   | `ompt_callback_target_data_op_emi(optype=ompt_target_data_associate, endpoint=ompt_scope_beginend)`                     |
+| `acc_ev_delete`                   | `ompt_callback_target_data_op_emi(optype=ompt_target_data_disassociate, endpoint=ompt_scope_beginend)`                  |
+| `acc_ev_alloc`                    | `ompt_callback_target_data_op_emi(optype=ompt_target_data_alloc, endpoint=ompt_scope_end)`                              |
+| `acc_ev_free`                     | `ompt_callback_target_data_op_emi(optype=ompt_target_data_delete, endpoint=ompt_scope_begin)`                           |
+| `acc_ev_enter_data_start`         | `ompt_callback_target_emi(kind=ompt_target_enter_data|`**`ompt_target_region_enter_data`**`, endpoint=ompt_scope_begin)`|
+| `acc_ev_enter_data_end`           | `ompt_callback_target_emi(kind=ompt_target_enter_data|`**`ompt_target_region_enter_data`**`, endpoint=ompt_scope_end)`  |
+| `acc_ev_exit_data_start`          | `ompt_callback_target_emi(kind=ompt_target_exit_data|`**`ompt_target_region_exit_data`**`, endpoint=ompt_scope_begin)`  |
+| `acc_ev_exit_data_end`            | `ompt_callback_target_emi(kind=ompt_target_exit_data|`**`ompt_target_region_exit_data`**`, endpoint=ompt_scope_end)`    |
+| `acc_ev_update_start`             | `ompt_callback_target_emi(kind=ompt_target_update, endpoint=ompt_scope_begin)`                                          |
+| `acc_ev_update_end`               | `ompt_callback_target_emi(kind=ompt_target_update, endpoint=ompt_scope_end)`                                            |
+| `acc_ev_compute_construct_start`  | `ompt_callback_target_emi(kind=ompt_target, endpoint=ompt_scope_begin)`                                                 |
+| `acc_ev_compute_construct_end`    | `ompt_callback_target_emi(kind=ompt_target, endpoint=ompt_scope_end)`                                                   |
+| `acc_ev_enqueue_launch_start`     | `ompt_callback_target_submit_emi(endpoint=ompt_scope_begin)`                                                            |
+| `acc_ev_enqueue_launch_end`       | `ompt_callback_target_submit_emi(endpoint=ompt_scope_end)`                                                              |
+| `acc_ev_enqueue_upload_start`     | `ompt_callback_target_data_op_emi(optype=ompt_target_data_transfer_to_device, endpoint=ompt_scope_begin)`               |
+| `acc_ev_enqueue_upload_end`       | `ompt_callback_target_data_op_emi(optype=ompt_target_data_transfer_to_device, endpoint=ompt_scope_end)`                 |
+| `acc_ev_enqueue_download_start`   | `ompt_callback_target_data_op_emi(optype=ompt_target_data_transfer_from_device, endpoint=ompt_scope_begin)`             |
+| `acc_ev_enqueue_download_end`     | `ompt_callback_target_data_op_emi(optype=ompt_target_data_transfer_from_device, endpoint=ompt_scope_end)`               |
+| `acc_ev_wait_start`               | *unimplemented*                                                                                                         |
+| `acc_ev_wait_end`                 | *unimplemented*                                                                                                         |
 
 This mapping is expected to be sufficient only for the OpenACC
 directives and clauses currently supported by the Clacc compiler, and

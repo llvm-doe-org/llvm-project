@@ -52,8 +52,8 @@ DeviceTy::DeviceTy(RTLInfoTy *RTL)
       ShadowPtrMap(), DataMapMtx(), PendingGlobalsMtx(), ShadowMtx() {
 #if OMPT_SUPPORT
   OmptApi.global_device_id = DeviceID;
-  OmptApi.ompt_get_enabled = ompt_get_enabled;
-  OmptApi.ompt_get_callbacks = ompt_get_callbacks;
+  OmptApi.ompt_target_enabled = &ompt_target_enabled;
+  OmptApi.ompt_target_callbacks = &ompt_target_callbacks;
 #endif
 }
 
@@ -377,16 +377,16 @@ DeviceTy::getTargetPointer(void *HstPtrBegin, void *HstPtrBase, int64_t Size,
     // The callback for ompt_target_data_associate should follow the callback
     // for ompt_target_data_alloc to reflect the order in which these events
     // must occur.
-    if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op_emi) {
+    if (OmptApi.ompt_target_enabled->ompt_callback_target_data_op_emi) {
       // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
       // OpenACC support, so we haven't bothered to implement them yet.
-      OmptApi.ompt_get_callbacks().ompt_callback(
+      OmptApi.ompt_target_callbacks->ompt_callback(
           ompt_callback_target_data_op_emi)(
           ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
           /*host_op_id=*/NULL, ompt_target_data_alloc, HstPtrBegin,
           omp_get_initial_device(), (void *)Ptr, DeviceID, Size,
           /*codeptr_ra=*/NULL);
-      OmptApi.ompt_get_callbacks().ompt_callback(
+      OmptApi.ompt_target_callbacks->ompt_callback(
           ompt_callback_target_data_op_emi)(
           ompt_scope_beginend, /*target_task_data=*/NULL, /*target_data=*/NULL,
           /*host_op_id=*/NULL, ompt_target_data_associate, HstPtrBegin,
@@ -566,17 +566,17 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size,
       // these events logically occur, even if that's not how the underlying
       // actions are coded here.  Moreover, this ordering is for symmetry with
       // ompt_target_data_alloc and ompt_target_data_associate.
-      if (OmptApi.ompt_get_enabled().ompt_callback_target_data_op_emi) {
+      if (OmptApi.ompt_target_enabled->ompt_callback_target_data_op_emi) {
         // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
         // OpenACC support, so we haven't bothered to implement them yet.
-        OmptApi.ompt_get_callbacks().ompt_callback(
+        OmptApi.ompt_target_callbacks->ompt_callback(
             ompt_callback_target_data_op_emi)(
             ompt_scope_beginend, /*target_task_data=*/NULL,
             /*target_data=*/NULL, /*host_op_id=*/NULL,
             ompt_target_data_disassociate, HstPtrBegin,
             omp_get_initial_device(), (void *)HT.TgtPtrBegin, DeviceID, Size,
             /*codeptr_ra=*/NULL);
-        OmptApi.ompt_get_callbacks().ompt_callback(
+        OmptApi.ompt_target_callbacks->ompt_callback(
             ompt_callback_target_data_op_emi)(
             ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
             /*host_op_id=*/NULL, ompt_target_data_delete, HstPtrBegin,
@@ -610,9 +610,9 @@ void DeviceTy::init() {
 #if OMPT_SUPPORT
   // FIXME: Is this the right place for this event?  Should it include global
   // data mapping in CheckDeviceAndCtors in omptarget.cpp?
-  if (OmptApi.ompt_get_enabled().ompt_callback_device_initialize_start) {
+  if (OmptApi.ompt_target_enabled->ompt_callback_device_initialize_start) {
     // FIXME: Lots of missing info is needed here.
-    OmptApi.ompt_get_callbacks().ompt_callback(
+    OmptApi.ompt_target_callbacks->ompt_callback(
         ompt_callback_device_initialize_start)(
         /*device_num*/ DeviceID,
         /*type*/ "<device type tracking is not yet implemented>",
@@ -637,9 +637,10 @@ void DeviceTy::init() {
   // "The OpenMP implementation invokes this callback after OpenMP is
   // initialized for the device but before execution of any OpenMP construct is
   // started on the device."
-  if (OmptApi.ompt_get_enabled().ompt_callback_device_initialize) {
+  if (OmptApi.ompt_target_enabled->ompt_callback_device_initialize) {
     // FIXME: Lots of missing info is needed here.
-    OmptApi.ompt_get_callbacks().ompt_callback(ompt_callback_device_initialize)(
+    OmptApi.ompt_target_callbacks->ompt_callback(
+        ompt_callback_device_initialize)(
         /*device_num*/ DeviceID,
         /*type*/ "<device type tracking is not yet implemented>",
         /*device*/ NULL,
@@ -650,7 +651,7 @@ void DeviceTy::init() {
   if (Ret != OFFLOAD_SUCCESS)
     return;
 #if OMPT_SUPPORT
-  if (OmptApi.ompt_get_enabled().enabled)
+  if (OmptApi.ompt_target_enabled->enabled)
     ompt_record_device_init(DeviceID);
 #endif
 
@@ -799,6 +800,41 @@ bool DeviceTy::isDataExchangable(const DeviceTy &DstDevice) {
 int32_t DeviceTy::synchronize(AsyncInfoTy &AsyncInfo) {
   if (RTL->synchronize)
     return RTL->synchronize(RTLDeviceID, AsyncInfo);
+  return OFFLOAD_SUCCESS;
+}
+
+int32_t DeviceTy::createEvent(void **Event) {
+  if (RTL->create_event)
+    return RTL->create_event(RTLDeviceID, Event);
+
+  return OFFLOAD_SUCCESS;
+}
+
+int32_t DeviceTy::recordEvent(void *Event, AsyncInfoTy &AsyncInfo) {
+  if (RTL->record_event)
+    return RTL->record_event(RTLDeviceID, Event, AsyncInfo);
+
+  return OFFLOAD_SUCCESS;
+}
+
+int32_t DeviceTy::waitEvent(void *Event, AsyncInfoTy &AsyncInfo) {
+  if (RTL->wait_event)
+    return RTL->wait_event(RTLDeviceID, Event, AsyncInfo);
+
+  return OFFLOAD_SUCCESS;
+}
+
+int32_t DeviceTy::syncEvent(void *Event) {
+  if (RTL->sync_event)
+    return RTL->sync_event(RTLDeviceID, Event);
+
+  return OFFLOAD_SUCCESS;
+}
+
+int32_t DeviceTy::destroyEvent(void *Event) {
+  if (RTL->create_event)
+    return RTL->destroy_event(RTLDeviceID, Event);
+
   return OFFLOAD_SUCCESS;
 }
 

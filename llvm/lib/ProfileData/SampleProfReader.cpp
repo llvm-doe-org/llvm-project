@@ -53,7 +53,7 @@ using namespace sampleprof;
 // For ext-binary format profiles, the flag is set in the summary.
 static cl::opt<bool> ProfileIsFSDisciminator(
     "profile-isfs", cl::Hidden, cl::init(false),
-    cl::desc("Profile uses flow senstive discriminators"));
+    cl::desc("Profile uses flow sensitive discriminators"));
 
 /// Dump the function profile for \p FName.
 ///
@@ -66,8 +66,10 @@ void SampleProfileReader::dumpFunctionProfile(StringRef FName,
 
 /// Dump all the function profiles found on stream \p OS.
 void SampleProfileReader::dump(raw_ostream &OS) {
-  for (const auto &I : Profiles)
-    dumpFunctionProfile(I.getKey(), OS);
+  std::vector<NameFunctionSamples> V;
+  sortFuncProfiles(Profiles, V);
+  for (const auto &I : V)
+    dumpFunctionProfile(I.first, OS);
 }
 
 /// Parse \p Input as function head.
@@ -249,6 +251,7 @@ std::error_code SampleProfileReaderText::readImpl() {
   bool SeenMetadata = false;
 
   ProfileIsFS = ProfileIsFSDisciminator;
+  FunctionSamples::ProfileIsFS = ProfileIsFS;
   for (; !LineIt.is_at_eof(); ++LineIt) {
     if ((*LineIt)[(*LineIt).find_first_not_of(' ')] == '#')
       continue;
@@ -597,6 +600,7 @@ SampleProfileReaderBinary::readFuncProfile(const uint8_t *Start) {
 
 std::error_code SampleProfileReaderBinary::readImpl() {
   ProfileIsFS = ProfileIsFSDisciminator;
+  FunctionSamples::ProfileIsFS = ProfileIsFS;
   while (!at_eof()) {
     if (std::error_code EC = readFuncProfile(Data))
       return EC;
@@ -789,7 +793,7 @@ std::error_code SampleProfileReaderExtBinaryBase::readFuncProfiles() {
   }
   assert((CSProfileCount == 0 || CSProfileCount == Profiles.size()) &&
          "Cannot have both context-sensitive and regular profile");
-  assert(ProfileIsCS == (CSProfileCount > 0) &&
+  assert((!CSProfileCount || ProfileIsCS) &&
          "Section flag should be consistent with actual profile");
   return sampleprof_error::success;
 }
@@ -885,6 +889,7 @@ std::error_code SampleProfileReaderCompactBinary::readImpl() {
   // given a module.
   bool LoadFuncsToBeUsed = collectFuncsFromModule();
   ProfileIsFS = ProfileIsFSDisciminator;
+  FunctionSamples::ProfileIsFS = ProfileIsFS;
   std::vector<uint64_t> OffsetsToUse;
   if (!LoadFuncsToBeUsed) {
     // load all the function profiles.

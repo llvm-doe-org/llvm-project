@@ -49,6 +49,14 @@ add_entrypoint_object(
 )
 
 add_entrypoint_object(
+  strncmp
+  SRCS
+    strncmp.cpp
+  HDRS
+    strncmp.h
+)
+
+add_entrypoint_object(
   memchr
   SRCS
     memchr.cpp
@@ -322,4 +330,36 @@ else()
   set(LIBC_MEMCMP_SRC ${LIBC_SOURCE_DIR}/src/string/memcmp.cpp)
   add_memcmp(memcmp_opt_host          COMPILE_OPTIONS ${LIBC_COMPILE_OPTIONS_NATIVE})
   add_memcmp(memcmp)
+endif()
+
+# ------------------------------------------------------------------------------
+# bcmp
+# ------------------------------------------------------------------------------
+
+function(add_bcmp bcmp_name)
+  add_implementation(bcmp ${bcmp_name}
+    SRCS ${LIBC_BCMP_SRC}
+    HDRS ${LIBC_SOURCE_DIR}/src/string/bcmp.h
+    DEPENDS
+      .memory_utils.memory_utils
+      libc.include.string
+    COMPILE_OPTIONS
+      -fno-builtin-memcmp
+      -fno-builtin-bcmp
+    ${ARGN}
+  )
+endfunction()
+
+if(${LIBC_TARGET_ARCHITECTURE_IS_X86})
+  set(LIBC_BCMP_SRC ${LIBC_SOURCE_DIR}/src/string/bcmp.cpp)
+  add_bcmp(bcmp_x86_64_opt_sse2   COMPILE_OPTIONS -march=k8             REQUIRE SSE2)
+  add_bcmp(bcmp_x86_64_opt_sse4   COMPILE_OPTIONS -march=nehalem        REQUIRE SSE4_2)
+  add_bcmp(bcmp_x86_64_opt_avx2   COMPILE_OPTIONS -march=haswell        REQUIRE AVX2)
+  add_bcmp(bcmp_x86_64_opt_avx512 COMPILE_OPTIONS -march=skylake-avx512 REQUIRE AVX512F)
+  add_bcmp(bcmp_opt_host          COMPILE_OPTIONS ${LIBC_COMPILE_OPTIONS_NATIVE})
+  add_bcmp(bcmp)
+else()
+  set(LIBC_BCMP_SRC ${LIBC_SOURCE_DIR}/src/string/bcmp.cpp)
+  add_bcmp(bcmp_opt_host          COMPILE_OPTIONS ${LIBC_COMPILE_OPTIONS_NATIVE})
+  add_bcmp(bcmp)
 endif()

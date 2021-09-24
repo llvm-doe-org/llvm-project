@@ -46,6 +46,12 @@ declare_mlir_python_sources(MLIRPythonSources.Passes
     transforms/*.py
 )
 
+declare_mlir_python_sources(MLIRPythonCAPIHeaderSources
+  ROOT_DIR "${MLIR_SOURCE_DIR}/include"
+  SOURCES_GLOB "mlir-c/*.h"
+  DEST_PREFIX "_mlir_libs/include"
+)
+
 ################################################################################
 # Dialect bindings
 ################################################################################
@@ -169,7 +175,6 @@ declare_mlir_python_extension(MLIRPythonExtension.Core
     ${PYTHON_SOURCE_DIR}/IRTypes.cpp
     ${PYTHON_SOURCE_DIR}/PybindUtils.cpp
     ${PYTHON_SOURCE_DIR}/Pass.cpp
-    ${PYTHON_SOURCE_DIR}/ExecutionEngine.cpp # TODO: Break this out.
   PRIVATE_LINK_LIBS
     LLVMSupport
   EMBED_CAPI_LINK_LIBS
@@ -181,9 +186,6 @@ declare_mlir_python_extension(MLIRPythonExtension.Core
     MLIRCAPILinalg  # TODO: Remove when above is removed.
     MLIRCAPISparseTensor  # TODO: Remove when above is removed.
     MLIRCAPIStandard
-
-    # Execution engine (remove once disaggregated).
-    MLIRCEXECUTIONENGINE
 )
 
 declare_mlir_python_extension(MLIRPythonExtension.AllPassesRegistration
@@ -217,6 +219,17 @@ declare_mlir_python_extension(MLIRPythonExtension.Conversions
     LLVMSupport
   EMBED_CAPI_LINK_LIBS
   MLIRCAPIConversion
+)
+
+declare_mlir_python_extension(MLIRPythonExtension.ExecutionEngine
+  MODULE_NAME _mlirExecutionEngine
+  ADD_TO_PARENT MLIRPythonSources.ExecutionEngine
+  SOURCES
+    ${PYTHON_SOURCE_DIR}/ExecutionEngineModule.cpp
+  PRIVATE_LINK_LIBS
+    LLVMSupport
+  EMBED_CAPI_LINK_LIBS
+    MLIRCEXECUTIONENGINE
 )
 
 declare_mlir_python_extension(MLIRPythonExtension.GPUDialectPasses
@@ -297,6 +310,7 @@ add_mlir_python_modules(MLIRPythonModules
   DECLARED_SOURCES
     MLIRPythonSources
     MLIRPythonExtension.AllPassesRegistration
+    MLIRPythonCAPIHeaderSources
   COMMON_CAPI_LINK_LIBS
     MLIRPythonCAPI
   )

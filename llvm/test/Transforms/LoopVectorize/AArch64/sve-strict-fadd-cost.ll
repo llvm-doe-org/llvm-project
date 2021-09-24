@@ -1,7 +1,7 @@
 ; REQUIRES: asserts
-; RUN: opt < %s -loop-vectorize -debug -disable-output -enable-strict-reductions=true -hints-allow-reordering=false \
+; RUN: opt < %s -loop-vectorize -debug -disable-output -force-ordered-reductions=true -hints-allow-reordering=false \
 ; RUN:   -scalable-vectorization=on -force-vector-width=4 -force-vector-interleave=1 -S 2>&1 | FileCheck %s --check-prefix=CHECK-VF4
-; RUN: opt < %s -loop-vectorize -debug -disable-output -enable-strict-reductions=true -hints-allow-reordering=false \
+; RUN: opt < %s -loop-vectorize -debug -disable-output -force-ordered-reductions=true -hints-allow-reordering=false \
 ; RUN:   -scalable-vectorization=on -force-vector-width=8 -force-vector-interleave=1 -S 2>&1 | FileCheck %s --check-prefix=CHECK-VF8
 
 target triple="aarch64-unknown-linux-gnu"
@@ -49,7 +49,7 @@ for.end:
   ret double %add
 }
 
-attributes #0 = { "target-features"="+sve" }
+attributes #0 = { "target-features"="+sve" vscale_range(0, 16) }
 
 !0 = distinct !{!0, !1}
 !1 = !{!"llvm.loop.vectorize.scalable.enable", i1 true}

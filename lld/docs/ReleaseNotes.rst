@@ -24,7 +24,8 @@ Non-comprehensive list of changes in this release
 ELF Improvements
 ----------------
 
-* ...
+* ``--export-dynamic-symbol-list`` has been added.
+  (`D107317 <https://reviews.llvm.org/D107317>`_)
 
 Breaking changes
 ----------------

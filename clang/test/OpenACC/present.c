@@ -37,10 +37,10 @@
 // RUN:   (present-opt=-fopenacc-present-omp=no-present                             present-mt=hold,alloc         not-if-present=    not-crash-if-present=             )
 // RUN: }
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     not-if-off-and-present=                  not-crash-if-off-and-present=                        not-if-off=    not-crash-if-off=             )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' not-if-off-and-present=                  not-crash-if-off-and-present=                        not-if-off=    not-crash-if-off=             )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
 // RUN: }
 // RUN: %data use-vars {
 // RUN:   (use-var-cflags=            )
@@ -178,7 +178,8 @@
 // RUN:                   -DCASES_HEADER='"%t-cases.h"' \
 // RUN:                   -Wno-openacc-omp-map-hold
 // RUN:         %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:         %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
+// RUN:         %[run-if] grep "^// nvptx64-" %s >> %t-omp.c
+// RUN:         %[run-if] %clang -fopenmp %fopenmp-version \
 // RUN:                   %[tgt-cflags] %[use-var-cflags] -o %t.exe %t-omp.c \
 // RUN:                   -DCASES_HEADER='"%t-cases.h"' -gline-tables-only
 // RUN:         %for cases {
@@ -203,7 +204,7 @@
 // RUN: %for present-opts {
 // RUN:   %for tgts {
 // RUN:     %for use-vars {
-// RUN:       %[run-if] %clang -Xclang -verify -fopenacc %[present-opt] \
+// RUN:       %[run-if] %clang -fopenacc %[present-opt] \
 // RUN:                 %[tgt-cflags] %[use-var-cflags] -o %t.exe %s \
 // RUN:                 -DCASES_HEADER='"%t-cases.h"'
 // RUN:       %for cases {
@@ -224,6 +225,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <stdio.h>
 #include <string.h>
@@ -253,9 +259,9 @@ FOREACH_CASE(AddCase)
 //                     EXE-ERR-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
 //         EXE-ERR-notARRAYEXT-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
 //          EXE-ERR-notPRESENT-NEXT: Libomptarget message: device mapping required by 'present' map type modifier does not exist for host address 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes)
-//                                   # FIXME: Names like getOrAllocTgtPtr are meaningless to users.
-//          EXE-ERR-notPRESENT-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer ('present' map type modifier).
-// EXE-ERR-PRESENT-notARRAYEXT-NEXT: Libomptarget error: Call to getOrAllocTgtPtr returned null pointer (device failure or illegal mapping)
+//                                   # FIXME: Names like getTargetPointer are meaningless to users.
+//          EXE-ERR-notPRESENT-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer ('present' map type modifier).
+// EXE-ERR-PRESENT-notARRAYEXT-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping)
 //    EXE-ERR-notPASS-parallel-NEXT: Libomptarget error: Call to targetDataBegin failed, abort target.
 //    EXE-ERR-notPASS-parallel-NEXT: Libomptarget error: Failed to process data before launching the kernel.
 //             EXE-ERR-notPASS-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.

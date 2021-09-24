@@ -25,9 +25,11 @@ VERSION {
         #
         # OMPT API
         #
-        ompt_start_tool;     # OMPT start interface
-        ompt_get_enabled;
-        ompt_get_callbacks;
+        ompt_start_tool;           # OMPT start interface
+        libomp_start_tool;         # OMPT start interface for libomptarget
+        libomp_ompt_*;             # OMPT callback functions
+        # FIXME: Clacc additions.  Migrate to upstream's approach where
+        # possible.
         ompt_get_unique_id;
         ompt_record_device_init;
         ompt_set_target_info;

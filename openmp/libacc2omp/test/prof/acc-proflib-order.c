@@ -25,13 +25,13 @@
 //        Whether the target is host or device affects at least when
 //        ompt_start_tool and thus acc_register_library executes, so it seems
 //        worthwhile to make sure ACC_PROFLIB works in all cases.
-// RUN:   (run-if=                tgt-cflags=                                     fc=HOST)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  fc=OFF )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple fc=OFF )
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple fc=OFF )
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' fc=HOST)
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' fc=OFF )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' fc=OFF )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' fc=OFF )
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes \
+// RUN:   %[run-if] %clang -fopenacc %acc-includes \
 // RUN:                    -DPROG=PROG_APP %s -o %t %[tgt-cflags]
 // RUN:   %[run-if] env ACC_PROFLIB='%t.proflib1;%t.proflib2' %t > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s \
@@ -41,6 +41,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <acc_prof.h>
 #include <stdio.h>

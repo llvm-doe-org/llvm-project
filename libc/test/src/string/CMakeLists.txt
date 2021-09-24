@@ -43,6 +43,16 @@ add_libc_unittest(
 )
 
 add_libc_unittest(
+  strncmp_test
+  SUITE
+    libc_string_unittests
+  SRCS
+    strncmp_test.cpp
+  DEPENDS
+    libc.src.string.strncmp
+)
+
+add_libc_unittest(
   memchr_test
   SUITE
     libc_string_unittests
@@ -189,4 +199,5 @@ add_libc_multi_impl_test(memcpy SRCS memcpy_test.cpp)
 add_libc_multi_impl_test(memset SRCS memset_test.cpp)
 add_libc_multi_impl_test(bzero SRCS bzero_test.cpp)
 add_libc_multi_impl_test(memcmp SRCS memcmp_test.cpp)
+add_libc_multi_impl_test(bcmp SRCS bcmp_test.cpp)
 add_libc_multi_impl_test(memmove SRCS memmove_test.cpp)

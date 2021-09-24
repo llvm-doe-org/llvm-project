@@ -961,6 +961,20 @@ Instruction *InstCombinerImpl::visitTrunc(TruncInst &Trunc) {
       return BinaryOperator::CreateAdd(NarrowCtlz, WidthDiff);
     }
   }
+
+  if (match(Src, m_VScale(DL))) {
+    if (Trunc.getFunction()->hasFnAttribute(Attribute::VScaleRange)) {
+      unsigned MaxVScale = Trunc.getFunction()
+                               ->getFnAttribute(Attribute::VScaleRange)
+                               .getVScaleRangeArgs()
+                               .second;
+      if (MaxVScale > 0 && Log2_32(MaxVScale) < DestWidth) {
+        Value *VScale = Builder.CreateVScale(ConstantInt::get(DestTy, 1));
+        return replaceInstUsesWith(Trunc, VScale);
+      }
+    }
+  }
+
   return nullptr;
 }
 
@@ -1361,6 +1375,20 @@ Instruction *InstCombinerImpl::visitZExt(ZExtInst &CI) {
     return BinaryOperator::CreateXor(Builder.CreateAnd(X, ZC), ZC);
   }
 
+  if (match(Src, m_VScale(DL))) {
+    if (CI.getFunction()->hasFnAttribute(Attribute::VScaleRange)) {
+      unsigned MaxVScale = CI.getFunction()
+                               ->getFnAttribute(Attribute::VScaleRange)
+                               .getVScaleRangeArgs()
+                               .second;
+      unsigned TypeWidth = Src->getType()->getScalarSizeInBits();
+      if (MaxVScale > 0 && Log2_32(MaxVScale) < TypeWidth) {
+        Value *VScale = Builder.CreateVScale(ConstantInt::get(DestTy, 1));
+        return replaceInstUsesWith(CI, VScale);
+      }
+    }
+  }
+
   return nullptr;
 }
 
@@ -1603,6 +1631,19 @@ Instruction *InstCombinerImpl::visitSExt(SExtInst &CI) {
         Constant::mergeUndefsWith(Constant::mergeUndefsWith(NewShAmt, BA), CA);
     A = Builder.CreateShl(A, NewShAmt, CI.getName());
     return BinaryOperator::CreateAShr(A, NewShAmt);
+  }
+
+  if (match(Src, m_VScale(DL))) {
+    if (CI.getFunction()->hasFnAttribute(Attribute::VScaleRange)) {
+      unsigned MaxVScale = CI.getFunction()
+                               ->getFnAttribute(Attribute::VScaleRange)
+                               .getVScaleRangeArgs()
+                               .second;
+      if (MaxVScale > 0 && Log2_32(MaxVScale) < (SrcBitSize - 1)) {
+        Value *VScale = Builder.CreateVScale(ConstantInt::get(DestTy, 1));
+        return replaceInstUsesWith(CI, VScale);
+      }
+    }
   }
 
   return nullptr;

@@ -16,11 +16,9 @@
 #include <list>
 #include <memory>
 #include <mutex>
-#include <string.h>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <string.h>
 
 #include "Debug.h"
 #include "omptargetplugin.h"
@@ -124,6 +122,62 @@ int memcpyDtoD(const void *SrcPtr, void *DstPtr, int64_t Size,
     DP("Error when copying data from device to device. Pointers: src "
        "= " DPxMOD ", dst = " DPxMOD ", size = %" PRId64 "\n",
        DPxPTR(SrcPtr), DPxPTR(DstPtr), Size);
+    CUDA_ERR_STRING(Err);
+    return OFFLOAD_FAIL;
+  }
+
+  return OFFLOAD_SUCCESS;
+}
+
+int createEvent(void **P) {
+  CUevent Event = nullptr;
+
+  CUresult Err = cuEventCreate(&Event, CU_EVENT_DEFAULT);
+  if (Err != CUDA_SUCCESS) {
+    DP("Error when creating event event = " DPxMOD "\n", DPxPTR(Event));
+    CUDA_ERR_STRING(Err);
+    return OFFLOAD_FAIL;
+  }
+
+  *P = Event;
+
+  return OFFLOAD_SUCCESS;
+}
+
+int recordEvent(void *EventPtr, __tgt_async_info *AsyncInfo) {
+  CUstream Stream = reinterpret_cast<CUstream>(AsyncInfo->Queue);
+  CUevent Event = reinterpret_cast<CUevent>(EventPtr);
+
+  CUresult Err = cuEventRecord(Event, Stream);
+  if (Err != CUDA_SUCCESS) {
+    DP("Error when recording event. stream = " DPxMOD ", event = " DPxMOD "\n",
+       DPxPTR(Stream), DPxPTR(Event));
+    CUDA_ERR_STRING(Err);
+    return OFFLOAD_FAIL;
+  }
+
+  return OFFLOAD_SUCCESS;
+}
+
+int syncEvent(void *EventPtr) {
+  CUevent Event = reinterpret_cast<CUevent>(EventPtr);
+
+  CUresult Err = cuEventSynchronize(Event);
+  if (Err != CUDA_SUCCESS) {
+    DP("Error when syncing event = " DPxMOD "\n", DPxPTR(Event));
+    CUDA_ERR_STRING(Err);
+    return OFFLOAD_FAIL;
+  }
+
+  return OFFLOAD_SUCCESS;
+}
+
+int destroyEvent(void *EventPtr) {
+  CUevent Event = reinterpret_cast<CUevent>(EventPtr);
+
+  CUresult Err = cuEventDestroy(Event);
+  if (Err != CUDA_SUCCESS) {
+    DP("Error when destroying event = " DPxMOD "\n", DPxPTR(Event));
     CUDA_ERR_STRING(Err);
     return OFFLOAD_FAIL;
   }
@@ -831,10 +885,9 @@ public:
           return nullptr;
         }
       } else {
-        REPORT("Loading global exec_mode '%s' - symbol missing, using default "
-               "value GENERIC (1)\n",
-               ExecModeName);
-        CUDA_ERR_STRING(Err);
+        DP("Loading global exec_mode '%s' - symbol missing, using default "
+           "value GENERIC (1)\n",
+           ExecModeName);
       }
 
       KernelsList.emplace_back(Func, ExecModeVal);
@@ -939,8 +992,8 @@ public:
     // FIXME: We don't yet need the target_task_data, target_data, host_op_id,
     // and codeptr_ra arguments for OpenACC support, so we haven't bothered to
     // implement them yet.
-    if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op_emi) {
-      ompt_api->ompt_get_callbacks().ompt_callback(
+    if (ompt_api->ompt_target_enabled->ompt_callback_target_data_op_emi) {
+      ompt_api->ompt_target_callbacks->ompt_callback(
           ompt_callback_target_data_op_emi)(
           ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
           /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, HstPtr,
@@ -950,8 +1003,8 @@ public:
 #endif
     Err = cuMemcpyHtoDAsync((CUdeviceptr)TgtPtr, HstPtr, Size, Stream);
 #if OMPT_SUPPORT
-    if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op_emi) {
-      ompt_api->ompt_get_callbacks().ompt_callback(
+    if (ompt_api->ompt_target_enabled->ompt_callback_target_data_op_emi) {
+      ompt_api->ompt_target_callbacks->ompt_callback(
           ompt_callback_target_data_op_emi)(
           ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
           /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, HstPtr,
@@ -1002,8 +1055,8 @@ public:
     // FIXME: We don't yet need the target_task_data, target_data, host_op_id,
     // and codeptr_ra arguments for OpenACC support, so we haven't bothered to
     // implement them yet.
-    if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op_emi) {
-      ompt_api->ompt_get_callbacks().ompt_callback(
+    if (ompt_api->ompt_target_enabled->ompt_callback_target_data_op_emi) {
+      ompt_api->ompt_target_callbacks->ompt_callback(
           ompt_callback_target_data_op_emi)(
           ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
           /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, TgtPtr,
@@ -1013,8 +1066,8 @@ public:
 #endif
     Err = cuMemcpyDtoHAsync(HstPtr, (CUdeviceptr)TgtPtr, Size, Stream);
 #if OMPT_SUPPORT
-    if (ompt_api->ompt_get_enabled().ompt_callback_target_data_op_emi) {
-      ompt_api->ompt_get_callbacks().ompt_callback(
+    if (ompt_api->ompt_target_enabled->ompt_callback_target_data_op_emi) {
+      ompt_api->ompt_target_callbacks->ompt_callback(
           ompt_callback_target_data_op_emi)(
           ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
           /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, TgtPtr,
@@ -1216,8 +1269,8 @@ public:
     //
     // FIXME: We don't yet need the target_data or host_op_id argument for
     // OpenACC support, so we haven't bothered to implement it yet.
-    if (ompt_api->ompt_get_enabled().ompt_callback_target_submit_emi) {
-      ompt_api->ompt_get_callbacks().ompt_callback(
+    if (ompt_api->ompt_target_enabled->ompt_callback_target_submit_emi) {
+      ompt_api->ompt_target_callbacks->ompt_callback(
           ompt_callback_target_submit_emi)(
           ompt_scope_begin, /*target_data=*/NULL, /*host_op_id=*/NULL,
           /*requested_num_teams=*/TeamNum);
@@ -1245,8 +1298,9 @@ public:
       return OFFLOAD_FAIL;
 
 #if OMPT_SUPPORT
-    if (ompt_api->ompt_get_enabled().ompt_callback_target_submit_emi) {
-      ompt_get_callbacks().ompt_callback(ompt_callback_target_submit_emi)(
+    if (ompt_api->ompt_target_enabled->ompt_callback_target_submit_emi) {
+      ompt_api->ompt_target_callbacks->ompt_callback(
+          ompt_callback_target_submit_emi)(
           ompt_scope_end, /*target_data=*/NULL, /*host_op_id=*/NULL,
           /*requested_num_teams=*/TeamNum);
     }
@@ -1314,9 +1368,10 @@ public:
             &TmpInt, CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK, Device),
         "Error returned from cuDeviceGetAttribute\n");
     printf("    Max Shared Memory per Block: \t%d bytes \n", TmpInt);
-    checkResult(cuDeviceGetAttribute(
-                    &TmpInt, CU_DEVICE_ATTRIBUTE_MAX_REGISTERS_PER_BLOCK, Device),
-                "Error returned from cuDeviceGetAttribute\n");
+    checkResult(
+        cuDeviceGetAttribute(
+            &TmpInt, CU_DEVICE_ATTRIBUTE_MAX_REGISTERS_PER_BLOCK, Device),
+        "Error returned from cuDeviceGetAttribute\n");
     printf("    Registers per Block: \t\t%d \n", TmpInt);
     checkResult(
         cuDeviceGetAttribute(&TmpInt, CU_DEVICE_ATTRIBUTE_WARP_SIZE, Device),
@@ -1326,28 +1381,28 @@ public:
                     &TmpInt, CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK, Device),
                 "Error returned from cuDeviceGetAttribute\n");
     printf("    Maximum Threads per Block: \t\t%d \n", TmpInt);
-    checkResult(cuDeviceGetAttribute(&TmpInt, CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X,
-                                    Device),
+    checkResult(cuDeviceGetAttribute(
+                    &TmpInt, CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X, Device),
                 "Error returned from cuDeviceGetAttribute\n");
-    checkResult(cuDeviceGetAttribute(&TmpInt2,
-                                    CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y, Device),
+    checkResult(cuDeviceGetAttribute(
+                    &TmpInt2, CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y, Device),
                 "Error returned from cuDeviceGetAttribute\n");
-    checkResult(cuDeviceGetAttribute(&TmpInt3,
-                                    CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z, Device),
+    checkResult(cuDeviceGetAttribute(
+                    &TmpInt3, CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z, Device),
                 "Error returned from cuDeviceGetAttribute\n");
     printf("    Maximum Block Dimensions: \t\t%d, %d, %d \n", TmpInt, TmpInt2,
-          TmpInt3);
-    checkResult(
-        cuDeviceGetAttribute(&TmpInt, CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_X, Device),
-        "Error returned from cuDeviceGetAttribute\n");
-    checkResult(cuDeviceGetAttribute(&TmpInt2, CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Y,
-                                    Device),
+           TmpInt3);
+    checkResult(cuDeviceGetAttribute(
+                    &TmpInt, CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_X, Device),
                 "Error returned from cuDeviceGetAttribute\n");
-    checkResult(cuDeviceGetAttribute(&TmpInt3, CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Z,
-                                    Device),
+    checkResult(cuDeviceGetAttribute(
+                    &TmpInt2, CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Y, Device),
+                "Error returned from cuDeviceGetAttribute\n");
+    checkResult(cuDeviceGetAttribute(
+                    &TmpInt3, CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Z, Device),
                 "Error returned from cuDeviceGetAttribute\n");
     printf("    Maximum Grid Dimensions: \t\t%d x %d x %d \n", TmpInt, TmpInt2,
-          TmpInt3);
+           TmpInt3);
     checkResult(
         cuDeviceGetAttribute(&TmpInt, CU_DEVICE_ATTRIBUTE_MAX_PITCH, Device),
         "Error returned from cuDeviceGetAttribute\n");
@@ -1396,18 +1451,19 @@ public:
                     &TmpInt, CU_DEVICE_ATTRIBUTE_MEMORY_CLOCK_RATE, Device),
                 "Error returned from cuDeviceGetAttribute\n");
     printf("    Memory Clock Rate: \t\t\t%d kHz\n", TmpInt);
-    checkResult(cuDeviceGetAttribute(
-                    &TmpInt, CU_DEVICE_ATTRIBUTE_GLOBAL_MEMORY_BUS_WIDTH, Device),
-                "Error returned from cuDeviceGetAttribute\n");
-    printf("    Memory Bus Width: \t\t\t%d bits\n", TmpInt);
-    checkResult(
-        cuDeviceGetAttribute(&TmpInt, CU_DEVICE_ATTRIBUTE_L2_CACHE_SIZE, Device),
-        "Error returned from cuDeviceGetAttribute\n");
-    printf("    L2 Cache Size: \t\t\t%d bytes \n", TmpInt);
     checkResult(
         cuDeviceGetAttribute(
-            &TmpInt, CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR, Device),
+            &TmpInt, CU_DEVICE_ATTRIBUTE_GLOBAL_MEMORY_BUS_WIDTH, Device),
         "Error returned from cuDeviceGetAttribute\n");
+    printf("    Memory Bus Width: \t\t\t%d bits\n", TmpInt);
+    checkResult(cuDeviceGetAttribute(&TmpInt, CU_DEVICE_ATTRIBUTE_L2_CACHE_SIZE,
+                                     Device),
+                "Error returned from cuDeviceGetAttribute\n");
+    printf("    L2 Cache Size: \t\t\t%d bytes \n", TmpInt);
+    checkResult(cuDeviceGetAttribute(
+                    &TmpInt, CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR,
+                    Device),
+                "Error returned from cuDeviceGetAttribute\n");
     printf("    Max Threads Per SMP: \t\t%d \n", TmpInt);
     checkResult(cuDeviceGetAttribute(
                     &TmpInt, CU_DEVICE_ATTRIBUTE_ASYNC_ENGINE_COUNT, Device),
@@ -1417,9 +1473,9 @@ public:
                     &TmpInt, CU_DEVICE_ATTRIBUTE_UNIFIED_ADDRESSING, Device),
                 "Error returned from cuDeviceGetAttribute\n");
     printf("    Unified Addressing: \t\t%s \n", BOOL2TEXT(TmpInt));
-    checkResult(
-        cuDeviceGetAttribute(&TmpInt, CU_DEVICE_ATTRIBUTE_MANAGED_MEMORY, Device),
-        "Error returned from cuDeviceGetAttribute\n");
+    checkResult(cuDeviceGetAttribute(
+                    &TmpInt, CU_DEVICE_ATTRIBUTE_MANAGED_MEMORY, Device),
+                "Error returned from cuDeviceGetAttribute\n");
     printf("    Managed Memory: \t\t\t%s \n", BOOL2TEXT(TmpInt));
     checkResult(
         cuDeviceGetAttribute(
@@ -1435,19 +1491,38 @@ public:
                     &TmpInt, CU_DEVICE_ATTRIBUTE_COOPERATIVE_LAUNCH, Device),
                 "Error returned from cuDeviceGetAttribute\n");
     printf("    Cooperative Launch: \t\t%s \n", BOOL2TEXT(TmpInt));
-    checkResult(cuDeviceGetAttribute(&TmpInt, CU_DEVICE_ATTRIBUTE_MULTI_GPU_BOARD,
-                                    Device),
+    checkResult(cuDeviceGetAttribute(
+                    &TmpInt, CU_DEVICE_ATTRIBUTE_MULTI_GPU_BOARD, Device),
                 "Error returned from cuDeviceGetAttribute\n");
     printf("    Multi-Device Boars: \t\t%s \n", BOOL2TEXT(TmpInt));
-    checkResult(cuDeviceGetAttribute(&TmpInt,
-                                    CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
-                                    Device),
-                "Error returned from cuDeviceGetAttribute\n");
-    checkResult(cuDeviceGetAttribute(&TmpInt2,
-                                    CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
-                                    Device),
-                "Error returned from cuDeviceGetAttribute\n");
+    checkResult(
+        cuDeviceGetAttribute(
+            &TmpInt, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, Device),
+        "Error returned from cuDeviceGetAttribute\n");
+    checkResult(
+        cuDeviceGetAttribute(
+            &TmpInt2, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, Device),
+        "Error returned from cuDeviceGetAttribute\n");
     printf("    Compute Capabilities: \t\t%d%d \n", TmpInt, TmpInt2);
+  }
+
+  int waitEvent(const int DeviceId, __tgt_async_info *AsyncInfo,
+                void *EventPtr) const {
+    CUstream Stream = getStream(DeviceId, AsyncInfo);
+    CUevent Event = reinterpret_cast<CUevent>(EventPtr);
+
+    // We don't use CU_EVENT_WAIT_DEFAULT here as it is only available from
+    // specific CUDA version, and defined as 0x0. In previous version, per CUDA
+    // API document, that argument has to be 0x0.
+    CUresult Err = cuStreamWaitEvent(Stream, Event, 0);
+    if (Err != CUDA_SUCCESS) {
+      DP("Error when waiting event. stream = " DPxMOD ", event = " DPxMOD "\n",
+         DPxPTR(Stream), DPxPTR(Event));
+      CUDA_ERR_STRING(Err);
+      return OFFLOAD_FAIL;
+    }
+
+    return OFFLOAD_SUCCESS;
   }
 };
 
@@ -1662,6 +1737,41 @@ void __tgt_rtl_set_info_flag(uint32_t NewInfoLevel) {
 void __tgt_rtl_print_device_info(int32_t device_id) {
   assert(DeviceRTL.isValidDeviceId(device_id) && "device_id is invalid");
   DeviceRTL.printDeviceInfo(device_id);
+}
+
+int32_t __tgt_rtl_create_event(int32_t device_id, void **event) {
+  assert(event && "event is nullptr");
+  return createEvent(event);
+}
+
+int32_t __tgt_rtl_record_event(int32_t device_id, void *event_ptr,
+                               __tgt_async_info *async_info_ptr) {
+  assert(async_info_ptr && "async_info_ptr is nullptr");
+  assert(async_info_ptr->Queue && "async_info_ptr->Queue is nullptr");
+  assert(event_ptr && "event_ptr is nullptr");
+
+  return recordEvent(event_ptr, async_info_ptr);
+}
+
+int32_t __tgt_rtl_wait_event(int32_t device_id, void *event_ptr,
+                             __tgt_async_info *async_info_ptr) {
+  assert(DeviceRTL.isValidDeviceId(device_id) && "device_id is invalid");
+  assert(async_info_ptr && "async_info_ptr is nullptr");
+  assert(event_ptr && "event is nullptr");
+
+  return DeviceRTL.waitEvent(device_id, async_info_ptr, event_ptr);
+}
+
+int32_t __tgt_rtl_sync_event(int32_t device_id, void *event_ptr) {
+  assert(event_ptr && "event is nullptr");
+
+  return syncEvent(event_ptr);
+}
+
+int32_t __tgt_rtl_destroy_event(int32_t device_id, void *event_ptr) {
+  assert(event_ptr && "event is nullptr");
+
+  return destroyEvent(event_ptr);
 }
 
 #ifdef __cplusplus

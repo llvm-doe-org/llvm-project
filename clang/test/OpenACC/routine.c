@@ -1,21 +1,20 @@
 // Check "acc routine".
 
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     host-or-dev=HOST)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-dev=DEV )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host-or-dev=DEV )
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-dev=DEV )
+// RUN:   (run-if=                tgt-cflags=                                     host-or-dev=HOST verify=expected)
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-dev=DEV  verify=expected)
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host-or-dev=DEV  verify=expected)
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-dev=DEV  verify=nvptx64 )
 // RUN: }
 
 // Check -ast-dump before and after AST serialization.
 //
-// RUN: %clang -Xclang -verify=expected,acc -Xclang -ast-dump -fsyntax-only \
+// RUN: %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only \
 // RUN:        %acc-includes -fopenacc %s \
 // RUN: | FileCheck -check-prefixes=DMP %s \
 // RUN:             -implicit-check-not=ACCRoutineDeclAttr \
 // RUN:             -implicit-check-not=OMPDeclareTargetDeclAttr
-// RUN: %clang -Xclang -verify=expected,acc -fopenacc -emit-ast %acc-includes \
-// RUN:        -o %t.ast %s
+// RUN: %clang -Xclang -verify -fopenacc -emit-ast %acc-includes -o %t.ast %s
 // RUN: %clang_cc1 -ast-dump-all %t.ast \
 // RUN: | FileCheck -check-prefixes=DMP %s \
 // RUN:             -implicit-check-not=ACCRoutineDeclAttr \
@@ -39,7 +38,7 @@
 // RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT,PRT-O,PRT-OA,PRT-SRC,PRT-SRC-O,PRT-SRC-OA)
 // RUN: }
 // RUN: %for prt-args {
-// RUN:   %clang -Xclang -verify=expected,acc %[prt] %acc-includes %t-acc.c \
+// RUN:   %clang -Xclang -verify %[prt] %acc-includes %t-acc.c \
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
@@ -49,8 +48,8 @@
 // directives) is serialized and deserialized, so it's worthwhile to try all
 // OpenACC printing modes.
 //
-// RUN: %clang -Xclang -verify=expected,acc -fopenacc -emit-ast %acc-includes \
-// RUN:        %t-acc.c -o %t.ast
+// RUN: %clang -Xclang -verify -fopenacc -emit-ast %acc-includes %t-acc.c \
+// RUN:        -o %t.ast
 // RUN: %for prt-args {
 // RUN:   %clang %[prt] %t.ast 2>&1 \
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
@@ -59,15 +58,15 @@
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify=expected,acc -fopenacc-print=omp \
-// RUN:                    %acc-includes %s > %t-omp.c
-// RUN:   %[run-if] echo "// none""-no-diagnostics" >> %t-omp.c
+// RUN:   %[run-if] %clang -Xclang -verify -fopenacc-print=omp %acc-includes \
+// RUN:                    %s > %t-omp.c
+// RUN:   %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:   %[run-if] %clang -fopenacc-print=omp %acc-includes -DCOMPILE_OTHER \
 // RUN:                    %s > %t-other-omp.c
 // RUN:   %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] \
 // RUN:                    -DCOMPILE_OTHER %acc-includes -c -o %t-other.o \
 // RUN:                    %t-other-omp.c
-// RUN:   %[run-if] %clang -Xclang -verify=none -fopenmp %fopenmp-version \
+// RUN:   %[run-if] %clang -Xclang -verify=%[verify] -fopenmp %fopenmp-version \
 // RUN:                    %[tgt-cflags] %acc-includes -o %t.exe %t-omp.c \
 // RUN:                    %t-other.o
 // RUN:   %[run-if] %t.exe > %t.out 2>&1
@@ -80,8 +79,8 @@
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -fopenacc %[tgt-cflags] %acc-includes -c \
 // RUN:                    -o %t-other.o -DCOMPILE_OTHER %s
-// RUN:   %[run-if] %clang -Xclang -verify=expected,acc -fopenacc \
-// RUN:                    %[tgt-cflags] %acc-includes -o %t.exe %s %t-other.o
+// RUN:   %[run-if] %clang -Xclang -verify=%[verify] -fopenacc %[tgt-cflags] \
+// RUN:                    %acc-includes -o %t.exe %s %t-other.o
 // RUN:   %[run-if] %t.exe > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s \
 // RUN:     -strict-whitespace -check-prefixes=EXE,EXE-%[host-or-dev]
@@ -90,6 +89,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <openacc.h>
 #include <stdio.h>

@@ -1,13 +1,13 @@
 ; REQUIRES: asserts
-; RUN: opt < %s -loop-vectorize -debug -disable-output -enable-strict-reductions=true -hints-allow-reordering=false \
+; RUN: opt < %s -loop-vectorize -debug -disable-output -force-ordered-reductions=true -hints-allow-reordering=false \
 ; RUN:   -force-vector-width=4 -force-vector-interleave=1 -S 2>&1 | FileCheck %s --check-prefix=CHECK-VF4
-; RUN: opt < %s -loop-vectorize -debug -disable-output -enable-strict-reductions=true -hints-allow-reordering=false \
+; RUN: opt < %s -loop-vectorize -debug -disable-output -force-ordered-reductions=true -hints-allow-reordering=false \
 ; RUN:   -force-vector-width=8 -force-vector-interleave=1 -S 2>&1 | FileCheck %s --check-prefix=CHECK-VF8
 
 target triple="aarch64-unknown-linux-gnu"
 
-; CHECK-VF4: Found an estimated cost of 17 for VF 4 For instruction:   %add = fadd float %0, %sum.07
-; CHECK-VF8: Found an estimated cost of 34 for VF 8 For instruction:   %add = fadd float %0, %sum.07
+; CHECK-VF4: Found an estimated cost of 21 for VF 4 For instruction:   %add = fadd float %0, %sum.07
+; CHECK-VF8: Found an estimated cost of 42 for VF 8 For instruction:   %add = fadd float %0, %sum.07
 
 define float @fadd_strict32(float* noalias nocapture readonly %a, i64 %n) {
 entry:
@@ -28,8 +28,8 @@ for.end:
 }
 
 
-; CHECK-VF4: Found an estimated cost of 14 for VF 4 For instruction:   %add = fadd double %0, %sum.07
-; CHECK-VF8: Found an estimated cost of 28 for VF 8 For instruction:   %add = fadd double %0, %sum.07
+; CHECK-VF4: Found an estimated cost of 18 for VF 4 For instruction:   %add = fadd double %0, %sum.07
+; CHECK-VF8: Found an estimated cost of 36 for VF 8 For instruction:   %add = fadd double %0, %sum.07
 
 define double @fadd_strict64(double* noalias nocapture readonly %a, i64 %n) {
 entry:

@@ -47,25 +47,25 @@
 // RUN:    tgt-acc-device=acc_device_host
 // RUN:    tgt-host-or-off=HOST
 // RUN:    tgt-cppflags=
-// RUN:    tgt-cflags=
+// RUN:    tgt-cflags='-Xclang -verify'
 // RUN:    tgt-fc=HOST,HOST-%[dir-fc1],HOST-%[dir-fc2],HOST-%[dir-fc3])
 // RUN:   (run-if=%run-if-x86_64
 // RUN:    tgt-acc-device=acc_device_x86_64
 // RUN:    tgt-host-or-off=OFF
 // RUN:    tgt-cppflags=
-// RUN:    tgt-cflags=-fopenmp-targets=%run-x86_64-triple
+// RUN:    tgt-cflags='-fopenmp-targets=%run-x86_64-triple -Xclang -verify'
 // RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],OFF-%[dir-fc3],X86_64,X86_64-%[dir-fc1],X86_64-%[dir-fc2],X86_64-%[dir-fc3])
 // RUN:   (run-if=%run-if-ppc64le
 // RUN:    tgt-acc-device=acc_device_ppc64le
 // RUN:    tgt-host-or-off=OFF
 // RUN:    tgt-cppflags=
-// RUN:    tgt-cflags=-fopenmp-targets=%run-ppc64le-triple
+// RUN:    tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'
 // RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],OFF-%[dir-fc3],PPC64LE,PPC64LE-%[dir-fc1],PPC64LE-%[dir-fc2],PPC64LE-%[dir-fc3])
 // RUN:   (run-if=%run-if-nvptx64
 // RUN:    tgt-acc-device=acc_device_nvidia
 // RUN:    tgt-host-or-off=OFF
 // RUN:    tgt-cppflags=-DNVPTX64
-// RUN:    tgt-cflags=-fopenmp-targets=%run-nvptx64-triple
+// RUN:    tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64'
 // RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],OFF-%[dir-fc3],NVPTX64,NVPTX64-%[dir-fc1],NVPTX64-%[dir-fc2],NVPTX64-%[dir-fc3])
 // RUN: }
 //      # Check offloading compilation both with and without offloading at run
@@ -94,7 +94,7 @@
 // RUN:                      -Wno-openacc-omp-map-hold
 // RUN:     %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 //          # With debug info.
-// RUN:     %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
+// RUN:     %[run-if] %clang -fopenmp %fopenmp-version \
 // RUN:         %acc-includes %t-omp.c %acc-libs %[tgt-cppflags] \
 // RUN:         %[tgt-cflags] %[dir-cflags] -I%S -gline-tables-only -o %t
 // RUN:     %for run-envs {
@@ -128,7 +128,7 @@
 // RUN:           -DARR0_VAR_NAME=arr0 -DARR1_VAR_NAME='arr1[0:5]'
 // RUN:     }
 //          # Without debug info.
-// RUN:     %[run-if] %clang -Xclang -verify -fopenmp %fopenmp-version \
+// RUN:     %[run-if] %clang -fopenmp %fopenmp-version \
 // RUN:         %acc-includes %t-omp.c %acc-libs %[tgt-cppflags] \
 // RUN:         %[tgt-cflags] %[dir-cflags] -I%S -o %t
 // RUN:     %for run-envs {
@@ -166,7 +166,7 @@
 // RUN: }
 // RUN: %for dirs {
 // RUN:   %for tgts {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s \
+// RUN:     %[run-if] %clang -fopenacc %acc-includes %s \
 // RUN:         %[tgt-cflags] %[tgt-cppflags] %[dir-cflags] -o %t
 // RUN:     %for run-envs {
 // RUN:       %[run-if] %[run-env] %t > %t.out 2> %t.err
@@ -204,6 +204,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include "callbacks.h"
 #include <stdbool.h>

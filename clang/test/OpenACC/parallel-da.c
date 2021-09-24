@@ -224,14 +224,14 @@
 // Check execution with normal compilation.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST    tgt-cflags=                                     host-or-tgt=host)
-// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-tgt=tgt )
-// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-tgt=tgt )
+// RUN:   (run-if=                tgt=HOST    tgt-cflags='                                     -Xclang -verify' host-or-tgt=host)
+// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host-or-tgt=tgt )
+// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-tgt=tgt )
 // RUN: }
 // RUN: %for directives {
 // RUN:   %for exes {
 // RUN:     %for tgts {
-// RUN:       %[run-if] %clang -Xclang -verify -fopenacc %s -o %t \
+// RUN:       %[run-if] %clang -fopenacc %s -o %t \
 // RUN:                        -DMODE=%[mode] -DTGT_%[tgt]_EXE \
 // RUN:                        %[cflags] %[tgt-cflags] %[dir-cflags]
 // RUN:       %[run-if] %t > %t.out 2>&1
@@ -264,6 +264,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <stdio.h>
 #include <stdint.h>

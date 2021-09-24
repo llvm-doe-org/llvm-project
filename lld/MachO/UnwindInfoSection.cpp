@@ -115,7 +115,7 @@ private:
   std::vector<std::pair<compact_unwind_encoding_t, size_t>> commonEncodings;
   EncodingMap commonEncodingIndexes;
   // Indices of personality functions within the GOT.
-  std::vector<uint32_t> personalities;
+  std::vector<Ptr> personalities;
   SmallDenseMap<std::pair<InputSection *, uint64_t /* addend */>, Symbol *>
       personalityTable;
   std::vector<unwind_info_section_header_lsda_index_entry> lsdaEntries;
@@ -286,7 +286,7 @@ relocateCompactUnwind(ConcatOutputSection *compactUnwindSection,
 template <class Ptr>
 static void
 encodePersonalities(const std::vector<CompactUnwindEntry<Ptr> *> &cuPtrVector,
-                    std::vector<uint32_t> &personalities) {
+                    std::vector<Ptr> &personalities) {
   for (CompactUnwindEntry<Ptr> *cu : cuPtrVector) {
     if (cu->personality == 0)
       continue;
@@ -572,7 +572,7 @@ void UnwindInfoSectionImpl<Ptr>::writeTo(uint8_t *buf) const {
     *i32p++ = encoding.first;
 
   // Personalities
-  for (const uint32_t &personality : personalities)
+  for (Ptr personality : personalities)
     *i32p++ =
         in.got->addr + (personality - 1) * target->wordSize - in.header->addr;
 

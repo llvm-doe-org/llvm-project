@@ -2,9 +2,9 @@
 // specify the right OpenACC Runtime Library API routine.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=%run-if-x86_64  cflags=-fopenmp-targets=%run-x86_64-triple  tgt-acc-device=acc_device_x86_64 )
-// RUN:   (run-if=%run-if-ppc64le cflags=-fopenmp-targets=%run-ppc64le-triple tgt-acc-device=acc_device_ppc64le)
-// RUN:   (run-if=%run-if-nvptx64 cflags=-fopenmp-targets=%run-nvptx64-triple tgt-acc-device=acc_device_nvidia )
+// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' tgt-acc-device=acc_device_x86_64 )
+// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' tgt-acc-device=acc_device_ppc64le)
+// RUN:   (run-if=%run-if-nvptx64 cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-acc-device=acc_device_nvidia )
 // RUN: }
 // RUN: %data cases {
 // RUN:   (case=acc_malloc args='size'     )
@@ -17,7 +17,7 @@
 // RUN: }
 // RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %[cflags] \
+// RUN:   %[run-if] %clang -fopenacc %acc-includes %[cflags] \
 // RUN:                    -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
 // RUN:   %for cases {
 // RUN:     %[run-if] %t.exe %[case] > %t.out 2> %t.err
@@ -34,6 +34,11 @@
 // END.
 
 // expected-no-diagnostics
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include "../callbacks.h"
 #include <stdbool.h>
