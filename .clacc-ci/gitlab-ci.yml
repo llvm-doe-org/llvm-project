@@ -34,10 +34,16 @@ variables:
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
   LIT_NTHREADS_DIVISOR: 1
   XFAIL_COMMON:
-    "libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
-    libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
+    "
+    libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
     libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/memory_manager.cpp
-    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/parallel_offloading_map.cpp"
+    libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
+    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/parallel_offloading_map.cpp
+    libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+    libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
+    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
+    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/taskloop_offload_nowait.cpp
+    "
   XFAIL_NOT_COMMON:
     ""
 
@@ -96,7 +102,7 @@ stages:
     PATH_PREPEND:
       ""
     XFAIL:
-      offloading/bug49334.cpp
+      ""
 
 # Sometimes bugs cause only release builds to fail.  For example, debugging
 # macros might accidentally be used but not defined in release builds.
@@ -106,18 +112,20 @@ stages:
     BUILD_ID: release
     CMAKE_BUILD_TYPE: Release
     XFAIL:
-      Headers/wasm.c
-      CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
-      CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
-      CodeGen/AMDGPU/GlobalISel/irtranslator-call-sret.ll
-      CodeGen/AMDGPU/GlobalISel/irtranslator-call.ll
-      CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
-      CodeGen/AMDGPU/GlobalISel/irtranslator-sibling-call.ll
-      CodeGen/AMDGPU/GlobalISel/irtranslator-tail-call.ll
-      CodeGen/AMDGPU/call-constant.ll
-      CodeGen/AMDGPU/indirect-call.ll
-      CodeGen/AMDGPU/returnaddress.ll
-      offloading/bug49334.cpp
+      "
+      Clang :: Headers/wasm.c
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-sret.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-sibling-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-tail-call.ll
+      LLVM :: CodeGen/AMDGPU/call-constant.ll
+      LLVM :: CodeGen/AMDGPU/indirect-call.ll
+      LLVM :: CodeGen/AMDGPU/returnaddress.ll
+      "
 
 # Not setup or cleanup.
 .non-utility:
@@ -371,10 +379,10 @@ release (build):
     - echo $NINJA
     - $NINJA --version
     - echo "$XFAIL_COMMON" "$XFAIL" |
-      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' |
+      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//' |
       tee xfail.txt
     - echo "$XFAIL_NOT_COMMON" "$XFAIL_NOT" |
-      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' |
+      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//' |
       tee xfail-not.txt
     - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
            $NINJA -l `nproc` check-all
