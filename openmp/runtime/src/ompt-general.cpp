@@ -1079,9 +1079,7 @@ int __kmp_control_tool(uint64_t command, uint64_t modifier, void *arg) {
  * misc
  ****************************************************************************/
 
-// FIXME: We expose this one to libomptarget, so we drop the OMPT_API_ROUTINE,
-// which makes it static.  Should we?
-uint64_t ompt_get_unique_id(void) {
+OMPT_API_ROUTINE uint64_t ompt_get_unique_id(void) {
   return __ompt_get_unique_id_internal();
 }
 

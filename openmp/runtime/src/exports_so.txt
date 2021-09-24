@@ -30,7 +30,6 @@ VERSION {
         libomp_ompt_*;             # OMPT callback functions
         # FIXME: Clacc additions.  Migrate to upstream's approach where
         # possible.
-        ompt_get_unique_id;
         ompt_record_device_init;
         ompt_set_target_info;
         ompt_clear_target_info;
