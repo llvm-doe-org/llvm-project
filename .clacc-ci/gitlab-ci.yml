@@ -34,7 +34,7 @@ variables:
   BUILD_DIR: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-$BUILD_ID
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
-  LIT_NTHREADS_DIVISOR: 1
+  LIT_NPROC_DIVISOR: 1
 
 stages:
   - setup
@@ -70,7 +70,7 @@ stages:
       -DCLANG_ACC_TEST_EXE_NVPTX64=6
     LLVM_ENABLE_PROJECTS: "clang"
     LLVM_ENABLE_RUNTIMES: "openmp"
-    LIT_NTHREADS_DIVISOR: 4
+    LIT_NPROC_DIVISOR: 4
     LIT_XFAIL:
       "
       libomp :: affinity/kmp-hw-subset.c
@@ -103,7 +103,7 @@ stages:
       -DCLANG_ACC_TEST_EXE_NVPTX64=1
     LLVM_ENABLE_PROJECTS: "clang"
     LLVM_ENABLE_RUNTIMES: "openmp"
-    LIT_NTHREADS_DIVISOR: 1
+    LIT_NPROC_DIVISOR: 1
     LIT_XFAIL:
       "
       libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
@@ -138,7 +138,7 @@ stages:
 #   #   clang-14: error: amdgcn-link command failed with exit code 1 (use -v to see invocation)
     LLVM_ENABLE_PROJECTS: "clang;lld"
     LLVM_ENABLE_RUNTIMES: "openmp"
-    LIT_NTHREADS_DIVISOR: 1
+    LIT_NPROC_DIVISOR: 1
     LIT_XFAIL:
       "
       libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
@@ -249,6 +249,11 @@ stages:
     - pwd
     - echo $BUILD_DIR
     - cd $BUILD_DIR/build
+    # Sometimes a build process gets stuck for a long time, and sometimes a test
+    # process does (usually OpenMP tests).  One hour of CPU time should be
+    # plenty for any process.  The goal is simply not to let them stick around
+    # forever.
+    - ulimit -t 3600
   after_script:
     - echo "$LLVM_CCACHE_PARAMS"
     - env $LLVM_CCACHE_PARAMS ccache -sp
@@ -540,17 +545,6 @@ debug (build):
 # When there are fails, the test suite run can be very noisy too and
 # exceed the log output limit.  It's hard to grep for just the important
 # stuff, so just print it all but also dump to an artifact.
-#
-# At various points in LLVM's history, check-all has run multiple lit
-# invocations.  For example, at the time of this writing, specifying runtimes
-# like openmp in LLVM_ENABLE_RUNTIMES instead of in LLVM_ENABLE_PROJECTS causes
-# all such runtimes' test suites to run in a separate lit invocation from all
-# other projects' test suites.  As a result, if a runtime test fails, then the
-# other projects' test suites don't run.  The best solution is to fix check-all,
-# but that won't protect us from unknowingly missing test results the next time
-# this happens.  The following use of --ignore-fail followed by grep avoids that
-# problem.  The count printed by grep tells us how many test suite summaries we
-# need to search for.
 #-------------------------------------------------
 
 .test:
@@ -580,13 +574,25 @@ debug (build):
         grep -c "$EXPECTED_TESTS_REGEX"
             $CI_PROJECT_DIR/check-all-show-tests.txt;
       fi
+    # Run the test suite.
+    #
+    # LIT_NPROC_DIVISOR is set to limit the number of tests launched at once so
+    # we don't overwhelm the accelerators (leconte GPUs, in particular),
+    # producing OpenMP offload test failures.
+    #
+    # ulimit -t does not terminate processes that are hung and not using CPUs,
+    # but hopefully lit's --timeout will.  20 mins ought to be long enough for
+    # any regression test.
+    #
+    # In case check-all runs multiple lit invocations (e.g., a separate
+    # invocation for openmp because it's in LLVM_ENABLE_RUNTIMES), use lit's
+    # --ignore-fail so that all lit invocations actually run.  The count printed
+    # by grep tells us how many test suite summaries we need to search for.
     - NPROC=`nproc`
     - echo "$NPROC"
-    - echo "$LIT_NTHREADS_DIVISOR"
-    - ulimit -t `expr $NPROC / $LIT_NTHREADS_DIVISOR \* 3600`
-    - ulimit -t
+    - echo "$LIT_NPROC_DIVISOR"
     - time FILECHECK_OPTS='-dump-input-filter=all -vv -color'
-           LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml --xfail=\"`cat xfail.txt`\" --xfail-not=\"`cat xfail-not.txt`\" --ignore-fail -j `expr $NPROC / $LIT_NTHREADS_DIVISOR`"
+           LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml --xfail=\"`cat xfail.txt`\" --xfail-not=\"`cat xfail-not.txt`\" --ignore-fail -j `expr $NPROC / $LIT_NPROC_DIVISOR` --timeout 1200"
            $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-log.txt
     - "! grep -c \"'--ignore-fail' was specified\"
