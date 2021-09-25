@@ -2,6 +2,8 @@
 # $BUILD_DIR, that's unique to each pipeline in case there are concurrent
 # pipelines.  Why not use artifacts?
 #
+# - [The following numbers are a bit old, and they were recorded for a debug
+#   build.]
 # - LLVM's build directory is huge.  For me, it's 46G when including just
 #   the clang and openmp subprojects, which are required for Clacc, and it's
 #   85G when including nearly all subprojects.
@@ -45,9 +47,9 @@ stages:
 #-------------------------------------------------
 # build configurations
 #
-# Test every architecture with a debug build (thus checking assertions) using
-# python3.  There are many kolds, so use them to check configuration choices
-# that are hopefully orthogonal to the architecture.
+# Test every architecture with a release build plus assertions using python3.
+# There are many kolds, so use them to check configuration choices that are
+# hopefully orthogonal to the architecture.
 #-------------------------------------------------
 
 .leconte:
@@ -58,7 +60,7 @@ stages:
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
-    CMAKE_BUILD_TYPE: Debug
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
     CMAKE_OFFLOAD_CONFIG:
       -DCLANG_ACC_TEST_EXE_X86_64=0
       -DCLANG_ACC_TEST_EXE_PPC64LE=4
@@ -68,6 +70,19 @@ stages:
     LIT_NTHREADS_DIVISOR: 4
     LIT_XFAIL:
       "
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-sret.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-sibling-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-tail-call.ll
+      LLVM :: CodeGen/AMDGPU/abi-attribute-hints-undefined-behavior.ll
+      LLVM :: CodeGen/AMDGPU/indirect-call-known-callees.ll
+      LLVM :: CodeGen/AMDGPU/call-constant.ll
+      LLVM :: CodeGen/AMDGPU/indirect-call.ll
+      LLVM :: CodeGen/AMDGPU/returnaddress.ll
       libomp :: affinity/kmp-hw-subset.c
       libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
@@ -88,7 +103,7 @@ stages:
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
-    CMAKE_BUILD_TYPE: Debug
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
     CMAKE_OFFLOAD_CONFIG:
       -DCLANG_ACC_TEST_EXE_X86_64=4
       -DCLANG_ACC_TEST_EXE_PPC64LE=0
@@ -98,6 +113,19 @@ stages:
     LIT_NTHREADS_DIVISOR: 1
     LIT_XFAIL:
       "
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-sret.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-sibling-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-tail-call.ll
+      LLVM :: CodeGen/AMDGPU/abi-attribute-hints-undefined-behavior.ll
+      LLVM :: CodeGen/AMDGPU/indirect-call-known-callees.ll
+      LLVM :: CodeGen/AMDGPU/call-constant.ll
+      LLVM :: CodeGen/AMDGPU/indirect-call.ll
+      LLVM :: CodeGen/AMDGPU/returnaddress.ll
       libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
@@ -117,7 +145,7 @@ stages:
     GCC_DIR: /usr
     NINJA: ninja
     PYTHON: /usr/bin/python3
-    CMAKE_BUILD_TYPE: Debug
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
     CMAKE_OFFLOAD_CONFIG:
       -DCLANG_ACC_TEST_EXE_X86_64=4
       -DCLANG_ACC_TEST_EXE_PPC64LE=0
@@ -127,6 +155,19 @@ stages:
     LIT_NTHREADS_DIVISOR: 1
     LIT_XFAIL:
       "
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-sret.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-sibling-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-tail-call.ll
+      LLVM :: CodeGen/AMDGPU/abi-attribute-hints-undefined-behavior.ll
+      LLVM :: CodeGen/AMDGPU/indirect-call-known-callees.ll
+      LLVM :: CodeGen/AMDGPU/call-constant.ll
+      LLVM :: CodeGen/AMDGPU/indirect-call.ll
+      LLVM :: CodeGen/AMDGPU/returnaddress.ll
       libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
@@ -144,7 +185,7 @@ stages:
     CMAKE: cmake3
     NINJA: ninja-build
     PYTHON: /usr/bin/python3
-    CMAKE_BUILD_TYPE: Debug
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
     CMAKE_OFFLOAD_CONFIG:
       -DCLANG_ACC_TEST_EXE_X86_64=4
       -DCLANG_ACC_TEST_EXE_PPC64LE=0
@@ -153,23 +194,6 @@ stages:
       ""
     LIT_XFAIL:
       "
-      libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
-      libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
-      libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
-      "
-    LIT_XFAIL_NOT:
-      ""
-
-# Sometimes bugs cause only release builds to fail.  For example, debugging
-# macros might accidentally be used but not defined in release builds.
-.release:
-  extends: [.kold]
-  variables:
-    BUILD_ID: release
-    CMAKE_BUILD_TYPE: Release
-    LIT_XFAIL:
-      "
-      Clang :: Headers/wasm.c
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
@@ -183,6 +207,36 @@ stages:
       LLVM :: CodeGen/AMDGPU/call-constant.ll
       LLVM :: CodeGen/AMDGPU/indirect-call.ll
       LLVM :: CodeGen/AMDGPU/returnaddress.ll
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
+      "
+    LIT_XFAIL_NOT:
+      ""
+
+.no-asserts:
+  extends: [.kold]
+  variables:
+    BUILD_ID: no-asserts
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=False
+    LIT_XFAIL:
+      "
+      Clang :: Headers/wasm.c
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
+      "
+    LIT_XFAIL_NOT:
+      ""
+
+.debug:
+  extends: [.kold]
+  variables:
+    BUILD_ID: debug
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Debug
+    LIT_XFAIL:
+      "
+      Clang :: Headers/wasm.c
       libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
@@ -254,8 +308,11 @@ explorer (setup):
 kold (setup):
   extends: [.kold, .setup]
 
-release (setup):
-  extends: [.release, .setup]
+no-asserts (setup):
+  extends: [.no-asserts, .setup]
+
+debug (setup):
+  extends: [.debug, .setup]
 
 #-------------------------------------------------
 # cleanup
@@ -304,10 +361,16 @@ kold (cleanup):
     - job: kold (test)
       artifacts: false
 
-release (cleanup):
-  extends: [.release, .cleanup]
+no-asserts (cleanup):
+  extends: [.no-asserts, .cleanup]
   needs:
-    - job: release (test)
+    - job: no-asserts (test)
+      artifacts: false
+
+debug (cleanup):
+  extends: [.debug, .cleanup]
+  needs:
+    - job: debug (test)
       artifacts: false
 
 leconte (manual cleanup):
@@ -322,8 +385,11 @@ explorer (manual cleanup):
 kold (manual cleanup):
   extends: [.kold, .manual-cleanup]
 
-release (manual cleanup):
-  extends: [.release, .manual-cleanup]
+no-asserts (manual cleanup):
+  extends: [.no-asserts, .manual-cleanup]
+
+debug (manual cleanup):
+  extends: [.debug, .manual-cleanup]
 
 z-cleanup-pipeline-builds:
   stage: manual cleanup
@@ -357,14 +423,14 @@ z-cleanup-project-builds:
   script:
     - echo $CMAKE
     - $CMAKE --version
-    - echo $CMAKE_BUILD_TYPE
+    - echo $CMAKE_BUILD_OPTS
     - echo $GCC_DIR
     - echo $PYTHON
     - $PYTHON --version
     - echo $LLVM_CCACHE_PARAMS
     - echo $CMAKE_OFFLOAD_CONFIG
     - time $CMAKE -G Ninja
-                  -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE
+                  $CMAKE_BUILD_OPTS
                   -DLLVM_CCACHE_BUILD=ON
                   -DLLVM_USE_SPLIT_DWARF=true
                   -DLLVM_USE_LINKER=gold
@@ -408,10 +474,16 @@ kold (config):
     - job: kold (setup)
       artifacts: false
 
-release (config):
-  extends: [.release, .config]
+no-asserts (config):
+  extends: [.no-asserts, .config]
   needs:
-    - job: release (setup)
+    - job: no-asserts (setup)
+      artifacts: false
+
+debug (config):
+  extends: [.debug, .config]
+  needs:
+    - job: debug (setup)
       artifacts: false
 
 #-------------------------------------------------
@@ -453,10 +525,16 @@ kold (build):
     - job: kold (config)
       artifacts: false
 
-release (build):
-  extends: [.release, .build]
+no-asserts (build):
+  extends: [.no-asserts, .build]
   needs:
-    - job: release (config)
+    - job: no-asserts (config)
+      artifacts: false
+
+debug (build):
+  extends: [.debug, .build]
+  needs:
+    - job: debug (config)
       artifacts: false
 
 #-------------------------------------------------
@@ -551,8 +629,14 @@ kold (test):
     - job: kold (build)
       artifacts: false
 
-release (test):
-  extends: [.release, .test]
+no-asserts (test):
+  extends: [.no-asserts, .test]
   needs:
-    - job: release (build)
+    - job: no-asserts (build)
+      artifacts: false
+
+debug (test):
+  extends: [.debug, .test]
+  needs:
+    - job: debug (build)
       artifacts: false
