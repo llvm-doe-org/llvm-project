@@ -537,14 +537,6 @@ debug (build):
 
 #-------------------------------------------------
 # tests
-#
-# The additional build required for the test suite can be very noisy and
-# exceed the log output limit.  Run that first, grep for key text, and
-# make the full version an artifact.
-#
-# When there are fails, the test suite run can be very noisy too and
-# exceed the log output limit.  It's hard to grep for just the important
-# stuff, so just print it all but also dump to an artifact.
 #-------------------------------------------------
 
 .test:
@@ -560,10 +552,10 @@ debug (build):
     - echo "$LIT_XFAIL_NOT" |
       sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//' |
       tee xfail-not.txt
-    - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
-           $NINJA -l `nproc` check-all
+    # Build test suite before running it so we can time those steps separately.
+    - time LIT_FILTER_OUT=. LIT_OPTS=--allow-empty-runs
+      $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-build-log.txt
-      | grep '^\[[0-9]\+/[0-9]\+]\|\<error:'
     # Check that no misconfiguration is quietly disabling key features and thus
     # tests (for example, not adding the gitlab-runner account to the required
     # render/video groups quietly disables OpenMP offloading to AMD GPU).
