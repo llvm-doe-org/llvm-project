@@ -120,6 +120,8 @@ stages:
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-sibling-call.ll
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-tail-call.ll
+      LLVM :: CodeGen/AMDGPU/abi-attribute-hints-undefined-behavior.ll
+      LLVM :: CodeGen/AMDGPU/indirect-call-known-callees.ll
       LLVM :: CodeGen/AMDGPU/call-constant.ll
       LLVM :: CodeGen/AMDGPU/indirect-call.ll
       LLVM :: CodeGen/AMDGPU/returnaddress.ll
