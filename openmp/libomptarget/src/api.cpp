@@ -45,8 +45,8 @@ static_assert(OMPT_TRIGGER_RUNTIME_API == ompt_trigger_runtime_api,
 
 #if OMPT_SUPPORT
 # define OMPT_DEFINE_IDENT(Func) DEFINE_IDENT(Func)
-# define OMPT_SET_TRIGGER_IDENT() ompt_set_trigger_ident(&Ident)
-# define OMPT_CLEAR_TRIGGER_IDENT() ompt_clear_trigger_ident()
+# define OMPT_SET_TRIGGER_IDENT() libomp_ompt_set_trigger_ident(&Ident)
+# define OMPT_CLEAR_TRIGGER_IDENT() libomp_ompt_clear_trigger_ident()
 # define OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(                            \
     EndPoint, OpKind, SrcPtr, SrcDevNum, DestPtr, DestDevNum, Size)            \
   ompt_dispatch_callback_target_data_op_emi(                                   \

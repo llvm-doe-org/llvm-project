@@ -1394,8 +1394,8 @@ static void ompt_dispatch_callback_target_emi(ident_t *loc,
       device_num != omp_get_initial_device())
     return;
   if (endpoint == ompt_scope_begin) {
-    ompt_set_target_info(omp_get_initial_device());
-    ompt_set_trigger_ident(loc);
+    libomp_ompt_set_target_info(omp_get_initial_device());
+    libomp_ompt_set_trigger_ident(loc);
   }
   if (ompt_target_enabled.ompt_callback_target_emi) {
     // FIXME: We don't yet need the task_data, target_task_data, target_data,
@@ -1435,8 +1435,8 @@ static void ompt_dispatch_callback_target_emi(ident_t *loc,
     }
   }
   if (endpoint == ompt_scope_end) {
-    ompt_clear_target_info();
-    ompt_clear_trigger_ident();
+    libomp_ompt_clear_target_info();
+    libomp_ompt_clear_trigger_ident();
   }
 }
 #endif

@@ -2,6 +2,7 @@
 #define LIBOMPTARGET_OMPT_TARGET_H
 
 #include "omp-tools.h"
+#include "SourceInfo.h"
 
 #define _OMP_EXTERN extern "C"
 
@@ -43,6 +44,26 @@ _OMP_EXTERN OMPT_WEAK_ATTRIBUTE bool
 libomp_start_tool(
     ompt_target_callbacks_active_t *libomptarget_ompt_enabled,
     ompt_target_callbacks_internal_t *libomptarget_ompt_callbacks);
+
+_OMP_EXTERN OMPT_WEAK_ATTRIBUTE void
+libomp_ompt_set_target_info(uint64_t device_num);
+
+_OMP_EXTERN OMPT_WEAK_ATTRIBUTE void libomp_ompt_clear_target_info();
+
+struct ident;
+typedef struct ident ident_t;
+
+_OMP_EXTERN OMPT_WEAK_ATTRIBUTE void
+libomp_ompt_set_trigger_ident(const ident_t *ident);
+
+_OMP_EXTERN OMPT_WEAK_ATTRIBUTE void
+libomp_ompt_clear_trigger_ident(void);
+
+_OMP_EXTERN OMPT_WEAK_ATTRIBUTE void
+libomp_ompt_set_map_var_info(map_var_info_t map_var_info);
+
+_OMP_EXTERN OMPT_WEAK_ATTRIBUTE void
+libomp_ompt_clear_map_var_info(void);
 
 /// This struct is passed into target plugins where OMPT callbacks require
 /// additional data.

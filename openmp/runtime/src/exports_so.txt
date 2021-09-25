@@ -28,14 +28,6 @@ VERSION {
         ompt_start_tool;           # OMPT start interface
         libomp_start_tool;         # OMPT start interface for libomptarget
         libomp_ompt_*;             # OMPT callback functions
-        # FIXME: Clacc additions.  Migrate to upstream's approach where
-        # possible.
-        ompt_set_target_info;
-        ompt_clear_target_info;
-        ompt_set_trigger_ident;
-        ompt_clear_trigger_ident;
-        ompt_set_map_var_info;
-        ompt_clear_map_var_info;
 
         ompc_*;    # omp.h renames some standard functions to ompc_*.
         kmp_*;     # Intel extensions.

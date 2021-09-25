@@ -187,18 +187,37 @@ int __kmp_control_tool(uint64_t command, uint64_t modifier, void *arg);
 extern ompt_callbacks_active_t ompt_enabled;
 extern ompt_target_callbacks_active_t ompt_target_enabled;
 
+/// Used as implementation of the ompt_get_target_info OMPT entry point, and
+/// called directly within libomp.
 int ompt_get_target_info(uint64_t *device_num, ompt_id_t *target_id,
-                         ompt_id_t *host_op_id) OMPT_LIBOMPTARGET_WEAK;
-void ompt_set_target_info(uint64_t device_num) OMPT_LIBOMPTARGET_WEAK;
-void ompt_clear_target_info() OMPT_LIBOMPTARGET_WEAK;
+                         ompt_id_t *host_op_id);
+
+/// Sets/clears info for OMPT entry point ompt_get_target_info.  Used within
+/// libomp and libomptarget.
+///@{
+void libomp_ompt_set_target_info(uint64_t device_num);
+void libomp_ompt_clear_target_info(void);
+///@}
+
 struct ident;
 typedef struct ident ident_t;
-void ompt_set_trigger_ident(const ident_t *ident) OMPT_LIBOMPTARGET_WEAK;
-void ompt_clear_trigger_ident(void) OMPT_LIBOMPTARGET_WEAK;
+
+/// Sets/clears info for OMPT entry point ompt_get_trigger_info.  Used within
+/// libomp and libomptarget.
+///@{
+void libomp_ompt_set_trigger_ident(const ident_t *ident);
+void libomp_ompt_clear_trigger_ident(void);
+///@}
+
+/// Sets/clears info for OMPT entry point ompt_get_data_expression.  Used within
+/// libomptarget.
+///@{
+void libomp_ompt_set_map_var_info(map_var_info_t map_var_info);
+void libomp_ompt_clear_map_var_info(void);
+///@}
+
 extern bool ompt_has_user_source_info;
 extern ompt_trigger_info_t ompt_user_source_info;
-void ompt_set_map_var_info(map_var_info_t map_var_info) OMPT_LIBOMPTARGET_WEAK;
-void ompt_clear_map_var_info() OMPT_LIBOMPTARGET_WEAK;
 
 #if KMP_OS_WINDOWS
 #define UNLIKELY(x) (x)

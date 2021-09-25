@@ -465,12 +465,12 @@ int targetDataMapper(ident_t *loc, DeviceTy &Device, void *arg_base, void *arg,
 struct OmptMapVarInfoRAII {
   OmptMapVarInfoRAII(map_var_info_t MapVarInfo) {
 #if OMPT_SUPPORT
-    ompt_set_map_var_info(MapVarInfo);
+    libomp_ompt_set_map_var_info(MapVarInfo);
 #endif
   }
   ~OmptMapVarInfoRAII() {
 #if OMPT_SUPPORT
-    ompt_clear_map_var_info();
+    libomp_ompt_clear_map_var_info();
 #endif
   }
 };
@@ -943,7 +943,7 @@ void ompt_dispatch_callback_target_emi(ompt_target_t Kind,
   bool SubRegion = Kind == ompt_target_region_enter_data ||
                    Kind == ompt_target_region_exit_data;
   if (!SubRegion && Endpoint == ompt_scope_begin)
-    ompt_set_target_info(Device.DeviceID);
+    libomp_ompt_set_target_info(Device.DeviceID);
   // FIXME: We don't yet need the task_data, target_id, or codeptr_ra argument
   // for OpenACC support, so we haven't bothered to implement them yet.
   if (Device.OmptApi.ompt_target_enabled->ompt_callback_target_emi) {
@@ -953,7 +953,7 @@ void ompt_dispatch_callback_target_emi(ompt_target_t Kind,
         /*target_task_data=*/NULL, /*target_data=*/NULL, /*codeptr_ra=*/NULL);
   }
   if (!SubRegion && Endpoint == ompt_scope_end)
-    ompt_clear_target_info();
+    libomp_ompt_clear_target_info();
 }
 #endif
 

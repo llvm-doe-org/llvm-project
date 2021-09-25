@@ -595,28 +595,28 @@ void ompt_fini() {
   memset(&ompt_enabled, 0, sizeof(ompt_enabled));
 }
 
-void ompt_set_target_info(uint64_t device_num) {
+void libomp_ompt_set_target_info(uint64_t device_num) {
   ompt_target_device = device_num;
 }
 
-void ompt_clear_target_info() { ompt_target_device = UINT64_MAX; }
+void libomp_ompt_clear_target_info() { ompt_target_device = UINT64_MAX; }
 
-void ompt_set_trigger_ident(const ident_t *ident) {
+void libomp_ompt_set_trigger_ident(const ident_t *ident) {
   ompt_trigger_ident = ident;
   ompt_trigger_ident_parsed = false;
 }
 
-void ompt_clear_trigger_ident() {
+void libomp_ompt_clear_trigger_ident() {
   ompt_trigger_ident = nullptr;
   ompt_trigger_ident_parsed = false;
 }
 
-void ompt_set_map_var_info(map_var_info_t map_var_info) {
+void libomp_ompt_set_map_var_info(map_var_info_t map_var_info) {
   ompt_map_var_info = map_var_info;
   ompt_map_var_info_parsed = false;
 }
 
-void ompt_clear_map_var_info() {
+void libomp_ompt_clear_map_var_info() {
   ompt_map_var_info = nullptr;
   ompt_map_var_info_parsed = false;
 }
