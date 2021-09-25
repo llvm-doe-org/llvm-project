@@ -10890,25 +10890,25 @@ def warn_acc_omp_update_present : Warning<
   "which is an OpenMP TR8 feature that might not be supported yet by other "
   "compilers">,
   InGroup<OpenACCOMPUpdatePresent>, DefaultIgnore;
-def warn_acc_omp_map_hold : Warning<
-  "the OpenACC '%0' clause translation uses the 'hold' map type modifier, "
+def warn_acc_omp_map_ompx_hold : Warning<
+  "the OpenACC '%0' clause translation uses the 'ompx_hold' map type modifier, "
   "which is an OpenMP extension that might not be supported yet by other "
   "compilers">,
-  InGroup<OpenACCOMPMapHold>, DefaultIgnore;
+  InGroup<OpenACCOMPMapOmpxHold>, DefaultIgnore;
 def warn_acc_omp_map_present : Warning<
   "the OpenACC '%0' clause translation uses the 'present' map type modifier, "
   "which is an OpenMP TR8 feature that might not be supported yet by other "
   "compilers">,
   InGroup<OpenACCOMPMapPresent>, DefaultIgnore;
-def warn_acc_omp_map_no_alloc : Warning<
-  "the OpenACC '%0' clause translation uses the 'no_alloc' map type modifier, "
-  "which is an OpenMP extension that might not be supported by other "
+def warn_acc_omp_map_ompx_no_alloc : Warning<
+  "the OpenACC '%0' clause translation uses the 'ompx_no_alloc' map type "
+  "modifier, which is an OpenMP extension that might not be supported by other "
   "compilers">,
-  InGroup<OpenACCOMPMapNoAlloc>, DefaultIgnore;
-def warn_acc_omp_map_no_alloc_from_visible : Warning<
-  "the translation of a visible OpenACC '%0' clause produces a 'no_alloc' map "
-  "type modifier here to suppress the OpenMP default map type">,
-  InGroup<OpenACCOMPMapNoAlloc>, DefaultIgnore;
+  InGroup<OpenACCOMPMapOmpxNoAlloc>, DefaultIgnore;
+def warn_acc_omp_map_ompx_no_alloc_from_visible : Warning<
+  "the translation of a visible OpenACC '%0' clause produces a 'ompx_no_alloc' "
+  "map type modifier here to suppress the OpenMP default map type">,
+  InGroup<OpenACCOMPMapOmpxNoAlloc>, DefaultIgnore;
 def note_acc_alternate_omp : Note<
   "an alternative OpenMP translation can be specified with, for example, "
   "'-fopenacc-%0-omp=%1'">;

@@ -1440,6 +1440,7 @@ class MVE_VMINMAXNM<string iname, string suffix, bit sz, bit bit_21,
   let Inst{4} = 0b1;
 
   let Predicates = [HasMVEFloat];
+  let validForTailPredication = 1;
 }
 
 multiclass MVE_VMINMAXNM_m<string iname, bit bit_4, MVEVectorVTInfo VTI, SDNode Op, Intrinsic PredInt> {
@@ -4048,6 +4049,17 @@ defm MVE_VCVTf16u16n : MVE_VCVT_fp_int_m<MVE_v8f16, MVE_v8u16, uint_to_fp>;
 defm MVE_VCVTf32s32n : MVE_VCVT_fp_int_m<MVE_v4f32, MVE_v4s32, sint_to_fp>;
 defm MVE_VCVTf32u32n : MVE_VCVT_fp_int_m<MVE_v4f32, MVE_v4u32, uint_to_fp>;
 
+let Predicates = [HasMVEFloat] in {
+  def : Pat<(v4i32 (fp_to_sint_sat v4f32:$src, i32)),
+            (MVE_VCVTs32f32z v4f32:$src)>;
+  def : Pat<(v4i32 (fp_to_uint_sat v4f32:$src, i32)),
+            (MVE_VCVTu32f32z v4f32:$src)>;
+  def : Pat<(v8i16 (fp_to_sint_sat v8f16:$src, i16)),
+            (MVE_VCVTs16f16z v8f16:$src)>;
+  def : Pat<(v8i16 (fp_to_uint_sat v8f16:$src, i16)),
+            (MVE_VCVTu16f16z v8f16:$src)>;
+}
+
 class MVE_VABSNEG_fp<string iname, string suffix, bits<2> size, bit negate,
                    list<dag> pattern=[]>
   : MVE_float<iname, suffix, (outs MQPR:$Qd),
@@ -4111,6 +4123,7 @@ class MVE_VMAXMINNMA<string iname, string suffix, bit size, bit bit_12,
   let Inst{0} = 0b1;
 
   let isCommutable = 1;
+  let validForTailPredication = 1;
 }
 
 multiclass MVE_VMAXMINNMA_m<string iname, MVEVectorVTInfo VTI,

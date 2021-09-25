@@ -35,7 +35,7 @@
 // RUN: }
 // RUN: %for contexts {
 // RUN:   %clang -Xclang -verify -fopenacc-print=omp %acc-includes \
-// RUN:       %[context-cflags] -Wno-openacc-omp-map-hold %s > %t-omp.c
+// RUN:       %[context-cflags] -Wno-openacc-omp-map-ompx-hold %s > %t-omp.c
 // RUN:   %for tgts {
 // RUN:     %[run-if] %clang -fopenacc %acc-includes \
 // RUN:         %[context-cflags] %[tgt-cflags] -o %t.exe %s

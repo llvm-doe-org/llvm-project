@@ -129,17 +129,17 @@ public:
   }
 
   enum OpenACCStructuredRefCountOMPKind {
-    OpenACCStructuredRefCountOMP_Hold,
-    OpenACCStructuredRefCountOMP_NoHold,
-    OpenACCStructuredRefCountOMP_Last = OpenACCStructuredRefCountOMP_NoHold
+    OpenACCStructuredRefCountOMP_OmpxHold,
+    OpenACCStructuredRefCountOMP_NoOmpxHold,
+    OpenACCStructuredRefCountOMP_Last = OpenACCStructuredRefCountOMP_NoOmpxHold
   };
   static StringRef
   getOpenACCStructuredRefCountOMPValue(OpenACCStructuredRefCountOMPKind K) {
     switch (K) {
-    case OpenACCStructuredRefCountOMP_Hold:
-      return "hold";
-    case OpenACCStructuredRefCountOMP_NoHold:
-      return "no-hold";
+    case OpenACCStructuredRefCountOMP_OmpxHold:
+      return "ompx-hold";
+    case OpenACCStructuredRefCountOMP_NoOmpxHold:
+      return "no-ompx-hold";
     }
     llvm_unreachable("unexpected OpenACCStructuredRefCountOMPKind");
   }
@@ -160,16 +160,16 @@ public:
   }
 
   enum OpenACCNoCreateOMPKind {
-    OpenACCNoCreateOMP_NoAlloc,
-    OpenACCNoCreateOMP_NoNoAlloc,
-    OpenACCNoCreateOMP_Last = OpenACCNoCreateOMP_NoNoAlloc
+    OpenACCNoCreateOMP_OmpxNoAlloc,
+    OpenACCNoCreateOMP_NoOmpxNoAlloc,
+    OpenACCNoCreateOMP_Last = OpenACCNoCreateOMP_NoOmpxNoAlloc
   };
   static StringRef getOpenACCNoCreateOMPValue(OpenACCNoCreateOMPKind K) {
     switch (K) {
-    case OpenACCNoCreateOMP_NoAlloc:
-      return "no_alloc";
-    case OpenACCNoCreateOMP_NoNoAlloc:
-      return "no-no_alloc";
+    case OpenACCNoCreateOMP_OmpxNoAlloc:
+      return "ompx-no-alloc";
+    case OpenACCNoCreateOMP_NoOmpxNoAlloc:
+      return "no-ompx-no-alloc";
     }
     llvm_unreachable("unexpected OpenACCNoCreateOMPKind");
   }
@@ -294,19 +294,6 @@ public:
 
   /// Possible exception handling behavior.
   enum class ExceptionHandlingKind { None, SjLj, WinEH, DwarfCFI, Wasm };
-
-  /// Possible float expression evaluation method choices.
-  enum FPEvalMethodKind {
-    /// Use the declared type for fp arithmetic.
-    FEM_Source,
-    /// Use the type double for fp arithmetic.
-    FEM_Double,
-    /// Use extended type for fp arithmetic.
-    FEM_Extended,
-    /// Use the default float eval method specified by Target:
-    //  most targets are defined with evaluation method FEM_Source.
-    FEM_TargetDefault
-  };
 
   enum class LaxVectorConversionKind {
     /// Permit no implicit vector bitcasts.
@@ -506,6 +493,9 @@ public:
   /// Return the OpenCL C or C++ version as a VersionTuple.
   VersionTuple getOpenCLVersionTuple() const;
 
+  /// Return the OpenCL version that kernel language is compatible with
+  unsigned getOpenCLCompatibleVersion() const;
+
   /// Return the OpenCL C or C++ for OpenCL language name and version
   /// as a string.
   std::string getOpenCLVersionString() const;
@@ -609,7 +599,6 @@ public:
       setAllowFEnvAccess(true);
     else
       setAllowFEnvAccess(LangOptions::FPM_Off);
-    setFPEvalMethod(LO.getFPEvalMethod());
   }
 
   bool allowFPContractWithinStatement() const {

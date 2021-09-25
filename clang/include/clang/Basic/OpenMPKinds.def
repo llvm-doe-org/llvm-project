@@ -124,13 +124,11 @@ OPENMP_MAP_MODIFIER_KIND(close)
 OPENMP_MAP_MODIFIER_KIND(mapper)
 OPENMP_MAP_MODIFIER_KIND(present)
 // This is an OpenMP extension for the sake of OpenACC support.
-// TODO: Currently, it is not well tested outside of translations from OpenACC
-// to OpenMP, so it is not yet recommended for general use in OpenMP code.
-OPENMP_MAP_MODIFIER_KIND(no_alloc)
+OPENMP_MAP_MODIFIER_KIND(ompx_hold)
 // This is an OpenMP extension for the sake of OpenACC support.
 // TODO: Currently, it is not well tested outside of translations from OpenACC
 // to OpenMP, so it is not yet recommended for general use in OpenMP code.
-OPENMP_MAP_MODIFIER_KIND(hold)
+OPENMP_MAP_MODIFIER_KIND(ompx_no_alloc)
 
 // Modifiers for 'to' or 'from' clause.
 OPENMP_MOTION_MODIFIER_KIND(mapper)

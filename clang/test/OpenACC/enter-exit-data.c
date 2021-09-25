@@ -1,8 +1,8 @@
 // Check "acc enter data" and "acc exit data".
 //
-// fopenacc-structured-ref-count-omp.c checks these when "hold" is not used by
-// "acc data" and "acc parallel".  Here, we focus on the normal translation
-// using "hold".  exit-data-uninit.c checks the case where "acc exit data"
+// fopenacc-structured-ref-count-omp.c checks these when "ompx_hold" is not used
+// by "acc data" and "acc parallel".  Here, we focus on the normal translation
+// using "ompx_hold".  exit-data-uninit.c checks the case where "acc exit data"
 // occurs before runtime initialization.
 
 // Check -ast-dump before and after AST serialization.
@@ -45,8 +45,8 @@
 // RUN: }
 // RUN: %for prt-args {
 // RUN:   %clang -Xclang -verify %[prt] %t-acc.c %acc-includes \
-// RUN:          -Wno-openacc-omp-map-hold -Wno-openacc-omp-map-present \
-// RUN:          -Wno-openacc-omp-map-no-alloc \
+// RUN:          -Wno-openacc-omp-map-ompx-hold -Wno-openacc-omp-map-present \
+// RUN:          -Wno-openacc-omp-map-ompx-no-alloc \
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
@@ -60,8 +60,8 @@
 // RUN:        -o %t.ast
 // RUN: %for prt-args {
 // RUN:   %clang %[prt] %t.ast 2>&1 \
-// RUN:          -Wno-openacc-omp-map-hold -Wno-openacc-omp-map-present \
-// RUN:          -Wno-openacc-omp-map-no-alloc \
+// RUN:          -Wno-openacc-omp-map-ompx-hold -Wno-openacc-omp-map-present \
+// RUN:          -Wno-openacc-omp-map-ompx-no-alloc \
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
@@ -77,9 +77,9 @@
 // RUN:   %for prt-opts {
 // RUN:     %[run-if] %clang -Xclang -verify %[prt-opt]=omp %acc-includes %s \
 // RUN:                      > %t-omp.c \
-// RUN:                      -Wno-openacc-omp-map-hold \
+// RUN:                      -Wno-openacc-omp-map-ompx-hold \
 // RUN:                      -Wno-openacc-omp-map-present \
-// RUN:                      -Wno-openacc-omp-map-no-alloc
+// RUN:                      -Wno-openacc-omp-map-ompx-no-alloc
 // RUN:     %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:     %[run-if] grep "^// nvptx64-" %s >> %t-omp.c
 // RUN:     %[run-if] %clang -fopenmp %fopenmp-version \
@@ -395,8 +395,8 @@ int main() {
     setHostInt(x, 10);
     // DMP: ACCDataDirective
     //  PRT-A-NEXT: {{^ *}}#pragma acc data create(x){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,alloc: x){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(hold,alloc: x){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,alloc: x){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(ompx_hold,alloc: x){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data create(x){{$}}
     // PRT-NEXT: {
     #pragma acc data create(x)

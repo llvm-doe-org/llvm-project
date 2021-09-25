@@ -295,7 +295,7 @@
 // RUN: %for loop-clauses {
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify %[prt] -DACCC=%'accc' %t-acc.c \
-// RUN:            -Wno-openacc-omp-map-hold \
+// RUN:            -Wno-openacc-omp-map-ompx-hold \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -DACCC=%[ACCC] \
 // RUN:                 -DOMPDP=%'ompdp' %s
 // RUN:   }
@@ -322,7 +322,7 @@
 // RUN: %for loop-clauses {
 // RUN:   %for prt-opts {
 // RUN:     %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c \
-// RUN:            -DACCC=%'accc' -Wno-openacc-omp-map-hold
+// RUN:            -DACCC=%'accc' -Wno-openacc-omp-map-ompx-hold
 // RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version \
 // RUN:            -Wno-unused-function -DACCC=%'accc' -o %t %t-omp.c
@@ -438,8 +438,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(3) map(hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
     #pragma acc parallel num_gangs(3)
     // DMP: CompoundStmt
@@ -707,13 +707,13 @@ int main() {
     // DMP-OSEQPLC-NEXT:        impl: ForStmt
     //
     // PRT-A-NEXT:                {{^ *}}#pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
-    // PRT-AO-NEXT:               {{^ *}}// #pragma omp target teams num_teams(3) map(hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    // PRT-AO-NEXT:               {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
     // PRT-AO-OPRG-OSIMP-NEXT:    {{^ *}}// #pragma omp [[OMPDP]]{{$}}
     // PRT-AO-OPRGPLC-OSIMP-NEXT: {{^ *}}// #pragma omp [[OMPDP]]{{$}}
     // PRT-AO-OPRG-OSEXP-NEXT:    {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
     // PRT-AO-OPRGPLC-OSEXP-NEXT: {{^ *}}// #pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
     //
-    // PRT-O-NEXT:               {{^ *}}#pragma omp target teams num_teams(3) map(hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    // PRT-O-NEXT:               {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
     // PRT-O-OPRG-OSIMP-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
     // PRT-O-OPRGPLC-OSIMP-NEXT: {{^ *}}#pragma omp [[OMPDP]]{{$}}
     // PRT-O-OPRG-OSEXP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] shared(j,loopOnly,save,loopOnlyArr){{$}}
@@ -858,8 +858,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
     //
     // PRT-A:       {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(hold,tofrom: save) shared(save){{$}}
-    // PRT-O:       {{^ *}}#pragma omp target teams num_teams(3) map(hold,tofrom: save) shared(save){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save) shared(save){{$}}
+    // PRT-O:       {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save) shared(save){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
     #pragma acc parallel num_gangs(3)
     // DMP: CompoundStmt

@@ -57,7 +57,7 @@
 // RUN: %for directives {
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify %[prt] %[dir-cflags] %t-acc.c \
-// RUN:            -Wno-openacc-omp-map-hold \
+// RUN:            -Wno-openacc-omp-map-ompx-hold \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -DLOOP=%[LOOP] %s
 // RUN:   }
 // RUN: }
@@ -85,7 +85,7 @@
 // RUN: %for directives {
 // RUN:   %for prt-opts {
 // RUN:     %clang -Xclang -verify %[prt-opt]=omp %[dir-cflags] %s > %t-omp.c \
-// RUN:            -Wno-openacc-omp-map-hold
+// RUN:            -Wno-openacc-omp-map-ompx-hold
 // RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version \
 // RUN:            -Wno-unused-function %libatomic %[dir-cflags] -o %t %t-omp.c
@@ -193,11 +193,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(+: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(+: acc){{$}}
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
     // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc)
     // DMP-PAR-NOT:      ForStmt
@@ -268,11 +268,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'float'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(*: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(*: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(*: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(*: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(*: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(*: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(*: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(*: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(*: acc){{$}}
     // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(*: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(*: acc)
     // DMP-PAR-NOT:      ForStmt
@@ -351,11 +351,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int *'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(max: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(max: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(max: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(max: acc){{$}}
     // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(max: acc)
     // DMP-PAR-NOT:      ForStmt
@@ -425,11 +425,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(max: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(max: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(max: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(max: acc){{$}}
     // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(max: acc)
     // DMP-PAR-NOT:      ForStmt
@@ -499,11 +499,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'double'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(min: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(min: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(min: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(min: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(min: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(min: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(min: acc){{$}}
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(min: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(min: acc){{$}}
     // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(min: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(min: acc)
     // DMP-PAR-NOT:      ForStmt
@@ -573,11 +573,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'char'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(&: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(&: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(&: acc){{$}}
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(&: acc){{$}}
     // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&: acc)
     // DMP-PAR-NOT:      ForStmt
@@ -647,11 +647,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(|: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(|: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(|: acc){{$}}
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(|: acc){{$}}
     // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(|: acc)
     // DMP-PAR-NOT:      ForStmt
@@ -721,11 +721,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(3) firstprivate(val) reduction(^: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(val) reduction(^: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(val) map(hold,tofrom: acc) reduction(^: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(val) reduction(^: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(^: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(3) firstprivate(val) reduction(^: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(3) firstprivate(val) map(hold,tofrom: acc) reduction(^: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(3) firstprivate(val) reduction(^: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(3) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(^: acc){{$}}
     // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(3) firstprivate(val) reduction(^: acc){{$}}
     #pragma acc parallel LOOP num_gangs(3) firstprivate(val) reduction(^: acc)
     // DMP-PAR-NOT:      ForStmt
@@ -802,11 +802,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&&: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&&: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(&&: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&&: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(&&: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&&: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(&&: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&&: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(&&: acc){{$}}
     // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&&: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&&: acc)
     // DMP-PAR-NOT:      ForStmt
@@ -879,11 +879,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(||: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(||: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(||: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(||: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(||: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(||: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(||: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(||: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(||: acc){{$}}
     // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(||: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(||: acc)
     // DMP-PAR-NOT:      ForStmt
@@ -960,11 +960,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'enum E'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(&: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(&: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(&: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(&: acc){{$}}
     // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&: acc)
     // DMP-PAR-NOT:      ForStmt
@@ -1039,11 +1039,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' '{{bool|_Bool}}'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(|: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(|: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(|: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(|: acc){{$}}
     // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(|: acc)
     // DMP-PAR-NOT:      ForStmt
@@ -1117,11 +1117,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' '_Complex float'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(+: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(+: acc){{$}}
+    // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
     // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc)
     // DMP-PAR-NOT:      ForStmt
@@ -1196,11 +1196,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copy(acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(+: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,tofrom: acc) reduction(+: acc){{$}}
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
     // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copy(acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc) copy(acc)
     // DMP-PAR-NOT:      ForStmt
@@ -1275,11 +1275,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copyin(acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(hold,to: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(hold,to: acc) reduction(+: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,to: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,to: acc) reduction(+: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(hold,to: acc){{$}}
-    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(hold,to: acc) reduction(+: acc){{$}}
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,to: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,to: acc) reduction(+: acc){{$}}
     // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copyin(acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc) copyin(acc)
     // DMP-PAR-NOT:      ForStmt
@@ -1338,11 +1338,11 @@ int main() {
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
     //
     // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) reduction(+: acc){{$}}
-    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) reduction(+: acc) map(hold,tofrom: acc){{$}}
-    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) map(hold,tofrom: acc) reduction(+: acc){{$}}
+    // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
     //
-    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) reduction(+: acc) map(hold,tofrom: acc){{$}}
-    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) map(hold,tofrom: acc) reduction(+: acc){{$}}
+    // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
+    // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
     // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(+: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) reduction(+: acc)
     // DMP-PAR-NOT:      ForStmt

@@ -53,15 +53,15 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
     * `-fopenacc-update-present-omp=KIND` where `KIND` is either
       `present` or `no-present`
     * `-fopenacc-structured-ref-count-omp=KIND` where `KIND` is either
-      `hold` or `no-hold`
+      `ompx-hold` or `no-ompx-hold`
     * `-fopenacc-present-omp=KIND` where `KIND` is either `present` or
       `no-present`
-    * `-fopenacc-no-create-omp=KIND` where `KIND` is either `no_alloc`
-      or `no-no_alloc`
+    * `-fopenacc-no-create-omp=KIND` where `KIND` is either
+      `ompx-no-alloc` or `no-ompx-no-alloc`
     * `-Wopenacc-omp-update-present`
-    * `-Wopenacc-omp-map-hold`
+    * `-Wopenacc-omp-map-ompx-hold`
     * `-Wopenacc-omp-map-present`
-    * `-Wopenacc-omp-map-no-alloc`
+    * `-Wopenacc-omp-map-ompx-no-alloc`
     * See the section "OpenMP Extensions" below for details.
 * Other diagnostic options
     * `-Wopenacc-omp-macro-inserted`
@@ -804,7 +804,7 @@ command-line options mentioned above.
       `copyout`, `create`, and `no_create` data attributes and
       clauses.
 * OpenMP Extension Employed
-    * `hold` map type modifier.
+    * `ompx_hold` map type modifier.
 * OpenACC Semantics Required
     * OpenACC specifies two reference counters for tracking device
       allocations: a structured reference counter for `data` and
@@ -813,30 +813,24 @@ command-line options mentioned above.
       OpenACC Runtime Library routines.
     * OpenMP 5.0 specifies only one, which can thus be considered a
       dynamic reference counter.
-    * Clacc uses the `hold` map type modifier extension to implement a
-      structured reference counter.
+    * Clacc uses the `ompx_hold` map type modifier extension to
+      implement a structured reference counter.
 * Diagnostic Options
-    * `-Wopenacc-omp-map-hold`
-    * `-Wno-error=openacc-omp-map-hold`
-    * `-Wno-openacc-omp-map-hold`
+    * `-Wopenacc-omp-map-ompx-hold`
+    * `-Wno-error=openacc-omp-map-ompx-hold`
+    * `-Wno-openacc-omp-map-ompx-hold`
 * Translation Options
-    * `-fopenacc-structured-ref-count-omp=hold`
+    * `-fopenacc-structured-ref-count-omp=ompx-hold`
         * This is the default translation.
-    * `-fopenacc-structured-ref-count-omp=no-hold`
-        * This translation omits the `hold` map type modifier.  Thus,
-          contrary to OpenACC semantics, it always uses the dynamic
-          reference counter, and so device memory might be deallocated
-          prematurely for some OpenACC applications.
+    * `-fopenacc-structured-ref-count-omp=no-ompx-hold`
+        * This translation omits the `ompx_hold` map type modifier.
+          Thus, contrary to OpenACC semantics, it always uses the
+          dynamic reference counter, and so device memory might be
+          deallocated prematurely for some OpenACC applications.
         * However, this translation should be sufficient if, for
           example, an OpenACC application always pairs `enter data`
           and `exit data` directives and corresponding OpenACC Runtime
           Library routine calls in a structured manner.
-
-Currently, Clacc's implementation of its `hold` map type modifier
-extension for OpenMP is not well tested outside of Clacc's
-translations from OpenACC to OpenMP.  Thus, it is not yet recommended
-for use in hand-written OpenMP code as it might not integrate well
-with some OpenMP features.
 
 ### `present` Clause's Presence Restriction ###
 
@@ -873,9 +867,9 @@ with some OpenMP features.
 * OpenACC Features Affected
     * `no_create` clause
 * OpenMP Extensions Employed
-    * `no_alloc` map type modifier
+    * `ompx_no_alloc` map type modifier
 * OpenACC Semantics Required
-    * Clacc uses the `no_alloc` map type modifier to suppress all
+    * Clacc uses the `ompx_no_alloc` map type modifier to suppress all
       runtime actions as required by the OpenACC `no_create` clause in
       the case that data is not already present on the device.
     * This modifier is combined with the OpenMP `alloc` map type as
@@ -883,17 +877,17 @@ with some OpenMP features.
       device-to-host transfers in the case that there is a reference
       count decrement within the associated region.
 * Diagnostic Options
-    * `-Wopenacc-omp-map-no-alloc`
-    * `-Wno-error=openacc-omp-map-no-alloc`
-    * `-Wno-openacc-omp-map-no-alloc`
+    * `-Wopenacc-omp-map-ompx-no-alloc`
+    * `-Wno-error=openacc-omp-map-ompx-no-alloc`
+    * `-Wno-openacc-omp-map-ompx-no-alloc`
 * Translation Options
-    * `-fopenacc-no-create-omp=no_alloc`
+    * `-fopenacc-no-create-omp=ompx-no-alloc`
         * This is the default translation.
-    * `-fopenacc-no-create-omp=no-no_alloc`
-        * This translation omits the `no_alloc` map type modifier.
-          Thus, contrary to OpenACC semantics, it attempts to allocate
-          the specified variable when it is not already present on the
-          device.
+    * `-fopenacc-no-create-omp=no-ompx-no-alloc`
+        * This translation omits the `ompx-no-alloc` map type
+          modifier.  Thus, contrary to OpenACC semantics, it attempts
+          to allocate the specified variable when it is not already
+          present on the device.
         * This translation is probably only useful when all of the
           following conditions are met:
             * The application is being tested with smaller data sets,
@@ -912,8 +906,8 @@ with some OpenMP features.
               associated region.  The unexpected allocations can
               suppress those data transfers.
 
-Currently, Clacc's implementation of its `no_alloc` map type modifier
-extension for OpenMP is not well tested outside of Clacc's
+Currently, Clacc's implementation of its `ompx_no_alloc` map type
+modifier extension for OpenMP is not well tested outside of Clacc's
 translations from OpenACC to OpenMP.  Thus, it is not yet recommended
 for use in hand-written OpenMP code as it might not integrate well
 with some OpenMP features.

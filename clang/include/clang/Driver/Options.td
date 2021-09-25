@@ -1463,11 +1463,6 @@ def : Flag<["-"], "fextended-identifiers">, Group<clang_ignored_f_Group>;
 def : Flag<["-"], "fno-extended-identifiers">, Group<f_Group>, Flags<[Unsupported]>;
 def fhosted : Flag<["-"], "fhosted">, Group<f_Group>;
 def fdenormal_fp_math_EQ : Joined<["-"], "fdenormal-fp-math=">, Group<f_Group>, Flags<[CC1Option]>;
-def ffp_eval_method_EQ : Joined<["-"], "ffp-eval-method=">, Group<f_Group>, Flags<[CC1Option]>,
-  HelpText<"Specifies the evaluation method to use for floating-point arithmetic.">,
-  Values<"source,double,extended">, NormalizedValuesScope<"LangOptions">,
-  NormalizedValues<["FEM_Source", "FEM_Double", "FEM_Extended"]>,
-  MarshallingInfoEnum<LangOpts<"FPEvalMethod">, "FEM_TargetDefault">;
 def ffp_model_EQ : Joined<["-"], "ffp-model=">, Group<f_Group>, Flags<[NoXarchOption]>,
   HelpText<"Controls the semantics of floating-point calculations.">;
 def ffp_exception_behavior_EQ : Joined<["-"], "ffp-exception-behavior=">, Group<f_Group>, Flags<[CC1Option]>,
@@ -2379,6 +2374,12 @@ def fopenmp : Flag<["-"], "fopenmp">, Group<f_Group>, Flags<[CC1Option, NoArgume
   HelpText<"Parse OpenMP pragmas and generate parallel code.">;
 def fno_openmp : Flag<["-"], "fno-openmp">, Group<f_Group>, Flags<[NoArgumentUnused]>;
 def fopenmp_version_EQ : Joined<["-"], "fopenmp-version=">, Group<f_Group>, Flags<[CC1Option, NoArgumentUnused]>;
+defm openmp_extensions: BoolFOption<"openmp-extensions",
+  LangOpts<"OpenMPExtensions">, DefaultTrue,
+  PosFlag<SetTrue, [CC1Option, NoArgumentUnused],
+          "Enable all Clang extensions for OpenMP directives and clauses">,
+  NegFlag<SetFalse, [CC1Option, NoArgumentUnused],
+          "Disable all Clang extensions for OpenMP directives and clauses">>;
 def fopenmp_EQ : Joined<["-"], "fopenmp=">, Group<f_Group>;
 def fopenmp_use_tls : Flag<["-"], "fopenmp-use-tls">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>;
@@ -2457,14 +2458,15 @@ def fopenacc_structured_ref_count_omp_EQ : Joined<["-"],
   Flags<[CC1Option, NoArgumentUnused]>, Group<f_Group>,
   MetaVarName<"<translation>">,
   HelpText<"Adjust the OpenMP translation of OpenACC data clauses that use "
-           "OpenACC's structured reference counter.  'hold' (default) "
-           "specifies inclusion of the 'hold' map type modifier, an OpenMP "
-           "extension that fully implements the structured reference counter "
-           "semantics.  'no-hold' specifies that 'hold' be omited, which "
-           "suffices if, for example, an OpenACC application always pairs "
-           "'enter data' and 'exit data' directives (and corresponding runtime "
-           "library routine calls) in a structured manner.">,
-  Values<"hold,no-hold">;
+           "OpenACC's structured reference counter.  'ompx-hold' (default) "
+           "specifies inclusion of the 'ompx_hold' map type modifier, an "
+           "OpenMP extension that fully implements the structured reference "
+           "counter semantics.  'no-ompx-hold' specifies that 'ompx_hold' be "
+           "omited, which suffices if, for example, an OpenACC application "
+           "always pairs 'enter data' and 'exit data' directives (and "
+           "corresponding runtime library routine calls) in a structured "
+           "manner.">,
+  Values<"ompx-hold,no-ompx-hold">;
 def fopenacc_present_omp_EQ : Joined<["-"], "fopenacc-present-omp=">,
   Flags<[CC1Option, NoArgumentUnused]>, Group<f_Group>,
   MetaVarName<"<translation>">,
@@ -2480,12 +2482,12 @@ def fopenacc_no_create_omp_EQ : Joined<["-"], "fopenacc-no-create-omp=">,
   Flags<[CC1Option, NoArgumentUnused]>, Group<f_Group>,
   MetaVarName<"<translation>">,
   HelpText<"Adjust the OpenMP translation of the OpenACC 'no_create' clause. "
-           "'no_alloc' (default) specifies inclusion of the 'no_alloc' map "
-           "type modifier, an OpenMP extension that fully implements the "
-           "'no_create' clause semantics.  'no-no_alloc' specifies that "
-           "'no_alloc' be omitted, which might be useful for testing while "
-           "porting some OpenACC applications to OpenMP.">,
-  Values<"no_alloc,no-no_alloc">;
+           "'ompx-no-alloc' (default) specifies inclusion of the "
+           "'ompx_no_alloc' map type modifier, an OpenMP extension that fully "
+           "implements the 'no_create' clause semantics.  'no-ompx-no-alloc' "
+           "specifies that 'ompx_no_alloc' be omitted, which might be useful "
+           "for testing while porting some OpenACC applications to OpenMP.">,
+  Values<"ompx-no-alloc,no-ompx-no-alloc">;
 
 def fno_optimize_sibling_calls : Flag<["-"], "fno-optimize-sibling-calls">, Group<f_Group>;
 def foptimize_sibling_calls : Flag<["-"], "foptimize-sibling-calls">, Group<f_Group>;
@@ -3745,8 +3747,10 @@ def multi__module : Flag<["-"], "multi_module">;
 def multiply__defined__unused : Separate<["-"], "multiply_defined_unused">;
 def multiply__defined : Separate<["-"], "multiply_defined">;
 def mwarn_nonportable_cfstrings : Flag<["-"], "mwarn-nonportable-cfstrings">, Group<m_Group>;
+def canonical_prefixes : Flag<["-"], "canonical-prefixes">, Flags<[HelpHidden, CoreOption]>,
+  HelpText<"Use absolute paths for invoking subcommands (default)">;
 def no_canonical_prefixes : Flag<["-"], "no-canonical-prefixes">, Flags<[HelpHidden, CoreOption]>,
-  HelpText<"Use relative instead of canonical paths">;
+  HelpText<"Use relative paths for invoking subcommands">;
 def no_cpp_precomp : Flag<["-"], "no-cpp-precomp">, Group<clang_ignored_f_Group>;
 def no_integrated_cpp : Flag<["-", "--"], "no-integrated-cpp">, Flags<[NoXarchOption]>;
 def no_pedantic : Flag<["-", "--"], "no-pedantic">, Group<pedantic_Group>;

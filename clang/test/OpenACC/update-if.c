@@ -49,7 +49,8 @@
 // RUN: }
 // RUN: %for prt-args {
 // RUN:   %clang -Xclang -verify=expected,acc %[prt] %t-acc.c \
-// RUN:          -Wno-openacc-omp-update-present -Wno-openacc-omp-map-hold \
+// RUN:          -Wno-openacc-omp-update-present \
+// RUN:          -Wno-openacc-omp-map-ompx-hold \
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
@@ -79,7 +80,7 @@
 // RUN:   %for prt-opts {
 // RUN:     %[run-if] %clang -Xclang -verify=expected,acc %[prt-opt]=omp %s \
 // RUN:                      -Wno-openacc-omp-update-present \
-// RUN:                      -Wno-openacc-omp-map-hold \
+// RUN:                      -Wno-openacc-omp-map-ompx-hold \
 // RUN:                      > %t-omp.c
 // RUN:     %[run-if] grep "^/\* link-" %s >> %t-omp.c
 // RUN:     %[run-if] %clang -Xclang -verify=link -fopenmp %fopenmp-version \

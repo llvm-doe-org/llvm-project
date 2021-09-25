@@ -1438,11 +1438,12 @@ OpenMP is as follows:
 * The translation of all data clauses listed below is affected by the
   `-fopenacc-structured-ref-count-omp=KIND` command-line option:
     * `KIND` is one of:
-        * `hold` (default):
-            * The `hold` map type modifier is included as specified
-              below.
-        * `no-hold`:
-            * The `hold` map type modifier specified below is omitted.
+        * `ompx-hold` (default):
+            * The `ompx_hold` map type modifier is included as
+              specified below.
+        * `no-ompx-hold`:
+            * The `ompx_hold` map type modifier specified below is
+              omitted.
     * Notes:
         * See the discussion of the `data` directive under "Supported
           Features" in `README-OpenACC-status.md` for a description of
@@ -1453,10 +1454,10 @@ OpenMP is as follows:
     * `KIND` is one of:
         * `present` (default):
             * *exp* `present` -> *exp* `map` with a
-              `present,hold,alloc` map type.
+              `present,ompx_hold,alloc` map type.
         * `no-present`:
-            * *exp* `present` -> *exp* `map` with a `hold,alloc` map
-              type.
+            * *exp* `present` -> *exp* `map` with a `ompx_hold,alloc`
+              map type.
     * Notes:
         * See the discussion of the `present` clause under "Supported
           Features" in `README-OpenACC-status.md` for a description of
@@ -1495,19 +1496,19 @@ OpenMP is as follows:
               if there is user demand, but we suspect the likelihood
               that OpenMP TR8's `present` map type modifier will be
               standardized means this option is likely not worthwhile.
-* *exp* `copy` -> *exp* `map` with a `hold,tofrom` map type.
-* *exp* `copyin` -> *exp* `map` with a `hold,to` map type.
-* *exp* `copyout` -> *exp* `map` with a `hold,from` map type.
-* *exp* `create` -> *exp* `map` with a `hold,alloc` map type.
+* *exp* `copy` -> *exp* `map` with a `ompx_hold,tofrom` map type.
+* *exp* `copyin` -> *exp* `map` with a `ompx_hold,to` map type.
+* *exp* `copyout` -> *exp* `map` with a `ompx_hold,from` map type.
+* *exp* `create` -> *exp* `map` with a `ompx_hold,alloc` map type.
 * *exp* `no_create` is translated according to the
   `-fopenacc-no-create-omp=KIND` command-line option:
     * `KIND` is one of:
-        * `no_alloc` (default):
+        * `ompx-no-alloc` (default):
             * *exp* `no_create` -> *exp* `map` with a
-              `no_alloc,hold,alloc` map type.
-        * `no-no_alloc`:
-            * *exp* `no_create` -> *exp* `map` with a `hold,alloc` map
-              type.
+              `ompx_no_alloc,ompx_hold,alloc` map type.
+        * `no-ompx-no-alloc`:
+            * *exp* `no_create` -> *exp* `map` with a
+              `ompx_hold,alloc` map type.
     * Notes:
         * See the translation of *imp* `nomap` on `acc parallel` for
           an additional component of the `no_create` translation.
@@ -1527,9 +1528,10 @@ to OpenMP is as follows:
     * If (a) the variable is *imp* `shared` on the `acc parallel`, (b)
       the variable is *exp* `no_create` on an enclosing `acc data`
       directive, (c) the variable has no *exp* DMA on any `acc data`
-      in between, and (d) `-fopenacc-no-create-omp=no_alloc`, then:
-        * *imp* `nomap` -> *exp* `map` with a `no_alloc,alloc` map
-          type.
+      in between, and (d) `-fopenacc-no-create-omp=ompx-no-alloc`,
+      then:
+        * *imp* `nomap` -> *exp* `map` with a `ompx_no_alloc,alloc`
+          map type.
         * If the variable is specified as a subarray in the enclosing
           `no_create`, then the full array is specified in the *exp*
           `map` here.
@@ -1564,14 +1566,15 @@ to OpenMP is as follows:
               the desired semantics in this case because it always
               allocates or produces a runtime error when the variable
               is not present.  To override that behavior, the Clacc
-              translation specifies the `no_alloc,alloc` map type.
+              translation specifies the `ompx_no_alloc,alloc` map
+              type.
             * In the case of a subarray in the enclosing `no_create`
               clause, Clacc specifies the full array in the
-              `no_alloc,alloc` map type.  This approach avoids the
-              need to copy potentially non-constant subarray bounds.
-              It works correctly because the `no_alloc,alloc` map type
-              then sees the variable as not (fully) present and thus
-              performs no action for it.
+              `ompx_no_alloc,alloc` map type.  This approach avoids
+              the need to copy potentially non-constant subarray
+              bounds.  It works correctly because the
+              `ompx_no_alloc,alloc` map type then sees the variable as
+              not (fully) present and thus performs no action for it.
         * In the case of an array when the suppressing DMA is not
           `no_create`:
             * Clacc does not override the *imp* `map` specified by

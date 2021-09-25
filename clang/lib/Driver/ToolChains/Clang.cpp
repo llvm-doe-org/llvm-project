@@ -2632,8 +2632,6 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
   StringRef FPModel = "";
   // -ffp-exception-behavior options: strict, maytrap, ignore
   StringRef FPExceptionBehavior = "";
-  // -ffp-eval-method options: double, extended, source
-  StringRef FPEvalMethod = "";
   const llvm::DenormalMode DefaultDenormalFPMath =
       TC.getDefaultDenormalModeForType(Args, JA);
   const llvm::DenormalMode DefaultDenormalFP32Math =
@@ -2825,18 +2823,6 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
       break;
     }
 
-    // Validate and pass through -ffp-eval-method option.
-    case options::OPT_ffp_eval_method_EQ: {
-      StringRef Val = A->getValue();
-      if (Val.equals("double") || Val.equals("extended") ||
-          Val.equals("source"))
-        FPEvalMethod = Val;
-      else
-        D.Diag(diag::err_drv_unsupported_option_argument)
-            << A->getOption().getName() << Val;
-      break;
-    }
-
     case options::OPT_ffinite_math_only:
       HonorINFs = false;
       HonorNaNs = false;
@@ -2980,9 +2966,6 @@ static void RenderFloatingPointOptions(const ToolChain &TC, const Driver &D,
   if (!FPExceptionBehavior.empty())
     CmdArgs.push_back(Args.MakeArgString("-ffp-exception-behavior=" +
                       FPExceptionBehavior));
-
-  if (!FPEvalMethod.empty())
-    CmdArgs.push_back(Args.MakeArgString("-ffp-eval-method=" + FPEvalMethod));
 
   ParseMRecip(D, Args, CmdArgs);
 
@@ -4379,9 +4362,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       options::OPT_fopenacc_print_EQ, options::OPT_fopenacc_ast_print_EQ);
   if (OpenACCPrint && StringRef(OpenACCPrint->getValue()) != "acc") {
     CmdArgs.push_back("-Werror=openacc-omp-update-present");
-    CmdArgs.push_back("-Werror=openacc-omp-map-hold");
+    CmdArgs.push_back("-Werror=openacc-omp-map-ompx-hold");
     CmdArgs.push_back("-Werror=openacc-omp-map-present");
-    CmdArgs.push_back("-Werror=openacc-omp-map-no-alloc");
+    CmdArgs.push_back("-Werror=openacc-omp-map-ompx-no-alloc");
   }
 
   // FIXME: Subclass ToolChain for SPIR and move this to addClangWarningOptions.
@@ -5784,6 +5767,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                       options::OPT_fno_openmp_simd);
       Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_enable_irbuilder);
       Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_version_EQ);
+      if (!Args.hasFlag(options::OPT_fopenmp_extensions,
+                        options::OPT_fno_openmp_extensions, /*Default=*/true))
+        CmdArgs.push_back("-fno-openmp-extensions");
       Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_cuda_number_of_sm_EQ);
       Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_cuda_blocks_per_sm_EQ);
       Args.AddAllArgs(CmdArgs,
@@ -5819,6 +5805,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     Args.AddLastArg(CmdArgs, options::OPT_fopenmp_simd,
                     options::OPT_fno_openmp_simd);
     Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_version_EQ);
+    if (!Args.hasFlag(options::OPT_fopenmp_extensions,
+                      options::OPT_fno_openmp_extensions, /*Default=*/true))
+      CmdArgs.push_back("-fno-openmp-extensions");
   }
   Args.AddLastArg(CmdArgs, options::OPT_fopenacc_print_EQ);
   Args.AddLastArg(CmdArgs, options::OPT_fopenacc_ast_print_EQ);

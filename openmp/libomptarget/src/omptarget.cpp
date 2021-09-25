@@ -540,8 +540,8 @@ int targetDataBegin(ident_t *loc, DeviceTy &Device, int32_t arg_num,
     // a close map modifier was associated with a map that contained a to.
     bool HasCloseModifier = arg_types[i] & OMP_TGT_MAPTYPE_CLOSE;
     bool HasPresentModifier = arg_types[i] & OMP_TGT_MAPTYPE_PRESENT;
-    bool HasNoAllocModifier = arg_types[i] & OMP_TGT_MAPTYPE_NO_ALLOC;
-    bool HasHoldModifier = arg_types[i] & OMP_TGT_MAPTYPE_HOLD;
+    bool HasHoldModifier = arg_types[i] & OMP_TGT_MAPTYPE_OMPX_HOLD;
+    bool HasNoAllocModifier = arg_types[i] & OMP_TGT_MAPTYPE_OMPX_NO_ALLOC;
     // UpdateRef is based on MEMBER_OF instead of TARGET_PARAM because if we
     // have reached this point via __tgt_target_data_begin and not __tgt_target
     // then no argument is marked as TARGET_PARAM ("omp target data map" is not
@@ -568,9 +568,10 @@ int targetDataBegin(ident_t *loc, DeviceTy &Device, int32_t arg_num,
       // the pointer not to be allocated yet?  If not, then does
       // HasPresentModifier or HasNoAllocModifier still matter here?
       Pointer_TPR = Device.getTargetPointer(
-          HstPtrBase, HstPtrBase, sizeof(void *), nullptr,
-          MoveDataStateTy::NONE, IsImplicit, UpdateRef, HasCloseModifier,
-          HasPresentModifier, HasNoAllocModifier, HasHoldModifier, AsyncInfo);
+          HstPtrBase, HstPtrBase, sizeof(void *), /*HstPtrName=*/nullptr,
+          /*HasFlagTo=*/false, /*HasFlagAlways=*/false, IsImplicit, UpdateRef,
+          HasCloseModifier, HasPresentModifier, HasHoldModifier,
+          HasNoAllocModifier, AsyncInfo);
       PointerTgtPtrBegin = Pointer_TPR.TargetPointer;
       IsHostPtr = Pointer_TPR.Flags.IsHostPointer;
       if (!PointerTgtPtrBegin) {
@@ -592,26 +593,21 @@ int targetDataBegin(ident_t *loc, DeviceTy &Device, int32_t arg_num,
           (!FromMapper || i != 0); // subsequently update ref count of pointee
     }
 
-    MoveDataStateTy MoveData = MoveDataStateTy::NONE;
-    const bool UseUSM = PM->RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY;
     const bool HasFlagTo = arg_types[i] & OMP_TGT_MAPTYPE_TO;
     const bool HasFlagAlways = arg_types[i] & OMP_TGT_MAPTYPE_ALWAYS;
-    if (HasFlagTo && (!UseUSM || HasCloseModifier))
-      MoveData = HasFlagAlways ? MoveDataStateTy::REQUIRED
-                               : MoveDataStateTy::UNKNOWN;
-
-    auto TPR = Device.getTargetPointer(
-        HstPtrBegin, HstPtrBase, data_size, HstPtrName, MoveData, IsImplicit,
-        UpdateRef, HasCloseModifier, HasPresentModifier, HasNoAllocModifier,
-        HasHoldModifier, AsyncInfo);
+    auto TPR = Device.getTargetPointer(HstPtrBegin, HstPtrBase, data_size,
+                                       HstPtrName, HasFlagTo, HasFlagAlways,
+                                       IsImplicit, UpdateRef, HasCloseModifier,
+                                       HasPresentModifier, HasHoldModifier,
+                                       HasNoAllocModifier, AsyncInfo);
     void *TgtPtrBegin = TPR.TargetPointer;
     IsHostPtr = TPR.Flags.IsHostPointer;
     // If data_size==0, then the argument could be a zero-length pointer to
     // NULL, so getOrAlloc() returning NULL is not an error.
     if (!TgtPtrBegin && (data_size || HasPresentModifier)) {
       if (!HasPresentModifier && HasNoAllocModifier) {
-        DP("Call to getTargetPointer returned null pointer ('no_alloc' map "
-           "type modifier).\n");
+        DP("Call to getTargetPointer returned null pointer ('ompx_no_alloc' "
+           "map type modifier).\n");
         continue;
       }
       REPORT("Call to getTargetPointer returned null pointer (%s).\n",
@@ -692,9 +688,7 @@ struct DeallocTgtPtrInfo {
   void *HstPtrBegin;
   /// Size of the data
   int64_t DataSize;
-  /// Whether it has \p close modifier
-  bool HasCloseModifier;
-  /// Whether it has \p hold modifier
+  /// Whether it has \p ompx_hold modifier
   bool HasHoldModifier;
 #if OMPT_SUPPORT
   /// Host pointer name, or nullptr if none.
@@ -702,10 +696,9 @@ struct DeallocTgtPtrInfo {
 #endif
 
   DeallocTgtPtrInfo(
-      void *HstPtr, int64_t Size, bool HasCloseModifier,
-      bool HasHoldModifier OMPT_SUPPORT_IF(, map_var_info_t HstPtrName))
-      : HstPtrBegin(HstPtr), DataSize(Size),
-        HasCloseModifier(HasCloseModifier), HasHoldModifier(HasHoldModifier)
+      void *HstPtr, int64_t Size, bool HasHoldModifier
+      OMPT_SUPPORT_IF(, map_var_info_t HstPtrName))
+      : HstPtrBegin(HstPtr), DataSize(Size), HasHoldModifier(HasHoldModifier)
         OMPT_SUPPORT_IF(, HstPtrName(HstPtrName)) {}
 };
 } // namespace
@@ -773,16 +766,8 @@ int targetDataEnd(ident_t *loc, DeviceTy &Device, int32_t ArgNum,
                       (ArgTypes[I] & OMP_TGT_MAPTYPE_PTR_AND_OBJ)) &&
                      !(FromMapper && I == 0);
     bool ForceDelete = ArgTypes[I] & OMP_TGT_MAPTYPE_DELETE;
-    bool HasCloseModifier = ArgTypes[I] & OMP_TGT_MAPTYPE_CLOSE;
     bool HasPresentModifier = ArgTypes[I] & OMP_TGT_MAPTYPE_PRESENT;
-    bool HasHoldModifier = ArgTypes[I] & OMP_TGT_MAPTYPE_HOLD;
-
-    // "delete" is implemented only for the dynamic reference count.  That
-    // should be fine as "hold" is permitted only on "omp target data" and
-    // "delete" is permitted only on "omp target exit data" and associated
-    // runtime library routines.
-    assert((!ForceDelete || !HasHoldModifier) &&
-           "unexpected 'delete' modifier with 'hold' modifier");
+    bool HasHoldModifier = ArgTypes[I] & OMP_TGT_MAPTYPE_OMPX_HOLD;
 
     // If PTR_AND_OBJ, HstPtrBegin is address of pointee
     void *TgtPtrBegin = Device.getTgtPtrBegin(
@@ -840,16 +825,7 @@ int targetDataEnd(ident_t *loc, DeviceTy &Device, int32_t ArgNum,
       // Move data back to the host
       if (ArgTypes[I] & OMP_TGT_MAPTYPE_FROM) {
         bool Always = ArgTypes[I] & OMP_TGT_MAPTYPE_ALWAYS;
-        bool CopyMember = false;
-        if (!(PM->RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY) ||
-            HasCloseModifier) {
-          if (IsLast)
-            CopyMember = true;
-        }
-
-        if ((DelEntry || Always || CopyMember) &&
-            !(PM->RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY &&
-              TgtPtrBegin == HstPtrBegin)) {
+        if ((Always || IsLast) && !IsHostPtr) {
           DP("Moving %" PRId64 " bytes (tgt:" DPxMOD ") -> (hst:" DPxMOD ")\n",
              DataSize, DPxPTR(TgtPtrBegin), DPxPTR(HstPtrBegin));
           Ret = Device.retrieveData(HstPtrBegin, TgtPtrBegin, DataSize,
@@ -903,9 +879,9 @@ int targetDataEnd(ident_t *loc, DeviceTy &Device, int32_t ArgNum,
       Device.ShadowMtx.unlock();
 
       // Add pointer to the buffer for later deallocation
-      if (DelEntry)
-        DeallocTgtPtrs.emplace_back(HstPtrBegin, DataSize, HasCloseModifier,
-                                    HasHoldModifier, HstPtrName);
+      if (DelEntry && !IsHostPtr)
+        DeallocTgtPtrs.emplace_back(HstPtrBegin, DataSize, HasHoldModifier,
+                                    HstPtrName);
     }
   }
 
@@ -924,7 +900,7 @@ int targetDataEnd(ident_t *loc, DeviceTy &Device, int32_t ArgNum,
     OmptMapVarInfoRAII TheOmptMapVarInfoRAII(Info.HstPtrName);
     Ret =
         Device.deallocTgtPtr(Info.HstPtrBegin, Info.DataSize,
-                             Info.HasCloseModifier, Info.HasHoldModifier);
+                             Info.HasHoldModifier);
     if (Ret != OFFLOAD_SUCCESS) {
       REPORT("Deallocating data from device failed.\n");
       return OFFLOAD_FAIL;
@@ -984,8 +960,7 @@ static int targetDataContiguous(ident_t *loc, DeviceTy &Device, void *ArgsBase,
     return OFFLOAD_SUCCESS;
   }
 
-  if (PM->RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY &&
-      TgtPtrBegin == HstPtrBegin) {
+  if (IsHostPtr) {
     DP("hst data:" DPxMOD " unified and shared, becomes a noop\n",
        DPxPTR(HstPtrBegin));
     return OFFLOAD_SUCCESS;
@@ -1626,7 +1601,7 @@ static int processDataBefore(ident_t *loc, int64_t DeviceId, void *HostPtr,
         void *HstPtrVal = Args[I];
         void *HstPtrBegin = ArgBases[I];
         void *HstPtrBase = Args[Idx];
-        bool IsLast, IsHostPtr; // unused.
+        bool IsLast, IsHostPtr; // IsLast is unused.
         void *TgtPtrBase =
             (void *)((intptr_t)TgtArgs[TgtIdx] + TgtOffsets[TgtIdx]);
         DP("Parent lambda base " DPxMOD "\n", DPxPTR(TgtPtrBase));
@@ -1641,8 +1616,7 @@ static int processDataBefore(ident_t *loc, int64_t DeviceId, void *HostPtr,
              DPxPTR(HstPtrVal));
           continue;
         }
-        if (PM->RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY &&
-            TgtPtrBegin == HstPtrBegin) {
+        if (IsHostPtr) {
           DP("Unified memory is active, no need to map lambda captured"
              "variable (" DPxMOD ")\n",
              DPxPTR(HstPtrVal));

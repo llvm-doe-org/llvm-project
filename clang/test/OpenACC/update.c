@@ -115,7 +115,8 @@
 // RUN: %for present-opts {
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify %[prt] %[present-opt] %t-acc.c \
-// RUN:             -DCASES_HEADER='"%t-cases.h"' -Wno-openacc-omp-map-hold \
+// RUN:             -DCASES_HEADER='"%t-cases.h"' \
+// RUN:             -Wno-openacc-omp-map-ompx-hold \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -DPRESENT='%[present]' %s
 // RUN:   }
 // RUN: }
@@ -149,7 +150,7 @@
 // RUN:     %for prt-opts {
 // RUN:       %[run-if] %clang -Xclang -verify %[prt-opt]=omp %[present-opt] \
 // RUN:                 -DCASES_HEADER='"%t-cases.h"' \
-// RUN:                 -Wno-openacc-omp-map-hold %s > %t-omp.c
+// RUN:                 -Wno-openacc-omp-map-ompx-hold %s > %t-omp.c
 // RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:       %[run-if] grep "^// nvptx64-" %s >> %t-omp.c
 // RUN:       %[run-if] %clang -fopenmp %fopenmp-version \
@@ -416,8 +417,8 @@ CASE(caseScalarPresent) {
   // DMP-NEXT:       DeclRefExpr {{.*}} 'd' 'int'
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc data create(s,h,d){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,alloc: s,h,d){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(hold,alloc: s,h,d){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,alloc: s,h,d){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(ompx_hold,alloc: s,h,d){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc data create(s,h,d){{$}}
   #pragma acc data create(s,h,d)
   // PRT-NEXT: {

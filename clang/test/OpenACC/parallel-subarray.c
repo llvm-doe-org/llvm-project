@@ -9,10 +9,10 @@
 // and whether the written elements are copied back out.
 
 // RUN: %data clauses {
-// RUN:   (accc=copy    ompmt=hold,tofrom fc=C )
-// RUN:   (accc=copyin  ompmt=hold,to     fc=CI)
-// RUN:   (accc=copyout ompmt=hold,from   fc=CO)
-// RUN:   (accc=create  ompmt=hold,alloc  fc=CR)
+// RUN:   (accc=copy    ompmt=ompx_hold,tofrom fc=C )
+// RUN:   (accc=copyin  ompmt=ompx_hold,to     fc=CI)
+// RUN:   (accc=copyout ompmt=ompx_hold,from   fc=CO)
+// RUN:   (accc=create  ompmt=ompx_hold,alloc  fc=CR)
 // RUN: }
 
 // Check -ast-dump before and after AST serialization.
@@ -58,7 +58,7 @@
 // RUN: %for clauses {
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify %[prt] -DACCC=%[accc] %t-acc.c \
-// RUN:            -Wno-openacc-omp-map-hold \
+// RUN:            -Wno-openacc-omp-map-ompx-hold \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -DACCC=%[prt-accc] \
 // RUN:                 -DOMPMT=%[ompmt] %s
 // RUN:   }
@@ -85,7 +85,7 @@
 // RUN: %for clauses {
 // RUN:   %for prt-opts {
 // RUN:     %clang -Xclang -verify %[prt-opt]=omp -DACCC=%[accc] %s > %t-omp.c \
-// RUN:            -Wno-openacc-omp-map-hold
+// RUN:            -Wno-openacc-omp-map-ompx-hold
 // RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version -o %t \
 // RUN:            -DACCC=%[accc] %t-omp.c

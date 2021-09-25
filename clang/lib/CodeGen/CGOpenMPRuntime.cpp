@@ -1496,8 +1496,8 @@ CGOpenMPRuntime::emitUpdateLocation(CodeGenFunction &CGF, SourceLocation Loc,
       FuncLine = 0;
       FuncEndLine = 0;
     }
-    SrcLocStr = OMPBuilder.getOrCreateSrcLocStr(FunctionName.c_str(), FileName,
-                                                Line, Column, EndLine, FuncLine,
+    SrcLocStr = OMPBuilder.getOrCreateSrcLocStr(FunctionName, FileName, Line,
+                                                Column, EndLine, FuncLine,
                                                 FuncEndLine, TriggerKind);
   }
   unsigned Reserved2Flags = getDefaultLocationReserved2Flags();
@@ -7324,22 +7324,20 @@ public:
     /// 0x800 is reserved for compatibility with XLC.
     /// Produce a runtime error if the data is not already allocated.
     OMP_MAP_PRESENT = 0x1000,
+    // Increment and decrement a separate reference counter so that the data
+    // cannot be unmapped within the associated region.  Thus, this flag is
+    // intended to be used on 'target' and 'target data' directives because they
+    // are inherently structured.  It is not intended to be used on 'target
+    // enter data' and 'target exit data' directives because they are inherently
+    // dynamic.
+    // This is an OpenMP extension for the sake of OpenACC support.
+    OMP_MAP_OMPX_HOLD = 0x2000,
     // Skip allocating the data if it is not already allocated.
     // This is an OpenMP extension for the sake of OpenACC support.
     // TODO: Currently, it is not well tested outside of translations from
     // OpenACC to OpenMP, so it is not yet recommended for general use in
     // OpenMP code.
-    OMP_MAP_NO_ALLOC = 0x2000,
-    // Increment and decrement a separate reference counter so that the data
-    // cannot be deallocated within the associated region.  Thus, this flag is
-    // intended to be used on target and target data directives.  It is not
-    // intended to be used on target enter/exit data directives because they are
-    // inherently dynamic not structured.
-    // This is an OpenMP extension for the sake of OpenACC support.
-    // TODO: Currently, it is not well tested outside of translations from
-    // OpenACC to OpenMP, so it is not yet recommended for general use in
-    // OpenMP code.
-    OMP_MAP_HOLD = 0x4000,
+    OMP_MAP_OMPX_NO_ALLOC = 0x4000,
     /// Signal that the runtime library should use args as an array of
     /// descriptor_dim pointers and use args_size as dims. Used when we have
     /// non-contiguous list items in target update directive
@@ -7641,11 +7639,12 @@ private:
         llvm::find(MotionModifiers, OMPC_MOTION_MODIFIER_present) !=
             MotionModifiers.end())
       Bits |= OMP_MAP_PRESENT;
-    if (llvm::find(MapModifiers, OMPC_MAP_MODIFIER_no_alloc)
+    if (llvm::find(MapModifiers, OMPC_MAP_MODIFIER_ompx_hold) !=
+        MapModifiers.end())
+      Bits |= OMP_MAP_OMPX_HOLD;
+    if (llvm::find(MapModifiers, OMPC_MAP_MODIFIER_ompx_no_alloc)
         != MapModifiers.end())
-      Bits |= OMP_MAP_NO_ALLOC;
-    if (llvm::find(MapModifiers, OMPC_MAP_MODIFIER_hold) != MapModifiers.end())
-      Bits |= OMP_MAP_HOLD;
+      Bits |= OMP_MAP_OMPX_NO_ALLOC;
     if (IsNonContiguous)
       Bits |= OMP_MAP_NON_CONTIG;
     return Bits;
@@ -8999,6 +8998,20 @@ public:
       CombinedInfo.Types.back() |= OMP_MAP_PRESENT;
     // Remove TARGET_PARAM flag from the first element
     (*CurTypes.begin()) &= ~OMP_MAP_TARGET_PARAM;
+    // If any element has the ompx_hold modifier, then make sure the runtime
+    // uses the hold reference count for the struct as a whole so that it won't
+    // be unmapped by an extra dynamic reference count decrement.  Add it to all
+    // elements as well so the runtime knows which reference count to check
+    // when determining whether it's time for device-to-host transfers of
+    // individual elements.
+    if (CurTypes.end() !=
+        llvm::find_if(CurTypes, [](OpenMPOffloadMappingFlags Type) {
+          return Type & OMP_MAP_OMPX_HOLD;
+        })) {
+      CombinedInfo.Types.back() |= OMP_MAP_OMPX_HOLD;
+      for (auto &M : CurTypes)
+        M |= OMP_MAP_OMPX_HOLD;
+    }
 
     // All other current entries will be MEMBER_OF the combined entry
     // (except for PTR_AND_OBJ entries which do not have a placeholder value

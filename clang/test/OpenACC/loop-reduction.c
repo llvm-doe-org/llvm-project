@@ -42,7 +42,8 @@
 // RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT,PRT-SRC)
 // RUN: }
 // RUN: %for prt-args {
-// RUN:   %clang -Xclang -verify %[prt] %t-acc.c -Wno-openacc-omp-map-hold \
+// RUN:   %clang -Xclang -verify %[prt] %t-acc.c \
+// RUN:          -Wno-openacc-omp-map-ompx-hold \
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
@@ -65,7 +66,7 @@
 //
 // RUN: %for prt-opts {
 // RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c \
-// RUN:          -Wno-openacc-omp-map-hold
+// RUN:          -Wno-openacc-omp-map-ompx-hold
 // RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:   %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c \
 // RUN:          -Wno-unused-function %libatomic
@@ -171,8 +172,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'int'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) reduction(*: out0) firstprivate(out2) private(out3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(*: out0) firstprivate(out2) private(out3) map(hold,tofrom: out0) firstprivate(out1){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(*: out0) firstprivate(out2) private(out3) map(hold,tofrom: out0) firstprivate(out1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(*: out0) firstprivate(out2) private(out3) map(ompx_hold,tofrom: out0) firstprivate(out1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(*: out0) firstprivate(out2) private(out3) map(ompx_hold,tofrom: out0) firstprivate(out1){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(*: out0) firstprivate(out2) private(out3){{$}}
     #pragma acc parallel num_gangs(2) reduction(*: out0) firstprivate(out2) private(out3)
     // DMP: CompoundStmt
@@ -294,8 +295,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) copy(out0) copyin(out1) copyout(out2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out0) map(hold,to: out1) map(hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out0) map(hold,to: out1) map(hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out0) map(ompx_hold,to: out1) map(ompx_hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out0) map(ompx_hold,to: out1) map(ompx_hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) copy(out0) copyin(out1) copyout(out2){{$}}
     #pragma acc parallel num_gangs(2) copy(out0) copyin(out1) copyout(out2)
     // DMP: CompoundStmt
@@ -396,9 +397,9 @@ int main() {
     // DMP-NEXT:       impl: ForStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2) seq reduction(*: out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(*: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(*: out){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(*: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(*: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) seq reduction(*: out){{$}}
     //
     // PRT-NEXT: for ({{.*}}) {
@@ -443,8 +444,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'enum E'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) reduction(max: out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(max: out) map(hold,tofrom: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(max: out) map(hold,tofrom: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(max: out) map(ompx_hold,tofrom: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(max: out) map(ompx_hold,tofrom: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(max: out){{$}}
     #pragma acc parallel num_gangs(2) reduction(max: out)
     // DMP: CompoundStmt
@@ -526,11 +527,11 @@ int main() {
     // DMP:            ForStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2)
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(max: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(max: out){{$}}
     // PRT-A-NEXT:  {{^ *}}#pragma acc loop reduction(max: out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(max: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(max: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc loop reduction(max: out){{$}}
@@ -586,10 +587,10 @@ int main() {
     // DMP:              ForStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2) reduction(max: out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(max: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(max: out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(max: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(max: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) reduction(max: out){{$}}
     //
@@ -658,8 +659,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' '_Bool'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) reduction(&: out0) firstprivate(out2) private(out3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(&: out0) firstprivate(out2) private(out3) map(hold,tofrom: out0) firstprivate(out1){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(&: out0) firstprivate(out2) private(out3) map(hold,tofrom: out0) firstprivate(out1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(&: out0) firstprivate(out2) private(out3) map(ompx_hold,tofrom: out0) firstprivate(out1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(&: out0) firstprivate(out2) private(out3) map(ompx_hold,tofrom: out0) firstprivate(out1){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(&: out0) firstprivate(out2) private(out3){{$}}
     #pragma acc parallel num_gangs(2) reduction(&: out0) firstprivate(out2) private(out3)
     // DMP: CompoundStmt
@@ -804,8 +805,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) pcopy(out0) pcopyin(out1) pcopyout(out2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out0) map(hold,to: out1) map(hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out0) map(hold,to: out1) map(hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out0) map(ompx_hold,to: out1) map(ompx_hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out0) map(ompx_hold,to: out1) map(ompx_hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) pcopy(out0) pcopyin(out1) pcopyout(out2){{$}}
     #pragma acc parallel num_gangs(2) pcopy(out0) pcopyin(out1) pcopyout(out2)
     // DMP: CompoundStmt
@@ -914,9 +915,9 @@ int main() {
     // DMP-NEXT:       impl: ForStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop reduction(&: out) auto worker num_gangs(2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(&: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(&: out){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(&: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(&: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop reduction(&: out) auto worker num_gangs(2){{$}}
     //
     // PRT-NEXT: for ({{.*}}) {
@@ -996,8 +997,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' '_Complex double'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) reduction(&&: out0) firstprivate(out2) private(out3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(&&: out0) firstprivate(out2) private(out3) map(hold,tofrom: out0,out1) reduction(&&: out1){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(&&: out0) firstprivate(out2) private(out3) map(hold,tofrom: out0,out1) reduction(&&: out1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(&&: out0) firstprivate(out2) private(out3) map(ompx_hold,tofrom: out0,out1) reduction(&&: out1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(&&: out0) firstprivate(out2) private(out3) map(ompx_hold,tofrom: out0,out1) reduction(&&: out1){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(&&: out0) firstprivate(out2) private(out3){{$}}
     #pragma acc parallel num_gangs(2) reduction(&&: out0) firstprivate(out2) private(out3)
     // DMP: CompoundStmt
@@ -1140,8 +1141,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) present_or_copy(out0) present_or_copyin(out1) present_or_copyout(out2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out0) map(hold,to: out1) map(hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out0) map(hold,to: out1) map(hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out0) map(ompx_hold,to: out1) map(ompx_hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out0) map(ompx_hold,to: out1) map(ompx_hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) present_or_copy(out0) present_or_copyin(out1) present_or_copyout(out2){{$}}
     #pragma acc parallel num_gangs(2) present_or_copy(out0) present_or_copyin(out1) present_or_copyout(out2)
     // DMP: CompoundStmt
@@ -1254,10 +1255,10 @@ int main() {
     // DMP-NEXT:           DeclRefExpr {{.*}} 'out' '_Complex double'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2) worker reduction(&&: out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(&&: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(&&: out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for reduction(&&: out){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(&&: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(&&: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for reduction(&&: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) worker reduction(&&: out){{$}}
     #pragma acc parallel loop num_gangs(2) worker reduction(&&: out)
@@ -1328,8 +1329,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'long'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) reduction(+: out0) firstprivate(out2) private(out3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(+: out0) firstprivate(out2) private(out3) map(hold,tofrom: out0,out1) reduction(+: out1){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out0) firstprivate(out2) private(out3) map(hold,tofrom: out0,out1) reduction(+: out1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(+: out0) firstprivate(out2) private(out3) map(ompx_hold,tofrom: out0,out1) reduction(+: out1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out0) firstprivate(out2) private(out3) map(ompx_hold,tofrom: out0,out1) reduction(+: out1){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(+: out0) firstprivate(out2) private(out3){{$}}
     #pragma acc parallel num_gangs(2) reduction(+: out0) firstprivate(out2) private(out3)
     // DMP: CompoundStmt
@@ -1455,8 +1456,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) copy(out0) copyin(out1) copyout(out2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out0) map(hold,to: out1) map(hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out0) map(hold,to: out1) map(hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out0) map(ompx_hold,to: out1) map(ompx_hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out0) map(ompx_hold,to: out1) map(ompx_hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) copy(out0) copyin(out1) copyout(out2){{$}}
     #pragma acc parallel num_gangs(2) copy(out0) copyin(out1) copyout(out2)
     // DMP: CompoundStmt
@@ -1569,10 +1570,10 @@ int main() {
     // DMP-NEXT:           DeclRefExpr {{.*}} 'out' 'long'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2) reduction(+: out) vector{{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd reduction(+: out){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute simd reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) reduction(+: out) vector{{$}}
     #pragma acc parallel loop num_gangs(2) reduction(+: out) vector
@@ -1638,8 +1639,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out1' 'float'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) reduction(*: out0) firstprivate(out2) private(out3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(*: out0) firstprivate(out2) private(out3) map(hold,tofrom: out0,out1) reduction(*: out1){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(*: out0) firstprivate(out2) private(out3) map(hold,tofrom: out0,out1) reduction(*: out1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(*: out0) firstprivate(out2) private(out3) map(ompx_hold,tofrom: out0,out1) reduction(*: out1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(*: out0) firstprivate(out2) private(out3) map(ompx_hold,tofrom: out0,out1) reduction(*: out1){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(*: out0) firstprivate(out2) private(out3){{$}}
     #pragma acc parallel num_gangs(2) reduction(*: out0) firstprivate(out2) private(out3)
     // DMP: CompoundStmt
@@ -1765,8 +1766,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out2' 'double'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) pcopy(out0) pcopyin(out1) pcopyout(out2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out0) map(hold,to: out1) map(hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out0) map(hold,to: out1) map(hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out0) map(ompx_hold,to: out1) map(ompx_hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out0) map(ompx_hold,to: out1) map(ompx_hold,from: out2) reduction(+: out0) reduction(+: out1) reduction(+: out2){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) pcopy(out0) pcopyin(out1) pcopyout(out2){{$}}
     #pragma acc parallel num_gangs(2) pcopy(out0) pcopyin(out1) pcopyout(out2)
     // DMP: CompoundStmt
@@ -1882,10 +1883,10 @@ int main() {
     // DMP-NEXT:           DeclRefExpr {{.*}} 'out' 'float'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2) worker vector reduction(*: out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(*: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(*: out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd reduction(*: out){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(*: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(*: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for simd reduction(*: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) worker vector reduction(*: out){{$}}
     #pragma acc parallel loop num_gangs(2) worker vector reduction(*: out)
@@ -1934,8 +1935,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) reduction(+: out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(+: out) map(hold,tofrom: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out) map(hold,tofrom: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(+: out) map(ompx_hold,tofrom: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out) map(ompx_hold,tofrom: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(+: out){{$}}
     #pragma acc parallel num_gangs(2) reduction(+: out)
     // DMP: CompoundStmt
@@ -2005,8 +2006,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'double'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
     #pragma acc parallel num_gangs(2)
     // DMP: CompoundStmt
@@ -2078,10 +2079,10 @@ int main() {
     // DMP-NOT:          OMPReductionClause
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2) gang reduction(+: out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) gang reduction(+: out){{$}}
     #pragma acc parallel loop num_gangs(2) gang reduction(+: out)
@@ -2121,8 +2122,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) reduction(+: out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(+: out) map(hold,tofrom: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out) map(hold,tofrom: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) reduction(+: out) map(ompx_hold,tofrom: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) reduction(+: out) map(ompx_hold,tofrom: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) reduction(+: out){{$}}
     #pragma acc parallel num_gangs(2) reduction(+: out)
     // DMP: CompoundStmt
@@ -2204,10 +2205,10 @@ int main() {
     // DMP-NEXT:           DeclRefExpr {{.*}} 'out' 'int'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop gang num_gangs(2) worker reduction(+: out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for reduction(+: out){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop gang num_gangs(2) worker reduction(+: out){{$}}
     #pragma acc parallel loop gang num_gangs(2) worker reduction(+: out)
@@ -2251,8 +2252,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
     #pragma acc parallel num_gangs(2)
     // DMP: CompoundStmt
@@ -2334,10 +2335,10 @@ int main() {
     // DMP-NEXT:           DeclRefExpr {{.*}} 'out' 'int'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop vector gang reduction(+: out) num_gangs(2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd reduction(+: out){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute simd reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop vector gang reduction(+: out) num_gangs(2){{$}}
     #pragma acc parallel loop vector gang reduction(+: out) num_gangs(2)
@@ -2377,8 +2378,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
     #pragma acc parallel num_gangs(2)
     // DMP: CompoundStmt
@@ -2463,10 +2464,10 @@ int main() {
     // DMP-NEXT:           DeclRefExpr {{.*}} 'out' 'int'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2) gang worker vector reduction(+: out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd reduction(+: out){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for simd reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) gang worker vector reduction(+: out){{$}}
     #pragma acc parallel loop num_gangs(2) gang worker vector reduction(+: out)
@@ -2506,8 +2507,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
     #pragma acc parallel num_gangs(2)
     // DMP: CompoundStmt
@@ -2623,10 +2624,10 @@ int main() {
     // DMP-NEXT:         Stmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2) gang reduction(+: out){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-O-NEXT:  {{^ *}}#pragma omp distribute{{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) gang reduction(+: out){{$}}
     #pragma acc parallel loop num_gangs(2) gang reduction(+: out)
@@ -2711,8 +2712,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
     #pragma acc parallel num_gangs(2)
     // DMP: CompoundStmt
@@ -2789,8 +2790,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
     #pragma acc parallel num_gangs(2)
     // DMP: CompoundStmt
@@ -2872,8 +2873,8 @@ int main() {
     // DMP-NEXT:       DeclRefExpr {{.*}} 'out' 'int'
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
     #pragma acc parallel num_gangs(2)
     // DMP: CompoundStmt
@@ -2991,9 +2992,9 @@ int main() {
     // DMP-NEXT:       impl: ForStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out) reduction(+: out){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out) reduction(+: out){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2){{$}}
     #pragma acc parallel loop num_gangs(2)
     // PRT-NEXT: for ({{.*}}) {
@@ -3186,8 +3187,8 @@ int main() {
     // DMP-NOT:      OMP
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) present_or_copy(out2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,tofrom: out2) firstprivate(out1){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,tofrom: out2) firstprivate(out1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out2) firstprivate(out1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: out2) firstprivate(out1){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) present_or_copy(out2){{$}}
     #pragma acc parallel num_gangs(2) present_or_copy(out2)
     // DMP: CompoundStmt
@@ -3443,7 +3444,7 @@ int main() {
     // PRT-A-NEXT:  {{^ *}}  }
     // PRT-A-NEXT:  {{^ *}}}
     // PRT-AO-NEXT: {{^ *}}// ---------ACC->OMP--------
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(hold,to: out2) map(hold,tofrom: out1) reduction(+: out1){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,to: out2) map(ompx_hold,tofrom: out1) reduction(+: out1){{$}}
     // PRT-AO-NEXT: {{^ *}}// {
     // PRT-AO-NEXT: {{^ *}}//   int out0;
     // PRT-AO-NEXT: {{^ *}}//   for (int i = 0; i < 2; ++i) {
@@ -3461,7 +3462,7 @@ int main() {
     // PRT-AO-NEXT: {{^ *}}// ^----------OMP----------^
     //
     // PRT-OA-NEXT: {{^ *}}// v----------OMP----------v
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(hold,to: out2) map(hold,tofrom: out1) reduction(+: out1){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,to: out2) map(ompx_hold,tofrom: out1) reduction(+: out1){{$}}
     // PRT-O-NEXT:  {{^ *}}{
     // PRT-O-NEXT:  {{^ *}}  int out0;
     // PRT-O-NEXT:  {{^ *}}  for (int i = 0; i < 2; ++i) {

@@ -3448,7 +3448,7 @@ Value *InnerLoopVectorizer::emitTransformedIndex(
     assert(isa<SCEVConstant>(Step) &&
            "Expected constant step for pointer induction");
     return B.CreateGEP(
-        StartValue->getType()->getPointerElementType(), StartValue,
+        ID.getElementType(), StartValue,
         CreateMul(Index,
                   Exp.expandCodeFor(Step, Index->getType()->getScalarType(),
                                     GetInsertPoint())));
@@ -3989,7 +3989,8 @@ void InnerLoopVectorizer::truncateToMinimalBitwidths(VPTransformState &State) {
     // If the value wasn't vectorized, we must maintain the original scalar
     // type. The absence of the value from State indicates that it
     // wasn't vectorized.
-    VPValue *Def = State.Plan->getVPValue(KV.first);
+    // FIXME: Should not rely on getVPValue at this point.
+    VPValue *Def = State.Plan->getVPValue(KV.first, true);
     if (!State.hasAnyVectorValue(Def))
       continue;
     for (unsigned Part = 0; Part < UF; ++Part) {
@@ -4096,7 +4097,8 @@ void InnerLoopVectorizer::truncateToMinimalBitwidths(VPTransformState &State) {
     // If the value wasn't vectorized, we must maintain the original scalar
     // type. The absence of the value from State indicates that it
     // wasn't vectorized.
-    VPValue *Def = State.Plan->getVPValue(KV.first);
+    // FIXME: Should not rely on getVPValue at this point.
+    VPValue *Def = State.Plan->getVPValue(KV.first, true);
     if (!State.hasAnyVectorValue(Def))
       continue;
     for (unsigned Part = 0; Part < UF; ++Part) {
@@ -4482,7 +4484,8 @@ void InnerLoopVectorizer::clearReductionWrapFlags(const RecurrenceDescriptor &Rd
     Instruction *Cur = Worklist.pop_back_val();
     if (isa<OverflowingBinaryOperator>(Cur))
       for (unsigned Part = 0; Part < UF; ++Part) {
-        Value *V = State.get(State.Plan->getVPValue(Cur), Part);
+        // FIXME: Should not rely on getVPValue at this point.
+        Value *V = State.get(State.Plan->getVPValue(Cur, true), Part);
         cast<Instruction>(V)->dropPoisonGeneratingFlags();
       }
 
@@ -4513,11 +4516,12 @@ void InnerLoopVectorizer::fixLCSSAPHIs(VPTransformState &State) {
 
     // Can be a loop invariant incoming value or the last scalar value to be
     // extracted from the vectorized loop.
+    // FIXME: Should not rely on getVPValue at this point.
     Builder.SetInsertPoint(LoopMiddleBlock->getTerminator());
     Value *lastIncomingValue =
         OrigLoop->isLoopInvariant(IncomingValue)
             ? IncomingValue
-            : State.get(State.Plan->getVPValue(IncomingValue),
+            : State.get(State.Plan->getVPValue(IncomingValue, true),
                         VPIteration(UF - 1, Lane));
     LCSSAPhi.addIncoming(lastIncomingValue, LoopMiddleBlock);
   }
@@ -4807,7 +4811,7 @@ void InnerLoopVectorizer::widenPHIInstruction(Instruction *PN,
     Value *NumUnrolledElems =
         Builder.CreateMul(RuntimeVF, ConstantInt::get(PhiType, State.UF));
     Value *InductionGEP = GetElementPtrInst::Create(
-        ScStValueType->getPointerElementType(), NewPointerPhi,
+        II.getElementType(), NewPointerPhi,
         Builder.CreateMul(ScalarStepValue, NumUnrolledElems), "ptr.ind",
         InductionLoc);
     NewPointerPhi->addIncoming(InductionGEP, LoopLatch);
@@ -4826,7 +4830,7 @@ void InnerLoopVectorizer::widenPHIInstruction(Instruction *PN,
           Builder.CreateAdd(StartOffset, Builder.CreateStepVector(VecPhiType));
 
       Value *GEP = Builder.CreateGEP(
-          ScStValueType->getPointerElementType(), NewPointerPhi,
+          II.getElementType(), NewPointerPhi,
           Builder.CreateMul(
               StartOffset, Builder.CreateVectorSplat(State.VF, ScalarStepValue),
               "vector.gep"));
@@ -9479,6 +9483,10 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
         RecipeBuilder.getRecipe(Member)->eraseFromParent();
       }
   }
+
+  // From this point onwards, VPlan-to-VPlan transformations may change the plan
+  // in ways that accessing values using original IR values is incorrect.
+  Plan->disableValue2VPValue();
 
   VPlanTransforms::sinkScalarOperands(*Plan);
   VPlanTransforms::mergeReplicateRegions(*Plan);

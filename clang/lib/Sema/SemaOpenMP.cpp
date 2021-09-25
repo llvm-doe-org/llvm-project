@@ -19190,7 +19190,7 @@ static bool checkMapConflicts(
   //
   bool HasNoAllocMod =
       Modifiers.end() != std::find(Modifiers.begin(), Modifiers.end(),
-                                   OMPC_MAP_MODIFIER_no_alloc);
+                                   OMPC_MAP_MODIFIER_ompx_no_alloc);
   if (EnclosingExpr && !IsEnclosedByDataEnvironmentExpr && !HasNoAllocMod) {
     SemaRef.Diag(ELoc,
                  diag::err_omp_original_storage_is_shared_and_does_not_contain)
@@ -19374,8 +19374,8 @@ static void checkMappableExpressionList(
   Expr *UnresolvedMapper = nullptr;
 
   bool HasHoldModifier =
-      Modifiers.end() !=
-      std::find(Modifiers.begin(), Modifiers.end(), OMPC_MAP_MODIFIER_hold);
+      Modifiers.end() != std::find(Modifiers.begin(), Modifiers.end(),
+                                   OMPC_MAP_MODIFIER_ompx_hold);
 
   // Keep track of the mappable components and base declarations in this clause.
   // Each entry in the list is going to have a list of components associated. We
@@ -19578,15 +19578,17 @@ static void checkMappableExpressionList(
         continue;
       }
 
-      // The 'hold' modifier is specifically intended to be used on a target or
-      // target data directive to prevent data from being deallocated during the
-      // associated region.  It is not useful on a target enter data or target
-      // exit data directive because they are inherently dynamic not structured.
+      // The 'ompx_hold' modifier is specifically intended to be used on a
+      // 'target' or 'target data' directive to prevent data from being unmapped
+      // during the associated statement.  It is not permitted on a 'target
+      // enter data' or 'target exit data' directive, which have no associated
+      // statement.
       if ((DKind == OMPD_target_enter_data || DKind == OMPD_target_exit_data) &&
           HasHoldModifier) {
         SemaRef.Diag(StartLoc,
                      diag::err_omp_invalid_map_type_modifier_for_directive)
-            << getOpenMPSimpleClauseTypeName(OMPC_map, OMPC_MAP_MODIFIER_hold)
+            << getOpenMPSimpleClauseTypeName(OMPC_map,
+                                             OMPC_MAP_MODIFIER_ompx_hold)
             << getOpenMPDirectiveName(DKind);
         continue;
       }

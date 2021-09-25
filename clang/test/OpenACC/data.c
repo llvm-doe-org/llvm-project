@@ -43,8 +43,8 @@
 // RUN: }
 // RUN: %for prt-args {
 // RUN:   %clang -Xclang -verify %[prt] %t-acc.c \
-// RUN:          -Wno-openacc-omp-map-hold -Wno-openacc-omp-map-present \
-// RUN:          -Wno-openacc-omp-map-no-alloc \
+// RUN:          -Wno-openacc-omp-map-ompx-hold -Wno-openacc-omp-map-present \
+// RUN:          -Wno-openacc-omp-map-ompx-no-alloc \
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
@@ -57,8 +57,8 @@
 // RUN: %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast
 // RUN: %for prt-args {
 // RUN:   %clang %[prt] %t.ast 2>&1 \
-// RUN:          -Wno-openacc-omp-map-hold -Wno-openacc-omp-map-present \
-// RUN:          -Wno-openacc-omp-map-no-alloc \
+// RUN:          -Wno-openacc-omp-map-ompx-hold -Wno-openacc-omp-map-present \
+// RUN:          -Wno-openacc-omp-map-ompx-no-alloc \
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
@@ -66,8 +66,8 @@
 //
 // RUN: %for prt-opts {
 // RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c \
-// RUN:          -Wno-openacc-omp-map-hold -Wno-openacc-omp-map-present \
-// RUN:          -Wno-openacc-omp-map-no-alloc
+// RUN:          -Wno-openacc-omp-map-ompx-hold -Wno-openacc-omp-map-present \
+// RUN:          -Wno-openacc-omp-map-ompx-no-alloc
 // RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:   %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c
 // RUN:   %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-HOST %s
@@ -226,8 +226,8 @@ void test() {
     // DMP-NOT:      OMP
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc data present(pr) copy(c) copyin(ci) copyout(co) create(cr) no_create(nc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(present,hold,alloc: pr) map(hold,tofrom: c) map(hold,to: ci) map(hold,from: co) map(hold,alloc: cr) map(no_alloc,hold,alloc: nc){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(present,hold,alloc: pr) map(hold,tofrom: c) map(hold,to: ci) map(hold,from: co) map(hold,alloc: cr) map(no_alloc,hold,alloc: nc){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(present,ompx_hold,alloc: pr) map(ompx_hold,tofrom: c) map(ompx_hold,to: ci) map(ompx_hold,from: co) map(ompx_hold,alloc: cr) map(ompx_no_alloc,ompx_hold,alloc: nc){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(present,ompx_hold,alloc: pr) map(ompx_hold,tofrom: c) map(ompx_hold,to: ci) map(ompx_hold,from: co) map(ompx_hold,alloc: cr) map(ompx_no_alloc,ompx_hold,alloc: nc){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data present(pr) copy(c) copyin(ci) copyout(co) create(cr) no_create(nc){{$}}
     #pragma acc data present(pr) copy(c) copyin(ci) copyout(co) create(cr) no_create(nc)
     // DMP: CompoundStmt
@@ -287,8 +287,8 @@ void test() {
     // DMP-NOT:      OMP
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(c0){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,tofrom: c0){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(hold,tofrom: c0){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: c0){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(ompx_hold,tofrom: c0){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(c0){{$}}
     #pragma acc data copy(c0)
     // DMP: CompoundStmt
@@ -313,8 +313,8 @@ void test() {
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(c0,c1){{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,tofrom: c0,c1){{$}}
-      // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(hold,tofrom: c0,c1){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: c0,c1){{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(ompx_hold,tofrom: c0,c1){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(c0,c1){{$}}
       #pragma acc data copy(c0,c1)
       // DMP: CompoundStmt
@@ -341,8 +341,8 @@ void test() {
         // DMP-NOT:      OMP
         //
         // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(c0,c1,c2){{$}}
-        // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,tofrom: c0,c1,c2){{$}}
-        // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(hold,tofrom: c0,c1,c2){{$}}
+        // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: c0,c1,c2){{$}}
+        // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(ompx_hold,tofrom: c0,c1,c2){{$}}
         // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(c0,c1,c2){{$}}
         #pragma acc data copy(c0,c1,c2)
         // DMP: CompoundStmt
@@ -480,19 +480,19 @@ void test() {
     //  PRT-A-SAME: {{^ *}}copyout(co0) pcopyout(co1) present_or_copyout(co2){{( *\\$[[:space:]])?}}
     //  PRT-A-SAME: {{^ *}}create(cr0) pcreate(cr1) present_or_create(cr2){{( *\\$[[:space:]])?}}
     //  PRT-A-SAME: {{^ *}}no_create(nc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(present,hold,alloc: pr)
-    // PRT-AO-SAME: {{^ *}}map(hold,tofrom: c0) map(hold,tofrom: c1) map(hold,tofrom: c2)
-    // PRT-AO-SAME: {{^ *}}map(hold,to: ci0) map(hold,to: ci1) map(hold,to: ci2)
-    // PRT-AO-SAME: {{^ *}}map(hold,from: co0) map(hold,from: co1) map(hold,from: co2)
-    // PRT-AO-SAME: {{^ *}}map(hold,alloc: cr0) map(hold,alloc: cr1) map(hold,alloc: cr2)
-    // PRT-AO-SAME: {{^ *}}map(no_alloc,hold,alloc: nc){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(present,ompx_hold,alloc: pr)
+    // PRT-AO-SAME: {{^ *}}map(ompx_hold,tofrom: c0) map(ompx_hold,tofrom: c1) map(ompx_hold,tofrom: c2)
+    // PRT-AO-SAME: {{^ *}}map(ompx_hold,to: ci0) map(ompx_hold,to: ci1) map(ompx_hold,to: ci2)
+    // PRT-AO-SAME: {{^ *}}map(ompx_hold,from: co0) map(ompx_hold,from: co1) map(ompx_hold,from: co2)
+    // PRT-AO-SAME: {{^ *}}map(ompx_hold,alloc: cr0) map(ompx_hold,alloc: cr1) map(ompx_hold,alloc: cr2)
+    // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,ompx_hold,alloc: nc){{$}}
     //
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(present,hold,alloc: pr)
-    //  PRT-O-SAME: {{^ *}}map(hold,tofrom: c0) map(hold,tofrom: c1) map(hold,tofrom: c2)
-    //  PRT-O-SAME: {{^ *}}map(hold,to: ci0) map(hold,to: ci1) map(hold,to: ci2)
-    //  PRT-O-SAME: {{^ *}}map(hold,from: co0) map(hold,from: co1) map(hold,from: co2)
-    //  PRT-O-SAME: {{^ *}}map(hold,alloc: cr0) map(hold,alloc: cr1) map(hold,alloc: cr2)
-    //  PRT-O-SAME: {{^ *}}map(no_alloc,hold,alloc: nc){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(present,ompx_hold,alloc: pr)
+    //  PRT-O-SAME: {{^ *}}map(ompx_hold,tofrom: c0) map(ompx_hold,tofrom: c1) map(ompx_hold,tofrom: c2)
+    //  PRT-O-SAME: {{^ *}}map(ompx_hold,to: ci0) map(ompx_hold,to: ci1) map(ompx_hold,to: ci2)
+    //  PRT-O-SAME: {{^ *}}map(ompx_hold,from: co0) map(ompx_hold,from: co1) map(ompx_hold,from: co2)
+    //  PRT-O-SAME: {{^ *}}map(ompx_hold,alloc: cr0) map(ompx_hold,alloc: cr1) map(ompx_hold,alloc: cr2)
+    //  PRT-O-SAME: {{^ *}}map(ompx_no_alloc,ompx_hold,alloc: nc){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data present(pr){{( *\\$[[:space:]] *//)?}}
     // PRT-OA-SAME: {{^ *}}copy(c0) pcopy(c1) present_or_copy(c2){{( *\\$[[:space:]] *//)?}}
     // PRT-OA-SAME: {{^ *}}copyin(ci0) pcopyin(ci1) present_or_copyin(ci2){{( *\\$[[:space:]] *//)?}}
@@ -580,12 +580,12 @@ void test() {
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(no_alloc,alloc: nc)
+      // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,alloc: nc)
       // PRT-AO-SAME: {{^ *}}shared(co0,co1,co2,cr0,cr1,cr2,nc,pr,c0,c1,c2,ci0,ci1,ci2)
       // PRT-AO-SAME: {{^ *}}defaultmap(tofrom: scalar){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(no_alloc,alloc: nc)
+      // PRT-O-SAME:  {{^ *}}map(ompx_no_alloc,alloc: nc)
       // PRT-O-SAME:  {{^ *}}shared(co0,co1,co2,cr0,cr1,cr2,nc,pr,c0,c1,c2,ci0,ci1,ci2)
       // PRT-O-SAME:  {{^ *}}defaultmap(tofrom: scalar){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
@@ -742,11 +742,11 @@ void test() {
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1)
       // PRT-A-SAME:  {{^ *}}copy(pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(hold,tofrom: pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc)
+      // PRT-AO-SAME: {{^ *}}map(ompx_hold,tofrom: pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc)
       // PRT-AO-SAME: {{^ *}}shared(pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(hold,tofrom: pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc)
+      // PRT-O-SAME:  {{^ *}}map(ompx_hold,tofrom: pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc)
       // PRT-O-SAME:  {{^ *}}shared(pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1)
       // PRT-OA-SAME: {{^ *}}copy(pr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc){{$}}
@@ -907,13 +907,13 @@ void test() {
     //  PRT-A-NEXT: {{^ *}}#pragma acc data present(prArr){{( *\\$[[:space:]])?}}
     //  PRT-A-SAME: {{^ *}}copy(c) copyin(ci) copyout(co){{( *\\$[[:space:]])?}}
     //  PRT-A-SAME: {{^ *}}create(cr) no_create(nc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(present,hold,alloc: prArr)
-    // PRT-AO-SAME: {{^  *}}map(hold,tofrom: c) map(hold,to: ci) map(hold,from: co)
-    // PRT-AO-SAME: {{^  *}}map(hold,alloc: cr) map(no_alloc,hold,alloc: nc){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(present,ompx_hold,alloc: prArr)
+    // PRT-AO-SAME: {{^  *}}map(ompx_hold,tofrom: c) map(ompx_hold,to: ci) map(ompx_hold,from: co)
+    // PRT-AO-SAME: {{^  *}}map(ompx_hold,alloc: cr) map(ompx_no_alloc,ompx_hold,alloc: nc){{$}}
     //
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(present,hold,alloc: prArr)
-    //  PRT-O-SAME: {{^  *}}map(hold,tofrom: c) map(hold,to: ci) map(hold,from: co)
-    //  PRT-O-SAME: {{^  *}}map(hold,alloc: cr) map(no_alloc,hold,alloc: nc){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(present,ompx_hold,alloc: prArr)
+    //  PRT-O-SAME: {{^  *}}map(ompx_hold,tofrom: c) map(ompx_hold,to: ci) map(ompx_hold,from: co)
+    //  PRT-O-SAME: {{^  *}}map(ompx_hold,alloc: cr) map(ompx_no_alloc,ompx_hold,alloc: nc){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data present(prArr){{( *\\$[[:space:]] *//)?}}
     // PRT-OA-SAME: {{^ *}}copy(c) copyin(ci) copyout(co){{( *\\$[[:space:]] *//)?}}
     // PRT-OA-SAME: {{^ *}}create(cr) no_create(nc){{$}}
@@ -969,11 +969,11 @@ void test() {
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(no_alloc,alloc: nc)
+      // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,alloc: nc)
       // PRT-AO-SAME: {{^ *}}shared(co,cr,nc,prArr,c,ci){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(no_alloc,alloc: nc)
+      // PRT-O-SAME:  {{^ *}}map(ompx_no_alloc,alloc: nc)
       // PRT-O-SAME:  {{^ *}}shared(co,cr,nc,prArr,c,ci){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
@@ -1081,10 +1081,10 @@ void test() {
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) copyin(prArr,c,ci,co,cr,nc){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(hold,to: prArr,c,ci,co,cr,nc) shared(prArr,c,ci,co,cr,nc){{$}}
+      // PRT-AO-SAME: {{^ *}}map(ompx_hold,to: prArr,c,ci,co,cr,nc) shared(prArr,c,ci,co,cr,nc){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(hold,to: prArr,c,ci,co,cr,nc) shared(prArr,c,ci,co,cr,nc){{$}}
+      // PRT-O-SAME:  {{^ *}}map(ompx_hold,to: prArr,c,ci,co,cr,nc) shared(prArr,c,ci,co,cr,nc){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copyin(prArr,c,ci,co,cr,nc){{$}}
       #pragma acc parallel num_gangs(1) copyin(prArr,c,ci,co,cr,nc)
       // DMP: CompoundStmt
@@ -1215,13 +1215,13 @@ void test() {
     //  PRT-A-NEXT: {{^ *}}#pragma acc data present(prStruct){{( *\\$[[:space:]])?}}
     //  PRT-A-SAME: {{^ *}}copy(c) copyin(ci) copyout(co){{( *\\$[[:space:]])?}}
     //  PRT-A-SAME: {{^ *}}create(cr) no_create(nc){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(present,hold,alloc: prStruct)
-    // PRT-AO-SAME: {{^  *}}map(hold,tofrom: c) map(hold,to: ci) map(hold,from: co)
-    // PRT-AO-SAME: {{^  *}}map(hold,alloc: cr) map(no_alloc,hold,alloc: nc){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(present,ompx_hold,alloc: prStruct)
+    // PRT-AO-SAME: {{^  *}}map(ompx_hold,tofrom: c) map(ompx_hold,to: ci) map(ompx_hold,from: co)
+    // PRT-AO-SAME: {{^  *}}map(ompx_hold,alloc: cr) map(ompx_no_alloc,ompx_hold,alloc: nc){{$}}
     //
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(present,hold,alloc: prStruct)
-    //  PRT-O-SAME: {{^  *}}map(hold,tofrom: c) map(hold,to: ci) map(hold,from: co)
-    //  PRT-O-SAME: {{^  *}}map(hold,alloc: cr) map(no_alloc,hold,alloc: nc){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(present,ompx_hold,alloc: prStruct)
+    //  PRT-O-SAME: {{^  *}}map(ompx_hold,tofrom: c) map(ompx_hold,to: ci) map(ompx_hold,from: co)
+    //  PRT-O-SAME: {{^  *}}map(ompx_hold,alloc: cr) map(ompx_no_alloc,ompx_hold,alloc: nc){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data present(prStruct){{( *\\$[[:space:]] *//)?}}
     // PRT-OA-SAME: {{^ *}}copy(c) copyin(ci) copyout(co){{( *\\$[[:space:]] *//)?}}
     // PRT-OA-SAME: {{^ *}}create(cr) no_create(nc){{$}}
@@ -1277,11 +1277,11 @@ void test() {
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(no_alloc,alloc: nc)
+      // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,alloc: nc)
       // PRT-AO-SAME: {{^ *}}shared(co,cr,nc,prStruct,c,ci){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(no_alloc,alloc: nc)
+      // PRT-O-SAME:  {{^ *}}map(ompx_no_alloc,alloc: nc)
       // PRT-O-SAME:  {{^ *}}shared(co,cr,nc,prStruct,c,ci){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
@@ -1389,10 +1389,10 @@ void test() {
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) copyout(prStruct,c,ci,co,cr,nc){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(hold,from: prStruct,c,ci,co,cr,nc) shared(nc,prStruct,c,ci,co,cr){{$}}
+      // PRT-AO-SAME: {{^ *}}map(ompx_hold,from: prStruct,c,ci,co,cr,nc) shared(nc,prStruct,c,ci,co,cr){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(hold,from: prStruct,c,ci,co,cr,nc) shared(nc,prStruct,c,ci,co,cr){{$}}
+      // PRT-O-SAME:  {{^ *}}map(ompx_hold,from: prStruct,c,ci,co,cr,nc) shared(nc,prStruct,c,ci,co,cr){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copyout(prStruct,c,ci,co,cr,nc){{$}}
       #pragma acc parallel num_gangs(1) copyout(prStruct,c,ci,co,cr,nc)
       // DMP: CompoundStmt
@@ -1489,8 +1489,8 @@ void test() {
     // DMP:          CapturedStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(c){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,tofrom: c){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(hold,tofrom: c){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: c){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(ompx_hold,tofrom: c){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(c){{$}}
     #pragma acc data copy(c)
     // DMP:      ACCDataDirective
@@ -1505,8 +1505,8 @@ void test() {
     // DMP:          CapturedStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc data copyin(ci){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,to: ci){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(hold,to: ci){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,to: ci){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(ompx_hold,to: ci){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data copyin(ci){{$}}
     #pragma acc data copyin(ci)
     // DMP:      ACCDataDirective
@@ -1520,8 +1520,8 @@ void test() {
     // DMP-NOT:      OMP{{.*}}Clause
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc data copyout(co){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,from: co){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(hold,from: co){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,from: co){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(ompx_hold,from: co){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data copyout(co){{$}}
     #pragma acc data copyout(co)
     // DMP: CompoundStmt
@@ -1629,10 +1629,10 @@ void test() {
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) copy(c,ci,co){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(hold,tofrom: c,ci,co) shared(c,ci,co){{$}}
+      // PRT-AO-SAME: {{^ *}}map(ompx_hold,tofrom: c,ci,co) shared(c,ci,co){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(hold,tofrom: c,ci,co) shared(c,ci,co){{$}}
+      // PRT-O-SAME:  {{^ *}}map(ompx_hold,tofrom: c,ci,co) shared(c,ci,co){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copy(c,ci,co){{$}}
       #pragma acc parallel num_gangs(1) copy(c,ci,co)
       // DMP: CompoundStmt
@@ -1705,8 +1705,8 @@ void test() {
     // DMP:          CapturedStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(arr[1:3]){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,tofrom: arr[1:3]){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(hold,tofrom: arr[1:3]){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: arr[1:3]){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(ompx_hold,tofrom: arr[1:3]){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(arr[1:3]){{$}}
     #pragma acc data copy(arr[1:3])
     // PRT-NEXT: {
@@ -1805,10 +1805,10 @@ void test() {
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) copy(arr[1:3]){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(hold,tofrom: arr[1:3]) shared(arr){{$}}
+      // PRT-AO-SAME: {{^ *}}map(ompx_hold,tofrom: arr[1:3]) shared(arr){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(hold,tofrom: arr[1:3]) shared(arr){{$}}
+      // PRT-O-SAME:  {{^ *}}map(ompx_hold,tofrom: arr[1:3]) shared(arr){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copy(arr[1:3]){{$}}
       #pragma acc parallel num_gangs(1) copy(arr[1:3])
       // DMP: CompoundStmt
@@ -1888,8 +1888,8 @@ void test() {
     // DMP:          CapturedStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(arr[s0:l0]){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,tofrom: arr[s0:l0]){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(hold,tofrom: arr[s0:l0]){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: arr[s0:l0]){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(ompx_hold,tofrom: arr[s0:l0]){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(arr[s0:l0]){{$}}
     #pragma acc data copy(arr[s0:l0])
     // PRT-NEXT: {
@@ -1992,10 +1992,10 @@ void test() {
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) copy(arr[s1:l1]){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(hold,tofrom: arr[s1:l1]) shared(arr){{$}}
+      // PRT-AO-SAME: {{^ *}}map(ompx_hold,tofrom: arr[s1:l1]) shared(arr){{$}}
       //
       // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(hold,tofrom: arr[s1:l1]) shared(arr){{$}}
+      // PRT-O-SAME:  {{^ *}}map(ompx_hold,tofrom: arr[s1:l1]) shared(arr){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copy(arr[s1:l1]){{$}}
       #pragma acc parallel num_gangs(1) copy(arr[s1:l1])
       // DMP: CompoundStmt
@@ -2096,8 +2096,8 @@ void test() {
     // DMP:          CapturedStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(arr0[0:2],arr1[2:3]){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,tofrom: arr0[0:2],arr1[2:3]){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(hold,tofrom: arr0[0:2],arr1[2:3]){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: arr0[0:2],arr1[2:3]){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(ompx_hold,tofrom: arr0[0:2],arr1[2:3]){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(arr0[0:2],arr1[2:3]){{$}}
     #pragma acc data copy(arr0[0:2],arr1[2:3])
     // DMP:      ACCDataDirective
@@ -2134,8 +2134,8 @@ void test() {
     // DMP:          CapturedStmt
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc data copy(arr0[2:3],arr1[0:2]){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,tofrom: arr0[2:3],arr1[0:2]){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(hold,tofrom: arr0[2:3],arr1[0:2]){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: arr0[2:3],arr1[0:2]){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target data map(ompx_hold,tofrom: arr0[2:3],arr1[0:2]){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(arr0[2:3],arr1[0:2]){{$}}
     #pragma acc data copy(arr0[2:3],arr1[0:2])
     // Check suppression of implicit data clauses.
@@ -2185,7 +2185,7 @@ void test() {
 
   //--------------------------------------------------
   // defaultmap for scalars with suppressed OpenACC implicit DAs: Check that an
-  // inherited no_alloc prevents adding it.
+  // inherited ompx_no_alloc prevents adding it.
   //--------------------------------------------------
 
   // PRT-NEXT: {
@@ -2195,17 +2195,17 @@ void test() {
     int x = 10;
     int use = 0;
     //  PRT-A-NEXT: {{^ *}}#pragma acc data no_create(x){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(no_alloc,hold,alloc: x){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(no_alloc,hold,alloc: x){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_no_alloc,ompx_hold,alloc: x){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(ompx_no_alloc,ompx_hold,alloc: x){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data no_create(x){{$}}
     #pragma acc data no_create(x)
     // PRT-NEXT: {
     {
-      // no_alloc inherited from parent.
+      // ompx_no_alloc inherited from parent.
       //
       //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1) copy(use){{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) map(hold,tofrom: use) map(no_alloc,alloc: x) shared(use,x){{$}}
-      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) map(hold,tofrom: use) map(no_alloc,alloc: x) shared(use,x){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: use) map(ompx_no_alloc,alloc: x) shared(use,x){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) map(ompx_hold,tofrom: use) map(ompx_no_alloc,alloc: x) shared(use,x){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copy(use){{$}}
       #pragma acc parallel num_gangs(1) copy(use)
       // PRT-NEXT: if (use)
@@ -2213,18 +2213,18 @@ void test() {
       if (use)
         x += 100;
 
-      // no_alloc inherited from grandparent.
+      // ompx_no_alloc inherited from grandparent.
       //
       //  PRT-A-NEXT: {{^ *}}#pragma acc data copy(use){{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,tofrom: use){{$}}
-      //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(hold,tofrom: use){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: use){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(ompx_hold,tofrom: use){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(use){{$}}
       #pragma acc data copy(use)
       // PRT-NEXT: {
       {
         //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1) copy(use){{$}}
-        // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) map(hold,tofrom: use) map(no_alloc,alloc: x) shared(use,x){{$}}
-        //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) map(hold,tofrom: use) map(no_alloc,alloc: x) shared(use,x){{$}}
+        // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: use) map(ompx_no_alloc,alloc: x) shared(use,x){{$}}
+        //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) map(ompx_hold,tofrom: use) map(ompx_no_alloc,alloc: x) shared(use,x){{$}}
         // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copy(use){{$}}
         #pragma acc parallel num_gangs(1) copy(use)
         // PRT-NEXT: if (use)
@@ -2254,8 +2254,8 @@ void test() {
     // PRT-NEXT: int x =
     int x = 10;
     //  PRT-A-NEXT: {{^ *}}#pragma acc data copy(x){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,tofrom: x){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(hold,tofrom: x){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: x){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(ompx_hold,tofrom: x){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(x){{$}}
     #pragma acc data copy(x)
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1) firstprivate(x){{$}}
@@ -2283,8 +2283,8 @@ void test() {
     int x = 10;
     int y = 20;
     //  PRT-A-NEXT: {{^ *}}#pragma acc data copy(x){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(hold,tofrom: x){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(hold,tofrom: x){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: x){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(ompx_hold,tofrom: x){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(x){{$}}
     #pragma acc data copy(x)
     // PRT-NEXT: {
@@ -2310,10 +2310,10 @@ void test() {
   } // PRT-NEXT: }
 
   //--------------------------------------------------
-  // Inherited no_alloc: Check that an explicit DMA or DSA prevents it.
+  // Inherited ompx_no_alloc: Check that an explicit DMA or DSA prevents it.
   //
-  // The case where -fopenacc-no-create-omp=no-no_alloc prevents it is checked
-  // in no-create.c.
+  // The case where -fopenacc-no-create-omp=no-ompx-no-alloc prevents it is
+  // checked in no-create.c.
   //--------------------------------------------------
 
   // PRT-NEXT: {
@@ -2323,13 +2323,13 @@ void test() {
     int x = 10;
     int y = 20;
     //  PRT-A-NEXT: {{^ *}}#pragma acc data no_create(x,y){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(no_alloc,hold,alloc: x,y){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(no_alloc,hold,alloc: x,y){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_no_alloc,ompx_hold,alloc: x,y){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(ompx_no_alloc,ompx_hold,alloc: x,y){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data no_create(x,y){{$}}
     #pragma acc data no_create(x,y)
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1) copy(x) firstprivate(y){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) map(hold,tofrom: x) firstprivate(y) shared(x){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) map(hold,tofrom: x) firstprivate(y) shared(x){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: x) firstprivate(y) shared(x){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) map(ompx_hold,tofrom: x) firstprivate(y) shared(x){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copy(x) firstprivate(y){{$}}
     #pragma acc parallel num_gangs(1) copy(x) firstprivate(y)
     // PRT-NEXT: {

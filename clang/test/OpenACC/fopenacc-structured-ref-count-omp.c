@@ -3,10 +3,10 @@
 // particular when acc exit data is called more times than acc enter data.
 //
 // In various other tests for specific directives and clauses, various other
-// dimensions of data clause behavior are checked thoroughly when 'hold' is
+// dimensions of data clause behavior are checked thoroughly when 'ompx_hold' is
 // used in the translation, and we don't bother to repeat those checks when
-// 'hold' isn't used.  Diagnostics about 'hold' in the translation are checked
-// in warn-acc-omp-map-hold.c.
+// 'ompx_hold' isn't used.  Diagnostics about 'ompx_hold' in the translation are
+// checked in warn-acc-omp-map-ompx-hold.c.
 //
 // In some cases, it's challenging to check when data manages to remain present.
 // Specifically, calling acc_is_present or omp_target_is_present or specifying a
@@ -38,9 +38,9 @@
 // BAD-VAL: error: invalid value '[[VAL]]' in '-fopenacc-structured-ref-count-omp=[[VAL]]'
 
 // RUN: %data ref-count-opts {
-// RUN:   (ref-count-opt=-Wno-openacc-omp-map-hold                                           hold-comma='hold,' hold-or-no-hold=HOLD)
-// RUN:   (ref-count-opt='-fopenacc-structured-ref-count-omp=hold -Wno-openacc-omp-map-hold' hold-comma='hold,' hold-or-no-hold=HOLD)
-// RUN:   (ref-count-opt=-fopenacc-structured-ref-count-omp=no-hold                          hold-comma=        hold-or-no-hold=NO-HOLD)
+// RUN:   (ref-count-opt=-Wno-openacc-omp-map-ompx-hold                                                hold-comma='ompx_hold,' hold-or-no-hold=HOLD   )
+// RUN:   (ref-count-opt='-fopenacc-structured-ref-count-omp=ompx-hold -Wno-openacc-omp-map-ompx-hold' hold-comma='ompx_hold,' hold-or-no-hold=HOLD   )
+// RUN:   (ref-count-opt=-fopenacc-structured-ref-count-omp=no-ompx-hold                               hold-comma=             hold-or-no-hold=NO-HOLD)
 // RUN: }
 
 // Check -ast-dump before and after AST serialization.
@@ -84,7 +84,7 @@
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify %[prt] %[ref-count-opt] %t-acc.c \
 // RUN:            %acc-includes -Wno-openacc-omp-map-present \
-// RUN:            -Wno-openacc-omp-map-no-alloc \
+// RUN:            -Wno-openacc-omp-map-ompx-no-alloc \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -DHOLD='%[hold-comma]' %s
 // RUN:   }
 // RUN: }
@@ -125,7 +125,7 @@
 // RUN:       %[run-if] %clang -Xclang -verify %[prt-opt]=omp %[ref-count-opt] \
 // RUN:                        %s %acc-includes > %t-omp.c \
 // RUN:                        -Wno-openacc-omp-map-present \
-// RUN:                        -Wno-openacc-omp-map-no-alloc
+// RUN:                        -Wno-openacc-omp-map-ompx-no-alloc
 // RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:       %[run-if] grep "^// nvptx64-" %s >> %t-omp.c
 // RUN:       %[run-if] %clang -fopenmp %fopenmp-version \
@@ -256,11 +256,11 @@ int main() {
   // PRT-AO-NEXT: // #pragma omp target data map([[HOLD]]tofrom: c)
   // PRT-AO-SAME: {{^}} map([[HOLD]]to: ci) map([[HOLD]]from: co)
   // PRT-AO-SAME: {{^}} map([[HOLD]]alloc: cr)
-  // PRT-AO-SAME: {{^}} map(no_alloc,[[HOLD]]alloc: nc){{$}}
+  // PRT-AO-SAME: {{^}} map(ompx_no_alloc,[[HOLD]]alloc: nc){{$}}
   //  PRT-O-NEXT: #pragma omp target data map([[HOLD]]tofrom: c)
   //  PRT-O-SAME: {{^}} map([[HOLD]]to: ci) map([[HOLD]]from: co)
   //  PRT-O-SAME: {{^}} map([[HOLD]]alloc: cr)
-  //  PRT-O-SAME: {{^}} map(no_alloc,[[HOLD]]alloc: nc){{$}}
+  //  PRT-O-SAME: {{^}} map(ompx_no_alloc,[[HOLD]]alloc: nc){{$}}
   // PRT-OA-NEXT: // #pragma acc data copy(c) copyin(ci) copyout(co)
   // PRT-OA-SAME: {{^}} create(cr) no_create(nc){{$}}
   //
@@ -340,11 +340,11 @@ int main() {
   // PRT-AO-NEXT: // #pragma omp target teams map([[HOLD]]tofrom: c)
   // PRT-AO-SAME: {{^}} map([[HOLD]]to: ci) map([[HOLD]]from: co)
   // PRT-AO-SAME: {{^}} map([[HOLD]]alloc: cr)
-  // PRT-AO-SAME: {{^}} map(no_alloc,[[HOLD]]alloc: nc){{$}}
+  // PRT-AO-SAME: {{^}} map(ompx_no_alloc,[[HOLD]]alloc: nc){{$}}
   //  PRT-O-NEXT: #pragma omp target teams map([[HOLD]]tofrom: c)
   //  PRT-O-SAME: {{^}} map([[HOLD]]to: ci) map([[HOLD]]from: co)
   //  PRT-O-SAME: {{^}} map([[HOLD]]alloc: cr)
-  //  PRT-O-SAME: {{^}} map(no_alloc,[[HOLD]]alloc: nc){{$}}
+  //  PRT-O-SAME: {{^}} map(ompx_no_alloc,[[HOLD]]alloc: nc){{$}}
   // PRT-OA-NEXT: // #pragma acc parallel copy(c) copyin(ci) copyout(co)
   // PRT-OA-SAME: {{^}} create(cr) no_create(nc){{$}}
   //
@@ -416,9 +416,9 @@ int main() {
     //
     //  PRT-A-NEXT: #pragma acc data present(p) no_create(nc){{$}}
     // PRT-AO-NEXT: // #pragma omp target data map(present,[[HOLD]]alloc: p)
-    // PRT-AO-SAME: {{^}} map(no_alloc,[[HOLD]]alloc: nc){{$}}
+    // PRT-AO-SAME: {{^}} map(ompx_no_alloc,[[HOLD]]alloc: nc){{$}}
     //  PRT-O-NEXT: #pragma omp target data map(present,[[HOLD]]alloc: p)
-    //  PRT-O-SAME: {{^}} map(no_alloc,[[HOLD]]alloc: nc){{$}}
+    //  PRT-O-SAME: {{^}} map(ompx_no_alloc,[[HOLD]]alloc: nc){{$}}
     // PRT-OA-NEXT: // #pragma acc data present(p) no_create(nc){{$}}
     // EXE-DEV-NEXT: acc_ev_enter_data_start
     // EXE-DEV-NEXT: acc_ev_enter_data_end
@@ -502,9 +502,9 @@ int main() {
     //
     //  PRT-A-NEXT: #pragma acc parallel present(p) no_create(nc){{$}}
     // PRT-AO-NEXT: // #pragma omp target teams map(present,[[HOLD]]alloc: p)
-    // PRT-AO-SAME: {{^}} map(no_alloc,[[HOLD]]alloc: nc){{$}}
+    // PRT-AO-SAME: {{^}} map(ompx_no_alloc,[[HOLD]]alloc: nc){{$}}
     //  PRT-O-NEXT: #pragma omp target teams map(present,[[HOLD]]alloc: p)
-    //  PRT-O-SAME: {{^}} map(no_alloc,[[HOLD]]alloc: nc){{$}}
+    //  PRT-O-SAME: {{^}} map(ompx_no_alloc,[[HOLD]]alloc: nc){{$}}
     // PRT-OA-NEXT: // #pragma acc parallel present(p) no_create(nc){{$}}
     //
     // EXE-DEV-NEXT: acc_ev_enter_data_start

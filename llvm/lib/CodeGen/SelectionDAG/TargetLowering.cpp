@@ -819,13 +819,21 @@ SDValue TargetLowering::SimplifyMultipleUseDemandedBits(
     break;
   }
   case ISD::INSERT_SUBVECTOR: {
-    // If we don't demand the inserted subvector, return the base vector.
     SDValue Vec = Op.getOperand(0);
     SDValue Sub = Op.getOperand(1);
     uint64_t Idx = Op.getConstantOperandVal(2);
     unsigned NumSubElts = Sub.getValueType().getVectorNumElements();
-    if (DemandedElts.extractBits(NumSubElts, Idx) == 0)
+    APInt DemandedSubElts = DemandedElts.extractBits(NumSubElts, Idx);
+    // If we don't demand the inserted subvector, return the base vector.
+    if (DemandedSubElts == 0)
       return Vec;
+    // If this simply widens the lowest subvector, see if we can do it earlier.
+    if (Idx == 0 && Vec.isUndef()) {
+      if (SDValue NewSub = SimplifyMultipleUseDemandedBits(
+              Sub, DemandedBits, DemandedSubElts, DAG, Depth + 1))
+        return DAG.getNode(Op.getOpcode(), SDLoc(Op), Op.getValueType(),
+                           Op.getOperand(0), NewSub, Op.getOperand(2));
+    }
     break;
   }
   case ISD::VECTOR_SHUFFLE: {
@@ -8180,8 +8188,11 @@ TargetLowering::expandFixedPointMul(SDNode *Node, SelectionDAG &DAG) const {
       APInt MaxVal = APInt::getSignedMaxValue(VTSize);
       SDValue SatMin = DAG.getConstant(MinVal, dl, VT);
       SDValue SatMax = DAG.getConstant(MaxVal, dl, VT);
-      SDValue ProdNeg = DAG.getSetCC(dl, BoolVT, Product, Zero, ISD::SETLT);
-      Result = DAG.getSelect(dl, VT, ProdNeg, SatMax, SatMin);
+      // Xor the inputs, if resulting sign bit is 0 the product will be
+      // positive, else negative.
+      SDValue Xor = DAG.getNode(ISD::XOR, dl, VT, LHS, RHS);
+      SDValue ProdNeg = DAG.getSetCC(dl, BoolVT, Xor, Zero, ISD::SETLT);
+      Result = DAG.getSelect(dl, VT, ProdNeg, SatMin, SatMax);
       return DAG.getSelect(dl, VT, Overflow, Result, Product);
     } else if (!Signed && isOperationLegalOrCustom(ISD::UMULO, VT)) {
       SDValue Result =

@@ -231,6 +231,7 @@ LANGOPT(HalfArgsAndReturns, 1, 0, "half args and returns")
 LANGOPT(CUDA              , 1, 0, "CUDA")
 LANGOPT(HIP               , 1, 0, "HIP")
 LANGOPT(OpenMP            , 32, 0, "OpenMP support and version of OpenMP (31, 40 or 45)")
+LANGOPT(OpenMPExtensions  , 1, 1, "Enable all Clang extensions for OpenMP directives and clauses")
 LANGOPT(OpenMPSimd        , 1, 0, "Use SIMD only OpenMP support.")
 LANGOPT(OpenMPUseTLS      , 1, 0, "Use TLS for threadprivates or runtime calls")
 LANGOPT(OpenMPIsDevice    , 1, 0, "Generate code only for OpenMP target device")
@@ -247,13 +248,13 @@ ENUM_LANGOPT(OpenACCUpdatePresentOMP, OpenACCUpdatePresentOMPKind, 1,
              OpenACCUpdatePresentOMP_Present,
              "The OpenMP translation of the OpenACC 'update' directive without 'if_present'")
 ENUM_LANGOPT(OpenACCStructuredRefCountOMP, OpenACCStructuredRefCountOMPKind, 1,
-             OpenACCStructuredRefCountOMP_Hold,
+             OpenACCStructuredRefCountOMP_OmpxHold,
              "The OpenMP translation of the OpenACC 'no_create' clause")
 ENUM_LANGOPT(OpenACCPresentOMP, OpenACCPresentOMPKind, 1,
              OpenACCPresentOMP_Present,
              "The OpenMP translation of OpenACC data clauses using OpenACC's structured reference counter")
 ENUM_LANGOPT(OpenACCNoCreateOMP, OpenACCNoCreateOMPKind, 1,
-             OpenACCNoCreateOMP_NoAlloc,
+             OpenACCNoCreateOMP_OmpxNoAlloc,
              "The OpenMP translation of the OpenACC 'no_create' clause")
 LANGOPT(RenderScript      , 1, 0, "RenderScript")
 
@@ -310,7 +311,6 @@ BENIGN_ENUM_LANGOPT(DefaultFPContractMode, FPModeKind, 2, FPM_Off, "FP contracti
 COMPATIBLE_LANGOPT(ExpStrictFP, 1, false, "Enable experimental strict floating point")
 BENIGN_ENUM_LANGOPT(FPRoundingMode, RoundingMode, 3, RoundingMode::NearestTiesToEven, "FP Rounding Mode type")
 BENIGN_ENUM_LANGOPT(FPExceptionMode, FPExceptionModeKind, 2, FPE_Ignore, "FP Exception Behavior Mode type")
-BENIGN_ENUM_LANGOPT(FPEvalMethod, FPEvalMethodKind, 2, FEM_TargetDefault, "FP type used for floating point arithmetic")
 LANGOPT(NoBitFieldTypeAlign , 1, 0, "bit-field type alignment")
 LANGOPT(HexagonQdsp6Compat , 1, 0, "hexagon-qdsp6 backward compatibility")
 LANGOPT(ObjCAutoRefCount , 1, 0, "Objective-C automated reference counting")

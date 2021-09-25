@@ -99,10 +99,11 @@ int DeviceTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size) {
                /*IsRefCountINF=*/true)
            .first;
   DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD
-     ", HstEnd=" DPxMOD ", TgtBegin=" DPxMOD ", RefCount=%s\n",
+     ", HstEnd=" DPxMOD ", TgtBegin=" DPxMOD ", DynRefCount=%s, "
+     "HoldRefCount=%s\n",
      DPxPTR(newEntry.HstPtrBase), DPxPTR(newEntry.HstPtrBegin),
      DPxPTR(newEntry.HstPtrEnd), DPxPTR(newEntry.TgtPtrBegin),
-     newEntry.refCountToStr().c_str());
+     newEntry.dynRefCountToStr().c_str(), newEntry.holdRefCountToStr().c_str());
   (void)newEntry;
 
   DataMapMtx.unlock();
@@ -117,13 +118,13 @@ int DeviceTy::disassociatePtr(void *HstPtrBegin, void *&TgtPtrBegin,
   auto search = HostDataToTargetMap.find(HstPtrBeginTy{(uintptr_t)HstPtrBegin});
   if (search != HostDataToTargetMap.end()) {
     // Mapping exists
-    if (search->getRefCount(/*UseHoldRefCount=*/true)) {
+    if (search->getHoldRefCount()) {
       // This is based on OpenACC 3.1, sec 3.2.33 "acc_unmap_data", L3656-3657:
       // "It is an error to call acc_unmap_data if the structured reference
       // count for the pointer is not zero."
       REPORT("Trying to disassociate a pointer with a non-zero hold reference "
              "count\n");
-    } else if (search->isRefCountInf()) {
+    } else if (search->isDynRefCountInf()) {
       DP("Association found, removing it\n");
       TgtPtrBegin = (void *)search->TgtPtrBegin;
       Size = search->HstPtrEnd - search->HstPtrBegin;
@@ -225,9 +226,9 @@ size_t DeviceTy::getAccessibleBuffer(void *Ptr, int64_t Size, void **BufferHost,
     auto &HT = *lr.Entry;
     BufferSize = HT.HstPtrEnd - HT.HstPtrBegin;
     DP("Overlapping mapping exists with HstPtrBegin=" DPxMOD ", TgtPtrBegin="
-        DPxMOD ", " "Size=%" PRId64 ", RefCount=%s\n",
+        DPxMOD ", " "Size=%" PRId64 ", DynRefCount=%s, HoldRefCount=%s\n",
         DPxPTR(HT.HstPtrBegin), DPxPTR(HT.TgtPtrBegin), BufferSize,
-        HT.isRefCountInf() ? "INF" : std::to_string(HT.getRefCount()).c_str());
+        HT.dynRefCountToStr().c_str(), HT.holdRefCountToStr().c_str());
     if (BufferHost)
       *BufferHost = (void *)HT.HstPtrBegin;
     if (BufferDevice)
@@ -253,11 +254,11 @@ size_t DeviceTy::getAccessibleBuffer(void *Ptr, int64_t Size, void **BufferHost,
 
 TargetPointerResultTy
 DeviceTy::getTargetPointer(void *HstPtrBegin, void *HstPtrBase, int64_t Size,
-                           map_var_info_t HstPtrName, MoveDataStateTy MoveData,
-                           bool IsImplicit, bool UpdateRefCount,
-                           bool HasCloseModifier, bool HasPresentModifier,
-                           bool HasNoAllocModifier, bool HasHoldModifier,
-                           AsyncInfoTy &AsyncInfo) {
+                           map_var_info_t HstPtrName, bool HasFlagTo,
+                           bool HasFlagAlways, bool IsImplicit,
+                           bool UpdateRefCount, bool HasCloseModifier,
+                           bool HasPresentModifier, bool HasHoldModifier,
+                           bool HasNoAllocModifier, AsyncInfoTy &AsyncInfo) {
   void *TargetPointer = nullptr;
   bool IsHostPtr = false;
   bool IsNew = false;
@@ -274,21 +275,26 @@ DeviceTy::getTargetPointer(void *HstPtrBegin, void *HstPtrBase, int64_t Size,
   if (LR.Flags.IsContained ||
       ((LR.Flags.ExtendsBefore || LR.Flags.ExtendsAfter) && IsImplicit)) {
     auto &HT = *LR.Entry;
-    assert(HT.getRefCount() > 0 && "expected existing RefCount > 0");
-    if (UpdateRefCount)
+    const char *RefCountAction;
+    assert(HT.getTotalRefCount() > 0 && "expected existing RefCount > 0");
+    if (UpdateRefCount) {
       // After this, RefCount > 1.
       HT.incRefCount(HasHoldModifier);
-    else
+      RefCountAction = " (incremented)";
+    } else {
       // It might have been allocated with the parent, but it's still new.
-      IsNew = HT.getRefCount() == 1;
+      IsNew = HT.getTotalRefCount() == 1;
+      RefCountAction = " (update suppressed)";
+    }
+    const char *DynRefCountAction = HasHoldModifier ? "" : RefCountAction;
+    const char *HoldRefCountAction = HasHoldModifier ? RefCountAction : "";
     uintptr_t Ptr = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
     INFO(OMP_INFOTYPE_MAPPING_EXISTS, DeviceID,
          "Mapping exists%s with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD
-         ", "
-         "Size=%" PRId64 ", RefCount=%s (%s), Name=%s\n",
+         ", Size=%" PRId64 ", DynRefCount=%s%s, HoldRefCount=%s%s, Name=%s\n",
          (IsImplicit ? " (implicit)" : ""), DPxPTR(HstPtrBegin), DPxPTR(Ptr),
-         Size, HT.refCountToStr().c_str(),
-         UpdateRefCount ? "incremented" : "update suppressed",
+         Size, HT.dynRefCountToStr().c_str(), DynRefCountAction,
+         HT.holdRefCountToStr().c_str(), HoldRefCountAction,
          (HstPtrName) ? getNameFromMapping(HstPtrName).c_str() : "unknown");
     TargetPointer = (void *)Ptr;
   } else if ((LR.Flags.ExtendsBefore || LR.Flags.ExtendsAfter) && !IsImplicit) {
@@ -403,18 +409,16 @@ DeviceTy::getTargetPointer(void *HstPtrBegin, void *HstPtrBase, int64_t Size,
     INFO(OMP_INFOTYPE_MAPPING_CHANGED, DeviceID,
          "Creating new map entry with "
          "HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", Size=%ld, "
-         "RefCount=%s, Name=%s\n",
-         DPxPTR(HstPtrBegin), DPxPTR(Ptr), Size, Entry->refCountToStr().c_str(),
+         "DynRefCount=%s, HoldRefCount=%s, Name=%s\n",
+         DPxPTR(HstPtrBegin), DPxPTR(Ptr), Size,
+         Entry->dynRefCountToStr().c_str(), Entry->holdRefCountToStr().c_str(),
          (HstPtrName) ? getNameFromMapping(HstPtrName).c_str() : "unknown");
     TargetPointer = (void *)Ptr;
   }
 
-  if (IsNew && MoveData == MoveDataStateTy::UNKNOWN)
-    MoveData = MoveDataStateTy::REQUIRED;
-
   // If the target pointer is valid, and we need to transfer data, issue the
   // data transfer.
-  if (TargetPointer && (MoveData == MoveDataStateTy::REQUIRED)) {
+  if (TargetPointer && !IsHostPtr && HasFlagTo && (IsNew || HasFlagAlways)) {
     // Lock the entry before releasing the mapping table lock such that another
     // thread that could issue data movement will get the right result.
     Entry->lock();
@@ -485,12 +489,14 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
       HT.decRefCount(UseHoldRefCount);
       RefCountAction = " (decremented)";
     }
+    const char *DynRefCountAction = UseHoldRefCount ? "" : RefCountAction;
+    const char *HoldRefCountAction = UseHoldRefCount ? RefCountAction : "";
     uintptr_t tp = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
     INFO(OMP_INFOTYPE_MAPPING_EXISTS, DeviceID,
          "Mapping exists with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", "
-         "Size=%" PRId64 ", RefCount=%s (%s)\n",
-         DPxPTR(HstPtrBegin), DPxPTR(tp), Size, HT.refCountToStr().c_str(),
-         RefCountAction);
+         "Size=%" PRId64 ", DynRefCount=%s%s, HoldRefCount=%s%s\n",
+         DPxPTR(HstPtrBegin), DPxPTR(tp), Size, HT.dynRefCountToStr().c_str(),
+         DynRefCountAction, HT.holdRefCountToStr().c_str(), HoldRefCountAction);
     rc = (void *)tp;
   } else if (PM->RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY) {
     // If the value isn't found in the mapping and unified shared memory
@@ -522,10 +528,7 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size) {
 }
 
 int DeviceTy::deallocTgtPtr(void *HstPtrBegin, int64_t Size,
-                            bool HasCloseModifier, bool HasHoldModifier) {
-  if (PM->RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY &&
-      !HasCloseModifier)
-    return OFFLOAD_SUCCESS;
+                            bool HasHoldModifier) {
   // Check if the pointer is contained in any sub-nodes.
   int rc;
   DataMapMtx.lock();

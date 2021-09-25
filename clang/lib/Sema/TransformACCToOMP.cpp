@@ -317,19 +317,19 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       llvm_unreachable("expected directive that takes data clauses");
     }
     switch (getSema().LangOpts.getOpenACCStructuredRefCountOMP()) {
-    case LangOptions::OpenACCStructuredRefCountOMP_Hold:
-      MapMods.push_back(OMPC_MAP_MODIFIER_hold);
-      getSema().Diag(C->getBeginLoc(), diag::warn_acc_omp_map_hold)
+    case LangOptions::OpenACCStructuredRefCountOMP_OmpxHold:
+      MapMods.push_back(OMPC_MAP_MODIFIER_ompx_hold);
+      getSema().Diag(C->getBeginLoc(), diag::warn_acc_omp_map_ompx_hold)
           << getOpenACCName(C->getClauseKind()) << C->getSourceRange();
       getSema().Diag(C->getBeginLoc(), diag::note_acc_alternate_omp)
           << "structured-ref-count"
           << LangOptions::getOpenACCStructuredRefCountOMPValue(
-                 LangOptions::OpenACCStructuredRefCountOMP_NoHold);
+                 LangOptions::OpenACCStructuredRefCountOMP_NoOmpxHold);
       getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag)
           << DiagnosticIDs::getWarningOptionForDiag(
-                 diag::warn_acc_omp_map_hold);
+                 diag::warn_acc_omp_map_ompx_hold);
       break;
-    case LangOptions::OpenACCStructuredRefCountOMP_NoHold:
+    case LangOptions::OpenACCStructuredRefCountOMP_NoOmpxHold:
       break;
     }
   }
@@ -907,14 +907,14 @@ public:
                                           ACCNomapClause *C) {
     // For each nomap shared variable:
     // - If it has a visible no_create at the parent directive and no_create
-    //   maps to no_alloc, then add a no_alloc here for it.
+    //   maps to ompx_no_alloc, then add a ompx_no_alloc here for it.
     // - Otherwise, if it's a scalar, a defaultmap for scalars is required here.
     bool NoCreateOMPNoAlloc;
     switch (getSema().LangOpts.getOpenACCNoCreateOMP()) {
-    case LangOptions::OpenACCNoCreateOMP_NoAlloc:
+    case LangOptions::OpenACCNoCreateOMP_OmpxNoAlloc:
       NoCreateOMPNoAlloc = true;
       break;
-    case LangOptions::OpenACCNoCreateOMP_NoNoAlloc:
+    case LangOptions::OpenACCNoCreateOMP_NoOmpxNoAlloc:
       NoCreateOMPNoAlloc = false;
       break;
     }
@@ -928,7 +928,7 @@ public:
               ACC_DMA_no_create &&
           NoCreateOMPNoAlloc) {
         getSema().Diag(D->getEndLoc(),
-                       diag::warn_acc_omp_map_no_alloc_from_visible)
+                       diag::warn_acc_omp_map_ompx_no_alloc_from_visible)
             << getOpenACCName(C->getClauseKind());
         return false;
       }
@@ -942,7 +942,7 @@ public:
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
           SmallVector<SourceLocation, 1> MapModLocs;
           return getDerived().RebuildOMPMapClause(
-              {OMPC_MAP_MODIFIER_no_alloc}, {L.LParenLoc}, CXXScopeSpec(),
+              {OMPC_MAP_MODIFIER_ompx_no_alloc}, {L.LParenLoc}, CXXScopeSpec(),
               DeclarationNameInfo(), OMPC_MAP_alloc,
               /*IsMapTypeImplicit=*/false, L.LocStart, L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
@@ -1066,20 +1066,20 @@ public:
                                              ACCNoCreateClause *C) {
     SmallVector<OpenMPMapModifierKind, 2> MapMods;
     switch (getSema().LangOpts.getOpenACCNoCreateOMP()) {
-    case LangOptions::OpenACCNoCreateOMP_NoAlloc:
-      MapMods.push_back(OMPC_MAP_MODIFIER_no_alloc);
-      getSema().Diag(C->getBeginLoc(), diag::warn_acc_omp_map_no_alloc)
+    case LangOptions::OpenACCNoCreateOMP_OmpxNoAlloc:
+      MapMods.push_back(OMPC_MAP_MODIFIER_ompx_no_alloc);
+      getSema().Diag(C->getBeginLoc(), diag::warn_acc_omp_map_ompx_no_alloc)
           << getOpenACCName(C->getClauseKind())
           << C->getSourceRange();
       getSema().Diag(C->getBeginLoc(), diag::note_acc_alternate_omp)
           << "no-create"
           << LangOptions::getOpenACCNoCreateOMPValue(
-              LangOptions::OpenACCNoCreateOMP_NoNoAlloc);
+              LangOptions::OpenACCNoCreateOMP_NoOmpxNoAlloc);
       getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag)
           << DiagnosticIDs::getWarningOptionForDiag(
-              diag::warn_acc_omp_map_no_alloc);
+              diag::warn_acc_omp_map_ompx_no_alloc);
       break;
-    case LangOptions::OpenACCNoCreateOMP_NoNoAlloc:
+    case LangOptions::OpenACCNoCreateOMP_NoOmpxNoAlloc:
       break;
     }
     addHoldMapTypeModifier(D, C, MapMods);

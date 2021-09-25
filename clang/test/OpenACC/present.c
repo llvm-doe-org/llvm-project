@@ -32,9 +32,9 @@
 // Define some interrelated data we use several times below.
 //
 // RUN: %data present-opts {
-// RUN:   (present-opt=-Wno-openacc-omp-map-present                                 present-mt=present,hold,alloc not-if-present=not not-crash-if-present='not --crash')
-// RUN:   (present-opt='-fopenacc-present-omp=present -Wno-openacc-omp-map-present' present-mt=present,hold,alloc not-if-present=not not-crash-if-present='not --crash')
-// RUN:   (present-opt=-fopenacc-present-omp=no-present                             present-mt=hold,alloc         not-if-present=    not-crash-if-present=             )
+// RUN:   (present-opt=-Wno-openacc-omp-map-present                                 present-mt=present,ompx_hold,alloc not-if-present=not not-crash-if-present='not --crash')
+// RUN:   (present-opt='-fopenacc-present-omp=present -Wno-openacc-omp-map-present' present-mt=present,ompx_hold,alloc not-if-present=not not-crash-if-present='not --crash')
+// RUN:   (present-opt=-fopenacc-present-omp=no-present                             present-mt=ompx_hold,alloc         not-if-present=    not-crash-if-present=             )
 // RUN: }
 // RUN: %data tgts {
 // RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' not-if-off-and-present=                  not-crash-if-off-and-present=                        not-if-off=    not-crash-if-off=             )
@@ -140,7 +140,8 @@
 // RUN: %for present-opts {
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify %[prt] %[present-opt] %t-acc.c \
-// RUN:            -DCASES_HEADER='"%t-cases.h"' -Wno-openacc-omp-map-hold \
+// RUN:            -DCASES_HEADER='"%t-cases.h"' \
+// RUN:            -Wno-openacc-omp-map-ompx-hold \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -DPRESENT_MT=%[present-mt] %s
 // RUN:   }
 // RUN: }
@@ -176,7 +177,7 @@
 // RUN:         %[run-if] %clang -Xclang -verify %[prt-opt]=omp %[present-opt] \
 // RUN:                   %[use-var-cflags] %s > %t-omp.c \
 // RUN:                   -DCASES_HEADER='"%t-cases.h"' \
-// RUN:                   -Wno-openacc-omp-map-hold
+// RUN:                   -Wno-openacc-omp-map-ompx-hold
 // RUN:         %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:         %[run-if] grep "^// nvptx64-" %s >> %t-omp.c
 // RUN:         %[run-if] %clang -fopenmp %fopenmp-version \
@@ -319,11 +320,11 @@ int main(int argc, char *argv[]) {
 //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
 //
 //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: x){{$}}
 //  PRT-A-NEXT:   #pragma acc data present(x){{$}}
 // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: x){{$}}
 //
-//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: x){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: x){{$}}
 // PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
 //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: x){{$}}
 // PRT-OA-NEXT:   // #pragma acc data present(x){{$}}
@@ -371,11 +372,11 @@ CASE(caseDataScalarAbsent) {
 //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
 //
 //  PRT-A-NEXT:   #pragma acc data copy(arr){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: arr){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: arr){{$}}
 //  PRT-A-NEXT:   #pragma acc data present(arr){{$}}
 // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr){{$}}
 //
-//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: arr){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: arr){{$}}
 // PRT-OA-NEXT:   // #pragma acc data copy(arr){{$}}
 //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr){{$}}
 // PRT-OA-NEXT:   // #pragma acc data present(arr){{$}}
@@ -415,11 +416,11 @@ CASE(caseDataArrayAbsent) {
 //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
 //
 //  PRT-A-NEXT:   #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
 //  PRT-A-NEXT:   #pragma acc data present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
 // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
 //
-//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
 // PRT-OA-NEXT:   // #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
 //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
 // PRT-OA-NEXT:   // #pragma acc data present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
@@ -445,11 +446,11 @@ CASE(caseDataSubarrayPresent) {
 //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
 //
 //  PRT-A-NEXT:   #pragma acc data copy(arr[0:2]){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: arr[0:2]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: arr[0:2]){{$}}
 //  PRT-A-NEXT:   #pragma acc data present(arr[2:2]){{$}}
 // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr[2:2]){{$}}
 //
-//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: arr[0:2]){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: arr[0:2]){{$}}
 // PRT-OA-NEXT:   // #pragma acc data copy(arr[0:2]){{$}}
 //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr[2:2]){{$}}
 // PRT-OA-NEXT:   // #pragma acc data present(arr[2:2]){{$}}
@@ -471,11 +472,11 @@ CASE(caseDataSubarrayDisjoint) {
 //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
 //
 //  PRT-A-NEXT:   #pragma acc data copyin(arr[1:2]){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(hold,to: arr[1:2]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,to: arr[1:2]){{$}}
 //  PRT-A-NEXT:   #pragma acc data present(arr[0:2]){{$}}
 // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr[0:2]){{$}}
 //
-//  PRT-O-NEXT:   #pragma omp target data map(hold,to: arr[1:2]){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,to: arr[1:2]){{$}}
 // PRT-OA-NEXT:   // #pragma acc data copyin(arr[1:2]){{$}}
 //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr[0:2]){{$}}
 // PRT-OA-NEXT:   // #pragma acc data present(arr[0:2]){{$}}
@@ -497,11 +498,11 @@ CASE(caseDataSubarrayOverlapStart) {
 //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
 //
 //  PRT-A-NEXT:   #pragma acc data copyin(arr[1:2]){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(hold,to: arr[1:2]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,to: arr[1:2]){{$}}
 //  PRT-A-NEXT:   #pragma acc data present(arr[2:2]){{$}}
 // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr[2:2]){{$}}
 //
-//  PRT-O-NEXT:   #pragma omp target data map(hold,to: arr[1:2]){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,to: arr[1:2]){{$}}
 // PRT-OA-NEXT:   // #pragma acc data copyin(arr[1:2]){{$}}
 //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr[2:2]){{$}}
 // PRT-OA-NEXT:   // #pragma acc data present(arr[2:2]){{$}}
@@ -523,15 +524,15 @@ CASE(caseDataSubarrayOverlapEnd) {
 //    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
 //
 //  PRT-A-NEXT:   #pragma acc data copyout(arr[0:2]){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(hold,from: arr[0:2]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,from: arr[0:2]){{$}}
 //  PRT-A-NEXT:   #pragma acc data copy(arr[2:2]){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: arr[2:2]){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: arr[2:2]){{$}}
 //  PRT-A-NEXT:   #pragma acc data present(arr[0:4]){{$}}
 // PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr[0:4]){{$}}
 //
-//  PRT-O-NEXT:   #pragma omp target data map(hold,from: arr[0:2]){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,from: arr[0:2]){{$}}
 // PRT-OA-NEXT:   // #pragma acc data copyout(arr[0:2]){{$}}
-//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: arr[2:2]){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: arr[2:2]){{$}}
 // PRT-OA-NEXT:   // #pragma acc data copy(arr[2:2]){{$}}
 //  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr[0:4]){{$}}
 // PRT-OA-NEXT:   // #pragma acc data present(arr[0:4]){{$}}
@@ -577,11 +578,11 @@ CASE(caseDataSubarrayNonSubarray) {
 //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
 //
 //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: x){{$}}
 //  PRT-A-NEXT:   #pragma acc parallel present(x){{$}}
 // PRT-AO-NEXT:   // #pragma omp target teams map([[PRESENT_MT]]: x){{$}}
 //
-//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: x){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: x){{$}}
 // PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
 //  PRT-O-NEXT:   #pragma omp target teams map([[PRESENT_MT]]: x){{$}}
 // PRT-OA-NEXT:   // #pragma acc parallel present(x){{$}}
@@ -708,12 +709,12 @@ CASE(caseParallelSubarrayNonSubarray) {
 //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
 //
 //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(hold,tofrom: x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: x){{$}}
 //  PRT-A-NEXT:   #pragma acc parallel loop present(x){{$}}
 // PRT-AO-NEXT:   // #pragma omp target teams map([[PRESENT_MT]]: x){{$}}
 // PRT-AO-NEXT:   // #pragma omp distribute{{$}}
 //
-//  PRT-O-NEXT:   #pragma omp target data map(hold,tofrom: x){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: x){{$}}
 // PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
 //  PRT-O-NEXT:   #pragma omp target teams map([[PRESENT_MT]]: x){{$}}
 //  PRT-O-NEXT:   #pragma omp distribute{{$}}

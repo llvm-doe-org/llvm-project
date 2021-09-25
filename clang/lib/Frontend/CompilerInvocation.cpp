@@ -504,7 +504,7 @@ static bool FixupInvocation(CompilerInvocation &Invocation,
   // This option should be deprecated for CL > 1.0 because
   // this option was added for compatibility with OpenCL 1.0.
   if (Args.getLastArg(OPT_cl_strict_aliasing) &&
-      (LangOpts.OpenCLCPlusPlus || LangOpts.OpenCLVersion > 100))
+      (LangOpts.getOpenCLCompatibleVersion() > 100))
     Diags.Report(diag::warn_option_invalid_ocl_version)
         << LangOpts.getOpenCLVersionString()
         << Args.getLastArg(OPT_cl_strict_aliasing)->getAsString(Args);
@@ -3209,9 +3209,8 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
     Opts.ZVector = 0;
     Opts.setDefaultFPContractMode(LangOptions::FPM_On);
     Opts.OpenCLCPlusPlus = Opts.CPlusPlus;
-    Opts.OpenCLPipes = Opts.OpenCLCPlusPlus || Opts.OpenCLVersion == 200;
-    Opts.OpenCLGenericAddressSpace =
-        Opts.OpenCLCPlusPlus || Opts.OpenCLVersion == 200;
+    Opts.OpenCLPipes = Opts.getOpenCLCompatibleVersion() == 200;
+    Opts.OpenCLGenericAddressSpace = Opts.getOpenCLCompatibleVersion() == 200;
 
     // Include default header file for OpenCL.
     if (Opts.IncludeDefaultHeader) {
@@ -4401,13 +4400,8 @@ static bool ParsePreprocessorArgs(PreprocessorOptions &Opts, ArgList &Args,
   // Always avoid lexing editor placeholders when we're just running the
   // preprocessor as we never want to emit the
   // "editor placeholder in source file" error in PP only mode.
-  // Certain predefined macros which depend upon semantic processing,
-  // for example __FLT_EVAL_METHOD__, are not expanded in PP mode, they
-  // appear in the preprocessed output as an unexpanded macro name.
-  if (isStrictlyPreprocessorAction(Action)) {
+  if (isStrictlyPreprocessorAction(Action))
     Opts.LexEditorPlaceholders = false;
-    Opts.LexExpandSpecialBuiltins = false;
-  }
 
   return Diags.getNumErrors() == NumErrorsBefore;
 }
