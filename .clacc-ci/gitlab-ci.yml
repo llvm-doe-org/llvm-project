@@ -2,6 +2,8 @@
 # $BUILD_DIR, that's unique to each pipeline in case there are concurrent
 # pipelines.  Why not use artifacts?
 #
+# - [The following numbers are a bit old, and they were recorded for a debug
+#   build.]
 # - LLVM's build directory is huge.  For me, it's 46G when including just
 #   the clang and openmp subprojects, which are required for Clacc, and it's
 #   85G when including nearly all subprojects.
@@ -32,20 +34,7 @@ variables:
   BUILD_DIR: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-$BUILD_ID
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
-  LIT_NTHREADS_DIVISOR: 1
-  XFAIL_COMMON:
-    "
-    libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
-    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/memory_manager.cpp
-    libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
-    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/parallel_offloading_map.cpp
-    libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
-    libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
-    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
-    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/taskloop_offload_nowait.cpp
-    "
-  XFAIL_NOT_COMMON:
-    ""
+  LIT_NPROC_DIVISOR: 1
 
 stages:
   - setup
@@ -58,9 +47,9 @@ stages:
 #-------------------------------------------------
 # build configurations
 #
-# Test every architecture with a debug build (thus checking assertions) using
-# python3.  There are many kolds, so use them to check configuration choices
-# that are hopefully orthogonal to the architecture.
+# Test every architecture with a release build plus assertions using python3.
+# There are many kolds, so use them to check configuration choices that are
+# hopefully orthogonal to the architecture.
 #-------------------------------------------------
 
 .leconte:
@@ -68,48 +57,146 @@ stages:
   variables:
     BUILD_ID: leconte
     MODULES: cmake/3.19.2 gnu/9.2.0 nvhpc/21.2
+    PATH_PREPEND:
+      /opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
-    CMAKE_BUILD_TYPE: Debug
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
     CMAKE_OFFLOAD_CONFIG:
       -DCLANG_ACC_TEST_EXE_X86_64=0
       -DCLANG_ACC_TEST_EXE_PPC64LE=4
+      -DCLANG_ACC_TEST_EXE_AMDGCN=0
       -DCLANG_ACC_TEST_EXE_NVPTX64=6
-    PATH_PREPEND:
-      /opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin
-    LIT_NTHREADS_DIVISOR: 4
-    XFAIL:
-      "libomp :: affinity/kmp-hw-subset.c"
-    XFAIL_NOT:
+    LLVM_ENABLE_PROJECTS: "clang"
+    LLVM_ENABLE_RUNTIMES: "openmp"
+    LIT_NPROC_DIVISOR: 4
+    LIT_XFAIL:
+      "
+      libomp :: affinity/kmp-hw-subset.c
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/memory_manager.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/parallel_offloading_map.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/taskloop_offload_nowait.cpp
+      "
+    LIT_XFAIL_NOT:
       "libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/api.c"
+    EXPECTED_TESTS_REGEX:
+      "libomptarget :: nvptx64-nvidia-cuda"
+
+.oswald02:
+  tags: [shell, oswald02]
+  variables:
+    BUILD_ID: oswald02
+    MODULES: cmake gnu/11.1.0 nvhpc/21.7
+    PATH_PREPEND:
+      /opt/nvidia/hpc_sdk/Linux_x86_64/21.7/cuda/11.4/bin
+    CMAKE: cmake
+    NINJA: ninja
+    PYTHON: /usr/bin/python3
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
+    CMAKE_OFFLOAD_CONFIG:
+      -DCLANG_ACC_TEST_EXE_X86_64=4
+      -DCLANG_ACC_TEST_EXE_PPC64LE=0
+      -DCLANG_ACC_TEST_EXE_AMDGCN=0
+      -DCLANG_ACC_TEST_EXE_NVPTX64=1
+    LLVM_ENABLE_PROJECTS: "clang"
+    LLVM_ENABLE_RUNTIMES: "openmp"
+    LIT_NPROC_DIVISOR: 1
+    LIT_XFAIL:
+      "
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
+      "
+    LIT_XFAIL_NOT:
+      ""
+    EXPECTED_TESTS_REGEX:
+      "libomptarget :: nvptx64-nvidia-cuda"
+
+.explorer:
+  tags: [shell, explorer]
+  variables:
+    BUILD_ID: explorer
+    MODULES: ""
+    PATH_PREPEND: ""
+    CMAKE: cmake
+    GCC_DIR: /usr
+    NINJA: ninja
+    PYTHON: /usr/bin/python3
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
+    CMAKE_OFFLOAD_CONFIG:
+      -DCLANG_ACC_TEST_EXE_X86_64=4
+      -DCLANG_ACC_TEST_EXE_PPC64LE=0
+      -DCLANG_ACC_TEST_EXE_AMDGCN=2
+      -DCLANG_ACC_TEST_EXE_NVPTX64=0
+    # If lld isn't built, OpenMP offloading tests for AMDGPU fail:
+    #
+    #   clang-14: error: unable to execute command: Executable "lld" doesn't exist!
+#   #   clang-14: error: amdgcn-link command failed with exit code 1 (use -v to see invocation)
+    LLVM_ENABLE_PROJECTS: "clang;lld"
+    LLVM_ENABLE_RUNTIMES: "openmp"
+    LIT_NPROC_DIVISOR: 1
+    LIT_XFAIL:
+      "
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
+      "
+    LIT_XFAIL_NOT:
+      ""
+    EXPECTED_TESTS_REGEX:
+      "libomptarget :: amdgcn-amd-amdhsa"
 
 .kold:
   tags: [shell, kold]
   variables:
     BUILD_ID: kold
     MODULES: gnu/9.1.0
+    PATH_PREPEND: ""
     CMAKE: cmake3
     NINJA: ninja-build
     PYTHON: /usr/bin/python3
-    CMAKE_BUILD_TYPE: Debug
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
     CMAKE_OFFLOAD_CONFIG:
       -DCLANG_ACC_TEST_EXE_X86_64=4
       -DCLANG_ACC_TEST_EXE_PPC64LE=0
+      -DCLANG_ACC_TEST_EXE_AMDGCN=0
       -DCLANG_ACC_TEST_EXE_NVPTX64=0
-    PATH_PREPEND:
-      ""
-    XFAIL:
+    LLVM_ENABLE_PROJECTS: "clang"
+    LLVM_ENABLE_RUNTIMES: "openmp"
+    LIT_XFAIL:
+      "
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-sret.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-sibling-call.ll
+      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-tail-call.ll
+      LLVM :: CodeGen/AMDGPU/abi-attribute-hints-undefined-behavior.ll
+      LLVM :: CodeGen/AMDGPU/indirect-call-known-callees.ll
+      LLVM :: CodeGen/AMDGPU/call-constant.ll
+      LLVM :: CodeGen/AMDGPU/indirect-call.ll
+      LLVM :: CodeGen/AMDGPU/returnaddress.ll
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
+      "
+    LIT_XFAIL_NOT:
       ""
 
-# Sometimes bugs cause only release builds to fail.  For example, debugging
-# macros might accidentally be used but not defined in release builds.
-.release:
+.no-asserts:
   extends: [.kold]
   variables:
-    BUILD_ID: release
-    CMAKE_BUILD_TYPE: Release
-    XFAIL:
+    BUILD_ID: no-asserts
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=False
+    LLVM_ENABLE_PROJECTS: "clang"
+    LLVM_ENABLE_RUNTIMES: "openmp"
+    LIT_XFAIL:
       "
       Clang :: Headers/wasm.c
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
@@ -120,10 +207,33 @@ stages:
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-sibling-call.ll
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-tail-call.ll
+      LLVM :: CodeGen/AMDGPU/abi-attribute-hints-undefined-behavior.ll
+      LLVM :: CodeGen/AMDGPU/indirect-call-known-callees.ll
       LLVM :: CodeGen/AMDGPU/call-constant.ll
       LLVM :: CodeGen/AMDGPU/indirect-call.ll
       LLVM :: CodeGen/AMDGPU/returnaddress.ll
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
       "
+    LIT_XFAIL_NOT:
+      ""
+
+.debug:
+  extends: [.kold]
+  variables:
+    BUILD_ID: debug
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Debug
+    LLVM_ENABLE_PROJECTS: "clang"
+    LLVM_ENABLE_RUNTIMES: "openmp"
+    LIT_XFAIL:
+      "
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
+      "
+    LIT_XFAIL_NOT:
+      ""
 
 # Not setup or cleanup.
 .non-utility:
@@ -132,13 +242,18 @@ stages:
     GIT_STRATEGY: none
   before_script:
     - echo $MODULES
-    - module load $MODULES
+    - if test x"$MODULES" != x; then module load $MODULES; fi
     - echo $PATH_PREPEND
     - if test x"$PATH_PREPEND" != x; then PATH="$PATH_PREPEND:$PATH"; fi
     - echo $PATH
     - pwd
     - echo $BUILD_DIR
     - cd $BUILD_DIR/build
+    # Sometimes a build process gets stuck for a long time, and sometimes a test
+    # process does (usually OpenMP tests).  One hour of CPU time should be
+    # plenty for any process.  The goal is simply not to let them stick around
+    # forever.
+    - ulimit -t 3600
   after_script:
     - echo "$LLVM_CCACHE_PARAMS"
     - env $LLVM_CCACHE_PARAMS ccache -sp
@@ -180,11 +295,20 @@ stages:
 leconte (setup):
   extends: [.leconte, .setup]
 
+oswald02 (setup):
+  extends: [.oswald02, .setup]
+
+explorer (setup):
+  extends: [.explorer, .setup]
+
 kold (setup):
   extends: [.kold, .setup]
 
-release (setup):
-  extends: [.release, .setup]
+no-asserts (setup):
+  extends: [.no-asserts, .setup]
+
+debug (setup):
+  extends: [.debug, .setup]
 
 #-------------------------------------------------
 # cleanup
@@ -215,26 +339,53 @@ leconte (cleanup):
     - job: leconte (test)
       artifacts: false
 
+oswald02 (cleanup):
+  extends: [.oswald02, .cleanup]
+  needs:
+    - job: oswald02 (test)
+      artifacts: false
+
+explorer (cleanup):
+  extends: [.explorer, .cleanup]
+  needs:
+    - job: explorer (test)
+      artifacts: false
+
 kold (cleanup):
   extends: [.kold, .cleanup]
   needs:
     - job: kold (test)
       artifacts: false
 
-release (cleanup):
-  extends: [.release, .cleanup]
+no-asserts (cleanup):
+  extends: [.no-asserts, .cleanup]
   needs:
-    - job: release (test)
+    - job: no-asserts (test)
+      artifacts: false
+
+debug (cleanup):
+  extends: [.debug, .cleanup]
+  needs:
+    - job: debug (test)
       artifacts: false
 
 leconte (manual cleanup):
   extends: [.leconte, .manual-cleanup]
 
+oswald02 (manual cleanup):
+  extends: [.oswald02, .manual-cleanup]
+
+explorer (manual cleanup):
+  extends: [.explorer, .manual-cleanup]
+
 kold (manual cleanup):
   extends: [.kold, .manual-cleanup]
 
-release (manual cleanup):
-  extends: [.release, .manual-cleanup]
+no-asserts (manual cleanup):
+  extends: [.no-asserts, .manual-cleanup]
+
+debug (manual cleanup):
+  extends: [.debug, .manual-cleanup]
 
 z-cleanup-pipeline-builds:
   stage: manual cleanup
@@ -268,24 +419,26 @@ z-cleanup-project-builds:
   script:
     - echo $CMAKE
     - $CMAKE --version
-    - echo $CMAKE_BUILD_TYPE
+    - echo $CMAKE_BUILD_OPTS
     - echo $GCC_DIR
+    - echo $LLVM_CCACHE_PARAMS
     - echo $PYTHON
     - $PYTHON --version
-    - echo $LLVM_CCACHE_PARAMS
+    - echo $LLVM_ENABLE_PROJECTS
+    - echo $LLVM_ENABLE_RUNTIMES
     - echo $CMAKE_OFFLOAD_CONFIG
     - time $CMAKE -G Ninja
-                  -DCMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE
+                  $CMAKE_BUILD_OPTS
                   -DLLVM_CCACHE_BUILD=ON
                   -DLLVM_USE_SPLIT_DWARF=true
                   -DLLVM_USE_LINKER=gold
                   -DCMAKE_C_COMPILER=gcc
                   -DCMAKE_CXX_COMPILER=g++
                   -DGCC_INSTALL_PREFIX=$GCC_DIR
-                  -DLLVM_ENABLE_PROJECTS='clang'
-                  -DLLVM_ENABLE_RUNTIMES='openmp'
-                  -DPython3_EXECUTABLE=$PYTHON
                   -DLLVM_CCACHE_PARAMS="$LLVM_CCACHE_PARAMS"
+                  -DLLVM_ENABLE_PROJECTS="$LLVM_ENABLE_PROJECTS"
+                  -DLLVM_ENABLE_RUNTIMES="$LLVM_ENABLE_RUNTIMES"
+                  -DPython3_EXECUTABLE=$PYTHON
                   -DLLVM_LIT_ARGS='-s -vv'
                   $CMAKE_OFFLOAD_CONFIG
                   ../source/llvm
@@ -301,16 +454,34 @@ leconte (config):
     - job: leconte (setup)
       artifacts: false
 
+oswald02 (config):
+  extends: [.oswald02, .config]
+  needs:
+    - job: oswald02 (setup)
+      artifacts: false
+
+explorer (config):
+  extends: [.explorer, .config]
+  needs:
+    - job: explorer (setup)
+      artifacts: false
+
 kold (config):
   extends: [.kold, .config]
   needs:
     - job: kold (setup)
       artifacts: false
 
-release (config):
-  extends: [.release, .config]
+no-asserts (config):
+  extends: [.no-asserts, .config]
   needs:
-    - job: release (setup)
+    - job: no-asserts (setup)
+      artifacts: false
+
+debug (config):
+  extends: [.debug, .config]
+  needs:
+    - job: debug (setup)
       artifacts: false
 
 #-------------------------------------------------
@@ -334,39 +505,38 @@ leconte (build):
     - job: leconte (config)
       artifacts: false
 
+oswald02 (build):
+  extends: [.oswald02, .build]
+  needs:
+    - job: oswald02 (config)
+      artifacts: false
+
+explorer (build):
+  extends: [.explorer, .build]
+  needs:
+    - job: explorer (config)
+      artifacts: false
+
 kold (build):
   extends: [.kold, .build]
   needs:
     - job: kold (config)
       artifacts: false
 
-release (build):
-  extends: [.release, .build]
+no-asserts (build):
+  extends: [.no-asserts, .build]
   needs:
-    - job: release (config)
+    - job: no-asserts (config)
+      artifacts: false
+
+debug (build):
+  extends: [.debug, .build]
+  needs:
+    - job: debug (config)
       artifacts: false
 
 #-------------------------------------------------
 # tests
-#
-# The additional build required for the test suite can be very noisy and
-# exceed the log output limit.  Run that first, grep for key text, and
-# make the full version an artifact.
-#
-# When there are fails, the test suite run can be very noisy too and
-# exceed the log output limit.  It's hard to grep for just the important
-# stuff, so just print it all but also dump to an artifact.
-#
-# At various points in LLVM's history, check-all has run multiple lit
-# invocations.  For example, at the time of this writing, specifying runtimes
-# like openmp in LLVM_ENABLE_RUNTIMES instead of in LLVM_ENABLE_PROJECTS causes
-# all such runtimes' test suites to run in a separate lit invocation from all
-# other projects' test suites.  As a result, if a runtime test fails, then the
-# other projects' test suites don't run.  The best solution is to fix check-all,
-# but that won't protect us from unknowingly missing test results the next time
-# this happens.  The following use of --ignore-fail followed by grep avoids that
-# problem.  The count printed by grep tells us how many test suite summaries we
-# need to search for.
 #-------------------------------------------------
 
 .test:
@@ -376,30 +546,60 @@ release (build):
     - echo $CHECK_TARGETS
     - echo $NINJA
     - $NINJA --version
-    - echo "$XFAIL_COMMON" "$XFAIL" |
-      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//' |
-      tee xfail.txt
-    - echo "$XFAIL_NOT_COMMON" "$XFAIL_NOT" |
-      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//' |
-      tee xfail-not.txt
-    - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
-           $NINJA -l `nproc` check-all
+    - export LIT_XFAIL=`
+        echo "$LIT_XFAIL"
+        | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
+      `
+    - export LIT_XFAIL_NOT=`
+        echo "$LIT_XFAIL_NOT"
+        | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
+      `
+    - echo "$LIT_XFAIL"
+    - echo "$LIT_XFAIL_NOT"
+    # Build test suite before running it so we can time those steps separately.
+    - time LIT_FILTER_OUT=. LIT_OPTS=--allow-empty-runs
+      $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-build-log.txt
-      | grep '^\[[0-9]\+/[0-9]\+]\|\<error:'
+    # Check that no misconfiguration is quietly disabling key features and thus
+    # tests (for example, not adding the gitlab-runner account to the required
+    # render/video groups quietly disables OpenMP offloading to AMD GPU).
+    - echo "$EXPECTED_TESTS_REGEX"
+    - LIT_OPTS=--show-tests $NINJA check-all >
+          $CI_PROJECT_DIR/check-all-show-tests.txt
+    - if test x"$EXPECTED_TESTS_REGEX" != x; then
+        grep -c "$EXPECTED_TESTS_REGEX"
+            $CI_PROJECT_DIR/check-all-show-tests.txt;
+      fi
+    # Run the test suite.
+    #
+    # LIT_NPROC_DIVISOR is set to limit the number of tests launched at once so
+    # we don't overwhelm the accelerators (leconte GPUs, in particular),
+    # producing OpenMP offload test failures.
+    #
+    # ulimit -t does not terminate processes that are hung and not using CPUs,
+    # but hopefully lit's --timeout will.  20 mins ought to be long enough for
+    # any regression test.
+    #
+    # In case check-all runs multiple lit invocations (e.g., a separate
+    # invocation for openmp because it's in LLVM_ENABLE_RUNTIMES), use lit's
+    # --ignore-fail so that all lit invocations actually run.  The count printed
+    # by grep tells us how many test suite summaries we need to search for.
     - NPROC=`nproc`
     - echo "$NPROC"
-    - echo "$LIT_NTHREADS_DIVISOR"
-    - ulimit -t `expr $NPROC / $LIT_NTHREADS_DIVISOR \* 3600`
-    - ulimit -t
+    - echo "$LIT_NPROC_DIVISOR"
     - time FILECHECK_OPTS='-dump-input-filter=all -vv -color'
-           LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml --xfail=\"`cat xfail.txt`\" --xfail-not=\"`cat xfail-not.txt`\" --ignore-fail -j `expr $NPROC / $LIT_NTHREADS_DIVISOR`"
-           $NINJA -l `nproc` check-all
+      LIT_OPTS="
+        --timeout 1200 -j `expr $NPROC / $LIT_NPROC_DIVISOR`
+        --ignore-fail --xunit-xml-output $CI_PROJECT_DIR/check-all.xml
+      "
+      $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-log.txt
     - "! grep -c \"'--ignore-fail' was specified\"
                  $CI_PROJECT_DIR/check-all-log.txt"
   artifacts:
     when: always
-    paths: [check-all-build-log.txt, check-all-log.txt, check-all.xml]
+    paths: [check-all-build-log.txt, check-all-show-tests.txt,
+            check-all-log.txt, check-all.xml]
     reports:
       junit: check-all.xml
 
@@ -409,14 +609,32 @@ leconte (test):
     - job: leconte (build)
       artifacts: false
 
+oswald02 (test):
+  extends: [.oswald02, .test]
+  needs:
+    - job: oswald02 (build)
+      artifacts: false
+
+explorer (test):
+  extends: [.explorer, .test]
+  needs:
+    - job: explorer (build)
+      artifacts: false
+
 kold (test):
   extends: [.kold, .test]
   needs:
     - job: kold (build)
       artifacts: false
 
-release (test):
-  extends: [.release, .test]
+no-asserts (test):
+  extends: [.no-asserts, .test]
   needs:
-    - job: release (build)
+    - job: no-asserts (build)
+      artifacts: false
+
+debug (test):
+  extends: [.debug, .test]
+  needs:
+    - job: debug (build)
       artifacts: false
