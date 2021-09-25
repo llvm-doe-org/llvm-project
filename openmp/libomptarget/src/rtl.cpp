@@ -437,6 +437,74 @@ void RTLsTy::RegisterLib(__tgt_bin_desc *desc) {
 void RTLsTy::UnregisterLib(__tgt_bin_desc *desc) {
   DP("Unloading target library!\n");
 
+  // OpenMP 5.1 sec. 2.14.1, "Device Initialization", p. 186, L12-13:
+  // "The device-finalize event for a target device that has been initialized
+  // occurs in some thread before an OpenMP implementation shuts down."
+  //
+  // OpenMP 5.1 sec. 4.5.2.20, "ompt_callback_device_finalize_t", p. 531,
+  // L27-33:
+  // "A registered callback with type signature ompt_callback_device_finalize_t
+  // is dispatched for a device immediately prior to finalizing the device.
+  // Prior to dispatching a finalization callback for a device on which tracing
+  // is active, the OpenMP implementation stops tracing on the device and
+  // synchronously flushes all trace records for the device that have not yet
+  // been reported. These trace records are flushed through one or more buffer
+  // completion callbacks with type signature ompt_callback_buffer_complete_t
+  // as needed prior to the dispatch of the callback with type signature
+  // ompt_callback_device_finalize_t."
+  //
+  // The above quotes say flushing of traces occurs "prior to dispatching a
+  // finalization callback", which occurs "immediately prior to finalizing the
+  // device".  This might imply that flushing of traces is prior to and not
+  // part of the finalization process, but we assume instead that "finalizing
+  // the device" really indicates the end of the finalization process, which
+  // can thus include flushing of traces.  Thus, we add
+  // ompt_callback_device_finalize_start for the beginning of the finalization
+  // process.
+  //
+  // (Currently, device tracing is not actually implemented, so there's nothing
+  // to flush, but the point of the above comments is to explain why we think
+  // ompt_callback_device_finalize is the end not the start of device
+  // finalization.)
+  //
+  // FIXME: Callbacks often call omp_get_initial_device(), which call
+  // omp_get_num_devices(), and that would deadlock if the callbacks were
+  // dispatched during the RTLsMtx lock below.  Thus, we have to have to
+  // dispatch outside the lock, which has at least two potential issues:
+  // - If there are multiple devices per device type, callbacks do not precisely
+  //   show when a specific device is finalized because the callbacks are
+  //   grouped by device type.  However, at least this means the finalization
+  //   work that is shared among all devices of a type can be measured.
+  // - Between the ompt_callback_device_finalize_start callbacks and the
+  //   associated finalizations, could the list of devices to be finalized
+  //   change since the lock has to be released for the callbacks?
+#if OMPT_SUPPORT
+  if (ompt_target_enabled.ompt_callback_device_finalize_start) {
+    std::list<DeviceTy *> DevFinalizeStarts;
+    DP("Building device list for OMPT ompt_callback_device_finalize_start");
+    PM->RTLsMtx.lock();
+    for (int32_t i = 0; i < desc->NumDeviceImages; ++i) {
+      __tgt_device_image *img = &desc->DeviceImages[i];
+      for (auto *R : UsedRTLs) {
+        assert(R->isUsed && "Expecting used RTLs.");
+        if (!R->is_valid_binary(img))
+          continue;
+        for (int32_t i = 0; i < R->NumberOfDevices; ++i) {
+          DeviceTy &Device = PM->Devices[R->Idx + i];
+          if (Device.IsInit)
+            DevFinalizeStarts.push_back(&Device);
+        }
+        break;
+      }
+    }
+    PM->RTLsMtx.unlock();
+    for (DeviceTy *Dev : DevFinalizeStarts)
+      ompt_target_callbacks.ompt_callback(ompt_callback_device_finalize_start)(
+        Dev->DeviceID);
+  }
+  std::list<DeviceTy *> DevFinalizeEnds;
+#endif
+
   PM->RTLsMtx.lock();
   // Find which RTL understands each image, if any.
   for (int32_t i = 0; i < desc->NumDeviceImages; ++i) {
@@ -466,6 +534,10 @@ void RTLsTy::UnregisterLib(__tgt_bin_desc *desc) {
       // if its PendingCtors list has been emptied.
       for (int32_t i = 0; i < FoundRTL->NumberOfDevices; ++i) {
         DeviceTy &Device = PM->Devices[FoundRTL->Idx + i];
+#if OMPT_SUPPORT
+        if (Device.IsInit)
+          DevFinalizeEnds.push_back(&Device);
+#endif
         Device.PendingGlobalsMtx.lock();
         if (Device.PendingCtorsDtors[desc].PendingCtors.empty()) {
           AsyncInfoTy AsyncInfo(Device);
@@ -525,6 +597,17 @@ void RTLsTy::UnregisterLib(__tgt_bin_desc *desc) {
 
   // TODO: Remove RTL and the devices it manages if it's not used anymore?
   // TODO: Write some RTL->unload_image(...) function?
+
+  // As mentioned above, to avoid deadlock, do not dispatch callbacks within
+  // locks .
+#if OMPT_SUPPORT
+  if (ompt_target_enabled.ompt_callback_device_finalize) {
+    for (DeviceTy *Dev : DevFinalizeEnds) {
+      ompt_target_callbacks.ompt_callback(ompt_callback_device_finalize)(
+        Dev->DeviceID);
+    }
+  }
+#endif
 
   DP("Done unregistering library!\n");
 }

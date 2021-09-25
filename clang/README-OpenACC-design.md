@@ -2369,13 +2369,15 @@ Clacc's rationale for such cases:
       `acc_ev_device_init_end` instead of `acc_ev_device_init_start`.
 
 * `ompt_callback_device_finalize`
-    * OpenMP 5.0 sec. 2.12.1 p. 160 L12-13:
+    * OpenMP 5.1, sec. 2.14.1, "Device Initialization", p. 186,
+      L12-13:
 
         > The device-finalize event for a target device that has been
         > initialized occurs in some thread before an OpenMP
         > implementation shuts down.
 
-    * OpenMP 5.0 sec. 4.5.2.20 p. 484 L12-18:
+    * OpenMP 5.1 sec. 4.5.2.20, "ompt_callback_device_finalize_t",
+      p. 531, L27-33:
 
         > A registered callback with type signature
         > ompt_callback_device_finalize_t is dispatched for a device
@@ -2402,8 +2404,7 @@ Clacc's rationale for such cases:
       `acc_ev_device_shutdown_end` instead of
       `acc_ev_device_shutdown_start`, which is logically triggered
       before flushing of traces.  (However, device traces haven't yet
-      actually been implemented in LLVM's OpenMP runtime, so these
-      events are actually triggered back to back at the moment.)
+      actually been implemented in LLVM's OpenMP runtime.)
 
 * `ompt_callback_target_data_op_emi(optype=ompt_target_data_alloc)`
     * OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
@@ -2820,6 +2821,15 @@ support currently include:
   compiler does not yet implement directives and clauses that would
   trigger them:
     * `acc_ev_wait_start`, `acc_ev_wait_end`
+* In the case of multiple devices of the same type, callbacks for
+  `acc_ev_device_shutdown_start` and `acc_ev_device_shutdown_end` are
+  currently grouped by device type.  That is, for any individual
+  device, the difference in time between the dispatch of
+  `acc_ev_device_shutdown_start` and `acc_ev_device_shutdown_end`
+  always includes the time to finalize all devices of the same type
+  and might include the time to execute those callbacks for some other
+  devices of the same type.  In contrast, `acc_ev_device_init_start`
+  and `acc_ev_device_init_end` are not grouped by device type.
 * Some of the data passed to the OpenACC callbacks currently have
   questionable values or have been omitted:
     * The `valid_bytes` field is properly set in each of these structs

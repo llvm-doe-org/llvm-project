@@ -651,10 +651,6 @@ void DeviceTy::init() {
 #endif
   if (Ret != OFFLOAD_SUCCESS)
     return;
-#if OMPT_SUPPORT
-  if (OmptApi.ompt_target_enabled->enabled)
-    ompt_record_device_init(DeviceID);
-#endif
 
   IsInit = true;
 }

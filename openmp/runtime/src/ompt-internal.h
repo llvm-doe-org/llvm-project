@@ -187,7 +187,6 @@ int __kmp_control_tool(uint64_t command, uint64_t modifier, void *arg);
 extern ompt_callbacks_active_t ompt_enabled;
 extern ompt_target_callbacks_active_t ompt_target_enabled;
 
-void ompt_record_device_init(int32_t device_num) OMPT_LIBOMPTARGET_WEAK;
 int ompt_get_target_info(uint64_t *device_num, ompt_id_t *target_id,
                          ompt_id_t *host_op_id) OMPT_LIBOMPTARGET_WEAK;
 void ompt_set_target_info(uint64_t device_num) OMPT_LIBOMPTARGET_WEAK;

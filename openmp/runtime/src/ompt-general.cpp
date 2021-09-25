@@ -127,9 +127,6 @@ static const ident_t *ompt_trigger_ident = nullptr;
 static bool ompt_trigger_ident_parsed = false;
 static map_var_info_t ompt_map_var_info = NULL;
 static bool ompt_map_var_info_parsed = false;
-static unsigned ompt_device_inits_capacity = 0;
-static unsigned ompt_device_inits_size = 0;
-static int32_t *ompt_device_inits = NULL;
 static uint64_t ompt_target_device = UINT64_MAX;
 
 /*****************************************************************************
@@ -585,78 +582,17 @@ void ompt_post_init() {
 }
 
 void ompt_fini() {
-  // OpenMP 5.0 sec. 2.12.1 p. 160 L12-13:
-  // "The device-finalize event for a target device that has been initialized
-  // occurs in some thread before an OpenMP implementation shuts down."
-  //
-  // OpenMP 5.0 sec. 4.5.2.20 p. 484 L12-18:
-  // "A registered callback with type signature ompt_callback_device_finalize_t
-  // is dispatched for a device immediately prior to finalizing the device.
-  // Prior to dispatching a finalization callback for a device on which tracing
-  // is active, the OpenMP implementation stops tracing on the device and
-  // synchronously flushes all trace records for the device that have not yet
-  // been reported. These trace records are flushed through one or more buffer
-  // completion callbacks with type signature ompt_callback_buffer_complete_t
-  // as needed prior to the dispatch of the callback with type signature
-  // ompt_callback_device_finalize_t."
-  //
-  // Currently, device tracing is not implemented, and there is no device
-  // finalization process in libomptarget, so we dispatch these callbacks here
-  // for all devices.
-  //
-  // The above quotes say flushing of traces occurs "prior to dispatching a
-  // finalization callback", which occurs "immediately prior to finalizing the
-  // device".  This might imply that flushing of traces is prior to and not
-  // part of the finalization process, but we assume instead that "finalizing
-  // the device" really indicates the end of the finalization process, which
-  // can thus include flushing of traces.  Thus, we add
-  // ompt_callback_device_finalize_start for the beginning of the finalization
-  // process.
-  if (ompt_enabled.enabled) {
-    if (ompt_target_enabled.ompt_callback_device_finalize_start ||
-        ompt_target_enabled.ompt_callback_device_finalize) {
-      for (int i = ompt_device_inits_size - 1; i >= 0; --i) {
-        int32_t device_num = ompt_device_inits[i];
-        if (ompt_target_enabled.ompt_callback_device_finalize_start) {
-          ompt_target_callbacks.ompt_callback(
-              ompt_callback_device_finalize_start)(
-            device_num);
-        }
-        // TODO: Based on the above discussion, flushing of traces goes here.
-        if (ompt_target_enabled.ompt_callback_device_finalize) {
-          ompt_target_callbacks.ompt_callback(ompt_callback_device_finalize)(
-            device_num);
-        }
-      }
-      ompt_device_inits_capacity = ompt_device_inits_size = 0;
-      KMP_INTERNAL_FREE(ompt_device_inits);
-      ompt_device_inits = NULL;
-    }
+  if (ompt_enabled.enabled
 #if OMPD_SUPPORT
-    if (ompt_start_tool_result && ompt_start_tool_result->finalize)
+      && ompt_start_tool_result && ompt_start_tool_result->finalize
 #endif
-      ompt_start_tool_result->finalize(&(ompt_start_tool_result->tool_data));
+  ) {
+    ompt_start_tool_result->finalize(&(ompt_start_tool_result->tool_data));
   }
 
   if (ompt_tool_module)
     OMPT_DLCLOSE(ompt_tool_module);
   memset(&ompt_enabled, 0, sizeof(ompt_enabled));
-}
-
-void ompt_record_device_init(int32_t device_num) {
-  if (!ompt_device_inits_capacity) {
-    ompt_device_inits_capacity = 4;
-    ompt_device_inits = (int32_t *)KMP_INTERNAL_MALLOC(
-        ompt_device_inits_capacity * sizeof *ompt_device_inits);
-    if (!ompt_device_inits)
-      KMP_FATAL(MemoryAllocFailed);
-  } else if (ompt_device_inits_capacity < ompt_device_inits_size + 1) {
-    ompt_device_inits_capacity *= 2;
-    ompt_device_inits = (int32_t *)KMP_INTERNAL_REALLOC(
-        ompt_device_inits,
-        ompt_device_inits_capacity * sizeof *ompt_device_inits);
-  }
-  ompt_device_inits[ompt_device_inits_size++] = device_num;
 }
 
 void ompt_set_target_info(uint64_t device_num) {
