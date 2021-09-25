@@ -83,6 +83,8 @@ stages:
       "libomp :: affinity/kmp-hw-subset.c"
     XFAIL_NOT:
       "libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/api.c"
+    EXPECTED_TESTS_REGEX:
+      "libomptarget :: nvptx64-nvidia-cuda"
 
 .oswald02:
   tags: [shell, oswald02]
@@ -104,6 +106,8 @@ stages:
       "libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp"
     XFAIL_NOT:
       ""
+    EXPECTED_TESTS_REGEX:
+      "libomptarget :: nvptx64-nvidia-cuda"
 
 .explorer:
   tags: [shell, explorer]
@@ -126,6 +130,8 @@ stages:
       ""
     XFAIL_NOT:
       ""
+    EXPECTED_TESTS_REGEX:
+      "libomptarget :: amdgcn-amd-amdhsa"
 
 .kold:
   tags: [shell, kold]
@@ -479,6 +485,16 @@ release (build):
            $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-build-log.txt
       | grep '^\[[0-9]\+/[0-9]\+]\|\<error:'
+    # Check that no misconfiguration is quietly disabling key features and thus
+    # tests (for example, not adding the gitlab-runner account to the required
+    # render/video groups quietly disables OpenMP offloading to AMD GPU).
+    - echo "$EXPECTED_TESTS_REGEX"
+    - LIT_OPTS=--show-tests $NINJA check-all >
+          $CI_PROJECT_DIR/check-all-show-tests.txt
+    - if test x"$EXPECTED_TESTS_REGEX" != x; then
+        grep -c "$EXPECTED_TESTS_REGEX"
+            $CI_PROJECT_DIR/check-all-show-tests.txt;
+      fi
     - NPROC=`nproc`
     - echo "$NPROC"
     - echo "$LIT_NTHREADS_DIVISOR"
@@ -492,7 +508,8 @@ release (build):
                  $CI_PROJECT_DIR/check-all-log.txt"
   artifacts:
     when: always
-    paths: [check-all-build-log.txt, check-all-log.txt, check-all.xml]
+    paths: [check-all-build-log.txt, check-all-show-tests.txt,
+            check-all-log.txt, check-all.xml]
     reports:
       junit: check-all.xml
 
