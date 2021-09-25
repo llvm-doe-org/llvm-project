@@ -84,6 +84,27 @@ stages:
     XFAIL_NOT:
       "libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/api.c"
 
+.oswald02:
+  tags: [shell, oswald02]
+  variables:
+    BUILD_ID: oswald02
+    MODULES: cmake gnu/11.1.0 nvhpc/21.7
+    CMAKE: cmake
+    NINJA: ninja
+    PYTHON: /usr/bin/python3
+    CMAKE_BUILD_TYPE: Debug
+    CMAKE_OFFLOAD_CONFIG:
+      -DCLANG_ACC_TEST_EXE_X86_64=4
+      -DCLANG_ACC_TEST_EXE_PPC64LE=0
+      -DCLANG_ACC_TEST_EXE_NVPTX64=1
+    PATH_PREPEND:
+      /opt/nvidia/hpc_sdk/Linux_x86_64/21.7/cuda/11.4/bin
+    LIT_NTHREADS_DIVISOR: 1
+    XFAIL:
+      "libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp"
+    XFAIL_NOT:
+      ""
+
 .kold:
   tags: [shell, kold]
   variables:
@@ -182,6 +203,9 @@ stages:
 leconte (setup):
   extends: [.leconte, .setup]
 
+oswald02 (setup):
+  extends: [.oswald02, .setup]
+
 kold (setup):
   extends: [.kold, .setup]
 
@@ -217,6 +241,12 @@ leconte (cleanup):
     - job: leconte (test)
       artifacts: false
 
+oswald02 (cleanup):
+  extends: [.oswald02, .cleanup]
+  needs:
+    - job: oswald02 (test)
+      artifacts: false
+
 kold (cleanup):
   extends: [.kold, .cleanup]
   needs:
@@ -231,6 +261,9 @@ release (cleanup):
 
 leconte (manual cleanup):
   extends: [.leconte, .manual-cleanup]
+
+oswald02 (manual cleanup):
+  extends: [.oswald02, .manual-cleanup]
 
 kold (manual cleanup):
   extends: [.kold, .manual-cleanup]
@@ -303,6 +336,12 @@ leconte (config):
     - job: leconte (setup)
       artifacts: false
 
+oswald02 (config):
+  extends: [.oswald02, .config]
+  needs:
+    - job: oswald02 (setup)
+      artifacts: false
+
 kold (config):
   extends: [.kold, .config]
   needs:
@@ -334,6 +373,12 @@ leconte (build):
   extends: [.leconte, .build]
   needs:
     - job: leconte (config)
+      artifacts: false
+
+oswald02 (build):
+  extends: [.oswald02, .build]
+  needs:
+    - job: oswald02 (config)
       artifacts: false
 
 kold (build):
@@ -409,6 +454,12 @@ leconte (test):
   extends: [.leconte, .test]
   needs:
     - job: leconte (build)
+      artifacts: false
+
+oswald02 (test):
+  extends: [.oswald02, .test]
+  needs:
+    - job: oswald02 (build)
       artifacts: false
 
 kold (test):
