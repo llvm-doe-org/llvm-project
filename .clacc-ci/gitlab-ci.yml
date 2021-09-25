@@ -42,7 +42,6 @@ variables:
     libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
     libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
     libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
-    libomptarget :: x86_64-pc-linux-gnu :: offloading/taskloop_offload_nowait.cpp
     libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/taskloop_offload_nowait.cpp
     "
   XFAIL_NOT_COMMON:
