@@ -57,6 +57,8 @@ stages:
   variables:
     BUILD_ID: leconte
     MODULES: cmake/3.19.2 gnu/9.2.0 nvhpc/21.2
+    PATH_PREPEND:
+      /opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
@@ -65,8 +67,8 @@ stages:
       -DCLANG_ACC_TEST_EXE_X86_64=0
       -DCLANG_ACC_TEST_EXE_PPC64LE=4
       -DCLANG_ACC_TEST_EXE_NVPTX64=6
-    PATH_PREPEND:
-      /opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin
+    LLVM_ENABLE_PROJECTS: "clang"
+    LLVM_ENABLE_RUNTIMES: "openmp"
     LIT_NTHREADS_DIVISOR: 4
     LIT_XFAIL:
       "
@@ -100,6 +102,8 @@ stages:
   variables:
     BUILD_ID: oswald02
     MODULES: cmake gnu/11.1.0 nvhpc/21.7
+    PATH_PREPEND:
+      /opt/nvidia/hpc_sdk/Linux_x86_64/21.7/cuda/11.4/bin
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
@@ -108,8 +112,8 @@ stages:
       -DCLANG_ACC_TEST_EXE_X86_64=4
       -DCLANG_ACC_TEST_EXE_PPC64LE=0
       -DCLANG_ACC_TEST_EXE_NVPTX64=1
-    PATH_PREPEND:
-      /opt/nvidia/hpc_sdk/Linux_x86_64/21.7/cuda/11.4/bin
+    LLVM_ENABLE_PROJECTS: "clang"
+    LLVM_ENABLE_RUNTIMES: "openmp"
     LIT_NTHREADS_DIVISOR: 1
     LIT_XFAIL:
       "
@@ -141,6 +145,7 @@ stages:
   variables:
     BUILD_ID: explorer
     MODULES: ""
+    PATH_PREPEND: ""
     CMAKE: cmake
     GCC_DIR: /usr
     NINJA: ninja
@@ -150,8 +155,12 @@ stages:
       -DCLANG_ACC_TEST_EXE_X86_64=4
       -DCLANG_ACC_TEST_EXE_PPC64LE=0
       -DCLANG_ACC_TEST_EXE_NVPTX64=1
-    PATH_PREPEND:
-      ""
+    # If lld isn't built, OpenMP offloading tests for AMDGPU fail:
+    #
+    #   clang-14: error: unable to execute command: Executable "lld" doesn't exist!
+#   #   clang-14: error: amdgcn-link command failed with exit code 1 (use -v to see invocation)
+    LLVM_ENABLE_PROJECTS: "clang;lld"
+    LLVM_ENABLE_RUNTIMES: "openmp"
     LIT_NTHREADS_DIVISOR: 1
     LIT_XFAIL:
       "
@@ -182,6 +191,7 @@ stages:
   variables:
     BUILD_ID: kold
     MODULES: gnu/9.1.0
+    PATH_PREPEND: ""
     CMAKE: cmake3
     NINJA: ninja-build
     PYTHON: /usr/bin/python3
@@ -190,8 +200,8 @@ stages:
       -DCLANG_ACC_TEST_EXE_X86_64=4
       -DCLANG_ACC_TEST_EXE_PPC64LE=0
       -DCLANG_ACC_TEST_EXE_NVPTX64=0
-    PATH_PREPEND:
-      ""
+    LLVM_ENABLE_PROJECTS: "clang"
+    LLVM_ENABLE_RUNTIMES: "openmp"
     LIT_XFAIL:
       "
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
@@ -219,6 +229,8 @@ stages:
   variables:
     BUILD_ID: no-asserts
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=False
+    LLVM_ENABLE_PROJECTS: "clang"
+    LLVM_ENABLE_RUNTIMES: "openmp"
     LIT_XFAIL:
       "
       Clang :: Headers/wasm.c
@@ -234,6 +246,8 @@ stages:
   variables:
     BUILD_ID: debug
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Debug
+    LLVM_ENABLE_PROJECTS: "clang"
+    LLVM_ENABLE_RUNTIMES: "openmp"
     LIT_XFAIL:
       "
       Clang :: Headers/wasm.c
@@ -425,9 +439,11 @@ z-cleanup-project-builds:
     - $CMAKE --version
     - echo $CMAKE_BUILD_OPTS
     - echo $GCC_DIR
+    - echo $LLVM_CCACHE_PARAMS
     - echo $PYTHON
     - $PYTHON --version
-    - echo $LLVM_CCACHE_PARAMS
+    - echo $LLVM_ENABLE_PROJECTS
+    - echo $LLVM_ENABLE_RUNTIMES
     - echo $CMAKE_OFFLOAD_CONFIG
     - time $CMAKE -G Ninja
                   $CMAKE_BUILD_OPTS
@@ -437,10 +453,10 @@ z-cleanup-project-builds:
                   -DCMAKE_C_COMPILER=gcc
                   -DCMAKE_CXX_COMPILER=g++
                   -DGCC_INSTALL_PREFIX=$GCC_DIR
-                  -DLLVM_ENABLE_PROJECTS='clang'
-                  -DLLVM_ENABLE_RUNTIMES='openmp'
-                  -DPython3_EXECUTABLE=$PYTHON
                   -DLLVM_CCACHE_PARAMS="$LLVM_CCACHE_PARAMS"
+                  -DLLVM_ENABLE_PROJECTS="$LLVM_ENABLE_PROJECTS"
+                  -DLLVM_ENABLE_RUNTIMES="$LLVM_ENABLE_RUNTIMES"
+                  -DPython3_EXECUTABLE=$PYTHON
                   -DLLVM_LIT_ARGS='-s -vv'
                   $CMAKE_OFFLOAD_CONFIG
                   ../source/llvm
