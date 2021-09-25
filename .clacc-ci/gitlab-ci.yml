@@ -546,12 +546,16 @@ debug (build):
     - echo $CHECK_TARGETS
     - echo $NINJA
     - $NINJA --version
-    - echo "$LIT_XFAIL" |
-      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//' |
-      tee xfail.txt
-    - echo "$LIT_XFAIL_NOT" |
-      sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//' |
-      tee xfail-not.txt
+    - export LIT_XFAIL=`
+        echo "$LIT_XFAIL"
+        | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
+      `
+    - export LIT_XFAIL_NOT=`
+        echo "$LIT_XFAIL_NOT"
+        | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
+      `
+    - echo "$LIT_XFAIL"
+    - echo "$LIT_XFAIL_NOT"
     # Build test suite before running it so we can time those steps separately.
     - time LIT_FILTER_OUT=. LIT_OPTS=--allow-empty-runs
       $NINJA -l `nproc` check-all
@@ -584,8 +588,11 @@ debug (build):
     - echo "$NPROC"
     - echo "$LIT_NPROC_DIVISOR"
     - time FILECHECK_OPTS='-dump-input-filter=all -vv -color'
-           LIT_OPTS="--xunit-xml-output $CI_PROJECT_DIR/check-all.xml --xfail=\"`cat xfail.txt`\" --xfail-not=\"`cat xfail-not.txt`\" --ignore-fail -j `expr $NPROC / $LIT_NPROC_DIVISOR` --timeout 1200"
-           $NINJA -l `nproc` check-all
+      LIT_OPTS="
+        --timeout 1200 -j `expr $NPROC / $LIT_NPROC_DIVISOR`
+        --ignore-fail --xunit-xml-output $CI_PROJECT_DIR/check-all.xml
+      "
+      $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-log.txt
     - "! grep -c \"'--ignore-fail' was specified\"
                  $CI_PROJECT_DIR/check-all-log.txt"
