@@ -111,7 +111,7 @@ stages:
     CMAKE_BUILD_TYPE: Release
     XFAIL:
       "
-      Headers/wasm.c
+      Clang :: Headers/wasm.c
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
