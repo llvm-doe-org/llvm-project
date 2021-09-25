@@ -2592,33 +2592,37 @@ enum CXCursorKind {
    */
   CXCursor_OMPUnrollDirective = 293,
 
+  /** OpenMP metadirective directive.
+   */
+  CXCursor_OMPMetaDirective = 294,
+
   /** OpenACC update directive.
    */
-  CXCursor_ACCUpdateDirective = 294,
+  CXCursor_ACCUpdateDirective = 295,
 
   /** OpenACC enter data directive.
    */
-  CXCursor_ACCEnterDataDirective = 295,
+  CXCursor_ACCEnterDataDirective = 296,
 
   /** OpenACC exit data directive.
    */
-  CXCursor_ACCExitDataDirective = 296,
+  CXCursor_ACCExitDataDirective = 297,
 
   /** OpenACC data directive.
    */
-  CXCursor_ACCDataDirective = 297,
+  CXCursor_ACCDataDirective = 298,
 
   /** OpenACC parallel directive.
    */
-  CXCursor_ACCParallelDirective = 298,
+  CXCursor_ACCParallelDirective = 299,
 
   /** OpenACC loop directive.
    */
-  CXCursor_ACCLoopDirective = 299,
+  CXCursor_ACCLoopDirective = 300,
 
   /** OpenACC parallel loop directive.
    */
-  CXCursor_ACCParallelLoopDirective = 300,
+  CXCursor_ACCParallelLoopDirective = 301,
 
   CXCursor_LastStmt = CXCursor_ACCParallelLoopDirective,
 
@@ -2628,7 +2632,7 @@ enum CXCursorKind {
    * The translation unit cursor exists primarily to act as the root
    * cursor for traversing the contents of a translation unit.
    */
-  CXCursor_TranslationUnit = 301,
+  CXCursor_TranslationUnit = 350,
 
   /* Attributes */
   CXCursor_FirstAttr = 400,
@@ -3326,8 +3330,9 @@ enum CXTypeKind {
   CXType_UAccum = 37,
   CXType_ULongAccum = 38,
   CXType_BFloat16 = 39,
+  CXType_Ibm128 = 40,
   CXType_FirstBuiltin = CXType_Void,
-  CXType_LastBuiltin = CXType_BFloat16,
+  CXType_LastBuiltin = CXType_Ibm128,
 
   CXType_Complex = 100,
   CXType_Pointer = 101,

@@ -9,7 +9,6 @@
 #include "DWARFUnit.h"
 
 #include "lldb/Core/Module.h"
-#include "lldb/Host/StringConvert.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Utility/LLDBAssert.h"
 #include "lldb/Utility/StreamString.h"
@@ -513,6 +512,24 @@ DWARFDataExtractor DWARFUnit::GetLocationData() const {
   return data;
 }
 
+DWARFDataExtractor DWARFUnit::GetRnglistData() const {
+  DWARFContext &Ctx = GetSymbolFileDWARF().GetDWARFContext();
+  const DWARFDataExtractor &data = Ctx.getOrLoadRngListsData();
+  if (const llvm::DWARFUnitIndex::Entry *entry = m_header.GetIndexEntry()) {
+    if (const auto *contribution =
+            entry->getContribution(llvm::DW_SECT_RNGLISTS))
+      return DWARFDataExtractor(data, contribution->Offset,
+                                contribution->Length);
+    GetSymbolFileDWARF().GetObjectFile()->GetModule()->ReportError(
+        "Failed to find range list contribution for CU with signature "
+        "0x%" PRIx64,
+        entry->getSignature());
+
+    return DWARFDataExtractor();
+  }
+  return data;
+}
+
 void DWARFUnit::SetRangesBase(dw_addr_t ranges_base) {
   lldbassert(!m_rnglist_table_done);
 
@@ -525,8 +542,7 @@ DWARFUnit::GetRnglistTable() {
     m_rnglist_table_done = true;
     if (auto table_or_error =
             ParseListTableHeader<llvm::DWARFDebugRnglistTable>(
-                m_dwarf.GetDWARFContext().getOrLoadRngListsData().GetAsLLVM(),
-                m_ranges_base, DWARF32))
+                GetRnglistData().GetAsLLVM(), m_ranges_base, DWARF32))
       m_rnglist_table = std::move(table_or_error.get());
     else
       GetSymbolFileDWARF().GetObjectFile()->GetModule()->ReportError(
@@ -547,7 +563,7 @@ llvm::Expected<uint64_t> DWARFUnit::GetRnglistOffset(uint32_t Index) {
                                    "DW_AT_rnglists_base for CU at 0x%8.8x",
                                    GetOffset());
   if (llvm::Optional<uint64_t> off = GetRnglistTable()->getOffsetEntry(
-          m_dwarf.GetDWARFContext().getOrLoadRngListsData().GetAsLLVM(), Index))
+          GetRnglistData().GetAsLLVM(), Index))
     return *off + m_ranges_base;
   return llvm::createStringError(
       errc::invalid_argument,
@@ -670,12 +686,10 @@ void DWARFUnit::ParseProducerInfo() {
         llvm::SmallVector<llvm::StringRef, 4> matches;
         if (g_clang_version_regex.Execute(llvm::StringRef(producer_cstr),
                                           &matches)) {
-          m_producer_version_major =
-              StringConvert::ToUInt32(matches[1].str().c_str(), UINT32_MAX, 10);
-          m_producer_version_minor =
-              StringConvert::ToUInt32(matches[2].str().c_str(), UINT32_MAX, 10);
-          m_producer_version_update =
-              StringConvert::ToUInt32(matches[3].str().c_str(), UINT32_MAX, 10);
+          // FIXME: improve error handling
+          llvm::to_integer(matches[1], m_producer_version_major);
+          llvm::to_integer(matches[2], m_producer_version_minor);
+          llvm::to_integer(matches[3], m_producer_version_update);
         }
         m_producer = eProducerClang;
       } else if (strstr(producer_cstr, "GNU"))
@@ -1001,8 +1015,7 @@ DWARFUnit::FindRnglistFromOffset(dw_offset_t offset) {
     return llvm::createStringError(errc::invalid_argument,
                                    "missing or invalid range list table");
 
-  llvm::DWARFDataExtractor data =
-      m_dwarf.GetDWARFContext().getOrLoadRngListsData().GetAsLLVM();
+  llvm::DWARFDataExtractor data = GetRnglistData().GetAsLLVM();
 
   // As DW_AT_rnglists_base may be missing we need to call setAddressSize.
   data.setAddressSize(m_header.GetAddressByteSize());

@@ -149,12 +149,12 @@ procedure above:
 
 ```
 $ export PATH=$CLACC_BUILD_DIR/bin:$PATH
-$ export LIBRARY_PATH=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget:$LIBRARY_PATH
 $ export LD_LIBRARY_PATH=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src:$LD_LIBRARY_PATH
 $ clang -fopenacc -fopenmp-targets=nvptx64-nvidia-cuda \
   -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
   -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
   -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
+  --libomptarget-nvptx-bc-path=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
   -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
   -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
   test.c
@@ -302,8 +302,9 @@ This is an example work-flow and configuration to get and build the LLVM source:
 
         * ``-DLLVM_ENABLE_PROJECTS='...'`` --- semicolon-separated list of the LLVM
           sub-projects you'd like to additionally build. Can include any of: clang,
-          clang-tools-extra, libcxx, libcxxabi, libunwind, lldb, compiler-rt, lld,
-          polly, or cross-project-tests.
+          clang-tools-extra, compiler-rt,cross-project-tests, flang, libc, libclc,
+          libcxx, libcxxabi, libunwind, lld, lldb, mlir, openmp, parallel-libs,
+          polly, or pstl.
 
           For example, to build LLVM, Clang, libcxx, and libcxxabi, use
           ``-DLLVM_ENABLE_PROJECTS="clang;libcxx;libcxxabi"``.

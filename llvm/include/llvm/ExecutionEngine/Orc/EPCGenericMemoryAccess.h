@@ -27,22 +27,17 @@ class EPCGenericMemoryAccess : public ExecutorProcessControl::MemoryAccess {
 public:
   /// Function addresses for memory access.
   struct FuncAddrs {
-    ExecutorAddress WriteUInt8s;
-    ExecutorAddress WriteUInt16s;
-    ExecutorAddress WriteUInt32s;
-    ExecutorAddress WriteUInt64s;
-    ExecutorAddress WriteBuffers;
+    ExecutorAddr WriteUInt8s;
+    ExecutorAddr WriteUInt16s;
+    ExecutorAddr WriteUInt32s;
+    ExecutorAddr WriteUInt64s;
+    ExecutorAddr WriteBuffers;
   };
 
   /// Create an EPCGenericMemoryAccess instance from a given set of
   /// function addrs.
   EPCGenericMemoryAccess(ExecutorProcessControl &EPC, FuncAddrs FAs)
       : EPC(EPC), FAs(FAs) {}
-
-  /// Create using the standard memory access function names from the ORC
-  /// runtime.
-  static Expected<std::unique_ptr<EPCGenericMemoryAccess>>
-  CreateUsingOrcRTFuncs(ExecutionSession &ES, JITDylib &OrcRuntimeJD);
 
   void writeUInt8sAsync(ArrayRef<tpctypes::UInt8Write> Ws,
                         WriteResultFn OnWriteComplete) override {

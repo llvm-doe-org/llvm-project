@@ -763,7 +763,6 @@ void TargetLoweringBase::initActions() {
 
     // These operations default to expand.
     setOperationAction(ISD::FGETSIGN, VT, Expand);
-    setOperationAction(ISD::ISNAN, VT, Expand);
     setOperationAction(ISD::CONCAT_VECTORS, VT, Expand);
     setOperationAction(ISD::FMINNUM, VT, Expand);
     setOperationAction(ISD::FMAXNUM, VT, Expand);
@@ -900,8 +899,6 @@ void TargetLoweringBase::initActions() {
     setOperationAction(ISD::FCEIL,      VT, Expand);
     setOperationAction(ISD::FRINT,      VT, Expand);
     setOperationAction(ISD::FTRUNC,     VT, Expand);
-    setOperationAction(ISD::FROUND,     VT, Expand);
-    setOperationAction(ISD::FROUNDEVEN, VT, Expand);
     setOperationAction(ISD::LROUND,     VT, Expand);
     setOperationAction(ISD::LLROUND,    VT, Expand);
     setOperationAction(ISD::LRINT,      VT, Expand);

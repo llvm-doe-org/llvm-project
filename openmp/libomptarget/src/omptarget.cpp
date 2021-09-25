@@ -263,7 +263,7 @@ void handleTargetOutcome(bool Success, ident_t *Loc) {
     if (!Success) {
       if (getInfoLevel() & OMP_INFOTYPE_DUMP_TABLE)
         for (auto &Device : PM->Devices)
-          dumpTargetPointerMappings(Loc, Device);
+          dumpTargetPointerMappings(Loc, *Device);
       else
         FAILURE_MESSAGE("Run with LIBOMPTARGET_INFO=%d to dump host-target "
                         "pointer mappings.\n",
@@ -281,7 +281,7 @@ void handleTargetOutcome(bool Success, ident_t *Loc) {
     } else {
       if (getInfoLevel() & OMP_INFOTYPE_DUMP_TABLE)
         for (auto &Device : PM->Devices)
-          dumpTargetPointerMappings(Loc, Device);
+          dumpTargetPointerMappings(Loc, *Device);
     }
     break;
   }
@@ -312,18 +312,19 @@ static bool isOffloadDisabled() {
 // If offload is enabled, ensure that device DeviceID has been initialized,
 // global ctors have been executed, and global data has been mapped.
 //
+// The return bool indicates if the offload is to the host device
 // There are three possible results:
-// - Return OFFLOAD_SUCCESS if the device is ready for offload.
-// - Return OFFLOAD_FAIL without reporting a runtime error if offload is
+// - Return false if the taregt device is ready for offload
+// - Return true without reporting a runtime error if offload is
 //   disabled, perhaps because the initial device was specified.
-// - Report a runtime error and return OFFLOAD_FAIL.
+// - Report a runtime error and return true.
 //
 // If DeviceID == OFFLOAD_DEVICE_DEFAULT, set DeviceID to the default device.
 // This step might be skipped if offload is disabled.
-int checkDeviceAndCtors(int64_t &DeviceID, ident_t *Loc) {
+bool checkDeviceAndCtors(int64_t &DeviceID, ident_t *Loc) {
   if (isOffloadDisabled()) {
     DP("Offload is disabled\n");
-    return OFFLOAD_FAIL;
+    return true;
   }
 
   if (DeviceID == OFFLOAD_DEVICE_DEFAULT) {
@@ -335,24 +336,24 @@ int checkDeviceAndCtors(int64_t &DeviceID, ident_t *Loc) {
   if (omp_get_num_devices() == 0) {
     DP("omp_get_num_devices() == 0 but offload is manadatory\n");
     handleTargetOutcome(false, Loc);
-    return OFFLOAD_FAIL;
+    return true;
   }
 
   if (DeviceID == omp_get_initial_device()) {
     DP("Device is host (%" PRId64 "), returning as if offload is disabled\n",
        DeviceID);
-    return OFFLOAD_FAIL;
+    return true;
   }
 
   // Is device ready?
   if (!device_is_ready(DeviceID)) {
     REPORT("Device %" PRId64 " is not ready.\n", DeviceID);
     handleTargetOutcome(false, Loc);
-    return OFFLOAD_FAIL;
+    return true;
   }
 
   // Get device info.
-  DeviceTy &Device = PM->Devices[DeviceID];
+  DeviceTy &Device = *PM->Devices[DeviceID];
 
   // Check whether global data has been mapped for this device
   Device.PendingGlobalsMtx.lock();
@@ -361,10 +362,10 @@ int checkDeviceAndCtors(int64_t &DeviceID, ident_t *Loc) {
   if (hasPendingGlobals && InitLibrary(Device) != OFFLOAD_SUCCESS) {
     REPORT("Failed to init globals on device %" PRId64 "\n", DeviceID);
     handleTargetOutcome(false, Loc);
-    return OFFLOAD_FAIL;
+    return true;
   }
 
-  return OFFLOAD_SUCCESS;
+  return false;
 }
 
 #ifdef OMPTARGET_DEBUG
@@ -411,7 +412,7 @@ void *targetAllocExplicit(size_t size, int device_num, int kind,
     return NULL;
   }
 
-  DeviceTy &Device = PM->Devices[device_num];
+  DeviceTy &Device = *PM->Devices[device_num];
   rc = Device.allocData(size, nullptr, kind);
   DP("%s returns device ptr " DPxMOD "\n", name, DPxPTR(rc));
   return rc;
@@ -1176,7 +1177,7 @@ TableMap *getTableMap(void *HostPtr) {
 /// __kmpc_push_target_tripcount_mapper in one thread but doing offloading in
 /// another thread, which might occur when we call task yield.
 uint64_t getLoopTripCount(int64_t DeviceId) {
-  DeviceTy &Device = PM->Devices[DeviceId];
+  DeviceTy &Device = *PM->Devices[DeviceId];
   uint64_t LoopTripCount = 0;
 
   {
@@ -1573,7 +1574,7 @@ static int processDataBefore(ident_t *loc, int64_t DeviceId, void *HostPtr,
                              PrivateArgumentManagerTy &PrivateArgumentManager,
                              AsyncInfoTy &AsyncInfo) {
   TIMESCOPE_WITH_NAME_AND_IDENT("mappingBeforeTargetRegion", loc);
-  DeviceTy &Device = PM->Devices[DeviceId];
+  DeviceTy &Device = *PM->Devices[DeviceId];
   int Ret = targetDataBegin(loc, Device, ArgNum, ArgBases, Args, ArgSizes,
                             ArgTypes, ArgNames, ArgMappers, AsyncInfo);
   if (Ret != OFFLOAD_SUCCESS) {
@@ -1700,7 +1701,7 @@ static int processDataAfter(ident_t *loc, int64_t DeviceId, void *HostPtr,
                             PrivateArgumentManagerTy &PrivateArgumentManager,
                             AsyncInfoTy &AsyncInfo) {
   TIMESCOPE_WITH_NAME_AND_IDENT("mappingAfterTargetRegion", loc);
-  DeviceTy &Device = PM->Devices[DeviceId];
+  DeviceTy &Device = *PM->Devices[DeviceId];
 
   // Move data from device.
   int Ret = targetDataEnd(loc, Device, ArgNum, ArgBases, Args, ArgSizes,

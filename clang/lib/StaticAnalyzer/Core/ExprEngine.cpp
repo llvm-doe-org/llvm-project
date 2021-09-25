@@ -1305,7 +1305,8 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
     case Stmt::ACCLoopDirectiveClass:
     case Stmt::ACCParallelLoopDirectiveClass:
     case Stmt::CapturedStmtClass:
-    case Stmt::OMPUnrollDirectiveClass: {
+    case Stmt::OMPUnrollDirectiveClass:
+    case Stmt::OMPMetaDirectiveClass: {
       const ExplodedNode *node = Bldr.generateSink(S, Pred, Pred->getState());
       Engine.addAbortedBlock(node, currBldrCtx->getBlock());
       break;

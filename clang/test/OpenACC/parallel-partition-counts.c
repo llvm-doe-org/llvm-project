@@ -74,18 +74,11 @@
 //
 // To avoid all this until upstream fixes it, we add -O1 -Wno-pass-failed.
 //
-// FIXME: Later, more bugs were introduced that cause this compile error if -O1
-// is used for nvptx64 offloading:
-//
-//   fatal error: error in backend: initial value of '_ZL32SharedMemVariableSharingSpacePtr' is not allowed in addrspace(3)
-//
-// Increasing to -O2 works around that.
-//
 // RUN: %data tgts {
 // RUN:   (run-if=                tgt-cflags='                                    ' tgt=host   )
 // RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple ' tgt=x86_64 )
 // RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple' tgt=ppc64le)
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O2 -Wno-pass-failed' tgt=nvptx64)
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed' tgt=nvptx64)
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify=expected,%[tgt] -fopenacc %s -o %t \

@@ -70,8 +70,8 @@ static Value *SimplifyOrInst(Value *, Value *, const SimplifyQuery &, unsigned);
 static Value *SimplifyXorInst(Value *, Value *, const SimplifyQuery &, unsigned);
 static Value *SimplifyCastInst(unsigned, Value *, Type *,
                                const SimplifyQuery &, unsigned);
-static Value *SimplifyGEPInst(Type *, ArrayRef<Value *>, const SimplifyQuery &,
-                              unsigned);
+static Value *SimplifyGEPInst(Type *, ArrayRef<Value *>, bool,
+                              const SimplifyQuery &, unsigned);
 static Value *SimplifySelectInst(Value *, Value *, Value *,
                                  const SimplifyQuery &, unsigned);
 
@@ -699,7 +699,7 @@ static Constant *stripAndComputeConstantOffsets(const DataLayout &DL, Value *&V,
   assert(V->getType()->isPtrOrPtrVectorTy());
 
   Type *IntIdxTy = DL.getIndexType(V->getType())->getScalarType();
-  APInt Offset = APInt::getNullValue(IntIdxTy->getIntegerBitWidth());
+  APInt Offset = APInt::getZero(IntIdxTy->getIntegerBitWidth());
 
   V = V->stripAndAccumulateConstantOffsets(DL, Offset, AllowNonInbounds);
   // As that strip may trace through `addrspacecast`, need to sext or trunc
@@ -1765,7 +1765,7 @@ static Value *simplifyAndOrOfICmpsWithLimitConst(ICmpInst *Cmp0, ICmpInst *Cmp1,
   if (match(Cmp0->getOperand(1), m_APInt(C)))
     MinMaxC = HasNotOp ? ~*C : *C;
   else if (isa<ConstantPointerNull>(Cmp0->getOperand(1)))
-    MinMaxC = APInt::getNullValue(8);
+    MinMaxC = APInt::getZero(8);
   else
     return nullptr;
 
@@ -3672,7 +3672,7 @@ static Value *SimplifyICmpInst(unsigned Predicate, Value *LHS, Value *RHS,
         Constant *NewLHS = ConstantExpr::getGetElementPtr(
             GLHS->getSourceElementType(), Null, IndicesLHS);
 
-        SmallVector<Value *, 4> IndicesRHS(GRHS->idx_begin(), GRHS->idx_end());
+        SmallVector<Value *, 4> IndicesRHS(GRHS->indices());
         Constant *NewRHS = ConstantExpr::getGetElementPtr(
             GLHS->getSourceElementType(), Null, IndicesRHS);
         Constant *NewICmp = ConstantExpr::getICmp(Pred, NewLHS, NewRHS);
@@ -3983,7 +3983,8 @@ static Value *simplifyWithOpReplaced(Value *V, Value *Op, Value *RepOp,
 
     if (auto *GEP = dyn_cast<GetElementPtrInst>(I))
       return PreventSelfSimplify(SimplifyGEPInst(GEP->getSourceElementType(),
-                                                 NewOps, Q, MaxRecurse - 1));
+                                                 NewOps, GEP->isInBounds(), Q,
+                                                 MaxRecurse - 1));
 
     if (isa<SelectInst>(I))
       return PreventSelfSimplify(
@@ -4328,7 +4329,7 @@ Value *llvm::SimplifySelectInst(Value *Cond, Value *TrueVal, Value *FalseVal,
 
 /// Given operands for an GetElementPtrInst, see if we can fold the result.
 /// If not, this returns null.
-static Value *SimplifyGEPInst(Type *SrcTy, ArrayRef<Value *> Ops,
+static Value *SimplifyGEPInst(Type *SrcTy, ArrayRef<Value *> Ops, bool InBounds,
                               const SimplifyQuery &Q, unsigned) {
   // The type of the GEP pointer operand.
   unsigned AS =
@@ -4448,13 +4449,13 @@ static Value *SimplifyGEPInst(Type *SrcTy, ArrayRef<Value *> Ops,
     return nullptr;
 
   auto *CE = ConstantExpr::getGetElementPtr(SrcTy, cast<Constant>(Ops[0]),
-                                            Ops.slice(1));
+                                            Ops.slice(1), InBounds);
   return ConstantFoldConstant(CE, Q.DL);
 }
 
-Value *llvm::SimplifyGEPInst(Type *SrcTy, ArrayRef<Value *> Ops,
+Value *llvm::SimplifyGEPInst(Type *SrcTy, ArrayRef<Value *> Ops, bool InBounds,
                              const SimplifyQuery &Q) {
-  return ::SimplifyGEPInst(SrcTy, Ops, Q, RecursionLimit);
+  return ::SimplifyGEPInst(SrcTy, Ops, InBounds, Q, RecursionLimit);
 }
 
 /// Given operands for an InsertValueInst, see if we can fold the result.
@@ -6220,8 +6221,9 @@ static Value *simplifyInstructionWithOperands(Instruction *I,
     Result = SimplifySelectInst(NewOps[0], NewOps[1], NewOps[2], Q);
     break;
   case Instruction::GetElementPtr: {
-    Result = SimplifyGEPInst(cast<GetElementPtrInst>(I)->getSourceElementType(),
-                             NewOps, Q);
+    auto *GEPI = cast<GetElementPtrInst>(I);
+    Result = SimplifyGEPInst(GEPI->getSourceElementType(), NewOps,
+                             GEPI->isInBounds(), Q);
     break;
   }
   case Instruction::InsertValue: {

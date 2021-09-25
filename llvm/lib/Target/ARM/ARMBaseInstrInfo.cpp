@@ -173,8 +173,8 @@ CreateTargetPostRAHazardRecognizer(const InstrItineraryData *II,
   return MHR;
 }
 
-MachineInstr *ARMBaseInstrInfo::convertToThreeAddress(
-    MachineFunction::iterator &MFI, MachineInstr &MI, LiveVariables *LV) const {
+MachineInstr *ARMBaseInstrInfo::convertToThreeAddress(MachineInstr &MI,
+                                                      LiveVariables *LV) const {
   // FIXME: Thumb2 support.
 
   if (!EnableARM3Addr)
@@ -336,9 +336,9 @@ MachineInstr *ARMBaseInstrInfo::convertToThreeAddress(
     }
   }
 
-  MachineBasicBlock::iterator MBBI = MI.getIterator();
-  MFI->insert(MBBI, NewMIs[1]);
-  MFI->insert(MBBI, NewMIs[0]);
+  MachineBasicBlock &MBB = *MI.getParent();
+  MBB.insert(MI, NewMIs[1]);
+  MBB.insert(MI, NewMIs[0]);
   return NewMIs[0];
 }
 
@@ -867,6 +867,7 @@ void ARMBaseInstrInfo::copyToCPSR(MachineBasicBlock &MBB,
 void llvm::addUnpredicatedMveVpredNOp(MachineInstrBuilder &MIB) {
   MIB.addImm(ARMVCC::None);
   MIB.addReg(0);
+  MIB.addReg(0); // tp_reg
 }
 
 void llvm::addUnpredicatedMveVpredROp(MachineInstrBuilder &MIB,
@@ -878,6 +879,7 @@ void llvm::addUnpredicatedMveVpredROp(MachineInstrBuilder &MIB,
 void llvm::addPredicatedMveVpredNOp(MachineInstrBuilder &MIB, unsigned Cond) {
   MIB.addImm(Cond);
   MIB.addReg(ARM::VPR, RegState::Implicit);
+  MIB.addReg(0); // tp_reg
 }
 
 void llvm::addPredicatedMveVpredROp(MachineInstrBuilder &MIB,

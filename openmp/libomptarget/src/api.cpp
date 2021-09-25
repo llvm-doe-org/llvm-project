@@ -218,7 +218,7 @@ EXTERN void omp_target_free(void *device_ptr, int device_num) {
       ompt_scope_begin, delete, /*SrcPtr=*/NULL, omp_get_initial_device(),
       device_ptr, device_num, AllocSize);
 #endif
-  PM->Devices[device_num].deleteData(device_ptr);
+  PM->Devices[device_num]->deleteData(device_ptr);
   DP("omp_target_free deallocated device ptr\n");
 }
 
@@ -246,7 +246,7 @@ EXTERN int omp_target_is_present(const void *ptr, int device_num) {
     return false;
   }
 
-  DeviceTy &Device = PM->Devices[device_num];
+  DeviceTy &Device = *PM->Devices[device_num];
   bool IsLast; // not used
   bool IsHostPtr;
   void *TgtPtr = Device.getTgtPtrBegin(const_cast<void *>(ptr), 0, IsLast,
@@ -309,7 +309,7 @@ EXTERN int omp_target_is_accessible(const void *ptr, size_t size,
     return false;
   }
 
-  DeviceTy &Device = PM->Devices[device_num];
+  DeviceTy &Device = *PM->Devices[device_num];
   bool IsLast;    // not used
   bool IsHostPtr; // not used
   // TODO: How does the spec intend for the size=0 case to be handled?
@@ -352,7 +352,7 @@ EXTERN void *omp_get_mapped_ptr(const void *ptr, int device_num) {
     return NULL;
   }
 
-  DeviceTy &Device = PM->Devices[device_num];
+  DeviceTy &Device = *PM->Devices[device_num];
   bool IsLast; // not used
   bool IsHostPtr;
   void *TgtPtr = Device.getTgtPtrBegin(const_cast<void *>(ptr), /*Size=*/0,
@@ -400,7 +400,7 @@ EXTERN void *omp_get_mapped_hostptr(const void *ptr, int device_num) {
     return NULL;
   }
 
-  DeviceTy &Device = PM->Devices[device_num];
+  DeviceTy &Device = *PM->Devices[device_num];
   // TODO: This returns nullptr in the case of unified shared memory.  This is
   // for consistency with the current omp_get_mapped_ptr implementation.
   void *HostPtr = Device.lookupHostPtr(const_cast<void *>(ptr));
@@ -447,7 +447,7 @@ EXTERN size_t omp_get_accessible_buffer(
     return SIZE_MAX;
   }
 
-  DeviceTy &Device = PM->Devices[device_num];
+  DeviceTy &Device = *PM->Devices[device_num];
   size_t BufferSize = Device.getAccessibleBuffer(const_cast<void *>(ptr),
                                                  /*Size=*/size, buffer_host,
                                                  buffer_device);
@@ -516,18 +516,18 @@ EXTERN int omp_target_memcpy(void *dst, const void *src, size_t length,
       rc = OFFLOAD_FAIL;
   } else if (src_device == omp_get_initial_device()) {
     DP("copy from host to device\n");
-    DeviceTy &DstDev = PM->Devices[dst_device];
+    DeviceTy &DstDev = *PM->Devices[dst_device];
     AsyncInfoTy AsyncInfo(DstDev);
     rc = DstDev.submitData(dstAddr, srcAddr, length, AsyncInfo);
   } else if (dst_device == omp_get_initial_device()) {
     DP("copy from device to host\n");
-    DeviceTy &SrcDev = PM->Devices[src_device];
+    DeviceTy &SrcDev = *PM->Devices[src_device];
     AsyncInfoTy AsyncInfo(SrcDev);
     rc = SrcDev.retrieveData(dstAddr, srcAddr, length, AsyncInfo);
   } else {
     DP("copy from device to device\n");
-    DeviceTy &SrcDev = PM->Devices[src_device];
-    DeviceTy &DstDev = PM->Devices[dst_device];
+    DeviceTy &SrcDev = *PM->Devices[src_device];
+    DeviceTy &DstDev = *PM->Devices[dst_device];
     // First try to use D2D memcpy which is more efficient. If fails, fall back
     // to unefficient way.
     if (SrcDev.isDataExchangable(DstDev)) {
@@ -640,7 +640,7 @@ EXTERN int omp_target_associate_ptr(const void *host_ptr,
     return OFFLOAD_FAIL;
   }
 
-  DeviceTy &Device = PM->Devices[device_num];
+  DeviceTy &Device = *PM->Devices[device_num];
   void *device_addr = (void *)((uint64_t)device_ptr + (uint64_t)device_offset);
   // OpenMP 5.1, sec. 3.8.9, p. 428, L10-17:
   // "The target-data-associate event occurs before a thread initiates a device
@@ -693,7 +693,7 @@ EXTERN int omp_target_disassociate_ptr(const void *host_ptr, int device_num) {
     return OFFLOAD_FAIL;
   }
 
-  DeviceTy &Device = PM->Devices[device_num];
+  DeviceTy &Device = *PM->Devices[device_num];
   void *TgtPtrBegin;
   int64_t Size;
   int rc = Device.disassociatePtr(const_cast<void *>(host_ptr), TgtPtrBegin,
@@ -805,7 +805,7 @@ EXTERN omp_device_t omp_get_device_type(int device_num) {
        device_num);
     return omp_device_none;
   }
-  omp_device_t DeviceType = PM->Devices[device_num].RTL->DeviceType;
+  omp_device_t DeviceType = PM->Devices[device_num]->RTL->DeviceType;
   DP("omp_get_device_type returns %s=%d for device ID %d\n",
      deviceTypeToString(DeviceType), DeviceType, device_num);
   return DeviceType;
@@ -858,7 +858,7 @@ EXTERN int omp_get_typed_device_num(int device_num) {
        device_num);
     return -1;
   }
-  int TypedDeviceNum = PM->Devices[device_num].RTLDeviceID;
+  int TypedDeviceNum = PM->Devices[device_num]->RTLDeviceID;
   DP("omp_get_typed_device_num returns %d for device ID %d\n",
      TypedDeviceNum, device_num);
   return TypedDeviceNum;

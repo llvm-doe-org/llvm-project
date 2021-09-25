@@ -3068,17 +3068,37 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     // ZExt bool to int type.
     return RValue::get(Builder.CreateZExt(LHS, ConvertType(E->getType())));
   }
-
   case Builtin::BI__builtin_isnan: {
     CodeGenFunction::CGFPOptionsRAII FPOptsRAII(*this, E);
     Value *V = EmitScalarExpr(E->getArg(0));
+    llvm::Type *Ty = V->getType();
+    const llvm::fltSemantics &Semantics = Ty->getFltSemantics();
+    if (!Builder.getIsFPConstrained() ||
+        Builder.getDefaultConstrainedExcept() == fp::ebIgnore ||
+        !Ty->isIEEE()) {
+      V = Builder.CreateFCmpUNO(V, V, "cmp");
+      return RValue::get(Builder.CreateZExt(V, ConvertType(E->getType())));
+    }
 
     if (Value *Result = getTargetHooks().testFPKind(V, BuiltinID, Builder, CGM))
       return RValue::get(Result);
 
-    Function *F = CGM.getIntrinsic(Intrinsic::isnan, V->getType());
-    Value *Call = Builder.CreateCall(F, V);
-    return RValue::get(Builder.CreateZExt(Call, ConvertType(E->getType())));
+    // NaN has all exp bits set and a non zero significand. Therefore:
+    // isnan(V) == ((exp mask - (abs(V) & exp mask)) < 0)
+    unsigned bitsize = Ty->getScalarSizeInBits();
+    llvm::IntegerType *IntTy = Builder.getIntNTy(bitsize);
+    Value *IntV = Builder.CreateBitCast(V, IntTy);
+    APInt AndMask = APInt::getSignedMaxValue(bitsize);
+    Value *AbsV =
+        Builder.CreateAnd(IntV, llvm::ConstantInt::get(IntTy, AndMask));
+    APInt ExpMask = APFloat::getInf(Semantics).bitcastToAPInt();
+    Value *Sub =
+        Builder.CreateSub(llvm::ConstantInt::get(IntTy, ExpMask), AbsV);
+    // V = sign bit (Sub) <=> V = (Sub < 0)
+    V = Builder.CreateLShr(Sub, llvm::ConstantInt::get(IntTy, bitsize - 1));
+    if (bitsize > 32)
+      V = Builder.CreateTrunc(V, ConvertType(E->getType()));
+    return RValue::get(V);
   }
 
   case Builtin::BI__builtin_matrix_transpose: {
@@ -14885,7 +14905,7 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
 
     Value *Call = Builder.CreateCall(CGM.getIntrinsic(IID), {Ops[0], Ops[1]});
 
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 3; ++i) {
       Value *Extract = Builder.CreateExtractValue(Call, i + 1);
       Value *Ptr = Builder.CreateConstGEP1_32(Int8Ty, Ops[2], i * 16);
       Ptr = Builder.CreateBitCast(
@@ -14901,7 +14921,7 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
     Value *Call =
         Builder.CreateCall(CGM.getIntrinsic(IID), {Ops[0], Ops[1], Ops[2]});
 
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < 4; ++i) {
       Value *Extract = Builder.CreateExtractValue(Call, i + 1);
       Value *Ptr = Builder.CreateConstGEP1_32(Int8Ty, Ops[3], i * 16);
       Ptr = Builder.CreateBitCast(
@@ -18201,6 +18221,29 @@ Value *CodeGenFunction::EmitWebAssemblyBuiltinExpr(unsigned BuiltinID,
     }
     Function *Callee = CGM.getIntrinsic(Intrinsic::wasm_shuffle);
     return Builder.CreateCall(Callee, Ops);
+  }
+  case WebAssembly::BI__builtin_wasm_fma_f32x4:
+  case WebAssembly::BI__builtin_wasm_fms_f32x4:
+  case WebAssembly::BI__builtin_wasm_fma_f64x2:
+  case WebAssembly::BI__builtin_wasm_fms_f64x2: {
+    Value *A = EmitScalarExpr(E->getArg(0));
+    Value *B = EmitScalarExpr(E->getArg(1));
+    Value *C = EmitScalarExpr(E->getArg(2));
+    unsigned IntNo;
+    switch (BuiltinID) {
+    case WebAssembly::BI__builtin_wasm_fma_f32x4:
+    case WebAssembly::BI__builtin_wasm_fma_f64x2:
+      IntNo = Intrinsic::wasm_fma;
+      break;
+    case WebAssembly::BI__builtin_wasm_fms_f32x4:
+    case WebAssembly::BI__builtin_wasm_fms_f64x2:
+      IntNo = Intrinsic::wasm_fms;
+      break;
+    default:
+      llvm_unreachable("unexpected builtin ID");
+    }
+    Function *Callee = CGM.getIntrinsic(IntNo, A->getType());
+    return Builder.CreateCall(Callee, {A, B, C});
   }
   default:
     return nullptr;

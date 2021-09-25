@@ -1076,7 +1076,7 @@ public:
   CanQualType SignedCharTy, ShortTy, IntTy, LongTy, LongLongTy, Int128Ty;
   CanQualType UnsignedCharTy, UnsignedShortTy, UnsignedIntTy, UnsignedLongTy;
   CanQualType UnsignedLongLongTy, UnsignedInt128Ty;
-  CanQualType FloatTy, DoubleTy, LongDoubleTy, Float128Ty;
+  CanQualType FloatTy, DoubleTy, LongDoubleTy, Float128Ty, Ibm128Ty;
   CanQualType ShortAccumTy, AccumTy,
       LongAccumTy;  // ISO/IEC JTC1 SC22 WG14 N1169 Extension
   CanQualType UnsignedShortAccumTy, UnsignedAccumTy, UnsignedLongAccumTy;
@@ -1364,6 +1364,12 @@ public:
 
   /// Get address space for OpenCL type.
   LangAS getOpenCLTypeAddrSpace(const Type *T) const;
+
+  /// Returns default address space based on OpenCL version and enabled features
+  inline LangAS getDefaultOpenCLPointeeAddrSpace() {
+    return LangOpts.OpenCLGenericAddressSpace ? LangAS::opencl_generic
+                                              : LangAS::opencl_private;
+  }
 
   void setcudaConfigureCallDecl(FunctionDecl *FD) {
     cudaConfigureCallDecl = FD;

@@ -130,12 +130,12 @@ EXTERN void __tgt_target_data_begin_mapper(ident_t *loc, int64_t device_id,
   OmptIdentRAII TheOmptIdentRAII(loc);
   DP("Entering data begin region for device %" PRId64 " with %d mappings\n",
      device_id, arg_num);
-  if (checkDeviceAndCtors(device_id, loc) != OFFLOAD_SUCCESS) {
+  if (checkDeviceAndCtors(device_id, loc)) {
     DP("Not offloading to device %" PRId64 "\n", device_id);
     return;
   }
 
-  DeviceTy &Device = PM->Devices[device_id];
+  DeviceTy &Device = *PM->Devices[device_id];
 
   if (getInfoLevel() & OMP_INFOTYPE_KERNEL_ARGS)
     printKernelArguments(loc, device_id, arg_num, arg_sizes, arg_types,
@@ -224,12 +224,12 @@ EXTERN void __tgt_target_data_end_mapper(ident_t *loc, int64_t device_id,
   TIMESCOPE_WITH_IDENT(loc);
   OmptIdentRAII TheOmptIdentRAII(loc);
   DP("Entering data end region with %d mappings\n", arg_num);
-  if (checkDeviceAndCtors(device_id, loc) != OFFLOAD_SUCCESS) {
+  if (checkDeviceAndCtors(device_id, loc)) {
     DP("Not offloading to device %" PRId64 "\n", device_id);
     return;
   }
 
-  DeviceTy &Device = PM->Devices[device_id];
+  DeviceTy &Device = *PM->Devices[device_id];
 
   if (getInfoLevel() & OMP_INFOTYPE_KERNEL_ARGS)
     printKernelArguments(loc, device_id, arg_num, arg_sizes, arg_types,
@@ -297,7 +297,7 @@ EXTERN void __tgt_target_data_update_mapper(ident_t *loc, int64_t device_id,
   TIMESCOPE_WITH_IDENT(loc);
   OmptIdentRAII TheOmptIdentRAII(loc);
   DP("Entering data update with %d mappings\n", arg_num);
-  if (checkDeviceAndCtors(device_id, loc) != OFFLOAD_SUCCESS) {
+  if (checkDeviceAndCtors(device_id, loc)) {
     DP("Not offloading to device %" PRId64 "\n", device_id);
     return;
   }
@@ -306,7 +306,7 @@ EXTERN void __tgt_target_data_update_mapper(ident_t *loc, int64_t device_id,
     printKernelArguments(loc, device_id, arg_num, arg_sizes, arg_types,
                          arg_names, "Updating OpenMP data");
 
-  DeviceTy &Device = PM->Devices[device_id];
+  DeviceTy &Device = *PM->Devices[device_id];
   ompt_dispatch_callback_target_emi(ompt_target_update, ompt_scope_begin,
                                     Device);
   AsyncInfoTy AsyncInfo(Device);
@@ -357,9 +357,9 @@ EXTERN int __tgt_target_mapper(ident_t *loc, int64_t device_id, void *host_ptr,
   DP("Entering target region with entry point " DPxMOD " and device Id %" PRId64
      "\n",
      DPxPTR(host_ptr), device_id);
-  if (checkDeviceAndCtors(device_id, loc) != OFFLOAD_SUCCESS) {
+  if (checkDeviceAndCtors(device_id, loc)) {
     DP("Not offloading to device %" PRId64 "\n", device_id);
-    return OFFLOAD_FAIL;
+    return OMP_TGT_FAIL;
   }
 
   if (getInfoLevel() & OMP_INFOTYPE_KERNEL_ARGS)
@@ -374,7 +374,7 @@ EXTERN int __tgt_target_mapper(ident_t *loc, int64_t device_id, void *host_ptr,
   }
 #endif
 
-  DeviceTy &Device = PM->Devices[device_id];
+  DeviceTy &Device = *PM->Devices[device_id];
   ompt_dispatch_callback_target_emi(ompt_target, ompt_scope_begin, Device);
   AsyncInfoTy AsyncInfo(Device);
   int rc = target(loc, Device, host_ptr, arg_num, args_base, args, arg_sizes,
@@ -384,7 +384,8 @@ EXTERN int __tgt_target_mapper(ident_t *loc, int64_t device_id, void *host_ptr,
     rc = AsyncInfo.synchronize();
   ompt_dispatch_callback_target_emi(ompt_target, ompt_scope_end, Device);
   handleTargetOutcome(rc == OFFLOAD_SUCCESS, loc);
-  return rc;
+  assert(rc == OFFLOAD_SUCCESS && "__tgt_target_mapper unexpected failure!");
+  return OMP_TGT_SUCCESS;
 }
 
 EXTERN int __tgt_target_nowait_mapper(
@@ -433,9 +434,9 @@ EXTERN int __tgt_target_teams_mapper(ident_t *loc, int64_t device_id,
   DP("Entering target region with entry point " DPxMOD " and device Id %" PRId64
      "\n",
      DPxPTR(host_ptr), device_id);
-  if (checkDeviceAndCtors(device_id, loc) != OFFLOAD_SUCCESS) {
+  if (checkDeviceAndCtors(device_id, loc)) {
     DP("Not offloading to device %" PRId64 "\n", device_id);
-    return OFFLOAD_FAIL;
+    return OMP_TGT_FAIL;
   }
 
   if (getInfoLevel() & OMP_INFOTYPE_KERNEL_ARGS)
@@ -450,7 +451,7 @@ EXTERN int __tgt_target_teams_mapper(ident_t *loc, int64_t device_id,
   }
 #endif
 
-  DeviceTy &Device = PM->Devices[device_id];
+  DeviceTy &Device = *PM->Devices[device_id];
   ompt_dispatch_callback_target_emi(ompt_target, ompt_scope_begin, Device);
   AsyncInfoTy AsyncInfo(Device);
   int rc = target(loc, Device, host_ptr, arg_num, args_base, args, arg_sizes,
@@ -460,7 +461,9 @@ EXTERN int __tgt_target_teams_mapper(ident_t *loc, int64_t device_id,
     rc = AsyncInfo.synchronize();
   ompt_dispatch_callback_target_emi(ompt_target, ompt_scope_end, Device);
   handleTargetOutcome(rc == OFFLOAD_SUCCESS, loc);
-  return rc;
+  assert(rc == OFFLOAD_SUCCESS &&
+         "__tgt_target_teams_mapper unexpected failure!");
+  return OMP_TGT_SUCCESS;
 }
 
 EXTERN int __tgt_target_teams_nowait_mapper(
@@ -509,7 +512,7 @@ EXTERN void __kmpc_push_target_tripcount(int64_t device_id,
 EXTERN void __kmpc_push_target_tripcount_mapper(ident_t *loc, int64_t device_id,
                                                 uint64_t loop_tripcount) {
   TIMESCOPE_WITH_IDENT(loc);
-  if (checkDeviceAndCtors(device_id, loc) != OFFLOAD_SUCCESS) {
+  if (checkDeviceAndCtors(device_id, loc)) {
     DP("Not offloading to device %" PRId64 "\n", device_id);
     return;
   }
@@ -517,8 +520,8 @@ EXTERN void __kmpc_push_target_tripcount_mapper(ident_t *loc, int64_t device_id,
   DP("__kmpc_push_target_tripcount(%" PRId64 ", %" PRIu64 ")\n", device_id,
      loop_tripcount);
   PM->TblMapMtx.lock();
-  PM->Devices[device_id].LoopTripCnt.emplace(__kmpc_global_thread_num(NULL),
-                                             loop_tripcount);
+  PM->Devices[device_id]->LoopTripCnt.emplace(__kmpc_global_thread_num(NULL),
+                                              loop_tripcount);
   PM->TblMapMtx.unlock();
 }
 
@@ -532,6 +535,6 @@ EXTERN void __tgt_set_info_flag(uint32_t NewInfoLevel) {
 }
 
 EXTERN int __tgt_print_device_info(int64_t device_id) {
-  return PM->Devices[device_id].printDeviceInfo(
-      PM->Devices[device_id].RTLDeviceID);
+  return PM->Devices[device_id]->printDeviceInfo(
+      PM->Devices[device_id]->RTLDeviceID);
 }

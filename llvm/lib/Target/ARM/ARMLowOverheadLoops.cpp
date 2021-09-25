@@ -97,7 +97,15 @@ static bool isDomainMVE(MachineInstr *MI) {
   return Domain == ARMII::DomainMVE;
 }
 
+static int getVecSize(const MachineInstr &MI) {
+  const MCInstrDesc &MCID = MI.getDesc();
+  uint64_t Flags = MCID.TSFlags;
+  return (Flags & ARMII::VecSize) >> ARMII::VecSizeShift;
+}
+
 static bool shouldInspect(MachineInstr &MI) {
+  if (MI.isDebugInstr())
+    return false;
   return isDomainMVE(&MI) || isVectorPredicate(&MI) || hasVPRUse(MI);
 }
 
@@ -371,6 +379,7 @@ namespace {
     SmallVector<MachineInstr*, 4> VCTPs;
     SmallPtrSet<MachineInstr*, 4> ToRemove;
     SmallPtrSet<MachineInstr*, 4> BlockMasksToRecompute;
+    SmallPtrSet<MachineInstr*, 4> DoubleWidthResultInstrs;
     bool Revert = false;
     bool CannotTailPredicate = false;
 
@@ -730,6 +739,20 @@ bool LowOverheadLoop::ValidateTailPredicate() {
     return false;
   }
 
+  // For any DoubleWidthResultInstrs we found whilst scanning instructions, they
+  // need to compute an output size that is smaller than the VCTP mask operates
+  // on. The VecSize of the DoubleWidthResult is the larger vector size - the
+  // size it extends into, so any VCTP VecSize <= is valid.
+  unsigned VCTPVecSize = getVecSize(*VCTP);
+  for (MachineInstr *MI : DoubleWidthResultInstrs) {
+    unsigned InstrVecSize = getVecSize(*MI);
+    if (InstrVecSize > VCTPVecSize) {
+      LLVM_DEBUG(dbgs() << "ARM Loops: Double width result larger than VCTP "
+                        << "VecSize:\n" << *MI);
+      return false;
+    }
+  }
+
   // Check that the value change of the element count is what we expect and
   // that the predication will be equivalent. For this we need:
   // NumElements = NumElements - VectorWidth. The sub will be a sub immediate
@@ -879,6 +902,10 @@ static bool producesFalseLanesZero(MachineInstr &MI,
     if (!MO.isReg() || !MO.getReg())
       continue;
     if (!isRegInClass(MO, QPRs) && AllowScalars)
+      continue;
+    // Skip the lr predicate reg
+    int PIdx = llvm::findFirstVPTPredOperandIdx(MI);
+    if (PIdx != -1 && (int)MI.getOperandNo(&MO) == PIdx + 2)
       continue;
 
     // Check that this instruction will produce zeros in its false lanes:
@@ -1229,8 +1256,13 @@ bool LowOverheadLoop::ValidateMVEInst(MachineInstr *MI) {
   bool RequiresExplicitPredication =
     (MCID.TSFlags & ARMII::ValidForTailPredication) == 0;
   if (isDomainMVE(MI) && RequiresExplicitPredication) {
-    LLVM_DEBUG(if (!IsUse)
-               dbgs() << "ARM Loops: Can't tail predicate: " << *MI);
+    if (!IsUse && producesDoubleWidthResult(*MI)) {
+      DoubleWidthResultInstrs.insert(MI);
+      return true;
+    }
+
+    LLVM_DEBUG(if (!IsUse) dbgs()
+               << "ARM Loops: Can't tail predicate: " << *MI);
     return IsUse;
   }
 

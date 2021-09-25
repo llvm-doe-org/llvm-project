@@ -487,6 +487,10 @@ static void createCombinedModuleSummaryIndex() {
         ExitOnErr(errorOrToExpected(MemoryBuffer::getFileOrSTDIN(Filename)));
     ExitOnErr(readModuleSummaryIndex(*MB, CombinedIndex, NextModuleId++));
   }
+  // In order to use this index for testing, specifically import testing, we
+  // need to update any indirect call edges created from SamplePGO, so that they
+  // point to the correct GUIDs.
+  updateIndirectCalls(CombinedIndex);
   std::error_code EC;
   assert(!OutputFilename.empty());
   raw_fd_ostream OS(OutputFilename + ".thinlto.bc", EC,
@@ -1059,7 +1063,7 @@ int main(int argc, char **argv) {
     CodeGen.addMustPreserveSymbol(KeptDSOSyms[i]);
 
   // Set cpu and attrs strings for the default target/subtarget.
-  CodeGen.setCpu(codegen::getMCPU().c_str());
+  CodeGen.setCpu(codegen::getMCPU());
 
   CodeGen.setOptLevel(OptLevel - '0');
   CodeGen.setAttrs(codegen::getMAttrs());

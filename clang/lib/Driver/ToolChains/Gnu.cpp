@@ -451,7 +451,7 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // Most Android ARM64 targets should enable the linker fix for erratum
   // 843419. Only non-Cortex-A53 devices are allowed to skip this flag.
   if (Arch == llvm::Triple::aarch64 && isAndroid) {
-    std::string CPU = getCPUName(Args, Triple);
+    std::string CPU = getCPUName(D, Args, Triple);
     if (CPU.empty() || CPU == "generic" || CPU == "cortex-a53")
       CmdArgs.push_back("--fix-cortex-a53-843419");
   }
@@ -734,32 +734,32 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
     CmdArgs.push_back("-a32");
     CmdArgs.push_back("-mppc");
     CmdArgs.push_back("-mbig-endian");
-    CmdArgs.push_back(
-      ppc::getPPCAsmModeForCPU(getCPUName(Args, getToolChain().getTriple())));
+    CmdArgs.push_back(ppc::getPPCAsmModeForCPU(
+        getCPUName(D, Args, getToolChain().getTriple())));
     break;
   }
   case llvm::Triple::ppcle: {
     CmdArgs.push_back("-a32");
     CmdArgs.push_back("-mppc");
     CmdArgs.push_back("-mlittle-endian");
-    CmdArgs.push_back(
-        ppc::getPPCAsmModeForCPU(getCPUName(Args, getToolChain().getTriple())));
+    CmdArgs.push_back(ppc::getPPCAsmModeForCPU(
+        getCPUName(D, Args, getToolChain().getTriple())));
     break;
   }
   case llvm::Triple::ppc64: {
     CmdArgs.push_back("-a64");
     CmdArgs.push_back("-mppc64");
     CmdArgs.push_back("-mbig-endian");
-    CmdArgs.push_back(
-      ppc::getPPCAsmModeForCPU(getCPUName(Args, getToolChain().getTriple())));
+    CmdArgs.push_back(ppc::getPPCAsmModeForCPU(
+        getCPUName(D, Args, getToolChain().getTriple())));
     break;
   }
   case llvm::Triple::ppc64le: {
     CmdArgs.push_back("-a64");
     CmdArgs.push_back("-mppc64");
     CmdArgs.push_back("-mlittle-endian");
-    CmdArgs.push_back(
-      ppc::getPPCAsmModeForCPU(getCPUName(Args, getToolChain().getTriple())));
+    CmdArgs.push_back(ppc::getPPCAsmModeForCPU(
+        getCPUName(D, Args, getToolChain().getTriple())));
     break;
   }
   case llvm::Triple::riscv32:
@@ -775,7 +775,7 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
   case llvm::Triple::sparc:
   case llvm::Triple::sparcel: {
     CmdArgs.push_back("-32");
-    std::string CPU = getCPUName(Args, getToolChain().getTriple());
+    std::string CPU = getCPUName(D, Args, getToolChain().getTriple());
     CmdArgs.push_back(
         sparc::getSparcAsmModeForCPU(CPU, getToolChain().getTriple()));
     AddAssemblerKPIC(getToolChain(), Args, CmdArgs);
@@ -783,7 +783,7 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
   }
   case llvm::Triple::sparcv9: {
     CmdArgs.push_back("-64");
-    std::string CPU = getCPUName(Args, getToolChain().getTriple());
+    std::string CPU = getCPUName(D, Args, getToolChain().getTriple());
     CmdArgs.push_back(
         sparc::getSparcAsmModeForCPU(CPU, getToolChain().getTriple()));
     AddAssemblerKPIC(getToolChain(), Args, CmdArgs);
@@ -1473,7 +1473,7 @@ bool clang::driver::findMIPSMultilibs(const Driver &D,
   addMultilibFlag(CPUName == "mips64r6", "march=mips64r6", Flags);
   addMultilibFlag(isMicroMips(Args), "mmicromips", Flags);
   addMultilibFlag(tools::mips::isUCLibc(Args), "muclibc", Flags);
-  addMultilibFlag(tools::mips::isNaN2008(Args, TargetTriple), "mnan=2008",
+  addMultilibFlag(tools::mips::isNaN2008(D, Args, TargetTriple), "mnan=2008",
                   Flags);
   addMultilibFlag(ABIName == "n32", "mabi=n32", Flags);
   addMultilibFlag(ABIName == "n64", "mabi=n64", Flags);
@@ -2075,6 +2075,12 @@ void Generic_GCC::GCCInstallationDetector::AddDefaultGCCPrefixes(
   // Declare a bunch of static data sets that we'll select between below. These
   // are specifically designed to always refer to string literals to avoid any
   // lifetime or initialization issues.
+  //
+  // The *Triples variables hard code some triples so that, for example,
+  // --target=aarch64 (incomplete triple) can detect lib/aarch64-linux-gnu.
+  // They are not needed when the user has correct LLVM_DEFAULT_TARGET_TRIPLE
+  // and always uses the full --target (e.g. --target=aarch64-linux-gnu).  The
+  // lists should shrink over time. Please don't add more elements to *Triples.
   static const char *const AArch64LibDirs[] = {"/lib64", "/lib"};
   static const char *const AArch64Triples[] = {
       "aarch64-none-linux-gnu", "aarch64-linux-gnu", "aarch64-redhat-linux",
@@ -2182,9 +2188,7 @@ void Generic_GCC::GCCInstallationDetector::AddDefaultGCCPrefixes(
   static const char *const RISCV64LibDirs[] = {"/lib64", "/lib"};
   static const char *const RISCV64Triples[] = {"riscv64-unknown-linux-gnu",
                                                "riscv64-linux-gnu",
-                                               "riscv64-unknown-elf",
-                                               "riscv64-redhat-linux",
-                                               "riscv64-suse-linux"};
+                                               "riscv64-unknown-elf"};
 
   static const char *const SPARCv8LibDirs[] = {"/lib32", "/lib"};
   static const char *const SPARCv8Triples[] = {"sparc-linux-gnu",
@@ -2709,6 +2713,7 @@ bool Generic_GCC::IsUnwindTablesDefault(const ArgList &Args) const {
   case llvm::Triple::ppcle:
   case llvm::Triple::ppc64:
   case llvm::Triple::ppc64le:
+  case llvm::Triple::x86:
   case llvm::Triple::x86_64:
     return true;
   default:
