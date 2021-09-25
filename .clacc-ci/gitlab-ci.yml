@@ -33,19 +33,6 @@ variables:
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
   LIT_NTHREADS_DIVISOR: 1
-  XFAIL_COMMON:
-    "
-    libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
-    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/memory_manager.cpp
-    libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
-    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/parallel_offloading_map.cpp
-    libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
-    libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
-    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
-    libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/taskloop_offload_nowait.cpp
-    "
-  XFAIL_NOT_COMMON:
-    ""
 
 stages:
   - setup
@@ -79,9 +66,16 @@ stages:
     PATH_PREPEND:
       /opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin
     LIT_NTHREADS_DIVISOR: 4
-    XFAIL:
-      "libomp :: affinity/kmp-hw-subset.c"
-    XFAIL_NOT:
+    LIT_XFAIL:
+      "
+      libomp :: affinity/kmp-hw-subset.c
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/memory_manager.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/parallel_offloading_map.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/taskloop_offload_nowait.cpp
+      "
+    LIT_XFAIL_NOT:
       "libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/api.c"
     EXPECTED_TESTS_REGEX:
       "libomptarget :: nvptx64-nvidia-cuda"
@@ -102,9 +96,14 @@ stages:
     PATH_PREPEND:
       /opt/nvidia/hpc_sdk/Linux_x86_64/21.7/cuda/11.4/bin
     LIT_NTHREADS_DIVISOR: 1
-    XFAIL:
-      "libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp"
-    XFAIL_NOT:
+    LIT_XFAIL:
+      "
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
+      "
+    LIT_XFAIL_NOT:
       ""
     EXPECTED_TESTS_REGEX:
       "libomptarget :: nvptx64-nvidia-cuda"
@@ -126,9 +125,13 @@ stages:
     PATH_PREPEND:
       ""
     LIT_NTHREADS_DIVISOR: 1
-    XFAIL:
-      ""
-    XFAIL_NOT:
+    LIT_XFAIL:
+      "
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
+      "
+    LIT_XFAIL_NOT:
       ""
     EXPECTED_TESTS_REGEX:
       "libomptarget :: amdgcn-amd-amdhsa"
@@ -148,7 +151,13 @@ stages:
       -DCLANG_ACC_TEST_EXE_NVPTX64=0
     PATH_PREPEND:
       ""
-    XFAIL:
+    LIT_XFAIL:
+      "
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
+      "
+    LIT_XFAIL_NOT:
       ""
 
 # Sometimes bugs cause only release builds to fail.  For example, debugging
@@ -158,7 +167,7 @@ stages:
   variables:
     BUILD_ID: release
     CMAKE_BUILD_TYPE: Release
-    XFAIL:
+    LIT_XFAIL:
       "
       Clang :: Headers/wasm.c
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
@@ -174,7 +183,12 @@ stages:
       LLVM :: CodeGen/AMDGPU/call-constant.ll
       LLVM :: CodeGen/AMDGPU/indirect-call.ll
       LLVM :: CodeGen/AMDGPU/returnaddress.ll
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
       "
+    LIT_XFAIL_NOT:
+      ""
 
 # Not setup or cleanup.
 .non-utility:
@@ -475,10 +489,10 @@ release (build):
     - echo $CHECK_TARGETS
     - echo $NINJA
     - $NINJA --version
-    - echo "$XFAIL_COMMON" "$XFAIL" |
+    - echo "$LIT_XFAIL" |
       sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//' |
       tee xfail.txt
-    - echo "$XFAIL_NOT_COMMON" "$XFAIL_NOT" |
+    - echo "$LIT_XFAIL_NOT" |
       sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//' |
       tee xfail-not.txt
     - time LIT_OPTS='--filter=xxxxxxxxx --allow-empty-runs'
