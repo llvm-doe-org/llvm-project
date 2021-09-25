@@ -6940,6 +6940,9 @@ QualType ASTReader::GetType(TypeID ID) {
     case PREDEF_TYPE_FLOAT128_ID:
       T = Context.Float128Ty;
       break;
+    case PREDEF_TYPE_IBM128_ID:
+      T = Context.Ibm128Ty;
+      break;
     case PREDEF_TYPE_OVERLOAD_ID:
       T = Context.OverloadTy;
       break;
@@ -8205,8 +8208,9 @@ void ASTReader::ReadMethodPool(Selector Sel) {
     return;
 
   Sema &S = *getSema();
-  Sema::GlobalMethodPool::iterator Pos
-    = S.MethodPool.insert(std::make_pair(Sel, Sema::GlobalMethods())).first;
+  Sema::GlobalMethodPool::iterator Pos =
+      S.MethodPool.insert(std::make_pair(Sel, Sema::GlobalMethodPool::Lists()))
+          .first;
 
   Pos->second.first.setBits(Visitor.getInstanceBits());
   Pos->second.first.setHasMoreThanOneDecl(Visitor.instanceHasMoreThanOneDecl());
@@ -8412,6 +8416,8 @@ void ASTReader::ReadLateParsedTemplates(
       LPTMap.insert(std::make_pair(FD, std::move(LT)));
     }
   }
+
+  LateParsedTemplates.clear();
 }
 
 void ASTReader::LoadSelector(Selector Sel) {
