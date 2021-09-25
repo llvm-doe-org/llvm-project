@@ -200,7 +200,6 @@ extern bool ompt_has_user_source_info;
 extern ompt_trigger_info_t ompt_user_source_info;
 void ompt_set_map_var_info(map_var_info_t map_var_info) OMPT_LIBOMPTARGET_WEAK;
 void ompt_clear_map_var_info() OMPT_LIBOMPTARGET_WEAK;
-int omp_get_initial_device(void) OMPT_LIBOMPTARGET_WEAK;
 
 #if KMP_OS_WINDOWS
 #define UNLIKELY(x) (x)

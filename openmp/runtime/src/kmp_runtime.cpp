@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "acc2omp-handlers.h"
+#include "omp.h"
 #include "kmp.h"
 #include "kmp_affinity.h"
 #include "kmp_atomic.h"

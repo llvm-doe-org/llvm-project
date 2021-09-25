@@ -54,6 +54,7 @@ DeviceTy::DeviceTy(RTLInfoTy *RTL)
   OmptApi.global_device_id = DeviceID;
   OmptApi.ompt_target_enabled = &ompt_target_enabled;
   OmptApi.ompt_target_callbacks = &ompt_target_callbacks;
+  OmptApi.omp_get_initial_device = omp_get_initial_device;
 #endif
 }
 

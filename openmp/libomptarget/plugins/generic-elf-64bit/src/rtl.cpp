@@ -307,14 +307,14 @@ int32_t __tgt_rtl_data_submit(
         ompt_callback_target_data_op_emi)(
         ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
         /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, hst_ptr,
-        omp_get_initial_device(), tgt_ptr, ompt_api->global_device_id, size,
-        /*codeptr_ra=*/NULL);
+        ompt_api->omp_get_initial_device(), tgt_ptr, ompt_api->global_device_id,
+        size, /*codeptr_ra=*/NULL);
     ompt_api->ompt_target_callbacks->ompt_callback(
         ompt_callback_target_data_op_emi)(
         ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
         /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, hst_ptr,
-        omp_get_initial_device(), tgt_ptr, ompt_api->global_device_id, size,
-        /*codeptr_ra=*/NULL);
+        ompt_api->omp_get_initial_device(), tgt_ptr, ompt_api->global_device_id,
+        size, /*codeptr_ra=*/NULL);
   }
 #endif
   memcpy(tgt_ptr, hst_ptr, size);
@@ -352,14 +352,14 @@ int32_t __tgt_rtl_data_retrieve(
         ompt_callback_target_data_op_emi)(
         ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
         /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, tgt_ptr,
-        ompt_api->global_device_id, hst_ptr, omp_get_initial_device(), size,
-        /*codeptr_ra=*/NULL);
+        ompt_api->global_device_id, hst_ptr, ompt_api->omp_get_initial_device(),
+        size, /*codeptr_ra=*/NULL);
     ompt_api->ompt_target_callbacks->ompt_callback(
         ompt_callback_target_data_op_emi)(
         ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
         /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, tgt_ptr,
-        ompt_api->global_device_id, hst_ptr, omp_get_initial_device(), size,
-        /*codeptr_ra=*/NULL);
+        ompt_api->global_device_id, hst_ptr, ompt_api->omp_get_initial_device(),
+        size, /*codeptr_ra=*/NULL);
   }
 #endif
   memcpy(hst_ptr, tgt_ptr, size);

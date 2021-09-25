@@ -977,11 +977,11 @@ extern omp_allocator_handle_t const llvm_omp_target_host_mem_alloc;
 extern omp_allocator_handle_t const llvm_omp_target_shared_mem_alloc;
 extern omp_allocator_handle_t const llvm_omp_target_device_mem_alloc;
 extern omp_allocator_handle_t const kmp_max_mem_alloc;
-extern omp_allocator_handle_t __kmp_def_allocator;
 
 // end of duplicate type definitions from omp.h
 #endif
 
+extern omp_allocator_handle_t __kmp_def_allocator;
 extern int __kmp_memkind_available;
 
 typedef omp_memspace_handle_t kmp_memspace_t; // placeholder

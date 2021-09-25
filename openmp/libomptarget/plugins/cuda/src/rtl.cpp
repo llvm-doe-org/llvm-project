@@ -997,8 +997,8 @@ public:
           ompt_callback_target_data_op_emi)(
           ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
           /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, HstPtr,
-          omp_get_initial_device(), TgtPtr, ompt_api->global_device_id, Size,
-          /*codeptr_ra=*/NULL);
+          ompt_api->omp_get_initial_device(), TgtPtr,
+          ompt_api->global_device_id, Size, /*codeptr_ra=*/NULL);
     }
 #endif
     Err = cuMemcpyHtoDAsync((CUdeviceptr)TgtPtr, HstPtr, Size, Stream);
@@ -1008,8 +1008,8 @@ public:
           ompt_callback_target_data_op_emi)(
           ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
           /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, HstPtr,
-          omp_get_initial_device(), TgtPtr, ompt_api->global_device_id, Size,
-          /*codeptr_ra=*/NULL);
+          ompt_api->omp_get_initial_device(), TgtPtr,
+          ompt_api->global_device_id, Size, /*codeptr_ra=*/NULL);
     }
 #endif
 
@@ -1060,8 +1060,8 @@ public:
           ompt_callback_target_data_op_emi)(
           ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
           /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, TgtPtr,
-          ompt_api->global_device_id, HstPtr, omp_get_initial_device(), Size,
-          /*codeptr_ra=*/NULL);
+          ompt_api->global_device_id, HstPtr,
+          ompt_api->omp_get_initial_device(), Size, /*codeptr_ra=*/NULL);
     }
 #endif
     Err = cuMemcpyDtoHAsync(HstPtr, (CUdeviceptr)TgtPtr, Size, Stream);
@@ -1071,8 +1071,8 @@ public:
           ompt_callback_target_data_op_emi)(
           ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
           /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, TgtPtr,
-          ompt_api->global_device_id, HstPtr, omp_get_initial_device(), Size,
-          /*codeptr_ra=*/NULL);
+          ompt_api->global_device_id, HstPtr,
+          ompt_api->omp_get_initial_device(), Size, /*codeptr_ra=*/NULL);
     }
 #endif
 
