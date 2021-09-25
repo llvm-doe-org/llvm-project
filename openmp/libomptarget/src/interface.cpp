@@ -15,8 +15,6 @@
 #include "omptarget.h"
 #include "private.h"
 #include "rtl.h"
-#define OMPT_FOR_LIBOMPTARGET
-#include "../../runtime/src/ompt-internal.h"
 
 #include <cassert>
 #include <cstdio>

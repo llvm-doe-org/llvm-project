@@ -20,37 +20,11 @@
 
 #define _OMP_EXTERN extern "C"
 
-// FIXME: OMPT_FOR_LIBOMPTARGET is defined wherever libomptarget includes this.
-// It should probably instead include its own header file, possibly a wrapper
-// around this one.  OMPT_SUPPORT and OMPT_OPTIONAL should be set in
-// libomptarget's cmake similar to how they're set in runtime's cmake.  For
-// now, we define them unconditionally to 1 for libomptarget so we can go ahead
-// and guard uses of OMPT there.
-#ifdef OMPT_FOR_LIBOMPTARGET
-# define OMPT_SUPPORT 1
-# define OMPT_OPTIONAL 1
-# define OMPT_LIBOMPTARGET_WEAK __attribute__((weak))
-
-# if OMPT_SUPPORT
-struct DeviceTy;
-void ompt_dispatch_callback_target_emi(ompt_target_t Kind,
-                                       ompt_scope_endpoint_t Endpoint,
-                                       DeviceTy &Device);
-# endif
-
-#else
-# define OMPT_LIBOMPTARGET_WEAK
-#endif
-
 #if OMPT_SUPPORT
 # define OMPT_SUPPORT_IF(...) __VA_ARGS__
 #else
 # define OMPT_SUPPORT_IF(...)
 #endif
-
-/// Type alias for source location information for variable mappings with data
-/// layout ";name;filename;row;col;;\0" from clang.
-using map_var_info_t = void *;
 
 #define OMPT_INVOKER(x)                                                        \
   ((x == fork_context_gnu) ? ompt_parallel_invoker_program                     \
@@ -208,6 +182,10 @@ typedef struct ident ident_t;
 void libomp_ompt_set_trigger_ident(const ident_t *ident);
 void libomp_ompt_clear_trigger_ident(void);
 ///@}
+
+/// Type alias for source location information for variable mappings with data
+/// layout ";name;filename;row;col;;\0" from clang.
+using map_var_info_t = void *;
 
 /// Sets/clears info for OMPT entry point ompt_get_data_expression.  Used within
 /// libomptarget.

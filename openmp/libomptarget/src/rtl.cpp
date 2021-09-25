@@ -15,9 +15,7 @@
 #include "device.h"
 #include "private.h"
 
-#if OMPT_SUPPORT
 #include "ompt-target.h"
-#endif
 
 #include <cassert>
 #include <cstdlib>

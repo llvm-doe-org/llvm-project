@@ -13,9 +13,6 @@
 #ifndef _OMPTARGET_DEVICE_H
 #define _OMPTARGET_DEVICE_H
 
-#define OMPT_FOR_LIBOMPTARGET
-#include "../../runtime/src/ompt-internal.h"
-
 #include <cassert>
 #include <cstddef>
 #include <list>

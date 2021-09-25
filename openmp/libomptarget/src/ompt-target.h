@@ -1,6 +1,19 @@
 #ifndef LIBOMPTARGET_OMPT_TARGET_H
 #define LIBOMPTARGET_OMPT_TARGET_H
 
+// FIXME: OMPT_SUPPORT should be set in libomptarget's cmake similar to how it's
+// set in libomp's cmake.  For now, we define it unconditionally to 1 for
+// libomptarget so we can go ahead and guard uses of OMPT here.
+#define OMPT_SUPPORT 1
+
+#if OMPT_SUPPORT
+# define OMPT_SUPPORT_IF(...) __VA_ARGS__
+#else
+# define OMPT_SUPPORT_IF(...)
+#endif
+
+#define ompt_callback(e) e##_callback
+
 #include "omp-tools.h"
 #include "SourceInfo.h"
 
@@ -12,7 +25,6 @@
 // libomptarget. The structs' definitions should be in sync with the definitions
 // in libomptarget/src/ompt_internal.h
 
-#ifndef OMPT_FOR_LIBOMPTARGET
 /* Bitmap to mark OpenMP 5.1 target events as registered*/
 typedef struct ompt_target_callbacks_active_s {
   unsigned int enabled : 1;
@@ -34,8 +46,6 @@ typedef struct ompt_target_callbacks_internal_s {
 
 #undef ompt_event_macro
 } ompt_target_callbacks_internal_t;
-
-#endif
 
 extern ompt_target_callbacks_active_t ompt_target_enabled;
 extern ompt_target_callbacks_internal_t ompt_target_callbacks;
@@ -64,6 +74,11 @@ libomp_ompt_set_map_var_info(map_var_info_t map_var_info);
 
 _OMP_EXTERN OMPT_WEAK_ATTRIBUTE void
 libomp_ompt_clear_map_var_info(void);
+
+struct DeviceTy;
+void ompt_dispatch_callback_target_emi(ompt_target_t Kind,
+                                       ompt_scope_endpoint_t Endpoint,
+                                       DeviceTy &Device);
 
 /// This struct is passed into target plugins where OMPT callbacks require
 /// additional data.
