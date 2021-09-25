@@ -105,6 +105,28 @@ stages:
     XFAIL_NOT:
       ""
 
+.explorer:
+  tags: [shell, explorer]
+  variables:
+    BUILD_ID: explorer
+    MODULES: ""
+    CMAKE: cmake
+    GCC_DIR: /usr
+    NINJA: ninja
+    PYTHON: /usr/bin/python3
+    CMAKE_BUILD_TYPE: Debug
+    CMAKE_OFFLOAD_CONFIG:
+      -DCLANG_ACC_TEST_EXE_X86_64=4
+      -DCLANG_ACC_TEST_EXE_PPC64LE=0
+      -DCLANG_ACC_TEST_EXE_NVPTX64=1
+    PATH_PREPEND:
+      ""
+    LIT_NTHREADS_DIVISOR: 1
+    XFAIL:
+      ""
+    XFAIL_NOT:
+      ""
+
 .kold:
   tags: [shell, kold]
   variables:
@@ -206,6 +228,9 @@ leconte (setup):
 oswald02 (setup):
   extends: [.oswald02, .setup]
 
+explorer (setup):
+  extends: [.explorer, .setup]
+
 kold (setup):
   extends: [.kold, .setup]
 
@@ -247,6 +272,12 @@ oswald02 (cleanup):
     - job: oswald02 (test)
       artifacts: false
 
+explorer (cleanup):
+  extends: [.explorer, .cleanup]
+  needs:
+    - job: explorer (test)
+      artifacts: false
+
 kold (cleanup):
   extends: [.kold, .cleanup]
   needs:
@@ -264,6 +295,9 @@ leconte (manual cleanup):
 
 oswald02 (manual cleanup):
   extends: [.oswald02, .manual-cleanup]
+
+explorer (manual cleanup):
+  extends: [.explorer, .manual-cleanup]
 
 kold (manual cleanup):
   extends: [.kold, .manual-cleanup]
@@ -342,6 +376,12 @@ oswald02 (config):
     - job: oswald02 (setup)
       artifacts: false
 
+explorer (config):
+  extends: [.explorer, .config]
+  needs:
+    - job: explorer (setup)
+      artifacts: false
+
 kold (config):
   extends: [.kold, .config]
   needs:
@@ -379,6 +419,12 @@ oswald02 (build):
   extends: [.oswald02, .build]
   needs:
     - job: oswald02 (config)
+      artifacts: false
+
+explorer (build):
+  extends: [.explorer, .build]
+  needs:
+    - job: explorer (config)
       artifacts: false
 
 kold (build):
@@ -460,6 +506,12 @@ oswald02 (test):
   extends: [.oswald02, .test]
   needs:
     - job: oswald02 (build)
+      artifacts: false
+
+explorer (test):
+  extends: [.explorer, .test]
+  needs:
+    - job: explorer (build)
       artifacts: false
 
 kold (test):
