@@ -197,7 +197,7 @@ stages:
     GIT_STRATEGY: none
   before_script:
     - echo $MODULES
-    - module load $MODULES
+    - if test x"$MODULES" != x; then module load $MODULES; fi
     - echo $PATH_PREPEND
     - if test x"$PATH_PREPEND" != x; then PATH="$PATH_PREPEND:$PATH"; fi
     - echo $PATH
