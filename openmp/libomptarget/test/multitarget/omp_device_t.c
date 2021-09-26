@@ -15,7 +15,8 @@
 #define FOREACH_ARCH(Macro)                                                    \
   Macro(x86_64)                                                                \
   Macro(ppc64le)                                                               \
-  Macro(nvptx64)
+  Macro(nvptx64)                                                               \
+  Macro(amdgcn)
 
 #define DEF_GET_ARCH(Arch)                                                     \
 _Pragma(STR(omp begin declare variant match(device={arch(Arch)})))             \
@@ -54,7 +55,12 @@ FOREACH_ARCH(DEF_GET_ARCH)
 //                     CHECK-NEXT:    -1: dot=-1
 //       NVPTX64-NVIDIA-CUDA-SAME:{{([[:space:]]+[0-9]+: dot=[0-9]+, dt=[0-9]+, tdn=[0-9]+ => nvptx64)+}}
 //                     CHECK-NEXT:    {{[0-9]+}}: dot=-1
-//                     CHECK-NEXT:omp_get_num_devices() = [[#X86_64 + PPC64LE + NVPTX64]]
+//                     CHECK-NEXT:omp_device_amdgcn=[[#]]:
+//                     CHECK-NEXT:    ndot: [[#AMDGCN:]]
+//                     CHECK-NEXT:    -1: dot=-1
+//         AMDGCN-AMD-AMDHSA-SAME:{{([[:space:]]+[0-9]+: dot=[0-9]+, dt=[0-9]+, tdn=[0-9]+ => amdgcn)+}}
+//                     CHECK-NEXT:    {{[0-9]+}}: dot=-1
+//                     CHECK-NEXT:omp_get_num_devices() = [[#X86_64 + PPC64LE + NVPTX64 + AMDGCN]]
 //                     CHECK-NEXT:omp_get_num_devices() = [[#HOST]]
 //                     CHECK-NEXT:calls for bad device numbers:
 //                     CHECK-NEXT:    -97: dt=0, tdn=-1
@@ -75,8 +81,18 @@ void checkArch(omp_device_t DevType, const char *DevTypeName) {
       printf(", dt=%d%s, tdn=%d%s",
              DT, DT == DevType ? "" : " (error!)",
              TDN, TDN == TypedDevNum ? "" : " (error!)");
-      #pragma omp target device(DevNum)
-      printf(" => %s", getArch());
+      // amdgcn doesn't support printf from a target region yet, so copy the
+      // arch name to the host to print it.
+      char Arch[100]; // surely big enough for any arch name
+      #pragma omp target device(DevNum) map(from:Arch)
+      {
+        const char *ArchDev = getArch();
+        int I;
+        for (I = 0; ArchDev[I] && I < sizeof Arch / sizeof *Arch - 1; ++I)
+          Arch[I] = ArchDev[I];
+        Arch[I] = 0;
+      }
+      printf(" => %s", Arch);
     }
     printf("\n");
   }

@@ -379,6 +379,7 @@ const char *deviceTypeToString(omp_device_t DevType) {
   MAKE_CASE(omp_device_x86_64);
   MAKE_CASE(omp_device_ppc64le);
   MAKE_CASE(omp_device_nvptx64);
+  MAKE_CASE(omp_device_amdgcn);
 #undef MAKE_CASE
   }
   assert(0 && "unexpected omp_device_t");

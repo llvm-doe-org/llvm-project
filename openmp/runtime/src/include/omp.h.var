@@ -365,7 +365,8 @@
         // The rest are for non-host devices.
         omp_device_x86_64,
         omp_device_ppc64le,
-        omp_device_nvptx64
+        omp_device_nvptx64,
+        omp_device_amdgcn
     } omp_device_t;
 
     // Return the type of the device specified by device_num.  Thus, return

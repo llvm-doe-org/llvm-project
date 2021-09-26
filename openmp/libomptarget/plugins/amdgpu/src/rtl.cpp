@@ -972,6 +972,8 @@ uint32_t elf_e_flags(__tgt_device_image *image) {
 }
 } // namespace
 
+int32_t __tgt_rtl_get_device_type() { return omp_device_amdgcn; }
+
 int32_t __tgt_rtl_is_valid_binary(__tgt_device_image *image) {
   return elf_machine_id_is_amdgcn(image);
 }
@@ -1848,8 +1850,9 @@ void *__tgt_rtl_data_alloc(int device_id, int64_t size, void *, int32_t kind) {
   return ptr;
 }
 
-int32_t __tgt_rtl_data_submit(int device_id, void *tgt_ptr, void *hst_ptr,
-                              int64_t size) {
+int32_t __tgt_rtl_data_submit(
+    int device_id, void *tgt_ptr, void *hst_ptr, int64_t size
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(device_id < DeviceInfo.NumberOfDevices && "Device ID too large");
   __tgt_async_info AsyncInfo;
   int32_t rc = dataSubmit(device_id, tgt_ptr, hst_ptr, size, &AsyncInfo);
@@ -1859,19 +1862,23 @@ int32_t __tgt_rtl_data_submit(int device_id, void *tgt_ptr, void *hst_ptr,
   return __tgt_rtl_synchronize(device_id, &AsyncInfo);
 }
 
-int32_t __tgt_rtl_data_submit_async(int device_id, void *tgt_ptr, void *hst_ptr,
-                                    int64_t size, __tgt_async_info *AsyncInfo) {
+int32_t __tgt_rtl_data_submit_async(
+    int device_id, void *tgt_ptr, void *hst_ptr, int64_t size,
+     __tgt_async_info *AsyncInfo
+     OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(device_id < DeviceInfo.NumberOfDevices && "Device ID too large");
   if (AsyncInfo) {
     initAsyncInfo(AsyncInfo);
     return dataSubmit(device_id, tgt_ptr, hst_ptr, size, AsyncInfo);
   } else {
-    return __tgt_rtl_data_submit(device_id, tgt_ptr, hst_ptr, size);
+    return __tgt_rtl_data_submit(device_id, tgt_ptr, hst_ptr, size
+                                 OMPT_SUPPORT_IF(, ompt_api));
   }
 }
 
-int32_t __tgt_rtl_data_retrieve(int device_id, void *hst_ptr, void *tgt_ptr,
-                                int64_t size) {
+int32_t __tgt_rtl_data_retrieve(
+    int device_id, void *hst_ptr, void *tgt_ptr, int64_t size
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(device_id < DeviceInfo.NumberOfDevices && "Device ID too large");
   __tgt_async_info AsyncInfo;
   int32_t rc = dataRetrieve(device_id, hst_ptr, tgt_ptr, size, &AsyncInfo);
@@ -1881,9 +1888,10 @@ int32_t __tgt_rtl_data_retrieve(int device_id, void *hst_ptr, void *tgt_ptr,
   return __tgt_rtl_synchronize(device_id, &AsyncInfo);
 }
 
-int32_t __tgt_rtl_data_retrieve_async(int device_id, void *hst_ptr,
-                                      void *tgt_ptr, int64_t size,
-                                      __tgt_async_info *AsyncInfo) {
+int32_t __tgt_rtl_data_retrieve_async(
+    int device_id, void *hst_ptr, void *tgt_ptr, int64_t size,
+    __tgt_async_info *AsyncInfo
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(AsyncInfo && "AsyncInfo is nullptr");
   assert(device_id < DeviceInfo.NumberOfDevices && "Device ID too large");
   initAsyncInfo(AsyncInfo);
@@ -2062,12 +2070,11 @@ static int32_t __tgt_rtl_run_target_team_region_locked(
     ptrdiff_t *tgt_offsets, int32_t arg_num, int32_t num_teams,
     int32_t thread_limit, uint64_t loop_tripcount);
 
-int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
-                                         void **tgt_args,
-                                         ptrdiff_t *tgt_offsets,
-                                         int32_t arg_num, int32_t num_teams,
-                                         int32_t thread_limit,
-                                         uint64_t loop_tripcount) {
+int32_t __tgt_rtl_run_target_team_region(
+    int32_t device_id, void *tgt_entry_ptr, void **tgt_args,
+    ptrdiff_t *tgt_offsets, int32_t arg_num, int32_t num_teams,
+    int32_t thread_limit, uint64_t loop_tripcount
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
 
   DeviceInfo.load_run_lock.lock_shared();
   int32_t res = __tgt_rtl_run_target_team_region_locked(
@@ -2261,23 +2268,23 @@ int32_t __tgt_rtl_run_target_team_region_locked(
   return OFFLOAD_SUCCESS;
 }
 
-int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
-                                    void **tgt_args, ptrdiff_t *tgt_offsets,
-                                    int32_t arg_num) {
+int32_t __tgt_rtl_run_target_region(
+    int32_t device_id, void *tgt_entry_ptr, void **tgt_args,
+    ptrdiff_t *tgt_offsets, int32_t arg_num
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   // use one team and one thread
   // fix thread num
   int32_t team_num = 1;
   int32_t thread_limit = 0; // use default
-  return __tgt_rtl_run_target_team_region(device_id, tgt_entry_ptr, tgt_args,
-                                          tgt_offsets, arg_num, team_num,
-                                          thread_limit, 0);
+  return __tgt_rtl_run_target_team_region(
+      device_id, tgt_entry_ptr, tgt_args, tgt_offsets, arg_num, team_num,
+      thread_limit, 0 OMPT_SUPPORT_IF(, ompt_api));
 }
 
-int32_t __tgt_rtl_run_target_region_async(int32_t device_id,
-                                          void *tgt_entry_ptr, void **tgt_args,
-                                          ptrdiff_t *tgt_offsets,
-                                          int32_t arg_num,
-                                          __tgt_async_info *AsyncInfo) {
+int32_t __tgt_rtl_run_target_region_async(
+    int32_t device_id, void *tgt_entry_ptr, void **tgt_args,
+    ptrdiff_t *tgt_offsets, int32_t arg_num, __tgt_async_info *AsyncInfo
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(AsyncInfo && "AsyncInfo is nullptr");
   initAsyncInfo(AsyncInfo);
 
@@ -2285,9 +2292,9 @@ int32_t __tgt_rtl_run_target_region_async(int32_t device_id,
   // fix thread num
   int32_t team_num = 1;
   int32_t thread_limit = 0; // use default
-  return __tgt_rtl_run_target_team_region(device_id, tgt_entry_ptr, tgt_args,
-                                          tgt_offsets, arg_num, team_num,
-                                          thread_limit, 0);
+  return __tgt_rtl_run_target_team_region(
+      device_id, tgt_entry_ptr, tgt_args, tgt_offsets, arg_num, team_num,
+      thread_limit, 0 OMPT_SUPPORT_IF(, ompt_api));
 }
 
 int32_t __tgt_rtl_synchronize(int32_t device_id, __tgt_async_info *AsyncInfo) {
