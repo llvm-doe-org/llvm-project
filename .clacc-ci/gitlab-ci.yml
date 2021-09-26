@@ -577,7 +577,7 @@ debug (build):
     # producing OpenMP offload test failures.
     #
     # ulimit -t does not terminate processes that are hung and not using CPUs,
-    # but hopefully lit's --timeout will.  20 mins ought to be long enough for
+    # but hopefully lit's --timeout will.  40 mins ought to be long enough for
     # any regression test.
     #
     # In case check-all runs multiple lit invocations (e.g., a separate
@@ -589,7 +589,7 @@ debug (build):
     - echo "$LIT_NPROC_DIVISOR"
     - time FILECHECK_OPTS='-dump-input-filter=all -vv -color'
       LIT_OPTS="
-        --timeout 1200 -j `expr $NPROC / $LIT_NPROC_DIVISOR`
+        --timeout 2400 -j `expr $NPROC / $LIT_NPROC_DIVISOR`
         --ignore-fail --xunit-xml-output $CI_PROJECT_DIR/check-all.xml
       "
       $NINJA -l `nproc` check-all
