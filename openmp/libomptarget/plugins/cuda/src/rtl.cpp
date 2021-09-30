@@ -1151,6 +1151,31 @@ public:
       const int ThreadLimit, const unsigned int LoopTripCount,
       __tgt_async_info *AsyncInfo
       OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) const {
+#if OMPT_SUPPORT
+    // OpenMP 5.1, sec. 2.14.5 "target Construct", p. 201, L17-20:
+    // "The target-submit-begin event occurs prior to initiating creation of an
+    // initial task on a target device for a target region.  The
+    // target-submit-end event occurs after initiating creation of an initial
+    // task on a target device for a target region."
+    //
+    // OpenMP 5.1, sec. 4.5.2.28 "ompt_callback_target_submit_emi_t and
+    // ompt_callback_target_submit_t", p. 543, L2-6:
+    // "A thread dispatches a registered ompt_callback_target_submit_emi or
+    // ompt_callback_target_submit callback on the host before and after a
+    // target task initiates creation of an initial task on a device."
+    // "The endpoint argument indicates that the callback signals the beginning
+    // or end of a scope."
+    //
+    // FIXME: We don't yet need the target_data or host_op_id argument for
+    // OpenACC support, so we haven't bothered to implement it yet.
+    if (ompt_api->ompt_target_enabled->ompt_callback_target_submit_emi) {
+      ompt_api->ompt_target_callbacks->ompt_callback(
+          ompt_callback_target_submit_emi)(
+          ompt_scope_begin, /*target_data=*/NULL, /*host_op_id=*/NULL,
+          /*requested_num_teams=*/TeamNum);
+    }
+#endif
+
     CUresult Err = cuCtxSetCurrent(DeviceData[DeviceId].Context);
     if (!checkResult(Err, "Error returned from cuCtxSetCurrent\n"))
       return OFFLOAD_FAIL;
@@ -1259,31 +1284,6 @@ public:
       DP("Using requested number of teams %d\n", TeamNum);
       CudaBlocksPerGrid = TeamNum;
     }
-
-#if OMPT_SUPPORT
-    // OpenMP 5.1, sec. 2.14.5 "target Construct", p. 201, L17-20:
-    // "The target-submit-begin event occurs prior to initiating creation of an
-    // initial task on a target device for a target region.  The
-    // target-submit-end event occurs after initiating creation of an initial
-    // task on a target device for a target region."
-    //
-    // OpenMP 5.1, sec. 4.5.2.28 "ompt_callback_target_submit_emi_t and
-    // ompt_callback_target_submit_t", p. 543, L2-6:
-    // "A thread dispatches a registered ompt_callback_target_submit_emi or
-    // ompt_callback_target_submit callback on the host before and after a
-    // target task initiates creation of an initial task on a device."
-    // "The endpoint argument indicates that the callback signals the beginning
-    // or end of a scope."
-    //
-    // FIXME: We don't yet need the target_data or host_op_id argument for
-    // OpenACC support, so we haven't bothered to implement it yet.
-    if (ompt_api->ompt_target_enabled->ompt_callback_target_submit_emi) {
-      ompt_api->ompt_target_callbacks->ompt_callback(
-          ompt_callback_target_submit_emi)(
-          ompt_scope_begin, /*target_data=*/NULL, /*host_op_id=*/NULL,
-          /*requested_num_teams=*/TeamNum);
-    }
-#endif
 
     INFO(OMP_INFOTYPE_PLUGIN_KERNEL, DeviceId,
          "Launching kernel %s with %d blocks and %d threads in %s mode\n",
