@@ -12,16 +12,17 @@
 // RUN:   (event=ENQUEUE_LAUNCH_START)
 // RUN:   (event=ENQUEUE_LAUNCH_END)
 // RUN: }
-//      # It's unlikely that no offloading or nvptx64 offloading covers any
-//      # important logic here beyond what x86_64 or ppc64le offloading covers.
-//      # However, nvptx64 offloading triples the test's run time for me, and no
-//      # offloading has different output and doesn't exercise some callbacks,
-//      # so just skip those cases.
+//      # It's unlikely that no offloading, nvptx64, or amdgcn offloading
+//      # covers any important logic here beyond what x86_64 or ppc64le
+//      # offloading covers.  However, nvptx64 offloading triples the test's
+//      # run time for me, and no offloading has different output and doesn't
+//      # exercise some callbacks, so just skip those cases.
 // RUN: %data tgts {
 // XUN:   (run-if=                tgt-cflags=                                     tgt-acc-device=acc_device_host   )
 // RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  tgt-acc-device=acc_device_x86_64 )
 // RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple tgt-acc-device=acc_device_ppc64le)
 // XUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple tgt-acc-device=acc_device_nvidia )
+// XUN:   (run-if=%run-if-amdgcn  tgt-cflags=-fopenmp-targets=%run-amdgcn-triple  tgt-acc-device=acc_device_radeon )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %for events {

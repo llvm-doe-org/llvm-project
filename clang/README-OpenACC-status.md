@@ -9,11 +9,22 @@ support OpenACC, and it identifies known limitations in those
 features.  Clacc does not yet support OpenACC features that are not
 mentioned here.
 
+Architectures
+-------------
+
+* x86_64 and ppc64le (Power 9) are supported as hosts or accelerator
+  devices.
+* nvptx64 (NVIDIA GPUs) and amdgcn (AMD GPUs) are supported as
+  accelerator devices.
+* Offload support inherits any limitations from upstream LLVM's OpenMP
+  offload support.  For example, `printf` is not currently supported
+  in kernels offloaded to AMD GPUs.
+
 Build Platforms
 ---------------
 
-* Ubuntu 18.04 is regularly tested.
-* CentOS 7.8 is regularly tested.
+* Ubuntu 18.04 and 20.04 are regularly tested.
+* CentOS 7.9 and 8.3 are regularly tested.
 * Windows and macOS are not yet supported.
 
 Command-Line Options
@@ -381,10 +392,10 @@ OpenACC Runtime Library API and Preprocessor
       include devices that `acc_device_not_host` also includes:
         * `acc_device_nvidia` is supported as recommended in OpenACC
           3.1, sec. A.1.1 "NVIDIA GPU Targets".
+        * `acc_device_radeon` is supported as recommended in OpenACC
+          3.1, sec. A.1.2 "AMD GPU Targets".
         * `acc_device_x86_64` and `acc_device_ppc64le` are supported
           but are not mentioned by OpenACC 3.1
-        * `acc_device_radeon` is not yet supported but is recommended
-          in OpenACC 3.1, sec. A.1.2 "AMD GPU Targets".
     * `acc_device_not_host` may include devices that no
       architecture-specific enumerator includes.  This situation is
       not ideal but can arise when either the OpenMP implementation's

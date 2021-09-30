@@ -252,9 +252,10 @@ int acc_get_num_devices(acc_device_t dev_type) {
     // behavior is inconsistent with nvc 20.11-0, which returns 0 instead.
     return 1;
   case acc_device_host:
-  case acc_device_nvidia:
-  case acc_device_x86_64:
-  case acc_device_ppc64le:
+#define ACC2OMP_DEVICE_ENUMERATOR(Device)                                      \
+  case acc_device_##Device:
+  ACC2OMP_FOREACH_ARCH_DEVICE(ACC2OMP_DEVICE_ENUMERATOR)
+#undef ACC2OMP_DEVICE_ENUMERATOR
     // omp_get_num_devices_of_type returns 0 if either:
     // - acc2omp_get_omp_device_t returns omp_device_none because omp_device_t
     //   has no corresponding enumerator, and so our implementation logically
@@ -365,9 +366,11 @@ static void setDeviceNumAndType(int dev_num, acc_device_t dev_type,
   case acc_device_current:
     return;
   case acc_device_host:
-  case acc_device_nvidia:
-  case acc_device_x86_64:
-  case acc_device_ppc64le: {
+#define ACC2OMP_DEVICE_ENUMERATOR(Device)                                      \
+  case acc_device_##Device:
+  ACC2OMP_FOREACH_ARCH_DEVICE(ACC2OMP_DEVICE_ENUMERATOR)
+#undef ACC2OMP_DEVICE_ENUMERATOR
+  {
     // omp_get_device_of_type returns -1 if either:
     // - acc2omp_get_omp_device_t returns omp_device_none because omp_device_t
     //   has no corresponding enumerator, and so our implementation has no
@@ -471,9 +474,11 @@ int acc_get_device_num(acc_device_t dev_type) {
   case acc_device_current:
     return 0;
   case acc_device_host:
-  case acc_device_nvidia:
-  case acc_device_x86_64:
-  case acc_device_ppc64le: {
+#define ACC2OMP_DEVICE_ENUMERATOR(Device)                                      \
+  case acc_device_##Device:
+  ACC2OMP_FOREACH_ARCH_DEVICE(ACC2OMP_DEVICE_ENUMERATOR)
+#undef ACC2OMP_DEVICE_ENUMERATOR
+  {
     // acc_get_device_type returns acc_device_not_host if omp_device_t has
     // no enumerator corresponding to dev_type, and so our implementation
     // logically then has no devices known to be of type dev_type.
@@ -1383,9 +1388,10 @@ extern "C" void acc2omp_set_omp_default_device() {
     break;
   case acc_device_host:
   case acc_device_not_host:
-  case acc_device_nvidia:
-  case acc_device_x86_64:
-  case acc_device_ppc64le:
+#define ACC2OMP_DEVICE_ENUMERATOR(Device)                                      \
+  case acc_device_##Device:
+  ACC2OMP_FOREACH_ARCH_DEVICE(ACC2OMP_DEVICE_ENUMERATOR)
+#undef ACC2OMP_DEVICE_ENUMERATOR
     break;
   }
 

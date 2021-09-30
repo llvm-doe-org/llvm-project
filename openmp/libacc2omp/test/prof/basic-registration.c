@@ -1,10 +1,11 @@
 // Check various basic registration/unregistration scenarios.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' fc=HOST       )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' fc=OFF,X86_64 )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' fc=OFF,PPC64LE)
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         fc=HOST       )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         fc=OFF,X86_64 )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         fc=OFF,PPC64LE)
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' fc=OFF,NVPTX64)
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         fc=OFF,AMDGCN )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -fopenacc %acc-includes %s -o %t %[tgt-cflags]
@@ -140,7 +141,7 @@ int main() {
   // CHECK:acc_ev_enqueue_launch_end
   #pragma acc parallel copy(arr) num_gangs(1)
   for (int j = 0; j < 2; ++j)
-    printf("arr[%d]=%d\n", j, arr[j]);
+    ;
   //       acc_ev_exit_data_start not registered
   //   OFF:acc_ev_enqueue_download_start
   //   OFF:acc_ev_enqueue_download_end

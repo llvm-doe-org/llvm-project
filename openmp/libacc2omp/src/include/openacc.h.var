@@ -24,15 +24,19 @@ extern "C" {
 // OpenACC Types.
 //----------------------------------------------------------------------------
 
+#define ACC2OMP_FOREACH_ARCH_DEVICE(Macro)                                     \
+  Macro(nvidia)                                                                \
+  Macro(radeon)                                                                \
+  Macro(x86_64)                                                                \
+  Macro(ppc64le)
+
 #define ACC2OMP_FOREACH_DEVICE(Macro)                                          \
   Macro(none)                                                                  \
   Macro(host)                                                                  \
   Macro(not_host)                                                              \
   Macro(default)                                                               \
   Macro(current)                                                               \
-  Macro(nvidia)                                                                \
-  Macro(x86_64)                                                                \
-  Macro(ppc64le)
+  ACC2OMP_FOREACH_ARCH_DEVICE(Macro)
 
 typedef enum {
 #define ACC2OMP_DEVICE_ENUMERATOR(Device)                                      \
@@ -161,6 +165,7 @@ static inline acc_device_t acc2omp_get_device_arch() {
 ACC2OMP_DEVICE_VARIANT(kind, host,    acc_device_host)
 ACC2OMP_DEVICE_VARIANT(kind, nohost,  acc_device_not_host)
 ACC2OMP_DEVICE_VARIANT(arch, nvptx64, acc_device_nvidia)
+ACC2OMP_DEVICE_VARIANT(arch, amdgcn,  acc_device_radeon)
 ACC2OMP_DEVICE_VARIANT(arch, x86_64,  acc_device_x86_64)
 ACC2OMP_DEVICE_VARIANT(arch, ppc64le, acc_device_ppc64le)
 #undef ACC2OMP_DEVICE_VARIANT

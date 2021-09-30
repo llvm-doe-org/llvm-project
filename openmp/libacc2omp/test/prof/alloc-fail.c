@@ -1,10 +1,11 @@
 // Check that no callbacks are missed upon a device allocation failure.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' host-or-off-pre-env=HOST not-if-off-pre-env=              )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         host-or-off-pre-env=HOST not-if-off-pre-env=              )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
 // RUN: }
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  host-or-off-post-env=%[host-or-off-pre-env] not-if-off-post-env=%[not-if-off-pre-env])

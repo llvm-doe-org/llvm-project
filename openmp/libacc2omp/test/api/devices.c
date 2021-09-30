@@ -6,16 +6,18 @@
 // variables here.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                                  cflags='                                                         -Xclang -verify' tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt0=host   )
-// RUN:   (run-if=%run-if-x86_64                    cflags='-fopenmp-targets=%run-x86_64-triple                      -Xclang -verify' tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt0=x86_64 )
-// RUN:   (run-if=%run-if-ppc64le                   cflags='-fopenmp-targets=%run-ppc64le-triple                     -Xclang -verify' tgt-nd-x86_64=0             tgt-nd-ppc64le=%ppc64le-ndevs tgt-nd-nvptx64=0              tgt0=ppc64le)
-// RUN:   (run-if=%run-if-nvptx64                   cflags='-fopenmp-targets=%run-nvptx64-triple                     -Xclang -verify=nvptx64' tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=%nvptx64-ndevs tgt0=nvidia )
-// RUN:   (run-if='%run-if-x86_64 %run-if-nvptx64'  cflags='-fopenmp-targets=%run-x86_64-triple,%run-nvptx64-triple  -Xclang -verify=nvptx64' tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=%nvptx64-ndevs tgt0=x86_64 )
-// RUN:   (run-if='%run-if-ppc64le %run-if-nvptx64' cflags='-fopenmp-targets=%run-ppc64le-triple,%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-nd-x86_64=0             tgt-nd-ppc64le=%ppc64le-ndevs tgt-nd-nvptx64=%nvptx64-ndevs tgt0=ppc64le)
+// RUN:   (run-if=                                  cflags='                                                         -Xclang -verify'         tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt-nd-amdgcn=0             tgt0=host   )
+// RUN:   (run-if=%run-if-x86_64                    cflags='-fopenmp-targets=%run-x86_64-triple                      -Xclang -verify'         tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt-nd-amdgcn=0             tgt0=x86_64 )
+// RUN:   (run-if=%run-if-ppc64le                   cflags='-fopenmp-targets=%run-ppc64le-triple                     -Xclang -verify'         tgt-nd-x86_64=0             tgt-nd-ppc64le=%ppc64le-ndevs tgt-nd-nvptx64=0              tgt-nd-amdgcn=0             tgt0=ppc64le)
+// RUN:   (run-if=%run-if-nvptx64                   cflags='-fopenmp-targets=%run-nvptx64-triple                     -Xclang -verify=nvptx64' tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=%nvptx64-ndevs tgt-nd-amdgcn=0             tgt0=nvidia )
+// RUN:   (run-if=%run-if-amdgcn                    cflags='-fopenmp-targets=%run-amdgcn-triple                      -Xclang -verify'         tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt-nd-amdgcn=%amdgcn-ndevs tgt0=radeon )
+// RUN:   (run-if='%run-if-x86_64 %run-if-nvptx64'  cflags='-fopenmp-targets=%run-x86_64-triple,%run-nvptx64-triple  -Xclang -verify=nvptx64' tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=%nvptx64-ndevs tgt-nd-amdgcn=0             tgt0=x86_64 )
+// RUN:   (run-if='%run-if-x86_64 %run-if-amdgcn'   cflags='-fopenmp-targets=%run-x86_64-triple,%run-amdgcn-triple   -Xclang -verify'         tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt-nd-amdgcn=%amdgcn-ndevs tgt0=x86_64 )
+// RUN:   (run-if='%run-if-ppc64le %run-if-nvptx64' cflags='-fopenmp-targets=%run-ppc64le-triple,%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-nd-x86_64=0             tgt-nd-ppc64le=%ppc64le-ndevs tgt-nd-nvptx64=%nvptx64-ndevs tgt-nd-amdgcn=0             tgt0=ppc64le)
 // RUN: }
 // RUN: %data run-envs {
-// RUN:   (run-env=                                  nd-x86_64=%[tgt-nd-x86_64] nd-ppc64le=%[tgt-nd-ppc64le] nd-nvptx64=%[tgt-nd-nvptx64] dev-type-init=%[tgt0])
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' nd-x86_64=0                nd-ppc64le=0                 nd-nvptx64=0                 dev-type-init=host   )
+// RUN:   (run-env=                                  nd-x86_64=%[tgt-nd-x86_64] nd-ppc64le=%[tgt-nd-ppc64le] nd-nvptx64=%[tgt-nd-nvptx64] nd-amdgcn=%[tgt-nd-amdgcn] dev-type-init=%[tgt0])
+// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' nd-x86_64=0                nd-ppc64le=0                 nd-nvptx64=0                 nd-amdgcn=0                dev-type-init=host   )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -fopenacc %acc-includes %[cflags] -o %t.exe %s
@@ -25,8 +27,8 @@
 // RUN:       -strict-whitespace -match-full-lines \
 // RUN:       -DDEV_TYPE_INIT=acc_device_%[dev-type-init] -D#DEV_NUM_INIT=0 \
 // RUN:       -D#ND_DEV_TYPE_INIT=%%[dev-type-init]-ndevs \
-// RUN:       -D#ND_NVIDIA=%[nd-nvptx64] -D#ND_X86_64=%[nd-x86_64] \
-// RUN:       -D#ND_PPC64LE=%[nd-ppc64le]
+// RUN:       -D#ND_NVIDIA=%[nd-nvptx64] -D#ND_RADEON=%[nd-amdgcn] \
+// RUN:       -D#ND_X86_64=%[nd-x86_64] -D#ND_PPC64LE=%[nd-ppc64le]
 // RUN:   }
 // RUN: }
 //
@@ -60,11 +62,13 @@
 // CHECK-NEXT:    0: num=0, type=[[DEV_TYPE_INIT]], on [[DEV_TYPE_INIT]]
 // CHECK-NEXT:acc_device_nvidia has [[#ND_NVIDIA]]:
 // CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_nvidia, on acc_device_nvidia)*}}
+// CHECK-NEXT:acc_device_radeon has [[#ND_RADEON]]:
+// CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_radeon, on acc_device_radeon)*}}
 // CHECK-NEXT:acc_device_x86_64 has [[#ND_X86_64]]:
 // CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_x86_64, on acc_device_x86_64)*}}
 // CHECK-NEXT:acc_device_ppc64le has [[#ND_PPC64LE]]:
 // CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_ppc64le, on acc_device_ppc64le)*}}
-// CHECK-NEXT:acc_device_not_host has [[#ND_NOT_HOST:ND_NVIDIA + ND_X86_64 + ND_PPC64LE]]:
+// CHECK-NEXT:acc_device_not_host has [[#ND_NOT_HOST:ND_NVIDIA + ND_RADEON + ND_X86_64 + ND_PPC64LE]]:
 // CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on [a-z0-9_]+, on acc_device_not_host)*}}
 //  CHECK-NOT:{{.}}
 
@@ -115,9 +119,10 @@ static void checkOtherType(acc_device_t DevTypeSet, int DevNumSet,
   case acc_device_current:
     Good = DevNumOther == 0;
     break;
-  case acc_device_nvidia:
-  case acc_device_x86_64:
-  case acc_device_ppc64le:
+#define ACC2OMP_DEVICE_ENUMERATOR(Device)                                      \
+  case acc_device_##Device:
+  ACC2OMP_FOREACH_ARCH_DEVICE(ACC2OMP_DEVICE_ENUMERATOR)
+#undef ACC2OMP_DEVICE_ENUMERATOR
     if (DevTypeOther == DevTypeSet)
       Good = DevNumOther == DevNumSet;
     else if (DevTypeOther == DevTypeCur)
@@ -176,14 +181,15 @@ static void checkType(acc_device_t DevType, acc_device_t DevTypeInit,
     // Check that the device is actually of the device type we're iterating and
     // of the device type returned by acc_get_device_type.  acc_on_device is
     // tested elsewhere, and here we assume it's correct.
-    #pragma acc parallel num_gangs(1)
+    bool OnDT, OnDevType;
+    #pragma acc parallel num_gangs(1) copyout(OnDT, OnDevType)
     {
-      printf(", %son %s", acc_on_device(DT) ? "" : "not ", deviceTypeToStr(DT));
-      if (DevType != DT && DevType != acc_device_default &&
-          DevType != acc_device_current)
-        printf(", %son %s", acc_on_device(DevType) ? "" : "not ",
-               deviceTypeToStr(DevType));
+      OnDT = acc_on_device(DT);
+      OnDevType = acc_on_device(DevType);
     }
+    printf(", %son %s", OnDT ? "" : "not ", deviceTypeToStr(DT));
+    if (DevType != DT && DevType != acc_device_default && DevType != acc_device_current)
+      printf(", %son %s", OnDevType ? "" : "not ", deviceTypeToStr(DevType));
     printf("\n");
 
     // Check that acc_get_device_num returns something sane for device types

@@ -2,11 +2,13 @@
 // ACC_DEVICE_TYPE and ACC_DEVICE_NUM, for example.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                                  cflags='                                                         -Xclang -verify' tgt0=host    tgt1=host    bad-tgt=not_host not-host-ndevs=0                    )
-// RUN:   (run-if=%run-if-x86_64                    cflags='-fopenmp-targets=%run-x86_64-triple                      -Xclang -verify' tgt0=x86_64  tgt1=x86_64  bad-tgt=ppc64le  not-host-ndevs=%x86_64-ndevs        )
-// RUN:   (run-if=%run-if-ppc64le                   cflags='-fopenmp-targets=%run-ppc64le-triple                     -Xclang -verify' tgt0=ppc64le tgt1=ppc64le bad-tgt=nvidia   not-host-ndevs=%ppc64le-ndevs       )
+// RUN:   (run-if=                                  cflags='                                                         -Xclang -verify'         tgt0=host    tgt1=host    bad-tgt=not_host not-host-ndevs=0                    )
+// RUN:   (run-if=%run-if-x86_64                    cflags='-fopenmp-targets=%run-x86_64-triple                      -Xclang -verify'         tgt0=x86_64  tgt1=x86_64  bad-tgt=ppc64le  not-host-ndevs=%x86_64-ndevs        )
+// RUN:   (run-if=%run-if-ppc64le                   cflags='-fopenmp-targets=%run-ppc64le-triple                     -Xclang -verify'         tgt0=ppc64le tgt1=ppc64le bad-tgt=nvidia   not-host-ndevs=%ppc64le-ndevs       )
 // RUN:   (run-if=%run-if-nvptx64                   cflags='-fopenmp-targets=%run-nvptx64-triple                     -Xclang -verify=nvptx64' tgt0=nvidia  tgt1=nvidia  bad-tgt=x86_64   not-host-ndevs=%nvidia-ndevs        )
-// RUN:   (run-if='%run-if-x86_64 %run-if-nvptx64'  cflags='-fopenmp-targets=%run-x86_64-triple,%run-nvptx64-triple  -Xclang -verify=nvptx64' tgt0=x86_64  tgt1=nvidia  bad-tgt=ppc64le  not-host-ndevs=%x86_64-nvidia-ndevs )
+// RUN:   (run-if=%run-if-amdgcn                    cflags='-fopenmp-targets=%run-amdgcn-triple                      -Xclang -verify'         tgt0=radeon  tgt1=radeon  bad-tgt=x86_64   not-host-ndevs=%radeon-ndevs        )
+// RUN:   (run-if='%run-if-x86_64 %run-if-nvptx64'  cflags='-fopenmp-targets=%run-x86_64-triple,%run-nvptx64-triple  -Xclang -verify=nvptx64' tgt0=x86_64  tgt1=nvidia  bad-tgt=radeon   not-host-ndevs=%x86_64-nvidia-ndevs )
+// RUN:   (run-if='%run-if-x86_64 %run-if-amdgcn'   cflags='-fopenmp-targets=%run-x86_64-triple,%run-amdgcn-triple   -Xclang -verify'         tgt0=x86_64  tgt1=radeon  bad-tgt=ppc64le  not-host-ndevs=%x86_64-radeon-ndevs )
 // RUN:   (run-if='%run-if-ppc64le %run-if-nvptx64' cflags='-fopenmp-targets=%run-ppc64le-triple,%run-nvptx64-triple -Xclang -verify=nvptx64' tgt0=ppc64le tgt1=nvidia  bad-tgt=x86_64   not-host-ndevs=%ppc64le-nvidia-ndevs)
 // RUN: }
 // RUN: %data run-envs {
@@ -33,6 +35,8 @@
 // RUN:    err='ACC_DEVICE_NUM=0 (default device number) is invalid for ACC_DEVICE_TYPE=ppc64le')
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_TYPE=nvidia'
 // RUN:    err='ACC_DEVICE_NUM=0 (default device number) is invalid for ACC_DEVICE_TYPE=nvidia')
+// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_TYPE=radeon'
+// RUN:    err='ACC_DEVICE_NUM=0 (default device number) is invalid for ACC_DEVICE_TYPE=radeon')
 //
 //        # Invalid explicit ACC_DEVICE_NUM for ACC_DEVICE_TYPE with offloading
 //        # disabled.
@@ -48,6 +52,8 @@
 // RUN:    err='ACC_DEVICE_NUM=0 is invalid for ACC_DEVICE_TYPE=ppc64le')
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_TYPE=nvidia ACC_DEVICE_NUM=0'
 // RUN:    err='ACC_DEVICE_NUM=0 is invalid for ACC_DEVICE_TYPE=nvidia')
+// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_TYPE=radeon ACC_DEVICE_NUM=0'
+// RUN:    err='ACC_DEVICE_NUM=0 is invalid for ACC_DEVICE_TYPE=radeon')
 //
 //        # Invalid ACC_DEVICE_NUM for ACC_DEVICE_TYPE with no devices.
 // RUN:   (run-env='env ACC_DEVICE_TYPE=%[bad-tgt]'

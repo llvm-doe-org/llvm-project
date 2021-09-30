@@ -13,14 +13,16 @@
 // RUN:   (event=ENQUEUE_DOWNLOAD_END)
 // RUN: }
 //      # Without offloading, none of the above events are produced, so just
-//      # skip that case.  It's unlikely that nvptx64 offloading covers any
-//      # important logic here beyond what x86_64 or ppc64le offloading covers,
-//      # but it triples the test's run time for me, so skip that case too.
+//      # skip that case.  It's unlikely that nvptx64 or amdgcn offloading
+//      # covers any important logic here beyond what x86_64 or ppc64le
+//      # offloading covers, but at least nvptx64 triples the test's run time
+//      # for me, so skip those case too.
 // RUN: %data tgts {
 // XUN:   (run-if=                tgt-cflags=                                    )
 // RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
 // RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
 // XUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
+// XUN:   (run-if=%run-if-amdgcn  tgt-cflags=-fopenmp-targets=%run-amdgcn-triple )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %for events {

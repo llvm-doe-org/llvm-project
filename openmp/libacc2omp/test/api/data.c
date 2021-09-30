@@ -1,10 +1,11 @@
 // Check data and memory management routines.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                cflags='                                     -Xclang -verify' tgt-host-or-off=HOST tgt-not-if-host='%not --crash' tgt-not-if-off=              )
-// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
-// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
+// RUN:   (run-if=                cflags='                                     -Xclang -verify'         tgt-host-or-off=HOST tgt-not-if-host='%not --crash' tgt-not-if-off=              )
+// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
+// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
 // RUN:   (run-if=%run-if-nvptx64 cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
+// RUN:   (run-if=%run-if-amdgcn  cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         tgt-host-or-off=OFF  tgt-not-if-host=               tgt-not-if-off='%not --crash')
 // RUN: }
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  host-or-off=%[tgt-host-or-off] not-if-host=%[tgt-not-if-host] not-if-off=%[tgt-not-if-off])

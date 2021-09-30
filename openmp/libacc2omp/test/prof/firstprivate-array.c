@@ -18,10 +18,11 @@
 // non-const cases.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                               -Xclang -verify' tgt-acc-device=acc_device_host    host-or-off=HOST tgt=NO_TGT )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple            -Xclang -verify' tgt-acc-device=acc_device_x86_64  host-or-off=OFF  tgt=X86_64 )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple           -Xclang -verify' tgt-acc-device=acc_device_ppc64le host-or-off=OFF  tgt=PPC64LE)
+// RUN:   (run-if=                tgt-cflags='                                               -Xclang -verify'         tgt-acc-device=acc_device_host    host-or-off=HOST tgt=NO_TGT )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple            -Xclang -verify'         tgt-acc-device=acc_device_x86_64  host-or-off=OFF  tgt=X86_64 )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple           -Xclang -verify'         tgt-acc-device=acc_device_ppc64le host-or-off=OFF  tgt=PPC64LE)
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -DNVPTX64 -Xclang -verify=nvptx64' tgt-acc-device=acc_device_nvidia  host-or-off=OFF  tgt=NVPTX64)
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple -DAMDGCN   -Xclang -verify'         tgt-acc-device=acc_device_radeon  host-or-off=OFF  tgt=AMDGCN )
 // RUN: }
 //      # Large firstprivates are not packed, so they exercise a different OMPT
 //      # code path.  Packing multiple (small) firstprivates means we cannot
@@ -344,9 +345,12 @@ int main() {
     // PPC64LE-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[7]=37
     // PPC64LE-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[8]=38
     // PPC64LE-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[9]=39
+    //
     // We omit NVPTX64 here because exit events might trigger before kernel
     // execution due to the use of CUDA streams.
-#ifndef NVPTX64
+    //
+    // FIXME: We omit AMDGCN here because it doesn't support target printf yet.
+#if !NVPTX64 && !AMDGCN
     printf("inside: arr0=%p, arr0[%d]=%d\n", arr0, j, arr0[j]);
 #endif
 #line 40000

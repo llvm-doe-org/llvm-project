@@ -2,9 +2,10 @@
 // specify the right OpenACC Runtime Library API routine.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' tgt-acc-device=acc_device_x86_64 )
-// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' tgt-acc-device=acc_device_ppc64le)
+// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         tgt-acc-device=acc_device_x86_64 )
+// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         tgt-acc-device=acc_device_ppc64le)
 // RUN:   (run-if=%run-if-nvptx64 cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-acc-device=acc_device_nvidia )
+// RUN:   (run-if=%run-if-amdgcn  cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         tgt-acc-device=acc_device_radeon )
 // RUN: }
 // RUN: %data cases {
 // RUN:   (case=acc_malloc args='size'     )

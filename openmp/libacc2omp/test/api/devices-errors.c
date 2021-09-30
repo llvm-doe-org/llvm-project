@@ -1,10 +1,11 @@
 // Check device management routines with runtime errors.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                cflags='                                     -Xclang -verify' tgt-host-or-off=HOST tgt-not-if-host='%not --crash')
-// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' tgt-host-or-off=OFF  tgt-not-if-host=              )
-// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' tgt-host-or-off=OFF  tgt-not-if-host=              )
+// RUN:   (run-if=                cflags='                                     -Xclang -verify'         tgt-host-or-off=HOST tgt-not-if-host='%not --crash')
+// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         tgt-host-or-off=OFF  tgt-not-if-host=              )
+// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         tgt-host-or-off=OFF  tgt-not-if-host=              )
 // RUN:   (run-if=%run-if-nvptx64 cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-host-or-off=OFF  tgt-not-if-host=              )
+// RUN:   (run-if=%run-if-amdgcn  cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         tgt-host-or-off=OFF  tgt-not-if-host=              )
 // RUN: }
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  host-or-off=%[tgt-host-or-off] not-if-host=%[tgt-not-if-host])
@@ -30,6 +31,8 @@
 // RUN:   (case=caseSetDeviceNumCurrent         not-if-fail=              )
 // RUN:   (case=caseSetDeviceNumNegOneNVIDIA    not-if-fail='%not --crash')
 // RUN:   (case=caseSetDeviceNumTooLargeNVIDIA  not-if-fail='%not --crash')
+// RUN:   (case=caseSetDeviceNumNegOneRADEON    not-if-fail='%not --crash')
+// RUN:   (case=caseSetDeviceNumTooLargeRADEON  not-if-fail='%not --crash')
 // RUN:   (case=caseSetDeviceNumNegOneX86_64    not-if-fail='%not --crash')
 // RUN:   (case=caseSetDeviceNumTooLargeX86_64  not-if-fail='%not --crash')
 // RUN:   (case=caseSetDeviceNumNegOnePPC64LE   not-if-fail='%not --crash')
@@ -194,11 +197,11 @@ CASE(caseSetDeviceNumTooLargeNotHost) {
                      acc_device_not_host);
 }
 CASE(caseSetDeviceNumNegOneDefault) {
-  // ERR-caseSetDeviceNumNegOneDefault-NEXT: OMP: Error #[[#]]: acc_set_device_num called with invalid device number -1 for acc_device_{{host|nvidia|x86_64|ppc64le}} (from acc_device_default)
+  // ERR-caseSetDeviceNumNegOneDefault-NEXT: OMP: Error #[[#]]: acc_set_device_num called with invalid device number -1 for acc_device_{{host|nvidia|radeon|x86_64|ppc64le}} (from acc_device_default)
   acc_set_device_num(-1, acc_device_default);
 }
 CASE(caseSetDeviceNumTooLargeDefault) {
-  // ERR-caseSetDeviceNumTooLargeDefault-NEXT: OMP: Error #[[#]]: acc_set_device_num called with invalid device number [[#%u,]] for acc_device_{{host|nvidia|x86_64|ppc64le}} (from acc_device_default)
+  // ERR-caseSetDeviceNumTooLargeDefault-NEXT: OMP: Error #[[#]]: acc_set_device_num called with invalid device number [[#%u,]] for acc_device_{{host|nvidia|radeon|x86_64|ppc64le}} (from acc_device_default)
   acc_set_device_num(acc_get_num_devices(acc_device_default),
                      acc_device_default);
 }
@@ -225,6 +228,14 @@ CASE(caseSetDeviceNumNegOneNVIDIA) {
 CASE(caseSetDeviceNumTooLargeNVIDIA) {
   // ERR-caseSetDeviceNumTooLargeNVIDIA-NEXT: OMP: Error #[[#]]: acc_set_device_num called with invalid device number [[#%u,]] for acc_device_nvidia
   acc_set_device_num(acc_get_num_devices(acc_device_nvidia), acc_device_nvidia);
+}
+CASE(caseSetDeviceNumNegOneRADEON) {
+  // ERR-caseSetDeviceNumNegOneRADEON-NEXT: OMP: Error #[[#]]: acc_set_device_num called with invalid device number -1 for acc_device_radeon
+  acc_set_device_num(-1, acc_device_radeon);
+}
+CASE(caseSetDeviceNumTooLargeRADEON) {
+  // ERR-caseSetDeviceNumTooLargeRADEON-NEXT: OMP: Error #[[#]]: acc_set_device_num called with invalid device number [[#%u,]] for acc_device_radeon
+  acc_set_device_num(acc_get_num_devices(acc_device_radeon), acc_device_radeon);
 }
 CASE(caseSetDeviceNumNegOneX86_64) {
   // ERR-caseSetDeviceNumNegOneX86_64-NEXT: OMP: Error #[[#]]: acc_set_device_num called with invalid device number -1 for acc_device_x86_64

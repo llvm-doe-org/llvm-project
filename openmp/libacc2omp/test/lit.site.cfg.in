@@ -29,9 +29,11 @@ def parseAccEnv(env):
 config.clang_acc_test_exe_x86_64 = parseAccEnv("@CLANG_ACC_TEST_EXE_X86_64@")
 config.clang_acc_test_exe_ppc64le = parseAccEnv("@CLANG_ACC_TEST_EXE_PPC64LE@")
 config.clang_acc_test_exe_nvptx64 = parseAccEnv("@CLANG_ACC_TEST_EXE_NVPTX64@")
+config.clang_acc_test_exe_amdgcn = parseAccEnv("@CLANG_ACC_TEST_EXE_AMDGCN@")
 config.clang_acc_test_exe_x86_64_triple = 'x86_64-unknown-linux-gnu';
 config.clang_acc_test_exe_ppc64le_triple = 'ppc64le-unknown-linux-gnu';
 config.clang_acc_test_exe_nvptx64_triple = 'nvptx64-nvidia-cuda';
+config.clang_acc_test_exe_amdgcn_triple = 'amdgcn-amd-amdhsa';
 
 # Let the main config do the real work.
 lit_config.load_config(config, "@CMAKE_CURRENT_SOURCE_DIR@/lit.cfg")

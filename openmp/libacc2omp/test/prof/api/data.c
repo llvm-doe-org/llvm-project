@@ -3,10 +3,11 @@
 // routines.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                cflags='                                     -Xclang -verify' tgt-acc-device=acc_device_host    tgt-host-or-off=HOST tgt-copy=COPY-DIRECT )
-// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' tgt-acc-device=acc_device_x86_64  tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
-// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' tgt-acc-device=acc_device_ppc64le tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
+// RUN:   (run-if=                cflags='                                     -Xclang -verify'         tgt-acc-device=acc_device_host    tgt-host-or-off=HOST tgt-copy=COPY-DIRECT )
+// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         tgt-acc-device=acc_device_x86_64  tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
+// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         tgt-acc-device=acc_device_ppc64le tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
 // RUN:   (run-if=%run-if-nvptx64 cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-acc-device=acc_device_nvidia  tgt-host-or-off=OFF  tgt-copy=COPY-DIRECT )
+// RUN:   (run-if=%run-if-amdgcn  cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         tgt-acc-device=acc_device_radeon  tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
 // RUN: }
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  host-or-off=%[tgt-host-or-off] copy=%[tgt-copy])

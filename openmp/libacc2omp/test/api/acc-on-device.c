@@ -19,10 +19,11 @@
 // RUN:   (context-cflags='-DACC2OMP_ENUM_VARIANTS_SUPPORTED=0 -DSKIP_CONST_EXPRS' const-expr=NO-CONST-EXPR)
 // RUN: }
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' tgt-type=host   )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' tgt-type=x86_64 )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' tgt-type=ppc64le)
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         tgt-type=host   )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         tgt-type=x86_64 )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         tgt-type=ppc64le)
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-type=nvptx64)
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         tgt-type=amdgcn )
 // RUN: }
 // RUN: %data run-envs {
 // RUN:   (run-env=                                  kern-type=%[tgt-type])
@@ -77,12 +78,14 @@
 //             CHECK-x86_64-NEXT:   inside kernel:  0
 //            CHECK-ppc64le-NEXT:   inside kernel:  0
 //            CHECK-nvptx64-NEXT:   inside kernel:  0
+//             CHECK-amdgcn-NEXT:   inside kernel:  0
 //                    CHECK-NEXT: acc_device_not_host:
 //                    CHECK-NEXT:   outside kernel: 0
 //               CHECK-host-NEXT:   inside kernel:  0
 //             CHECK-x86_64-NEXT:   inside kernel:  1
 //            CHECK-ppc64le-NEXT:   inside kernel:  1
 //            CHECK-nvptx64-NEXT:   inside kernel:  1
+//             CHECK-amdgcn-NEXT:   inside kernel:  1
 //                    CHECK-NEXT: acc_device_default:
 //                    CHECK-NEXT:   outside kernel: 0
 //                    CHECK-NEXT:   inside kernel:  0
@@ -95,30 +98,42 @@
 //             CHECK-x86_64-NEXT:   inside kernel:  0
 //            CHECK-ppc64le-NEXT:   inside kernel:  0
 //            CHECK-nvptx64-NEXT:   inside kernel:  1
+//             CHECK-amdgcn-NEXT:   inside kernel:  0
+//                    CHECK-NEXT: acc_device_radeon:
+//                    CHECK-NEXT:   outside kernel: 0
+//               CHECK-host-NEXT:   inside kernel:  0
+//             CHECK-x86_64-NEXT:   inside kernel:  0
+//            CHECK-ppc64le-NEXT:   inside kernel:  0
+//            CHECK-nvptx64-NEXT:   inside kernel:  0
+//             CHECK-amdgcn-NEXT:   inside kernel:  1
 //                    CHECK-NEXT: acc_device_x86_64:
 //                    CHECK-NEXT:   outside kernel: 0
 //               CHECK-host-NEXT:   inside kernel:  0
 //             CHECK-x86_64-NEXT:   inside kernel:  1
 //            CHECK-ppc64le-NEXT:   inside kernel:  0
 //            CHECK-nvptx64-NEXT:   inside kernel:  0
+//             CHECK-amdgcn-NEXT:   inside kernel:  0
 //                    CHECK-NEXT: acc_device_ppc64le:
 //                    CHECK-NEXT:   outside kernel: 0
 //               CHECK-host-NEXT:   inside kernel:  0
 //             CHECK-x86_64-NEXT:   inside kernel:  0
 //            CHECK-ppc64le-NEXT:   inside kernel:  1
 //            CHECK-nvptx64-NEXT:   inside kernel:  0
+//             CHECK-amdgcn-NEXT:   inside kernel:  0
 //         CHECK-CONST-EXPR-NEXT: acc_device_host (constant expression):
 //         CHECK-CONST-EXPR-NEXT:   outside kernel: 1
 //    CHECK-CONST-EXPR-host-NEXT:   inside kernel:  1
 //  CHECK-CONST-EXPR-x86_64-NEXT:   inside kernel:  0
 // CHECK-CONST-EXPR-ppc64le-NEXT:   inside kernel:  0
 // CHECK-CONST-EXPR-nvptx64-NEXT:   inside kernel:  0
+//  CHECK-CONST-EXPR-amdgcn-NEXT:   inside kernel:  0
 //         CHECK-CONST-EXPR-NEXT: acc_device_not_host (constant expression):
 //         CHECK-CONST-EXPR-NEXT:   outside kernel: 0
 //    CHECK-CONST-EXPR-host-NEXT:   inside kernel:  0
 //  CHECK-CONST-EXPR-x86_64-NEXT:   inside kernel:  1
 // CHECK-CONST-EXPR-ppc64le-NEXT:   inside kernel:  1
 // CHECK-CONST-EXPR-nvptx64-NEXT:   inside kernel:  1
+//  CHECK-CONST-EXPR-amdgcn-NEXT:   inside kernel:  1
 //                     CHECK-NOT: {{.}}
 
 static int insideKernel(acc_device_t devType) {
@@ -150,24 +165,29 @@ int main() {
   //     return 0;
   //   }
 #if !SKIP_CONST_EXPRS
+  int res;
   // FIXME: Clang produces confusing location info for these errors.
   // const-expr-err-error@* 4 {{expression is not an integer constant expression}}
+
   printf("acc_device_host (constant expression):\n");
   enum {ConstHostOutsideKernel = acc_on_device(acc_device_host)};
   printf("  outside kernel: %d\n", ConstHostOutsideKernel);
-  #pragma acc parallel num_gangs(1)
+  #pragma acc parallel num_gangs(1) copyout(res)
   {
     enum {ConstHostInsideKernel = acc_on_device(acc_device_host)};
-    printf("  inside kernel:  %d\n", ConstHostInsideKernel);
+    res = ConstHostInsideKernel;
   }
+  printf("  inside kernel:  %d\n", res);
+
   printf("acc_device_not_host (constant expression):\n");
   enum {ConstNotHostOutsideKernel = acc_on_device(acc_device_not_host)};
   printf("  outside kernel: %d\n", ConstNotHostOutsideKernel);
-  #pragma acc parallel num_gangs(1)
+  #pragma acc parallel num_gangs(1) copyout(res)
   {
     enum {ConstNotHostInsideKernel = acc_on_device(acc_device_not_host)};
-    printf("  inside kernel:  %d\n", ConstNotHostInsideKernel);
+    res = ConstNotHostInsideKernel;
   }
+  printf("  inside kernel:  %d\n", res);
 #endif
   return 0;
 }

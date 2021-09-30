@@ -860,7 +860,8 @@ static RTLDeviceInfoTy DeviceInfo;
 namespace {
 
 int32_t dataRetrieve(int32_t DeviceId, void *HstPtr, void *TgtPtr, int64_t Size,
-                     __tgt_async_info *AsyncInfo) {
+                     __tgt_async_info *AsyncInfo
+                     OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(AsyncInfo && "AsyncInfo is nullptr");
   assert(DeviceId < DeviceInfo.NumberOfDevices && "Device ID too large");
   // Return success if we are not copying back to host from target.
@@ -871,8 +872,47 @@ int32_t dataRetrieve(int32_t DeviceId, void *HstPtr, void *TgtPtr, int64_t Size,
      (long long unsigned)(Elf64_Addr)TgtPtr,
      (long long unsigned)(Elf64_Addr)HstPtr);
 
+#if OMPT_SUPPORT
+    // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
+    // "The target-data-op-begin event occurs before a thread initiates a data
+    // operation on a target device.  The target-data-op-end event occurs after
+    // a thread initiates a data operation on a target device."
+    //
+    // OpenMP 5.1, sec. 3.8.5 "omp_target_memcpy", p. 419, L4-5:
+    // "The target-data-op-begin event occurs before a thread initiates a data
+    // transfer.  The target-data-op-end event occurs after a thread initiated
+    // a data transfer."
+    //
+    // OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t and
+    // ompt_callback_target_data_op_t", p. 535, L25-27:
+    // "A thread dispatches a registered ompt_callback_target_data_op_emi or
+    // ompt_callback_target_data_op callback when device memory is allocated or
+    // freed, as well as when data is copied to or from a device."
+    //
+    // FIXME: We don't yet need the target_task_data, target_data, host_op_id,
+    // and codeptr_ra arguments for OpenACC support, so we haven't bothered to
+    // implement them yet.
+    if (ompt_api->ompt_target_enabled->ompt_callback_target_data_op_emi) {
+      ompt_api->ompt_target_callbacks->ompt_callback(
+          ompt_callback_target_data_op_emi)(
+          ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
+          /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, TgtPtr,
+          ompt_api->global_device_id, HstPtr,
+          ompt_api->omp_get_initial_device(), Size, /*codeptr_ra=*/NULL);
+    }
+#endif
   err = DeviceInfo.freesignalpool_memcpy_d2h(HstPtr, TgtPtr, (size_t)Size,
                                              DeviceId);
+#if OMPT_SUPPORT
+    if (ompt_api->ompt_target_enabled->ompt_callback_target_data_op_emi) {
+      ompt_api->ompt_target_callbacks->ompt_callback(
+          ompt_callback_target_data_op_emi)(
+          ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
+          /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, TgtPtr,
+          ompt_api->global_device_id, HstPtr,
+          ompt_api->omp_get_initial_device(), Size, /*codeptr_ra=*/NULL);
+    }
+#endif
 
   if (err != HSA_STATUS_SUCCESS) {
     DP("Error when copying data from device to host. Pointers: "
@@ -887,7 +927,8 @@ int32_t dataRetrieve(int32_t DeviceId, void *HstPtr, void *TgtPtr, int64_t Size,
 }
 
 int32_t dataSubmit(int32_t DeviceId, void *TgtPtr, void *HstPtr, int64_t Size,
-                   __tgt_async_info *AsyncInfo) {
+                   __tgt_async_info *AsyncInfo
+                   OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(AsyncInfo && "AsyncInfo is nullptr");
   hsa_status_t err;
   assert(DeviceId < DeviceInfo.NumberOfDevices && "Device ID too large");
@@ -898,8 +939,47 @@ int32_t dataSubmit(int32_t DeviceId, void *TgtPtr, void *HstPtr, int64_t Size,
   DP("Submit data %ld bytes, (hst:%016llx) -> (tgt:%016llx).\n", Size,
      (long long unsigned)(Elf64_Addr)HstPtr,
      (long long unsigned)(Elf64_Addr)TgtPtr);
+#if OMPT_SUPPORT
+    // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
+    // "The target-data-op-begin event occurs before a thread initiates a data
+    // operation on a target device.  The target-data-op-end event occurs after
+    // a thread initiates a data operation on a target device."
+    //
+    // OpenMP 5.1, sec. 3.8.5 "omp_target_memcpy", p. 419, L4-5:
+    // "The target-data-op-begin event occurs before a thread initiates a data
+    // transfer.  The target-data-op-end event occurs after a thread initiated
+    // a data transfer."
+    //
+    // OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t and
+    // ompt_callback_target_data_op_t", p. 535, L25-27:
+    // "A thread dispatches a registered ompt_callback_target_data_op_emi or
+    // ompt_callback_target_data_op callback when device memory is allocated or
+    // freed, as well as when data is copied to or from a device."
+    //
+    // FIXME: We don't yet need the target_task_data, target_data, host_op_id,
+    // and codeptr_ra arguments for OpenACC support, so we haven't bothered to
+    // implement them yet.
+    if (ompt_api->ompt_target_enabled->ompt_callback_target_data_op_emi) {
+      ompt_api->ompt_target_callbacks->ompt_callback(
+          ompt_callback_target_data_op_emi)(
+          ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
+          /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, HstPtr,
+          ompt_api->omp_get_initial_device(), TgtPtr,
+          ompt_api->global_device_id, Size, /*codeptr_ra=*/NULL);
+    }
+#endif
   err = DeviceInfo.freesignalpool_memcpy_h2d(TgtPtr, HstPtr, (size_t)Size,
                                              DeviceId);
+#if OMPT_SUPPORT
+    if (ompt_api->ompt_target_enabled->ompt_callback_target_data_op_emi) {
+      ompt_api->ompt_target_callbacks->ompt_callback(
+          ompt_callback_target_data_op_emi)(
+          ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
+          /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, HstPtr,
+          ompt_api->omp_get_initial_device(), TgtPtr,
+          ompt_api->global_device_id, Size, /*codeptr_ra=*/NULL);
+    }
+#endif
   if (err != HSA_STATUS_SUCCESS) {
     DP("Error when copying data from host to device. Pointers: "
        "host = 0x%016lx, device = 0x%016lx, size = %lld\n",
@@ -1855,7 +1935,8 @@ int32_t __tgt_rtl_data_submit(
     OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(device_id < DeviceInfo.NumberOfDevices && "Device ID too large");
   __tgt_async_info AsyncInfo;
-  int32_t rc = dataSubmit(device_id, tgt_ptr, hst_ptr, size, &AsyncInfo);
+  int32_t rc = dataSubmit(device_id, tgt_ptr, hst_ptr, size, &AsyncInfo
+                          OMPT_SUPPORT_IF(, ompt_api));
   if (rc != OFFLOAD_SUCCESS)
     return OFFLOAD_FAIL;
 
@@ -1869,7 +1950,8 @@ int32_t __tgt_rtl_data_submit_async(
   assert(device_id < DeviceInfo.NumberOfDevices && "Device ID too large");
   if (AsyncInfo) {
     initAsyncInfo(AsyncInfo);
-    return dataSubmit(device_id, tgt_ptr, hst_ptr, size, AsyncInfo);
+    return dataSubmit(device_id, tgt_ptr, hst_ptr, size, AsyncInfo
+                      OMPT_SUPPORT_IF(, ompt_api));
   } else {
     return __tgt_rtl_data_submit(device_id, tgt_ptr, hst_ptr, size
                                  OMPT_SUPPORT_IF(, ompt_api));
@@ -1881,7 +1963,8 @@ int32_t __tgt_rtl_data_retrieve(
     OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   assert(device_id < DeviceInfo.NumberOfDevices && "Device ID too large");
   __tgt_async_info AsyncInfo;
-  int32_t rc = dataRetrieve(device_id, hst_ptr, tgt_ptr, size, &AsyncInfo);
+  int32_t rc = dataRetrieve(device_id, hst_ptr, tgt_ptr, size, &AsyncInfo
+                            OMPT_SUPPORT_IF(, ompt_api));
   if (rc != OFFLOAD_SUCCESS)
     return OFFLOAD_FAIL;
 
@@ -1895,7 +1978,8 @@ int32_t __tgt_rtl_data_retrieve_async(
   assert(AsyncInfo && "AsyncInfo is nullptr");
   assert(device_id < DeviceInfo.NumberOfDevices && "Device ID too large");
   initAsyncInfo(AsyncInfo);
-  return dataRetrieve(device_id, hst_ptr, tgt_ptr, size, AsyncInfo);
+  return dataRetrieve(device_id, hst_ptr, tgt_ptr, size, AsyncInfo
+                      OMPT_SUPPORT_IF(, ompt_api));
 }
 
 int32_t __tgt_rtl_data_delete(int device_id, void *tgt_ptr) {
@@ -2068,7 +2152,8 @@ static uint64_t acquire_available_packet_id(hsa_queue_t *queue) {
 static int32_t __tgt_rtl_run_target_team_region_locked(
     int32_t device_id, void *tgt_entry_ptr, void **tgt_args,
     ptrdiff_t *tgt_offsets, int32_t arg_num, int32_t num_teams,
-    int32_t thread_limit, uint64_t loop_tripcount);
+    int32_t thread_limit, uint64_t loop_tripcount
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
 
 int32_t __tgt_rtl_run_target_team_region(
     int32_t device_id, void *tgt_entry_ptr, void **tgt_args,
@@ -2079,7 +2164,7 @@ int32_t __tgt_rtl_run_target_team_region(
   DeviceInfo.load_run_lock.lock_shared();
   int32_t res = __tgt_rtl_run_target_team_region_locked(
       device_id, tgt_entry_ptr, tgt_args, tgt_offsets, arg_num, num_teams,
-      thread_limit, loop_tripcount);
+      thread_limit, loop_tripcount OMPT_SUPPORT_IF(, ompt_api));
 
   DeviceInfo.load_run_lock.unlock_shared();
   return res;
@@ -2088,12 +2173,38 @@ int32_t __tgt_rtl_run_target_team_region(
 int32_t __tgt_rtl_run_target_team_region_locked(
     int32_t device_id, void *tgt_entry_ptr, void **tgt_args,
     ptrdiff_t *tgt_offsets, int32_t arg_num, int32_t num_teams,
-    int32_t thread_limit, uint64_t loop_tripcount) {
+    int32_t thread_limit, uint64_t loop_tripcount
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api)) {
   // Set the context we are using
   // update thread limit content in gpu memory if un-initialized or specified
   // from host
 
   DP("Run target team region thread_limit %d\n", thread_limit);
+
+#if OMPT_SUPPORT
+  // OpenMP 5.1, sec. 2.14.5 "target Construct", p. 201, L17-20:
+  // "The target-submit-begin event occurs prior to initiating creation of an
+  // initial task on a target device for a target region.  The target-submit-end
+  // event occurs after initiating creation of an initial task on a target
+  // device for a target region."
+  //
+  // OpenMP 5.1, sec. 4.5.2.28 "ompt_callback_target_submit_emi_t and
+  // ompt_callback_target_submit_t", p. 543, L2-6:
+  // "A thread dispatches a registered ompt_callback_target_submit_emi or
+  // ompt_callback_target_submit callback on the host before and after a target
+  // task initiates creation of an initial task on a device."
+  // "The endpoint argument indicates that the callback signals the beginning or
+  // end of a scope."
+  //
+  // FIXME: We don't yet need the target_data or host_op_id argument for
+  // OpenACC support, so we haven't bothered to implement it yet.
+  if (ompt_api->ompt_target_enabled->ompt_callback_target_submit_emi) {
+    ompt_api->ompt_target_callbacks->ompt_callback(
+        ompt_callback_target_submit_emi)(
+        ompt_scope_begin, /*target_data=*/NULL, /*host_op_id=*/NULL,
+        /*requested_num_teams=*/num_teams);
+  }
+#endif
 
   // All args are references.
   std::vector<void *> args(arg_num);
@@ -2253,6 +2364,14 @@ int32_t __tgt_rtl_run_target_team_region_locked(
                                core::create_header(), packet->setup);
 
     hsa_signal_store_relaxed(queue->doorbell_signal, packet_id);
+#if OMPT_SUPPORT
+    if (ompt_api->ompt_target_enabled->ompt_callback_target_submit_emi) {
+      ompt_api->ompt_target_callbacks->ompt_callback(
+          ompt_callback_target_submit_emi)(
+          ompt_scope_end, /*target_data=*/NULL, /*host_op_id=*/NULL,
+          /*requested_num_teams=*/num_teams);
+    }
+#endif
 
     while (hsa_signal_wait_scacquire(packet->completion_signal,
                                      HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX,

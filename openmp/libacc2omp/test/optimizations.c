@@ -19,6 +19,7 @@
 // RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify')
 // RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify')
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64')
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify')
 // RUN: }
 // RUN: %data run-envs {
 // RUN:   (run-env=                                 )
@@ -52,14 +53,13 @@
 
 // CHECK-NOT: {{.}}
 int main() {
-  // CHECK: before
-  printf("before\n");
-  #pragma acc parallel
-  // CHECK-NEXT: inside{{($[[:space:]]inside)*}}
-  printf("inside\n");
-  ;
-  // CHECK-NEXT: after
-  printf("after\n");
+  int i = 0;
+  // CHECK: before: 0
+  printf("before: %d\n", i);
+  #pragma acc parallel copy(i)
+  i = 5;
+  // CHECK-NEXT: after: 5
+  printf("after: %d\n", i);
   return 0;
 }
 // CHECK-NOT: {{.}}

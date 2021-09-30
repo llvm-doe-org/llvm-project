@@ -57,6 +57,7 @@ specify one or more of the following when running `cmake`:
 -DCLANG_ACC_TEST_EXE_X86_64=4  # x86_64-unknown-linux-gnu
 -DCLANG_ACC_TEST_EXE_PPC64LE=4 # ppc64le-unknown-linux-gnu
 -DCLANG_ACC_TEST_EXE_NVPTX64=6 # nvptx64-nvidia-cuda
+-DCLANG_ACC_TEST_EXE_AMDGCN=2  # amdgcn-amd-amdhsa
 ```
 
 In each case, the value should be `0`, the empty string, or
@@ -151,14 +152,27 @@ procedure above:
 $ export PATH=$CLACC_BUILD_DIR/bin:$PATH
 $ export LD_LIBRARY_PATH=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src:$LD_LIBRARY_PATH
 $ clang -fopenacc -fopenmp-targets=nvptx64-nvidia-cuda \
+  --libomptarget-nvptx-bc-path=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
   -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
   -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
   -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
-  --libomptarget-nvptx-bc-path=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
   -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
   -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
   test.c
 $ ./a.out
+```
+
+For an AMD GPU, change the Clang command line to:
+
+```
+$ clang -fopenacc -fopenmp-targets=amdgcn-amd-amdhsa \
+  --libomptarget-amdgcn-bc-path=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
+  -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
+  -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
+  -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
+  -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
+  -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
+  test.c
 ```
 
 ## Compiler Options
@@ -175,6 +189,7 @@ The most relevant `clang` command-line options are as follows:
         * `x86_64-unknown-linux-gnu` for x86_64.
         * `ppc64le-unknown-linux-gnu` for Power9.
         * `nvptx64-nvidia-cuda` for NVIDIA GPUs.
+        * `amdgcn-amd-amdhsa` for AMD GPUs.
     * In general, options starting with `-fopenmp-` adjust various
       OpenMP features when compiling the OpenMP translation.  So far,
       only `-fopenmp-targets=<triples>` has been tested.

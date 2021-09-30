@@ -10,10 +10,12 @@
 // after the kernel terminates.
 
 // RUN: %data tgts {
-// RUN:   (run-if=                cflags='                                     -Xclang -verify' host-or-off=HOST)
-// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host-or-off=OFF )
-// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' host-or-off=OFF )
-// RUN:   (run-if=%run-if-nvptx64 cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-off=OFF )
+// RUN:   (run-if=                cflags='                                     -Xclang -verify          -DTGT_PRINT' host-or-off=HOST tgt-print=TGT-PRINT   )
+// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify          -DTGT_PRINT' host-or-off=OFF  tgt-print=TGT-PRINT   )
+// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify          -DTGT_PRINT' host-or-off=OFF  tgt-print=TGT-PRINT   )
+// RUN:   (run-if=%run-if-nvptx64 cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64  -DTGT_PRINT' host-or-off=OFF  tgt-print=TGT-PRINT   )
+//        # FIXME: Add back the target printf check once amdgcn supports it.
+// RUN:   (run-if=%run-if-amdgcn  cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'                      host-or-off=OFF  tgt-print=NO-TGT-PRINT)
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -fopenacc %acc-includes %s -o %t %[cflags]
@@ -21,7 +23,7 @@
 // RUN:   %[run-if] FileCheck -input-file %t.out %s \
 // RUN:       -match-full-lines -strict-whitespace \
 // RUN:       -implicit-check-not=acc_ev_ \
-// RUN:       -check-prefixes=CHECK,%[host-or-off]
+// RUN:       -check-prefixes=CHECK,%[host-or-off],%[tgt-print]
 // RUN: }
 //
 // END.
@@ -41,18 +43,21 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
   register_all_callbacks(reg);
 }
 
-//   OFF:acc_ev_device_init_start
-//   OFF:acc_ev_device_init_end
-// CHECK:acc_ev_compute_construct_start
-// CHECK:acc_ev_enqueue_launch_start
-// CHECK:acc_ev_enqueue_launch_end
-// CHECK:hello world
-// CHECK:acc_ev_compute_construct_end
-//   OFF:acc_ev_device_shutdown_start
-//   OFF:acc_ev_device_shutdown_end
-// CHECK:acc_ev_runtime_shutdown
+//       OFF:acc_ev_device_init_start
+//       OFF:acc_ev_device_init_end
+//     CHECK:acc_ev_compute_construct_start
+//     CHECK:acc_ev_enqueue_launch_start
+//     CHECK:acc_ev_enqueue_launch_end
+// TGT-PRINT:hello world
+//     CHECK:acc_ev_compute_construct_end
+//       OFF:acc_ev_device_shutdown_start
+//       OFF:acc_ev_device_shutdown_end
+//     CHECK:acc_ev_runtime_shutdown
 int main() {
   #pragma acc parallel
-  printf("hello world\n");
+#if TGT_PRINT
+  printf("hello world\n")
+#endif
+  ;
   return 0;
 }

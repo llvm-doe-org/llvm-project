@@ -25,10 +25,11 @@
 //        Whether the target is host or device affects at least when
 //        ompt_start_tool and thus acc_register_library executes, so it seems
 //        worthwhile to make sure ACC_PROFLIB works in all cases.
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' fc=HOST)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' fc=OFF )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' fc=OFF )
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         fc=HOST)
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         fc=OFF )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         fc=OFF )
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' fc=OFF )
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         fc=OFF )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -fopenacc %acc-includes \

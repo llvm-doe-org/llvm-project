@@ -67,6 +67,12 @@
 // RUN:    tgt-cppflags=-DNVPTX64
 // RUN:    tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64'
 // RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],OFF-%[dir-fc3],NVPTX64,NVPTX64-%[dir-fc1],NVPTX64-%[dir-fc2],NVPTX64-%[dir-fc3])
+// RUN:   (run-if=%run-if-amdgcn
+// RUN:    tgt-acc-device=acc_device_radeon
+// RUN:    tgt-host-or-off=OFF
+// RUN:    tgt-cppflags=-DAMDGCN
+// RUN:    tgt-cflags='-fopenmp-targets=%run-amdgcn-triple -Xclang -verify'
+// RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],OFF-%[dir-fc3],AMDGCN,AMDGCN-%[dir-fc1],AMDGCN-%[dir-fc2],AMDGCN-%[dir-fc3])
 // RUN: }
 //      # Check offloading compilation both with and without offloading at run
 //      # time.  This is important because some runtime calls that must be
@@ -222,6 +228,10 @@
 
 #ifndef NVPTX64
 # define NVPTX64 0
+#endif
+
+#ifndef AMDGCN
+# define AMDGCN 0
 #endif
 
 // ERR-NOT:{{.}}
@@ -607,6 +617,12 @@ int main() {
   //  HOST-HASPAR-NEXT:    device_type=acc_device_host
   //   OFF-HASPAR-NEXT:    device_type=[[ACC_DEVICE]]
 
+#if AMDGCN
+  // Compiled as host printf.
+  int (*printfPtr)(const char *, int *, int, int) =
+      (int(*)(const char *, int *, int, int))printf;
+#endif
+
 #if DIR == DIR_ENTER_EXIT_DATA
   #line 20000
   #pragma acc enter data copyin(arr0, arr1[0:5])
@@ -647,11 +663,21 @@ int main() {
         // PPC64LE-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[0]=20
         // PPC64LE-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[1]=11
         // PPC64LE-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[1]=21
+        //
         // We omit NVPTX64 here because subsequent events might trigger before
         // kernel execution due to the use of CUDA streams.
-        if (!NVPTX64 || offloadDisabled) {
-          printf("inside: arr0=%p, arr0[%d]=%d\n", arr0, j, arr0[j]);
-          printf("inside: arr1=%p, arr1[%d]=%d\n", arr1, j, arr1[j]);
+        //
+        // FIXME: We omit AMDGCN here because it doesn't support target printf
+        // yet.  The ugly printfPtr hack is so that, in the case of AMDGCN, it
+        // only tries to link a host printf, which we need if offload is
+        // disabled.
+#if !AMDGCN
+        // Compiled as host and target printf.
+# define printfPtr printf
+#endif
+        if ((!NVPTX64 && !AMDGCN) || offloadDisabled) {
+          printfPtr("inside: arr0=%p, arr0[%d]=%d\n", arr0, j, arr0[j]);
+          printfPtr("inside: arr1=%p, arr1[%d]=%d\n", arr1, j, arr1[j]);
         }
       #line 100000
       }

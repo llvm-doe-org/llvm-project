@@ -146,6 +146,8 @@ omp_device_t acc2omp_get_omp_device_t(acc_device_t DevTypeACC) {
     return omp_device_host;
   case acc_device_nvidia:
     return omp_device_nvptx64;
+  case acc_device_radeon:
+    return omp_device_amdgcn;
   case acc_device_x86_64:
     return omp_device_x86_64;
   case acc_device_ppc64le:
@@ -167,6 +169,8 @@ acc_device_t acc2omp_get_acc_device_t(omp_device_t DevTypeOMP) {
     return acc_device_ppc64le;
   case omp_device_nvptx64:
     return acc_device_nvidia;
+  case omp_device_amdgcn:
+    return acc_device_radeon;
   }
   KMP_ASSERT2(0, "unexpected omp_device_t");
   return acc_device_none;

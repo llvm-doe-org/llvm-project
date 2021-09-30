@@ -12,10 +12,12 @@
 //        Whether the target is host or device affects at least when
 //        ompt_start_tool and thus acc_register_library executes, so it seems
 //        worthwhile to make sure ACC_PROFLIB works in all cases.
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' fc=HOST)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' fc=OFF )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' fc=OFF )
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' fc=OFF )
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify         -DTGT_PRINT' fc=HOST,TGT-PRINT)
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify         -DTGT_PRINT' fc=OFF,TGT-PRINT )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify         -DTGT_PRINT' fc=OFF,TGT-PRINT )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64 -DTGT_PRINT' fc=OFF,TGT-PRINT )
+//        # FIXME: Add back the target printf check once amdgcn supports it.
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'                     fc=OFF           )
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -fopenacc %acc-includes \
@@ -75,12 +77,15 @@ int main() {
   #pragma acc parallel num_gangs(1)
   // After an ACC_PROFLIB error, the kernel should not execute, and so stdout
   // should remain empty.
-  printf("success\n");
-  // CHECK: success
-  // CHECK: acc_ev_compute_construct_end
-  //   OFF: acc_ev_device_shutdown_start
-  //   OFF: acc_ev_device_shutdown_end
-  // CHECK: acc_ev_runtime_shutdown
+#if TGT_PRINT
+  printf("success\n")
+#endif
+  ;
+  // TGT-PRINT: success
+  //     CHECK: acc_ev_compute_construct_end
+  //       OFF: acc_ev_device_shutdown_start
+  //       OFF: acc_ev_device_shutdown_end
+  //     CHECK: acc_ev_runtime_shutdown
   return 0;
 }
 
