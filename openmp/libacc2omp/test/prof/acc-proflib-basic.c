@@ -75,14 +75,16 @@ int main() {
   // CHECK: acc_ev_enqueue_launch_start
   // CHECK: acc_ev_enqueue_launch_end
   #pragma acc parallel num_gangs(1)
-  // After an ACC_PROFLIB error, the kernel should not execute, and so stdout
-  // should remain empty.
+  // After an ACC_PROFLIB error, the kernel should not execute, and neither
+  // should host code after the kernel, and so stdout should remain empty.
+  // TGT-PRINT: in kernel
 #if TGT_PRINT
-  printf("success\n")
+  printf("in kernel\n")
 #endif
-  ;
-  // TGT-PRINT: success
   //     CHECK: acc_ev_compute_construct_end
+  ;
+  //     CHECK: after kernel
+  printf("after kernel\n");
   //       OFF: acc_ev_device_shutdown_start
   //       OFF: acc_ev_device_shutdown_end
   //     CHECK: acc_ev_runtime_shutdown
