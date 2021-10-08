@@ -6,13 +6,12 @@
 // cover copy, copyin, copyout, and create, which we just cycle through across
 // the various subarray extension cases.
 
-// Define some interrelated data we use several times below.
-//
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' host-or-off=HOST not-crash-if-off=             )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host-or-off=OFF  not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' host-or-off=OFF  not-crash-if-off='not --crash')
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         host-or-off=HOST not-crash-if-off=             )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         host-or-off=OFF  not-crash-if-off='not --crash')
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         host-or-off=OFF  not-crash-if-off='not --crash')
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-off=OFF  not-crash-if-off='not --crash')
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         host-or-off=OFF  not-crash-if-off='not --crash')
 // RUN: }
 //      # "acc parallel loop" should be about the same as "acc parallel", so a
 //      # few cases are probably sufficient for it.

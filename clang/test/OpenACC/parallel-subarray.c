@@ -41,8 +41,8 @@
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-accc=%[accc] prt-chk=PRT,PRT-A)
@@ -82,26 +82,35 @@
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
+// RUN: %data tgts {
+// RUN:   (run-if=                tgt=HOST tgt-cflags='                                     -Xclang -verify'        )
+// RUN:   (run-if=%run-if-x86_64  tgt=OFF  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'        )
+// RUN:   (run-if=%run-if-ppc64le tgt=OFF  tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'        )
+// RUN:   (run-if=%run-if-nvptx64 tgt=OFF  tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64')
+// RUN:   (run-if=%run-if-amdgcn  tgt=OFF  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'        )
+// RUN: }
 // RUN: %for clauses {
 // RUN:   %for prt-opts {
-// RUN:     %clang -Xclang -verify %[prt-opt]=omp -DACCC=%[accc] %s > %t-omp.c \
-// RUN:            -Wno-openacc-omp-map-ompx-hold
-// RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version -o %t \
-// RUN:            -DACCC=%[accc] %t-omp.c
-// RUN:     %t 2 2>&1 \
-// RUN:     | FileCheck -check-prefixes=EXE,EXE-%[fc],EXE-TGT-HOST-%[fc] %s
+// RUN:     %clang -Xclang -verify %[prt-opt]=omp -DACCC=%[accc] \
+// RUN:       -Wno-openacc-omp-map-ompx-hold %s > %t-%[prt-kind]-omp.c
+// RUN:     echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN:   }
+// RUN:   %clang -Xclang -verify -fopenmp %fopenmp-version -o %t \
+// RUN:     -DACCC=%[accc] %t-ast-prt-omp.c
+// RUN:   %t > %t.out 2>&1
+// RUN:   FileCheck -input-file %t.out %s \
+// RUN:     -check-prefixes=EXE,EXE-%[fc],EXE-TGT-HOST-%[fc]
+// RUN:   %for tgts {
+// RUN:     %[run-if] %clang -fopenmp %fopenmp-version -o %t %[tgt-cflags] \
+// RUN:       -DACCC=%[accc] %t-prt-omp.c
+// RUN:     %[run-if] %t > %t.out 2>&1
+// RUN:     %[run-if] FileCheck -input-file %t.out %s \
+// RUN:       -check-prefixes=EXE,EXE-%[fc],EXE-TGT-%[tgt]-%[fc]
 // RUN:   }
 // RUN: }
 
 // Check execution with normal compilation.
 //
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST tgt-cflags='                                     -Xclang -verify')
-// RUN:   (run-if=%run-if-x86_64  tgt=OFF  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify')
-// RUN:   (run-if=%run-if-ppc64le tgt=OFF  tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify')
-// RUN:   (run-if=%run-if-nvptx64 tgt=OFF  tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64')
-// RUN: }
 // RUN: %for clauses {
 // RUN:   %for tgts {
 // RUN:     %[run-if] %clang -fopenacc -o %t %[tgt-cflags] \

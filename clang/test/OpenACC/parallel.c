@@ -40,8 +40,8 @@
 // the prt-args definition.
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
@@ -78,31 +78,48 @@
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
+// FIXME: amdgcn doesn't yet support printf in a kernel.  Unfortunately, That
+// means our execution checks on amdgcn don't verify much except that nothing
+// crashes.
+//
+// RUN: %data tgts {
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'                   tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'                   tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'                   tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64'           tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify -DTGT_USE_STDIO=0' tgt-use-stdio=NO-TGT-USE-STDIO)
+// RUN: }
 // RUN: %for directives {
 // RUN:   %for prt-opts {
-// RUN:     %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c %[dir-cflags]
-// RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version  \
-// RUN:            -Wno-unused-function %[dir-cflags] -o %t %t-omp.c
-// RUN:     %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-%[dir] %s
+// RUN:     %clang -Xclang -verify %[prt-opt]=omp %s > %t-%[prt-kind]-omp.c \
+// RUN:       %[dir-cflags]
+// RUN:     echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN:   }
+// RUN:   %clang -Xclang -verify -fopenmp %fopenmp-version  \
+// RUN:          -Wno-unused-function %[dir-cflags] -o %t %t-ast-prt-omp.c
+// RUN:   %t 2 > %t.out 2>&1
+// RUN:   FileCheck -input-file %t.out %s \
+// RUN:     -check-prefixes=EXE,EXE-%[dir] \
+// RUN:     -check-prefixes=EXE-TGT-USE-STDIO,EXE-%[dir]-TGT-USE-STDIO
+// RUN:   %for tgts {
+// RUN:     %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] \
+// RUN:       %[dir-cflags] -o %t %t-prt-omp.c
+// RUN:     %[run-if] %t 2 > %t.out 2>&1
+// RUN:     %[run-if] FileCheck -input-file %t.out %s \
+// RUN:       -check-prefixes=EXE,EXE-%[dir] \
+// RUN:       -check-prefixes=EXE-%[tgt-use-stdio],EXE-%[dir]-%[tgt-use-stdio]
 // RUN:   }
 // RUN: }
 
 // Check execution with normal compilation.
 //
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify')
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify')
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64')
-// RUN: }
 // RUN: %for directives {
 // RUN:   %for tgts {
-// RUN:     %[run-if] %clang -fopenacc %s -o %t \
-// RUN:                      %[tgt-cflags] %[dir-cflags]
+// RUN:     %[run-if] %clang -fopenacc -o %t %[tgt-cflags] %[dir-cflags] %s
 // RUN:     %[run-if] %t 2 > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:                         -check-prefixes=EXE,EXE-%[dir]
+// RUN:       -check-prefixes=EXE,EXE-%[dir] \
+// RUN:       -check-prefixes=EXE-%[tgt-use-stdio],EXE-%[dir]-%[tgt-use-stdio]
 // RUN:   }
 // RUN: }
 
@@ -124,6 +141,16 @@
 #else
 # define LOOP loop seq
 # define FORLOOP_HEAD for (int i = 0; i < 2; ++i)
+#endif
+
+#ifndef TGT_USE_STDIO
+# define TGT_USE_STDIO 1
+#endif
+
+#if TGT_USE_STDIO
+# define TGT_PRINTF(...) printf(__VA_ARGS__)
+#else
+# define TGT_PRINTF(...)
 #endif
 
 // PRT: int main(int argc, char *argv[]) {
@@ -159,17 +186,17 @@ int main(int argc, char *argv[]) {
   // PRT-PARLOOP-NEXT: {{FORLOOP_HEAD|for \(.*\)}}
   FORLOOP_HEAD
     // DMP: CallExpr
-    // PRT-NEXT: printf("hello world\n");
+    // PRT-NEXT: {{TGT_PRINTF|printf}}("hello world\n");
     //
-    // EXE-NEXT: hello world
-    // EXE-NEXT: hello world
-    // EXE-NEXT: hello world
-    // EXE-NEXT: hello world
-    // EXE-PARLOOP-NEXT: hello world
-    // EXE-PARLOOP-NEXT: hello world
-    // EXE-PARLOOP-NEXT: hello world
-    // EXE-PARLOOP-NEXT: hello world
-    printf("hello world\n");
+    //         EXE-TGT-USE-STDIO-NEXT: hello world
+    //         EXE-TGT-USE-STDIO-NEXT: hello world
+    //         EXE-TGT-USE-STDIO-NEXT: hello world
+    //         EXE-TGT-USE-STDIO-NEXT: hello world
+    // EXE-PARLOOP-TGT-USE-STDIO-NEXT: hello world
+    // EXE-PARLOOP-TGT-USE-STDIO-NEXT: hello world
+    // EXE-PARLOOP-TGT-USE-STDIO-NEXT: hello world
+    // EXE-PARLOOP-TGT-USE-STDIO-NEXT: hello world
+    TGT_PRINTF("hello world\n");
 
   // DMP-PAR:          ACCParallelDirective
   // DMP-PARLOOP:      ACCParallelLoopDirective
@@ -192,10 +219,10 @@ int main(int argc, char *argv[]) {
   // PRT-PARLOOP-NEXT: {{FORLOOP_HEAD|for \(.*\)}}
   FORLOOP_HEAD
     // DMP: CallExpr
-    // PRT-NEXT: printf("crazy world\n");
-    // EXE-NEXT:         crazy world
-    // EXE-PARLOOP-NEXT: crazy world
-    printf("crazy world\n");
+    // PRT-NEXT: {{TGT_PRINTF|printf}}("crazy world\n");
+    //         EXE-TGT-USE-STDIO-NEXT: crazy world
+    // EXE-PARLOOP-TGT-USE-STDIO-NEXT: crazy world
+    TGT_PRINTF("crazy world\n");
 
   // The number of gangs for the previous parallel construct is determined by
   // the implementation, so we don't know how many times it will print, so
@@ -233,12 +260,12 @@ int main(int argc, char *argv[]) {
   // PRT-PARLOOP-NEXT: {{FORLOOP_HEAD|for \(.*\)}}
   FORLOOP_HEAD
     // DMP: CallExpr
-    // PRT-NEXT: printf("goodbye world\n");
-    // EXE-NEXT:         goodbye world
-    // EXE-NEXT:         goodbye world
-    // EXE-PARLOOP-NEXT: goodbye world
-    // EXE-PARLOOP-NEXT: goodbye world
-    printf("goodbye world\n");
+    // PRT-NEXT: {{TGT_PRINTF|printf}}("goodbye world\n");
+    //         EXE-TGT-USE-STDIO-NEXT: goodbye world
+    //         EXE-TGT-USE-STDIO-NEXT: goodbye world
+    // EXE-PARLOOP-TGT-USE-STDIO-NEXT: goodbye world
+    // EXE-PARLOOP-TGT-USE-STDIO-NEXT: goodbye world
+    TGT_PRINTF("goodbye world\n");
 
   // PRT-NEXT: return 0;
   return 0;

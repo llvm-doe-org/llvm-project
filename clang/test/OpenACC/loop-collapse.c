@@ -22,8 +22,8 @@
 // the prt-args definition.
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT-A,PRT)
@@ -55,14 +55,10 @@
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
-// RUN: %for prt-opts {
-// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c
-// RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:   %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c
-// RUN:   %t 2 2>&1 | FileCheck -check-prefix=EXE -match-full-lines %s
-// RUN: }
-
-// Check execution with normal compilation.
+// -fopenacc-ast-print is guaranteed to expand includes and macros appropiately
+// only for the host architecture, so don't try to use it for offload
+// compilation.  Do try it for the host as it's good way to catch AST printing
+// issues.
 //
 // FIXME: Several upstream compiler bugs were recently introduced that break
 // behavior when offloading to nvptx64 unless we add -O1 or higher, but that
@@ -72,17 +68,52 @@
 //
 // To avoid all this until upstream fixes it, we add -O1 -Wno-pass-failed.
 //
+// FIXME: amdgcn doesn't yet support printf in a kernel.  Unfortunately, That
+// means our execution checks on amdgcn don't verify much except that nothing
+// crashes.
+//
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify')
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify')
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed -Xclang -verify=nvptx64')
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed -Xclang -verify=nvptx64' tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify -DTGT_USE_STDIO=0'            tgt-use-stdio=NO-TGT-USE-STDIO)
 // RUN: }
+//      # FIXME: amdgcn doesn't yet support printf in a kernel, but
+//      # -fopenacc-print=omp still fails to suppress macro expansion in some
+//      # kernels.  To avoid expanding TGT_PRINTF to printf here and thus
+//      # breaking amdgcn compilation later, we prototype TGT_PRINTF as a
+//      # function here, and then we define it to either printf or nothing
+//      # when we compile for the target.  When either of those limitations is
+//      # fixed, this hack can go away.  Once it does, the -DTGT_PRINTF=printf
+//      # in the %t-ast-prt-omp.c case below will be redundant and so can go
+//      # away too.
+// RUN: %for prt-opts {
+// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-%[prt-kind]-omp.c \
+// RUN:     -DTGT_PRINTF_PROTO
+// RUN:   echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN:   echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN: }
+// RUN: %clang -fopenmp %fopenmp-version -Xclang -verify -o %t \
+// RUN:   -DTGT_PRINTF=printf %t-ast-prt-omp.c
+// RUN: %t > %t.out 2>&1
+// RUN: FileCheck -input-file %t.out %s -match-full-lines \
+// RUN:   -check-prefixes=EXE,EXE-TGT-USE-STDIO
+// RUN: %for tgts {
+// RUN:   %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] -o %t \
+// RUN:     %t-prt-omp.c
+// RUN:   %[run-if] %t > %t.out 2>&1
+// RUN:   %[run-if] FileCheck -input-file %t.out %s -match-full-lines \
+// RUN:     -check-prefixes=EXE,EXE-%[tgt-use-stdio]
+// RUN: }
+
+// Check execution with normal compilation.
+//
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -fopenacc %s -o %t %[tgt-cflags]
-// RUN:   %[run-if] %t 2 > %t.out 2>&1
+// RUN:   %[run-if] %t > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s -match-full-lines \
-// RUN:                       -check-prefixes=EXE
+// RUN:                       -check-prefixes=EXE,EXE-%[tgt-use-stdio]
 // RUN: }
 
 // END.
@@ -96,6 +127,18 @@
 
 #include <stdio.h>
 
+#ifndef TGT_USE_STDIO
+# define TGT_USE_STDIO 1
+#endif
+
+#if TGT_PRINTF_PROTO
+int TGT_PRINTF(const char *, ...);
+#elif TGT_USE_STDIO
+# define TGT_PRINTF(...) printf(__VA_ARGS__)
+#else
+# define TGT_PRINTF(...)
+#endif
+
 // PRT: int main() {
 int main() {
   //--------------------------------------------------
@@ -103,7 +146,7 @@ int main() {
   //--------------------------------------------------
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("loop seq\n");
   // EXE-LABEL: loop seq
   printf("loop seq\n");
 
@@ -138,15 +181,15 @@ int main() {
     // PRT-NEXT: for (int j ={{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-NEXT: 0, 0
-      // EXE-NEXT: 0, 1
-      // EXE-NEXT: 1, 0
-      // EXE-NEXT: 1, 1
-      printf("%d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-NEXT: 0, 0
+      // EXE-TGT-USE-STDIO-NEXT: 0, 1
+      // EXE-TGT-USE-STDIO-NEXT: 1, 0
+      // EXE-TGT-USE-STDIO-NEXT: 1, 1
+      TGT_PRINTF("%d, %d\n", i, j);
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("parallel loop seq\n");
   // EXE-LABEL: parallel loop seq
   printf("parallel loop seq\n");
 
@@ -183,19 +226,19 @@ int main() {
     // PRT-NEXT: for (int j ={{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-NEXT: 0, 0
-      // EXE-NEXT: 0, 1
-      // EXE-NEXT: 1, 0
-      // EXE-NEXT: 1, 1
-      printf("%d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-NEXT: 0, 0
+      // EXE-TGT-USE-STDIO-NEXT: 0, 1
+      // EXE-TGT-USE-STDIO-NEXT: 1, 0
+      // EXE-TGT-USE-STDIO-NEXT: 1, 1
+      TGT_PRINTF("%d, %d\n", i, j);
 
   //--------------------------------------------------
   // Implicit independent, implicit gang partitioning.
   //--------------------------------------------------
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("loop\n");
   // EXE-LABEL: loop
   printf("loop\n");
 
@@ -236,15 +279,15 @@ int main() {
     // PRT-NEXT: for (int j ={{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-NEXT: 0, 0
-      // EXE-NEXT: 0, 1
-      // EXE-NEXT: 1, 0
-      // EXE-NEXT: 1, 1
-      printf("%d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-NEXT: 0, 0
+      // EXE-TGT-USE-STDIO-NEXT: 0, 1
+      // EXE-TGT-USE-STDIO-NEXT: 1, 0
+      // EXE-TGT-USE-STDIO-NEXT: 1, 1
+      TGT_PRINTF("%d, %d\n", i, j);
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("parallel loop\n");
   // EXE-LABEL: parallel loop
   printf("parallel loop\n");
 
@@ -288,19 +331,19 @@ int main() {
     // PRT-NEXT: for (int j ={{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-NEXT: 0, 0
-      // EXE-NEXT: 0, 1
-      // EXE-NEXT: 1, 0
-      // EXE-NEXT: 1, 1
-      printf("%d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-NEXT: 0, 0
+      // EXE-TGT-USE-STDIO-NEXT: 0, 1
+      // EXE-TGT-USE-STDIO-NEXT: 1, 0
+      // EXE-TGT-USE-STDIO-NEXT: 1, 1
+      TGT_PRINTF("%d, %d\n", i, j);
 
   //--------------------------------------------------
   // Explicit independent, implicit gang partitioning.
   //--------------------------------------------------
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("loop independent\n");
   // EXE-LABEL: loop independent
   printf("loop independent\n");
 
@@ -342,15 +385,15 @@ int main() {
     // PRT-NEXT: for (int j ={{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-NEXT: 0, 0
-      // EXE-NEXT: 0, 1
-      // EXE-NEXT: 1, 0
-      // EXE-NEXT: 1, 1
-      printf("%d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-NEXT: 0, 0
+      // EXE-TGT-USE-STDIO-NEXT: 0, 1
+      // EXE-TGT-USE-STDIO-NEXT: 1, 0
+      // EXE-TGT-USE-STDIO-NEXT: 1, 1
+      TGT_PRINTF("%d, %d\n", i, j);
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("parallel loop independent\n");
   // EXE-LABEL: parallel loop independent
   printf("parallel loop independent\n");
 
@@ -397,19 +440,19 @@ int main() {
     // PRT-NEXT: for (int j ={{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-NEXT: 0, 0
-      // EXE-NEXT: 0, 1
-      // EXE-NEXT: 1, 0
-      // EXE-NEXT: 1, 1
-      printf("%d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-NEXT: 0, 0
+      // EXE-TGT-USE-STDIO-NEXT: 0, 1
+      // EXE-TGT-USE-STDIO-NEXT: 1, 0
+      // EXE-TGT-USE-STDIO-NEXT: 1, 1
+      TGT_PRINTF("%d, %d\n", i, j);
 
   //--------------------------------------------------
   // Explicit auto with partitioning.
   //--------------------------------------------------
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("loop auto\n");
   // EXE-LABEL: loop auto
   printf("loop auto\n");
 
@@ -445,15 +488,15 @@ int main() {
     // PRT-NEXT: for (int j ={{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-NEXT: 0, 0
-      // EXE-NEXT: 0, 1
-      // EXE-NEXT: 1, 0
-      // EXE-NEXT: 1, 1
-      printf("%d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-NEXT: 0, 0
+      // EXE-TGT-USE-STDIO-NEXT: 0, 1
+      // EXE-TGT-USE-STDIO-NEXT: 1, 0
+      // EXE-TGT-USE-STDIO-NEXT: 1, 1
+      TGT_PRINTF("%d, %d\n", i, j);
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("parallel loop auto\n");
   // EXE-LABEL: parallel loop auto
   printf("parallel loop auto\n");
 
@@ -492,19 +535,19 @@ int main() {
     // PRT-NEXT: for (int j ={{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: 0, 0
-      // EXE-DAG: 0, 1
-      // EXE-DAG: 1, 0
-      // EXE-DAG: 1, 1
-      printf("%d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: 0, 0
+      // EXE-TGT-USE-STDIO-DAG: 0, 1
+      // EXE-TGT-USE-STDIO-DAG: 1, 0
+      // EXE-TGT-USE-STDIO-DAG: 1, 1
+      TGT_PRINTF("%d, %d\n", i, j);
 
   //--------------------------------------------------
   // Worker or vector partitioned.
   //--------------------------------------------------
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("loop worker\n");
   // EXE-LABEL: loop worker
   printf("loop worker\n");
 
@@ -548,15 +591,15 @@ int main() {
     // PRT-NEXT: for (int j ={{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: 0, 0
-      // EXE-DAG: 0, 1
-      // EXE-DAG: 1, 0
-      // EXE-DAG: 1, 1
-      printf("%d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: 0, 0
+      // EXE-TGT-USE-STDIO-DAG: 0, 1
+      // EXE-TGT-USE-STDIO-DAG: 1, 0
+      // EXE-TGT-USE-STDIO-DAG: 1, 1
+      TGT_PRINTF("%d, %d\n", i, j);
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("parallel loop vector\n");
   // EXE-LABEL: parallel loop vector
   printf("parallel loop vector\n");
 
@@ -608,19 +651,19 @@ int main() {
     // PRT-NEXT: for (int j ={{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: 0, 0
-      // EXE-DAG: 0, 1
-      // EXE-DAG: 1, 0
-      // EXE-DAG: 1, 1
-      printf("%d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: 0, 0
+      // EXE-TGT-USE-STDIO-DAG: 0, 1
+      // EXE-TGT-USE-STDIO-DAG: 1, 0
+      // EXE-TGT-USE-STDIO-DAG: 1, 1
+      TGT_PRINTF("%d, %d\n", i, j);
 
   //--------------------------------------------------
   // Explicit gang partitioned.
   //--------------------------------------------------
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("loop gang\n");
   // EXE-LABEL: loop gang
   printf("loop gang\n");
 
@@ -660,15 +703,15 @@ int main() {
     // PRT-NEXT: for (int j ={{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: 0, 0
-      // EXE-DAG: 0, 1
-      // EXE-DAG: 1, 0
-      // EXE-DAG: 1, 1
-      printf("%d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: 0, 0
+      // EXE-TGT-USE-STDIO-DAG: 0, 1
+      // EXE-TGT-USE-STDIO-DAG: 1, 0
+      // EXE-TGT-USE-STDIO-DAG: 1, 1
+      TGT_PRINTF("%d, %d\n", i, j);
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("parallel loop gang\n");
   // EXE-LABEL: parallel loop gang
   printf("parallel loop gang\n");
 
@@ -716,23 +759,23 @@ int main() {
       // PRT-NEXT: for (int k ={{.*}})
       for (int k = 0; k < 2; ++k)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: 0, 0, 0
-        // EXE-DAG: 0, 0, 1
-        // EXE-DAG: 0, 1, 0
-        // EXE-DAG: 0, 1, 1
-        // EXE-DAG: 1, 0, 0
-        // EXE-DAG: 1, 0, 1
-        // EXE-DAG: 1, 1, 0
-        // EXE-DAG: 1, 1, 1
-        printf("%d, %d, %d\n", i, j, k);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+        // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+        // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+        // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+        // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+        // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+        // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+        // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
+        TGT_PRINTF("%d, %d, %d\n", i, j, k);
 
   //--------------------------------------------------
   // More loops than necessary.
   //--------------------------------------------------
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("loop 1 {1}\n");
   // EXE-LABEL: loop 1 {1}
   printf("loop 1 {1}\n");
 
@@ -772,16 +815,16 @@ int main() {
     // PRT-NEXT: for (int j ={{.*}})
     for (int j = 0; j < 4; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
       // For any i, values of j must print in ascending order.
-      // EXE: 0, 0
-      // EXE: 0, 1
-      // EXE: 0, 2
-      // EXE: 0, 3
-      printf("%d, %d\n", i, j);
+      // EXE-TGT-USE-STDIO: 0, 0
+      // EXE-TGT-USE-STDIO: 0, 1
+      // EXE-TGT-USE-STDIO: 0, 2
+      // EXE-TGT-USE-STDIO: 0, 3
+      TGT_PRINTF("%d, %d\n", i, j);
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("loop 2 {1}\n");
   // EXE-LABEL: loop 2 {1}
   printf("loop 2 {1}\n");
 
@@ -823,14 +866,14 @@ int main() {
       // PRT-NEXT: for (int k ={{.*}})
       for (int k = 0; k < 2; ++k)
         // DMP: CallExpr
-        // PRT-NEXT: printf
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
         // For any pair (i,j), values of k must print in ascending order.
-        // EXE: 1, 0, 0
-        // EXE: 1, 0, 1
-        printf("%d, %d, %d\n", i, j, k);
+        // EXE-TGT-USE-STDIO: 1, 0, 0
+        // EXE-TGT-USE-STDIO: 1, 0, 1
+        TGT_PRINTF("%d, %d, %d\n", i, j, k);
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("parallel loop 2 {2}\n");
   // EXE-LABEL: parallel loop 2 {2}
   printf("parallel loop 2 {2}\n");
 
@@ -881,20 +924,20 @@ int main() {
         // PRT-NEXT: for (int l ={{.*}})
         for (int l = 0; l < 2; ++l)
           // DMP: CallExpr
-          // PRT-NEXT: printf
+          // PRT-NEXT: {{TGT_PRINTF|printf}}
           // For any pair (i,j), values of (k,l) must print in ascending order.
-          // EXE: 0, 1, 0, 0
-          // EXE: 0, 1, 0, 1
-          // EXE: 0, 1, 1, 0
-          // EXE: 0, 1, 1, 1
-          printf("%d, %d, %d, %d\n", i, j, k, l);
+          // EXE-TGT-USE-STDIO: 0, 1, 0, 0
+          // EXE-TGT-USE-STDIO: 0, 1, 0, 1
+          // EXE-TGT-USE-STDIO: 0, 1, 1, 0
+          // EXE-TGT-USE-STDIO: 0, 1, 1, 1
+          TGT_PRINTF("%d, %d, %d, %d\n", i, j, k, l);
 
   //--------------------------------------------------
   // Nested collapse.
   //--------------------------------------------------
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("loop 2 {loop 2}\n");
   // EXE-LABEL: loop 2 {loop 2}
   printf("loop 2 {loop 2}\n");
 
@@ -966,27 +1009,27 @@ int main() {
         // PRT-NEXT: for (int l ={{.*}})
         for (int l = 0; l < 2; ++l)
           // DMP: CallExpr
-          // PRT-NEXT: printf
-          // EXE-DAG: 0, 0, 0, 0
-          // EXE-DAG: 0, 0, 0, 1
-          // EXE-DAG: 0, 0, 1, 0
-          // EXE-DAG: 0, 0, 1, 1
-          // EXE-DAG: 0, 1, 0, 0
-          // EXE-DAG: 0, 1, 0, 1
-          // EXE-DAG: 0, 1, 1, 0
-          // EXE-DAG: 0, 1, 1, 1
-          // EXE-DAG: 1, 0, 0, 0
-          // EXE-DAG: 1, 0, 0, 1
-          // EXE-DAG: 1, 0, 1, 0
-          // EXE-DAG: 1, 0, 1, 1
-          // EXE-DAG: 1, 1, 0, 0
-          // EXE-DAG: 1, 1, 0, 1
-          // EXE-DAG: 1, 1, 1, 0
-          // EXE-DAG: 1, 1, 1, 1
-          printf("%d, %d, %d, %d\n", i, j, k, l);
+          // PRT-NEXT: {{TGT_PRINTF|printf}}
+          // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 0
+          // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 1
+          // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 0
+          // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 1
+          // EXE-TGT-USE-STDIO-DAG: 0, 1, 0, 0
+          // EXE-TGT-USE-STDIO-DAG: 0, 1, 0, 1
+          // EXE-TGT-USE-STDIO-DAG: 0, 1, 1, 0
+          // EXE-TGT-USE-STDIO-DAG: 0, 1, 1, 1
+          // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 0
+          // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 1
+          // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 0
+          // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 1
+          // EXE-TGT-USE-STDIO-DAG: 1, 1, 0, 0
+          // EXE-TGT-USE-STDIO-DAG: 1, 1, 0, 1
+          // EXE-TGT-USE-STDIO-DAG: 1, 1, 1, 0
+          // EXE-TGT-USE-STDIO-DAG: 1, 1, 1, 1
+          TGT_PRINTF("%d, %d, %d, %d\n", i, j, k, l);
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("parallel loop 2 {loop 2 {loop 2}}\n");
   // EXE-LABEL: parallel loop 2 {loop 2 {loop 2}}
   printf("parallel loop 2 {loop 2 {loop 2}}\n");
 
@@ -1102,72 +1145,72 @@ int main() {
             // PRT-NEXT: for (int n ={{.*}})
             for (int n = 0; n < 2; ++n)
               // DMP: CallExpr
-              // PRT-NEXT: printf({{.*}}
-              // EXE-DAG: 0, 0, 0, 0, 0, 0
-              // EXE-DAG: 0, 0, 0, 0, 0, 1
-              // EXE-DAG: 0, 0, 0, 0, 1, 0
-              // EXE-DAG: 0, 0, 0, 0, 1, 1
-              // EXE-DAG: 0, 0, 0, 1, 0, 0
-              // EXE-DAG: 0, 0, 0, 1, 0, 1
-              // EXE-DAG: 0, 0, 0, 1, 1, 0
-              // EXE-DAG: 0, 0, 0, 1, 1, 1
-              // EXE-DAG: 0, 0, 1, 0, 0, 0
-              // EXE-DAG: 0, 0, 1, 0, 0, 1
-              // EXE-DAG: 0, 0, 1, 0, 1, 0
-              // EXE-DAG: 0, 0, 1, 0, 1, 1
-              // EXE-DAG: 0, 0, 1, 1, 0, 0
-              // EXE-DAG: 0, 0, 1, 1, 0, 1
-              // EXE-DAG: 0, 0, 1, 1, 1, 0
-              // EXE-DAG: 0, 0, 1, 1, 1, 1
-              // EXE-DAG: 0, 1, 0, 0, 0, 0
-              // EXE-DAG: 0, 1, 0, 0, 0, 1
-              // EXE-DAG: 0, 1, 0, 0, 1, 0
-              // EXE-DAG: 0, 1, 0, 0, 1, 1
-              // EXE-DAG: 0, 1, 0, 1, 0, 0
-              // EXE-DAG: 0, 1, 0, 1, 0, 1
-              // EXE-DAG: 0, 1, 0, 1, 1, 0
-              // EXE-DAG: 0, 1, 0, 1, 1, 1
-              // EXE-DAG: 0, 1, 1, 0, 0, 0
-              // EXE-DAG: 0, 1, 1, 0, 0, 1
-              // EXE-DAG: 0, 1, 1, 0, 1, 0
-              // EXE-DAG: 0, 1, 1, 0, 1, 1
-              // EXE-DAG: 0, 1, 1, 1, 0, 0
-              // EXE-DAG: 0, 1, 1, 1, 0, 1
-              // EXE-DAG: 0, 1, 1, 1, 1, 0
-              // EXE-DAG: 0, 1, 1, 1, 1, 1
-              // EXE-DAG: 1, 0, 0, 0, 0, 0
-              // EXE-DAG: 1, 0, 0, 0, 0, 1
-              // EXE-DAG: 1, 0, 0, 0, 1, 0
-              // EXE-DAG: 1, 0, 0, 0, 1, 1
-              // EXE-DAG: 1, 0, 0, 1, 0, 0
-              // EXE-DAG: 1, 0, 0, 1, 0, 1
-              // EXE-DAG: 1, 0, 0, 1, 1, 0
-              // EXE-DAG: 1, 0, 0, 1, 1, 1
-              // EXE-DAG: 1, 0, 1, 0, 0, 0
-              // EXE-DAG: 1, 0, 1, 0, 0, 1
-              // EXE-DAG: 1, 0, 1, 0, 1, 0
-              // EXE-DAG: 1, 0, 1, 0, 1, 1
-              // EXE-DAG: 1, 0, 1, 1, 0, 0
-              // EXE-DAG: 1, 0, 1, 1, 0, 1
-              // EXE-DAG: 1, 0, 1, 1, 1, 0
-              // EXE-DAG: 1, 0, 1, 1, 1, 1
-              // EXE-DAG: 1, 1, 0, 0, 0, 0
-              // EXE-DAG: 1, 1, 0, 0, 0, 1
-              // EXE-DAG: 1, 1, 0, 0, 1, 0
-              // EXE-DAG: 1, 1, 0, 0, 1, 1
-              // EXE-DAG: 1, 1, 0, 1, 0, 0
-              // EXE-DAG: 1, 1, 0, 1, 0, 1
-              // EXE-DAG: 1, 1, 0, 1, 1, 0
-              // EXE-DAG: 1, 1, 0, 1, 1, 1
-              // EXE-DAG: 1, 1, 1, 0, 0, 0
-              // EXE-DAG: 1, 1, 1, 0, 0, 1
-              // EXE-DAG: 1, 1, 1, 0, 1, 0
-              // EXE-DAG: 1, 1, 1, 0, 1, 1
-              // EXE-DAG: 1, 1, 1, 1, 0, 0
-              // EXE-DAG: 1, 1, 1, 1, 0, 1
-              // EXE-DAG: 1, 1, 1, 1, 1, 0
-              // EXE-DAG: 1, 1, 1, 1, 1, 1
-              printf("%d, %d, %d, %d, %d, %d\n", i, j, k, l, m, n);
+              // PRT-NEXT: {{TGT_PRINTF|printf}}({{.*}}
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 0, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 0, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 0, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 0, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 1, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 1, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 1, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 1, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 0, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 0, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 0, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 0, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 1, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 1, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 1, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 1, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 0, 0, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 0, 0, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 0, 0, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 0, 0, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 0, 1, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 0, 1, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 0, 1, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 0, 1, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 1, 0, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 1, 0, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 1, 0, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 1, 0, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 1, 1, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 1, 1, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 1, 1, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 0, 1, 1, 1, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 0, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 0, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 0, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 0, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 1, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 1, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 1, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 1, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 0, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 0, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 0, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 0, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 1, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 1, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 1, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 1, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 0, 0, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 0, 0, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 0, 0, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 0, 0, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 0, 1, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 0, 1, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 0, 1, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 0, 1, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 1, 0, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 1, 0, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 1, 0, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 1, 0, 1, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 1, 1, 0, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 1, 1, 0, 1
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 1, 1, 1, 0
+              // EXE-TGT-USE-STDIO-DAG: 1, 1, 1, 1, 1, 1
+              TGT_PRINTF("%d, %d, %d, %d, %d, %d\n", i, j, k, l, m, n);
 
   //--------------------------------------------------
   // Private for loop control variable that is assigned not declared in init
@@ -1187,7 +1230,7 @@ int main() {
   //--------------------------------------------------
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("loop gang private control var\n");
   // EXE-LABEL: loop gang private control var
   printf("loop gang private control var\n");
 
@@ -1253,20 +1296,20 @@ int main() {
         // PRT-NEXT: for (k ={{.*}})
         for (k = 0; k < 2; ++k)
           // DMP: CallExpr
-          // PRT-NEXT: printf
-          // EXE-DAG: 0, 0, 0
-          // EXE-DAG: 0, 0, 1
-          // EXE-DAG: 0, 1, 0
-          // EXE-DAG: 0, 1, 1
-          // EXE-DAG: 1, 0, 0
-          // EXE-DAG: 1, 0, 1
-          // EXE-DAG: 1, 1, 0
-          // EXE-DAG: 1, 1, 1
-          printf("%d, %d, %d\n", i, j, k);
+          // PRT-NEXT: {{TGT_PRINTF|printf}}
+          // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+          // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+          // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+          // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+          // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+          // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+          // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+          // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
   } // PRT-NEXT: }
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("loop worker private control var\n");
   // EXE-LABEL: loop worker private control var
   printf("loop worker private control var\n");
 
@@ -1338,16 +1381,16 @@ int main() {
         // Because k is shared among workers, writes to it are a race.
         for (k = 0; k < 2; ++k)
           // DMP: CallExpr
-          // PRT-NEXT: printf
-          // EXE-DAG: 0, 0, {{.*}}
-          // EXE-DAG: 0, 1, {{.*}}
-          // EXE-DAG: 1, 0, {{.*}}
-          // EXE-DAG: 1, 1, {{.*}}
-          printf("%d, %d, %d\n", i, j, k);
+          // PRT-NEXT: {{TGT_PRINTF|printf}}
+          // EXE-TGT-USE-STDIO-DAG: 0, 0, {{.*}}
+          // EXE-TGT-USE-STDIO-DAG: 0, 1, {{.*}}
+          // EXE-TGT-USE-STDIO-DAG: 1, 0, {{.*}}
+          // EXE-TGT-USE-STDIO-DAG: 1, 1, {{.*}}
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
   } // PRT-NEXT: }
 
   // DMP: CallExpr
-  // PRT-NEXT: printf
+  // PRT-NEXT: printf("parallel loop vector private control var\n");
   // EXE-LABEL: parallel loop vector private control var
   printf("parallel loop vector private control var\n");
 
@@ -1410,14 +1453,14 @@ int main() {
     // PRT-NOACC-NEXT: for (int i ={{.*}})
     // PRT-NOACC-NEXT:   for (j ={{.*}})
     // PRT-NOACC-NEXT:     for (k ={{.*}})
-    // PRT-NOACC-NEXT:       printf
+    // PRT-NOACC-NEXT:       {{TGT_PRINTF|printf}}
     //
     // PRT-AO-NEXT: // v----------ACC----------v
     // PRT-A-NEXT:  #pragma acc parallel loop num_gangs(1) vector_length(8) vector collapse(2){{$}}
     // PRT-A-NEXT:  for (int i ={{.*}})
     // PRT-A-NEXT:    for (j ={{.*}})
     // PRT-A-NEXT:      for (k ={{.*}})
-    // PRT-A-NEXT:        printf
+    // PRT-A-NEXT:        {{TGT_PRINTF|printf}}
     // PRT-AO-NEXT: // ---------ACC->OMP--------
     // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) firstprivate(k){{$}}
     // PRT-AO-NEXT: // {
@@ -1426,7 +1469,7 @@ int main() {
     // PRT-AO-NEXT: //   for (int i ={{.*}})
     // PRT-AO-NEXT: //     for (j ={{.*}})
     // PRT-AO-NEXT: //       for (k ={{.*}})
-    // PRT-AO-NEXT: //         printf
+    // PRT-AO-NEXT: //         {{TGT_PRINTF|printf}}
     // PRT-AO-NEXT: // }
     // PRT-AO-NEXT: // ^----------OMP----------^
     //
@@ -1438,28 +1481,28 @@ int main() {
     // PRT-O-NEXT:    for (int i ={{.*}})
     // PRT-O-NEXT:      for (j ={{.*}})
     // PRT-O-NEXT:        for (k ={{.*}})
-    // PRT-O-NEXT:          printf
+    // PRT-O-NEXT:          {{TGT_PRINTF|printf}}
     // PRT-O-NEXT:  }
     // PRT-OA-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-NEXT: // #pragma acc parallel loop num_gangs(1) vector_length(8) vector collapse(2){{$}}
     // PRT-OA-NEXT: // for (int i ={{.*}})
     // PRT-OA-NEXT: //   for (j ={{.*}})
     // PRT-OA-NEXT: //     for (k ={{.*}})
-    // PRT-OA-NEXT: //       printf
+    // PRT-OA-NEXT: //       {{TGT_PRINTF|printf}}
     // PRT-OA-NEXT: // ^----------ACC----------^
     #pragma acc parallel loop num_gangs(1) vector_length(8) vector collapse(2)
     for (int i = 0; i < 2; ++i)
       for (j = 0; j < 2; ++j)
         for (k = 0; k < 2; ++k)
-          // EXE-DAG: 0, 0, 0
-          // EXE-DAG: 0, 0, 1
-          // EXE-DAG: 0, 1, 0
-          // EXE-DAG: 0, 1, 1
-          // EXE-DAG: 1, 0, 0
-          // EXE-DAG: 1, 0, 1
-          // EXE-DAG: 1, 1, 0
-          // EXE-DAG: 1, 1, 1
-          printf("%d, %d, %d\n", i, j, k);
+          // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+          // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+          // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+          // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+          // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+          // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+          // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+          // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
   } // PRT-NEXT: }
 
   // PRT-NEXT: return 0;

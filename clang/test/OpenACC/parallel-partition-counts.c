@@ -23,8 +23,8 @@
 // the prt-args definition.
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-A)
@@ -56,12 +56,38 @@
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
+// FIXME: amdgcn doesn't yet support printf in a kernel.
+//
+// RUN: %data tgts {
+// RUN:   (run-if=                tgt-cflags='                                    '                      tgt=host    tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple '                      tgt=x86_64  tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple'                      tgt=ppc64le tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed' tgt=nvptx64 tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple -DTGT_USE_STDIO=0'     tgt=amdgcn  tgt-use-stdio=NO-TGT-USE-STDIO)
+// RUN: }
+//      # FIXME: amdgcn doesn't yet support printf in a kernel, but
+//      # -fopenacc-print=omp still fails to suppress macro expansion in some
+//      # kernels.  To avoid expanding TGT_PRINTF to printf here and thus
+//      # breaking amdgcn compilation later, we prototype TGT_PRINTF as a
+//      # function here, and then we define it to either printf or nothing when
+//      # we compile for the target.  When either of those limitations is fixed,
+//      # this hack can go away.  Once it does, the -DTGT_PRINTF=printf in the
+//      # %t-ast-prt-omp.c case below will be redundant and so can go away too.
 // RUN: %for prt-opts {
-// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c
-// RUN:   echo "// noacc""-no-diagnostics" >> %t-omp.c
-// RUN:   %clang -Xclang -verify=noacc -fopenmp %fopenmp-version \
-// RUN:          -Wno-unused-function -o %t %t-omp.c
-// RUN:   %t 2 2>&1 | FileCheck -check-prefix=EXE %s
+// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-%[prt-kind]-omp.c \
+// RUN:     -DTGT_PRINTF_PROTO
+// RUN:   echo "// noacc""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN: }
+// RUN: %clang -Xclang -verify=noacc -fopenmp %fopenmp-version \
+// RUN:   -Wno-unused-function -o %t %t-ast-prt-omp.c -DTGT_PRINTF=printf
+// RUN: %t 2 > %t.out 2>&1
+// RUN: FileCheck -input-file %t.out -check-prefixes=EXE,EXE-TGT-USE-STDIO %s
+// RUN: %for tgts {
+// RUN:   %[run-if] %clang -Xclang -verify=%[tgt] -fopenmp %fopenmp-version \
+// RUN:     %[tgt-cflags] -o %t %t-prt-omp.c
+// RUN:   %[run-if] %t 2 > %t.out 2>&1
+// RUN:   %[run-if] FileCheck -input-file %t.out %s \
+// RUN:     -check-prefixes=EXE,EXE-%[tgt-use-stdio]
 // RUN: }
 
 // Check execution with normal compilation.
@@ -74,17 +100,12 @@
 //
 // To avoid all this until upstream fixes it, we add -O1 -Wno-pass-failed.
 //
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                    ' tgt=host   )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple ' tgt=x86_64 )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple' tgt=ppc64le)
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed' tgt=nvptx64)
-// RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify=expected,%[tgt] -fopenacc %s -o %t \
 // RUN:                    %[tgt-cflags]
 // RUN:   %[run-if] %t 2 > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out %s -check-prefixes=EXE
+// RUN:   %[run-if] FileCheck -input-file %t.out %s \
+// RUN:     -check-prefixes=EXE,EXE-%[tgt-use-stdio]
 // RUN: }
 
 // END.
@@ -116,9 +137,29 @@
 /* nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}} */
 /* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
 
+// This hack enables these Clang -verify prefixes to be used alone (without
+// expecting any error diagnostics) or with other prefixes (without requiring
+// a prefix-no-diagnostics declaration that could contradict other prefixes).
+/* host-warning 0 {{}} */
+/* x86_64-warning 0 {{}} */
+/* ppc64le-warning 0 {{}} */
+/* amdgcn-warning 0 {{}} */
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#ifndef TGT_USE_STDIO
+# define TGT_USE_STDIO 1
+#endif
+
+#if TGT_PRINTF_PROTO
+int TGT_PRINTF(const char *, ...);
+#elif TGT_USE_STDIO
+# define TGT_PRINTF(...) printf(__VA_ARGS__)
+#else
+# define TGT_PRINTF(...)
+#endif
 
 int foo() { printf("foo\n"); return 5; }
 int bar() { printf("bar\n"); return 6; }
@@ -171,16 +212,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 8; ++i) {
         // sequential, so order is deterministic
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 4
-        // EXE-NEXT: 5
-        // EXE-NEXT: 6
-        // EXE-NEXT: 7
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 4
+        // EXE-TGT-USE-STDIO-NEXT: 5
+        // EXE-TGT-USE-STDIO-NEXT: 6
+        // EXE-TGT-USE-STDIO-NEXT: 7
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
 
       // DMP:      ACCLoopDirective
@@ -198,16 +239,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 8; ++i) {
         // sequential as partitioned only across 1 gang
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 4
-        // EXE-NEXT: 5
-        // EXE-NEXT: 6
-        // EXE-NEXT: 7
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 4
+        // EXE-TGT-USE-STDIO-NEXT: 5
+        // EXE-TGT-USE-STDIO-NEXT: 6
+        // EXE-TGT-USE-STDIO-NEXT: 7
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
@@ -258,16 +299,16 @@ int main(int argc, char *argv[]) {
       for (int j = 0; j < 4; ++j) {
         // sequential as partitioned only across 1 gang
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        printf("%d\n", j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        TGT_PRINTF("%d\n", j);
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
@@ -320,16 +361,16 @@ int main(int argc, char *argv[]) {
       for (int j = 0; j < 4; ++j) {
         // sequential, so order is deterministic
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        printf("%d\n", j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        TGT_PRINTF("%d\n", j);
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
@@ -378,16 +419,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 8; ++i) {
         // sequential as partitioned only across 1 worker
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 4
-        // EXE-NEXT: 5
-        // EXE-NEXT: 6
-        // EXE-NEXT: 7
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 4
+        // EXE-TGT-USE-STDIO-NEXT: 5
+        // EXE-TGT-USE-STDIO-NEXT: 6
+        // EXE-TGT-USE-STDIO-NEXT: 7
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
 
       // DMP:      ACCLoopDirective
@@ -410,16 +451,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 8; ++i) {
         // sequential as partitioned only across 1 vector lane
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 4
-        // EXE-NEXT: 5
-        // EXE-NEXT: 6
-        // EXE-NEXT: 7
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 4
+        // EXE-TGT-USE-STDIO-NEXT: 5
+        // EXE-TGT-USE-STDIO-NEXT: 6
+        // EXE-TGT-USE-STDIO-NEXT: 7
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
 
       // DMP:      ACCLoopDirective
@@ -440,16 +481,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 8; ++i) {
         // sequential as partitioned only across 1 gang, 1 worker
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 4
-        // EXE-NEXT: 5
-        // EXE-NEXT: 6
-        // EXE-NEXT: 7
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 4
+        // EXE-TGT-USE-STDIO-NEXT: 5
+        // EXE-TGT-USE-STDIO-NEXT: 6
+        // EXE-TGT-USE-STDIO-NEXT: 7
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
 
       // DMP:      ACCLoopDirective
@@ -472,16 +513,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 8; ++i) {
         // sequential as partitioned only across 1 gang, 1 vector lane
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 4
-        // EXE-NEXT: 5
-        // EXE-NEXT: 6
-        // EXE-NEXT: 7
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 4
+        // EXE-TGT-USE-STDIO-NEXT: 5
+        // EXE-TGT-USE-STDIO-NEXT: 6
+        // EXE-TGT-USE-STDIO-NEXT: 7
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
 
       // DMP:      ACCLoopDirective
@@ -540,16 +581,16 @@ int main(int argc, char *argv[]) {
             // sequential as partitioned only across 1 gang, 1 worker, 1 vector
             // lane
             // DMP: CallExpr
-            // PRT-NEXT: printf
-            // EXE-NEXT: 0, 0, 0
-            // EXE-NEXT: 0, 0, 1
-            // EXE-NEXT: 0, 1, 0
-            // EXE-NEXT: 0, 1, 1
-            // EXE-NEXT: 1, 0, 0
-            // EXE-NEXT: 1, 0, 1
-            // EXE-NEXT: 1, 1, 0
-            // EXE-NEXT: 1, 1, 1
-            printf("%d, %d, %d\n", i, j, k);
+            // PRT-NEXT: {{TGT_PRINTF|printf}}
+            // EXE-TGT-USE-STDIO-NEXT: 0, 0, 0
+            // EXE-TGT-USE-STDIO-NEXT: 0, 0, 1
+            // EXE-TGT-USE-STDIO-NEXT: 0, 1, 0
+            // EXE-TGT-USE-STDIO-NEXT: 0, 1, 1
+            // EXE-TGT-USE-STDIO-NEXT: 1, 0, 0
+            // EXE-TGT-USE-STDIO-NEXT: 1, 0, 1
+            // EXE-TGT-USE-STDIO-NEXT: 1, 1, 0
+            // EXE-TGT-USE-STDIO-NEXT: 1, 1, 1
+            TGT_PRINTF("%d, %d, %d\n", i, j, k);
           } // PRT-NEXT: }
         } // PRT-NEXT: }
       } // PRT-NEXT: }
@@ -613,16 +654,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 4; ++i) {
         // sequential as partitioned only across 1 vector lane
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
@@ -680,16 +721,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 4; ++i) {
         // sequential as partitioned only across 1 vector lane
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
@@ -743,16 +784,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 8; ++i) {
         // not sequential
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: 0
-        // EXE-DAG: 1
-        // EXE-DAG: 2
-        // EXE-DAG: 3
-        // EXE-DAG: 4
-        // EXE-DAG: 5
-        // EXE-DAG: 6
-        // EXE-DAG: 7
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: 0
+        // EXE-TGT-USE-STDIO-DAG: 1
+        // EXE-TGT-USE-STDIO-DAG: 2
+        // EXE-TGT-USE-STDIO-DAG: 3
+        // EXE-TGT-USE-STDIO-DAG: 4
+        // EXE-TGT-USE-STDIO-DAG: 5
+        // EXE-TGT-USE-STDIO-DAG: 6
+        // EXE-TGT-USE-STDIO-DAG: 7
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
 
       // DMP:      ACCLoopDirective
@@ -778,16 +819,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 8; ++i) {
         // not sequential
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: 0
-        // EXE-DAG: 1
-        // EXE-DAG: 2
-        // EXE-DAG: 3
-        // EXE-DAG: 4
-        // EXE-DAG: 5
-        // EXE-DAG: 6
-        // EXE-DAG: 7
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: 0
+        // EXE-TGT-USE-STDIO-DAG: 1
+        // EXE-TGT-USE-STDIO-DAG: 2
+        // EXE-TGT-USE-STDIO-DAG: 3
+        // EXE-TGT-USE-STDIO-DAG: 4
+        // EXE-TGT-USE-STDIO-DAG: 5
+        // EXE-TGT-USE-STDIO-DAG: 6
+        // EXE-TGT-USE-STDIO-DAG: 7
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
 
       // DMP:      ACCLoopDirective
@@ -829,16 +870,16 @@ int main(int argc, char *argv[]) {
         for (int j = 0; j < 4; ++j) {
           // not sequential
           // DMP: CallExpr
-          // PRT-NEXT: printf
-          // EXE-DAG: 0, 0
-          // EXE-DAG: 0, 1
-          // EXE-DAG: 0, 2
-          // EXE-DAG: 0, 3
-          // EXE-DAG: 1, 0
-          // EXE-DAG: 1, 1
-          // EXE-DAG: 1, 2
-          // EXE-DAG: 1, 3
-          printf("%d, %d\n", i, j);
+          // PRT-NEXT: {{TGT_PRINTF|printf}}
+          // EXE-TGT-USE-STDIO-DAG: 0, 0
+          // EXE-TGT-USE-STDIO-DAG: 0, 1
+          // EXE-TGT-USE-STDIO-DAG: 0, 2
+          // EXE-TGT-USE-STDIO-DAG: 0, 3
+          // EXE-TGT-USE-STDIO-DAG: 1, 0
+          // EXE-TGT-USE-STDIO-DAG: 1, 1
+          // EXE-TGT-USE-STDIO-DAG: 1, 2
+          // EXE-TGT-USE-STDIO-DAG: 1, 3
+          TGT_PRINTF("%d, %d\n", i, j);
         } // PRT-NEXT: }
       } // PRT-NEXT: }
     } // PRT-NEXT: }
@@ -890,16 +931,16 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 8; ++i) {
       // not sequential
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: 0
-      // EXE-DAG: 1
-      // EXE-DAG: 2
-      // EXE-DAG: 3
-      // EXE-DAG: 4
-      // EXE-DAG: 5
-      // EXE-DAG: 6
-      // EXE-DAG: 7
-      printf("%d\n", i);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: 0
+      // EXE-TGT-USE-STDIO-DAG: 1
+      // EXE-TGT-USE-STDIO-DAG: 2
+      // EXE-TGT-USE-STDIO-DAG: 3
+      // EXE-TGT-USE-STDIO-DAG: 4
+      // EXE-TGT-USE-STDIO-DAG: 5
+      // EXE-TGT-USE-STDIO-DAG: 6
+      // EXE-TGT-USE-STDIO-DAG: 7
+      TGT_PRINTF("%d\n", i);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
@@ -950,16 +991,16 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 8; ++i) {
       // not sequential
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: 0
-      // EXE-DAG: 1
-      // EXE-DAG: 2
-      // EXE-DAG: 3
-      // EXE-DAG: 4
-      // EXE-DAG: 5
-      // EXE-DAG: 6
-      // EXE-DAG: 7
-      printf("%d\n", i);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: 0
+      // EXE-TGT-USE-STDIO-DAG: 1
+      // EXE-TGT-USE-STDIO-DAG: 2
+      // EXE-TGT-USE-STDIO-DAG: 3
+      // EXE-TGT-USE-STDIO-DAG: 4
+      // EXE-TGT-USE-STDIO-DAG: 5
+      // EXE-TGT-USE-STDIO-DAG: 6
+      // EXE-TGT-USE-STDIO-DAG: 7
+      TGT_PRINTF("%d\n", i);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
@@ -1024,16 +1065,16 @@ int main(int argc, char *argv[]) {
       for (int j = 0; j < 4; ++j) {
         // not sequential
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: 0, 0
-        // EXE-DAG: 0, 1
-        // EXE-DAG: 0, 2
-        // EXE-DAG: 0, 3
-        // EXE-DAG: 1, 0
-        // EXE-DAG: 1, 1
-        // EXE-DAG: 1, 2
-        // EXE-DAG: 1, 3
-        printf("%d, %d\n", i, j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: 0, 0
+        // EXE-TGT-USE-STDIO-DAG: 0, 1
+        // EXE-TGT-USE-STDIO-DAG: 0, 2
+        // EXE-TGT-USE-STDIO-DAG: 0, 3
+        // EXE-TGT-USE-STDIO-DAG: 1, 0
+        // EXE-TGT-USE-STDIO-DAG: 1, 1
+        // EXE-TGT-USE-STDIO-DAG: 1, 2
+        // EXE-TGT-USE-STDIO-DAG: 1, 3
+        TGT_PRINTF("%d, %d\n", i, j);
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
@@ -1080,16 +1121,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 8; ++i) {
         // sequential, so order is deterministic
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 4
-        // EXE-NEXT: 5
-        // EXE-NEXT: 6
-        // EXE-NEXT: 7
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 4
+        // EXE-TGT-USE-STDIO-NEXT: 5
+        // EXE-TGT-USE-STDIO-NEXT: 6
+        // EXE-TGT-USE-STDIO-NEXT: 7
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
 
       // DMP:      ACCLoopDirective
@@ -1107,16 +1148,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 8; ++i) {
         // sequential as partitioned only across 1 gang
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 4
-        // EXE-NEXT: 5
-        // EXE-NEXT: 6
-        // EXE-NEXT: 7
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 4
+        // EXE-TGT-USE-STDIO-NEXT: 5
+        // EXE-TGT-USE-STDIO-NEXT: 6
+        // EXE-TGT-USE-STDIO-NEXT: 7
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
 
       // DMP:      ACCLoopDirective
@@ -1139,16 +1180,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 8; ++i) {
         // sequential as partitioned only across 1 vector lane
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 4
-        // EXE-NEXT: 5
-        // EXE-NEXT: 6
-        // EXE-NEXT: 7
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 4
+        // EXE-TGT-USE-STDIO-NEXT: 5
+        // EXE-TGT-USE-STDIO-NEXT: 6
+        // EXE-TGT-USE-STDIO-NEXT: 7
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
 
       // DMP:      ACCLoopDirective
@@ -1165,16 +1206,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 8; ++i) {
         // sequential, so order is deterministic
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 4
-        // EXE-NEXT: 5
-        // EXE-NEXT: 6
-        // EXE-NEXT: 7
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 4
+        // EXE-TGT-USE-STDIO-NEXT: 5
+        // EXE-TGT-USE-STDIO-NEXT: 6
+        // EXE-TGT-USE-STDIO-NEXT: 7
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
@@ -1215,16 +1256,16 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 8; ++i) {
       // sequential, so order is deterministic
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-NEXT: 0
-      // EXE-NEXT: 1
-      // EXE-NEXT: 2
-      // EXE-NEXT: 3
-      // EXE-NEXT: 4
-      // EXE-NEXT: 5
-      // EXE-NEXT: 6
-      // EXE-NEXT: 7
-      printf("%d\n", i);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-NEXT: 0
+      // EXE-TGT-USE-STDIO-NEXT: 1
+      // EXE-TGT-USE-STDIO-NEXT: 2
+      // EXE-TGT-USE-STDIO-NEXT: 3
+      // EXE-TGT-USE-STDIO-NEXT: 4
+      // EXE-TGT-USE-STDIO-NEXT: 5
+      // EXE-TGT-USE-STDIO-NEXT: 6
+      // EXE-TGT-USE-STDIO-NEXT: 7
+      TGT_PRINTF("%d\n", i);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
@@ -1274,16 +1315,16 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 8; ++i) {
       // sequential as partitioned only across 1 gang
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-NEXT: 0
-      // EXE-NEXT: 1
-      // EXE-NEXT: 2
-      // EXE-NEXT: 3
-      // EXE-NEXT: 4
-      // EXE-NEXT: 5
-      // EXE-NEXT: 6
-      // EXE-NEXT: 7
-      printf("%d\n", i);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-NEXT: 0
+      // EXE-TGT-USE-STDIO-NEXT: 1
+      // EXE-TGT-USE-STDIO-NEXT: 2
+      // EXE-TGT-USE-STDIO-NEXT: 3
+      // EXE-TGT-USE-STDIO-NEXT: 4
+      // EXE-TGT-USE-STDIO-NEXT: 5
+      // EXE-TGT-USE-STDIO-NEXT: 6
+      // EXE-TGT-USE-STDIO-NEXT: 7
+      TGT_PRINTF("%d\n", i);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
@@ -1324,7 +1365,7 @@ int main(int argc, char *argv[]) {
     //
     // PRT-NOACC-NEXT: {
     // PRT-NOACC-NEXT:   for ({{.*}}) {
-    // PRT-NOACC-NEXT:     printf
+    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
     // PRT-NOACC-NEXT:   }
     // PRT-NOACC-NEXT: }
     // PRT-AO-NEXT:    // v----------ACC----------v
@@ -1332,7 +1373,7 @@ int main(int argc, char *argv[]) {
     // PRT-A-NEXT:     {
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop vector{{$}}
     // PRT-A-NEXT:       for ({{.*}}) {
-    // PRT-A-NEXT:         printf
+    // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
     // PRT-A-NEXT:       }
     // PRT-A-NEXT:     }
     // PRT-AO-NEXT:    // ---------ACC->OMP--------
@@ -1342,7 +1383,7 @@ int main(int argc, char *argv[]) {
     // PRT-AO-NEXT:    //   {
     // PRT-AO-NEXT:    //     #pragma omp distribute simd simdlen(1){{$}}
     // PRT-AO-NEXT:    //     for ({{.*}}) {
-    // PRT-AO-NEXT:    //       printf
+    // PRT-AO-NEXT:    //       {{TGT_PRINTF|printf}}
     // PRT-AO-NEXT:    //     }
     // PRT-AO-NEXT:    //   }
     // PRT-AO-NEXT:    // }
@@ -1354,7 +1395,7 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:       {
     // PRT-O-NEXT:         {{^ *}}#pragma omp distribute simd simdlen(1){{$}}
     // PRT-O-NEXT:         for ({{.*}}) {
-    // PRT-O-NEXT:           printf
+    // PRT-O-NEXT:           {{TGT_PRINTF|printf}}
     // PRT-O-NEXT:         }
     // PRT-O-NEXT:       }
     // PRT-O-NEXT:     }
@@ -1363,7 +1404,7 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    // {
     // PRT-OA-NEXT:    //   #pragma acc loop vector{{$}}
     // PRT-OA-NEXT:    //   for ({{.*}}) {
-    // PRT-OA-NEXT:    //     printf
+    // PRT-OA-NEXT:    //     {{TGT_PRINTF|printf}}
     // PRT-OA-NEXT:    //   }
     // PRT-OA-NEXT:    // }
     // PRT-OA-NEXT:    // ^----------ACC----------^
@@ -1374,15 +1415,15 @@ int main(int argc, char *argv[]) {
       #pragma acc loop vector
       for (int i = 0; i < 8; ++i) {
         // sequential as partitioned only across 1 vector lane
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 4
-        // EXE-NEXT: 5
-        // EXE-NEXT: 6
-        // EXE-NEXT: 7
-        printf("%d\n", i);
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 4
+        // EXE-TGT-USE-STDIO-NEXT: 5
+        // EXE-TGT-USE-STDIO-NEXT: 6
+        // EXE-TGT-USE-STDIO-NEXT: 7
+        TGT_PRINTF("%d\n", i);
       }
     }
   } // PRT-NEXT: }
@@ -1446,7 +1487,7 @@ int main(int argc, char *argv[]) {
     //
     // PRT-NOACC-NEXT: for ({{.*}}) {
     // PRT-NOACC-NEXT:   for ({{.*}}) {
-    // PRT-NOACC-NEXT:     printf
+    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
     // PRT-NOACC-NEXT:   }
     // PRT-NOACC-NEXT: }
     // PRT-AO-NEXT:    // v----------ACC----------v
@@ -1454,7 +1495,7 @@ int main(int argc, char *argv[]) {
     // PRT-A-NEXT:     for ({{.*}}) {
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop vector{{$}}
     // PRT-A-NEXT:       for ({{.*}}) {
-    // PRT-A-NEXT:         printf
+    // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
     // PRT-A-NEXT:       }
     // PRT-A-NEXT:     }
     // PRT-AO-NEXT:    // ---------ACC->OMP--------
@@ -1465,7 +1506,7 @@ int main(int argc, char *argv[]) {
     // PRT-AO-NEXT:    //   for ({{.*}}) {
     // PRT-AO-NEXT:    //     #pragma omp simd simdlen(1){{$}}
     // PRT-AO-NEXT:    //     for ({{.*}}) {
-    // PRT-AO-NEXT:    //       printf
+    // PRT-AO-NEXT:    //       {{TGT_PRINTF|printf}}
     // PRT-AO-NEXT:    //     }
     // PRT-AO-NEXT:    //   }
     // PRT-AO-NEXT:    // }
@@ -1478,7 +1519,7 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:       for ({{.*}}) {
     // PRT-O-NEXT:         {{^ *}}#pragma omp simd simdlen(1){{$}}
     // PRT-O-NEXT:         for ({{.*}}) {
-    // PRT-O-NEXT:           printf
+    // PRT-O-NEXT:           {{TGT_PRINTF|printf}}
     // PRT-O-NEXT:         }
     // PRT-O-NEXT:       }
     // PRT-O-NEXT:     }
@@ -1487,7 +1528,7 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    // for ({{.*}}) {
     // PRT-OA-NEXT:    //   #pragma acc loop vector{{$}}
     // PRT-OA-NEXT:    //   for ({{.*}}) {
-    // PRT-OA-NEXT:    //     printf
+    // PRT-OA-NEXT:    //     {{TGT_PRINTF|printf}}
     // PRT-OA-NEXT:    //   }
     // PRT-OA-NEXT:    // }
     // PRT-OA-NEXT:    // ^----------ACC----------^
@@ -1496,15 +1537,15 @@ int main(int argc, char *argv[]) {
       #pragma acc loop vector
       for (int j = 0; j < 4; ++j) {
         // sequential as partitioned only across 1 gang, 1 vector lane
-        // EXE-NEXT: 0, 0
-        // EXE-NEXT: 0, 1
-        // EXE-NEXT: 0, 2
-        // EXE-NEXT: 0, 3
-        // EXE-NEXT: 1, 0
-        // EXE-NEXT: 1, 1
-        // EXE-NEXT: 1, 2
-        // EXE-NEXT: 1, 3
-        printf("%d, %d\n", i, j);
+        // EXE-TGT-USE-STDIO-NEXT: 0, 0
+        // EXE-TGT-USE-STDIO-NEXT: 0, 1
+        // EXE-TGT-USE-STDIO-NEXT: 0, 2
+        // EXE-TGT-USE-STDIO-NEXT: 0, 3
+        // EXE-TGT-USE-STDIO-NEXT: 1, 0
+        // EXE-TGT-USE-STDIO-NEXT: 1, 1
+        // EXE-TGT-USE-STDIO-NEXT: 1, 2
+        // EXE-TGT-USE-STDIO-NEXT: 1, 3
+        TGT_PRINTF("%d, %d\n", i, j);
       }
     }
   } // PRT-NEXT: }
@@ -1547,7 +1588,7 @@ int main(int argc, char *argv[]) {
     //
     // PRT-NOACC-NEXT: {
     // PRT-NOACC-NEXT:   for ({{.*}}) {
-    // PRT-NOACC-NEXT:     printf
+    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
     // PRT-NOACC-NEXT:   }
     // PRT-NOACC-NEXT: }
     // PRT-AO-NEXT:    // v----------ACC----------v
@@ -1555,7 +1596,7 @@ int main(int argc, char *argv[]) {
     // PRT-A-NEXT:     {
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop worker{{$}}
     // PRT-A-NEXT:       for ({{.*}}) {
-    // PRT-A-NEXT:         printf
+    // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
     // PRT-A-NEXT:       }
     // PRT-A-NEXT:     }
     // PRT-AO-NEXT:    // ---------ACC->OMP--------
@@ -1565,7 +1606,7 @@ int main(int argc, char *argv[]) {
     // PRT-AO-NEXT:    //   {
     // PRT-AO-NEXT:    //     #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
     // PRT-AO-NEXT:    //     for ({{.*}}) {
-    // PRT-AO-NEXT:    //       printf
+    // PRT-AO-NEXT:    //       {{TGT_PRINTF|printf}}
     // PRT-AO-NEXT:    //     }
     // PRT-AO-NEXT:    //   }
     // PRT-AO-NEXT:    // }
@@ -1577,7 +1618,7 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:       {
     // PRT-O-NEXT:         {{^ *}}#pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
     // PRT-O-NEXT:         for ({{.*}}) {
-    // PRT-O-NEXT:           printf
+    // PRT-O-NEXT:           {{TGT_PRINTF|printf}}
     // PRT-O-NEXT:         }
     // PRT-O-NEXT:       }
     // PRT-O-NEXT:     }
@@ -1586,7 +1627,7 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    // {
     // PRT-OA-NEXT:    //   #pragma acc loop worker{{$}}
     // PRT-OA-NEXT:    //   for ({{.*}}) {
-    // PRT-OA-NEXT:    //     printf
+    // PRT-OA-NEXT:    //     {{TGT_PRINTF|printf}}
     // PRT-OA-NEXT:    //   }
     // PRT-OA-NEXT:    // }
     // PRT-OA-NEXT:    // ^----------ACC----------^
@@ -1595,15 +1636,15 @@ int main(int argc, char *argv[]) {
       #pragma acc loop worker
       for (int i = 0; i < 8; ++i) {
         // not sequential
-        // EXE-DAG: 0
-        // EXE-DAG: 1
-        // EXE-DAG: 2
-        // EXE-DAG: 3
-        // EXE-DAG: 4
-        // EXE-DAG: 5
-        // EXE-DAG: 6
-        // EXE-DAG: 7
-        printf("%d\n", i);
+        // EXE-TGT-USE-STDIO-DAG: 0
+        // EXE-TGT-USE-STDIO-DAG: 1
+        // EXE-TGT-USE-STDIO-DAG: 2
+        // EXE-TGT-USE-STDIO-DAG: 3
+        // EXE-TGT-USE-STDIO-DAG: 4
+        // EXE-TGT-USE-STDIO-DAG: 5
+        // EXE-TGT-USE-STDIO-DAG: 6
+        // EXE-TGT-USE-STDIO-DAG: 7
+        TGT_PRINTF("%d\n", i);
       }
     }
   } // PRT-NEXT: }
@@ -1665,7 +1706,7 @@ int main(int argc, char *argv[]) {
     //
     // PRT-NOACC-NEXT: for ({{.*}}) {
     // PRT-NOACC-NEXT:   for ({{.*}}) {
-    // PRT-NOACC-NEXT:     printf
+    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
     // PRT-NOACC-NEXT:   }
     // PRT-NOACC-NEXT: }
     // PRT-AO-NEXT:    // v----------ACC----------v
@@ -1673,7 +1714,7 @@ int main(int argc, char *argv[]) {
     // PRT-A-NEXT:     for ({{.*}}) {
     // PRT-A-NEXT:       {{^ *}}#pragma acc loop vector{{$}}
     // PRT-A-NEXT:       for ({{.*}}) {
-    // PRT-A-NEXT:         printf
+    // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
     // PRT-A-NEXT:       }
     // PRT-A-NEXT:     }
     // PRT-AO-NEXT:    // ---------ACC->OMP--------
@@ -1684,7 +1725,7 @@ int main(int argc, char *argv[]) {
     // PRT-AO-NEXT:    //   for ({{.*}}) {
     // PRT-AO-NEXT:    //     #pragma omp simd simdlen(1){{$}}
     // PRT-AO-NEXT:    //     for ({{.*}}) {
-    // PRT-AO-NEXT:    //       printf
+    // PRT-AO-NEXT:    //       {{TGT_PRINTF|printf}}
     // PRT-AO-NEXT:    //     }
     // PRT-AO-NEXT:    //   }
     // PRT-AO-NEXT:    // }
@@ -1697,7 +1738,7 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:       for ({{.*}}) {
     // PRT-O-NEXT:         {{^ *}}#pragma omp simd simdlen(1){{$}}
     // PRT-O-NEXT:         for ({{.*}}) {
-    // PRT-O-NEXT:           printf
+    // PRT-O-NEXT:           {{TGT_PRINTF|printf}}
     // PRT-O-NEXT:         }
     // PRT-O-NEXT:       }
     // PRT-O-NEXT:     }
@@ -1706,7 +1747,7 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    // for ({{.*}}) {
     // PRT-OA-NEXT:    //   #pragma acc loop vector{{$}}
     // PRT-OA-NEXT:    //   for ({{.*}}) {
-    // PRT-OA-NEXT:    //     printf
+    // PRT-OA-NEXT:    //     {{TGT_PRINTF|printf}}
     // PRT-OA-NEXT:    //   }
     // PRT-OA-NEXT:    // }
     // PRT-OA-NEXT:    // ^----------ACC----------^
@@ -1714,15 +1755,15 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 2; ++i) {
       #pragma acc loop vector
       for (int j = 0; j < 4; ++j) {
-        // EXE-DAG: 0, 0
-        // EXE-DAG: 0, 1
-        // EXE-DAG: 0, 2
-        // EXE-DAG: 0, 3
-        // EXE-DAG: 1, 0
-        // EXE-DAG: 1, 1
-        // EXE-DAG: 1, 2
-        // EXE-DAG: 1, 3
-        printf("%d, %d\n", i, j);
+        // EXE-TGT-USE-STDIO-DAG: 0, 0
+        // EXE-TGT-USE-STDIO-DAG: 0, 1
+        // EXE-TGT-USE-STDIO-DAG: 0, 2
+        // EXE-TGT-USE-STDIO-DAG: 0, 3
+        // EXE-TGT-USE-STDIO-DAG: 1, 0
+        // EXE-TGT-USE-STDIO-DAG: 1, 1
+        // EXE-TGT-USE-STDIO-DAG: 1, 2
+        // EXE-TGT-USE-STDIO-DAG: 1, 3
+        TGT_PRINTF("%d, %d\n", i, j);
       }
     }
   } // PRT-NEXT: }
@@ -1822,7 +1863,7 @@ int main(int argc, char *argv[]) {
     // PRT-NOACC-NEXT:         for (int l = 0; l < 2; ++l) {
     // PRT-NOACC-NEXT:           for (int m = 0; m < 2; ++m) {
     // PRT-NOACC-NEXT:             for (int n = 0; n < 1; ++n)
-    // PRT-NOACC-NEXT:               printf
+    // PRT-NOACC-NEXT:               {{TGT_PRINTF|printf}}
     // PRT-NOACC-NEXT:           }
     // PRT-NOACC-NEXT:         }
     // PRT-NOACC-NEXT:       }
@@ -1844,7 +1885,7 @@ int main(int argc, char *argv[]) {
     // PRT-A-NEXT:               for (int m = 0; m < 2; ++m) {
     // PRT-A-NEXT:                 {{^ *}}#pragma acc loop vector{{$}}
     // PRT-A-NEXT:                 for (int n = 0; n < 1; ++n)
-    // PRT-A-NEXT:                   printf
+    // PRT-A-NEXT:                   {{TGT_PRINTF|printf}}
     // PRT-A-NEXT:               }
     // PRT-A-NEXT:             }
     // PRT-A-NEXT:           }
@@ -1865,7 +1906,7 @@ int main(int argc, char *argv[]) {
     // PRT-AO-NEXT:    //             for (int m = 0; m < 2; ++m) {
     // PRT-AO-NEXT:    //               #pragma omp simd simdlen(1){{$}}
     // PRT-AO-NEXT:    //               for (int n = 0; n < 1; ++n)
-    // PRT-AO-NEXT:    //                 printf
+    // PRT-AO-NEXT:    //                 {{TGT_PRINTF|printf}}
     // PRT-AO-NEXT:    //             }
     // PRT-AO-NEXT:    //           }
     // PRT-AO-NEXT:    //         }
@@ -1888,7 +1929,7 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:                 for (int m = 0; m < 2; ++m) {
     // PRT-O-NEXT:                   {{^ *}}#pragma omp simd simdlen(1){{$}}
     // PRT-O-NEXT:                   for (int n = 0; n < 1; ++n)
-    // PRT-O-NEXT:                     printf
+    // PRT-O-NEXT:                     {{TGT_PRINTF|printf}}
     // PRT-O-NEXT:                 }
     // PRT-O-NEXT:               }
     // PRT-O-NEXT:             }
@@ -1911,7 +1952,7 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    //           for (int m = 0; m < 2; ++m) {
     // PRT-OA-NEXT:    //             #pragma acc loop vector{{$}}
     // PRT-OA-NEXT:    //             for (int n = 0; n < 1; ++n)
-    // PRT-OA-NEXT:    //               printf
+    // PRT-OA-NEXT:    //               {{TGT_PRINTF|printf}}
     // PRT-OA-NEXT:    //           }
     // PRT-OA-NEXT:    //         }
     // PRT-OA-NEXT:    //       }
@@ -1936,23 +1977,23 @@ int main(int argc, char *argv[]) {
                 #pragma acc loop vector
                 for (int n = 0; n < 1; ++n)
                   // not sequential
-                  // EXE-DAG: 0, 0, 0, 0, 0, 0
-                  // EXE-DAG: 0, 0, 0, 0, 1, 0
-                  // EXE-DAG: 0, 0, 0, 1, 0, 0
-                  // EXE-DAG: 0, 0, 0, 1, 1, 0
-                  // EXE-DAG: 0, 0, 1, 0, 0, 0
-                  // EXE-DAG: 0, 0, 1, 0, 1, 0
-                  // EXE-DAG: 0, 0, 1, 1, 0, 0
-                  // EXE-DAG: 0, 0, 1, 1, 1, 0
-                  // EXE-DAG: 1, 0, 0, 0, 0, 0
-                  // EXE-DAG: 1, 0, 0, 0, 1, 0
-                  // EXE-DAG: 1, 0, 0, 1, 0, 0
-                  // EXE-DAG: 1, 0, 0, 1, 1, 0
-                  // EXE-DAG: 1, 0, 1, 0, 0, 0
-                  // EXE-DAG: 1, 0, 1, 0, 1, 0
-                  // EXE-DAG: 1, 0, 1, 1, 0, 0
-                  // EXE-DAG: 1, 0, 1, 1, 1, 0
-                  printf("%d, %d, %d, %d, %d, %d\n", i, j, k, l, m, n);
+                  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 0, 0, 0
+                  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 0, 1, 0
+                  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 1, 0, 0
+                  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0, 1, 1, 0
+                  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 0, 0, 0
+                  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 0, 1, 0
+                  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 1, 0, 0
+                  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1, 1, 1, 0
+                  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 0, 0, 0
+                  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 0, 1, 0
+                  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 1, 0, 0
+                  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0, 1, 1, 0
+                  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 0, 0, 0
+                  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 0, 1, 0
+                  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 1, 0, 0
+                  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1, 1, 1, 0
+                  TGT_PRINTF("%d, %d, %d, %d, %d, %d\n", i, j, k, l, m, n);
               }
             }
           }
@@ -2007,16 +2048,16 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < 8; ++i) {
         // sequential as partitioned only across 1 vector lane
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-NEXT: 0
-        // EXE-NEXT: 1
-        // EXE-NEXT: 2
-        // EXE-NEXT: 3
-        // EXE-NEXT: 4
-        // EXE-NEXT: 5
-        // EXE-NEXT: 6
-        // EXE-NEXT: 7
-        printf("%d\n", i);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-NEXT: 0
+        // EXE-TGT-USE-STDIO-NEXT: 1
+        // EXE-TGT-USE-STDIO-NEXT: 2
+        // EXE-TGT-USE-STDIO-NEXT: 3
+        // EXE-TGT-USE-STDIO-NEXT: 4
+        // EXE-TGT-USE-STDIO-NEXT: 5
+        // EXE-TGT-USE-STDIO-NEXT: 6
+        // EXE-TGT-USE-STDIO-NEXT: 7
+        TGT_PRINTF("%d\n", i);
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
@@ -2067,13 +2108,13 @@ int main(int argc, char *argv[]) {
     // PRT-PRE-NEXT: /* expected{{-warning.*}} */
     //
     // PRT-NOACC-NEXT: for (int i = 0; i < 8; ++i) {
-    // PRT-NOACC-NEXT:   printf
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
     // PRT-NOACC-NEXT: }
     //
     // PRT-AO-NEXT:    // v----------ACC----------v
     // PRT-A-NEXT:     {{^ *}}#pragma acc parallel loop vector num_gangs(1) num_workers(1) vector_length(++vl){{$}}
     // PRT-A-NEXT:     for (int i = 0; i < 8; ++i) {
-    // PRT-A-NEXT:       printf
+    // PRT-A-NEXT:       {{TGT_PRINTF|printf}}
     // PRT-A-NEXT:     }
     // PRT-AO-NEXT:    // ---------ACC->OMP--------
     // PRT-AO-NEXT:    // {
@@ -2081,7 +2122,7 @@ int main(int argc, char *argv[]) {
     // PRT-AO-NEXT:    //   #pragma omp target teams num_teams(1){{$}}
     // PRT-AO-NEXT:    //   #pragma omp distribute simd{{$}}
     // PRT-AO-NEXT:    //   for (int i = 0; i < 8; ++i) {
-    // PRT-AO-NEXT:    //     printf
+    // PRT-AO-NEXT:    //     {{TGT_PRINTF|printf}}
     // PRT-AO-NEXT:    //   }
     // PRT-AO-NEXT:    // }
     // PRT-AO-NEXT:    // ^----------OMP----------^
@@ -2092,13 +2133,13 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(1){{$}}
     // PRT-O-NEXT:       {{^ *}}#pragma omp distribute simd{{$}}
     // PRT-O-NEXT:       for (int i = 0; i < 8; ++i) {
-    // PRT-O-NEXT:         printf
+    // PRT-O-NEXT:         {{TGT_PRINTF|printf}}
     // PRT-O-NEXT:       }
     // PRT-O-NEXT:     }
     // PRT-OA-NEXT:    // ---------OMP<-ACC--------
     // PRT-OA-NEXT:    // #pragma acc parallel loop vector num_gangs(1) num_workers(1) vector_length(++vl){{$}}
     // PRT-OA-NEXT:    // for (int i = 0; i < 8; ++i) {
-    // PRT-OA-NEXT:    //   printf
+    // PRT-OA-NEXT:    //   {{TGT_PRINTF|printf}}
     // PRT-OA-NEXT:    // }
     // PRT-OA-NEXT:    // ^----------ACC----------^
     //
@@ -2106,15 +2147,15 @@ int main(int argc, char *argv[]) {
     #pragma acc parallel loop vector num_gangs(1) num_workers(1) vector_length(++vl)
     for (int i = 0; i < 8; ++i) {
       // sequential as partitioned only across 1 vector lane
-      // EXE-NEXT: 0
-      // EXE-NEXT: 1
-      // EXE-NEXT: 2
-      // EXE-NEXT: 3
-      // EXE-NEXT: 4
-      // EXE-NEXT: 5
-      // EXE-NEXT: 6
-      // EXE-NEXT: 7
-      printf("%d\n", i);
+      // EXE-TGT-USE-STDIO-NEXT: 0
+      // EXE-TGT-USE-STDIO-NEXT: 1
+      // EXE-TGT-USE-STDIO-NEXT: 2
+      // EXE-TGT-USE-STDIO-NEXT: 3
+      // EXE-TGT-USE-STDIO-NEXT: 4
+      // EXE-TGT-USE-STDIO-NEXT: 5
+      // EXE-TGT-USE-STDIO-NEXT: 6
+      // EXE-TGT-USE-STDIO-NEXT: 7
+      TGT_PRINTF("%d\n", i);
     }
   } // PRT-NEXT: }
 
@@ -2156,14 +2197,14 @@ int main(int argc, char *argv[]) {
     // PRT-PRE-NEXT: /* expected{{-warning.*}} */
     //
     // PRT-NOACC-NEXT: for (int i = 0; i < 8; ++i) {
-    // PRT-NOACC-NEXT:   printf
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
     // PRT-NOACC-NEXT: }
     //
     // PRT-AO-NEXT:    // v----------ACC----------v
     // PRT-A-NEXT:     {{^ *}}#pragma acc parallel num_gangs(1) num_workers(1) vector_length(vl--){{$}}
     // PRT-A-NEXT:     {{^ *}}#pragma acc loop worker{{$}}
     // PRT-A-NEXT:     for (int i = 0; i < 8; ++i) {
-    // PRT-A-NEXT:       printf
+    // PRT-A-NEXT:       {{TGT_PRINTF|printf}}
     // PRT-A-NEXT:     }
     // PRT-AO-NEXT:    // ---------ACC->OMP--------
     // PRT-AO-NEXT:    // {
@@ -2171,7 +2212,7 @@ int main(int argc, char *argv[]) {
     // PRT-AO-NEXT:    //   #pragma omp target teams num_teams(1){{$}}
     // PRT-AO-NEXT:    //   #pragma omp distribute parallel for num_threads(1){{$}}
     // PRT-AO-NEXT:    //   for (int i = 0; i < 8; ++i) {
-    // PRT-AO-NEXT:    //     printf
+    // PRT-AO-NEXT:    //     {{TGT_PRINTF|printf}}
     // PRT-AO-NEXT:    //   }
     // PRT-AO-NEXT:    // }
     // PRT-AO-NEXT:    // ^----------OMP----------^
@@ -2182,14 +2223,14 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(1){{$}}
     // PRT-O-NEXT:       {{^ *}}#pragma omp distribute parallel for num_threads(1){{$}}
     // PRT-O-NEXT:       for (int i = 0; i < 8; ++i) {
-    // PRT-O-NEXT:         printf
+    // PRT-O-NEXT:         {{TGT_PRINTF|printf}}
     // PRT-O-NEXT:       }
     // PRT-O-NEXT:     }
     // PRT-OA-NEXT:    // ---------OMP<-ACC--------
     // PRT-OA-NEXT:    // #pragma acc parallel num_gangs(1) num_workers(1) vector_length(vl--){{$}}
     // PRT-OA-NEXT:    // #pragma acc loop worker{{$}}
     // PRT-OA-NEXT:    // for (int i = 0; i < 8; ++i) {
-    // PRT-OA-NEXT:    //   printf
+    // PRT-OA-NEXT:    //   {{TGT_PRINTF|printf}}
     // PRT-OA-NEXT:    // }
     // PRT-OA-NEXT:    // ^----------ACC----------^
     //
@@ -2198,15 +2239,15 @@ int main(int argc, char *argv[]) {
     #pragma acc loop worker
     for (int i = 0; i < 8; ++i) {
       // sequential as partitioned only across 1 worker
-      // EXE-NEXT: 0
-      // EXE-NEXT: 1
-      // EXE-NEXT: 2
-      // EXE-NEXT: 3
-      // EXE-NEXT: 4
-      // EXE-NEXT: 5
-      // EXE-NEXT: 6
-      // EXE-NEXT: 7
-      printf("%d\n", i);
+      // EXE-TGT-USE-STDIO-NEXT: 0
+      // EXE-TGT-USE-STDIO-NEXT: 1
+      // EXE-TGT-USE-STDIO-NEXT: 2
+      // EXE-TGT-USE-STDIO-NEXT: 3
+      // EXE-TGT-USE-STDIO-NEXT: 4
+      // EXE-TGT-USE-STDIO-NEXT: 5
+      // EXE-TGT-USE-STDIO-NEXT: 6
+      // EXE-TGT-USE-STDIO-NEXT: 7
+      TGT_PRINTF("%d\n", i);
     }
   } // PRT-NEXT: }
 
@@ -2248,14 +2289,14 @@ int main(int argc, char *argv[]) {
     // PRT-PRE-NEXT: /* expected{{-warning.*}} */
     //
     // PRT-NOACC-NEXT: for (int i = 0; i < 8; ++i) {
-    // PRT-NOACC-NEXT:   printf
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
     // PRT-NOACC-NEXT: }
     //
     // PRT-AO-NEXT:    // v----------ACC----------v
     // PRT-A-NEXT:     {{^ *}}#pragma acc parallel num_gangs(1) num_workers(foo()) vector_length(bar()){{$}}
     // PRT-A-NEXT:     {{^ *}}#pragma acc loop gang{{$}}
     // PRT-A-NEXT:     for (int i = 0; i < 8; ++i) {
-    // PRT-A-NEXT:       printf
+    // PRT-A-NEXT:       {{TGT_PRINTF|printf}}
     // PRT-A-NEXT:     }
     // PRT-AO-NEXT:    // ---------ACC->OMP--------
     // PRT-AO-NEXT:    // {
@@ -2264,7 +2305,7 @@ int main(int argc, char *argv[]) {
     // PRT-AO-NEXT:    //   #pragma omp target teams num_teams(1){{$}}
     // PRT-AO-NEXT:    //   #pragma omp distribute{{$}}
     // PRT-AO-NEXT:    //   for (int i = 0; i < 8; ++i) {
-    // PRT-AO-NEXT:    //     printf
+    // PRT-AO-NEXT:    //     {{TGT_PRINTF|printf}}
     // PRT-AO-NEXT:    //   }
     // PRT-AO-NEXT:    // }
     // PRT-AO-NEXT:    // ^----------OMP----------^
@@ -2276,14 +2317,14 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:       {{^ *}}#pragma omp target teams num_teams(1){{$}}
     // PRT-O-NEXT:       {{^ *}}#pragma omp distribute{{$}}
     // PRT-O-NEXT:       for (int i = 0; i < 8; ++i) {
-    // PRT-O-NEXT:         printf
+    // PRT-O-NEXT:         {{TGT_PRINTF|printf}}
     // PRT-O-NEXT:       }
     // PRT-O-NEXT:     }
     // PRT-OA-NEXT:    // ---------OMP<-ACC--------
     // PRT-OA-NEXT:    // #pragma acc parallel num_gangs(1) num_workers(foo()) vector_length(bar()){{$}}
     // PRT-OA-NEXT:    // #pragma acc loop gang{{$}}
     // PRT-OA-NEXT:    // for (int i = 0; i < 8; ++i) {
-    // PRT-OA-NEXT:    //   printf
+    // PRT-OA-NEXT:    //   {{TGT_PRINTF|printf}}
     // PRT-OA-NEXT:    // }
     // PRT-OA-NEXT:    // ^----------ACC----------^
     //
@@ -2295,15 +2336,15 @@ int main(int argc, char *argv[]) {
     #pragma acc loop gang
     for (int i = 0; i < 8; ++i) {
       // sequential as partitioned only across 1 gang
-      // EXE-NEXT: 0
-      // EXE-NEXT: 1
-      // EXE-NEXT: 2
-      // EXE-NEXT: 3
-      // EXE-NEXT: 4
-      // EXE-NEXT: 5
-      // EXE-NEXT: 6
-      // EXE-NEXT: 7
-      printf("%d\n", i);
+      // EXE-TGT-USE-STDIO-NEXT: 0
+      // EXE-TGT-USE-STDIO-NEXT: 1
+      // EXE-TGT-USE-STDIO-NEXT: 2
+      // EXE-TGT-USE-STDIO-NEXT: 3
+      // EXE-TGT-USE-STDIO-NEXT: 4
+      // EXE-TGT-USE-STDIO-NEXT: 5
+      // EXE-TGT-USE-STDIO-NEXT: 6
+      // EXE-TGT-USE-STDIO-NEXT: 7
+      TGT_PRINTF("%d\n", i);
     }
   } // PRT-NEXT: }
 

@@ -47,10 +47,11 @@
 // RUN:   (no-create-opt=-fopenacc-no-create-omp=no-ompx-no-alloc                                   no-create-mt=ompx_hold,alloc               inherited-no-create-mt=alloc               noAlloc-or-alloc=ALLOC    not-crash-if-alloc='not --crash')
 // RUN: }
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' host=-HOST not-crash-if-off-and-alloc=                     )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host=      not-crash-if-off-and-alloc=%[not-crash-if-alloc])
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' host=      not-crash-if-off-and-alloc=%[not-crash-if-alloc])
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         host=-HOST not-crash-if-off-and-alloc=                     )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         host=      not-crash-if-off-and-alloc=%[not-crash-if-alloc])
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         host=      not-crash-if-off-and-alloc=%[not-crash-if-alloc])
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host=      not-crash-if-off-and-alloc=%[not-crash-if-alloc])
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         host=      not-crash-if-off-and-alloc=%[not-crash-if-alloc])
 // RUN: }
 //      # "acc parallel loop" should be about the same as "acc parallel", so a
 //      # few cases are probably sufficient for it.
@@ -123,8 +124,8 @@
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-%[noAlloc-or-alloc],PRT-A,PRT-A-%[noAlloc-or-alloc]                                      )
@@ -175,25 +176,33 @@
 // working translations of the no_create clause in all cases.
 //
 // RUN: %for no-create-opts {
+// RUN:   %for prt-opts {
+// RUN:     %clang -Xclang -verify %[prt-opt]=omp %[no-create-opt] \
+// RUN:       %acc-includes -DCASES_HEADER='"%t-cases.h"' %s \
+// RUN:       > %t-%[prt-kind]-omp.c -Wno-openacc-omp-map-ompx-hold
+// RUN:     echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN:     grep "// nvptx64-" %s >> %t-%[prt-kind]-omp.c
+// RUN:   }
+// RUN:   %clang -fopenmp %fopenmp-version -Xclang -verify \
+// RUN:     -Wno-unused-function %acc-includes -DCASES_HEADER='"%t-cases.h"' \
+// RUN:     -gline-tables-only -o %t.exe %t-ast-prt-omp.c %acc-libs
+// RUN:   %for cases {
+// RUN:     %t.exe %[case] > %t.out 2>&1
+// RUN:     FileCheck -input-file %t.out %s \
+// RUN:       -match-full-lines -allow-empty \
+// RUN:       -check-prefixes=EXE-HOST,EXE-%[case]-HOST \
+// RUN:       -check-prefixes=EXE-%[case]-%[noAlloc-or-alloc]-HOST
+// RUN:   }
 // RUN:   %for tgts {
-// RUN:     %for prt-opts {
-// RUN:       %[run-if] %clang -Xclang -verify %[prt-opt]=omp \
-// RUN:                 %[no-create-opt] %acc-includes \
-// RUN:                 -DCASES_HEADER='"%t-cases.h"' %s > %t-omp.c \
-// RUN:                 -Wno-openacc-omp-map-ompx-hold
-// RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:       %[run-if] grep "// nvptx64-" %s >> %t-omp.c
-// RUN:       %[run-if] %clang -fopenmp %fopenmp-version \
-// RUN:                 %[tgt-cflags] -Wno-unused-function %acc-includes \
-// RUN:                 -DCASES_HEADER='"%t-cases.h"' -gline-tables-only \
-// RUN:                 -o %t.exe %t-omp.c %acc-libs
-// RUN:       %for cases {
-// RUN:         %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2>&1
-// RUN:         %[run-if] FileCheck -input-file %t.out %s \
-// RUN:           -match-full-lines -allow-empty \
-// RUN:           -check-prefixes=EXE%[host],EXE-%[case]%[host] \
-// RUN:           -check-prefixes=EXE-%[case]-%[noAlloc-or-alloc]%[host]
-// RUN:       }
+// RUN:     %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] \
+// RUN:       -Wno-unused-function %acc-includes -DCASES_HEADER='"%t-cases.h"' \
+// RUN:       -gline-tables-only -o %t.exe %t-prt-omp.c %acc-libs
+// RUN:     %for cases {
+// RUN:       %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2>&1
+// RUN:       %[run-if] FileCheck -input-file %t.out %s \
+// RUN:         -match-full-lines -allow-empty \
+// RUN:         -check-prefixes=EXE%[host],EXE-%[case]%[host] \
+// RUN:         -check-prefixes=EXE-%[case]-%[noAlloc-or-alloc]%[host]
 // RUN:     }
 // RUN:   }
 // RUN: }

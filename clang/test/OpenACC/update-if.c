@@ -9,6 +9,7 @@
 // RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-dev=DEV )
 // RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host-or-dev=DEV )
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-dev=DEV )
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags=-fopenmp-targets=%run-amdgcn-triple  host-or-dev=DEV )
 // RUN: }
 
 // Check -ast-dump before and after AST serialization.
@@ -33,8 +34,8 @@
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' > %t-acc.c
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT-A)
@@ -76,28 +77,32 @@
 // compilers.  That is, we want to be sure source-to-source mode produces
 // working translations of the update directive in all cases.
 //
+// RUN: %for prt-opts {
+// RUN:   %clang -Xclang -verify=expected,acc %[prt-opt]=omp %s \
+// RUN:     -Wno-openacc-omp-update-present -Wno-openacc-omp-map-ompx-hold \
+// RUN:     > %t-%[prt-kind]-omp.c
+// RUN:   grep "^/\* link-" %s >> %t-%[prt-kind]-omp.c
+// RUN: }
+// RUN: %clang -Xclang -verify=link -fopenmp %fopenmp-version \
+// RUN:   -Wno-literal-conversion -Wno-pointer-bool-conversion -o %t.exe \
+// RUN:   %t-ast-prt-omp.c 
+// RUN: %t.exe > %t.out 2>&1
+// RUN: FileCheck -input-file %t.out %s \
+// RUN:   -strict-whitespace -check-prefixes=EXE,EXE-HOST
 // RUN: %for tgts {
-// RUN:   %for prt-opts {
-// RUN:     %[run-if] %clang -Xclang -verify=expected,acc %[prt-opt]=omp %s \
-// RUN:                      -Wno-openacc-omp-update-present \
-// RUN:                      -Wno-openacc-omp-map-ompx-hold \
-// RUN:                      > %t-omp.c
-// RUN:     %[run-if] grep "^/\* link-" %s >> %t-omp.c
-// RUN:     %[run-if] %clang -Xclang -verify=link -fopenmp %fopenmp-version \
-// RUN:                      %[tgt-cflags] -o %t.exe %t-omp.c \
-// RUN:                      -Wno-literal-conversion \
-// RUN:                      -Wno-pointer-bool-conversion
-// RUN:     %[run-if] %t.exe > %t.out 2>&1
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:       -strict-whitespace -check-prefixes=EXE,EXE-%[host-or-dev]
-// RUN:   }
+// RUN:   %[run-if] %clang -Xclang -verify=link -fopenmp %fopenmp-version \
+// RUN:     %[tgt-cflags] -o %t.exe %t-prt-omp.c \
+// RUN:     -Wno-literal-conversion -Wno-pointer-bool-conversion
+// RUN:   %[run-if] %t.exe > %t.out 2>&1
+// RUN:   %[run-if] FileCheck -input-file %t.out %s \
+// RUN:     -strict-whitespace -check-prefixes=EXE,EXE-%[host-or-dev]
 // RUN: }
 
 // Check execution with normal compilation.
 //
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify=expected,acc,link -fopenacc \
-// RUN:             %[tgt-cflags] -o %t.exe %s
+// RUN:     %[tgt-cflags] -o %t.exe %s
 // RUN:   %[run-if] %t.exe > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s\
 // RUN:     -strict-whitespace -check-prefixes=EXE,EXE-%[host-or-dev]
@@ -130,8 +135,14 @@ void setValues_(int *sp, int *hp, int *dp) {
 
 void printValues_(int *sp, int *hp, int *dp) {
   printf("    host s=%d, h=%d, d=%d\n", *sp, *hp, *dp);
-  #pragma acc parallel num_gangs(1)
-  printf("  device s=%d, h=%d, d=%d\n", *sp, *hp, *dp);
+  int sCopy, hCopy, dCopy;
+  #pragma acc parallel num_gangs(1) copyout(sCopy, hCopy, dCopy)
+  {
+    sCopy = *sp;
+    hCopy = *hp;
+    dCopy = *dp;
+  }
+  printf("  device s=%d, h=%d, d=%d\n", sCopy, hCopy, dCopy);
 }
 
 // EXE-NOT: {{.}}
@@ -293,8 +304,8 @@ int main(int argc, char *argv[]) {
   //  EXE-DEV-NEXT:   device s=11, h=21, d=30{{$}}
   printf("if(0.1)\n");
   setValues();
-  /* expected-warning@+2 {{implicit conversion from 'double' to '_Bool' changes value from 0.1 to true}} */
-  /* acc-warning@+1 {{implicit conversion from 'double' to '_Bool' changes value from 0.1 to true}} */
+  /* expected-warning-re@+2 {{implicit conversion from 'double' to '{{_Bool|bool}}' changes value from 0.1 to true}} */
+  /* acc-warning-re@+1 {{implicit conversion from 'double' to '{{_Bool|bool}}' changes value from 0.1 to true}} */
   #pragma acc update self(s) host(h) device(d) if(0.1)
   printValues();
 
@@ -305,8 +316,8 @@ int main(int argc, char *argv[]) {
   //  EXE-DEV-NEXT:   device s=11, h=21, d=30{{$}}
   printf("if(-19.)\n");
   setValues();
-  /* expected-warning@+2 {{implicit conversion from 'double' to '_Bool' changes value from -19 to true}} */
-  /* acc-warning@+1 {{implicit conversion from 'double' to '_Bool' changes value from -19 to true}} */
+  /* expected-warning-re@+2 {{implicit conversion from 'double' to '{{_Bool|bool}}' changes value from -19 to true}} */
+  /* acc-warning-re@+1 {{implicit conversion from 'double' to '{{_Bool|bool}}' changes value from -19 to true}} */
   #pragma acc update self(s) host(h) device(d) if(-19.)
   printValues();
 

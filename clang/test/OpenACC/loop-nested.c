@@ -43,8 +43,8 @@
 // prt-args iteration, significantly shortening the prt-args definition.
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb])
@@ -81,18 +81,10 @@
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
-// RUN: %for cmbs {
-// RUN:   %for prt-opts {
-// RUN:     %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c %[cmb-cflags]
-// RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c \
-// RUN:             -Wno-unused-function %[cmb-cflags]
-// RUN:     %t 2>&1 \
-// RUN:     | FileCheck -check-prefixes=EXE %s
-// RUN:   }
-// RUN: }
-
-// Check execution with normal compilation.
+// -fopenacc-ast-print is guaranteed to expand includes and macros appropiately
+// only for the host architecture, so don't try to use it for offload
+// compilation.  Do try it for the host as it's good way to catch AST printing
+// issues.
 //
 // FIXME: Several upstream compiler bugs were recently introduced that break
 // behavior when offloading to nvptx64 unless we add -O1 or higher, but that
@@ -102,18 +94,45 @@
 //
 // To avoid all this until upstream fixes it, we add -O1 -Wno-pass-failed.
 //
+// FIXME: amdgcn doesn't yet support printf in a kernel.  Unfortunately, That
+// means our execution checks on amdgcn don't verify much except that nothing
+// crashes.
+//
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify')
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify')
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed -Xclang -verify=nvptx64')
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed -Xclang -verify=nvptx64' tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify -DTGT_USE_STDIO=0'            tgt-use-stdio=NO-TGT-USE-STDIO)
 // RUN: }
+// RUN: %for cmbs {
+// RUN:   %for prt-opts {
+// RUN:     %clang -Xclang -verify %[prt-opt]=omp %s > %t-%[prt-kind]-omp.c \
+// RUN:       %[cmb-cflags]
+// RUN:     echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN:   }
+// RUN:   %clang -fopenmp %fopenmp-version -Xclang -verify -o %t \
+// RUN:     %t-ast-prt-omp.c -Wno-unused-function %[cmb-cflags]
+// RUN:   %t > %t.out 2>&1
+// RUN:   FileCheck -input-file %t.out %s -check-prefixes=EXE,EXE-TGT-USE-STDIO
+// RUN:   %for tgts {
+// RUN:     %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] -o %t \
+// RUN:       %t-prt-omp.c %[cmb-cflags]
+// RUN:     %[run-if] %t > %t.out 2>&1
+// RUN:     %[run-if] FileCheck -input-file %t.out %s \
+// RUN:       -check-prefixes=EXE,EXE-%[tgt-use-stdio]
+// RUN:   }
+// RUN: }
+
+// Check execution with normal compilation.
+//
 // RUN: %for cmbs {
 // RUN:   %for tgts {
 // RUN:     %[run-if] %clang -fopenacc %s -o %t \
 // RUN:                      %[cmb-cflags] %[tgt-cflags]
 // RUN:     %[run-if] %t > %t.out 2>&1
-// RUN:     %[run-if] FileCheck -input-file %t.out %s -check-prefixes=EXE
+// RUN:     %[run-if] FileCheck -input-file %t.out %s \
+// RUN:       -check-prefixes=EXE,EXE-%[tgt-use-stdio]
 // RUN:   }
 // RUN: }
 
@@ -129,6 +148,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef TGT_USE_STDIO
+# define TGT_USE_STDIO 1
+#endif
+
+#if TGT_USE_STDIO
+# define TGT_PRINTF(...) printf(__VA_ARGS__)
+#else
+# define TGT_PRINTF(...)
+#endif
 
 int main() {
 
@@ -217,7 +246,7 @@ int main() {
   //      PRT-OA-SAME:         {{^}} // discarded in OpenMP translation
   //      PRT-OA-SAME:         {{^$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -225,22 +254,22 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -253,7 +282,7 @@ int main() {
       for (int j = 0; j < 2; ++j) {
         #pragma acc loop seq
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB
@@ -345,7 +374,7 @@ int main() {
   //      PRT-OA-SAME:         {{^}} // discarded in OpenMP translation
   //      PRT-OA-SAME:         {{^$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -353,14 +382,14 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -373,7 +402,7 @@ int main() {
       for (int j = 0; j < 2; ++j) {
         #pragma acc loop seq
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB
@@ -467,7 +496,7 @@ int main() {
   //      PRT-OA-SAME:         {{^}} // discarded in OpenMP translation
   //      PRT-OA-SAME:         {{^$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -475,22 +504,22 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 0, 2, 0
-  // EXE-DAG: 0, 2, 1
-  // EXE-DAG: 0, 3, 0
-  // EXE-DAG: 0, 3, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
-  // EXE-DAG: 1, 2, 0
-  // EXE-DAG: 1, 2, 1
-  // EXE-DAG: 1, 3, 0
-  // EXE-DAG: 1, 3, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 2, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 2, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 3, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 3, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 2, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 2, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 3, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 3, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -503,7 +532,7 @@ int main() {
       for (int j = 0; j < 4; ++j) {
         #pragma acc loop seq
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB
@@ -596,7 +625,7 @@ int main() {
   //      PRT-OA-SAME:         {{^}} // discarded in OpenMP translation
   //      PRT-OA-SAME:         {{^$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -604,22 +633,22 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 0, 2, 0
-  // EXE-DAG: 0, 2, 1
-  // EXE-DAG: 0, 3, 0
-  // EXE-DAG: 0, 3, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
-  // EXE-DAG: 1, 2, 0
-  // EXE-DAG: 1, 2, 1
-  // EXE-DAG: 1, 3, 0
-  // EXE-DAG: 1, 3, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 2, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 2, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 3, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 3, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 2, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 2, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 3, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 3, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -632,7 +661,7 @@ int main() {
       for (int j = 0; j < 4; ++j) {
         #pragma acc loop seq
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB
@@ -730,7 +759,7 @@ int main() {
   //       PRT-O-NEXT:         #pragma omp parallel for shared(i,j){{$}}
   //      PRT-OA-NEXT:         // #pragma acc loop worker{{$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -738,14 +767,14 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -758,7 +787,7 @@ int main() {
       for (int j = 0; j < 2; ++j) {
         #pragma acc loop worker
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB
@@ -848,7 +877,7 @@ int main() {
   //      PRT-OA-SAME:         {{^}} // discarded in OpenMP translation
   //      PRT-OA-SAME:         {{^$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -856,22 +885,22 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 0, 2, 0
-  // EXE-DAG: 0, 2, 1
-  // EXE-DAG: 0, 3, 0
-  // EXE-DAG: 0, 3, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
-  // EXE-DAG: 1, 2, 0
-  // EXE-DAG: 1, 2, 1
-  // EXE-DAG: 1, 3, 0
-  // EXE-DAG: 1, 3, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 2, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 2, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 3, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 3, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 2, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 2, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 3, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 3, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -884,7 +913,7 @@ int main() {
       for (int j = 0; j < 4; ++j) {
         #pragma acc loop seq
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB
@@ -981,7 +1010,7 @@ int main() {
   //       PRT-O-NEXT:         #pragma omp simd{{$}}
   //      PRT-OA-NEXT:         // #pragma acc loop vector{{$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -989,14 +1018,14 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -1009,7 +1038,7 @@ int main() {
       for (int j = 0; j < 2; ++j) {
         #pragma acc loop vector
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB
@@ -1098,7 +1127,7 @@ int main() {
   //      PRT-OA-SAME:         {{^}} // discarded in OpenMP translation
   //      PRT-OA-SAME:         {{^$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -1106,22 +1135,22 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 0, 2, 0
-  // EXE-DAG: 0, 2, 1
-  // EXE-DAG: 0, 3, 0
-  // EXE-DAG: 0, 3, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
-  // EXE-DAG: 1, 2, 0
-  // EXE-DAG: 1, 2, 1
-  // EXE-DAG: 1, 3, 0
-  // EXE-DAG: 1, 3, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 2, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 2, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 3, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 3, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 2, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 2, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 3, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 3, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -1134,7 +1163,7 @@ int main() {
       for (int j = 0; j < 4; ++j) {
         #pragma acc loop seq
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB
@@ -1232,7 +1261,7 @@ int main() {
   //       PRT-O-NEXT:         #pragma omp simd{{$}}
   //      PRT-OA-NEXT:         // #pragma acc loop vector{{$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -1240,22 +1269,22 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
-  // EXE-DAG: 2, 0, 0
-  // EXE-DAG: 2, 0, 1
-  // EXE-DAG: 2, 1, 0
-  // EXE-DAG: 2, 1, 1
-  // EXE-DAG: 3, 0, 0
-  // EXE-DAG: 3, 0, 1
-  // EXE-DAG: 3, 1, 0
-  // EXE-DAG: 3, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 2, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 2, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 2, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 2, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 3, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 3, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 3, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 3, 1, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -1268,7 +1297,7 @@ int main() {
       for (int j = 0; j < 2; ++j) {
         #pragma acc loop vector
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB
@@ -1359,7 +1388,7 @@ int main() {
   //      PRT-OA-SAME:         {{^}} // discarded in OpenMP translation
   //      PRT-OA-SAME:         {{^$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -1367,30 +1396,30 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 0, 2, 0
-  // EXE-DAG: 0, 2, 1
-  // EXE-DAG: 0, 3, 0
-  // EXE-DAG: 0, 3, 1
-  // EXE-DAG: 0, 4, 0
-  // EXE-DAG: 0, 4, 1
-  // EXE-DAG: 0, 5, 0
-  // EXE-DAG: 0, 5, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
-  // EXE-DAG: 1, 2, 0
-  // EXE-DAG: 1, 2, 1
-  // EXE-DAG: 1, 3, 0
-  // EXE-DAG: 1, 3, 1
-  // EXE-DAG: 1, 4, 0
-  // EXE-DAG: 1, 4, 1
-  // EXE-DAG: 1, 5, 0
-  // EXE-DAG: 1, 5, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 2, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 2, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 3, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 3, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 4, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 4, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 5, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 5, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 2, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 2, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 3, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 3, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 4, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 4, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 5, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 5, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -1403,7 +1432,7 @@ int main() {
       for (int j = 0; j < 6; ++j) {
         #pragma acc loop seq
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB
@@ -1504,7 +1533,7 @@ int main() {
   //       PRT-O-NEXT:         #pragma omp simd{{$}}
   //      PRT-OA-NEXT:         // #pragma acc loop vector{{$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -1512,14 +1541,14 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -1532,7 +1561,7 @@ int main() {
       for (int j = 0; j < 2; ++j) {
         #pragma acc loop vector
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB
@@ -1627,7 +1656,7 @@ int main() {
   //       PRT-O-NEXT:         #pragma omp simd{{$}}
   //      PRT-OA-NEXT:         // #pragma acc loop vector{{$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -1635,22 +1664,22 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
-  // EXE-DAG: 2, 0, 0
-  // EXE-DAG: 2, 0, 1
-  // EXE-DAG: 2, 1, 0
-  // EXE-DAG: 2, 1, 1
-  // EXE-DAG: 3, 0, 0
-  // EXE-DAG: 3, 0, 1
-  // EXE-DAG: 3, 1, 0
-  // EXE-DAG: 3, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 2, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 2, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 2, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 2, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 3, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 3, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 3, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 3, 1, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -1663,7 +1692,7 @@ int main() {
       for (int j = 0; j < 2; ++j) {
         #pragma acc loop vector
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB
@@ -1758,7 +1787,7 @@ int main() {
   //       PRT-O-NEXT:         #pragma omp parallel for simd shared(i,j){{$}}
   //      PRT-OA-NEXT:         // #pragma acc loop worker vector{{$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -1766,22 +1795,22 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
-  // EXE-DAG: 2, 0, 0
-  // EXE-DAG: 2, 0, 1
-  // EXE-DAG: 2, 1, 0
-  // EXE-DAG: 2, 1, 1
-  // EXE-DAG: 3, 0, 0
-  // EXE-DAG: 3, 0, 1
-  // EXE-DAG: 3, 1, 0
-  // EXE-DAG: 3, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 2, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 2, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 2, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 2, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 3, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 3, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 3, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 3, 1, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -1794,7 +1823,7 @@ int main() {
       for (int j = 0; j < 2; ++j) {
         #pragma acc loop worker vector
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB
@@ -1885,7 +1914,7 @@ int main() {
   //      PRT-OA-SAME:         {{^}} // discarded in OpenMP translation
   //      PRT-OA-SAME:         {{^$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
-  //         PRT-NEXT:           printf
+  //         PRT-NEXT:           {{TGT_PRINTF|printf}}
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
@@ -1893,30 +1922,30 @@ int main() {
   //     PRT-PRE-NEXT:   }
   //     PRT-PRE-NEXT: #endif
   //
-  // EXE-DAG: 0, 0, 0
-  // EXE-DAG: 0, 0, 1
-  // EXE-DAG: 0, 1, 0
-  // EXE-DAG: 0, 1, 1
-  // EXE-DAG: 0, 2, 0
-  // EXE-DAG: 0, 2, 1
-  // EXE-DAG: 0, 3, 0
-  // EXE-DAG: 0, 3, 1
-  // EXE-DAG: 0, 4, 0
-  // EXE-DAG: 0, 4, 1
-  // EXE-DAG: 0, 5, 0
-  // EXE-DAG: 0, 5, 1
-  // EXE-DAG: 1, 0, 0
-  // EXE-DAG: 1, 0, 1
-  // EXE-DAG: 1, 1, 0
-  // EXE-DAG: 1, 1, 1
-  // EXE-DAG: 1, 2, 0
-  // EXE-DAG: 1, 2, 1
-  // EXE-DAG: 1, 3, 0
-  // EXE-DAG: 1, 3, 1
-  // EXE-DAG: 1, 4, 0
-  // EXE-DAG: 1, 4, 1
-  // EXE-DAG: 1, 5, 0
-  // EXE-DAG: 1, 5, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 2, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 2, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 3, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 3, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 4, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 4, 1
+  // EXE-TGT-USE-STDIO-DAG: 0, 5, 0
+  // EXE-TGT-USE-STDIO-DAG: 0, 5, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 0, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 1, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 2, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 2, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 3, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 3, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 4, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 4, 1
+  // EXE-TGT-USE-STDIO-DAG: 1, 5, 0
+  // EXE-TGT-USE-STDIO-DAG: 1, 5, 1
 #if !CMB
   #pragma acc parallel num_gangs(2)
   {
@@ -1929,7 +1958,7 @@ int main() {
       for (int j = 0; j < 6; ++j) {
         #pragma acc loop seq
         for (int k = 0; k < 2; ++k)
-          printf("%d, %d, %d\n", i, j, k);
+          TGT_PRINTF("%d, %d, %d\n", i, j, k);
       }
     }
 #if !CMB

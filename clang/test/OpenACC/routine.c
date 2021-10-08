@@ -5,6 +5,7 @@
 // RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-dev=DEV  verify=expected)
 // RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host-or-dev=DEV  verify=expected)
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-dev=DEV  verify=nvptx64 )
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags=-fopenmp-targets=%run-amdgcn-triple  host-or-dev=DEV  verify=expected)
 // RUN: }
 
 // Check -ast-dump before and after AST serialization.
@@ -39,6 +40,7 @@
 // RUN: }
 // RUN: %for prt-args {
 // RUN:   %clang -Xclang -verify %[prt] %acc-includes %t-acc.c \
+// RUN:     -Wno-openacc-omp-map-ompx-hold \
 // RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
 // RUN: }
 
@@ -59,7 +61,7 @@
 //
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify -fopenacc-print=omp %acc-includes \
-// RUN:                    %s > %t-omp.c
+// RUN:     -Wno-openacc-omp-map-ompx-hold %s > %t-omp.c
 // RUN:   %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
 // RUN:   %[run-if] %clang -fopenacc-print=omp %acc-includes -DCOMPILE_OTHER \
 // RUN:                    %s > %t-other-omp.c
@@ -98,9 +100,19 @@
 #include <openacc.h>
 #include <stdio.h>
 
-#define PRINT()                                                                \
-  printf("%s: host=%d, not_host=%d\n", __func__,                               \
-         acc_on_device(acc_device_host), acc_on_device(acc_device_not_host))
+typedef struct {
+  int Host;
+  int NotHost;
+} Result;
+
+#define WRITE_RESULT(Res)                                                      \
+  do {                                                                         \
+    (Res)->Host = acc_on_device(acc_device_host);                              \
+    (Res)->NotHost = acc_on_device(acc_device_not_host);                       \
+  } while (0)
+
+#define PRINT_RESULT(Fn, Res)                                                  \
+    printf("%s: host=%d, not_host=%d\n", #Fn, Res.Host, Res.NotHost)
 
 #ifndef COMPILE_OTHER
 
@@ -108,7 +120,7 @@
 // PRT: int PrtStart;
 int PrtStart;
 
-//      DMP: FunctionDecl {{.*}} onDecl 'void ()'
+//      DMP: FunctionDecl {{.*}} onDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
@@ -117,13 +129,13 @@ int PrtStart;
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDecl();
+//    PRT-NEXT: void onDecl(Result *);
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 #pragma acc routine seq
-void onDecl();
+void onDecl(Result *);
 
-//      DMP: FunctionDecl {{.*}} onDef 'void ()'
+//      DMP: FunctionDecl {{.*}} onDef 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
@@ -132,20 +144,18 @@ void onDecl();
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDef() {
-//         PRT: }
+//    PRT-NEXT: void onDef(Result *Res) {
+//         PRT: }{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 #pragma acc routine seq
-void onDef() {
-  PRINT();
-}
+void onDef(Result *Res) { WRITE_RESULT(Res); }
 
-//      DMP: FunctionDecl [[#%#x,onDeclDecl:]] {{.*}} onDeclDecl 'void ()'
+//      DMP: FunctionDecl [[#%#x,onDeclDecl:]] {{.*}} onDeclDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
-//      DMP: FunctionDecl {{.*}} prev [[#onDeclDecl]] {{.*}} onDeclDecl 'void ()'
+//      DMP: FunctionDecl {{.*}} prev [[#onDeclDecl]] {{.*}} onDeclDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> Inherited MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
@@ -154,19 +164,19 @@ void onDef() {
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDeclDecl();
+//    PRT-NEXT: void onDeclDecl(Result *);
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
-//    PRT-NEXT: void onDeclDecl();
+//    PRT-NEXT: void onDeclDecl(Result *);
 #pragma acc routine seq
-void onDeclDecl();
-void onDeclDecl();
+void onDeclDecl(Result *);
+void onDeclDecl(Result *);
 
-//      DMP: FunctionDecl [[#%#x,onDeclDef:]] {{.*}} onDeclDef 'void ()'
+//      DMP: FunctionDecl [[#%#x,onDeclDef:]] {{.*}} onDeclDef 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
-//      DMP: FunctionDecl {{.*}} prev [[#onDeclDef]] {{.*}} onDeclDef 'void ()'
+//      DMP: FunctionDecl {{.*}} prev [[#onDeclDef]] {{.*}} onDeclDef 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> Inherited MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
@@ -175,22 +185,20 @@ void onDeclDecl();
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDeclDef();
+//    PRT-NEXT: void onDeclDef(Result *);
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
-//    PRT-NEXT: void onDeclDef() {
-//         PRT: }
+//    PRT-NEXT: void onDeclDef(Result *Res) {
+//         PRT: }{{$}}
 #pragma acc routine seq
-void onDeclDef();
-void onDeclDef() {
-  PRINT();
-}
+void onDeclDef(Result *);
+void onDeclDef(Result *Res) { WRITE_RESULT(Res); }
 
-//      DMP: FunctionDecl [[#%#x,onDefDecl:]] {{.*}} onDefDecl 'void ()'
+//      DMP: FunctionDecl [[#%#x,onDefDecl:]] {{.*}} onDefDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
-//      DMP: FunctionDecl {{.*}} prev [[#onDefDecl]] {{.*}} onDefDecl 'void ()'
+//      DMP: FunctionDecl {{.*}} prev [[#onDefDecl]] {{.*}} onDefDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> Inherited MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
@@ -199,55 +207,51 @@ void onDeclDef() {
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDefDecl() {
-//         PRT: }
+//    PRT-NEXT: void onDefDecl(Result *Res) {
+//         PRT: }{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
-//    PRT-NEXT: void onDefDecl();
+//    PRT-NEXT: void onDefDecl(Result *);
 #pragma acc routine seq
-void onDefDecl() {
-  PRINT();
-}
-void onDefDecl();
+void onDefDecl(Result *Res) { WRITE_RESULT(Res); }
+void onDefDecl(Result *);
 
-//      DMP: FunctionDecl [[#%#x,declOnDecl:]] {{.*}} declOnDecl 'void ()'
-//      DMP: FunctionDecl {{.*}} prev [[#declOnDecl]] {{.*}} declOnDecl 'void ()'
+//      DMP: FunctionDecl [[#%#x,declOnDecl:]] {{.*}} declOnDecl 'void (Result *)'
+//      DMP: FunctionDecl {{.*}} prev [[#declOnDecl]] {{.*}} declOnDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
 //
-//    PRT-NEXT: void declOnDecl();
+//    PRT-NEXT: void declOnDecl(Result *);
 //  PRT-A-NEXT: {{^ *}}#pragma acc routine seq{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void declOnDecl();
+//    PRT-NEXT: void declOnDecl(Result *);
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
-void declOnDecl();
+void declOnDecl(Result *);
 #pragma acc routine seq
-void declOnDecl();
+void declOnDecl(Result *);
 
-//      DMP: FunctionDecl [[#%#x,declOnDef:]] {{.*}} declOnDef 'void ()'
-//      DMP: FunctionDecl {{.*}} prev [[#declOnDef]] {{.*}} declOnDef 'void ()'
+//      DMP: FunctionDecl [[#%#x,declOnDef:]] {{.*}} declOnDef 'void (Result *)'
+//      DMP: FunctionDecl {{.*}} prev [[#declOnDef]] {{.*}} declOnDef 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
 //
-//    PRT-NEXT: void declOnDef();
+//    PRT-NEXT: void declOnDef(Result *);
 //  PRT-A-NEXT: {{^ *}}#pragma acc routine seq{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void declOnDef() {
-//         PRT: }
+//    PRT-NEXT: void declOnDef(Result *Res) {
+//         PRT: }{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
-void declOnDef();
+void declOnDef(Result *);
 #pragma acc routine seq
-void declOnDef() {
-  PRINT();
-}
+void declOnDef(Result *Res) { WRITE_RESULT(Res); }
 
 // This case is special because codegen is performed on the function definition,
 // but the OpenACC routine directive hasn't been seen yet at that point.
@@ -267,39 +271,37 @@ void declOnDef() {
 //
 // In either case, omitting the attribute/directive would cause a linking error.
 //
-//      DMP: FunctionDecl [[#%#x,defOnDecl:]] {{.*}} defOnDecl 'void ()'
+//      DMP: FunctionDecl [[#%#x,defOnDecl:]] {{.*}} defOnDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> Implicit MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
-//      DMP: FunctionDecl {{.*}} prev [[#defOnDecl]] {{.*}} defOnDecl 'void ()'
+//      DMP: FunctionDecl {{.*}} prev [[#defOnDecl]] {{.*}} defOnDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
 //
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
-//    PRT-NEXT: void defOnDecl() {
-//         PRT: }
+//    PRT-NEXT: void defOnDecl(Result *Res) {
+//         PRT: }{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 //  PRT-A-NEXT: {{^ *}}#pragma acc routine seq{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void defOnDecl();
+//    PRT-NEXT: void defOnDecl(Result *);
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
-void defOnDecl() {
-  PRINT();
-}
+void defOnDecl(Result *Res) { WRITE_RESULT(Res); }
 #pragma acc routine seq
-void defOnDecl();
+void defOnDecl(Result *);
 
-//      DMP: FunctionDecl [[#%#x,onDeclOnDecl:]] {{.*}} onDeclOnDecl 'void ()'
+//      DMP: FunctionDecl [[#%#x,onDeclOnDecl:]] {{.*}} onDeclOnDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
-//      DMP: FunctionDecl {{.*}} prev [[#onDeclOnDecl]] {{.*}} onDeclOnDecl 'void ()'
+//      DMP: FunctionDecl {{.*}} prev [[#onDeclOnDecl]] {{.*}} onDeclOnDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
@@ -308,26 +310,26 @@ void defOnDecl();
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDeclOnDecl();
+//    PRT-NEXT: void onDeclOnDecl(Result *);
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 //  PRT-A-NEXT: {{^ *}}#pragma acc routine seq{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDeclOnDecl();
+//    PRT-NEXT: void onDeclOnDecl(Result *);
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 #pragma acc routine seq
-void onDeclOnDecl();
+void onDeclOnDecl(Result *);
 #pragma acc routine seq
-void onDeclOnDecl();
+void onDeclOnDecl(Result *);
 
-//      DMP: FunctionDecl [[#%#x,onDeclOnDecl:]] {{.*}} onDeclOnDecl 'void ()'
+//      DMP: FunctionDecl [[#%#x,onDeclOnDecl:]] {{.*}} onDeclOnDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
-//      DMP: FunctionDecl {{.*}} prev [[#onDeclOnDecl]] {{.*}} onDeclOnDecl 'void ()'
+//      DMP: FunctionDecl {{.*}} prev [[#onDeclOnDecl]] {{.*}} onDeclOnDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
@@ -336,7 +338,7 @@ void onDeclOnDecl();
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDeclOnDecl();
+//    PRT-NEXT: void onDeclOnDecl(Result *);
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 //
@@ -344,19 +346,19 @@ void onDeclOnDecl();
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDeclOnDecl();
+//    PRT-NEXT: void onDeclOnDecl(Result *);
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 #pragma acc routine seq
-void onDeclOnDecl();
+void onDeclOnDecl(Result *);
 #pragma acc routine seq
-void onDeclOnDecl();
+void onDeclOnDecl(Result *);
 
-//      DMP: FunctionDecl [[#%#x,onDeclOnDef:]] {{.*}} onDeclOnDef 'void ()'
+//      DMP: FunctionDecl [[#%#x,onDeclOnDef:]] {{.*}} onDeclOnDef 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
-//      DMP: FunctionDecl {{.*}} prev [[#onDeclOnDef]] {{.*}} onDeclOnDef 'void ()'
+//      DMP: FunctionDecl {{.*}} prev [[#onDeclOnDef]] {{.*}} onDeclOnDef 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
@@ -365,7 +367,7 @@ void onDeclOnDecl();
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDeclOnDef();
+//    PRT-NEXT: void onDeclOnDef(Result *);
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 //
@@ -373,22 +375,20 @@ void onDeclOnDecl();
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDeclOnDef() {
-//         PRT: }
+//    PRT-NEXT: void onDeclOnDef(Result *Res) {
+//         PRT: }{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 #pragma acc routine seq
-void onDeclOnDef();
+void onDeclOnDef(Result *);
 #pragma acc routine seq
-void onDeclOnDef() {
-  PRINT();
-}
+void onDeclOnDef(Result *Res) { WRITE_RESULT(Res); }
 
-//      DMP: FunctionDecl [[#%#x,onDefOnDecl:]] {{.*}} onDefOnDecl 'void ()'
+//      DMP: FunctionDecl [[#%#x,onDefOnDecl:]] {{.*}} onDefOnDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
-//      DMP: FunctionDecl {{.*}} prev [[#onDefOnDecl]] {{.*}} onDefOnDecl 'void ()'
+//      DMP: FunctionDecl {{.*}} prev [[#onDefOnDecl]] {{.*}} onDefOnDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
@@ -397,8 +397,8 @@ void onDeclOnDef() {
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDefOnDecl() {
-//         PRT: }
+//    PRT-NEXT: void onDefOnDecl(Result *Res) {
+//         PRT: }{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 //
@@ -406,21 +406,19 @@ void onDeclOnDef() {
 // PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 // PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDefOnDecl();
+//    PRT-NEXT: void onDefOnDecl(Result *);
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 #pragma acc routine seq
-void onDefOnDecl() {
-  PRINT();
-}
+void onDefOnDecl(Result *Res) { WRITE_RESULT(Res); }
 #pragma acc routine seq
-void onDefOnDecl();
+void onDefOnDecl(Result *);
 
 // In a function prototype but not definition, Clang represents new types within
 // the same DeclGroup as the function.  Thus, the routine directive
 // implementation has to search the group to find the function.
 //
-//      DMP: FunctionDecl {{.*}} fnDefAddsType 'struct fnDefAddsType *()'
+//      DMP: FunctionDecl {{.*}} fnDefAddsType 'struct fnDefAddsType *(Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
@@ -431,22 +429,22 @@ void onDefOnDecl();
 //     PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //      PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 //     PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//        PRT-NEXT: struct fnDefAddsType *fnDefAddsType() {
-//             PRT: }
+//        PRT-NEXT: struct fnDefAddsType *fnDefAddsType(Result *Res) {
+//             PRT: }{{$}}
 //    PRT-AST-NEXT: ;
 //  PRT-SRC-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-SRC-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 #pragma acc routine seq
-struct fnDefAddsType *fnDefAddsType() { // type decl not in function's DeclGroup
-  PRINT();
+struct fnDefAddsType *fnDefAddsType(Result *Res) { // type decl not in function's DeclGroup
+  WRITE_RESULT(Res);
   return 0;
 }
 
-//      DMP: FunctionDecl [[#%#x,fnDeclAddsType:]] {{.*}} fnDeclAddsType 'struct fnDeclAddsType *()'
+//      DMP: FunctionDecl [[#%#x,fnDeclAddsType:]] {{.*}} fnDeclAddsType 'struct fnDeclAddsType *(Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
-//      DMP: FunctionDecl {{.*}} prev [[#fnDeclAddsType]] {{.*}} fnDeclAddsType 'struct fnDeclAddsType *()'
+//      DMP: FunctionDecl {{.*}} prev [[#fnDeclAddsType]] {{.*}} fnDeclAddsType 'struct fnDeclAddsType *(Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
 // DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> Inherited MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
@@ -457,22 +455,23 @@ struct fnDefAddsType *fnDefAddsType() { // type decl not in function's DeclGroup
 //     PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //      PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 //     PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-SRC-NEXT: struct fnDeclAddsType *fnDeclAddsType();
+//    PRT-SRC-NEXT: struct fnDeclAddsType *fnDeclAddsType(Result *);
 //  PRT-SRC-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-SRC-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
-//    PRT-SRC-NEXT: struct fnDeclAddsType *fnDeclAddsType() {
-//    PRT-AST-NEXT: struct fnDeclAddsType *fnDeclAddsType(), *fnDeclAddsType() {
-//             PRT: }
+//    PRT-SRC-NEXT: struct fnDeclAddsType *fnDeclAddsType(Result *Res) {
+//    PRT-AST-NEXT: struct fnDeclAddsType *fnDeclAddsType(Result *), *fnDeclAddsType(Result *Res) {
+//             PRT: }{{$}}
 //    PRT-AST-NEXT: ;
 #pragma acc routine seq
-struct fnDeclAddsType *fnDeclAddsType(); // type decl in function's Declgroup
-struct fnDeclAddsType *fnDeclAddsType() { // type isn't new so has no decl
-  PRINT();
+struct fnDeclAddsType *fnDeclAddsType(Result *); // type decl in function's Declgroup
+struct fnDeclAddsType *fnDeclAddsType(Result *Res) { // type isn't new so has no decl
+  WRITE_RESULT(Res);
   return 0;
 }
 
 // EXE-NOT: {{.}}
 int main(int argc, char *argv[]) {
+  Result Res;
   //      EXE:         onDecl: host=1, not_host=0
   // EXE-NEXT:          onDef: host=1, not_host=0
   // EXE-NEXT:     onDeclDecl: host=1, not_host=0
@@ -486,19 +485,19 @@ int main(int argc, char *argv[]) {
   // EXE-NEXT:    onDefOnDecl: host=1, not_host=0
   // EXE-NEXT:  fnDefAddsType: host=1, not_host=0
   // EXE-NEXT: fnDeclAddsType: host=1, not_host=0
-  onDecl();
-  onDef();
-  onDeclDecl();
-  onDeclDef();
-  onDefDecl();
-  declOnDecl();
-  declOnDef();
-  defOnDecl();
-  onDeclOnDecl();
-  onDeclOnDef();
-  onDefOnDecl();
-  fnDefAddsType();
-  fnDeclAddsType();
+  onDecl(&Res); PRINT_RESULT(onDecl, Res);
+  onDef(&Res); PRINT_RESULT(onDef, Res);
+  onDeclDecl(&Res); PRINT_RESULT(onDeclDecl, Res);
+  onDeclDef(&Res); PRINT_RESULT(onDeclDef, Res);
+  onDefDecl(&Res); PRINT_RESULT(onDefDecl, Res);
+  declOnDecl(&Res); PRINT_RESULT(declOnDecl, Res);
+  declOnDef(&Res); PRINT_RESULT(declOnDef, Res);
+  defOnDecl(&Res); PRINT_RESULT(defOnDecl, Res);
+  onDeclOnDecl(&Res); PRINT_RESULT(onDeclOnDecl, Res);
+  onDeclOnDef(&Res); PRINT_RESULT(onDeclOnDef, Res);
+  onDefOnDecl(&Res); PRINT_RESULT(onDefOnDecl, Res);
+  fnDefAddsType(&Res); PRINT_RESULT(fnDefAddsType, Res);
+  fnDeclAddsType(&Res); PRINT_RESULT(fnDeclAddsType, Res);
   // EXE-HOST-NEXT:         onDecl: host=1, not_host=0
   // EXE-HOST-NEXT:          onDef: host=1, not_host=0
   // EXE-HOST-NEXT:     onDeclDecl: host=1, not_host=0
@@ -525,22 +524,32 @@ int main(int argc, char *argv[]) {
   //  EXE-DEV-NEXT:    onDefOnDecl: host=0, not_host=1
   //  EXE-DEV-NEXT:  fnDefAddsType: host=0, not_host=1
   //  EXE-DEV-NEXT: fnDeclAddsType: host=0, not_host=1
-  #pragma acc parallel num_gangs(1)
-  {
-    onDecl();
-    onDef();
-    onDeclDecl();
-    onDeclDef();
-    onDefDecl();
-    declOnDecl();
-    declOnDef();
-    defOnDecl();
-    onDeclOnDecl();
-    onDeclOnDef();
-    onDefOnDecl();
-    fnDefAddsType();
-    fnDeclAddsType();
-  }
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  onDecl(&Res); PRINT_RESULT(onDecl, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  onDef(&Res); PRINT_RESULT(onDef, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  onDeclDecl(&Res); PRINT_RESULT(onDeclDecl, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  onDeclDef(&Res); PRINT_RESULT(onDeclDef, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  onDefDecl(&Res); PRINT_RESULT(onDefDecl, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  declOnDecl(&Res); PRINT_RESULT(declOnDecl, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  declOnDef(&Res); PRINT_RESULT(declOnDef, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  defOnDecl(&Res); PRINT_RESULT(defOnDecl, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  onDeclOnDecl(&Res); PRINT_RESULT(onDeclOnDecl, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  onDeclOnDef(&Res); PRINT_RESULT(onDeclOnDef, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  onDefOnDecl(&Res); PRINT_RESULT(onDefOnDecl, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  fnDefAddsType(&Res); PRINT_RESULT(fnDefAddsType, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  fnDeclAddsType(&Res); PRINT_RESULT(fnDeclAddsType, Res);
   return 0;
 }
 // EXE-NOT: {{.}}
@@ -548,23 +557,15 @@ int main(int argc, char *argv[]) {
 #else
 
 #pragma acc routine seq
-void onDecl() {
-  PRINT();
-}
+void onDecl(Result *Res) { WRITE_RESULT(Res); }
 
 #pragma acc routine seq
-void onDeclDecl() {
-  PRINT();
-}
+void onDeclDecl(Result *Res) { WRITE_RESULT(Res); }
 
 #pragma acc routine seq
-void declOnDecl() {
-  PRINT();
-}
+void declOnDecl(Result *Res) { WRITE_RESULT(Res); }
 
 #pragma acc routine seq
-void onDeclOnDecl() {
-  PRINT();
-}
+void onDeclOnDecl(Result *Res) { WRITE_RESULT(Res); }
 
 #endif

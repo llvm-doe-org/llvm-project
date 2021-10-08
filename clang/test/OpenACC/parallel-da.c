@@ -87,8 +87,8 @@
 // shortening the prt-args definition.
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (mode=MODE_I  prt=%[prt-opt]=acc     prt-chk=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-A,PRT-A-I,PRT-A-%[dir],PRT-A-%[dir]-I                                              )
@@ -207,28 +207,61 @@
 // RUN:   (mode=MODE_P   cflags=                 pre-host=EXE-P,EXE-CoCrP,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE               pre-tgt=EXE-P,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE                            )
 // RUN:   (mode=MODE_P   cflags=-DSTORAGE=static pre-host=EXE-P,EXE-CoCrP,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE               pre-tgt=EXE-P,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE                            )
 // RUN: }
+//
+// FIXME: amdgcn doesn't yet support printf in a kernel.
+//
+// RUN: %data tgts {
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'                   host-or-tgt=host tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'                   host-or-tgt=tgt  tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'                   host-or-tgt=tgt  tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64'           host-or-tgt=tgt  tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify -DTGT_USE_STDIO=0' host-or-tgt=tgt  tgt-use-stdio=NO-TGT-USE-STDIO)
+// RUN: }
+//
 // RUN: %for directives {
 // RUN:   %for exes {
+//          # FIXME: amdgcn doesn't yet support printf in a kernel, but
+//          # -fopenacc-print=omp still fails to suppress macro expansion in
+//          # some kernels.  To avoid expanding TGT_PRINTF to printf here and
+//          # thus breaking amdgcn compilation later, we prototype TGT_PRINTF as
+//          # a function here, and then we define it to either printf or nothing
+//          # when we compile for the target.  When either of those limitations
+//          # is fixed, this hack can go away.  Once it does, the
+//          # -DTGT_PRINTF=printf in the %t-ast-prt-omp.c case below will be
+//          # redundant and so can go away too.
 // RUN:     %for prt-opts {
-// RUN:       %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c \
-// RUN:              -DMODE=%[mode] %[cflags] %[dir-cflags] \
-// RUN:              -Wno-openacc-omp-map-ompx-hold
-// RUN:       echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:       %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c \
-// RUN:              -DMODE=%[mode] %[cflags] %[dir-cflags]
-// RUN:       %t | FileCheck -check-prefixes=%[pre-host] %s
+// RUN:       %clang -Xclang -verify %[prt-opt]=omp %s > %t-%[prt-kind]-omp.c \
+// RUN:         -DMODE=%[mode] %[cflags] %[dir-cflags] \
+// RUN:         -Wno-openacc-omp-map-ompx-hold -DTGT_PRINTF_PROTO
+// RUN:       echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN:     }
+// RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version -o %t \
+// RUN:       -DMODE=%[mode] %[cflags] %[dir-cflags] %t-ast-prt-omp.c \
+// RUN:       -DTGT_PRINTF=printf
+// RUN:     %t > %t.out 2>&1
+// RUN:     echo \
+// RUN:       'FileCheck -input-file %t.out %s ' \
+// RUN:       '-check-prefixes=%[pre-host],' \
+// RUN:     | sed -e 's/\([^,=]*\),/\1,\1-TGT-USE-STDIO,/g' -e 's/,$//' \
+// RUN:     > %t-fc
+// RUN:     sh %t-fc
+// RUN:     %for tgts {
+// RUN:       %[run-if] %clang -fopenmp %fopenmp-version -o %t \
+// RUN:         -DMODE=%[mode] -DEXE_ON_%[host-or-tgt] \
+// RUN:         %[cflags] %[tgt-cflags] %[dir-cflags] %t-prt-omp.c
+// RUN:       %[run-if] %t > %t.out 2>&1
+// RUN:       echo \
+// RUN:         'FileCheck -input-file %t.out %s ' \
+// RUN:         '-check-prefixes=%[pre-%[host-or-tgt]],' \
+// RUN:       | sed -e 's/\([^,=]*\),/\1,\1-%[tgt-use-stdio],/g' -e 's/,$//' \
+// RUN:       > %t-fc
+// RUN:       %[run-if] sh %t-fc
 // RUN:     }
 // RUN:   }
 // RUN: }
 //
 // Check execution with normal compilation.
 //
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' host-or-tgt=host)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host-or-tgt=tgt )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' host-or-tgt=tgt )
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-tgt=tgt )
-// RUN: }
 // RUN: %for directives {
 // RUN:   %for exes {
 // RUN:     %for tgts {
@@ -236,8 +269,12 @@
 // RUN:                        -DMODE=%[mode] -DEXE_ON_%[host-or-tgt] \
 // RUN:                        %[cflags] %[tgt-cflags] %[dir-cflags]
 // RUN:       %[run-if] %t > %t.out 2>&1
-// RUN:       %[run-if] FileCheck -input-file %t.out %s \
-// RUN:                           -check-prefixes=%[pre-%[host-or-tgt]]
+// RUN:       echo \
+// RUN:         'FileCheck -input-file %t.out %s ' \
+// RUN:         '-check-prefixes=%[pre-%[host-or-tgt]],' \
+// RUN:       | sed -e 's/\([^,=]*\),/\1,\1-%[tgt-use-stdio],/g' -e 's/,$//' \
+// RUN:       > %t-fc
+// RUN:       %[run-if] sh %t-fc
 // RUN:     }
 // RUN:   }
 // RUN: }
@@ -273,6 +310,18 @@
 
 #include <stdio.h>
 #include <stdint.h>
+
+#ifndef TGT_USE_STDIO
+# define TGT_USE_STDIO 1
+#endif
+
+#if TGT_PRINTF_PROTO
+int TGT_PRINTF(const char *, ...);
+#elif TGT_USE_STDIO
+# define TGT_PRINTF(...) printf(__VA_ARGS__)
+#else
+# define TGT_PRINTF(...)
+#endif
 
 #if !ADD_LOOP_TO_PAR
 # define LOOP
@@ -996,131 +1045,134 @@ int main() {
     gpOld = gp;
     lpOld = lp;
 #endif
-    // PRT:      printf("inside :{{([^;]|[[:space:]])*}};
-    // PRT-NEXT: printf("{{([^;]|[[:space:]])*}};
+    //      PRT: {{TGT_PRINTF|printf}}("inside :{{([^;]|[[:space:]])*}};
+    // PRT-NEXT: {{TGT_PRINTF|printf}}("{{([^;]|[[:space:]])*}};
     //
     // It cannot all be in one printf, or nvptx64 output becomes corrupt, so
     // break it into multiple printfs.  The order of output from different
     // gangs is non-deterministic at the level of printfs, but it's easier to
     // write the FileCheck DAG directives at the level of lines.
     //
-    //      EXE-IF-DAG: inside : gi:55->56,
-    //     EXE-CCi-DAG: inside : gi:{{55|56}}->56,
-    //   EXE-CoCrP-DAG: inside : gi:{{.+}}->56,
-    //      EXE-IF-DAG:          gt:[1400,59]->[f08234,a07de1],
-    //     EXE-CCi-DAG:          gt:[{{1400|f08234}},{{59|a07de1}}]->[f08234,a07de1],
-    //   EXE-CoCrP-DAG:          gt:[{{.+}}]->[f08234,a07de1],
-    //      EXE-IF-DAG:          *gp:{{55->98|9999->9999}},
-    //     EXE-CCi-DAG:          *gp:{{(56|98)->98|9999->9999}},
-    //   EXE-CoCrP-DAG:          *gp:{{.+->98|9999->9999}},
-    //    EXE-ICCi-DAG:          ga:[{{100|101}},{{200|202}}]->[101,202],
-    //       EXE-F-DAG:          ga:[100,200]->[101,202],
-    //   EXE-CoCrP-DAG:          ga:[{{.+,.+}}]->[101,202],
-    //    EXE-ICCi-DAG:          gs:[{{33|42}},{{11|1}}]->[42,1],
-    //       EXE-F-DAG:          gs:[33,11]->[42,1],
-    //   EXE-CoCrP-DAG:          gs:[{{.+,.+}}]->[42,1],
-    //    EXE-ICCi-DAG:          gu.i:{{22|13}}->13,
-    //       EXE-F-DAG:          gu.i:22->13,
-    //   EXE-CoCrP-DAG:          gu.i:{{.+}}->13,
-    //      EXE-IF-DAG:          li:99->98,
-    //     EXE-CCi-DAG:          li:{{99|98}}->98,
-    //   EXE-CoCrP-DAG:          li:{{.+}}->98,
-    //      EXE-IF-DAG:          lt:[7a1,62b0]->[79ca,2961],
-    //     EXE-CCi-DAG:          lt:[{{7a1|79ca}},{{62b0|2961}}]->[79ca,2961],
-    //   EXE-CoCrP-DAG:          lt:[{{.+}}]->[79ca,2961],
-    //      EXE-IF-DAG:          *lp:{{55->98|9999->9999}},
-    //     EXE-CCi-DAG:          *lp:{{(56|98)->98|9999->9999}},
-    //   EXE-CoCrP-DAG:          *lp:{{.+->98|9999->9999}},
-    //    EXE-ICCi-DAG:          la:[{{77|55}},{{88|66}}]->[55,66],
-    //       EXE-F-DAG:          la:[77,88]->[55,66],
-    //   EXE-CoCrP-DAG:          la:[{{.+,.+}}]->[55,66],
-    //    EXE-ICCi-DAG:          ls:[{{222|333}},{{111|444}}]->[333,444],
-    //       EXE-F-DAG:          ls:[222,111]->[333,444],
-    //   EXE-CoCrP-DAG:          ls:[{{.+,.+}}]->[333,444],
-    //    EXE-ICCi-DAG:          lu.i:{{167|279}}->279,
-    //       EXE-F-DAG:          lu.i:167->279,
-    //   EXE-CoCrP-DAG:          lu.i:{{.+}}->279,
-    //         EXE-DAG:          shadowed:
-    //   EXE-ICCiF-DAG:          ci:53,
-    //   EXE-CoCrP-DAG:          ci:
-    //   EXE-ICCiF-DAG:          ca:[10,11,12]
-    //   EXE-CoCrP-DAG:          ca:[{{.+}},{{.+}},{{.+}}]
+    //      EXE-IF-TGT-USE-STDIO-DAG: inside : gi:55->56,
+    //     EXE-CCi-TGT-USE-STDIO-DAG: inside : gi:{{55|56}}->56,
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG: inside : gi:{{.+}}->56,
+    //      EXE-IF-TGT-USE-STDIO-DAG:          gt:[1400,59]->[f08234,a07de1],
+    //     EXE-CCi-TGT-USE-STDIO-DAG:          gt:[{{1400|f08234}},{{59|a07de1}}]->[f08234,a07de1],
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          gt:[{{.+}}]->[f08234,a07de1],
+    //      EXE-IF-TGT-USE-STDIO-DAG:          *gp:{{55->98|9999->9999}},
+    //     EXE-CCi-TGT-USE-STDIO-DAG:          *gp:{{(56|98)->98|9999->9999}},
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          *gp:{{.+->98|9999->9999}},
+    //    EXE-ICCi-TGT-USE-STDIO-DAG:          ga:[{{100|101}},{{200|202}}]->[101,202],
+    //       EXE-F-TGT-USE-STDIO-DAG:          ga:[100,200]->[101,202],
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          ga:[{{.+,.+}}]->[101,202],
+    //    EXE-ICCi-TGT-USE-STDIO-DAG:          gs:[{{33|42}},{{11|1}}]->[42,1],
+    //       EXE-F-TGT-USE-STDIO-DAG:          gs:[33,11]->[42,1],
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          gs:[{{.+,.+}}]->[42,1],
+    //    EXE-ICCi-TGT-USE-STDIO-DAG:          gu.i:{{22|13}}->13,
+    //       EXE-F-TGT-USE-STDIO-DAG:          gu.i:22->13,
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          gu.i:{{.+}}->13,
+    //      EXE-IF-TGT-USE-STDIO-DAG:          li:99->98,
+    //     EXE-CCi-TGT-USE-STDIO-DAG:          li:{{99|98}}->98,
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          li:{{.+}}->98,
+    //      EXE-IF-TGT-USE-STDIO-DAG:          lt:[7a1,62b0]->[79ca,2961],
+    //     EXE-CCi-TGT-USE-STDIO-DAG:          lt:[{{7a1|79ca}},{{62b0|2961}}]->[79ca,2961],
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          lt:[{{.+}}]->[79ca,2961],
+    //      EXE-IF-TGT-USE-STDIO-DAG:          *lp:{{55->98|9999->9999}},
+    //     EXE-CCi-TGT-USE-STDIO-DAG:          *lp:{{(56|98)->98|9999->9999}},
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          *lp:{{.+->98|9999->9999}},
+    //    EXE-ICCi-TGT-USE-STDIO-DAG:          la:[{{77|55}},{{88|66}}]->[55,66],
+    //       EXE-F-TGT-USE-STDIO-DAG:          la:[77,88]->[55,66],
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          la:[{{.+,.+}}]->[55,66],
+    //    EXE-ICCi-TGT-USE-STDIO-DAG:          ls:[{{222|333}},{{111|444}}]->[333,444],
+    //       EXE-F-TGT-USE-STDIO-DAG:          ls:[222,111]->[333,444],
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          ls:[{{.+,.+}}]->[333,444],
+    //    EXE-ICCi-TGT-USE-STDIO-DAG:          lu.i:{{167|279}}->279,
+    //       EXE-F-TGT-USE-STDIO-DAG:          lu.i:167->279,
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          lu.i:{{.+}}->279,
+    //         EXE-TGT-USE-STDIO-DAG:          shadowed:
+    //   EXE-ICCiF-TGT-USE-STDIO-DAG:          ci:53,
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          ci:
+    //   EXE-ICCiF-TGT-USE-STDIO-DAG:          ca:[10,11,12]
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          ca:[{{.+}},{{.+}},{{.+}}]
     //
     // Duplicate that EXE block exactly.
     //
-    //      EXE-IF-DAG: inside : gi:55->56,
-    //     EXE-CCi-DAG: inside : gi:{{55|56}}->56,
-    //   EXE-CoCrP-DAG: inside : gi:{{.+}}->56,
-    //      EXE-IF-DAG:          gt:[1400,59]->[f08234,a07de1],
-    //     EXE-CCi-DAG:          gt:[{{1400|f08234}},{{59|a07de1}}]->[f08234,a07de1],
-    //   EXE-CoCrP-DAG:          gt:[{{.+}}]->[f08234,a07de1],
-    //      EXE-IF-DAG:          *gp:{{55->98|9999->9999}},
-    //     EXE-CCi-DAG:          *gp:{{(56|98)->98|9999->9999}},
-    //   EXE-CoCrP-DAG:          *gp:{{.+->98|9999->9999}},
-    //    EXE-ICCi-DAG:          ga:[{{100|101}},{{200|202}}]->[101,202],
-    //       EXE-F-DAG:          ga:[100,200]->[101,202],
-    //   EXE-CoCrP-DAG:          ga:[{{.+,.+}}]->[101,202],
-    //    EXE-ICCi-DAG:          gs:[{{33|42}},{{11|1}}]->[42,1],
-    //       EXE-F-DAG:          gs:[33,11]->[42,1],
-    //   EXE-CoCrP-DAG:          gs:[{{.+,.+}}]->[42,1],
-    //    EXE-ICCi-DAG:          gu.i:{{22|13}}->13,
-    //       EXE-F-DAG:          gu.i:22->13,
-    //   EXE-CoCrP-DAG:          gu.i:{{.+}}->13,
-    //      EXE-IF-DAG:          li:99->98,
-    //     EXE-CCi-DAG:          li:{{99|98}}->98,
-    //   EXE-CoCrP-DAG:          li:{{.+}}->98,
-    //      EXE-IF-DAG:          lt:[7a1,62b0]->[79ca,2961],
-    //     EXE-CCi-DAG:          lt:[{{7a1|79ca}},{{62b0|2961}}]->[79ca,2961],
-    //   EXE-CoCrP-DAG:          lt:[{{.+}}]->[79ca,2961],
-    //      EXE-IF-DAG:          *lp:{{55->98|9999->9999}},
-    //     EXE-CCi-DAG:          *lp:{{(56|98)->98|9999->9999}},
-    //   EXE-CoCrP-DAG:          *lp:{{.+->98|9999->9999}},
-    //    EXE-ICCi-DAG:          la:[{{77|55}},{{88|66}}]->[55,66],
-    //       EXE-F-DAG:          la:[77,88]->[55,66],
-    //   EXE-CoCrP-DAG:          la:[{{.+,.+}}]->[55,66],
-    //    EXE-ICCi-DAG:          ls:[{{222|333}},{{111|444}}]->[333,444],
-    //       EXE-F-DAG:          ls:[222,111]->[333,444],
-    //   EXE-CoCrP-DAG:          ls:[{{.+,.+}}]->[333,444],
-    //    EXE-ICCi-DAG:          lu.i:{{167|279}}->279,
-    //       EXE-F-DAG:          lu.i:167->279,
-    //   EXE-CoCrP-DAG:          lu.i:{{.+}}->279,
-    //         EXE-DAG:          shadowed:
-    //   EXE-ICCiF-DAG:          ci:53,
-    //   EXE-CoCrP-DAG:          ci:
-    //   EXE-ICCiF-DAG:          ca:[10,11,12]
-    //   EXE-CoCrP-DAG:          ca:[{{.+}},{{.+}},{{.+}}]
-    printf("inside : gi:%d->%d,\n"
-           "         gt:[%lx,%lx]->[%lx,%lx],\n"
-           "         *gp:%d->%d,\n"
-           "         ga:[%d,%d]->[%d,%d],\n"
-           "         gs:[%d,%d]->[%d,%d],\n"
-           "         gu.i:%d->%d,\n"
-           "         li:%d->%d,\n"
-           "         lt:[%lx,%lx]->[%lx,%lx],\n",
-           giOld, gi,
-           HI_UINT128(gtOld), LW_UINT128(gtOld),
-           HI_UINT128(gt), LW_UINT128(gt),
-           DEREF_PTR(gpOld), DEREF_PTR(gp),
-           gaOld[0], gaOld[1], ga[0], ga[1],
-           gsOld.i, gsOld.j, gs.i, gs.j,
-           guOld.i, gu.i,
-           liOld, li,
-           HI_UINT128(ltOld), LW_UINT128(ltOld),
-           HI_UINT128(lt), LW_UINT128(lt));
-    printf("         *lp:%d->%d,\n"
-           "         la:[%d,%d]->[%d,%d],\n"
-           "         ls:[%d,%d]->[%d,%d],\n"
-           "         lu.i:%d->%d,\n"
-           "         shadowed:%d,\n"
-           "         ci:%d,\n"
-           "         ca:[%d,%d,%d]\n",
-           DEREF_PTR(lpOld), DEREF_PTR(lp),
-           laOld[0], laOld[1], la[0], la[1],
-           lsOld.i, lsOld.j, ls.i, ls.j,
-           luOld.i, lu.i,
-           shadowed,
-           ci, ca[0],
-           ca[1], ca[2]);
+    //      EXE-IF-TGT-USE-STDIO-DAG: inside : gi:55->56,
+    //     EXE-CCi-TGT-USE-STDIO-DAG: inside : gi:{{55|56}}->56,
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG: inside : gi:{{.+}}->56,
+    //      EXE-IF-TGT-USE-STDIO-DAG:          gt:[1400,59]->[f08234,a07de1],
+    //     EXE-CCi-TGT-USE-STDIO-DAG:          gt:[{{1400|f08234}},{{59|a07de1}}]->[f08234,a07de1],
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          gt:[{{.+}}]->[f08234,a07de1],
+    //      EXE-IF-TGT-USE-STDIO-DAG:          *gp:{{55->98|9999->9999}},
+    //     EXE-CCi-TGT-USE-STDIO-DAG:          *gp:{{(56|98)->98|9999->9999}},
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          *gp:{{.+->98|9999->9999}},
+    //    EXE-ICCi-TGT-USE-STDIO-DAG:          ga:[{{100|101}},{{200|202}}]->[101,202],
+    //       EXE-F-TGT-USE-STDIO-DAG:          ga:[100,200]->[101,202],
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          ga:[{{.+,.+}}]->[101,202],
+    //    EXE-ICCi-TGT-USE-STDIO-DAG:          gs:[{{33|42}},{{11|1}}]->[42,1],
+    //       EXE-F-TGT-USE-STDIO-DAG:          gs:[33,11]->[42,1],
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          gs:[{{.+,.+}}]->[42,1],
+    //    EXE-ICCi-TGT-USE-STDIO-DAG:          gu.i:{{22|13}}->13,
+    //       EXE-F-TGT-USE-STDIO-DAG:          gu.i:22->13,
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          gu.i:{{.+}}->13,
+    //      EXE-IF-TGT-USE-STDIO-DAG:          li:99->98,
+    //     EXE-CCi-TGT-USE-STDIO-DAG:          li:{{99|98}}->98,
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          li:{{.+}}->98,
+    //      EXE-IF-TGT-USE-STDIO-DAG:          lt:[7a1,62b0]->[79ca,2961],
+    //     EXE-CCi-TGT-USE-STDIO-DAG:          lt:[{{7a1|79ca}},{{62b0|2961}}]->[79ca,2961],
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          lt:[{{.+}}]->[79ca,2961],
+    //      EXE-IF-TGT-USE-STDIO-DAG:          *lp:{{55->98|9999->9999}},
+    //     EXE-CCi-TGT-USE-STDIO-DAG:          *lp:{{(56|98)->98|9999->9999}},
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          *lp:{{.+->98|9999->9999}},
+    //    EXE-ICCi-TGT-USE-STDIO-DAG:          la:[{{77|55}},{{88|66}}]->[55,66],
+    //       EXE-F-TGT-USE-STDIO-DAG:          la:[77,88]->[55,66],
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          la:[{{.+,.+}}]->[55,66],
+    //    EXE-ICCi-TGT-USE-STDIO-DAG:          ls:[{{222|333}},{{111|444}}]->[333,444],
+    //       EXE-F-TGT-USE-STDIO-DAG:          ls:[222,111]->[333,444],
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          ls:[{{.+,.+}}]->[333,444],
+    //    EXE-ICCi-TGT-USE-STDIO-DAG:          lu.i:{{167|279}}->279,
+    //       EXE-F-TGT-USE-STDIO-DAG:          lu.i:167->279,
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          lu.i:{{.+}}->279,
+    //         EXE-TGT-USE-STDIO-DAG:          shadowed:
+    //   EXE-ICCiF-TGT-USE-STDIO-DAG:          ci:53,
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          ci:
+    //   EXE-ICCiF-TGT-USE-STDIO-DAG:          ca:[10,11,12]
+    //   EXE-CoCrP-TGT-USE-STDIO-DAG:          ca:[{{.+}},{{.+}},{{.+}}]
+    //
+    // If we're not checking for this above, then we shouldn't be printing it.
+    // EXE-NOT: inside
+    TGT_PRINTF("inside : gi:%d->%d,\n"
+               "         gt:[%lx,%lx]->[%lx,%lx],\n"
+               "         *gp:%d->%d,\n"
+               "         ga:[%d,%d]->[%d,%d],\n"
+               "         gs:[%d,%d]->[%d,%d],\n"
+               "         gu.i:%d->%d,\n"
+               "         li:%d->%d,\n"
+               "         lt:[%lx,%lx]->[%lx,%lx],\n",
+               giOld, gi,
+               HI_UINT128(gtOld), LW_UINT128(gtOld),
+               HI_UINT128(gt), LW_UINT128(gt),
+               DEREF_PTR(gpOld), DEREF_PTR(gp),
+               gaOld[0], gaOld[1], ga[0], ga[1],
+               gsOld.i, gsOld.j, gs.i, gs.j,
+               guOld.i, gu.i,
+               liOld, li,
+               HI_UINT128(ltOld), LW_UINT128(ltOld),
+               HI_UINT128(lt), LW_UINT128(lt));
+    TGT_PRINTF("         *lp:%d->%d,\n"
+               "         la:[%d,%d]->[%d,%d],\n"
+               "         ls:[%d,%d]->[%d,%d],\n"
+               "         lu.i:%d->%d,\n"
+               "         shadowed:%d,\n"
+               "         ci:%d,\n"
+               "         ca:[%d,%d,%d]\n",
+               DEREF_PTR(lpOld), DEREF_PTR(lp),
+               laOld[0], laOld[1], la[0], la[1],
+               lsOld.i, lsOld.j, ls.i, ls.j,
+               luOld.i, lu.i,
+               shadowed,
+               ci, ca[0],
+               ca[1], ca[2]);
   } // PRT-NEXT: }
 
   // DMP: CallExpr

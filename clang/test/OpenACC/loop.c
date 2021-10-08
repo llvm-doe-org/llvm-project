@@ -49,6 +49,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AGIMP
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-NOPART-GPART,EXE-PLC)
 // RUN:   (accc=seq
 // RUN:    accc_sp=' '
@@ -57,6 +58,7 @@
 // RUN:    ompdk=OSEQ
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-ASEQ,DMP-ASLC
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-SLC)
 // RUN:   (accc=independent
 // RUN:    accc_sp=' '
@@ -65,6 +67,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AGIMP
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-NOPART-GPART,EXE-PLC)
 // RUN:   (accc=auto
 // RUN:    accc_sp=' '
@@ -73,6 +76,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 //
 //        gang, worker, vector with each of the above except seq
@@ -83,6 +87,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AG
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-NOPART-GPART,EXE-PLC)
 // RUN:   (accc=worker
 // RUN:    accc_sp=' '
@@ -91,6 +96,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AGIMP,DMP-AW
+// RUN:    run-if-not-worker=:
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc=vector
 // RUN:    accc_sp=' '
@@ -99,6 +105,7 @@
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AGIMP,DMP-AV
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='independent gang'
 // RUN:    accc_sp=' '
@@ -107,6 +114,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AG
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-NOPART-GPART,EXE-PLC)
 // RUN:   (accc='independent worker'
 // RUN:    accc_sp=' '
@@ -115,6 +123,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AGIMP,DMP-AW
+// RUN:    run-if-not-worker=:
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='independent vector'
 // RUN:    accc_sp=' '
@@ -123,6 +132,7 @@
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AGIMP,DMP-AV
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='auto gang'
 // RUN:    accc_sp=' '
@@ -131,6 +141,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AG
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 // RUN:   (accc='auto worker'
 // RUN:    accc_sp=' '
@@ -139,6 +150,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AW
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 // RUN:   (accc='auto vector'
 // RUN:    accc_sp=' '
@@ -147,6 +159,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AV
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 //
 //        combinations of gang, worker, vector
@@ -157,6 +170,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AG,DMP-AW
+// RUN:    run-if-not-worker=:
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='independent gang worker'
 // RUN:    accc_sp=' '
@@ -165,6 +179,7 @@
 // RUN:    ompdk=OPRG
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AG,DMP-AW
+// RUN:    run-if-not-worker=:
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='gang vector'
 // RUN:    accc_sp=' '
@@ -173,6 +188,7 @@
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AG,DMP-AV
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='independent gang vector'
 // RUN:    accc_sp=' '
@@ -181,6 +197,7 @@
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AG,DMP-AV
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='worker vector'
 // RUN:    accc_sp=' '
@@ -189,6 +206,7 @@
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AGIMP,DMP-AW,DMP-AV
+// RUN:    run-if-not-worker=:
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='independent worker vector'
 // RUN:    accc_sp=' '
@@ -197,6 +215,7 @@
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AGIMP,DMP-AW,DMP-AV
+// RUN:    run-if-not-worker=:
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='gang worker vector'
 // RUN:    accc_sp=' '
@@ -205,6 +224,7 @@
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIMP,DMP-APLC,DMP-AG,DMP-AW,DMP-AV
+// RUN:    run-if-not-worker=:
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='independent gang worker vector'
 // RUN:    accc_sp=' '
@@ -213,6 +233,7 @@
 // RUN:    ompdk=OPRGPLC
 // RUN:    ompsk=OSEXP
 // RUN:    dmp=DMP-AIND,DMP-APLC,DMP-AG,DMP-AW,DMP-AV
+// RUN:    run-if-not-worker=:
 // RUN:    exe=EXE,EXE-PART,EXE-GPART,EXE-PART-GPART,EXE-PLC)
 // RUN:   (accc='auto gang worker'
 // RUN:    accc_sp=' '
@@ -221,6 +242,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AG,DMP-AW
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 // RUN:   (accc='auto gang vector'
 // RUN:    accc_sp=' '
@@ -229,6 +251,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AG,DMP-AV
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 // RUN:   (accc='auto worker vector'
 // RUN:    accc_sp=' '
@@ -237,6 +260,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AW,DMP-AV
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 // RUN:   (accc='auto gang worker vector'
 // RUN:    accc_sp=' '
@@ -245,6 +269,7 @@
 // RUN:    ompdk=OSEQPLC
 // RUN:    ompsk=OSIMP
 // RUN:    dmp=DMP-AAUTO,DMP-APLC,DMP-AG,DMP-AW,DMP-AV
+// RUN:    run-if-not-worker=
 // RUN:    exe=EXE,EXE-NOPART,EXE-GREDUN,EXE-PLC)
 // RUN: }
 
@@ -278,8 +303,8 @@
 // prt-args iteration, significantly shortening the prt-args definition.
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' ACCC="%'accc_sp'%'accc'" prt-chk=PRT,PRT-A)
@@ -319,18 +344,10 @@
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
-// RUN: %for loop-clauses {
-// RUN:   %for prt-opts {
-// RUN:     %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c \
-// RUN:            -DACCC=%'accc' -Wno-openacc-omp-map-ompx-hold
-// RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:            -Wno-unused-function -DACCC=%'accc' -o %t %t-omp.c
-// RUN:     %t | FileCheck -check-prefixes=%[exe] %s
-// RUN:   }
-// RUN: }
-
-// Check execution with normal compilation.
+// -fopenacc-ast-print is guaranteed to expand includes and macros appropiately
+// only for the host architecture, so don't try to use it for offload
+// compilation.  Do try it for the host as it's good way to catch AST printing
+// issues.
 //
 // FIXME: Several upstream compiler bugs were recently introduced that break
 // behavior when offloading to nvptx64 unless we add -O1 or higher, but that
@@ -340,18 +357,62 @@
 //
 // To avoid all this until upstream fixes it, we add -O1 -Wno-pass-failed.
 //
+// FIXME: amdgcn doesn't yet support printf in a kernel.
+//
+// FIXME: amdgcn misbehaves with worker partitioning, so skip it there for now.
+//
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify')
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify')
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed -Xclang -verify=nvptx64')
+// RUN:   (run-if=                                      tgt-cflags='                                                          -Xclang -verify'                   tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-x86_64                        tgt-cflags='-fopenmp-targets=%run-x86_64-triple                       -Xclang -verify'                   tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-ppc64le                       tgt-cflags='-fopenmp-targets=%run-ppc64le-triple                      -Xclang -verify'                   tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-nvptx64                       tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed -Xclang -verify=nvptx64'           tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if='%run-if-amdgcn %[run-if-not-worker]' tgt-cflags='-fopenmp-targets=%run-amdgcn-triple                       -Xclang -verify -DTGT_USE_STDIO=0' tgt-use-stdio=NO-TGT-USE-STDIO)
 // RUN: }
 // RUN: %for loop-clauses {
+//        # FIXME: amdgcn doesn't yet support printf in a kernel, but
+//        # -fopenacc-print=omp still fails to suppress macro expansion in some
+//        # kernels.  To avoid expanding TGT_PRINTF to printf here and thus
+//        # breaking amdgcn compilation later, we prototype TGT_PRINTF as a
+//        # function here, and then we define it to either printf or nothing
+//        # when we compile for the target.  When either of those limitations is
+//        # fixed, this hack can go away.  Once it does, the -DTGT_PRINTF=printf
+//        # in the %t-ast-prt-omp.c case below will be redundant and so can go
+//        # away too.
+// RUN:   %for prt-opts {
+// RUN:     %clang -Xclang -verify %[prt-opt]=omp %s > %t-%[prt-kind]-omp.c \
+// RUN:       -DACCC=%'accc' -Wno-openacc-omp-map-ompx-hold -DTGT_PRINTF_PROTO
+// RUN:     echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN:   }
+// RUN:   %clang -fopenmp %fopenmp-version -Xclang -verify -o %t \
+// RUN:     -Wno-unused-function -DACCC=%'accc' %t-ast-prt-omp.c \
+// RUN:     -DTGT_PRINTF=printf
+// RUN:   %t > %t.out 2>&1
+// RUN:   echo \
+// RUN:     'FileCheck -input-file %t.out %s -check-prefixes=%[exe],' \
+// RUN:   | sed -e 's/\([^,=]*\),/\1,\1-TGT-USE-STDIO,/g' -e 's/,$//' \
+// RUN:   > %t-fc
+// RUN:   sh %t-fc
 // RUN:   %for tgts {
-// RUN:     %[run-if] %clang -fopenacc %s -o %t \
-// RUN:                      %[tgt-cflags] -DACCC=%'accc'
-// RUN:     %[run-if] %t 2 > %t.out 2>&1
-// RUN:     %[run-if] FileCheck -input-file %t.out %s -check-prefixes=%[exe]
+// RUN:     %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] -o %t \
+// RUN:       %t-prt-omp.c
+// RUN:     %[run-if] %t > %t.out 2>&1
+// RUN:     echo 'FileCheck -input-file %t.out %s -check-prefixes=%[exe],' \
+// RUN:     | sed -e 's/\([^,=]*\),/\1,\1-%[tgt-use-stdio],/g' -e 's/,$//' \
+// RUN:     > %t-fc
+// RUN:     %[run-if] sh %t-fc
+// RUN:   }
+// RUN: }
+
+// Check execution with normal compilation.
+//
+// RUN: %for loop-clauses {
+// RUN:   %for tgts {
+// RUN:     %[run-if] %clang -fopenacc %s -o %t %[tgt-cflags] -DACCC=%'accc'
+// RUN:     %[run-if] %t > %t.out 2>&1
+// RUN:     echo 'FileCheck -input-file %t.out %s -check-prefixes=%[exe],' \
+// RUN:     | sed -e 's/\([^,=]*\),/\1,\1-%[tgt-use-stdio],/g' -e 's/,$//' \
+// RUN:     > %t-fc
+// RUN:     %[run-if] sh %t-fc
 // RUN:   }
 // RUN: }
 
@@ -369,11 +430,26 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef TGT_USE_STDIO
+# define TGT_USE_STDIO 1
+#endif
+
+#if TGT_PRINTF_PROTO
+int TGT_PRINTF(const char *, ...);
+#elif TGT_USE_STDIO
+# define TGT_PRINTF(...) printf(__VA_ARGS__)
+#else
+# define TGT_PRINTF(...)
+#endif
+
 // PRT: int tentativeDef;
 int tentativeDef;
 
 // PRT-NEXT: int main() {
 int main() {
+  // PRT-NEXT: printf
+  // EXE: start
+  printf("start\n");
 
   //--------------------------------------------------
   // Exercise declared loop control variable, i.
@@ -508,21 +584,21 @@ int main() {
       // PRT-NEXT: for ({{.*}}) {
       #pragma acc loop ACCC
       for (int i = 0; i < 2; ++i) {
-        // EXE:             hello world
-        // EXE-NEXT:        hello world
-        // EXE-GREDUN-NEXT: hello world
-        // EXE-GREDUN-NEXT: hello world
-        // EXE-GREDUN-NEXT: hello world
-        // EXE-GREDUN-NEXT: hello world
-        printf("hello world\n");
+        //        EXE-TGT-USE-STDIO-NEXT: hello world
+        //        EXE-TGT-USE-STDIO-NEXT: hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        TGT_PRINTF("hello world\n");
         for (j = 0; j < 2; ++j)
           ;
 
         // If gang-redundant, every gang should see old value at i = 0, new
-	// value at i = 1 if sequential, and either value at i = 1 if otherwise
+        // value at i = 1 if sequential, and either value at i = 1 if otherwise
         // partitioned.  If gang-partitioned, each of two gangs should see old
         // value at the gang's one assigned iteration, and one gang shouldn't
-	// see anything.
+        // see anything.
         if (loopOnly == 88) // check old before new in case assign between
           save.readLoopOnlyOld = true;
         else if (loopOnly == 77 && i == 1)
@@ -533,9 +609,9 @@ int main() {
           loopOnly = 77;
 
         // At least one gang should see old value at i = 0, every gang should
-	// see new value at i = 1 if sequential, and gangs can see either value
-	// (or no value in case of the gang not assigned an iteration under
-	// gang partitioning) at i = 1 if partitioned in any way.
+        // see new value at i = 1 if sequential, and gangs can see either value
+        // (or no value in case of the gang not assigned an iteration under
+        // gang partitioning) at i = 1 if partitioned in any way.
         if (loopOnlyArr[0] == 88) // check old before new in case assign between
           save.readLoopOnlyArrOld = true;
         else if (loopOnlyArr[0] == 77)
@@ -723,13 +799,13 @@ int main() {
     // PRT-NEXT: for ({{.*}}) {
     #pragma acc parallel loop num_gangs(3) ACCC
     for (int i = 0; i < 2; ++i) {
-      // EXE:             hello world
-      // EXE-NEXT:        hello world
-      // EXE-GREDUN-NEXT: hello world
-      // EXE-GREDUN-NEXT: hello world
-      // EXE-GREDUN-NEXT: hello world
-      // EXE-GREDUN-NEXT: hello world
-      printf("hello world\n");
+      //        EXE-TGT-USE-STDIO-NEXT: hello world
+      //        EXE-TGT-USE-STDIO-NEXT: hello world
+      // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+      // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+      // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+      // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+      TGT_PRINTF("hello world\n");
       for (j = 0; j < 2; ++j)
         ;
 
@@ -916,7 +992,7 @@ int main() {
       // PRT-AO-OPRG-OSIMP-NEXT:    // #pragma omp [[OMPDP]] private(j){{$}}
       // PRT-AO-OPRG-OSEXP-NEXT:    // #pragma omp [[OMPDP]] private(j) shared(k){{$}}
       // PRT-A-NEXT:                for (j ={{.*}}) {
-      // PRT-A-NEXT:                  printf
+      // PRT-A-NEXT:                  {{print|TGT_PRINTF}}
       // PRT-A-NEXT:                  for (k ={{.*}})
       // PRT-A-NEXT:                    ;
       // PRT-A-NEXT:                }
@@ -926,7 +1002,7 @@ int main() {
       // PRT-AO-OPRGPLC-OSIMP-NEXT: //   #pragma omp [[OMPDP]]{{$}}
       // PRT-AO-OPRGPLC-OSEXP-NEXT: //   #pragma omp [[OMPDP]] shared(k){{$}}
       // PRT-AO-OPRGPLC-NEXT:       //   for (j ={{.*}}) {
-      // PRT-AO-OPRGPLC-NEXT:       //     printf
+      // PRT-AO-OPRGPLC-NEXT:       //     {{printf|TGT_PRINTF}}
       // PRT-AO-OPRGPLC-NEXT:       //     for (k ={{.*}})
       // PRT-AO-OPRGPLC-NEXT:       //       ;
       // PRT-AO-OPRGPLC-NEXT:       //   }
@@ -936,7 +1012,7 @@ int main() {
       // PRT-AO-OSEQPLC-NEXT:       // {
       // PRT-AO-OSEQPLC-NEXT:       //   int j;
       // PRT-AO-OSEQPLC-NEXT:       //   for (j ={{.*}}) {
-      // PRT-AO-OSEQPLC-NEXT:       //     printf
+      // PRT-AO-OSEQPLC-NEXT:       //     {{printf|TGT_PRINTF}}
       // PRT-AO-OSEQPLC-NEXT:       //     for (k ={{.*}})
       // PRT-AO-OSEQPLC-NEXT:       //       ;
       // PRT-AO-OSEQPLC-NEXT:       //   }
@@ -956,7 +1032,7 @@ int main() {
       // PRT-O-OPRGPLC-OSIMP-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
       // PRT-O-OPRGPLC-OSEXP-NEXT:    {{^ *}}#pragma omp [[OMPDP]] shared(k){{$}}
       // PRT-O-NEXT:                  for (j ={{.*}}) {
-      // PRT-O-NEXT:                    printf
+      // PRT-O-NEXT:                    {{printf|TGT_PRINTF}}
       // PRT-O-NEXT:                    for (k ={{.*}})
       // PRT-O-NEXT:                      ;
       // PRT-O-NEXT:                  }
@@ -965,7 +1041,7 @@ int main() {
       // PRT-OA-OPRGPLC-NEXT:       // ---------OMP<-ACC--------
       // PRT-OA-OPRGPLC-NEXT:       // #pragma acc loop[[ACCC]]{{$}}
       // PRT-OA-OPRGPLC-NEXT:       // for (j ={{.*}}) {
-      // PRT-OA-OPRGPLC-NEXT:       //   printf
+      // PRT-OA-OPRGPLC-NEXT:       //   {{printf|TGT_PRINTF}}
       // PRT-OA-OPRGPLC-NEXT:       //   for (k ={{.*}})
       // PRT-OA-OPRGPLC-NEXT:       //     ;
       // PRT-OA-OPRGPLC-NEXT:       // }
@@ -973,26 +1049,26 @@ int main() {
       // PRT-OA-OSEQPLC-NEXT:       // ---------OMP<-ACC--------
       // PRT-OA-OSEQPLC-NEXT:       // #pragma acc loop[[ACCC]]{{$}}
       // PRT-OA-OSEQPLC-NEXT:       // for (j ={{.*}}) {
-      // PRT-OA-OSEQPLC-NEXT:       //   printf
+      // PRT-OA-OSEQPLC-NEXT:       //   {{printf|TGT_PRINTF}}
       // PRT-OA-OSEQPLC-NEXT:       //   for (k ={{.*}})
       // PRT-OA-OSEQPLC-NEXT:       //     ;
       // PRT-OA-OSEQPLC-NEXT:       // }
       // PRT-OA-OSEQPLC-NEXT:       // ^----------ACC----------^
       //
       // PRT-NOACC-NEXT:            for (j ={{.*}}) {
-      // PRT-NOACC-NEXT:              printf
+      // PRT-NOACC-NEXT:              {{printf|TGT_PRINTF}}
       // PRT-NOACC-NEXT:              for (k ={{.*}})
       // PRT-NOACC-NEXT:                ;
       // PRT-NOACC-NEXT:            }
       #pragma acc loop ACCC
       for (j = 1; j < 3; ++j) {
-        // EXE-NEXT:        hello world
-        // EXE-NEXT:        hello world
-        // EXE-GREDUN-NEXT: hello world
-        // EXE-GREDUN-NEXT: hello world
-        // EXE-GREDUN-NEXT: hello world
-        // EXE-GREDUN-NEXT: hello world
-        printf("hello world\n");
+        // EXE-TGT-USE-STDIO-NEXT:        hello world
+        // EXE-TGT-USE-STDIO-NEXT:        hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        TGT_PRINTF("hello world\n");
         for (k = 0; k < 2; ++k)
           ;
       }
@@ -1093,13 +1169,13 @@ int main() {
           save.readInLaterLoopErr = true;
         if (i == 0)
           j = 9999;
-        // EXE-NEXT:        hello world
-        // EXE-NEXT:        hello world
-        // EXE-GREDUN-NEXT: hello world
-        // EXE-GREDUN-NEXT: hello world
-        // EXE-GREDUN-NEXT: hello world
-        // EXE-GREDUN-NEXT: hello world
-        printf("hello world\n");
+        // EXE-TGT-USE-STDIO-NEXT:        hello world
+        // EXE-TGT-USE-STDIO-NEXT:        hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        TGT_PRINTF("hello world\n");
       } // PRT: }
 
       // Should see j value assigned inside loop except that, if
@@ -1235,7 +1311,7 @@ int main() {
     // PRT-AO-OPRG-OSEXP-NEXT:    // #pragma omp [[OMPDP]] private(j) shared(k){{$}}
     // PRT-AO-OSEQ-NEXT:          // #pragma omp target teams num_teams(3) firstprivate(j,k){{$}}
     // PRT-A-NEXT:                for (j ={{.*}}) {
-    // PRT-A-NEXT:                  printf
+    // PRT-A-NEXT:                  {{printf|TGT_PRINTF}}
     // PRT-A-NEXT:                  for (k ={{.*}})
     // PRT-A-NEXT:                    ;
     // PRT-A-NEXT:                }
@@ -1246,7 +1322,7 @@ int main() {
     // PRT-AO-OPRGPLC-OSIMP-NEXT: //   #pragma omp [[OMPDP]]{{$}}
     // PRT-AO-OPRGPLC-OSEXP-NEXT: //   #pragma omp [[OMPDP]] shared(k){{$}}
     // PRT-AO-OPRGPLC-NEXT:       //   for (j ={{.*}}) {
-    // PRT-AO-OPRGPLC-NEXT:       //     printf
+    // PRT-AO-OPRGPLC-NEXT:       //     {{printf|TGT_PRINTF}}
     // PRT-AO-OPRGPLC-NEXT:       //     for (k ={{.*}})
     // PRT-AO-OPRGPLC-NEXT:       //       ;
     // PRT-AO-OPRGPLC-NEXT:       //   }
@@ -1257,7 +1333,7 @@ int main() {
     // PRT-AO-OSEQPLC-NEXT:       // {
     // PRT-AO-OSEQPLC-NEXT:       //   int j;
     // PRT-AO-OSEQPLC-NEXT:       //   for (j ={{.*}}) {
-    // PRT-AO-OSEQPLC-NEXT:       //     printf
+    // PRT-AO-OSEQPLC-NEXT:       //     {{printf|TGT_PRINTF}}
     // PRT-AO-OSEQPLC-NEXT:       //     for (k ={{.*}})
     // PRT-AO-OSEQPLC-NEXT:       //       ;
     // PRT-AO-OSEQPLC-NEXT:       //   }
@@ -1281,7 +1357,7 @@ int main() {
     // PRT-O-OPRGPLC-OSIMP-NEXT:   {{^ *}}#pragma omp [[OMPDP]]{{$}}
     // PRT-O-OPRGPLC-OSEXP-NEXT:   {{^ *}}#pragma omp [[OMPDP]] shared(k){{$}}
     // PRT-O-NEXT:                 for (j ={{.*}}) {
-    // PRT-O-NEXT:                   printf
+    // PRT-O-NEXT:                   {{printf|TGT_PRINTF}}
     // PRT-O-NEXT:                   for (k ={{.*}})
     // PRT-O-NEXT:                     ;
     // PRT-O-NEXT:                 }
@@ -1290,7 +1366,7 @@ int main() {
     // PRT-OA-OPRGPLC-NEXT:      // ---------OMP<-ACC--------
     // PRT-OA-OPRGPLC-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
     // PRT-OA-OPRGPLC-NEXT:      // for (j ={{.*}}) {
-    // PRT-OA-OPRGPLC-NEXT:      //   printf
+    // PRT-OA-OPRGPLC-NEXT:      //   {{printf|TGT_PRINTF}}
     // PRT-OA-OPRGPLC-NEXT:      //   for (k ={{.*}})
     // PRT-OA-OPRGPLC-NEXT:      //     ;
     // PRT-OA-OPRGPLC-NEXT:      // }
@@ -1298,26 +1374,26 @@ int main() {
     // PRT-OA-OSEQPLC-NEXT:      // ---------OMP<-ACC--------
     // PRT-OA-OSEQPLC-NEXT:      // #pragma acc parallel loop[[ACCC]] num_gangs(3){{$}}
     // PRT-OA-OSEQPLC-NEXT:      // for (j ={{.*}}) {
-    // PRT-OA-OSEQPLC-NEXT:      //   printf
+    // PRT-OA-OSEQPLC-NEXT:      //   {{printf|TGT_PRINTF}}
     // PRT-OA-OSEQPLC-NEXT:      //   for (k ={{.*}})
     // PRT-OA-OSEQPLC-NEXT:      //     ;
     // PRT-OA-OSEQPLC-NEXT:      // }
     // PRT-OA-OSEQPLC-NEXT:      // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT:           for (j ={{.*}}) {
-    // PRT-NOACC-NEXT:             printf
+    // PRT-NOACC-NEXT:             {{printf|TGT_PRINTF}}
     // PRT-NOACC-NEXT:             for (k ={{.*}})
     // PRT-NOACC-NEXT:               ;
     // PRT-NOACC-NEXT:           }
     #pragma acc parallel loop ACCC num_gangs(3)
     for (j = 1; j < 3; ++j) {
-      // EXE-NEXT:        hello world
-      // EXE-NEXT:        hello world
-      // EXE-GREDUN-NEXT: hello world
-      // EXE-GREDUN-NEXT: hello world
-      // EXE-GREDUN-NEXT: hello world
-      // EXE-GREDUN-NEXT: hello world
-      printf("hello world\n");
+      // EXE-TGT-USE-STDIO-NEXT:        hello world
+      // EXE-TGT-USE-STDIO-NEXT:        hello world
+      // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+      // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+      // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+      // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+      TGT_PRINTF("hello world\n");
       for (k = 0; k < 2; ++k)
         ;
     }
@@ -1400,14 +1476,14 @@ int main() {
       // PRT-A-SAME:          {{^$}}
       // PRT-AO-OPRG-NEXT:    // #pragma omp [[OMPDP]] private(tentativeDef){{$}}
       // PRT-A-NEXT:          for (tentativeDef ={{.*}}) {
-      // PRT-A-NEXT:            printf
+      // PRT-A-NEXT:            {{printf|TGT_PRINTF}}
       // PRT-A-NEXT:          }
       // PRT-AO-OPRGPLC-NEXT: // ---------ACC->OMP--------
       // PRT-AO-OPRGPLC-NEXT: // {
       // PRT-AO-OPRGPLC-NEXT: //   int tentativeDef;
       // PRT-AO-OPRGPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
       // PRT-AO-OPRGPLC-NEXT: //   for (tentativeDef ={{.*}}) {
-      // PRT-AO-OPRGPLC-NEXT: //     printf
+      // PRT-AO-OPRGPLC-NEXT: //     {{printf|TGT_PRINTF}}
       // PRT-AO-OPRGPLC-NEXT: //   }
       // PRT-AO-OPRGPLC-NEXT: // }
       // PRT-AO-OPRGPLC-NEXT: // ^----------OMP----------^
@@ -1415,7 +1491,7 @@ int main() {
       // PRT-AO-OSEQPLC-NEXT: // {
       // PRT-AO-OSEQPLC-NEXT: //   int tentativeDef;
       // PRT-AO-OSEQPLC-NEXT: //   for (tentativeDef ={{.*}}) {
-      // PRT-AO-OSEQPLC-NEXT: //     printf
+      // PRT-AO-OSEQPLC-NEXT: //     {{printf|TGT_PRINTF}}
       // PRT-AO-OSEQPLC-NEXT: //   }
       // PRT-AO-OSEQPLC-NEXT: // }
       // PRT-AO-OSEQPLC-NEXT: // ^----------OMP----------^
@@ -1431,35 +1507,35 @@ int main() {
       // PRT-O-OSEQPLC-NEXT:    int tentativeDef;
       // PRT-O-OPRGPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
       // PRT-O-NEXT:            for (tentativeDef ={{.*}}) {
-      // PRT-O-NEXT:              printf
+      // PRT-O-NEXT:              {{printf|TGT_PRINTF}}
       // PRT-O-NEXT:            }
       // PRT-O-OPRGPLC-NEXT:  }
       // PRT-O-OSEQPLC-NEXT:  }
       // PRT-OA-OPRGPLC-NEXT: // ---------OMP<-ACC--------
       // PRT-OA-OPRGPLC-NEXT: // #pragma acc loop[[ACCC]]{{$}}
       // PRT-OA-OPRGPLC-NEXT: // for (tentativeDef ={{.*}}) {
-      // PRT-OA-OPRGPLC-NEXT: //   printf
+      // PRT-OA-OPRGPLC-NEXT: //   {{printf|TGT_PRINTF}}
       // PRT-OA-OPRGPLC-NEXT: // }
       // PRT-OA-OPRGPLC-NEXT: // ^----------ACC----------^
       // PRT-OA-OSEQPLC-NEXT: // ---------OMP<-ACC--------
       // PRT-OA-OSEQPLC-NEXT: // #pragma acc loop[[ACCC]]{{$}}
       // PRT-OA-OSEQPLC-NEXT: // for (tentativeDef ={{.*}}) {
-      // PRT-OA-OSEQPLC-NEXT: //   printf
+      // PRT-OA-OSEQPLC-NEXT: //   {{printf|TGT_PRINTF}}
       // PRT-OA-OSEQPLC-NEXT: // }
       // PRT-OA-OSEQPLC-NEXT: // ^----------ACC----------^
       //
       // PRT-NOACC-NEXT: for (tentativeDef ={{.*}}) {
-      // PRT-NOACC-NEXT:   printf
+      // PRT-NOACC-NEXT:   {{printf|TGT_PRINTF}}
       // PRT-NOACC-NEXT: }
       #pragma acc loop ACCC
       for (tentativeDef = 1; tentativeDef < 3; ++tentativeDef) {
-        // EXE-NEXT:        hello world
-        // EXE-NEXT:        hello world
-        // EXE-GREDUN-NEXT: hello world
-        // EXE-GREDUN-NEXT: hello world
-        // EXE-GREDUN-NEXT: hello world
-        // EXE-GREDUN-NEXT: hello world
-        printf("hello world\n");
+        // EXE-TGT-USE-STDIO-NEXT:        hello world
+        // EXE-TGT-USE-STDIO-NEXT:        hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+        TGT_PRINTF("hello world\n");
       }
     } // PRT: }
   } // PRT: }
@@ -1533,7 +1609,7 @@ int main() {
     // PRT-AO-OSEQ-NEXT:    {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(tentativeDef){{$}}
     // PRT-AO-OPRG-NEXT:    {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
     // PRT-A-NEXT:          for (tentativeDef ={{.*}}) {
-    // PRT-A-NEXT:            printf
+    // PRT-A-NEXT:            {{printf|TGT_PRINTF}}
     // PRT-A-NEXT:          }
     // PRT-AO-OPRGPLC-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OPRGPLC-NEXT: // #pragma omp target teams num_teams(3){{$}}
@@ -1541,7 +1617,7 @@ int main() {
     // PRT-AO-OPRGPLC-NEXT: //   int tentativeDef;
     // PRT-AO-OPRGPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
     // PRT-AO-OPRGPLC-NEXT: //   for (tentativeDef ={{.*}}) {
-    // PRT-AO-OPRGPLC-NEXT: //     printf
+    // PRT-AO-OPRGPLC-NEXT: //     {{printf|TGT_PRINTF}}
     // PRT-AO-OPRGPLC-NEXT: //   }
     // PRT-AO-OPRGPLC-NEXT: // }
     // PRT-AO-OPRGPLC-NEXT: // ^----------OMP----------^
@@ -1550,7 +1626,7 @@ int main() {
     // PRT-AO-OSEQPLC-NEXT: // {
     // PRT-AO-OSEQPLC-NEXT: //   int tentativeDef;
     // PRT-AO-OSEQPLC-NEXT: //   for (tentativeDef ={{.*}}) {
-    // PRT-AO-OSEQPLC-NEXT: //     printf
+    // PRT-AO-OSEQPLC-NEXT: //     {{printf|TGT_PRINTF}}
     // PRT-AO-OSEQPLC-NEXT: //   }
     // PRT-AO-OSEQPLC-NEXT: // }
     // PRT-AO-OSEQPLC-NEXT: // ^----------OMP----------^
@@ -1570,35 +1646,35 @@ int main() {
     // PRT-O-OSEQPLC-NEXT:    int tentativeDef;
     // PRT-O-OPRGPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
     // PRT-O-NEXT:            for (tentativeDef ={{.*}}) {
-    // PRT-O-NEXT:              printf
+    // PRT-O-NEXT:              {{printf|TGT_PRINTF}}
     // PRT-O-NEXT:            }
     // PRT-O-OPRGPLC-NEXT:  }
     // PRT-O-OSEQPLC-NEXT:  }
     // PRT-OA-OPRGPLC-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OPRGPLC-NEXT: // #pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
     // PRT-OA-OPRGPLC-NEXT: // for (tentativeDef ={{.*}}) {
-    // PRT-OA-OPRGPLC-NEXT: //   printf
+    // PRT-OA-OPRGPLC-NEXT: //   {{printf|TGT_PRINTF}}
     // PRT-OA-OPRGPLC-NEXT: // }
     // PRT-OA-OPRGPLC-NEXT: // ^----------ACC----------^
     // PRT-OA-OSEQPLC-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OSEQPLC-NEXT: // #pragma acc parallel loop num_gangs(3)[[ACCC]]{{$}}
     // PRT-OA-OSEQPLC-NEXT: // for (tentativeDef ={{.*}}) {
-    // PRT-OA-OSEQPLC-NEXT: //   printf
+    // PRT-OA-OSEQPLC-NEXT: //   {{printf|TGT_PRINTF}}
     // PRT-OA-OSEQPLC-NEXT: // }
     // PRT-OA-OSEQPLC-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT: for (tentativeDef ={{.*}}) {
-    // PRT-NOACC-NEXT:   printf
+    // PRT-NOACC-NEXT:   {{printf|TGT_PRINTF}}
     // PRT-NOACC-NEXT: }
     #pragma acc parallel loop num_gangs(3) ACCC
     for (tentativeDef = 1; tentativeDef < 3; ++tentativeDef) {
-      // EXE-NEXT:        hello world
-      // EXE-NEXT:        hello world
-      // EXE-GREDUN-NEXT: hello world
-      // EXE-GREDUN-NEXT: hello world
-      // EXE-GREDUN-NEXT: hello world
-      // EXE-GREDUN-NEXT: hello world
-      printf("hello world\n");
+      // EXE-TGT-USE-STDIO-NEXT:        hello world
+      // EXE-TGT-USE-STDIO-NEXT:        hello world
+      // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+      // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+      // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+      // EXE-GREDUN-TGT-USE-STDIO-NEXT: hello world
+      TGT_PRINTF("hello world\n");
     }
   } // PRT: }
 
@@ -1657,9 +1733,9 @@ int main() {
   // PRT-NEXT: for ({{.*}}) {
   #pragma acc loop ACCC
   for (int i = 0; i < 2; ++i) {
-    // EXE-NEXT:      just once
-    // EXE-PART-NEXT: just once
-    printf("just once\n");
+    // EXE-TGT-USE-STDIO-NEXT:      just once
+    // EXE-PART-TGT-USE-STDIO-NEXT: just once
+    TGT_PRINTF("just once\n");
     i = 2;
   } // PRT: }
 
@@ -1717,9 +1793,9 @@ int main() {
   // PRT-NEXT: for ({{.*}}) {
   #pragma acc parallel loop num_gangs(1) ACCC
   for (int i = 0; i < 2; ++i) {
-    // EXE-NEXT:      just once
-    // EXE-PART-NEXT: just once
-    printf("just once\n");
+    // EXE-TGT-USE-STDIO-NEXT:      just once
+    // EXE-PART-TGT-USE-STDIO-NEXT: just once
+    TGT_PRINTF("just once\n");
     i = 2;
   } // PRT: }
 
@@ -1785,14 +1861,14 @@ int main() {
     // PRT-A-SAME:          {{^$}}
     // PRT-AO-OPRG-NEXT:    {{^ *}}// #pragma omp [[OMPDP]] private(j){{$}}
     // PRT-A-NEXT:          for (j ={{.*}}) {
-    // PRT-A-NEXT:            printf
+    // PRT-A-NEXT:            {{printf|TGT_PRINTF}}
     // PRT-A-NEXT:          }
     // PRT-AO-OPRGPLC-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OPRGPLC-NEXT: // {
     // PRT-AO-OPRGPLC-NEXT: //   int j;
     // PRT-AO-OPRGPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
     // PRT-AO-OPRGPLC-NEXT: //   for (j ={{.*}}) {
-    // PRT-AO-OPRGPLC-NEXT: //     printf
+    // PRT-AO-OPRGPLC-NEXT: //     {{printf|TGT_PRINTF}}
     // PRT-AO-OPRGPLC-NEXT: //   }
     // PRT-AO-OPRGPLC-NEXT: // }
     // PRT-AO-OPRGPLC-NEXT: // ^----------OMP----------^
@@ -1800,7 +1876,7 @@ int main() {
     // PRT-AO-OSEQPLC-NEXT: // {
     // PRT-AO-OSEQPLC-NEXT: //   int j;
     // PRT-AO-OSEQPLC-NEXT: //   for (j ={{.*}}) {
-    // PRT-AO-OSEQPLC-NEXT: //     printf
+    // PRT-AO-OSEQPLC-NEXT: //     {{printf|TGT_PRINTF}}
     // PRT-AO-OSEQPLC-NEXT: //   }
     // PRT-AO-OSEQPLC-NEXT: // }
     // PRT-AO-OSEQPLC-NEXT: // ^----------OMP----------^
@@ -1816,34 +1892,34 @@ int main() {
     // PRT-O-OSEQPLC-NEXT:    int j;
     // PRT-O-OPRGPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
     // PRT-O-NEXT:            for (j ={{.*}}) {
-    // PRT-O-NEXT:              printf
+    // PRT-O-NEXT:              {{printf|TGT_PRINTF}}
     // PRT-O-NEXT:            }
     // PRT-O-OPRGPLC-NEXT:  }
     // PRT-O-OSEQPLC-NEXT:  }
     // PRT-OA-OPRGPLC-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OPRGPLC-NEXT: // #pragma acc loop[[ACCC]]{{$}}
     // PRT-OA-OPRGPLC-NEXT: // for (j ={{.*}}) {
-    // PRT-OA-OPRGPLC-NEXT: //   printf
+    // PRT-OA-OPRGPLC-NEXT: //   {{printf|TGT_PRINTF}}
     // PRT-OA-OPRGPLC-NEXT: // }
     // PRT-OA-OPRGPLC-NEXT: // ^----------ACC----------^
     // PRT-OA-OSEQPLC-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OSEQPLC-NEXT: // #pragma acc loop[[ACCC]]{{$}}
     // PRT-OA-OSEQPLC-NEXT: // for (j ={{.*}}) {
-    // PRT-OA-OSEQPLC-NEXT: //   printf
+    // PRT-OA-OSEQPLC-NEXT: //   {{printf|TGT_PRINTF}}
     // PRT-OA-OSEQPLC-NEXT: // }
     // PRT-OA-OSEQPLC-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT: for (j ={{.*}}) {
-    // PRT-NOACC-NEXT:   printf
+    // PRT-NOACC-NEXT:   {{printf|TGT_PRINTF}}
     // PRT-NOACC-NEXT: }
     #pragma acc loop ACCC
     for (j = 7; j > -2; j -= 2) {
-      // EXE-DAG: 7
-      // EXE-DAG: 5
-      // EXE-DAG: 3
-      // EXE-DAG: {{^1}}
-      // EXE-DAG: -1
-      printf("%d\n", j);
+      // EXE-TGT-USE-STDIO-DAG: 7
+      // EXE-TGT-USE-STDIO-DAG: 5
+      // EXE-TGT-USE-STDIO-DAG: 3
+      // EXE-TGT-USE-STDIO-DAG: {{^1}}
+      // EXE-TGT-USE-STDIO-DAG: -1
+      TGT_PRINTF("%d\n", j);
     }
   } // PRT-NEXT: }
 
@@ -1918,7 +1994,7 @@ int main() {
     // PRT-AO-OSEQ-NEXT:    // #pragma omp target teams num_teams(1) firstprivate(j){{$}}
     // PRT-AO-OPRG-NEXT:    // #pragma omp [[OMPDP]] private(j){{$}}
     // PRT-A-NEXT:          for (j ={{.*}}) {
-    // PRT-A-NEXT:            printf
+    // PRT-A-NEXT:            {{printf|TGT_PRINTF}}
     // PRT-A-NEXT:          }
     // PRT-AO-OPRGPLC-NEXT: // ---------ACC->OMP--------
     // PRT-AO-OPRGPLC-NEXT: // #pragma omp target teams num_teams(1){{$}}
@@ -1926,7 +2002,7 @@ int main() {
     // PRT-AO-OPRGPLC-NEXT: //   int j;
     // PRT-AO-OPRGPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
     // PRT-AO-OPRGPLC-NEXT: //   for (j ={{.*}}) {
-    // PRT-AO-OPRGPLC-NEXT: //     printf
+    // PRT-AO-OPRGPLC-NEXT: //     {{printf|TGT_PRINTF}}
     // PRT-AO-OPRGPLC-NEXT: //   }
     // PRT-AO-OPRGPLC-NEXT: // }
     // PRT-AO-OPRGPLC-NEXT: // ^----------OMP----------^
@@ -1935,7 +2011,7 @@ int main() {
     // PRT-AO-OSEQPLC-NEXT: // {
     // PRT-AO-OSEQPLC-NEXT: //   int j;
     // PRT-AO-OSEQPLC-NEXT: //   for (j ={{.*}}) {
-    // PRT-AO-OSEQPLC-NEXT: //     printf
+    // PRT-AO-OSEQPLC-NEXT: //     {{printf|TGT_PRINTF}}
     // PRT-AO-OSEQPLC-NEXT: //   }
     // PRT-AO-OSEQPLC-NEXT: // }
     // PRT-AO-OSEQPLC-NEXT: // ^----------OMP----------^
@@ -1955,34 +2031,34 @@ int main() {
     // PRT-O-OSEQPLC-NEXT:    int j;
     // PRT-O-OPRGPLC-NEXT:    {{^ *}}#pragma omp [[OMPDP]]{{$}}
     // PRT-O-NEXT:            for (j ={{.*}}) {
-    // PRT-O-NEXT:              printf
+    // PRT-O-NEXT:              {{printf|TGT_PRINTF}}
     // PRT-O-NEXT:            }
     // PRT-O-OPRGPLC-NEXT:  }
     // PRT-O-OSEQPLC-NEXT:  }
     // PRT-OA-OPRGPLC-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OPRGPLC-NEXT: // #pragma acc parallel loop num_gangs(1)[[ACCC]]{{$}}
     // PRT-OA-OPRGPLC-NEXT: // for (j ={{.*}}) {
-    // PRT-OA-OPRGPLC-NEXT: //   printf
+    // PRT-OA-OPRGPLC-NEXT: //   {{printf|TGT_PRINTF}}
     // PRT-OA-OPRGPLC-NEXT: // }
     // PRT-OA-OPRGPLC-NEXT: // ^----------ACC----------^
     // PRT-OA-OSEQPLC-NEXT: // ---------OMP<-ACC--------
     // PRT-OA-OSEQPLC-NEXT: // #pragma acc parallel loop num_gangs(1)[[ACCC]]{{$}}
     // PRT-OA-OSEQPLC-NEXT: // for (j ={{.*}}) {
-    // PRT-OA-OSEQPLC-NEXT: //   printf
+    // PRT-OA-OSEQPLC-NEXT: //   {{printf|TGT_PRINTF}}
     // PRT-OA-OSEQPLC-NEXT: // }
     // PRT-OA-OSEQPLC-NEXT: // ^----------ACC----------^
     //
     // PRT-NOACC-NEXT: for (j ={{.*}}) {
-    // PRT-NOACC-NEXT:   printf
+    // PRT-NOACC-NEXT:   {{printf|TGT_PRINTF}}
     // PRT-NOACC-NEXT: }
     #pragma acc parallel loop num_gangs(1) ACCC
     for (j = 7; j > -2; j -= 2) {
-      // EXE-DAG: 7
-      // EXE-DAG: 5
-      // EXE-DAG: 3
-      // EXE-DAG: {{^1}}
-      // EXE-DAG: -1
-      printf("%d\n", j);
+      // EXE-TGT-USE-STDIO-DAG: 7
+      // EXE-TGT-USE-STDIO-DAG: 5
+      // EXE-TGT-USE-STDIO-DAG: 3
+      // EXE-TGT-USE-STDIO-DAG: {{^1}}
+      // EXE-TGT-USE-STDIO-DAG: -1
+      TGT_PRINTF("%d\n", j);
     }
   } // PRT-NEXT: }
 
@@ -2066,13 +2142,13 @@ int main() {
       // PRT-OA-OSEQPLC-NEXT:       {{^ *}}// #pragma acc loop[[ACCC]] // discarded in OpenMP translation{{$}}
       //
       // PRT-NEXT: for (int i ={{.*}}) {
-      // PRT-NEXT:   printf
+      // PRT-NEXT:   {{printf|TGT_PRINTF}}
       // PRT-NEXT: }
       #pragma acc loop ACCC
       for (int i = 0; i < 2; ++i) {
-        // EXE-DAG: 0: 55
-        // EXE-DAG: 1: 55
-        printf("%d: %d\n", i, x);
+        // EXE-TGT-USE-STDIO-DAG: 0: 55
+        // EXE-TGT-USE-STDIO-DAG: 1: 55
+        TGT_PRINTF("%d: %d\n", i, x);
       }
     } // PRT-NEXT: }
   } // PRT-NEXT: }

@@ -17,8 +17,10 @@ Architectures
 * nvptx64 (NVIDIA GPUs) and amdgcn (AMD GPUs) are supported as
   accelerator devices.
 * Offload support inherits any limitations from upstream LLVM's OpenMP
-  offload support.  For example, `printf` is not currently supported
-  in kernels offloaded to AMD GPUs.
+  offload support.  For example, stdio (e.g., `printf`), worker loops
+  (that is, `parallel for` in an OpenMP `target teams` region), and
+  some standard math libraries (e.g., `complex.h`) are not yet
+  properly supported in kernels offloaded to AMD GPUs.
 
 Build Platforms
 ---------------
@@ -100,7 +102,7 @@ Run-Time Environment Variables
     * If `OMP_DEFAULT_DEVICE` is set, `ACC_DEVICE_TYPE` and
       `ACC_DEVICE_NUM` are ignored.
     * If only `ACC_DEVICE_TYPE` is set, `ACC_DEVICE_NUM` is treated as
-      0.
+      `0`.
     * If only `ACC_DEVICE_NUM` is set, `ACC_DEVICE_TYPE` is treated as
       the type of the device that the OpenMP implementation would
       otherwise select by default.

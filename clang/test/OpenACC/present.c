@@ -37,10 +37,11 @@
 // RUN:   (present-opt=-fopenacc-present-omp=no-present                             present-mt=ompx_hold,alloc         not-if-present=    not-crash-if-present=             )
 // RUN: }
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' not-if-off-and-present=                  not-crash-if-off-and-present=                        not-if-off=    not-crash-if-off=             )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         not-if-off-and-present=                  not-crash-if-off-and-present=                        not-if-off=    not-crash-if-off=             )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
 // RUN: }
 // RUN: %data use-vars {
 // RUN:   (use-var-cflags=            )
@@ -123,8 +124,8 @@
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-A       )
@@ -163,7 +164,7 @@
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
-// We don't normally bother to check this for offloading, but the present clause
+// We don't always bother to check this for offloading, but the present clause
 // has no effect when not offloading (that is, for shared memory), and one of
 // the main issues with the present clause is the various ways it can be
 // translated so it can be used in source-to-source when targeting other
@@ -171,30 +172,43 @@
 // working translations of the present clause in all cases.
 //
 // RUN: %for present-opts {
-// RUN:   %for tgts {
-// RUN:     %for use-vars {
-// RUN:       %for prt-opts {
-// RUN:         %[run-if] %clang -Xclang -verify %[prt-opt]=omp %[present-opt] \
-// RUN:                   %[use-var-cflags] %s > %t-omp.c \
-// RUN:                   -DCASES_HEADER='"%t-cases.h"' \
-// RUN:                   -Wno-openacc-omp-map-ompx-hold
-// RUN:         %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:         %[run-if] grep "^// nvptx64-" %s >> %t-omp.c
-// RUN:         %[run-if] %clang -fopenmp %fopenmp-version \
-// RUN:                   %[tgt-cflags] %[use-var-cflags] -o %t.exe %t-omp.c \
-// RUN:                   -DCASES_HEADER='"%t-cases.h"' -gline-tables-only
-// RUN:         %for cases {
-// RUN:           %[run-if] %[not-crash-if-fail] %t.exe %[case] \
-// RUN:                     > %t.out 2> %t.err
-// RUN:           %[run-if] FileCheck -input-file %t.err -allow-empty %s \
-// RUN:             -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS \
-// RUN:             -check-prefixes=EXE-ERR-%[not-if-fail]PASS-%[construct] \
-// RUN:             -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT \
-// RUN:             -check-prefixes=EXE-ERR-%[not-if-arrayExtError]ARRAYEXT \
-// RUN:             -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT-%[not-if-arrayExtError]ARRAYEXT
-// RUN:           %[run-if] FileCheck -input-file %t.out -allow-empty %s \
-// RUN:             -check-prefixes=EXE-OUT,EXE-OUT-%[not-if-fail]PASS
-// RUN:         }
+// RUN:   %for use-vars {
+// RUN:     %for prt-opts {
+// RUN:       %clang -Xclang -verify %[prt-opt]=omp %[present-opt] \
+// RUN:         %[use-var-cflags] %s > %t-%[prt-kind]-omp.c \
+// RUN:         -DCASES_HEADER='"%t-cases.h"' -Wno-openacc-omp-map-ompx-hold
+// RUN:       echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN:       grep "^// nvptx64-" %s >> %t-%[prt-kind]-omp.c
+// RUN:     }
+// RUN:     %clang -fopenmp %fopenmp-version -Xclang -verify \
+// RUN:       %[use-var-cflags] -o %t.exe %t-ast-prt-omp.c \
+// RUN:       -DCASES_HEADER='"%t-cases.h"' -gline-tables-only
+// RUN:     %for cases {
+// RUN:       %t.exe %[case] > %t.out 2> %t.err
+// RUN:       FileCheck -input-file %t.err -allow-empty %s \
+// RUN:         -check-prefixes=EXE-ERR,EXE-ERR-PASS \
+// RUN:         -check-prefixes=EXE-ERR-PASS-%[construct] \
+// RUN:         -check-prefixes=EXE-ERR-PRESENT \
+// RUN:         -check-prefixes=EXE-ERR-ARRAYEXT \
+// RUN:         -check-prefixes=EXE-ERR-PRESENT-ARRAYEXT
+// RUN:       FileCheck -input-file %t.out -allow-empty %s \
+// RUN:         -check-prefixes=EXE-OUT,EXE-OUT-PASS
+// RUN:     }
+// RUN:     %for tgts {
+// RUN:       %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] \
+// RUN:         %[use-var-cflags] -o %t.exe %t-prt-omp.c \
+// RUN:         -DCASES_HEADER='"%t-cases.h"' -gline-tables-only
+// RUN:       %for cases {
+// RUN:         %[run-if] %[not-crash-if-fail] %t.exe %[case] \
+// RUN:                   > %t.out 2> %t.err
+// RUN:         %[run-if] FileCheck -input-file %t.err -allow-empty %s \
+// RUN:           -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS \
+// RUN:           -check-prefixes=EXE-ERR-%[not-if-fail]PASS-%[construct] \
+// RUN:           -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT \
+// RUN:           -check-prefixes=EXE-ERR-%[not-if-arrayExtError]ARRAYEXT \
+// RUN:           -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT-%[not-if-arrayExtError]ARRAYEXT
+// RUN:         %[run-if] FileCheck -input-file %t.out -allow-empty %s \
+// RUN:           -check-prefixes=EXE-OUT,EXE-OUT-%[not-if-fail]PASS
 // RUN:       }
 // RUN:     }
 // RUN:   }
@@ -203,8 +217,8 @@
 // Check execution with normal compilation.
 //
 // RUN: %for present-opts {
-// RUN:   %for tgts {
-// RUN:     %for use-vars {
+// RUN:   %for use-vars {
+// RUN:     %for tgts {
 // RUN:       %[run-if] %clang -fopenacc %[present-opt] \
 // RUN:                 %[tgt-cflags] %[use-var-cflags] -o %t.exe %s \
 // RUN:                 -DCASES_HEADER='"%t-cases.h"'

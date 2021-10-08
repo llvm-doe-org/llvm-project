@@ -29,8 +29,8 @@
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT-A,PRT)
@@ -62,16 +62,6 @@
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
-// RUN: %for prt-opts {
-// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c
-// RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:   %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:          -Wno-unused-function -o %t %t-omp.c
-// RUN:   %t 2 2>&1 | FileCheck -check-prefix=EXE %s
-// RUN: }
-
-// Check execution with normal compilation.
-//
 // FIXME: Several upstream compiler bugs were recently introduced that break
 // behavior when offloading to nvptx64 unless we add -O1 or higher, but that
 // causes many diagnostics like:
@@ -80,16 +70,40 @@
 //
 // To avoid all this until upstream fixes it, we add -O1 -Wno-pass-failed.
 //
+// FIXME: amdgcn doesn't yet support printf in a kernel.  Unfortunately, That
+// means our execution checks on amdgcn don't verify much except that nothing
+// crashes.
+//
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify')
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify')
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed -Xclang -verify=nvptx64')
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed -Xclang -verify=nvptx64' tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify -DTGT_USE_STDIO=0'            tgt-use-stdio=NO-TGT-USE-STDIO)
 // RUN: }
+// RUN: %for prt-opts {
+// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-%[prt-kind]-omp.c
+// RUN:   echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN: }
+// RUN: %clang -fopenmp %fopenmp-version -Wno-unused-function -Xclang -verify \
+// RUN:   -o %t %t-ast-prt-omp.c
+// RUN: %t > %t.out 2>&1
+// RUN: FileCheck -input-file %t.out %s -check-prefixes=EXE,EXE-TGT-USE-STDIO
+// RUN: %for tgts {
+// RUN:   %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] -o %t \
+// RUN:     %t-prt-omp.c
+// RUN:   %[run-if] %t > %t.out 2>&1
+// RUN:   %[run-if] FileCheck -input-file %t.out %s \
+// RUN:     -check-prefixes=EXE,EXE-%[tgt-use-stdio]
+// RUN: }
+
+// Check execution with normal compilation.
+//
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -fopenacc %s -o %t %[tgt-cflags]
 // RUN:   %[run-if] %t 2 > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out %s -check-prefix=EXE
+// RUN:   %[run-if] FileCheck -input-file %t.out %s \
+// RUN:     -check-prefixes=EXE,EXE-%[tgt-use-stdio]
 // RUN: }
 
 // END.
@@ -104,6 +118,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef TGT_USE_STDIO
+# define TGT_USE_STDIO 1
+#endif
+
+#if TGT_USE_STDIO
+# define TGT_PRINTF(...) printf(__VA_ARGS__)
+#else
+# define TGT_PRINTF(...)
+#endif
 
 // PRT: int main() {
 int main() {
@@ -171,12 +195,12 @@ int main() {
       #pragma acc loop
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}acc loop gang enclosing: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop gang enclosing: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop gang enclosing: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop gang enclosing: 1, 1{{$}}
-        printf("acc loop gang enclosing: %d, %d\n", i, j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop gang enclosing: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop gang enclosing: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop gang enclosing: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop gang enclosing: 1, 1{{$}}
+        TGT_PRINTF("acc loop gang enclosing: %d, %d\n", i, j);
     } // PRT-NEXT: }
 
     // DMP-NOT:  OMP
@@ -215,12 +239,12 @@ int main() {
       #pragma acc loop
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}acc loop worker enclosing: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop worker enclosing: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop worker enclosing: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop worker enclosing: 1, 1{{$}}
-        printf("acc loop worker enclosing: %d, %d\n", i, j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop worker enclosing: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop worker enclosing: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop worker enclosing: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop worker enclosing: 1, 1{{$}}
+        TGT_PRINTF("acc loop worker enclosing: %d, %d\n", i, j);
 
     // DMP-NOT:  OMP
     // DMP:      ACCLoopDirective
@@ -260,12 +284,12 @@ int main() {
       #pragma acc loop
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}acc loop vector enclosing: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop vector enclosing: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop vector enclosing: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop vector enclosing: 1, 1{{$}}
-        printf("acc loop vector enclosing: %d, %d\n", i, j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop vector enclosing: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop vector enclosing: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop vector enclosing: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop vector enclosing: 1, 1{{$}}
+        TGT_PRINTF("acc loop vector enclosing: %d, %d\n", i, j);
 
     // DMP-NOT:  OMP
     // DMP:      ACCLoopDirective
@@ -300,12 +324,12 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}acc loop seq enclosing: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop seq enclosing: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop seq enclosing: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop seq enclosing: 1, 1{{$}}
-        printf("acc loop seq enclosing: %d, %d\n", i, j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop seq enclosing: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop seq enclosing: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop seq enclosing: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop seq enclosing: 1, 1{{$}}
+        TGT_PRINTF("acc loop seq enclosing: %d, %d\n", i, j);
     } // PRT-NEXT: }
 
     // DMP-NOT:  OMP
@@ -341,12 +365,12 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}acc loop auto enclosing: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop auto enclosing: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop auto enclosing: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop auto enclosing: 1, 1{{$}}
-        printf("acc loop auto enclosing: %d, %d\n", i, j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop auto enclosing: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop auto enclosing: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop auto enclosing: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop auto enclosing: 1, 1{{$}}
+        TGT_PRINTF("acc loop auto enclosing: %d, %d\n", i, j);
     } // PRT-NEXT: }
 
     // DMP-NOT:  OMP
@@ -384,12 +408,12 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}acc loop auto gang enclosing: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop auto gang enclosing: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop auto gang enclosing: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop auto gang enclosing: 1, 1{{$}}
-        printf("acc loop auto gang enclosing: %d, %d\n", i, j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop auto gang enclosing: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop auto gang enclosing: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop auto gang enclosing: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop auto gang enclosing: 1, 1{{$}}
+        TGT_PRINTF("acc loop auto gang enclosing: %d, %d\n", i, j);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
@@ -447,12 +471,12 @@ int main() {
     #pragma acc loop
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: {{^}}acc parallel loop gang enclosing: 0, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop gang enclosing: 0, 1{{$}}
-      // EXE-DAG: {{^}}acc parallel loop gang enclosing: 1, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop gang enclosing: 1, 1{{$}}
-      printf("acc parallel loop gang enclosing: %d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang enclosing: 0, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang enclosing: 0, 1{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang enclosing: 1, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang enclosing: 1, 1{{$}}
+      TGT_PRINTF("acc parallel loop gang enclosing: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop worker enclosing\n"
@@ -514,12 +538,12 @@ int main() {
     #pragma acc loop
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: {{^}}acc parallel loop worker enclosing: 0, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop worker enclosing: 0, 1{{$}}
-      // EXE-DAG: {{^}}acc parallel loop worker enclosing: 1, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop worker enclosing: 1, 1{{$}}
-      printf("acc parallel loop worker enclosing: %d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop worker enclosing: 0, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop worker enclosing: 0, 1{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop worker enclosing: 1, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop worker enclosing: 1, 1{{$}}
+      TGT_PRINTF("acc parallel loop worker enclosing: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop vector enclosing\n"
@@ -583,12 +607,12 @@ int main() {
     #pragma acc loop
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: {{^}}acc parallel loop vector enclosing: 0, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop vector enclosing: 0, 1{{$}}
-      // EXE-DAG: {{^}}acc parallel loop vector enclosing: 1, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop vector enclosing: 1, 1{{$}}
-      printf("acc parallel loop vector enclosing: %d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop vector enclosing: 0, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop vector enclosing: 0, 1{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop vector enclosing: 1, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop vector enclosing: 1, 1{{$}}
+      TGT_PRINTF("acc parallel loop vector enclosing: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop seq enclosing\n"
@@ -641,12 +665,12 @@ int main() {
     #pragma acc loop
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: {{^}}acc parallel loop seq enclosing: 0, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop seq enclosing: 0, 1{{$}}
-      // EXE-DAG: {{^}}acc parallel loop seq enclosing: 1, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop seq enclosing: 1, 1{{$}}
-      printf("acc parallel loop seq enclosing: %d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop seq enclosing: 0, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop seq enclosing: 0, 1{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop seq enclosing: 1, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop seq enclosing: 1, 1{{$}}
+      TGT_PRINTF("acc parallel loop seq enclosing: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop auto enclosing\n"
@@ -699,12 +723,12 @@ int main() {
     #pragma acc loop
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: {{^}}acc parallel loop auto enclosing: 0, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop auto enclosing: 0, 1{{$}}
-      // EXE-DAG: {{^}}acc parallel loop auto enclosing: 1, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop auto enclosing: 1, 1{{$}}
-      printf("acc parallel loop auto enclosing: %d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop auto enclosing: 0, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop auto enclosing: 0, 1{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop auto enclosing: 1, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop auto enclosing: 1, 1{{$}}
+      TGT_PRINTF("acc parallel loop auto enclosing: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop gang auto enclosing\n"
@@ -761,12 +785,12 @@ int main() {
     #pragma acc loop
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: {{^}}acc parallel loop gang auto enclosing: 0, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop gang auto enclosing: 0, 1{{$}}
-      // EXE-DAG: {{^}}acc parallel loop gang auto enclosing: 1, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop gang auto enclosing: 1, 1{{$}}
-      printf("acc parallel loop gang auto enclosing: %d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang auto enclosing: 0, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang auto enclosing: 0, 1{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang auto enclosing: 1, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang auto enclosing: 1, 1{{$}}
+      TGT_PRINTF("acc parallel loop gang auto enclosing: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
   //--------------------------------------------------
@@ -834,12 +858,12 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}acc loop gang enclosed: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop gang enclosed: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop gang enclosed: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop gang enclosed: 1, 1{{$}}
-        printf("acc loop gang enclosed: %d, %d\n", i, j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop gang enclosed: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop gang enclosed: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop gang enclosed: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop gang enclosed: 1, 1{{$}}
+        TGT_PRINTF("acc loop gang enclosed: %d, %d\n", i, j);
     } // PRT-NEXT: }
 
     // DMP:      ACCLoopDirective
@@ -879,12 +903,12 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}acc loop worker enclosed: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop worker enclosed: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop worker enclosed: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop worker enclosed: 1, 1{{$}}
-        printf("acc loop worker enclosed: %d, %d\n", i, j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop worker enclosed: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop worker enclosed: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop worker enclosed: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop worker enclosed: 1, 1{{$}}
+        TGT_PRINTF("acc loop worker enclosed: %d, %d\n", i, j);
     } // PRT-NEXT: }
 
     // DMP:      ACCLoopDirective
@@ -925,12 +949,12 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}acc loop vector enclosed: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop vector enclosed: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop vector enclosed: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop vector enclosed: 1, 1{{$}}
-        printf("acc loop vector enclosed: %d, %d\n", i, j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop vector enclosed: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop vector enclosed: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop vector enclosed: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop vector enclosed: 1, 1{{$}}
+        TGT_PRINTF("acc loop vector enclosed: %d, %d\n", i, j);
     } // PRT-NEXT: }
 
     // DMP:      ACCLoopDirective
@@ -965,12 +989,12 @@ int main() {
       #pragma acc loop seq
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}acc loop seq enclosed: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop seq enclosed: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop seq enclosed: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop seq enclosed: 1, 1{{$}}
-        printf("acc loop seq enclosed: %d, %d\n", i, j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop seq enclosed: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop seq enclosed: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop seq enclosed: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop seq enclosed: 1, 1{{$}}
+        TGT_PRINTF("acc loop seq enclosed: %d, %d\n", i, j);
     } // PRT-NEXT: }
 
     // DMP:      ACCLoopDirective
@@ -1005,12 +1029,12 @@ int main() {
       #pragma acc loop auto
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}acc loop auto enclosed: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop auto enclosed: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop auto enclosed: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop auto enclosed: 1, 1{{$}}
-        printf("acc loop auto enclosed: %d, %d\n", i, j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop auto enclosed: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop auto enclosed: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop auto enclosed: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop auto enclosed: 1, 1{{$}}
+        TGT_PRINTF("acc loop auto enclosed: %d, %d\n", i, j);
     } // PRT-NEXT: }
 
     // DMP:      ACCLoopDirective
@@ -1047,12 +1071,12 @@ int main() {
       #pragma acc loop gang auto
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}acc loop gang auto enclosed: 0, 0{{$}}
-        // EXE-DAG: {{^}}acc loop gang auto enclosed: 0, 1{{$}}
-        // EXE-DAG: {{^}}acc loop gang auto enclosed: 1, 0{{$}}
-        // EXE-DAG: {{^}}acc loop gang auto enclosed: 1, 1{{$}}
-        printf("acc loop gang auto enclosed: %d, %d\n", i, j);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop gang auto enclosed: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop gang auto enclosed: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop gang auto enclosed: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop gang auto enclosed: 1, 1{{$}}
+        TGT_PRINTF("acc loop gang auto enclosed: %d, %d\n", i, j);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
@@ -1106,12 +1130,12 @@ int main() {
     // PRT-NEXT: for ({{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: {{^}}acc parallel loop gang enclosed: 0, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop gang enclosed: 0, 1{{$}}
-      // EXE-DAG: {{^}}acc parallel loop gang enclosed: 1, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop gang enclosed: 1, 1{{$}}
-      printf("acc parallel loop gang enclosed: %d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang enclosed: 0, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang enclosed: 0, 1{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang enclosed: 1, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang enclosed: 1, 1{{$}}
+      TGT_PRINTF("acc parallel loop gang enclosed: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop worker enclosed\n"
@@ -1173,12 +1197,12 @@ int main() {
     // PRT-NEXT: for ({{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: {{^}}acc parallel loop worker enclosed: 0, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop worker enclosed: 0, 1{{$}}
-      // EXE-DAG: {{^}}acc parallel loop worker enclosed: 1, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop worker enclosed: 1, 1{{$}}
-      printf("acc parallel loop worker enclosed: %d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop worker enclosed: 0, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop worker enclosed: 0, 1{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop worker enclosed: 1, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop worker enclosed: 1, 1{{$}}
+      TGT_PRINTF("acc parallel loop worker enclosed: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop vector enclosed\n"
@@ -1241,12 +1265,12 @@ int main() {
     // PRT-NEXT: for ({{.*}})
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: {{^}}acc parallel loop vector enclosed: 0, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop vector enclosed: 0, 1{{$}}
-      // EXE-DAG: {{^}}acc parallel loop vector enclosed: 1, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop vector enclosed: 1, 1{{$}}
-      printf("acc parallel loop vector enclosed: %d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop vector enclosed: 0, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop vector enclosed: 0, 1{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop vector enclosed: 1, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop vector enclosed: 1, 1{{$}}
+      TGT_PRINTF("acc parallel loop vector enclosed: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop seq enclosed\n"
@@ -1299,12 +1323,12 @@ int main() {
     #pragma acc loop seq
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: {{^}}acc parallel loop seq enclosed: 0, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop seq enclosed: 0, 1{{$}}
-      // EXE-DAG: {{^}}acc parallel loop seq enclosed: 1, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop seq enclosed: 1, 1{{$}}
-      printf("acc parallel loop seq enclosed: %d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop seq enclosed: 0, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop seq enclosed: 0, 1{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop seq enclosed: 1, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop seq enclosed: 1, 1{{$}}
+      TGT_PRINTF("acc parallel loop seq enclosed: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop auto enclosed\n"
@@ -1357,12 +1381,12 @@ int main() {
     #pragma acc loop auto
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: {{^}}acc parallel loop auto enclosed: 0, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop auto enclosed: 0, 1{{$}}
-      // EXE-DAG: {{^}}acc parallel loop auto enclosed: 1, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop auto enclosed: 1, 1{{$}}
-      printf("acc parallel loop auto enclosed: %d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop auto enclosed: 0, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop auto enclosed: 0, 1{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop auto enclosed: 1, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop auto enclosed: 1, 1{{$}}
+      TGT_PRINTF("acc parallel loop auto enclosed: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop gang auto enclosed\n"
@@ -1417,12 +1441,12 @@ int main() {
     #pragma acc loop gang auto
     for (int j = 0; j < 2; ++j)
       // DMP: CallExpr
-      // PRT-NEXT: printf
-      // EXE-DAG: {{^}}acc parallel loop gang auto enclosed: 0, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop gang auto enclosed: 0, 1{{$}}
-      // EXE-DAG: {{^}}acc parallel loop gang auto enclosed: 1, 0{{$}}
-      // EXE-DAG: {{^}}acc parallel loop gang auto enclosed: 1, 1{{$}}
-      printf("acc parallel loop gang auto enclosed: %d, %d\n", i, j);
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang auto enclosed: 0, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang auto enclosed: 0, 1{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang auto enclosed: 1, 0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop gang auto enclosed: 1, 1{{$}}
+      TGT_PRINTF("acc parallel loop gang auto enclosed: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
   //--------------------------------------------------
@@ -1496,16 +1520,16 @@ int main() {
       #pragma acc loop
       for (int k = 0; k < 2; ++k)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}multilevel, separate: 0, 0, 0{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 0, 0, 1{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 0, 1, 0{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 0, 1, 1{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 1, 0, 0{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 1, 0, 1{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 1, 1, 0{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 1, 1, 1{{$}}
-        printf("multilevel, separate: %d, %d, %d\n", i, j, k);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 0, 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 0, 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 0, 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 0, 1, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 1, 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 1, 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 1, 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 1, 1, 1{{$}}
+        TGT_PRINTF("multilevel, separate: %d, %d, %d\n", i, j, k);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
@@ -1568,16 +1592,16 @@ int main() {
       #pragma acc loop
       for (int k = 0; k < 2; ++k)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}multilevel, separate: 0, 0, 0{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 0, 0, 1{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 0, 1, 0{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 0, 1, 1{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 1, 0, 0{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 1, 0, 1{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 1, 1, 0{{$}}
-        // EXE-DAG: {{^}}multilevel, separate: 1, 1, 1{{$}}
-        printf("multilevel, separate: %d, %d, %d\n", i, j, k);
+        // PRT-NEXT: {{TGT_PRINTF|printf}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 0, 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 0, 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 0, 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 0, 1, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 1, 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 1, 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 1, 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}multilevel, separate: 1, 1, 1{{$}}
+        TGT_PRINTF("multilevel, separate: %d, %d, %d\n", i, j, k);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
@@ -1639,12 +1663,13 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}siblings, separate, gang first, first loop: 0, 0{{$}}
-        // EXE-DAG: {{^}}siblings, separate, gang first, first loop: 0, 1{{$}}
-        // EXE-DAG: {{^}}siblings, separate, gang first, first loop: 1, 0{{$}}
-        // EXE-DAG: {{^}}siblings, separate, gang first, first loop: 1, 1{{$}}
-        printf("siblings, separate, gang first, first loop: %d, %d\n", i, j);
+        // PRT-NEXT: {{(TGT_PRINTF|printf)([^)]|[[:space:]])*}});
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang first, first loop: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang first, first loop: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang first, first loop: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang first, first loop: 1, 1{{$}}
+        TGT_PRINTF("siblings, separate, gang first, first loop: %d, %d\n",
+                   i, j);
 
       // DMP:      ACCLoopDirective
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
@@ -1665,12 +1690,13 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}siblings, separate, gang first, second loop: 0, 0{{$}}
-        // EXE-DAG: {{^}}siblings, separate, gang first, second loop: 0, 1{{$}}
-        // EXE-DAG: {{^}}siblings, separate, gang first, second loop: 1, 0{{$}}
-        // EXE-DAG: {{^}}siblings, separate, gang first, second loop: 1, 1{{$}}
-        printf("siblings, separate, gang first, second loop: %d, %d\n", i, j);
+        // PRT-NEXT: {{(TGT_PRINTF|printf)([^)]|[[:space:]])*}});
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang first, second loop: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang first, second loop: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang first, second loop: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang first, second loop: 1, 1{{$}}
+        TGT_PRINTF("siblings, separate, gang first, second loop: %d, %d\n",
+                   i, j);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
@@ -1725,12 +1751,13 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}siblings, combined, gang first, first loop: 0, 0{{$}}
-        // EXE-DAG: {{^}}siblings, combined, gang first, first loop: 0, 1{{$}}
-        // EXE-DAG: {{^}}siblings, combined, gang first, first loop: 1, 0{{$}}
-        // EXE-DAG: {{^}}siblings, combined, gang first, first loop: 1, 1{{$}}
-        printf("siblings, combined, gang first, first loop: %d, %d\n", i, j);
+        // PRT-NEXT: {{(TGT_PRINTF|printf)([^)]|[[:space:]])*}});
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang first, first loop: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang first, first loop: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang first, first loop: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang first, first loop: 1, 1{{$}}
+        TGT_PRINTF("siblings, combined, gang first, first loop: %d, %d\n",
+                   i, j);
 
       // DMP:      ACCLoopDirective
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
@@ -1751,12 +1778,13 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}siblings, combined, gang first, second loop: 0, 0{{$}}
-        // EXE-DAG: {{^}}siblings, combined, gang first, second loop: 0, 1{{$}}
-        // EXE-DAG: {{^}}siblings, combined, gang first, second loop: 1, 0{{$}}
-        // EXE-DAG: {{^}}siblings, combined, gang first, second loop: 1, 1{{$}}
-        printf("siblings, combined, gang first, second loop: %d, %d\n", i, j);
+        // PRT-NEXT: {{(TGT_PRINTF|printf)([^)]|[[:space:]])*}});
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang first, second loop: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang first, second loop: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang first, second loop: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang first, second loop: 1, 1{{$}}
+        TGT_PRINTF("siblings, combined, gang first, second loop: %d, %d\n",
+                   i, j);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
@@ -1813,12 +1841,13 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}siblings, separate, gang second, first loop: 0, 0{{$}}
-        // EXE-DAG: {{^}}siblings, separate, gang second, first loop: 0, 1{{$}}
-        // EXE-DAG: {{^}}siblings, separate, gang second, first loop: 1, 0{{$}}
-        // EXE-DAG: {{^}}siblings, separate, gang second, first loop: 1, 1{{$}}
-        printf("siblings, separate, gang second, first loop: %d, %d\n", i, j);
+        // PRT-NEXT: {{(TGT_PRINTF|printf)([^)]|[[:space:]])*}});
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang second, first loop: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang second, first loop: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang second, first loop: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang second, first loop: 1, 1{{$}}
+        TGT_PRINTF("siblings, separate, gang second, first loop: %d, %d\n",
+                   i, j);
 
       // DMP:      ACCLoopDirective
       // DMP-NEXT:   ACCGangClause
@@ -1840,12 +1869,13 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}siblings, separate, gang second, second loop: 0, 0{{$}}
-        // EXE-DAG: {{^}}siblings, separate, gang second, second loop: 0, 1{{$}}
-        // EXE-DAG: {{^}}siblings, separate, gang second, second loop: 1, 0{{$}}
-        // EXE-DAG: {{^}}siblings, separate, gang second, second loop: 1, 1{{$}}
-        printf("siblings, separate, gang second, second loop: %d, %d\n", i, j);
+        // PRT-NEXT: {{(TGT_PRINTF|printf)([^)]|[[:space:]])*}});
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang second, second loop: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang second, second loop: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang second, second loop: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang second, second loop: 1, 1{{$}}
+        TGT_PRINTF("siblings, separate, gang second, second loop: %d, %d\n",
+                   i, j);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 
@@ -1899,12 +1929,13 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}siblings, combined, gang second, second loop: 0, 0{{$}}
-        // EXE-DAG: {{^}}siblings, combined, gang second, second loop: 0, 1{{$}}
-        // EXE-DAG: {{^}}siblings, combined, gang second, second loop: 1, 0{{$}}
-        // EXE-DAG: {{^}}siblings, combined, gang second, second loop: 1, 1{{$}}
-        printf("siblings, combined, gang second, second loop: %d, %d\n", i, j);
+        // PRT-NEXT: {{(TGT_PRINTF|printf)([^)]|[[:space:]])*}});
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang second, second loop: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang second, second loop: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang second, second loop: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang second, second loop: 1, 1{{$}}
+        TGT_PRINTF("siblings, combined, gang second, second loop: %d, %d\n",
+                   i, j);
 
       // DMP:      ACCLoopDirective
       // DMP-NEXT:   ACCGangClause
@@ -1926,12 +1957,13 @@ int main() {
       // PRT-NEXT: for ({{.*}})
       for (int j = 0; j < 2; ++j)
         // DMP: CallExpr
-        // PRT-NEXT: printf
-        // EXE-DAG: {{^}}siblings, combined, gang second, first loop: 0, 0{{$}}
-        // EXE-DAG: {{^}}siblings, combined, gang second, first loop: 0, 1{{$}}
-        // EXE-DAG: {{^}}siblings, combined, gang second, first loop: 1, 0{{$}}
-        // EXE-DAG: {{^}}siblings, combined, gang second, first loop: 1, 1{{$}}
-        printf("siblings, combined, gang second, first loop: %d, %d\n", i, j);
+        // PRT-NEXT: {{(TGT_PRINTF|printf)([^)]|[[:space:]])*}});
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang second, first loop: 0, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang second, first loop: 0, 1{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang second, first loop: 1, 0{{$}}
+        // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang second, first loop: 1, 1{{$}}
+        TGT_PRINTF("siblings, combined, gang second, first loop: %d, %d\n",
+                   i, j);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
 

@@ -29,8 +29,8 @@
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT-A,PRT)
@@ -67,28 +67,37 @@
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
+// -fopenacc-ast-print is guaranteed to expand includes and macros appropiately
+// only for the host architecture, so don't try to use it for offload
+// compilation.  Do try it for the host as it's good way to catch AST printing
+// issues.
+//
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' host-or-dev=HOST)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host-or-dev=DEV )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' host-or-dev=DEV )
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         host-or-dev=HOST)
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         host-or-dev=DEV )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         host-or-dev=DEV )
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-dev=DEV )
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         host-or-dev=DEV )
 // RUN: }
+// RUN: %for prt-opts {
+// RUN:   %clang -Xclang -verify %[prt-opt]=omp %acc-includes %s \
+// RUN:     > %t-%[prt-kind]-omp.c \
+// RUN:     -Wno-openacc-omp-map-ompx-hold \
+// RUN:     -Wno-openacc-omp-map-present \
+// RUN:     -Wno-openacc-omp-map-ompx-no-alloc
+// RUN:   echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN:   grep "^// nvptx64-" %s >> %t-%[prt-kind]-omp.c
+// RUN: }
+// RUN: %clang -fopenmp %fopenmp-version %acc-includes -Wno-unused-function \
+// RUN:   -Xclang -verify -o %t %t-ast-prt-omp.c %acc-libs
+// RUN: %t > %t.out 2>&1
+// RUN: FileCheck -input-file %t.out %s -check-prefixes=EXE,EXE-HOST
 // RUN: %for tgts {
-// RUN:   %for prt-opts {
-// RUN:     %[run-if] %clang -Xclang -verify %[prt-opt]=omp %acc-includes %s \
-// RUN:                      > %t-omp.c \
-// RUN:                      -Wno-openacc-omp-map-ompx-hold \
-// RUN:                      -Wno-openacc-omp-map-present \
-// RUN:                      -Wno-openacc-omp-map-ompx-no-alloc
-// RUN:     %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %[run-if] grep "^// nvptx64-" %s >> %t-omp.c
-// RUN:     %[run-if] %clang -fopenmp %fopenmp-version \
-// RUN:               %acc-includes -Wno-unused-function %[tgt-cflags] -o %t \
-// RUN:               %t-omp.c %acc-libs
-// RUN:     %[run-if] %t > %t.out 2>&1
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:                         -check-prefixes=EXE,EXE-%[host-or-dev]
-// RUN:   }
+// RUN:   %[run-if] %clang -fopenmp %fopenmp-version %acc-includes \
+// RUN:     -Wno-unused-function %[tgt-cflags] -o %t %t-prt-omp.c %acc-libs
+// RUN:   %[run-if] %t > %t.out 2>&1
+// RUN:   %[run-if] FileCheck -input-file %t.out %s \
+// RUN:     -check-prefixes=EXE,EXE-%[host-or-dev]
 // RUN: }
 
 // Check execution with normal compilation.
@@ -137,8 +146,10 @@ void printDeviceInt_(const char *Name, int *Var) {
   if (!acc_is_present(Var, 0))
     printf("absent");
   else {
-    #pragma acc parallel num_gangs(1)
-    printf("present %d", *Var);
+    int TgtVal;
+    #pragma acc parallel num_gangs(1) copyout(TgtVal)
+    TgtVal = *Var;
+    printf("present %d", TgtVal);
   }
   printf("\n");
 }

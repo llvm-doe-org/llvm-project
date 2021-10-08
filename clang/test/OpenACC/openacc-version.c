@@ -9,6 +9,7 @@
 // RUN:   (run-if=%run-if-x86_64  cflags='-fopenacc -fopenmp-targets=%run-x86_64-triple -o -'  fc=DEFS,DEFS-ACC,DEFS-ACC2)
 // RUN:   (run-if=%run-if-ppc64le cflags='-fopenacc -fopenmp-targets=%run-ppc64le-triple -o -' fc=DEFS,DEFS-ACC,DEFS-ACC2)
 // RUN:   (run-if=%run-if-nvptx64 cflags='-fopenacc -fopenmp-targets=%run-nvptx64-triple -o -' fc=DEFS,DEFS-ACC,DEFS-ACC2)
+// RUN:   (run-if=%run-if-amdgcn  cflags='-fopenacc -fopenmp-targets=%run-amdgcn-triple  -o -' fc=DEFS,DEFS-ACC,DEFS-ACC2)
 // RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -Xclang -verify=none -E -dM %[cflags] %s > %t.out

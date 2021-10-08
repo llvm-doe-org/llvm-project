@@ -40,8 +40,8 @@
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
@@ -82,33 +82,44 @@
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
+// RUN: %data tgts {
+// RUN:   (run-if=                tgt=HOST    tgt-cflags='                                     -Xclang -verify'        )
+// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'        )
+// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'        )
+// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64')
+// RUN:   (run-if=%run-if-amdgcn  tgt=AMDGCN  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang'                )
+// RUN: }
 // RUN: %for directives {
 // RUN:   %for prt-opts {
-// RUN:     %clang -Xclang -verify %[prt-opt]=omp %[dir-cflags] %s > %t-omp.c \
-// RUN:            -Wno-openacc-omp-map-ompx-hold
-// RUN:     echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:            -Wno-unused-function %libatomic %[dir-cflags] -o %t %t-omp.c
-// RUN:     %t 2 2>&1 \
-// RUN:     | FileCheck -check-prefixes=EXE,EXE-%[dir],EXE-TGT-HOST,EXE-%[dir]-TGT-HOST %s
+// RUN:     %clang -Xclang -verify %[prt-opt]=omp %[dir-cflags] %s \
+// RUN:       -Wno-openacc-omp-map-ompx-hold > %t-%[prt-kind]-omp.c
+// RUN:     echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN:   }
+// RUN:   %clang -Xclang -verify -fopenmp %fopenmp-version \
+// RUN:     -Wno-unused-function %libatomic %[dir-cflags] -o %t %t-ast-prt-omp.c
+// RUN:   %t > %t.out 2>&1
+// RUN:   FileCheck -input-file %t.out %s \
+// RUN:     -check-prefixes=EXE,EXE-%[dir],EXE-TGT-HOST,EXE-%[dir]-TGT-HOST
+// RUN:   %for tgts {
+// RUN:     %[run-if] %clang -fopenmp %fopenmp-version %t-prt-omp.c -o %t \
+// RUN:       %libatomic %[tgt-cflags] %[dir-cflags] -DTGT_%[tgt]_EXE
+// RUN:     %[run-if] %t > %t.out 2>&1
+// RUN:     %[run-if] FileCheck -input-file %t.out %s \
+// RUN:       -check-prefixes=EXE,EXE-%[dir] \
+// RUN:       -check-prefixes=EXE-TGT-%[tgt],EXE-%[dir]-TGT-%[tgt]
 // RUN:   }
 // RUN: }
 
 // Check execution with normal compilation.
 //
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST    tgt-cflags='                                     -Xclang -verify')
-// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify')
-// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify')
-// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64')
-// RUN: }
 // RUN: %for directives {
 // RUN:   %for tgts {
 // RUN:     %[run-if] %clang -fopenacc %s -o %t %libatomic \
-// RUN:                      %[tgt-cflags] %[dir-cflags] -DTGT_%[tgt]_EXE
-// RUN:     %[run-if] %t 2 > %t.out 2>&1
+// RUN:       %[tgt-cflags] %[dir-cflags] -DTGT_%[tgt]_EXE
+// RUN:     %[run-if] %t > %t.out 2>&1
 // RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:                         -check-prefixes=EXE,EXE-%[dir],EXE-TGT-%[tgt],EXE-%[dir]-TGT-%[tgt]
+// RUN:       -check-prefixes=EXE,EXE-%[dir] \
+// RUN:       -check-prefixes=EXE-TGT-%[tgt],EXE-%[dir]-TGT-%[tgt]
 // RUN:   }
 // RUN: }
 
@@ -122,7 +133,14 @@
 // nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <assert.h>
-#include <complex.h>
+
+// FIXME: For amdgcn, we get the following compile error:
+//
+//   File /home/jdenny/llvm/build/lib/clang/14.0.0/include/__clang_hip_math.h Line 23: 'omp.h' file not found
+#if !TGT_AMDGCN_EXE
+# include <complex.h>
+#endif
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -299,8 +317,8 @@ int main() {
   // pass into acc parallel as null, but otherwise they pass in just fine.
   // What does the OpenMP spec say is supposed to happen?
 
-// PRT-SRC-NEXT: #if !TGT_X86_64_EXE && !TGT_PPC64LE_EXE && !TGT_NVPTX64_EXE
-#if !TGT_X86_64_EXE && !TGT_PPC64LE_EXE && !TGT_NVPTX64_EXE
+// PRT-SRC-NEXT: #if !TGT_X86_64_EXE && !TGT_PPC64LE_EXE && !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
+#if !TGT_X86_64_EXE && !TGT_PPC64LE_EXE && !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
   // PRT-NEXT: {
   {
     // PRT-NEXT: int arr[]
@@ -988,9 +1006,10 @@ int main() {
 
   // FIXME: OpenMP offloading for nvptx64 doesn't store bool correctly for
   // reductions.
+  // FIXME: Clang fails an assert here for amdgcn offloading.
 
-// PRT-SRC-NEXT: #if !TGT_NVPTX64_EXE
-#if !TGT_NVPTX64_EXE
+// PRT-SRC-NEXT: #if !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
+#if !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
   // PRT-NEXT: {
   {
     // PRT-NEXT: {{_Bool|bool}} acc = 3;
@@ -1069,6 +1088,9 @@ int main() {
   // Complex argument type
   //--------------------------------------------------
 
+  // FIXME: We couldn't include complex.h for amdgcn (see above).
+// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
+#if !TGT_AMDGCN_EXE
   // PRT-NEXT: {
   {
     // PRT-NEXT: {{_Complex float|float complex}} acc
@@ -1134,11 +1156,19 @@ int main() {
       acc += val;
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-PAR-NEXT:     acc = 18.0 + 13.0i
-    // EXE-PARLOOP-NEXT: acc = 26.0 + 25.0i
+    //        EXE-PAR-TGT-HOST-NEXT: acc = 18.0 + 13.0i
+    //      EXE-PAR-TGT-X86_64-NEXT: acc = 18.0 + 13.0i
+    //     EXE-PAR-TGT-PPC64LE-NEXT: acc = 18.0 + 13.0i
+    //     EXE-PAR-TGT-NVPTX64-NEXT: acc = 18.0 + 13.0i
+    //    EXE-PARLOOP-TGT-HOST-NEXT: acc = 26.0 + 25.0i
+    //  EXE-PARLOOP-TGT-X86_64-NEXT: acc = 26.0 + 25.0i
+    // EXE-PARLOOP-TGT-PPC64LE-NEXT: acc = 26.0 + 25.0i
+    // EXE-PARLOOP-TGT-NVPTX64-NEXT: acc = 26.0 + 25.0i
     printf("acc = %.1f + %.1fi\n", creal(acc), cimag(acc));
   }
   // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   //--------------------------------------------------
   // Explicit copy already present
@@ -1292,11 +1322,12 @@ int main() {
       acc += val;
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-PAR-TGT-HOST-NEXT: acc = 18
+    //     EXE-PAR-TGT-HOST-NEXT: acc = 18
     // EXE-PARLOOP-TGT-HOST-NEXT: acc = 26
-    // EXE-TGT-X86_64-NEXT: acc = 10
-    // EXE-TGT-PPC64LE-NEXT: acc = 10
-    // EXE-TGT-NVPTX64-NEXT: acc = 10
+    //       EXE-TGT-X86_64-NEXT: acc = 10
+    //      EXE-TGT-PPC64LE-NEXT: acc = 10
+    //      EXE-TGT-NVPTX64-NEXT: acc = 10
+    //       EXE-TGT-AMDGCN-NEXT: acc = 10
     printf("acc = %d\n", acc);
   }
   // PRT-NEXT: }

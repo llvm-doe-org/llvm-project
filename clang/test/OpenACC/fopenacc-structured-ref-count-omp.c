@@ -66,8 +66,8 @@
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-A       )
@@ -106,37 +106,50 @@
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
-// We don't normally bother to check this for offloading, but DMAs have no
-// effect when not offloading (that is, for shared memory), and one of the main
-// issues here is the various ways the data clauses can be translated so they
-// can be used in source-to-source when targeting other compilers.  That is, we
-// want to be sure source-to-source mode produces working translations of the
-// data clauses in all cases.
+// We do'nt always bother to check this for offloading, but DMAs have no effect
+// when not offloading (that is, for shared memory), and one of the main issues
+// here is the various ways the data clauses can be translated so they can be
+// used in source-to-source when targeting other compilers.  That is, we want to
+// be sure source-to-source mode produces working translations of the data
+// clauses in all cases.
+//
+// -fopenacc-ast-print is guaranteed to expand includes and macros appropiately
+// only for the host architecture, so don't try to use it for offload
+// compilation.  Do try it for the host as it's good way to catch AST printing
+// issues.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' host-or-dev=HOST)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host-or-dev=DEV )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' host-or-dev=DEV )
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         host-or-dev=HOST)
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         host-or-dev=DEV )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         host-or-dev=DEV )
 // RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-dev=DEV )
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         host-or-dev=DEV )
 // RUN: }
 // RUN: %for ref-count-opts {
+// RUN:   %for prt-opts {
+// RUN:     %clang -Xclang -verify %[prt-opt]=omp %[ref-count-opt] %s \
+// RUN:       %acc-includes > %t-%[prt-kind]-omp.c \
+// RUN:       -Wno-openacc-omp-map-present \
+// RUN:       -Wno-openacc-omp-map-ompx-no-alloc
+// RUN:     echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN:     grep "^// nvptx64-" %s >> %t-%[prt-kind]-omp.c
+// RUN:   }
+// RUN:   %clang -fopenmp %fopenmp-version %acc-includes -Wno-unused-function \
+// RUN:     -o %t.exe %t-prt-omp.c %acc-libs
+// RUN:   %t.exe > %t.out 2>&1
+// RUN:   FileCheck -input-file %t.out %s \
+// RUN:     -match-full-lines -allow-empty \
+// RUN:     -check-prefixes=EXE,EXE-HOST \
+// RUN:     -check-prefixes=EXE-HOST-%[hold-or-no-hold]
 // RUN:   %for tgts {
-// RUN:     %for prt-opts {
-// RUN:       %[run-if] %clang -Xclang -verify %[prt-opt]=omp %[ref-count-opt] \
-// RUN:                        %s %acc-includes > %t-omp.c \
-// RUN:                        -Wno-openacc-omp-map-present \
-// RUN:                        -Wno-openacc-omp-map-ompx-no-alloc
-// RUN:       %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:       %[run-if] grep "^// nvptx64-" %s >> %t-omp.c
-// RUN:       %[run-if] %clang -fopenmp %fopenmp-version \
-// RUN:                 %[tgt-cflags] %acc-includes -Wno-unused-function \
-// RUN:                 -o %t.exe %t-omp.c %acc-libs
-// RUN:       %[run-if] %t.exe > %t.out 2>&1
-// RUN:       %[run-if] FileCheck -input-file %t.out %s \
-// RUN:         -match-full-lines -allow-empty \
-// RUN:         -check-prefixes=EXE,EXE-%[host-or-dev] \
-// RUN:         -check-prefixes=EXE-%[host-or-dev]-%[hold-or-no-hold]
-// RUN:     }
+// RUN:     %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] \
+// RUN:       %acc-includes -Wno-unused-function -o %t.exe %t-prt-omp.c \
+// RUN:       %acc-libs
+// RUN:     %[run-if] %t.exe > %t.out 2>&1
+// RUN:     %[run-if] FileCheck -input-file %t.out %s \
+// RUN:       -match-full-lines -allow-empty \
+// RUN:       -check-prefixes=EXE,EXE-%[host-or-dev] \
+// RUN:       -check-prefixes=EXE-%[host-or-dev]-%[hold-or-no-hold]
 // RUN:   }
 // RUN: }
 

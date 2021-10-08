@@ -27,8 +27,8 @@
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
 //
 // RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print)
-// RUN:   (prt-opt=-fopenacc-print    )
+// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
+// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
 // RUN: }
 // RUN: %data prt-args {
 // RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT-A,PRT)
@@ -64,28 +64,49 @@
 
 // Can we print the OpenMP source code, compile, and run it successfully?
 //
+// -fopenacc-ast-print is guaranteed to expand includes and macros appropiately
+// only for the host architecture, so don't try to use it for offload
+// compilation.  Do try it for the host as it's good way to catch AST printing
+// issues.
+//
+// RUN: %data tgts {
+// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'                   host-or-dev=HOST tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'                   host-or-dev=DEV  tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'                   host-or-dev=DEV  tgt-use-stdio=TGT-USE-STDIO   )
+// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64'           host-or-dev=DEV  tgt-use-stdio=TGT-USE-STDIO   )
+//        # FIXME: Add back the target printf check once amdgcn supports it.
+// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify -DTGT_USE_STDIO=0' host-or-dev=DEV  tgt-use-stdio=NO-TGT-USE-STDIO)
+// RUN: }
 // RUN: %for prt-opts {
-// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-omp.c \
+// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-%[prt-kind]-omp.c \
 // RUN:          -Wno-openacc-omp-map-ompx-hold -Wno-openacc-omp-map-present \
 // RUN:          -Wno-openacc-omp-map-ompx-no-alloc
-// RUN:   echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:   %clang -Xclang -verify -fopenmp %fopenmp-version -o %t %t-omp.c
-// RUN:   %t 2 2>&1 | FileCheck -check-prefixes=EXE,EXE-HOST %s
+// RUN:   echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
+// RUN: }
+// RUN: %clang -fopenmp %fopenmp-version -o %t %t-ast-prt-omp.c
+// RUN: %t > %t.out 2>&1
+// RUN: FileCheck -input-file %t.out %s -strict-whitespace \
+// RUN:   -check-prefixes=EXE,EXE-HOST \
+// RUN:   -check-prefixes=EXE-TGT-USE-STDIO,EXE-HOST-TGT-USE-STDIO
+// RUN: %for tgts {
+// RUN:   %[run-if] %clang -fopenmp %fopenmp-version -o %t %[tgt-cflags] \
+// RUN:     %t-prt-omp.c
+// RUN:   %[run-if] %t > %t.out 2>&1
+// RUN:   %[run-if] FileCheck -input-file %t.out %s -strict-whitespace \
+// RUN:     -check-prefixes=EXE,EXE-%[host-or-dev] \
+// RUN:     -check-prefixes=EXE-%[tgt-use-stdio] \
+// RUN:     -check-prefixes=EXE-%[host-or-dev]-%[tgt-use-stdio]
 // RUN: }
 
 // Check execution with normal compilation.
 //
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify' host-or-dev=HOST)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify' host-or-dev=DEV )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify' host-or-dev=DEV )
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-dev=DEV )
-// RUN: }
 // RUN: %for tgts {
 // RUN:   %[run-if] %clang -fopenacc %s -o %t %[tgt-cflags]
 // RUN:   %[run-if] %t > %t.out 2>&1
 // RUN:   %[run-if] FileCheck -input-file %t.out %s -strict-whitespace \
-// RUN:                       -check-prefixes=EXE,EXE-%[host-or-dev]
+// RUN:     -check-prefixes=EXE,EXE-%[host-or-dev] \
+// RUN:     -check-prefixes=EXE-%[tgt-use-stdio] \
+// RUN:     -check-prefixes=EXE-%[host-or-dev]-%[tgt-use-stdio]
 // RUN: }
 
 // END.
@@ -98,6 +119,16 @@
 // nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <stdio.h>
+
+#ifndef TGT_USE_STDIO
+# define TGT_USE_STDIO 1
+#endif
+
+#if TGT_USE_STDIO
+# define TGT_PRINTF(...) printf(__VA_ARGS__)
+#else
+# define TGT_PRINTF(...)
+#endif
 
 struct T { int i; };
 
@@ -604,26 +635,27 @@ void test() {
         // PRT-NEXT: nc =
         if (!cr0)
           nc = 55;
-        // PRT-NEXT: printf(
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
         // PRT:      );
-        //      EXE-NEXT: In first acc parallel:
-        // EXE-HOST-NEXT:    pr= 190
-        // EXE-HOST-NEXT:    c0= 110,  c1= 111,  c2= 112
-        // EXE-HOST-NEXT:   ci0= 120, ci1= 121, ci2= 122
-        // EXE-HOST-NEXT:   co0=  35, co1=  36, co2=  37
-        // EXE-HOST-NEXT:   cr0=  45, cr1=  46, cr2=  47
-        //  EXE-DEV-NEXT:    pr=  90
-        //  EXE-DEV-NEXT:    c0=  10,  c1=  11,  c2=  12
-        //  EXE-DEV-NEXT:   ci0=  20, ci1=  21, ci2=  22
-        //  EXE-DEV-NEXT:   co0=  35, co1=  36, co2=  37
-        //  EXE-DEV-NEXT:   cr0=  45, cr1=  46, cr2=  47
-        printf("In first acc parallel:\n"
-               "   pr=%4d\n"
-               "   c0=%4d,  c1=%4d,  c2=%4d\n"
-               "  ci0=%4d, ci1=%4d, ci2=%4d\n"
-               "  co0=%4d, co1=%4d, co2=%4d\n"
-               "  cr0=%4d, cr1=%4d, cr2=%4d\n",
-               pr, c0, c1, c2, ci0, ci1, ci2, co0, co1, co2, cr0, cr1, cr2);
+        //      EXE-TGT-USE-STDIO-NEXT: In first acc parallel:
+        // EXE-HOST-TGT-USE-STDIO-NEXT:    pr= 190
+        // EXE-HOST-TGT-USE-STDIO-NEXT:    c0= 110,  c1= 111,  c2= 112
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   ci0= 120, ci1= 121, ci2= 122
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   co0=  35, co1=  36, co2=  37
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   cr0=  45, cr1=  46, cr2=  47
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:    pr=  90
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:    c0=  10,  c1=  11,  c2=  12
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   ci0=  20, ci1=  21, ci2=  22
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   co0=  35, co1=  36, co2=  37
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   cr0=  45, cr1=  46, cr2=  47
+        TGT_PRINTF("In first acc parallel:\n"
+                   "   pr=%4d\n"
+                   "   c0=%4d,  c1=%4d,  c2=%4d\n"
+                   "  ci0=%4d, ci1=%4d, ci2=%4d\n"
+                   "  co0=%4d, co1=%4d, co2=%4d\n"
+                   "  cr0=%4d, cr1=%4d, cr2=%4d\n",
+                   pr, c0, c1, c2, ci0, ci1, ci2, co0, co1, co2, cr0, cr1,
+		   cr2);
         // PRT-NEXT: pr +=
         // PRT: cr2 +=
          pr += 1000;
@@ -754,29 +786,30 @@ void test() {
       // DMP: CompoundStmt
       // PRT-NEXT: {
       {
-        // PRT-NEXT: printf(
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
         // PRT:      );
-        //      EXE-NEXT: In second acc parallel:
-        // EXE-HOST-NEXT:    pr=1290
-        // EXE-HOST-NEXT:    c0=1210,  c1=1211,  c2=1212
-        // EXE-HOST-NEXT:   ci0=1220, ci1=1221, ci2=1222
-        // EXE-HOST-NEXT:   co0=1135, co1=1136, co2=1137
-        // EXE-HOST-NEXT:   cr0=1145, cr1=1146, cr2=1147
-        // EXE-HOST-NEXT:    nc= 250
-        //  EXE-DEV-NEXT:    pr=1090
-        //  EXE-DEV-NEXT:    c0=1010,  c1=1011,  c2=1012
-        //  EXE-DEV-NEXT:   ci0=1020, ci1=1021, ci2=1022
-        //  EXE-DEV-NEXT:   co0=1035, co1=1036, co2=1037
-        //  EXE-DEV-NEXT:   cr0=1045, cr1=1046, cr2=1047
-        //  EXE-DEV-NEXT:    nc= 250
-        printf("In second acc parallel:\n"
-               "   pr=%4d\n"
-               "   c0=%4d,  c1=%4d,  c2=%4d\n"
-               "  ci0=%4d, ci1=%4d, ci2=%4d\n"
-               "  co0=%4d, co1=%4d, co2=%4d\n"
-               "  cr0=%4d, cr1=%4d, cr2=%4d\n"
-               "   nc=%4d\n",
-               pr, c0, c1, c2, ci0, ci1, ci2, co0, co1, co2, cr0, cr1, cr2, nc);
+        //      EXE-TGT-USE-STDIO-NEXT: In second acc parallel:
+        // EXE-HOST-TGT-USE-STDIO-NEXT:    pr=1290
+        // EXE-HOST-TGT-USE-STDIO-NEXT:    c0=1210,  c1=1211,  c2=1212
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   ci0=1220, ci1=1221, ci2=1222
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   co0=1135, co1=1136, co2=1137
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   cr0=1145, cr1=1146, cr2=1147
+        // EXE-HOST-TGT-USE-STDIO-NEXT:    nc= 250
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:    pr=1090
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:    c0=1010,  c1=1011,  c2=1012
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   ci0=1020, ci1=1021, ci2=1022
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   co0=1035, co1=1036, co2=1037
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   cr0=1045, cr1=1046, cr2=1047
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:    nc= 250
+        TGT_PRINTF("In second acc parallel:\n"
+                   "   pr=%4d\n"
+                   "   c0=%4d,  c1=%4d,  c2=%4d\n"
+                   "  ci0=%4d, ci1=%4d, ci2=%4d\n"
+                   "  co0=%4d, co1=%4d, co2=%4d\n"
+                   "  cr0=%4d, cr1=%4d, cr2=%4d\n"
+                   "   nc=%4d\n",
+                   pr, c0, c1, c2, ci0, ci1, ci2, co0, co1, co2, cr0, cr1, cr2,
+		   nc);
         // PRT-NEXT: pr +=
         // PRT: nc +=
          pr += 1000;
@@ -991,20 +1024,20 @@ void test() {
         // PRT-NEXT: nc[0] = 55;
         if (!cr[0])
           nc[0] = 55;
-        // PRT-NEXT: printf(
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
         // PRT:      );
-        //      EXE-NEXT: In first acc parallel:
-        // EXE-HOST-NEXT:   prArr[0]= 190
-        // EXE-HOST-NEXT:       c[0]= 110, ci[0]= 120, co[0]=  35
-        // EXE-HOST-NEXT:      cr[0]=  45
-        //  EXE-DEV-NEXT:   prArr[0]=  90
-        //  EXE-DEV-NEXT:       c[0]=  10, ci[0]=  20, co[0]=  35
-        //  EXE-DEV-NEXT:      cr[0]=  45
-        printf("In first acc parallel:\n"
-               "  prArr[0]=%4d\n"
-               "      c[0]=%4d, ci[0]=%4d, co[0]=%4d\n"
-               "     cr[0]=%4d\n",
-               prArr[0], c[0], ci[0], co[0], cr[0]);
+        //      EXE-TGT-USE-STDIO-NEXT: In first acc parallel:
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   prArr[0]= 190
+        // EXE-HOST-TGT-USE-STDIO-NEXT:       c[0]= 110, ci[0]= 120, co[0]=  35
+        // EXE-HOST-TGT-USE-STDIO-NEXT:      cr[0]=  45
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   prArr[0]=  90
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:       c[0]=  10, ci[0]=  20, co[0]=  35
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:      cr[0]=  45
+        TGT_PRINTF("In first acc parallel:\n"
+                   "  prArr[0]=%4d\n"
+                   "      c[0]=%4d, ci[0]=%4d, co[0]=%4d\n"
+                   "     cr[0]=%4d\n",
+                   prArr[0], c[0], ci[0], co[0], cr[0]);
         // PRT-NEXT: prArr[0] +=
         // PRT: cr[0] +=
         prArr[0] += 1000;
@@ -1090,20 +1123,20 @@ void test() {
       // DMP: CompoundStmt
       // PRT-NEXT: {
       {
-        // PRT-NEXT: printf(
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
         // PRT:      );
-        //      EXE-NEXT: In second acc parallel:
-        // EXE-HOST-NEXT:   prArr[0]=1290
-        // EXE-HOST-NEXT:       c[0]=1210, ci[0]=1220, co[0]=1135
-        // EXE-HOST-NEXT:      cr[0]=1145, nc[0]= 250
-        //  EXE-DEV-NEXT:   prArr[0]=1090
-        //  EXE-DEV-NEXT:       c[0]=1010, ci[0]=1020, co[0]=1035
-        //  EXE-DEV-NEXT:      cr[0]=1045, nc[0]= 250
-        printf("In second acc parallel:\n"
-               "  prArr[0]=%4d\n"
-               "      c[0]=%4d, ci[0]=%4d, co[0]=%4d\n"
-               "     cr[0]=%4d, nc[0]=%4d\n",
-               prArr[0], c[0], ci[0], co[0], cr[0], nc[0]);
+        //      EXE-TGT-USE-STDIO-NEXT: In second acc parallel:
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   prArr[0]=1290
+        // EXE-HOST-TGT-USE-STDIO-NEXT:       c[0]=1210, ci[0]=1220, co[0]=1135
+        // EXE-HOST-TGT-USE-STDIO-NEXT:      cr[0]=1145, nc[0]= 250
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   prArr[0]=1090
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:       c[0]=1010, ci[0]=1020, co[0]=1035
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:      cr[0]=1045, nc[0]= 250
+        TGT_PRINTF("In second acc parallel:\n"
+                   "  prArr[0]=%4d\n"
+                   "      c[0]=%4d, ci[0]=%4d, co[0]=%4d\n"
+                   "     cr[0]=%4d, nc[0]=%4d\n",
+                   prArr[0], c[0], ci[0], co[0], cr[0], nc[0]);
         // PRT-NEXT: prArr[0] +=
         // PRT: nc[0] +=
         prArr[0] += 1000;
@@ -1299,20 +1332,20 @@ void test() {
         // PRT-NEXT: nc.i = 55;
         if (!cr.i)
           nc.i = 55;
-        // PRT-NEXT: printf(
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
         // PRT:      );
-        //      EXE-NEXT: In first acc parallel:
-        // EXE-HOST-NEXT:   prStruct.i= 190
-        // EXE-HOST-NEXT:          c.i= 110, ci.i= 120, co.i=  35
-        // EXE-HOST-NEXT:         cr.i=  45
-        //  EXE-DEV-NEXT:   prStruct.i=  90
-        //  EXE-DEV-NEXT:          c.i=  10, ci.i=  20, co.i=  35
-        //  EXE-DEV-NEXT:         cr.i=  45
-        printf("In first acc parallel:\n"
-               "  prStruct.i=%4d\n"
-               "         c.i=%4d, ci.i=%4d, co.i=%4d\n"
-               "        cr.i=%4d\n",
-               prStruct.i, c.i, ci.i, co.i, cr.i);
+        //      EXE-TGT-USE-STDIO-NEXT: In first acc parallel:
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   prStruct.i= 190
+        // EXE-HOST-TGT-USE-STDIO-NEXT:          c.i= 110, ci.i= 120, co.i=  35
+        // EXE-HOST-TGT-USE-STDIO-NEXT:         cr.i=  45
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   prStruct.i=  90
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:          c.i=  10, ci.i=  20, co.i=  35
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:         cr.i=  45
+        TGT_PRINTF("In first acc parallel:\n"
+                   "  prStruct.i=%4d\n"
+                   "         c.i=%4d, ci.i=%4d, co.i=%4d\n"
+                   "        cr.i=%4d\n",
+                   prStruct.i, c.i, ci.i, co.i, cr.i);
         // PRT-NEXT: prStruct.i +=
         // PRT: cr.i +=
         prStruct.i += 1000;
@@ -1401,20 +1434,20 @@ void test() {
         // Don't use this uninitialized.
         // PRT-NEXT: nc.i =
         nc.i = 55;
-        // PRT-NEXT: printf(
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
         // PRT:      );
-        //      EXE-NEXT: In second acc parallel:
-        // EXE-HOST-NEXT:   prStruct.i=1290
-        // EXE-HOST-NEXT:          c.i=1210, ci.i=1220, co.i=1135
-        // EXE-HOST-NEXT:         cr.i=1145, nc.i=  55
-        //  EXE-DEV-NEXT:   prStruct.i=1090
-        //  EXE-DEV-NEXT:          c.i=1010, ci.i=1020, co.i=1035
-        //  EXE-DEV-NEXT:         cr.i=1045, nc.i=  55
-        printf("In second acc parallel:\n"
-               "  prStruct.i=%4d\n"
-               "         c.i=%4d, ci.i=%4d, co.i=%4d\n"
-               "        cr.i=%4d, nc.i=%4d\n",
-               prStruct.i, c.i, ci.i, co.i, cr.i, nc.i);
+        //      EXE-TGT-USE-STDIO-NEXT: In second acc parallel:
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   prStruct.i=1290
+        // EXE-HOST-TGT-USE-STDIO-NEXT:          c.i=1210, ci.i=1220, co.i=1135
+        // EXE-HOST-TGT-USE-STDIO-NEXT:         cr.i=1145, nc.i=  55
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   prStruct.i=1090
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:          c.i=1010, ci.i=1020, co.i=1035
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:         cr.i=1045, nc.i=  55
+        TGT_PRINTF("In second acc parallel:\n"
+                   "  prStruct.i=%4d\n"
+                   "         c.i=%4d, ci.i=%4d, co.i=%4d\n"
+                   "        cr.i=%4d, nc.i=%4d\n",
+                   prStruct.i, c.i, ci.i, co.i, cr.i, nc.i);
         // PRT-NEXT: prStruct.i +=
         // PRT: nc.i +=
         prStruct.i += 1000;
@@ -1572,14 +1605,14 @@ void test() {
         // Don't use this uninitialized.
         // PRT-NEXT: co =
         co = 40;
-        // PRT-NEXT: printf(
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
         // PRT:      );
-        //      EXE-NEXT: In first acc parallel:
-        // EXE-HOST-NEXT:   c= 110, ci= 120, co=  40
-        //  EXE-DEV-NEXT:   c=  10, ci=  20, co=  40
-        printf("In first acc parallel:\n"
-               "  c=%4d, ci=%4d, co=%4d\n",
-               c, ci, co);
+        //      EXE-TGT-USE-STDIO-NEXT: In first acc parallel:
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   c= 110, ci= 120, co=  40
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   c=  10, ci=  20, co=  40
+        TGT_PRINTF("In first acc parallel:\n"
+                   "  c=%4d, ci=%4d, co=%4d\n",
+                   c, ci, co);
         // PRT-NEXT: c +=
         // PRT: co +=
         c += 1000; ci += 1000; co += 1000;
@@ -1638,14 +1671,14 @@ void test() {
       // DMP: CompoundStmt
       // PRT-NEXT: {
       {
-        // PRT-NEXT: printf(
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
         // PRT:      );
-        //      EXE-NEXT: In second acc parallel:
-        // EXE-HOST-NEXT:   c=1210, ci=1220, co=1140
-        //  EXE-DEV-NEXT:   c=1010, ci=1020, co=1040
-        printf("In second acc parallel:\n"
-               "  c=%4d, ci=%4d, co=%4d\n",
-               c, ci, co);
+        //      EXE-TGT-USE-STDIO-NEXT: In second acc parallel:
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   c=1210, ci=1220, co=1140
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   c=1010, ci=1020, co=1040
+        TGT_PRINTF("In second acc parallel:\n"
+                   "  c=%4d, ci=%4d, co=%4d\n",
+                   c, ci, co);
         // PRT-NEXT: c +=
         // PRT: co +=
          c += 1000; ci += 1000; co += 1000;
@@ -1746,14 +1779,14 @@ void test() {
       // DMP: CompoundStmt
       // PRT-NEXT: {
       {
-        // PRT-NEXT: printf(
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
         // PRT:      );
-        //      EXE-NEXT: In first acc parallel:
-        // EXE-HOST-NEXT:   arr[1]= 120, arr[2]= 130, arr[3]= 140
-        //  EXE-DEV-NEXT:   arr[1]=  20, arr[2]=  30, arr[3]=  40
-        printf("In first acc parallel:\n"
-               "  arr[1]=%4d, arr[2]=%4d, arr[3]=%4d\n",
-               arr[1], arr[2], arr[3]);
+        //      EXE-TGT-USE-STDIO-NEXT: In first acc parallel:
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   arr[1]= 120, arr[2]= 130, arr[3]= 140
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   arr[1]=  20, arr[2]=  30, arr[3]=  40
+        TGT_PRINTF("In first acc parallel:\n"
+                   "  arr[1]=%4d, arr[2]=%4d, arr[3]=%4d\n",
+                   arr[1], arr[2], arr[3]);
         // PRT-NEXT: arr[1] +=
         // PRT: arr[3] +=
         arr[1] += 1000; arr[2] += 1000; arr[3] += 1000;
@@ -1814,14 +1847,14 @@ void test() {
       // DMP: CompoundStmt
       // PRT-NEXT: {
       {
-        // PRT-NEXT: printf(
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
         // PRT:      );
-        //      EXE-NEXT: In second acc parallel:
-        // EXE-HOST-NEXT:   arr[1]=1220, arr[2]=1230, arr[3]=1240
-        //  EXE-DEV-NEXT:   arr[1]=1020, arr[2]=1030, arr[3]=1040
-        printf("In second acc parallel:\n"
-               "  arr[1]=%4d, arr[2]=%4d, arr[3]=%4d\n",
-               arr[1], arr[2], arr[3]);
+        //      EXE-TGT-USE-STDIO-NEXT: In second acc parallel:
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   arr[1]=1220, arr[2]=1230, arr[3]=1240
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   arr[1]=1020, arr[2]=1030, arr[3]=1040
+        TGT_PRINTF("In second acc parallel:\n"
+                   "  arr[1]=%4d, arr[2]=%4d, arr[3]=%4d\n",
+                   arr[1], arr[2], arr[3]);
         // PRT-NEXT: arr[1] +=
         // PRT: arr[3] +=
         arr[1] += 1000; arr[2] += 1000; arr[3] += 1000;
@@ -1929,14 +1962,14 @@ void test() {
       // DMP: CompoundStmt
       // PRT-NEXT: {
       {
-        // PRT-NEXT: printf(
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
         // PRT:      );
-        //      EXE-NEXT: In first acc parallel:
-        // EXE-HOST-NEXT:   arr[1]= 120, arr[2]= 130, arr[3]= 140
-        //  EXE-DEV-NEXT:   arr[1]=  20, arr[2]=  30, arr[3]=  40
-        printf("In first acc parallel:\n"
-               "  arr[1]=%4d, arr[2]=%4d, arr[3]=%4d\n",
-               arr[1], arr[2], arr[3]);
+        //      EXE-TGT-USE-STDIO-NEXT: In first acc parallel:
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   arr[1]= 120, arr[2]= 130, arr[3]= 140
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   arr[1]=  20, arr[2]=  30, arr[3]=  40
+        TGT_PRINTF("In first acc parallel:\n"
+                   "  arr[1]=%4d, arr[2]=%4d, arr[3]=%4d\n",
+                   arr[1], arr[2], arr[3]);
         // PRT-NEXT: arr[1] +=
         // PRT: arr[3] +=
         arr[1] += 1000; arr[2] += 1000; arr[3] += 1000;
@@ -2001,14 +2034,14 @@ void test() {
       // DMP: CompoundStmt
       // PRT-NEXT: {
       {
-        // PRT-NEXT: printf(
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
         // PRT:      );
-        //      EXE-NEXT: In second acc parallel:
-        // EXE-HOST-NEXT:   arr[1]=1220, arr[2]=1230, arr[3]=1240
-        //  EXE-DEV-NEXT:   arr[1]=1020, arr[2]=1030, arr[3]=1040
-        printf("In second acc parallel:\n"
-               "  arr[1]=%4d, arr[2]=%4d, arr[3]=%4d\n",
-               arr[1], arr[2], arr[3]);
+        //      EXE-TGT-USE-STDIO-NEXT: In second acc parallel:
+        // EXE-HOST-TGT-USE-STDIO-NEXT:   arr[1]=1220, arr[2]=1230, arr[3]=1240
+        //  EXE-DEV-TGT-USE-STDIO-NEXT:   arr[1]=1020, arr[2]=1030, arr[3]=1040
+        TGT_PRINTF("In second acc parallel:\n"
+                   "  arr[1]=%4d, arr[2]=%4d, arr[3]=%4d\n",
+                   arr[1], arr[2], arr[3]);
         // PRT-NEXT: arr[1] +=
         // PRT: arr[3] +=
         arr[1] += 1000; arr[2] += 1000; arr[3] += 1000;
