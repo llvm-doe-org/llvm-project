@@ -2,63 +2,62 @@
 // share ompt_callback_target.
 
 // RUN: %data events {
-// RUN:   (event=NONE)
-// RUN:   (event=ENTER_DATA_START)
-// RUN:   (event=ENTER_DATA_END)
-// RUN:   (event=EXIT_DATA_START)
-// RUN:   (event=EXIT_DATA_END)
-// RUN:   (event=COMPUTE_CONSTRUCT_START)
-// RUN:   (event=COMPUTE_CONSTRUCT_END)
-// RUN:   (event=ENQUEUE_LAUNCH_START)
-// RUN:   (event=ENQUEUE_LAUNCH_END)
+// RUN:   (event=NONE                    host-event=NONE                   )
+// RUN:   (event=ENTER_DATA_START        host-event=NONE                   )
+// RUN:   (event=ENTER_DATA_END          host-event=NONE                   )
+// RUN:   (event=EXIT_DATA_START         host-event=NONE                   )
+// RUN:   (event=EXIT_DATA_END           host-event=NONE                   )
+// RUN:   (event=COMPUTE_CONSTRUCT_START host-event=COMPUTE_CONSTRUCT_START)
+// RUN:   (event=COMPUTE_CONSTRUCT_END   host-event=COMPUTE_CONSTRUCT_END  )
+// RUN:   (event=ENQUEUE_LAUNCH_START    host-event=ENQUEUE_LAUNCH_START   )
+// RUN:   (event=ENQUEUE_LAUNCH_END      host-event=ENQUEUE_LAUNCH_END     )
 // RUN: }
-//      # It's unlikely that no offloading, nvptx64, or amdgcn offloading
-//      # covers any important logic here beyond what x86_64 or ppc64le
-//      # offloading covers.  However, nvptx64 offloading triples the test's
-//      # run time for me, and no offloading has different output and doesn't
-//      # exercise some callbacks, so just skip those cases.
-// RUN: %data tgts {
-// XUN:   (run-if=                tgt-cflags=                                     tgt-acc-device=acc_device_host   )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  tgt-acc-device=acc_device_x86_64 )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple tgt-acc-device=acc_device_ppc64le)
-// XUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple tgt-acc-device=acc_device_nvidia )
-// XUN:   (run-if=%run-if-amdgcn  tgt-cflags=-fopenmp-targets=%run-amdgcn-triple  tgt-acc-device=acc_device_radeon )
-// RUN: }
-// RUN: %for tgts {
-// RUN:   %for events {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s -o %t \
-// RUN:                      %[tgt-cflags] -DEVENT=EVENT_%[event]
-// RUN:     %[run-if] %t > %t.out 2> %t.err
-// RUN:     %[run-if] FileCheck -input-file %t.err %s \
-// RUN:         -allow-empty -check-prefixes=ERR
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:         -match-full-lines -strict-whitespace \
-// RUN:         -implicit-check-not=acc_ev_ -check-prefixes=%[event] \
-// RUN:         -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
-// RUN:         -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 -DSRC_FILE=%s \
-// RUN:         -DLINE_NO=20000 -DEND_LINE_NO=20002 \
-// RUN:         -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=30000
-// RUN:   }
+// RUN: %clang-acc -o %t.exe %s
+// RUN: %for events {
+// RUN:   env EVENT=%[event] %t.exe > %t.out 2> %t.err
+// RUN:   FileCheck -input-file %t.err -allow-empty -check-prefixes=ERR %s
+// RUN:   FileCheck -input-file %t.out %s \
+// RUN:     -match-full-lines -strict-whitespace -allow-empty \
+// RUN:     -implicit-check-not=acc_ev_ \
+// RUN:     -check-prefixes=%if-host(%[host-event],%[event]) \
+// RUN:     -DACC_DEVICE=acc_device_%dev-type-0-acc -DVERSION=%acc-version \
+// RUN:     -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 -DSRC_FILE=%s \
+// RUN:     -DLINE_NO=20000 -DEND_LINE_NO=20002 \
+// RUN:     -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=30000
 // RUN: }
 //
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <acc_prof.h>
 __attribute__((unused)) static void register_all_callbacks(acc_prof_reg reg);
 #include "callbacks.h"
 
+#include <stdlib.h>
+#include <string.h>
+
+#define FOREACH_EVENT(Macro)                                                   \
+  Macro(NONE)                                                                  \
+  Macro(ENTER_DATA_START)                                                      \
+  Macro(ENTER_DATA_END)                                                        \
+  Macro(EXIT_DATA_START)                                                       \
+  Macro(EXIT_DATA_END)                                                         \
+  Macro(COMPUTE_CONSTRUCT_START)                                               \
+  Macro(COMPUTE_CONSTRUCT_END)                                                 \
+  Macro(ENQUEUE_LAUNCH_START)                                                  \
+  Macro(ENQUEUE_LAUNCH_END)
+
 enum {
-  EVENT_NONE,
-  EVENT_ENTER_DATA_START,
-  EVENT_ENTER_DATA_END,
-  EVENT_EXIT_DATA_START,
-  EVENT_EXIT_DATA_END,
-  EVENT_COMPUTE_CONSTRUCT_START,
-  EVENT_COMPUTE_CONSTRUCT_END,
-  EVENT_ENQUEUE_LAUNCH_START,
-  EVENT_ENQUEUE_LAUNCH_END,
+#define EventItr(Event)                                                        \
+  EVENT_##Event,
+  FOREACH_EVENT(EventItr)
+#undef EventItr
 };
 
 void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
@@ -83,7 +82,19 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
   reg(acc_ev_enqueue_launch_start, on_enqueue_launch_start, acc_reg);
   reg(acc_ev_enqueue_launch_end, on_enqueue_launch_end, acc_reg);
 
-  int event = EVENT;
+  const char *eventEnv = getenv("EVENT");
+  assert(eventEnv && "expected env var EVENT to be set");
+  int event;
+  if (0)
+    ;
+#define EventItr(Event)                                                        \
+  else if (!strcmp(eventEnv, #Event))                                          \
+    event = EVENT_##Event;
+  FOREACH_EVENT(EventItr)
+#undef EventItr
+  else
+    assert(!"expected env var EVENT to have valid event");
+
   if (event != EVENT_ENTER_DATA_START)
     unreg(acc_ev_enter_data_start, on_enter_data_start, acc_reg);
   if (event != EVENT_ENTER_DATA_END)
@@ -185,7 +196,7 @@ int main() {
 #line 20000
   #pragma acc parallel copy(arr) num_gangs(1)
   for (int j = 0; j < 2; ++j)
-    printf("arr[%d]=%d\n", j, arr[j]);
+    ;
   //            EXIT_DATA_START:acc_ev_exit_data_start
   //       EXIT_DATA_START-NEXT:  acc_prof_info
   //       EXIT_DATA_START-NEXT:    event_type=12, valid_bytes=72, version=[[VERSION]],

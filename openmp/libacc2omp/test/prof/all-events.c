@@ -42,38 +42,6 @@
 // RUN:    kern-line-no=90000       kern-end-line-no=100000
 // RUN:    update0-line-no=110000   update1-line-no=120000       )
 // RUN: }
-// RUN: %data tgts {
-// RUN:   (run-if=
-// RUN:    tgt-acc-device=acc_device_host
-// RUN:    tgt-host-or-off=HOST
-// RUN:    tgt-cppflags=
-// RUN:    tgt-cflags='-Xclang -verify'
-// RUN:    tgt-fc=HOST,HOST-%[dir-fc1],HOST-%[dir-fc2],HOST-%[dir-fc3])
-// RUN:   (run-if=%run-if-x86_64
-// RUN:    tgt-acc-device=acc_device_x86_64
-// RUN:    tgt-host-or-off=OFF
-// RUN:    tgt-cppflags=
-// RUN:    tgt-cflags='-fopenmp-targets=%run-x86_64-triple -Xclang -verify'
-// RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],OFF-%[dir-fc3],X86_64,X86_64-%[dir-fc1],X86_64-%[dir-fc2],X86_64-%[dir-fc3])
-// RUN:   (run-if=%run-if-ppc64le
-// RUN:    tgt-acc-device=acc_device_ppc64le
-// RUN:    tgt-host-or-off=OFF
-// RUN:    tgt-cppflags=
-// RUN:    tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'
-// RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],OFF-%[dir-fc3],PPC64LE,PPC64LE-%[dir-fc1],PPC64LE-%[dir-fc2],PPC64LE-%[dir-fc3])
-// RUN:   (run-if=%run-if-nvptx64
-// RUN:    tgt-acc-device=acc_device_nvidia
-// RUN:    tgt-host-or-off=OFF
-// RUN:    tgt-cppflags=-DNVPTX64
-// RUN:    tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64'
-// RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],OFF-%[dir-fc3],NVPTX64,NVPTX64-%[dir-fc1],NVPTX64-%[dir-fc2],NVPTX64-%[dir-fc3])
-// RUN:   (run-if=%run-if-amdgcn
-// RUN:    tgt-acc-device=acc_device_radeon
-// RUN:    tgt-host-or-off=OFF
-// RUN:    tgt-cppflags=-DAMDGCN
-// RUN:    tgt-cflags='-fopenmp-targets=%run-amdgcn-triple -Xclang -verify'
-// RUN:    tgt-fc=OFF,OFF-%[dir-fc1],OFF-%[dir-fc2],OFF-%[dir-fc3],AMDGCN,AMDGCN-%[dir-fc1],AMDGCN-%[dir-fc2],AMDGCN-%[dir-fc3])
-// RUN: }
 //      # Check offloading compilation both with and without offloading at run
 //      # time.  This is important because some runtime calls that must be
 //      # instrumented with some callback data are not exercised in both cases.
@@ -83,133 +51,125 @@
 //      # the implementation has a bug.
 // RUN: %data run-envs {
 // RUN:   (run-env=
-// RUN:    env-fc=%[tgt-fc],%[tgt-host-or-off]-BEFORE-ENV,%[tgt-host-or-off]-BEFORE-ENV-%[dir-fc2])
+// RUN:    env-fc='%if-host(HOST,OFF),%if-host(HOST,OFF)-%[dir-fc1],%if-host(HOST,OFF)-%[dir-fc2],%if-host(HOST,OFF)-%[dir-fc3],TGT-%dev-type-0-omp,TGT-%dev-type-0-omp-%[dir-fc1],TGT-%dev-type-0-omp-%[dir-fc2],TGT-%dev-type-0-omp-%[dir-fc3],%if-host(HOST,OFF)-BEFORE-ENV,%if-host(HOST,OFF)-BEFORE-ENV-%[dir-fc2]')
 // RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled'
-// RUN:    env-fc=HOST,HOST-%[dir-fc1],HOST-%[dir-fc2],%[tgt-host-or-off]-BEFORE-ENV,%[tgt-host-or-off]-BEFORE-ENV-%[dir-fc2])
+// RUN:    env-fc='HOST,HOST-%[dir-fc1],HOST-%[dir-fc2],%if-host(HOST,OFF)-BEFORE-ENV,%if-host(HOST,OFF)-BEFORE-ENV-%[dir-fc2]')
 // RUN:   (run-env='env ACC_DEVICE_TYPE=host'
-// RUN:    env-fc=HOST,HOST-%[dir-fc1],HOST-%[dir-fc2],%[tgt-host-or-off]-BEFORE-ENV,%[tgt-host-or-off]-BEFORE-ENV-%[dir-fc2])
+// RUN:    env-fc='HOST,HOST-%[dir-fc1],HOST-%[dir-fc2],%if-host(HOST,OFF)-BEFORE-ENV,%if-host(HOST,OFF)-BEFORE-ENV-%[dir-fc2]')
 // RUN: }
 //      # Check both traditional compilation mode and source-to-source mode
 //      # followed by OpenMP compilation.  This is important because, in the
 //      # latter case, some profiling data that depends on OMPT extensions is
 //      # currently available only when debug info is turned.
 // RUN: %for dirs {
-// RUN:   %for tgts {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc-print=omp %acc-includes \
-// RUN:                      %s %[tgt-cppflags] %[dir-cflags] > %t-omp.c \
-// RUN:                      -Wno-openacc-omp-map-ompx-hold
-// RUN:     %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
-//          # With debug info.
-// RUN:     %[run-if] %clang -fopenmp %fopenmp-version \
-// RUN:         %acc-includes %t-omp.c %acc-libs %[tgt-cppflags] \
-// RUN:         %[tgt-cflags] %[dir-cflags] -I%S -gline-tables-only -o %t
-// RUN:     %for run-envs {
-// RUN:       %[run-if] %[run-env] %t > %t.out 2> %t.err
-// RUN:       %[run-if] FileCheck -input-file %t.err %s \
-// RUN:           -allow-empty -check-prefixes=ERR
-// RUN:       %[run-if] FileCheck -input-file %t.out %s \
-// RUN:           -match-full-lines -strict-whitespace \
-// RUN:           -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2] \
-// RUN:           -check-prefixes=CHECK-%[dir-fc3],%[env-fc] \
-// RUN:           -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
-// RUN:           -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
-// RUN:           -DARR_ENTER_CONSTRUCT=%[arr-enter-construct] \
-// RUN:           -DARR_EXIT_CONSTRUCT=%[arr-exit-construct] \
-// RUN:           -DDATA_CONSTRUCT='data' -DPARALLEL_CONSTRUCT='parallel' \
-// RUN:           -DUPDATE_CONSTRUCT='update' \
-// RUN:           -DIMPLICIT_FOR_DIRECTIVE=0 -DSRC_FILE='%t-omp.c' \
-// RUN:           -DFUNC_NAME=main -DARR0_ENTER_LINE_NO=%[arr0-enter-line-no] \
-// RUN:           -DARR0_ENTER_END_LINE_NO=%[arr0-enter-end-line-no] \
-// RUN:           -DARR0_EXIT_LINE_NO=%[arr0-exit-line-no] \
-// RUN:           -DARR0_EXIT_END_LINE_NO=%[arr0-exit-end-line-no] \
-// RUN:           -DARR1_ENTER_LINE_NO=%[arr1-enter-line-no] \
-// RUN:           -DARR1_ENTER_END_LINE_NO=%[arr1-enter-end-line-no] \
-// RUN:           -DARR1_EXIT_LINE_NO=%[arr1-exit-line-no] \
-// RUN:           -DARR1_EXIT_END_LINE_NO=%[arr1-exit-end-line-no] \
-// RUN:           -DKERN_LINE_NO=%[kern-line-no] \
-// RUN:           -DKERN_END_LINE_NO=%[kern-end-line-no] \
-// RUN:           -DUPDATE0_LINE_NO=%[update0-line-no] \
-// RUN:           -DUPDATE1_LINE_NO=%[update1-line-no] \
-// RUN:           -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=150000 \
-// RUN:           -DARR0_VAR_NAME=arr0 -DARR1_VAR_NAME='arr1[0:5]'
-// RUN:     }
-//          # Without debug info.
-// RUN:     %[run-if] %clang -fopenmp %fopenmp-version \
-// RUN:         %acc-includes %t-omp.c %acc-libs %[tgt-cppflags] \
-// RUN:         %[tgt-cflags] %[dir-cflags] -I%S -o %t
-// RUN:     %for run-envs {
-// RUN:       %[run-if] %[run-env] %t > %t.out 2> %t.err
-// RUN:       %[run-if] FileCheck -input-file %t.err %s \
-// RUN:           -allow-empty -check-prefixes=ERR
-// RUN:       %[run-if] FileCheck -input-file %t.out %s \
-// RUN:           -match-full-lines -strict-whitespace \
-// RUN:           -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2] \
-// RUN:           -check-prefixes=CHECK-%[dir-fc3],%[env-fc] \
-// RUN:           -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
-// RUN:           -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
-// RUN:           -DARR_ENTER_CONSTRUCT='runtime_api' \
-// RUN:           -DARR_EXIT_CONSTRUCT='runtime_api' \
-// RUN:           -DDATA_CONSTRUCT='runtime_api' \
-// RUN:           -DPARALLEL_CONSTRUCT='runtime_api' \
-// RUN:           -DUPDATE_CONSTRUCT='runtime_api' \
-// RUN:           -DIMPLICIT_FOR_DIRECTIVE=1 \
-//                # FIXME: These should be nullified instead of 'unknown' in
-//                # order to distinguish from actual files or functions by that
-//                # name.  The use of 'unknown' is inherited from upstream's
-//                # LLVM OpenMP implementation, which uses 'unknown' in many
-//                # cases of a default ident_t.
-// RUN:           -DSRC_FILE='unknown'     -DFUNC_NAME='unknown' \
-// RUN:           -DARR0_ENTER_LINE_NO=0   -DARR0_ENTER_END_LINE_NO=0 \
-// RUN:           -DARR0_EXIT_LINE_NO=0    -DARR0_EXIT_END_LINE_NO=0 \
-// RUN:           -DARR1_ENTER_LINE_NO=0   -DARR1_ENTER_END_LINE_NO=0 \
-// RUN:           -DARR1_EXIT_LINE_NO=0    -DARR1_EXIT_END_LINE_NO=0 \
-// RUN:           -DKERN_LINE_NO=0         -DKERN_END_LINE_NO=0 \
-// RUN:           -DUPDATE0_LINE_NO=0      -DUPDATE1_LINE_NO=0 \
-// RUN:           -DFUNC_LINE_NO=0         -DFUNC_END_LINE_NO=0 \
-// RUN:           -DARR0_VAR_NAME='(null)' -DARR1_VAR_NAME='(null)'
-// RUN:     }
+// RUN:   %clang-acc-prt-omp %s -DTGT_%dev-type-0-omp %[dir-cflags] > %t-omp.c
+//        # With debug info.
+// RUN:   %clang-omp %t-omp.c -DTGT_%dev-type-0-omp %[dir-cflags] -I%S \
+// RUN:     -gline-tables-only -o %t.exe
+// RUN:   %for run-envs {
+// RUN:     %[run-env] %t.exe > %t.out 2> %t.err
+// RUN:     FileCheck -input-file %t.err %s \
+// RUN:       -allow-empty -check-prefixes=ERR
+// RUN:     FileCheck -input-file %t.out %s \
+// RUN:       -match-full-lines -strict-whitespace \
+// RUN:       -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2] \
+// RUN:       -check-prefixes=CHECK-%[dir-fc3],%[env-fc] \
+// RUN:       -DACC_DEVICE=acc_device_%dev-type-0-acc \
+// RUN:       -DVERSION=%acc-version \
+// RUN:       -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
+// RUN:       -DARR_ENTER_CONSTRUCT=%[arr-enter-construct] \
+// RUN:       -DARR_EXIT_CONSTRUCT=%[arr-exit-construct] \
+// RUN:       -DDATA_CONSTRUCT='data' -DPARALLEL_CONSTRUCT='parallel' \
+// RUN:       -DUPDATE_CONSTRUCT='update' \
+// RUN:       -DIMPLICIT_FOR_DIRECTIVE=0 -DSRC_FILE='%t-omp.c' \
+// RUN:       -DFUNC_NAME=main -DARR0_ENTER_LINE_NO=%[arr0-enter-line-no] \
+// RUN:       -DARR0_ENTER_END_LINE_NO=%[arr0-enter-end-line-no] \
+// RUN:       -DARR0_EXIT_LINE_NO=%[arr0-exit-line-no] \
+// RUN:       -DARR0_EXIT_END_LINE_NO=%[arr0-exit-end-line-no] \
+// RUN:       -DARR1_ENTER_LINE_NO=%[arr1-enter-line-no] \
+// RUN:       -DARR1_ENTER_END_LINE_NO=%[arr1-enter-end-line-no] \
+// RUN:       -DARR1_EXIT_LINE_NO=%[arr1-exit-line-no] \
+// RUN:       -DARR1_EXIT_END_LINE_NO=%[arr1-exit-end-line-no] \
+// RUN:       -DKERN_LINE_NO=%[kern-line-no] \
+// RUN:       -DKERN_END_LINE_NO=%[kern-end-line-no] \
+// RUN:       -DUPDATE0_LINE_NO=%[update0-line-no] \
+// RUN:       -DUPDATE1_LINE_NO=%[update1-line-no] \
+// RUN:       -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=150000 \
+// RUN:       -DARR0_VAR_NAME=arr0 -DARR1_VAR_NAME='arr1[0:5]'
+// RUN:   }
+//        # Without debug info.
+// RUN:   %clang-omp %t-omp.c -DTGT_%dev-type-0-omp %[dir-cflags] -I%S -o %t.exe
+// RUN:   %for run-envs {
+// RUN:     %[run-env] %t.exe > %t.out 2> %t.err
+// RUN:     FileCheck -input-file %t.err %s \
+// RUN:       -allow-empty -check-prefixes=ERR
+// RUN:     FileCheck -input-file %t.out %s \
+// RUN:       -match-full-lines -strict-whitespace \
+// RUN:       -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2] \
+// RUN:       -check-prefixes=CHECK-%[dir-fc3],%[env-fc] \
+// RUN:       -DACC_DEVICE=acc_device_%dev-type-0-acc \
+// RUN:       -DVERSION=%acc-version \
+// RUN:       -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
+// RUN:       -DARR_ENTER_CONSTRUCT='runtime_api' \
+// RUN:       -DARR_EXIT_CONSTRUCT='runtime_api' \
+// RUN:       -DDATA_CONSTRUCT='runtime_api' \
+// RUN:       -DPARALLEL_CONSTRUCT='runtime_api' \
+// RUN:       -DUPDATE_CONSTRUCT='runtime_api' \
+// RUN:       -DIMPLICIT_FOR_DIRECTIVE=1 \
+//            # FIXME: These should be nullified instead of 'unknown' in
+//            # order to distinguish from actual files or functions by that
+//            # name.  The use of 'unknown' is inherited from upstream's
+//            # LLVM OpenMP implementation, which uses 'unknown' in many
+//            # cases of a default ident_t.
+// RUN:       -DSRC_FILE='unknown'     -DFUNC_NAME='unknown' \
+// RUN:       -DARR0_ENTER_LINE_NO=0   -DARR0_ENTER_END_LINE_NO=0 \
+// RUN:       -DARR0_EXIT_LINE_NO=0    -DARR0_EXIT_END_LINE_NO=0 \
+// RUN:       -DARR1_ENTER_LINE_NO=0   -DARR1_ENTER_END_LINE_NO=0 \
+// RUN:       -DARR1_EXIT_LINE_NO=0    -DARR1_EXIT_END_LINE_NO=0 \
+// RUN:       -DKERN_LINE_NO=0         -DKERN_END_LINE_NO=0 \
+// RUN:       -DUPDATE0_LINE_NO=0      -DUPDATE1_LINE_NO=0 \
+// RUN:       -DFUNC_LINE_NO=0         -DFUNC_END_LINE_NO=0 \
+// RUN:       -DARR0_VAR_NAME='(null)' -DARR1_VAR_NAME='(null)'
 // RUN:   }
 // RUN: }
 // RUN: %for dirs {
-// RUN:   %for tgts {
-// RUN:     %[run-if] %clang -fopenacc %acc-includes %s \
-// RUN:         %[tgt-cflags] %[tgt-cppflags] %[dir-cflags] -o %t
-// RUN:     %for run-envs {
-// RUN:       %[run-if] %[run-env] %t > %t.out 2> %t.err
-// RUN:       %[run-if] FileCheck -input-file %t.err %s \
-// RUN:           -allow-empty -check-prefixes=ERR
-// RUN:       %[run-if] FileCheck -input-file %t.out %s \
-// RUN:           -match-full-lines -strict-whitespace \
-// RUN:           -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2] \
-// RUN:           -check-prefixes=CHECK-%[dir-fc3],%[env-fc] \
-// RUN:           -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
-// RUN:           -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
-// RUN:           -DARR_ENTER_CONSTRUCT=%[arr-enter-construct] \
-// RUN:           -DARR_EXIT_CONSTRUCT=%[arr-exit-construct] \
-// RUN:           -DDATA_CONSTRUCT='data' -DPARALLEL_CONSTRUCT='parallel' \
-// RUN:           -DUPDATE_CONSTRUCT='update' \
-// RUN:           -DIMPLICIT_FOR_DIRECTIVE=0 -DSRC_FILE='%s' -DFUNC_NAME=main \
-// RUN:           -DARR0_ENTER_LINE_NO=%[arr0-enter-line-no] \
-// RUN:           -DARR0_ENTER_END_LINE_NO=%[arr0-enter-end-line-no] \
-// RUN:           -DARR0_EXIT_LINE_NO=%[arr0-exit-line-no] \
-// RUN:           -DARR0_EXIT_END_LINE_NO=%[arr0-exit-end-line-no] \
-// RUN:           -DARR1_ENTER_LINE_NO=%[arr1-enter-line-no] \
-// RUN:           -DARR1_ENTER_END_LINE_NO=%[arr1-enter-end-line-no] \
-// RUN:           -DARR1_EXIT_LINE_NO=%[arr1-exit-line-no] \
-// RUN:           -DARR1_EXIT_END_LINE_NO=%[arr1-exit-end-line-no] \
-// RUN:           -DKERN_LINE_NO=%[kern-line-no] \
-// RUN:           -DKERN_END_LINE_NO=%[kern-end-line-no] \
-// RUN:           -DUPDATE0_LINE_NO=%[update0-line-no] \
-// RUN:           -DUPDATE1_LINE_NO=%[update1-line-no] \
-// RUN:           -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=150000 \
-// RUN:           -DARR0_VAR_NAME=arr0 -DARR1_VAR_NAME='arr1[0:5]'
-// RUN:     }
+// RUN:   %clang-acc -DTGT_%dev-type-0-omp %[dir-cflags] -o %t.exe %s
+// RUN:   %for run-envs {
+// RUN:     %[run-env] %t.exe > %t.out 2> %t.err
+// RUN:     FileCheck -input-file %t.err %s \
+// RUN:       -allow-empty -check-prefixes=ERR
+// RUN:     FileCheck -input-file %t.out %s \
+// RUN:       -match-full-lines -strict-whitespace \
+// RUN:       -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2] \
+// RUN:       -check-prefixes=CHECK-%[dir-fc3],%[env-fc] \
+// RUN:       -DACC_DEVICE=acc_device_%dev-type-0-acc \
+// RUN:       -DVERSION=%acc-version \
+// RUN:       -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
+// RUN:       -DARR_ENTER_CONSTRUCT=%[arr-enter-construct] \
+// RUN:       -DARR_EXIT_CONSTRUCT=%[arr-exit-construct] \
+// RUN:       -DDATA_CONSTRUCT='data' -DPARALLEL_CONSTRUCT='parallel' \
+// RUN:       -DUPDATE_CONSTRUCT='update' \
+// RUN:       -DIMPLICIT_FOR_DIRECTIVE=0 -DSRC_FILE='%s' -DFUNC_NAME=main \
+// RUN:       -DARR0_ENTER_LINE_NO=%[arr0-enter-line-no] \
+// RUN:       -DARR0_ENTER_END_LINE_NO=%[arr0-enter-end-line-no] \
+// RUN:       -DARR0_EXIT_LINE_NO=%[arr0-exit-line-no] \
+// RUN:       -DARR0_EXIT_END_LINE_NO=%[arr0-exit-end-line-no] \
+// RUN:       -DARR1_ENTER_LINE_NO=%[arr1-enter-line-no] \
+// RUN:       -DARR1_ENTER_END_LINE_NO=%[arr1-enter-end-line-no] \
+// RUN:       -DARR1_EXIT_LINE_NO=%[arr1-exit-line-no] \
+// RUN:       -DARR1_EXIT_END_LINE_NO=%[arr1-exit-end-line-no] \
+// RUN:       -DKERN_LINE_NO=%[kern-line-no] \
+// RUN:       -DKERN_END_LINE_NO=%[kern-end-line-no] \
+// RUN:       -DUPDATE0_LINE_NO=%[update0-line-no] \
+// RUN:       -DUPDATE1_LINE_NO=%[update1-line-no] \
+// RUN:       -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=150000 \
+// RUN:       -DARR0_VAR_NAME=arr0 -DARR1_VAR_NAME='arr1[0:5]'
 // RUN:   }
 // RUN: }
 //
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
@@ -226,12 +186,12 @@
 #define DIR_PAR             3
 #define DIR_DATAPAR         4
 
-#ifndef NVPTX64
-# define NVPTX64 0
+#ifndef TGT_nvptx64
+# define TGT_nvptx64 0
 #endif
 
-#ifndef AMDGCN
-# define AMDGCN 0
+#ifndef TGT_amdgcn
+# define TGT_amdgcn 0
 #endif
 
 // ERR-NOT:{{.}}
@@ -617,7 +577,7 @@ int main() {
   //  HOST-HASPAR-NEXT:    device_type=acc_device_host
   //   OFF-HASPAR-NEXT:    device_type=[[ACC_DEVICE]]
 
-#if AMDGCN
+#if TGT_amdgcn
   // Compiled as host printf.
   int (*printfPtr)(const char *, int *, int, int) =
       (int(*)(const char *, int *, int, int))printf;
@@ -651,31 +611,31 @@ int main() {
 #endif
 #if DIR == DIR_PAR || DIR == DIR_DATAPAR
       for (int j = 0; j < 2; ++j) {
-        //    HOST-HASPAR-NEXT:inside: arr0=[[ARR0_HOST_PTR]], arr0[0]=10
-        //    HOST-HASPAR-NEXT:inside: arr1=[[ARR1_HOST_PTR]], arr1[0]=20
-        //    HOST-HASPAR-NEXT:inside: arr0=[[ARR0_HOST_PTR]], arr0[1]=11
-        //    HOST-HASPAR-NEXT:inside: arr1=[[ARR1_HOST_PTR]], arr1[1]=21
-        //  X86_64-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[0]=10
-        //  X86_64-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[0]=20
-        //  X86_64-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[1]=11
-        //  X86_64-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[1]=21
-        // PPC64LE-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[0]=10
-        // PPC64LE-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[0]=20
-        // PPC64LE-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[1]=11
-        // PPC64LE-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[1]=21
+        //        HOST-HASPAR-NEXT:inside: arr0=[[ARR0_HOST_PTR]], arr0[0]=10
+        //        HOST-HASPAR-NEXT:inside: arr1=[[ARR1_HOST_PTR]], arr1[0]=20
+        //        HOST-HASPAR-NEXT:inside: arr0=[[ARR0_HOST_PTR]], arr0[1]=11
+        //        HOST-HASPAR-NEXT:inside: arr1=[[ARR1_HOST_PTR]], arr1[1]=21
+        //  TGT-x86_64-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[0]=10
+        //  TGT-x86_64-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[0]=20
+        //  TGT-x86_64-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[1]=11
+        //  TGT-x86_64-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[1]=21
+        // TGT-ppc64le-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[0]=10
+        // TGT-ppc64le-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[0]=20
+        // TGT-ppc64le-HASPAR-NEXT:inside: arr0=[[ARR0_DEVICE_PTR]], arr0[1]=11
+        // TGT-ppc64le-HASPAR-NEXT:inside: arr1=[[ARR1_DEVICE_PTR]], arr1[1]=21
         //
-        // We omit NVPTX64 here because subsequent events might trigger before
+        // We omit nvptx64 here because subsequent events might trigger before
         // kernel execution due to the use of CUDA streams.
         //
-        // FIXME: We omit AMDGCN here because it doesn't support target printf
-        // yet.  The ugly printfPtr hack is so that, in the case of AMDGCN, it
+        // FIXME: We omit amdgcn here because it doesn't support target printf
+        // yet.  The ugly printfPtr hack is so that, in the case of amdgcn, it
         // only tries to link a host printf, which we need if offload is
         // disabled.
-#if !AMDGCN
+#if !TGT_amdgcn
         // Compiled as host and target printf.
 # define printfPtr printf
 #endif
-        if ((!NVPTX64 && !AMDGCN) || offloadDisabled) {
+        if ((!TGT_nvptx64 && !TGT_amdgcn) || offloadDisabled) {
           printfPtr("inside: arr0=%p, arr0[%d]=%d\n", arr0, j, arr0[j]);
           printfPtr("inside: arr1=%p, arr1[%d]=%d\n", arr1, j, arr1[j]);
         }

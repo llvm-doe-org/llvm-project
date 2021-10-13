@@ -5,36 +5,24 @@
 // these routines are correct as checked here, so don't use those environment
 // variables here.
 
-// RUN: %data tgts {
-// RUN:   (run-if=                                  cflags='                                                         -Xclang -verify'         tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt-nd-amdgcn=0             tgt0=host   )
-// RUN:   (run-if=%run-if-x86_64                    cflags='-fopenmp-targets=%run-x86_64-triple                      -Xclang -verify'         tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt-nd-amdgcn=0             tgt0=x86_64 )
-// RUN:   (run-if=%run-if-ppc64le                   cflags='-fopenmp-targets=%run-ppc64le-triple                     -Xclang -verify'         tgt-nd-x86_64=0             tgt-nd-ppc64le=%ppc64le-ndevs tgt-nd-nvptx64=0              tgt-nd-amdgcn=0             tgt0=ppc64le)
-// RUN:   (run-if=%run-if-nvptx64                   cflags='-fopenmp-targets=%run-nvptx64-triple                     -Xclang -verify=nvptx64' tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=%nvptx64-ndevs tgt-nd-amdgcn=0             tgt0=nvidia )
-// RUN:   (run-if=%run-if-amdgcn                    cflags='-fopenmp-targets=%run-amdgcn-triple                      -Xclang -verify'         tgt-nd-x86_64=0             tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt-nd-amdgcn=%amdgcn-ndevs tgt0=radeon )
-// RUN:   (run-if='%run-if-x86_64 %run-if-nvptx64'  cflags='-fopenmp-targets=%run-x86_64-triple,%run-nvptx64-triple  -Xclang -verify=nvptx64' tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=%nvptx64-ndevs tgt-nd-amdgcn=0             tgt0=x86_64 )
-// RUN:   (run-if='%run-if-x86_64 %run-if-amdgcn'   cflags='-fopenmp-targets=%run-x86_64-triple,%run-amdgcn-triple   -Xclang -verify'         tgt-nd-x86_64=%x86_64-ndevs tgt-nd-ppc64le=0              tgt-nd-nvptx64=0              tgt-nd-amdgcn=%amdgcn-ndevs tgt0=x86_64 )
-// RUN:   (run-if='%run-if-ppc64le %run-if-nvptx64' cflags='-fopenmp-targets=%run-ppc64le-triple,%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-nd-x86_64=0             tgt-nd-ppc64le=%ppc64le-ndevs tgt-nd-nvptx64=%nvptx64-ndevs tgt-nd-amdgcn=0             tgt0=ppc64le)
-// RUN: }
 // RUN: %data run-envs {
-// RUN:   (run-env=                                  nd-x86_64=%[tgt-nd-x86_64] nd-ppc64le=%[tgt-nd-ppc64le] nd-nvptx64=%[tgt-nd-nvptx64] nd-amdgcn=%[tgt-nd-amdgcn] dev-type-init=%[tgt0])
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' nd-x86_64=0                nd-ppc64le=0                 nd-nvptx64=0                 nd-amdgcn=0                dev-type-init=host   )
+// RUN:   (run-env=                                  nd-x86_64=%x86_64-num-devs nd-ppc64le=%ppc64le-num-devs nd-nvptx64=%nvptx64-num-devs nd-amdgcn=%amdgcn-num-devs dev-type-init=%dev-type-0-acc nd-dev-type-init=%dev-type-0-num-devs)
+// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' nd-x86_64=0                nd-ppc64le=0                 nd-nvptx64=0                 nd-amdgcn=0                dev-type-init=host            nd-dev-type-init=1                   )
 // RUN: }
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenacc %acc-includes %[cflags] -o %t.exe %s
-// RUN:   %for run-envs {
-// RUN:     %[run-if] %[run-env] %t.exe > %t.out 2>&1
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:       -strict-whitespace -match-full-lines \
-// RUN:       -DDEV_TYPE_INIT=acc_device_%[dev-type-init] -D#DEV_NUM_INIT=0 \
-// RUN:       -D#ND_DEV_TYPE_INIT=%%[dev-type-init]-ndevs \
-// RUN:       -D#ND_NVIDIA=%[nd-nvptx64] -D#ND_RADEON=%[nd-amdgcn] \
-// RUN:       -D#ND_X86_64=%[nd-x86_64] -D#ND_PPC64LE=%[nd-ppc64le]
-// RUN:   }
+// RUN: %clang-acc -o %t.exe %s
+// RUN: %for run-envs {
+// RUN:   %[run-env] %t.exe > %t.out 2>&1
+// RUN:   FileCheck -input-file %t.out %s \
+// RUN:     -strict-whitespace -match-full-lines \
+// RUN:     -DDEV_TYPE_INIT=acc_device_%[dev-type-init] -D#DEV_NUM_INIT=0 \
+// RUN:     -D#ND_DEV_TYPE_INIT=%[nd-dev-type-init] \
+// RUN:     -D#ND_NVIDIA=%[nd-nvptx64] -D#ND_RADEON=%[nd-amdgcn] \
+// RUN:     -D#ND_X86_64=%[nd-x86_64] -D#ND_PPC64LE=%[nd-ppc64le]
 // RUN: }
 //
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:

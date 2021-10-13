@@ -1,12 +1,6 @@
 // Check that acc_ev_device_init_start and acc_ev_device_init_end callbacks
 // specify the right OpenACC Runtime Library API routine.
 //
-// RUN: %data tgts {
-// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         tgt-acc-device=acc_device_x86_64 )
-// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         tgt-acc-device=acc_device_ppc64le)
-// RUN:   (run-if=%run-if-nvptx64 cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-acc-device=acc_device_nvidia )
-// RUN:   (run-if=%run-if-amdgcn  cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         tgt-acc-device=acc_device_radeon )
-// RUN: }
 // RUN: %data cases {
 // RUN:   (case=acc_malloc args='size'     )
 // RUN:   (case=acc_copyin args='arr, size')
@@ -17,24 +11,21 @@
 // RUN:   echo '  Macro(%[case], %[args]) \' >> %t-cases.h
 // RUN: }
 // RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenacc %acc-includes %[cflags] \
-// RUN:                    -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
-// RUN:   %for cases {
-// RUN:     %[run-if] %t.exe %[case] > %t.out 2> %t.err
-// RUN:     %[run-if] FileCheck -input-file %t.err %s \
-// RUN:         -allow-empty -check-prefixes=ERR
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:         -match-full-lines -strict-whitespace \
-// RUN:         -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
-// RUN:         -DHOST_DEV=%acc-host-dev -DOFF_DEV=0 -DTHREAD_ID=0 \
-// RUN:         -DASYNC_QUEUE=-1 -DROUTINE=%[case]
-// RUN:   }
+// RUN: %clang-acc -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
+// RUN: %for cases {
+// RUN:   %t.exe %[case] > %t.out 2> %t.err
+// RUN:   FileCheck -input-file %t.err -allow-empty -check-prefixes=ERR %s
+// RUN:   FileCheck -input-file %t.out %s \
+// RUN:     -check-prefixes=OUT,OUT-%if-host(host,OFF) \
+// RUN:     -match-full-lines -strict-whitespace \
+// RUN:     -DACC_DEVICE=acc_device_%dev-type-0-acc -DVERSION=%acc-version \
+// RUN:     -DHOST_DEV=%acc-host-dev -DOFF_DEV=0 -DTHREAD_ID=0 \
+// RUN:     -DASYNC_QUEUE=-1 -DROUTINE=%[case]
 // RUN: }
 //
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
@@ -58,37 +49,39 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
 // ERR-NOT:{{.}}
 
 int main(int argc, char *argv[]) {
-  // CHECK-NOT:{{.}}
-  //      CHECK:acc_ev_device_init_start
-  // CHECK-NEXT:  acc_prof_info
-  // CHECK-NEXT:    event_type=1, valid_bytes=72, version=[[VERSION]],
-  // CHECK-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
-  // CHECK-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // CHECK-NEXT:    src_file=(null), func_name=[[ROUTINE]],
-  // CHECK-NEXT:    line_no=0, end_line_no=0,
-  // CHECK-NEXT:    func_line_no=0, func_end_line_no=0
-  // CHECK-NEXT:  acc_other_event_info
-  // CHECK-NEXT:    event_type=1, valid_bytes=24,
-  // CHECK-NEXT:    parent_construct=acc_construct_runtime_api,
-  // CHECK-NEXT:    implicit=0, tool_info=(nil)
-  // CHECK-NEXT:  acc_api_info
-  // CHECK-NEXT:    device_api=0, valid_bytes=12,
-  // CHECK-NEXT:    device_type=[[ACC_DEVICE]]
-  // CHECK-NEXT:acc_ev_device_init_end
-  // CHECK-NEXT:  acc_prof_info
-  // CHECK-NEXT:    event_type=2, valid_bytes=72, version=[[VERSION]],
-  // CHECK-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
-  // CHECK-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // CHECK-NEXT:    src_file=(null), func_name=[[ROUTINE]],
-  // CHECK-NEXT:    line_no=0, end_line_no=0,
-  // CHECK-NEXT:    func_line_no=0, func_end_line_no=0
-  // CHECK-NEXT:  acc_other_event_info
-  // CHECK-NEXT:    event_type=2, valid_bytes=24,
-  // CHECK-NEXT:    parent_construct=acc_construct_runtime_api,
-  // CHECK-NEXT:    implicit=0, tool_info=(nil)
-  // CHECK-NEXT:  acc_api_info
-  // CHECK-NEXT:    device_api=0, valid_bytes=12,
-  // CHECK-NEXT:    device_type=[[ACC_DEVICE]]
+  // OUT:start
+  printf("start\n");
+
+  //      OUT-OFF:acc_ev_device_init_start
+  // OUT-OFF-NEXT:  acc_prof_info
+  // OUT-OFF-NEXT:    event_type=1, valid_bytes=72, version=[[VERSION]],
+  // OUT-OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
+  // OUT-OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OUT-OFF-NEXT:    src_file=(null), func_name=[[ROUTINE]],
+  // OUT-OFF-NEXT:    line_no=0, end_line_no=0,
+  // OUT-OFF-NEXT:    func_line_no=0, func_end_line_no=0
+  // OUT-OFF-NEXT:  acc_other_event_info
+  // OUT-OFF-NEXT:    event_type=1, valid_bytes=24,
+  // OUT-OFF-NEXT:    parent_construct=acc_construct_runtime_api,
+  // OUT-OFF-NEXT:    implicit=0, tool_info=(nil)
+  // OUT-OFF-NEXT:  acc_api_info
+  // OUT-OFF-NEXT:    device_api=0, valid_bytes=12,
+  // OUT-OFF-NEXT:    device_type=[[ACC_DEVICE]]
+  // OUT-OFF-NEXT:acc_ev_device_init_end
+  // OUT-OFF-NEXT:  acc_prof_info
+  // OUT-OFF-NEXT:    event_type=2, valid_bytes=72, version=[[VERSION]],
+  // OUT-OFF-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
+  // OUT-OFF-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // OUT-OFF-NEXT:    src_file=(null), func_name=[[ROUTINE]],
+  // OUT-OFF-NEXT:    line_no=0, end_line_no=0,
+  // OUT-OFF-NEXT:    func_line_no=0, func_end_line_no=0
+  // OUT-OFF-NEXT:  acc_other_event_info
+  // OUT-OFF-NEXT:    event_type=2, valid_bytes=24,
+  // OUT-OFF-NEXT:    parent_construct=acc_construct_runtime_api,
+  // OUT-OFF-NEXT:    implicit=0, tool_info=(nil)
+  // OUT-OFF-NEXT:  acc_api_info
+  // OUT-OFF-NEXT:    device_api=0, valid_bytes=12,
+  // OUT-OFF-NEXT:    device_type=[[ACC_DEVICE]]
   int arr[5];
   int size = sizeof arr;
   if (argc != 2) {

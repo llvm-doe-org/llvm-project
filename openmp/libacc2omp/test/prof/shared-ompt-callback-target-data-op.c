@@ -12,49 +12,47 @@
 // RUN:   (event=ENQUEUE_DOWNLOAD_START)
 // RUN:   (event=ENQUEUE_DOWNLOAD_END)
 // RUN: }
-//      # Without offloading, none of the above events are produced, so just
-//      # skip that case.  It's unlikely that nvptx64 or amdgcn offloading
-//      # covers any important logic here beyond what x86_64 or ppc64le
-//      # offloading covers, but at least nvptx64 triples the test's run time
-//      # for me, so skip those case too.
-// RUN: %data tgts {
-// XUN:   (run-if=                tgt-cflags=                                    )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple)
-// XUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple)
-// XUN:   (run-if=%run-if-amdgcn  tgt-cflags=-fopenmp-targets=%run-amdgcn-triple )
-// RUN: }
-// RUN: %for tgts {
-// RUN:   %for events {
-// RUN:     %[run-if] %clang -Xclang -verify -fopenacc %acc-includes %s -o %t \
-// RUN:                      %[tgt-cflags] -DEVENT=EVENT_%[event]
-// RUN:     %[run-if] %t > %t.out 2> %t.err
-// RUN:     %[run-if] FileCheck -input-file %t.err %s \
-// RUN:         -allow-empty -check-prefixes=ERR
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:         -match-full-lines -strict-whitespace \
-// RUN:         -implicit-check-not=acc_ev_ -check-prefixes=%[event]
-// RUN:   }
+// RUN: %clang-acc -o %t.exe %s
+// RUN: %for events {
+// RUN:   env EVENT=%[event] %t.exe > %t.out 2> %t.err
+// RUN:   FileCheck -input-file %t.err -allow-empty -check-prefixes=ERR %s
+// RUN:   FileCheck -input-file %t.out %s \
+// RUN:     -match-full-lines -strict-whitespace -allow-empty \
+// RUN:     -implicit-check-not=acc_ev_ -check-prefixes=%if-host(NONE,%[event])
 // RUN: }
 //
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <acc_prof.h>
 __attribute__((unused)) static void register_all_callbacks(acc_prof_reg reg);
 #include "callbacks.h"
 
+#include <stdlib.h>
+#include <string.h>
+
+#define FOREACH_EVENT(Macro)                                                   \
+  Macro(NONE)                                                                  \
+  Macro(CREATE)                                                                \
+  Macro(DELETE)                                                                \
+  Macro(ALLOC)                                                                 \
+  Macro(FREE)                                                                  \
+  Macro(ENQUEUE_UPLOAD_START)                                                  \
+  Macro(ENQUEUE_UPLOAD_END)                                                    \
+  Macro(ENQUEUE_DOWNLOAD_START)                                                \
+  Macro(ENQUEUE_DOWNLOAD_END)
+
 enum {
-  EVENT_NONE,
-  EVENT_CREATE,
-  EVENT_DELETE,
-  EVENT_ALLOC,
-  EVENT_FREE,
-  EVENT_ENQUEUE_UPLOAD_START,
-  EVENT_ENQUEUE_UPLOAD_END,
-  EVENT_ENQUEUE_DOWNLOAD_START,
-  EVENT_ENQUEUE_DOWNLOAD_END,
+#define EventItr(Event)                                                        \
+  EVENT_##Event,
+  FOREACH_EVENT(EventItr)
+#undef EventItr
 };
 
 void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
@@ -81,7 +79,19 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
   reg(acc_ev_enqueue_download_start, on_enqueue_download_start, acc_reg);
   reg(acc_ev_enqueue_download_end, on_enqueue_download_end, acc_reg);
 
-  int event = EVENT;
+  const char *eventEnv = getenv("EVENT");
+  assert(eventEnv && "expected env var EVENT to be set");
+  int event;
+  if (0)
+    ;
+#define EventItr(Event)                                                        \
+  else if (!strcmp(eventEnv, #Event))                                          \
+    event = EVENT_##Event;
+  FOREACH_EVENT(EventItr)
+#undef EventItr
+  else
+    assert(!"expected env var EVENT to have valid event");
+
   if (event != EVENT_CREATE)
     unreg(acc_ev_create, on_create, acc_reg);
   if (event != EVENT_DELETE)
@@ -112,7 +122,7 @@ int main() {
   int arr[2] = {10, 11};
   #pragma acc parallel copy(arr) num_gangs(1)
   for (int j = 0; j < 2; ++j)
-    printf("arr[%d]=%d\n", j, arr[j]);
+    ;
   return 0;
 }
 

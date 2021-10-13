@@ -98,3 +98,7 @@ add_subdirectory(tools)
 
 # Add tests.
 add_subdirectory(test)
+
+# Make these available to libacc2omp.
+set(LIBOMPTARGET_ALL_TARGETS ${LIBOMPTARGET_ALL_TARGETS} PARENT_SCOPE)
+set(LIBOMPTARGET_SYSTEM_TARGETS ${LIBOMPTARGET_SYSTEM_TARGETS} PARENT_SCOPE)

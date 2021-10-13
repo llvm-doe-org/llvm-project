@@ -1,15 +1,8 @@
 // Check device management routines with runtime errors.
 
-// RUN: %data tgts {
-// RUN:   (run-if=                cflags='                                     -Xclang -verify'         tgt-host-or-off=HOST tgt-not-if-host='%not --crash')
-// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         tgt-host-or-off=OFF  tgt-not-if-host=              )
-// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         tgt-host-or-off=OFF  tgt-not-if-host=              )
-// RUN:   (run-if=%run-if-nvptx64 cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-host-or-off=OFF  tgt-not-if-host=              )
-// RUN:   (run-if=%run-if-amdgcn  cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         tgt-host-or-off=OFF  tgt-not-if-host=              )
-// RUN: }
 // RUN: %data run-envs {
-// RUN:   (run-env=                                  host-or-off=%[tgt-host-or-off] not-if-host=%[tgt-not-if-host])
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off=HOST               not-if-host='%not --crash'    )
+// RUN:   (run-env=                                  host-or-off='%if-host(HOST, OFF)' not-if-host='%if-host(%not --crash,)')
+// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off=HOST                  not-if-host='%not --crash'           )
 // RUN: }
 // RUN: %data cases {
 // RUN:   (case=caseGetNumDevicesInvalidTypePos not-if-fail='%not --crash')
@@ -45,26 +38,20 @@
 // RUN:   echo '  Macro(%[case]) \' >> %t-cases.h
 // RUN: }
 // RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenacc %acc-includes %[cflags] \
-// RUN:                    -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
-// RUN:   %for run-envs {
-// RUN:     %for cases {
-// RUN:       %[run-if] %[not-if-fail] %[run-env] %t.exe %[case] \
-// RUN:           > %t.out 2> %t.err
-// RUN:       %[run-if] FileCheck \
-// RUN:           -input-file %t.out %s -match-full-lines -allow-empty \
-// RUN:           -check-prefixes=OUT,OUT-%[case],OUT-%[case]-%[host-or-off]
-// RUN:       %[run-if] FileCheck \
-// RUN:           -input-file %t.err %s -match-full-lines -allow-empty \
-// RUN:           -check-prefixes=ERR,ERR-%[case],ERR-%[case]-%[host-or-off]
-// RUN:     }
+// RUN: %clang-acc -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
+// RUN: %for run-envs {
+// RUN:   %for cases {
+// RUN:     %[not-if-fail] %[run-env] %t.exe %[case] > %t.out 2> %t.err
+// RUN:     FileCheck -input-file %t.out %s -match-full-lines -allow-empty \
+// RUN:       -check-prefixes=OUT,OUT-%[case],OUT-%[case]-%[host-or-off]
+// RUN:     FileCheck -input-file %t.err %s -match-full-lines -allow-empty \
+// RUN:       -check-prefixes=ERR,ERR-%[case],ERR-%[case]-%[host-or-off]
 // RUN:   }
 // RUN: }
 //
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:

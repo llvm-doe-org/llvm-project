@@ -8,8 +8,8 @@
 // Check that our constant expression checks are sane: that they actually call
 // acc_on_device where Clang requires constant expressions.
 //
-// RUN: %clang -Xclang -verify=const-expr-err -fsyntax-only -fopenacc \
-// RUN:        %acc-includes -DACC2OMP_ENUM_VARIANTS_SUPPORTED=0 -o %t.exe %s
+// RUN: %clang-acc-fsyntax-only -Xclang -verify=const-expr-err \
+// RUN:   -DACC2OMP_ENUM_VARIANTS_SUPPORTED=0 %s
 
 // Check successful cases.
 //
@@ -18,45 +18,33 @@
 // RUN:   (context-cflags=-DACC2OMP_ENUM_VARIANTS_SUPPORTED=1                      const-expr=CONST-EXPR   )
 // RUN:   (context-cflags='-DACC2OMP_ENUM_VARIANTS_SUPPORTED=0 -DSKIP_CONST_EXPRS' const-expr=NO-CONST-EXPR)
 // RUN: }
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         tgt-type=host   )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         tgt-type=x86_64 )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         tgt-type=ppc64le)
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-type=nvptx64)
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         tgt-type=amdgcn )
-// RUN: }
 // RUN: %data run-envs {
-// RUN:   (run-env=                                  kern-type=%[tgt-type])
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' kern-type=host       )
-// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        kern-type=host       )
+// RUN:   (run-env=                                  off-type=%dev-type-0-omp)
+// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' off-type=host           )
+// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        off-type=host           )
 // RUN: }
 // RUN: %data exes {
 // RUN:   (exe=%t.exe    )
 // RUN:   (exe=%t-s2s.exe)
 // RUN: }
 // RUN: %for contexts {
-// RUN:   %clang -Xclang -verify -fopenacc-print=omp %acc-includes \
-// RUN:       %[context-cflags] -Wno-openacc-omp-map-ompx-hold %s > %t-omp.c
-// RUN:   %for tgts {
-// RUN:     %[run-if] %clang -fopenacc %acc-includes \
-// RUN:         %[context-cflags] %[tgt-cflags] -o %t.exe %s
-// RUN:     %[run-if] %clang -fopenmp %acc-includes \
-// RUN:         %[context-cflags] %[tgt-cflags] %acc-libs -o %t-s2s.exe %t-omp.c
-// RUN:     %for run-envs {
-// RUN:       %for exes {
-// RUN:         %[run-if] %[run-env] %[exe] > %t.out 2>&1
-// RUN:         %[run-if] FileCheck -input-file %t.out %s -match-full-lines \
-// RUN:             -check-prefixes=CHECK,CHECK-%[kern-type] \
-// RUN:             -check-prefixes=CHECK-%[const-expr] \
-// RUN:             -check-prefixes=CHECK-%[const-expr]-%[kern-type]
-// RUN:       }
+// RUN:   %clang-acc-prt-omp %[context-cflags] %s > %t-prt-omp.c
+// RUN:   %clang-omp %[context-cflags] -o %t-s2s.exe %t-prt-omp.c
+// RUN:   %clang-acc %[context-cflags] -o %t.exe %s
+// RUN:   %for run-envs {
+// RUN:     %for exes {
+// RUN:       %[run-env] %[exe] > %t.out 2>&1
+// RUN:       FileCheck -input-file %t.out %s -match-full-lines \
+// RUN:         -check-prefixes=CHECK,CHECK-%[off-type] \
+// RUN:         -check-prefixes=CHECK-%[const-expr] \
+// RUN:         -check-prefixes=CHECK-%[const-expr]-%[off-type]
 // RUN:     }
 // RUN:   }
 // RUN: }
 
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:

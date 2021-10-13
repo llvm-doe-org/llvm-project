@@ -9,26 +9,17 @@
 // though there's no data synchronization: acc_ev_compute_construct_end occurs
 // after the kernel terminates.
 
-// RUN: %data tgts {
-// RUN:   (run-if=                cflags='                                     -Xclang -verify        '           host-or-off=HOST tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify        '           host-or-off=OFF  tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify        '           host-or-off=OFF  tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-nvptx64 cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64'           host-or-off=OFF  tgt-use-stdio=TGT-USE-STDIO   )
-//        # FIXME: Add back the target printf check once amdgcn supports it.
-// RUN:   (run-if=%run-if-amdgcn  cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify -DTGT_USE_STDIO=0' host-or-off=OFF  tgt-use-stdio=NO-TGT-USE-STDIO)
-// RUN: }
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenacc %acc-includes %s -o %t %[cflags]
-// RUN:   %[run-if] %t > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out %s \
-// RUN:       -match-full-lines -strict-whitespace \
-// RUN:       -implicit-check-not=acc_ev_ \
-// RUN:       -check-prefixes=CHECK,%[host-or-off],%[tgt-use-stdio]
-// RUN: }
+// RUN: %clang-acc %s -o %t.exe -DTGT_USE_STDIO=%if-tgt-stdio(1, 0)
+// RUN: %t.exe > %t.out 2>&1
+// RUN: FileCheck -input-file %t.out %s \
+// RUN:   -match-full-lines -strict-whitespace \
+// RUN:   -implicit-check-not=acc_ev_ \
+// RUN:   -check-prefixes=CHECK,%if-host(HOST, OFF) \
+// RUN:   -check-prefixes=%if-tgt-stdio(TGT-USE-STDIO,NO-TGT-USE-STDIO)
 //
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
@@ -37,10 +28,6 @@
 
 #include "stdio.h"
 #include "callbacks.h"
-
-#ifndef TGT_USE_STDIO
-# define TGT_USE_STDIO 1
-#endif
 
 void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
                           acc_prof_lookup lookup) {

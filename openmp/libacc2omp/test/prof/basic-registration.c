@@ -1,25 +1,16 @@
 // Check various basic registration/unregistration scenarios.
 
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         fc=HOST       )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         fc=OFF,X86_64 )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         fc=OFF,PPC64LE)
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' fc=OFF,NVPTX64)
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         fc=OFF,AMDGCN )
-// RUN: }
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenacc %acc-includes %s -o %t %[tgt-cflags]
-// RUN:   %[run-if] %t > %t.out 2> %t.err
-// RUN:   %[run-if] FileCheck -input-file %t.err %s \
-// RUN:       -match-full-lines -strict-whitespace -check-prefix=ERR
-// RUN:   %[run-if] FileCheck -input-file %t.out %s \
-// RUN:       -match-full-lines -strict-whitespace \
-// RUN:       -implicit-check-not=acc_ev_ -check-prefixes=CHECK,%[fc]
-// RUN: }
+// RUN: %clang-acc %s -o %t.exe
+// RUN: %t.exe > %t.out 2> %t.err
+// RUN: FileCheck -input-file %t.err %s \
+// RUN:   -match-full-lines -strict-whitespace -check-prefix=ERR
+// RUN: FileCheck -input-file %t.out %s \
+// RUN:   -match-full-lines -strict-whitespace \
+// RUN:   -implicit-check-not=acc_ev_ -check-prefixes=CHECK,%if-host(HOST,OFF)
 //
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:

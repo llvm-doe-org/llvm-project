@@ -17,13 +17,6 @@
 // we continue to test with a preceding kernel, and we test both const and
 // non-const cases.
 
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                               -Xclang -verify'         tgt-acc-device=acc_device_host    host-or-off=HOST tgt=NO_TGT )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple            -Xclang -verify'         tgt-acc-device=acc_device_x86_64  host-or-off=OFF  tgt=X86_64 )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple           -Xclang -verify'         tgt-acc-device=acc_device_ppc64le host-or-off=OFF  tgt=PPC64LE)
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -DNVPTX64 -Xclang -verify=nvptx64' tgt-acc-device=acc_device_nvidia  host-or-off=OFF  tgt=NVPTX64)
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple -DAMDGCN   -Xclang -verify'         tgt-acc-device=acc_device_radeon  host-or-off=OFF  tgt=AMDGCN )
-// RUN: }
 //      # Large firstprivates are not packed, so they exercise a different OMPT
 //      # code path.  Packing multiple (small) firstprivates means we cannot
 //      # provide a single var_name, so currently it's set to a null pointer.
@@ -41,36 +34,34 @@
 // RUN:   (const=     )
 // RUN:   (const=const)
 // RUN: }
-// RUN: %for tgts {
-// RUN:   %for packing-cases {
-// RUN:     %for const-cases {
-// RUN:       %[run-if] %clang -fopenacc %acc-includes %s \
-// RUN:         -o %t %[tgt-cflags] -DCONST=%[const] \
-// RUN:         -DARR0_SIZE=%[arr0-size] -DARR1_SIZE=%[arr1-size]
-// RUN:       %[run-if] %t > %t.out 2> %t.err
-// RUN:       %[run-if] FileCheck -input-file %t.err %s \
-// RUN:           -allow-empty -check-prefixes=ERR
-// RUN:       %[run-if] FileCheck -input-file %t.out %s \
-// RUN:           -match-full-lines -strict-whitespace \
-// RUN:           -implicit-check-not=acc_ev_ \
-// RUN:           -check-prefixes=CHECK,%[tgt],%[host-or-off] \
-// RUN:           -check-prefixes=CHECK-%[pack0],%[host-or-off]-%[pack0] \
-// RUN:           -check-prefixes=CHECK-%[pack1],%[host-or-off]-%[pack1] \
-// RUN:           -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
-// RUN:           -DHOST_DEV=%acc-host-dev -DOFF_DEV=0 -DTHREAD_ID=0 \
-// RUN:           -DASYNC_QUEUE=-1 -DSRC_FILE=%s \
-// RUN:           -DLINE_NO0=20000 -DEND_LINE_NO0=20001 \
-// RUN:           -DLINE_NO1=30000 -DEND_LINE_NO1=40000 \
-// RUN:           -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=50000 \
-// RUN:           -DPACK0_NAME=%[pack0-name] -D#PACK0_SIZE=%[pack0-size] \
-// RUN:           -DPACK1_NAME=%[pack1-name] -D#PACK1_SIZE=%[pack1-size]
-// RUN:     }
+// RUN: %for packing-cases {
+// RUN:   %for const-cases {
+// RUN:     %clang-acc %s -o %t.exe -DCONST=%[const] \
+// RUN:       -DARR0_SIZE=%[arr0-size] -DARR1_SIZE=%[arr1-size] \
+// RUN:       -DTGT_%dev-type-0-omp
+// RUN:     %t.exe > %t.out 2> %t.err
+// RUN:     FileCheck -input-file %t.err %s \
+// RUN:       -allow-empty -check-prefixes=ERR
+// RUN:     FileCheck -input-file %t.out %s \
+// RUN:       -match-full-lines -strict-whitespace \
+// RUN:       -implicit-check-not=acc_ev_ \
+// RUN:       -check-prefixes=CHECK,TGT-%dev-type-0-omp,%if-host(HOST,OFF) \
+// RUN:       -check-prefixes=CHECK-%[pack0],%if-host(HOST,OFF)-%[pack0] \
+// RUN:       -check-prefixes=CHECK-%[pack1],%if-host(HOST,OFF)-%[pack1] \
+// RUN:       -DACC_DEVICE=acc_device_%dev-type-0-acc -DVERSION=%acc-version \
+// RUN:       -DHOST_DEV=%acc-host-dev -DOFF_DEV=0 -DTHREAD_ID=0 \
+// RUN:       -DASYNC_QUEUE=-1 -DSRC_FILE=%s \
+// RUN:       -DLINE_NO0=20000 -DEND_LINE_NO0=20001 \
+// RUN:       -DLINE_NO1=30000 -DEND_LINE_NO1=40000 \
+// RUN:       -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=50000 \
+// RUN:       -DPACK0_NAME=%[pack0-name] -D#PACK0_SIZE=%[pack0-size] \
+// RUN:       -DPACK1_NAME=%[pack1-name] -D#PACK1_SIZE=%[pack1-size]
 // RUN:   }
 // RUN: }
 //
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
@@ -315,42 +306,42 @@ int main() {
   for (int j = 0; j < 10; ++j) {
     // Because of firstprivate, arr0's address is different here even when not
     // offloading.
-    //         HOST:inside: arr0=0x[[#%x,ARR0_HOST_PTR_IN_KERNEL:]], arr0[0]=30
-    //    HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[1]=31
-    //    HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[2]=32
-    //    HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[3]=33
-    //    HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[4]=34
-    //    HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[5]=35
-    //    HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[6]=36
-    //    HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[7]=37
-    //    HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[8]=38
-    //    HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[9]=39
-    //       X86_64:inside: arr0=0x[[#%x,ARR0_DEVICE_PTR_IN_KERNEL:]], arr0[0]=30
-    //  X86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[1]=31
-    //  X86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[2]=32
-    //  X86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[3]=33
-    //  X86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[4]=34
-    //  X86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[5]=35
-    //  X86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[6]=36
-    //  X86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[7]=37
-    //  X86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[8]=38
-    //  X86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[9]=39
-    //      PPC64LE:inside: arr0=0x[[#%x,ARR0_DEVICE_PTR_IN_KERNEL:]], arr0[0]=30
-    // PPC64LE-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[1]=31
-    // PPC64LE-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[2]=32
-    // PPC64LE-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[3]=33
-    // PPC64LE-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[4]=34
-    // PPC64LE-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[5]=35
-    // PPC64LE-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[6]=36
-    // PPC64LE-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[7]=37
-    // PPC64LE-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[8]=38
-    // PPC64LE-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[9]=39
+    //             HOST:inside: arr0=0x[[#%x,ARR0_HOST_PTR_IN_KERNEL:]], arr0[0]=30
+    //        HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[1]=31
+    //        HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[2]=32
+    //        HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[3]=33
+    //        HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[4]=34
+    //        HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[5]=35
+    //        HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[6]=36
+    //        HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[7]=37
+    //        HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[8]=38
+    //        HOST-NEXT:inside: arr0=0x[[#ARR0_HOST_PTR_IN_KERNEL]], arr0[9]=39
+    //       TGT-x86_64:inside: arr0=0x[[#%x,ARR0_DEVICE_PTR_IN_KERNEL:]], arr0[0]=30
+    //  TGT-x86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[1]=31
+    //  TGT-x86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[2]=32
+    //  TGT-x86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[3]=33
+    //  TGT-x86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[4]=34
+    //  TGT-x86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[5]=35
+    //  TGT-x86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[6]=36
+    //  TGT-x86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[7]=37
+    //  TGT-x86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[8]=38
+    //  TGT-x86_64-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[9]=39
+    //      TGT-ppc64le:inside: arr0=0x[[#%x,ARR0_DEVICE_PTR_IN_KERNEL:]], arr0[0]=30
+    // TGT-ppc64le-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[1]=31
+    // TGT-ppc64le-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[2]=32
+    // TGT-ppc64le-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[3]=33
+    // TGT-ppc64le-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[4]=34
+    // TGT-ppc64le-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[5]=35
+    // TGT-ppc64le-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[6]=36
+    // TGT-ppc64le-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[7]=37
+    // TGT-ppc64le-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[8]=38
+    // TGT-ppc64le-NEXT:inside: arr0=0x[[#ARR0_DEVICE_PTR_IN_KERNEL]], arr0[9]=39
     //
-    // We omit NVPTX64 here because exit events might trigger before kernel
+    // We omit nvptx64 here because exit events might trigger before kernel
     // execution due to the use of CUDA streams.
     //
-    // FIXME: We omit AMDGCN here because it doesn't support target printf yet.
-#if !NVPTX64 && !AMDGCN
+    // FIXME: We omit amdgcn here because it doesn't support target printf yet.
+#if !TGT_nvptx64 && !TGT_amdgcn
     printf("inside: arr0=%p, arr0[%d]=%d\n", arr0, j, arr0[j]);
 #endif
 #line 40000

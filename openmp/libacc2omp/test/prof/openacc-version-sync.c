@@ -3,14 +3,20 @@
 //
 // Various other tests check that each of Clang and the OpenACC Profiling
 // Interface support reports the same OpenACC version (LIT substitution
-// %acc-version) across offload configurations.  This test connects the two.
+// %acc-version) across offload configurations.  This test makes sure the two
+// report the same OpenACC version as each other.
 
-// RUN: %clang -Xclang -verify -fopenacc %acc-includes -o %t %s
-// RUN: %t 2>&1 | FileCheck -DACC_VERSION=%acc-version %s
+// RUN: %clang-acc -o %t.exe %s
+// RUN: %t.exe 2>&1 | FileCheck -DACC_VERSION=%acc-version %s
 //
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
+// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
 
 #include <acc_prof.h>
 #include <stdio.h>

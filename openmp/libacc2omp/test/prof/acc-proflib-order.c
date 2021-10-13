@@ -12,36 +12,27 @@
 // As a final sanity check, we make sure all the original callbacks were
 // registered.  This will become more important once multiple callbacks can be
 // registered as we'll then need to check their dispatch order.
+//
+// Whether the target is host or device affects at least when ompt_start_tool
+// and thus acc_register_library executes, so it seems worthwhile to make sure
+// ACC_PROFLIB works in all offload cases.
 
 // RUN: %data proflibs {
 // RUN:   (cpp=-DPROG=PROG_PROFLIB1 file=%t.proflib1)
 // RUN:   (cpp=-DPROG=PROG_PROFLIB2 file=%t.proflib2)
 // RUN: }
 // RUN: %for proflibs {
-// RUN:   %clang -Xclang -verify %acc-includes -shared -fpic %[cpp] %s \
-// RUN:          -o %[file]
+// RUN:   %clang-lib %[cpp] %s -o %[file]
 // RUN: }
-// RUN: %data tgts {
-//        Whether the target is host or device affects at least when
-//        ompt_start_tool and thus acc_register_library executes, so it seems
-//        worthwhile to make sure ACC_PROFLIB works in all cases.
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         fc=HOST)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         fc=OFF )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         fc=OFF )
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' fc=OFF )
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         fc=OFF )
-// RUN: }
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenacc %acc-includes \
-// RUN:                    -DPROG=PROG_APP %s -o %t %[tgt-cflags]
-// RUN:   %[run-if] env ACC_PROFLIB='%t.proflib1;%t.proflib2' %t > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out %s \
-// RUN:       -match-full-lines -strict-whitespace -check-prefixes=CHECK,%[fc]
-// RUN: }
+// RUN: %clang-acc -DPROG=PROG_APP %s -o %t.exe
+// RUN: env ACC_PROFLIB='%t.proflib1;%t.proflib2' %t.exe > %t.out 2>&1
+// RUN: FileCheck -input-file %t.out %s \
+// RUN:   -match-full-lines -strict-whitespace \
+// RUN:   -check-prefixes=CHECK,%if-host(HOST,OFF)
 //
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:

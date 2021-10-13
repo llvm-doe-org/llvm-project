@@ -1,35 +1,26 @@
 // Check that no callbacks are missed upon a device allocation failure.
 
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         host-or-off-pre-env=HOST not-if-off-pre-env=              )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         host-or-off-pre-env=OFF  not-if-off-pre-env='%not --crash')
-// RUN: }
 // RUN: %data run-envs {
-// RUN:   (run-env=                                  host-or-off-post-env=%[host-or-off-pre-env] not-if-off-post-env=%[not-if-off-pre-env])
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off-post-env=HOST                   not-if-off-post-env=                     )
-// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        host-or-off-post-env=HOST                   not-if-off-post-env=                     )
+// RUN:   (run-env=                                  host-or-off-post-env='%if-host(HOST,OFF)' not-if-off-post-env='%if-host(, %not --crash)')
+// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off-post-env=HOST                 not-if-off-post-env=                          )
+// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        host-or-off-post-env=HOST                 not-if-off-post-env=                          )
 // RUN: }
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenacc %acc-includes %s -o %t %[tgt-cflags]
-// RUN:   %for run-envs {
-// RUN:     %[run-if] %[not-if-off-post-env] %[run-env] %t > %t.out 2> %t.err
-// RUN:     %[run-if] FileCheck -input-file %t.err -allow-empty %s \
-// RUN:       -check-prefixes=ERR,ERR-%[host-or-off-post-env]-POST-ENV
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:       -match-full-lines -strict-whitespace -allow-empty \
-// RUN:       -implicit-check-not=acc_ev_ \
-// RUN:       -check-prefixes=OUT,OUT-%[host-or-off-pre-env]-PRE-ENV \
-// RUN:       -check-prefixes=OUT-%[host-or-off-post-env]-POST-ENV \
-// RUN:       -check-prefixes=OUT-%[host-or-off-pre-env]-THEN-%[host-or-off-post-env]
-// RUN:   }
+// RUN: %clang-acc %s -o %t.exe
+// RUN: %for run-envs {
+// RUN:   %[not-if-off-post-env] %[run-env] %t.exe > %t.out 2> %t.err
+// RUN:   FileCheck -input-file %t.err -allow-empty %s \
+// RUN:     -check-prefixes=ERR,ERR-%[host-or-off-post-env]-POST-ENV
+// RUN:   FileCheck -input-file %t.out %s \
+// RUN:     -match-full-lines -strict-whitespace -allow-empty \
+// RUN:     -implicit-check-not=acc_ev_ \
+// RUN:     -check-prefixes=OUT,OUT-%if-host(HOST,OFF)-PRE-ENV \
+// RUN:     -check-prefixes=OUT-%[host-or-off-post-env]-POST-ENV \
+// RUN:     -check-prefixes=OUT-%if-host(HOST,OFF)-THEN-%[host-or-off-post-env]
 // RUN: }
 //
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:

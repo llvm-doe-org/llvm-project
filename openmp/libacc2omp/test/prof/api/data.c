@@ -2,36 +2,26 @@
 // correct data for the OpenACC Runtime Library API's data and memory management
 // routines.
 //
-// RUN: %data tgts {
-// RUN:   (run-if=                cflags='                                     -Xclang -verify'         tgt-acc-device=acc_device_host    tgt-host-or-off=HOST tgt-copy=COPY-DIRECT )
-// RUN:   (run-if=%run-if-x86_64  cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         tgt-acc-device=acc_device_x86_64  tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
-// RUN:   (run-if=%run-if-ppc64le cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         tgt-acc-device=acc_device_ppc64le tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
-// RUN:   (run-if=%run-if-nvptx64 cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' tgt-acc-device=acc_device_nvidia  tgt-host-or-off=OFF  tgt-copy=COPY-DIRECT )
-// RUN:   (run-if=%run-if-amdgcn  cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         tgt-acc-device=acc_device_radeon  tgt-host-or-off=OFF  tgt-copy=COPY-BY-HOST)
-// RUN: }
 // RUN: %data run-envs {
-// RUN:   (run-env=                                  host-or-off=%[tgt-host-or-off] copy=%[tgt-copy])
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off=HOST               copy=COPY-DIRECT)
-// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        host-or-off=HOST               copy=COPY-DIRECT)
+// RUN:   (run-env=                                  host-or-off='%if-host(HOST,OFF)' copy=COPY-%dev-type-0-copy)
+// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off=HOST                 copy=COPY-direct          )
+// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        host-or-off=HOST                 copy=COPY-direct          )
 // RUN: }
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenacc %acc-includes %s %[cflags] -o %t
-// RUN:   %for run-envs {
-// RUN:     %[run-if] %[run-env] %t %[host-or-off] > %t.out 2> %t.err
-// RUN:     %[run-if] FileCheck -input-file %t.err %s \
-// RUN:         -allow-empty -check-prefixes=ERR
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:         -match-full-lines -strict-whitespace \
-// RUN:         -implicit-check-not=acc_ev_ \
-// RUN:         -check-prefixes=CHECK,%[host-or-off],%[copy] \
-// RUN:         -DACC_DEVICE=%[tgt-acc-device] -DVERSION=%acc-version \
-// RUN:         -DTHREAD_ID=0 -DASYNC_QUEUE=-1
-// RUN:   }
+// RUN: %clang-acc -o %t.exe %s
+// RUN: %for run-envs {
+// RUN:   %[run-env] %t.exe %[host-or-off] > %t.out 2> %t.err
+// RUN:   FileCheck -input-file %t.err -allow-empty -check-prefixes=ERR %s
+// RUN:   FileCheck -input-file %t.out %s \
+// RUN:     -match-full-lines -strict-whitespace \
+// RUN:     -implicit-check-not=acc_ev_ \
+// RUN:     -check-prefixes=CHECK,%[host-or-off],%[copy] \
+// RUN:     -DACC_DEVICE=acc_device_%dev-type-0-acc -DVERSION=%acc-version \
+// RUN:     -DTHREAD_ID=0 -DASYNC_QUEUE=-1
 // RUN: }
 //
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
@@ -1350,78 +1340,78 @@ int main(int argc, char *argv[]) {
   // OFF-NEXT:    device_type=[[ACC_DEVICE]]
   acc_memcpy_from_device(arr, arr_dev, sizeof arr);
 
-  // COPY-BY-HOST-NEXT:acc_ev_enqueue_download_start
-  // COPY-BY-HOST-NEXT:  acc_prof_info
-  // COPY-BY-HOST-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
-  // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_device,
-  // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
-  // COPY-BY-HOST-NEXT:    func_line_no=0, func_end_line_no=0
-  // COPY-BY-HOST-NEXT:  acc_data_event_info
-  // COPY-BY-HOST-NEXT:    event_type=22, valid_bytes=56,
-  // COPY-BY-HOST-NEXT:    parent_construct=acc_construct_runtime_api,
-  // COPY-BY-HOST-NEXT:    implicit=0, tool_info=(nil),
-  // COPY-BY-HOST-NEXT:    var_name=(null), bytes=4,
-  // COPY-BY-HOST-NEXT:    host_ptr=0x[[#%x,TMP_HOST_PTR:]],
-  // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEV + ARR_ELE_SIZE]]
-  // COPY-BY-HOST-NEXT:  acc_api_info
-  // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
-  // COPY-BY-HOST-NEXT:acc_ev_enqueue_download_end
-  // COPY-BY-HOST-NEXT:  acc_prof_info
-  // COPY-BY-HOST-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
-  // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_device,
-  // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
-  // COPY-BY-HOST-NEXT:    func_line_no=0, func_end_line_no=0
-  // COPY-BY-HOST-NEXT:  acc_data_event_info
-  // COPY-BY-HOST-NEXT:    event_type=23, valid_bytes=56,
-  // COPY-BY-HOST-NEXT:    parent_construct=acc_construct_runtime_api,
-  // COPY-BY-HOST-NEXT:    implicit=0, tool_info=(nil),
-  // COPY-BY-HOST-NEXT:    var_name=(null), bytes=4,
-  // COPY-BY-HOST-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
-  // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEV + ARR_ELE_SIZE]]
-  // COPY-BY-HOST-NEXT:  acc_api_info
-  // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
-  // COPY-BY-HOST-NEXT:acc_ev_enqueue_upload_start
-  // COPY-BY-HOST-NEXT:  acc_prof_info
-  // COPY-BY-HOST-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
-  // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_device,
-  // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
-  // COPY-BY-HOST-NEXT:    func_line_no=0, func_end_line_no=0
-  // COPY-BY-HOST-NEXT:  acc_data_event_info
-  // COPY-BY-HOST-NEXT:    event_type=20, valid_bytes=56,
-  // COPY-BY-HOST-NEXT:    parent_construct=acc_construct_runtime_api,
-  // COPY-BY-HOST-NEXT:    implicit=0, tool_info=(nil),
-  // COPY-BY-HOST-NEXT:    var_name=(null), bytes=4,
-  // COPY-BY-HOST-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
-  // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEV]]
-  // COPY-BY-HOST-NEXT:  acc_api_info
-  // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
-  // COPY-BY-HOST-NEXT:acc_ev_enqueue_upload_end
-  // COPY-BY-HOST-NEXT:  acc_prof_info
-  // COPY-BY-HOST-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
-  // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_device,
-  // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
-  // COPY-BY-HOST-NEXT:    func_line_no=0, func_end_line_no=0
-  // COPY-BY-HOST-NEXT:  acc_data_event_info
-  // COPY-BY-HOST-NEXT:    event_type=21, valid_bytes=56,
-  // COPY-BY-HOST-NEXT:    parent_construct=acc_construct_runtime_api,
-  // COPY-BY-HOST-NEXT:    implicit=0, tool_info=(nil),
-  // COPY-BY-HOST-NEXT:    var_name=(null), bytes=4,
-  // COPY-BY-HOST-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
-  // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEV]]
-  // COPY-BY-HOST-NEXT:  acc_api_info
-  // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
+  // COPY-by-host-NEXT:acc_ev_enqueue_download_start
+  // COPY-by-host-NEXT:  acc_prof_info
+  // COPY-by-host-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
+  // COPY-by-host-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // COPY-by-host-NEXT:    src_file=(null), func_name=acc_memcpy_device,
+  // COPY-by-host-NEXT:    line_no=0, end_line_no=0,
+  // COPY-by-host-NEXT:    func_line_no=0, func_end_line_no=0
+  // COPY-by-host-NEXT:  acc_data_event_info
+  // COPY-by-host-NEXT:    event_type=22, valid_bytes=56,
+  // COPY-by-host-NEXT:    parent_construct=acc_construct_runtime_api,
+  // COPY-by-host-NEXT:    implicit=0, tool_info=(nil),
+  // COPY-by-host-NEXT:    var_name=(null), bytes=4,
+  // COPY-by-host-NEXT:    host_ptr=0x[[#%x,TMP_HOST_PTR:]],
+  // COPY-by-host-NEXT:    device_ptr=0x[[#%x,ARR_DEV + ARR_ELE_SIZE]]
+  // COPY-by-host-NEXT:  acc_api_info
+  // COPY-by-host-NEXT:    device_api=0, valid_bytes=12,
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]]
+  // COPY-by-host-NEXT:acc_ev_enqueue_download_end
+  // COPY-by-host-NEXT:  acc_prof_info
+  // COPY-by-host-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
+  // COPY-by-host-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // COPY-by-host-NEXT:    src_file=(null), func_name=acc_memcpy_device,
+  // COPY-by-host-NEXT:    line_no=0, end_line_no=0,
+  // COPY-by-host-NEXT:    func_line_no=0, func_end_line_no=0
+  // COPY-by-host-NEXT:  acc_data_event_info
+  // COPY-by-host-NEXT:    event_type=23, valid_bytes=56,
+  // COPY-by-host-NEXT:    parent_construct=acc_construct_runtime_api,
+  // COPY-by-host-NEXT:    implicit=0, tool_info=(nil),
+  // COPY-by-host-NEXT:    var_name=(null), bytes=4,
+  // COPY-by-host-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
+  // COPY-by-host-NEXT:    device_ptr=0x[[#%x,ARR_DEV + ARR_ELE_SIZE]]
+  // COPY-by-host-NEXT:  acc_api_info
+  // COPY-by-host-NEXT:    device_api=0, valid_bytes=12,
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]]
+  // COPY-by-host-NEXT:acc_ev_enqueue_upload_start
+  // COPY-by-host-NEXT:  acc_prof_info
+  // COPY-by-host-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
+  // COPY-by-host-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // COPY-by-host-NEXT:    src_file=(null), func_name=acc_memcpy_device,
+  // COPY-by-host-NEXT:    line_no=0, end_line_no=0,
+  // COPY-by-host-NEXT:    func_line_no=0, func_end_line_no=0
+  // COPY-by-host-NEXT:  acc_data_event_info
+  // COPY-by-host-NEXT:    event_type=20, valid_bytes=56,
+  // COPY-by-host-NEXT:    parent_construct=acc_construct_runtime_api,
+  // COPY-by-host-NEXT:    implicit=0, tool_info=(nil),
+  // COPY-by-host-NEXT:    var_name=(null), bytes=4,
+  // COPY-by-host-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
+  // COPY-by-host-NEXT:    device_ptr=0x[[#%x,ARR_DEV]]
+  // COPY-by-host-NEXT:  acc_api_info
+  // COPY-by-host-NEXT:    device_api=0, valid_bytes=12,
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]]
+  // COPY-by-host-NEXT:acc_ev_enqueue_upload_end
+  // COPY-by-host-NEXT:  acc_prof_info
+  // COPY-by-host-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
+  // COPY-by-host-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // COPY-by-host-NEXT:    src_file=(null), func_name=acc_memcpy_device,
+  // COPY-by-host-NEXT:    line_no=0, end_line_no=0,
+  // COPY-by-host-NEXT:    func_line_no=0, func_end_line_no=0
+  // COPY-by-host-NEXT:  acc_data_event_info
+  // COPY-by-host-NEXT:    event_type=21, valid_bytes=56,
+  // COPY-by-host-NEXT:    parent_construct=acc_construct_runtime_api,
+  // COPY-by-host-NEXT:    implicit=0, tool_info=(nil),
+  // COPY-by-host-NEXT:    var_name=(null), bytes=4,
+  // COPY-by-host-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
+  // COPY-by-host-NEXT:    device_ptr=0x[[#%x,ARR_DEV]]
+  // COPY-by-host-NEXT:  acc_api_info
+  // COPY-by-host-NEXT:    device_api=0, valid_bytes=12,
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]]
   acc_memcpy_device(&arr_dev[0], &arr_dev[1], sizeof *arr_dev);
 
   // No-ops.  There's not much point in trying no-op cases that are specific to
@@ -1488,78 +1478,78 @@ int main(int argc, char *argv[]) {
            deviceTypeToStr(devTypeInit), devNumOther, acc_deviceptr(arr));
   }
 
-  //      COPY-BY-HOST:acc_ev_enqueue_download_start
-  // COPY-BY-HOST-NEXT:  acc_prof_info
-  // COPY-BY-HOST-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
-  // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
-  // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
-  // COPY-BY-HOST-NEXT:    func_line_no=0, func_end_line_no=0
-  // COPY-BY-HOST-NEXT:  acc_data_event_info
-  // COPY-BY-HOST-NEXT:    event_type=22, valid_bytes=56,
-  // COPY-BY-HOST-NEXT:    parent_construct=acc_construct_runtime_api,
-  // COPY-BY-HOST-NEXT:    implicit=0, tool_info=(nil),
-  // COPY-BY-HOST-NEXT:    var_name=(null), bytes=4,
-  // COPY-BY-HOST-NEXT:    host_ptr=0x[[#%x,TMP_HOST_PTR:]],
-  // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR + ARR_ELE_SIZE]]
-  // COPY-BY-HOST-NEXT:  acc_api_info
-  // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
-  // COPY-BY-HOST-NEXT:acc_ev_enqueue_download_end
-  // COPY-BY-HOST-NEXT:  acc_prof_info
-  // COPY-BY-HOST-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
-  // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
-  // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
-  // COPY-BY-HOST-NEXT:    func_line_no=0, func_end_line_no=0
-  // COPY-BY-HOST-NEXT:  acc_data_event_info
-  // COPY-BY-HOST-NEXT:    event_type=23, valid_bytes=56,
-  // COPY-BY-HOST-NEXT:    parent_construct=acc_construct_runtime_api,
-  // COPY-BY-HOST-NEXT:    implicit=0, tool_info=(nil),
-  // COPY-BY-HOST-NEXT:    var_name=(null), bytes=4,
-  // COPY-BY-HOST-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
-  // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR + ARR_ELE_SIZE]]
-  // COPY-BY-HOST-NEXT:  acc_api_info
-  // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
-  // COPY-BY-HOST-NEXT:acc_ev_enqueue_upload_start
-  // COPY-BY-HOST-NEXT:  acc_prof_info
-  // COPY-BY-HOST-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
-  // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
-  // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
-  // COPY-BY-HOST-NEXT:    func_line_no=0, func_end_line_no=0
-  // COPY-BY-HOST-NEXT:  acc_data_event_info
-  // COPY-BY-HOST-NEXT:    event_type=20, valid_bytes=56,
-  // COPY-BY-HOST-NEXT:    parent_construct=acc_construct_runtime_api,
-  // COPY-BY-HOST-NEXT:    implicit=0, tool_info=(nil),
-  // COPY-BY-HOST-NEXT:    var_name=(null), bytes=4,
-  // COPY-BY-HOST-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
-  // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR]]
-  // COPY-BY-HOST-NEXT:  acc_api_info
-  // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
-  // COPY-BY-HOST-NEXT:acc_ev_enqueue_upload_end
-  // COPY-BY-HOST-NEXT:  acc_prof_info
-  // COPY-BY-HOST-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
-  // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
-  // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
-  // COPY-BY-HOST-NEXT:    func_line_no=0, func_end_line_no=0
-  // COPY-BY-HOST-NEXT:  acc_data_event_info
-  // COPY-BY-HOST-NEXT:    event_type=21, valid_bytes=56,
-  // COPY-BY-HOST-NEXT:    parent_construct=acc_construct_runtime_api,
-  // COPY-BY-HOST-NEXT:    implicit=0, tool_info=(nil),
-  // COPY-BY-HOST-NEXT:    var_name=(null), bytes=4,
-  // COPY-BY-HOST-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
-  // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR]]
-  // COPY-BY-HOST-NEXT:  acc_api_info
-  // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
+  //      COPY-by-host:acc_ev_enqueue_download_start
+  // COPY-by-host-NEXT:  acc_prof_info
+  // COPY-by-host-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
+  // COPY-by-host-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // COPY-by-host-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
+  // COPY-by-host-NEXT:    line_no=0, end_line_no=0,
+  // COPY-by-host-NEXT:    func_line_no=0, func_end_line_no=0
+  // COPY-by-host-NEXT:  acc_data_event_info
+  // COPY-by-host-NEXT:    event_type=22, valid_bytes=56,
+  // COPY-by-host-NEXT:    parent_construct=acc_construct_runtime_api,
+  // COPY-by-host-NEXT:    implicit=0, tool_info=(nil),
+  // COPY-by-host-NEXT:    var_name=(null), bytes=4,
+  // COPY-by-host-NEXT:    host_ptr=0x[[#%x,TMP_HOST_PTR:]],
+  // COPY-by-host-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR + ARR_ELE_SIZE]]
+  // COPY-by-host-NEXT:  acc_api_info
+  // COPY-by-host-NEXT:    device_api=0, valid_bytes=12,
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]]
+  // COPY-by-host-NEXT:acc_ev_enqueue_download_end
+  // COPY-by-host-NEXT:  acc_prof_info
+  // COPY-by-host-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
+  // COPY-by-host-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // COPY-by-host-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
+  // COPY-by-host-NEXT:    line_no=0, end_line_no=0,
+  // COPY-by-host-NEXT:    func_line_no=0, func_end_line_no=0
+  // COPY-by-host-NEXT:  acc_data_event_info
+  // COPY-by-host-NEXT:    event_type=23, valid_bytes=56,
+  // COPY-by-host-NEXT:    parent_construct=acc_construct_runtime_api,
+  // COPY-by-host-NEXT:    implicit=0, tool_info=(nil),
+  // COPY-by-host-NEXT:    var_name=(null), bytes=4,
+  // COPY-by-host-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
+  // COPY-by-host-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR + ARR_ELE_SIZE]]
+  // COPY-by-host-NEXT:  acc_api_info
+  // COPY-by-host-NEXT:    device_api=0, valid_bytes=12,
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]]
+  // COPY-by-host-NEXT:acc_ev_enqueue_upload_start
+  // COPY-by-host-NEXT:  acc_prof_info
+  // COPY-by-host-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
+  // COPY-by-host-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // COPY-by-host-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
+  // COPY-by-host-NEXT:    line_no=0, end_line_no=0,
+  // COPY-by-host-NEXT:    func_line_no=0, func_end_line_no=0
+  // COPY-by-host-NEXT:  acc_data_event_info
+  // COPY-by-host-NEXT:    event_type=20, valid_bytes=56,
+  // COPY-by-host-NEXT:    parent_construct=acc_construct_runtime_api,
+  // COPY-by-host-NEXT:    implicit=0, tool_info=(nil),
+  // COPY-by-host-NEXT:    var_name=(null), bytes=4,
+  // COPY-by-host-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
+  // COPY-by-host-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR]]
+  // COPY-by-host-NEXT:  acc_api_info
+  // COPY-by-host-NEXT:    device_api=0, valid_bytes=12,
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]]
+  // COPY-by-host-NEXT:acc_ev_enqueue_upload_end
+  // COPY-by-host-NEXT:  acc_prof_info
+  // COPY-by-host-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
+  // COPY-by-host-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // COPY-by-host-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
+  // COPY-by-host-NEXT:    line_no=0, end_line_no=0,
+  // COPY-by-host-NEXT:    func_line_no=0, func_end_line_no=0
+  // COPY-by-host-NEXT:  acc_data_event_info
+  // COPY-by-host-NEXT:    event_type=21, valid_bytes=56,
+  // COPY-by-host-NEXT:    parent_construct=acc_construct_runtime_api,
+  // COPY-by-host-NEXT:    implicit=0, tool_info=(nil),
+  // COPY-by-host-NEXT:    var_name=(null), bytes=4,
+  // COPY-by-host-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
+  // COPY-by-host-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR]]
+  // COPY-by-host-NEXT:  acc_api_info
+  // COPY-by-host-NEXT:    device_api=0, valid_bytes=12,
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]]
   acc_memcpy_d2d(&arr[0], &arr[1], sizeof *arr, devNumInit, devNumInit);
 
   // There are no device upload/download events for host-to-host copy.
@@ -1567,78 +1557,78 @@ int main(int argc, char *argv[]) {
   acc_memcpy_d2d(&arr[0], &arr[1], sizeof *arr, 0, 0);
   acc_set_device_num(devNumInit, devTypeInit);
 
-  //      COPY-BY-HOST:acc_ev_enqueue_download_start
-  // COPY-BY-HOST-NEXT:  acc_prof_info
-  // COPY-BY-HOST-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV_OTHER]],
-  // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
-  // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
-  // COPY-BY-HOST-NEXT:    func_line_no=0, func_end_line_no=0
-  // COPY-BY-HOST-NEXT:  acc_data_event_info
-  // COPY-BY-HOST-NEXT:    event_type=22, valid_bytes=56,
-  // COPY-BY-HOST-NEXT:    parent_construct=acc_construct_runtime_api,
-  // COPY-BY-HOST-NEXT:    implicit=0, tool_info=(nil),
-  // COPY-BY-HOST-NEXT:    var_name=(null), bytes=4,
-  // COPY-BY-HOST-NEXT:    host_ptr=0x[[#%x,TMP_HOST_PTR:]],
-  // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_OTHER_PTR + ARR_ELE_SIZE]]
-  // COPY-BY-HOST-NEXT:  acc_api_info
-  // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
-  // COPY-BY-HOST-NEXT:acc_ev_enqueue_download_end
-  // COPY-BY-HOST-NEXT:  acc_prof_info
-  // COPY-BY-HOST-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV_OTHER]],
-  // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
-  // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
-  // COPY-BY-HOST-NEXT:    func_line_no=0, func_end_line_no=0
-  // COPY-BY-HOST-NEXT:  acc_data_event_info
-  // COPY-BY-HOST-NEXT:    event_type=23, valid_bytes=56,
-  // COPY-BY-HOST-NEXT:    parent_construct=acc_construct_runtime_api,
-  // COPY-BY-HOST-NEXT:    implicit=0, tool_info=(nil),
-  // COPY-BY-HOST-NEXT:    var_name=(null), bytes=4,
-  // COPY-BY-HOST-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
-  // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_OTHER_PTR + ARR_ELE_SIZE]]
-  // COPY-BY-HOST-NEXT:  acc_api_info
-  // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
-  // COPY-BY-HOST-NEXT:acc_ev_enqueue_upload_start
-  // COPY-BY-HOST-NEXT:  acc_prof_info
-  // COPY-BY-HOST-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
-  // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
-  // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
-  // COPY-BY-HOST-NEXT:    func_line_no=0, func_end_line_no=0
-  // COPY-BY-HOST-NEXT:  acc_data_event_info
-  // COPY-BY-HOST-NEXT:    event_type=20, valid_bytes=56,
-  // COPY-BY-HOST-NEXT:    parent_construct=acc_construct_runtime_api,
-  // COPY-BY-HOST-NEXT:    implicit=0, tool_info=(nil),
-  // COPY-BY-HOST-NEXT:    var_name=(null), bytes=4,
-  // COPY-BY-HOST-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
-  // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR]]
-  // COPY-BY-HOST-NEXT:  acc_api_info
-  // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
-  // COPY-BY-HOST-NEXT:acc_ev_enqueue_upload_end
-  // COPY-BY-HOST-NEXT:  acc_prof_info
-  // COPY-BY-HOST-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
-  // COPY-BY-HOST-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-  // COPY-BY-HOST-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
-  // COPY-BY-HOST-NEXT:    line_no=0, end_line_no=0,
-  // COPY-BY-HOST-NEXT:    func_line_no=0, func_end_line_no=0
-  // COPY-BY-HOST-NEXT:  acc_data_event_info
-  // COPY-BY-HOST-NEXT:    event_type=21, valid_bytes=56,
-  // COPY-BY-HOST-NEXT:    parent_construct=acc_construct_runtime_api,
-  // COPY-BY-HOST-NEXT:    implicit=0, tool_info=(nil),
-  // COPY-BY-HOST-NEXT:    var_name=(null), bytes=4,
-  // COPY-BY-HOST-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
-  // COPY-BY-HOST-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR]]
-  // COPY-BY-HOST-NEXT:  acc_api_info
-  // COPY-BY-HOST-NEXT:    device_api=0, valid_bytes=12,
-  // COPY-BY-HOST-NEXT:    device_type=[[ACC_DEVICE]]
+  //      COPY-by-host:acc_ev_enqueue_download_start
+  // COPY-by-host-NEXT:  acc_prof_info
+  // COPY-by-host-NEXT:    event_type=22, valid_bytes=72, version=[[VERSION]],
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV_OTHER]],
+  // COPY-by-host-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // COPY-by-host-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
+  // COPY-by-host-NEXT:    line_no=0, end_line_no=0,
+  // COPY-by-host-NEXT:    func_line_no=0, func_end_line_no=0
+  // COPY-by-host-NEXT:  acc_data_event_info
+  // COPY-by-host-NEXT:    event_type=22, valid_bytes=56,
+  // COPY-by-host-NEXT:    parent_construct=acc_construct_runtime_api,
+  // COPY-by-host-NEXT:    implicit=0, tool_info=(nil),
+  // COPY-by-host-NEXT:    var_name=(null), bytes=4,
+  // COPY-by-host-NEXT:    host_ptr=0x[[#%x,TMP_HOST_PTR:]],
+  // COPY-by-host-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_OTHER_PTR + ARR_ELE_SIZE]]
+  // COPY-by-host-NEXT:  acc_api_info
+  // COPY-by-host-NEXT:    device_api=0, valid_bytes=12,
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]]
+  // COPY-by-host-NEXT:acc_ev_enqueue_download_end
+  // COPY-by-host-NEXT:  acc_prof_info
+  // COPY-by-host-NEXT:    event_type=23, valid_bytes=72, version=[[VERSION]],
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV_OTHER]],
+  // COPY-by-host-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // COPY-by-host-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
+  // COPY-by-host-NEXT:    line_no=0, end_line_no=0,
+  // COPY-by-host-NEXT:    func_line_no=0, func_end_line_no=0
+  // COPY-by-host-NEXT:  acc_data_event_info
+  // COPY-by-host-NEXT:    event_type=23, valid_bytes=56,
+  // COPY-by-host-NEXT:    parent_construct=acc_construct_runtime_api,
+  // COPY-by-host-NEXT:    implicit=0, tool_info=(nil),
+  // COPY-by-host-NEXT:    var_name=(null), bytes=4,
+  // COPY-by-host-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
+  // COPY-by-host-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_OTHER_PTR + ARR_ELE_SIZE]]
+  // COPY-by-host-NEXT:  acc_api_info
+  // COPY-by-host-NEXT:    device_api=0, valid_bytes=12,
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]]
+  // COPY-by-host-NEXT:acc_ev_enqueue_upload_start
+  // COPY-by-host-NEXT:  acc_prof_info
+  // COPY-by-host-NEXT:    event_type=20, valid_bytes=72, version=[[VERSION]],
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
+  // COPY-by-host-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // COPY-by-host-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
+  // COPY-by-host-NEXT:    line_no=0, end_line_no=0,
+  // COPY-by-host-NEXT:    func_line_no=0, func_end_line_no=0
+  // COPY-by-host-NEXT:  acc_data_event_info
+  // COPY-by-host-NEXT:    event_type=20, valid_bytes=56,
+  // COPY-by-host-NEXT:    parent_construct=acc_construct_runtime_api,
+  // COPY-by-host-NEXT:    implicit=0, tool_info=(nil),
+  // COPY-by-host-NEXT:    var_name=(null), bytes=4,
+  // COPY-by-host-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
+  // COPY-by-host-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR]]
+  // COPY-by-host-NEXT:  acc_api_info
+  // COPY-by-host-NEXT:    device_api=0, valid_bytes=12,
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]]
+  // COPY-by-host-NEXT:acc_ev_enqueue_upload_end
+  // COPY-by-host-NEXT:  acc_prof_info
+  // COPY-by-host-NEXT:    event_type=21, valid_bytes=72, version=[[VERSION]],
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]], device_number=[[OFF_DEV]],
+  // COPY-by-host-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+  // COPY-by-host-NEXT:    src_file=(null), func_name=acc_memcpy_d2d,
+  // COPY-by-host-NEXT:    line_no=0, end_line_no=0,
+  // COPY-by-host-NEXT:    func_line_no=0, func_end_line_no=0
+  // COPY-by-host-NEXT:  acc_data_event_info
+  // COPY-by-host-NEXT:    event_type=21, valid_bytes=56,
+  // COPY-by-host-NEXT:    parent_construct=acc_construct_runtime_api,
+  // COPY-by-host-NEXT:    implicit=0, tool_info=(nil),
+  // COPY-by-host-NEXT:    var_name=(null), bytes=4,
+  // COPY-by-host-NEXT:    host_ptr=0x[[#TMP_HOST_PTR]],
+  // COPY-by-host-NEXT:    device_ptr=0x[[#%x,ARR_DEVICE_PTR]]
+  // COPY-by-host-NEXT:  acc_api_info
+  // COPY-by-host-NEXT:    device_api=0, valid_bytes=12,
+  // COPY-by-host-NEXT:    device_type=[[ACC_DEVICE]]
   acc_memcpy_d2d(&arr[0], &arr[1], sizeof *arr, devNumInit, devNumOther);
 
   // We've already checked acc_delete when data is present, but we want to make
