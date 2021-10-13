@@ -5,6 +5,7 @@ config.test_cxx_compiler = "@OPENMP_TEST_CXX_COMPILER@"
 config.test_compiler_features = @OPENMP_TEST_COMPILER_FEATURES@
 config.test_filecheck = "@OPENMP_FILECHECK_EXECUTABLE@"
 config.test_not = "@OPENMP_NOT_EXECUTABLE@"
+config.test_llvm_omp_device_info = "@LLVM_BINARY_DIR@/bin/llvm-omp-device-info"
 config.libacc2omp_obj_root = "@CMAKE_CURRENT_BINARY_DIR@/@CURRENT_TARGET@"
 config.libacc2omp_dir = "@LIBACC2OMP_LIBRARY_DIR@"
 config.libacc2omp_all_targets = "@LIBOMPTARGET_ALL_TARGETS@".split()
@@ -15,24 +16,6 @@ config.libomptarget_dir = "@LIBOMPTARGET_LIBRARY_DIR@"
 config.acc2omp_header_directory = "@CMAKE_CURRENT_BINARY_DIR@/../src"
 config.omp_header_directory = "@CMAKE_CURRENT_BINARY_DIR@/../../runtime/src"
 config.host_arch = "@CMAKE_SYSTEM_PROCESSOR@"
-
-# These cmake variables enable users to specify what hardware and platform is
-# available for running programs with offloading in the libacc2omp test suite.
-def parseAccEnv(env):
-    if env == '':
-        return 0
-    try:
-        ndevs = int(env)
-        if ndevs < 0:
-            raise ValueError("unexpected negative value: " + str(ndevs))
-    except ValueError as exc:
-        raise ValueError("cmake CLANG_ACC_TEST_EXE_* vars must be"
-                         " non-negative integers") from exc
-    return ndevs
-config.clang_acc_test_exe_x86_64 = parseAccEnv("@CLANG_ACC_TEST_EXE_X86_64@")
-config.clang_acc_test_exe_ppc64le = parseAccEnv("@CLANG_ACC_TEST_EXE_PPC64LE@")
-config.clang_acc_test_exe_nvptx64 = parseAccEnv("@CLANG_ACC_TEST_EXE_NVPTX64@")
-config.clang_acc_test_exe_amdgcn = parseAccEnv("@CLANG_ACC_TEST_EXE_AMDGCN@")
 
 # Let the main config do the real work.
 lit_config.load_config(config, "@CMAKE_CURRENT_SOURCE_DIR@/lit.cfg")

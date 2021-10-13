@@ -37,28 +37,7 @@ config.has_plugins = @LLVM_ENABLE_PLUGINS@
 config.clang_vendor_uti = "@CLANG_VENDOR_UTI@"
 config.llvm_external_lit = path(r"@LLVM_EXTERNAL_LIT@")
 config.has_libatomic = "@CLANG_HAVE_LIBATOMIC@"
-
-# These cmake variables enable users to specify what hardware and platform is
-# available for running programs with offloading in the OpenACC test suite.
-def parseAccEnv(env):
-    if env == '':
-        return 0
-    try:
-        ndevs = int(env)
-        if ndevs < 0:
-            raise ValueError("unexpected negative value: " + str(ndevs))
-    except ValueError as exc:
-        raise ValueError("cmake CLANG_ACC_TEST_EXE_* vars must be"
-                         " non-negative integers") from exc
-    return ndevs
-config.clang_acc_test_exe_x86_64 = parseAccEnv("@CLANG_ACC_TEST_EXE_X86_64@")
-config.clang_acc_test_exe_ppc64le = parseAccEnv("@CLANG_ACC_TEST_EXE_PPC64LE@")
-config.clang_acc_test_exe_nvptx64 = parseAccEnv("@CLANG_ACC_TEST_EXE_NVPTX64@")
-config.clang_acc_test_exe_amdgcn = parseAccEnv("@CLANG_ACC_TEST_EXE_AMDGCN@")
-config.clang_acc_test_exe_x86_64_triple = 'x86_64-unknown-linux-gnu';
-config.clang_acc_test_exe_ppc64le_triple = 'ppc64le-unknown-linux-gnu';
-config.clang_acc_test_exe_nvptx64_triple = 'nvptx64-nvidia-cuda';
-config.clang_acc_test_exe_amdgcn_triple = 'amdgcn-amd-amdhsa';
+config.llvm_omp_device_info = config.llvm_obj_root + "/bin/llvm-omp-device-info"
 
 # Support substitution of the tools and libs dirs with user parameters. This is
 # used when we can't determine the tool dir at configuration time.

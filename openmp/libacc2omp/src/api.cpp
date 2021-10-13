@@ -200,8 +200,8 @@ static const char *deviceTypeToStringEnv(acc_device_t DevType,
  *   - If the environment or application has not selected a current device type,
  *     the implementation selects it based on device availability and
  *     compilation options.  For example, currently,
- *     -fopenmp-targets=nvptx64-nvidia-cuda,x86_64-unknown-linux-gnu will
- *     usually cause acc_device_nvidia to be the initial current device type.
+ *     -fopenmp-targets=nvptx64-nvidia-cuda,x86_64-pc-linux-gnu will usually
+ *     cause acc_device_nvidia to be the initial current device type.
  *   - If the environment or application has not selected a current device, the
  *     implementation selects one of the current device type.
  *   - Because the lists referred to by architecture-specific enumerators are

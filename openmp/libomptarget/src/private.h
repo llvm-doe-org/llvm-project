@@ -49,9 +49,7 @@ extern bool checkDeviceAndCtors(int64_t &DeviceID, ident_t *Loc);
 extern void *targetAllocExplicit(size_t size, int device_num, int kind,
                                  const char *name);
 
-#ifdef OMPTARGET_DEBUG
 extern const char *deviceTypeToString(omp_device_t DevType);
-#endif
 
 // This structure stores information of a mapped memory region.
 struct MapComponentInfoTy {

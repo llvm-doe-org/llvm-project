@@ -368,7 +368,6 @@ bool checkDeviceAndCtors(int64_t &DeviceID, ident_t *Loc) {
   return false;
 }
 
-#ifdef OMPTARGET_DEBUG
 const char *deviceTypeToString(omp_device_t DevType) {
   switch (DevType) {
 #define MAKE_CASE(Type)                                                        \
@@ -384,7 +383,6 @@ const char *deviceTypeToString(omp_device_t DevType) {
   }
   assert(0 && "unexpected omp_device_t");
 }
-#endif
 
 static int32_t getParentIndex(int64_t type) {
   return ((type & OMP_TGT_MAPTYPE_MEMBER_OF) >> 48) - 1;

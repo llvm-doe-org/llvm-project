@@ -5,9 +5,9 @@
 // FIXME: Replace DEFAULT_OPENMP_LIB below with the value chosen at configure time.
 
 // RUN: %data {
-// RUN:   (target=i386-unknown-linux   pre=LD)
-// RUN:   (target=x86_64-unknown-linux pre=LD)
-// RUN:   (target=x86_64-msvc-win32    pre=MSVC-LINK-64)
+// RUN:   (target=i386-pc-linux-gnu   pre=LD)
+// RUN:   (target=x86_64-pc-linux-gnu pre=LD)
+// RUN:   (target=x86_64-msvc-win32   pre=MSVC-LINK-64)
 // RUN: }
 // RUN: %for {
 // RUN:   %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \

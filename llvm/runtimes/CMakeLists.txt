@@ -176,7 +176,7 @@ foreach(entry ${runtimes})
   string(TOUPPER ${canon_name} canon_name)
   list(APPEND prefixes ${canon_name})
   if (${canon_name} STREQUAL "OPENMP")
-    list(APPEND prefixes "LIBOMP" "LIBOMPTARGET" "CLANG_ACC_TEST_EXE_")
+    list(APPEND prefixes "LIBOMP" "LIBOMPTARGET")
   endif()
   # Many compiler-rt options start with SANITIZER_ rather than COMPILER_RT_,
   # so when compiler-rt is enabled, consider both.

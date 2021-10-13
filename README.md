@@ -47,28 +47,6 @@ For further details on building OpenMP support, see the following FAQ:
 
 > <https://openmp.llvm.org/docs/SupportAndFAQ.html>
 
-Clacc's OpenACC test suites currently build and run OpenACC test
-programs.  Normally it builds them without offloading to avoid
-requiring specific hardware.  To specify hardware architectures
-available on your system so that it tests offloading to them as well,
-specify one or more of the following when running `cmake`:
-
-```
--DCLANG_ACC_TEST_EXE_X86_64=4  # x86_64-unknown-linux-gnu
--DCLANG_ACC_TEST_EXE_PPC64LE=4 # ppc64le-unknown-linux-gnu
--DCLANG_ACC_TEST_EXE_NVPTX64=6 # nvptx64-nvidia-cuda
--DCLANG_ACC_TEST_EXE_AMDGCN=2  # amdgcn-amd-amdhsa
-```
-
-In each case, the value should be `0`, the empty string, or
-unspecified to turn off testing of that device type.  Otherwise, it
-should be the number of devices of that type that LLVM's OpenMP
-runtime is expected to report as available on the system.  In the
-latter case, the value is used to test device management
-functionality, such as `acc_get_num_devices`.  Specifying a smaller
-non-zero value will not significantly affect device resources used
-during testing but will cause some tests to fail.
-
 Test suites checking Clacc's OpenACC support can be run by themselves
 or as part of larger test suites, as follows:
 
@@ -186,8 +164,8 @@ The most relevant `clang` command-line options are as follows:
     * Without `-fopenmp-targets`, the host is targeted.
     * `-fopenmp-targets=<triples>` specifies desired offloading
       targets.  So far, the following triples have been tested:
-        * `x86_64-unknown-linux-gnu` for x86_64.
-        * `ppc64le-unknown-linux-gnu` for Power9.
+        * `x86_64-pc-linux-gnu` for x86_64.
+        * `powerpc64le-ibm-linux-gnu` for Power9.
         * `nvptx64-nvidia-cuda` for NVIDIA GPUs.
         * `amdgcn-amd-amdhsa` for AMD GPUs.
     * In general, options starting with `-fopenmp-` adjust various

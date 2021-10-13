@@ -34,6 +34,7 @@ variables:
   BUILD_DIR: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-$BUILD_ID
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
+  LLVM_TARGETS_TO_BUILD: all
   LIT_NPROC_DIVISOR: 1
 
 stages:
@@ -63,13 +64,12 @@ stages:
     NINJA: ninja
     PYTHON: /usr/bin/python3
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
-    CMAKE_OFFLOAD_CONFIG:
-      -DCLANG_ACC_TEST_EXE_X86_64=0
-      -DCLANG_ACC_TEST_EXE_PPC64LE=4
-      -DCLANG_ACC_TEST_EXE_NVPTX64=6
-      -DCLANG_ACC_TEST_EXE_AMDGCN=0
     LLVM_ENABLE_PROJECTS: "clang"
     LLVM_ENABLE_RUNTIMES: "openmp"
+    CPU_TRIPLE: "powerpc64le-ibm-linux-gnu"
+    CPU_COUNT:  4
+    GPU_TRIPLE: "nvptx64-nvidia-cuda"
+    GPU_COUNT:  6
     LIT_NPROC_DIVISOR: 4
     LIT_XFAIL:
       "
@@ -82,8 +82,6 @@ stages:
       "
     LIT_XFAIL_NOT:
       "libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/api.c"
-    EXPECTED_TESTS_REGEX:
-      "libomptarget :: nvptx64-nvidia-cuda"
 
 .oswald02:
   tags: [shell, oswald02]
@@ -96,13 +94,12 @@ stages:
     NINJA: ninja
     PYTHON: /usr/bin/python3
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
-    CMAKE_OFFLOAD_CONFIG:
-      -DCLANG_ACC_TEST_EXE_X86_64=4
-      -DCLANG_ACC_TEST_EXE_PPC64LE=0
-      -DCLANG_ACC_TEST_EXE_NVPTX64=1
-      -DCLANG_ACC_TEST_EXE_AMDGCN=0
     LLVM_ENABLE_PROJECTS: "clang"
     LLVM_ENABLE_RUNTIMES: "openmp"
+    CPU_TRIPLE: "x86_64-pc-linux-gnu"
+    CPU_COUNT:  4
+    GPU_TRIPLE: "nvptx64-nvidia-cuda"
+    GPU_COUNT:  1
     LIT_NPROC_DIVISOR: 1
     LIT_XFAIL:
       "
@@ -113,8 +110,6 @@ stages:
       "
     LIT_XFAIL_NOT:
       ""
-    EXPECTED_TESTS_REGEX:
-      "libomptarget :: nvptx64-nvidia-cuda"
 
 .explorer:
   tags: [shell, explorer]
@@ -127,17 +122,16 @@ stages:
     NINJA: ninja
     PYTHON: /usr/bin/python3
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
-    CMAKE_OFFLOAD_CONFIG:
-      -DCLANG_ACC_TEST_EXE_X86_64=4
-      -DCLANG_ACC_TEST_EXE_PPC64LE=0
-      -DCLANG_ACC_TEST_EXE_NVPTX64=0
-      -DCLANG_ACC_TEST_EXE_AMDGCN=2
     # If lld isn't built, OpenMP offloading tests for AMDGPU fail:
     #
     #   clang-14: error: unable to execute command: Executable "lld" doesn't exist!
 #   #   clang-14: error: amdgcn-link command failed with exit code 1 (use -v to see invocation)
     LLVM_ENABLE_PROJECTS: "clang;lld"
     LLVM_ENABLE_RUNTIMES: "openmp"
+    CPU_TRIPLE: "x86_64-pc-linux-gnu"
+    CPU_COUNT:  4
+    GPU_TRIPLE: "amdgcn-amd-amdhsa"
+    GPU_COUNT:  2
     LIT_NPROC_DIVISOR: 1
     LIT_XFAIL:
       "
@@ -147,8 +141,6 @@ stages:
       "
     LIT_XFAIL_NOT:
       ""
-    EXPECTED_TESTS_REGEX:
-      "libomptarget :: amdgcn-amd-amdhsa"
 
 .kold:
   tags: [shell, kold]
@@ -160,13 +152,24 @@ stages:
     NINJA: ninja-build
     PYTHON: /usr/bin/python3
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
-    CMAKE_OFFLOAD_CONFIG:
-      -DCLANG_ACC_TEST_EXE_X86_64=4
-      -DCLANG_ACC_TEST_EXE_PPC64LE=0
-      -DCLANG_ACC_TEST_EXE_NVPTX64=0
-      -DCLANG_ACC_TEST_EXE_AMDGCN=0
+    # FIXME: Many of Clacc's Clang OpenACC tests fail if we let
+    # LLVM_TARGETS_TO_BUILD default to "all":
+    #
+    #   clang-14: error: cannot find libdevice for sm_35; provide path to different CUDA installation via '--cuda-path', or pass '-nocudalib' to build without linking with libdevice
+    #
+    # The trouble is that Clang's OpenACC test suite relies solely on
+    # llvm_omp_device_info to determine available devices, and it reports an
+    # NVIDIA GPU even though the kolds don't have required libraries for Clang
+    # to compile for it.  Thus, we set LLVM_TARGETS_TO_BUILD to disable support
+    # for targets beyond host.  In the future, all end-to-end compilation
+    # testing of Clang's OpenACC support should move into the libacc2omp test
+    # suite, which reuses libomptarget's detection of supported devices, which
+    # correctly suppresses NVIDIA GPU support in this case.
+    LLVM_TARGETS_TO_BUILD: "host"
     LLVM_ENABLE_PROJECTS: "clang"
     LLVM_ENABLE_RUNTIMES: "openmp"
+    CPU_TRIPLE: "x86_64-pc-linux-gnu"
+    CPU_COUNT:  4
     LIT_XFAIL:
       "
       LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
@@ -194,8 +197,6 @@ stages:
   variables:
     BUILD_ID: no-asserts
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=False
-    LLVM_ENABLE_PROJECTS: "clang"
-    LLVM_ENABLE_RUNTIMES: "openmp"
     LIT_XFAIL:
       "
       Clang :: Headers/wasm.c
@@ -224,8 +225,6 @@ stages:
   variables:
     BUILD_ID: debug
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Debug
-    LLVM_ENABLE_PROJECTS: "clang"
-    LLVM_ENABLE_RUNTIMES: "openmp"
     LIT_XFAIL:
       "
       libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
@@ -424,9 +423,9 @@ z-cleanup-project-builds:
     - echo $LLVM_CCACHE_PARAMS
     - echo $PYTHON
     - $PYTHON --version
+    - echo $LLVM_TARGETS_TO_BUILD
     - echo $LLVM_ENABLE_PROJECTS
     - echo $LLVM_ENABLE_RUNTIMES
-    - echo $CMAKE_OFFLOAD_CONFIG
     - time $CMAKE -G Ninja
                   $CMAKE_BUILD_OPTS
                   -DLLVM_CCACHE_BUILD=ON
@@ -436,11 +435,11 @@ z-cleanup-project-builds:
                   -DCMAKE_CXX_COMPILER=g++
                   -DGCC_INSTALL_PREFIX=$GCC_DIR
                   -DLLVM_CCACHE_PARAMS="$LLVM_CCACHE_PARAMS"
+                  -DLLVM_TARGETS_TO_BUILD="$LLVM_TARGETS_TO_BUILD"
                   -DLLVM_ENABLE_PROJECTS="$LLVM_ENABLE_PROJECTS"
                   -DLLVM_ENABLE_RUNTIMES="$LLVM_ENABLE_RUNTIMES"
                   -DPython3_EXECUTABLE=$PYTHON
                   -DLLVM_LIT_ARGS='-s -vv'
-                  $CMAKE_OFFLOAD_CONFIG
                   ../source/llvm
       |& tee $CI_PROJECT_DIR/cmake-log.txt
     - cp CMakeCache.txt $CI_PROJECT_DIR
@@ -561,14 +560,41 @@ debug (build):
       $NINJA -l `nproc` check-all
       |& tee $CI_PROJECT_DIR/check-all-build-log.txt
     # Check that no misconfiguration is quietly disabling key features and thus
-    # tests (for example, not adding the gitlab-runner account to the required
-    # render/video groups quietly disables OpenMP offloading to AMD GPU).
-    - echo "$EXPECTED_TESTS_REGEX"
-    - LIT_OPTS=--show-tests $NINJA check-all >
-          $CI_PROJECT_DIR/check-all-show-tests.txt
-    - if test x"$EXPECTED_TESTS_REGEX" != x; then
-        grep -c "$EXPECTED_TESTS_REGEX"
-            $CI_PROJECT_DIR/check-all-show-tests.txt;
+    # tests.  For example, not adding the gitlab-runner account to the required
+    # render/video groups quietly disables OpenMP offloading to AMD GPU.
+    #
+    # Check that device counts are computed correctly by the test suite based on
+    # known device counts for each host.
+    - tl=$CI_PROJECT_DIR/check-all-show-tests.txt
+    - LIT_OPTS=--show-tests $NINJA check-all > $tl 2>&1
+    - echo "$CPU_TRIPLE" "$CPU_COUNT"
+    - echo "$GPU_TRIPLE" "$GPU_COUNT"
+    - grep -c "^ *libomptarget "'::'" $CPU_TRIPLE ::" $tl
+    - if test x"$GPU_TRIPLE" != x; then
+         grep -c "^ *libomptarget "'::'" $GPU_TRIPLE ::" $tl;
+      fi
+    - clacc_branch=`echo "$CI_COMMIT_BRANCH" | grep '^\(clacc\|jdenny-openacc\)'`
+    - echo "$clacc_branch"
+    - if test x"$clacc_branch" != x; then
+        echo "Test counts for libacc2omp "'::'" $CPU_TRIPLE:" &&
+        grep -c "^ *libacc2omp "'::'" $CPU_TRIPLE ::" $tl &&
+        prefix="Device counts for" &&
+        echo "Device counts for $CPU_TRIPLE (expecting $CPU_COUNT):" &&
+        for suite in "libacc2omp "'::'" $CPU_TRIPLE"
+                     "libacc2omp "'::'" multitarget"
+                     "Clang"; do
+          grep "$prefix '$suite'.*'$CPU_TRIPLE'"':'" $CPU_COUNT[,}]" $tl;
+        done &&
+        if test x"$GPU_TRIPLE" != x; then
+          echo "Test counts for libacc2omp "'::'" $GPU_TRIPLE:" &&
+          grep -c "^ *libacc2omp "'::'" $GPU_TRIPLE ::" $tl &&
+          echo "Device counts for $GPU_TRIPLE (expecting $GPU_COUNT):" &&
+          for suite in "libacc2omp "'::'" $GPU_TRIPLE"
+                       "libacc2omp "'::'" multitarget"
+                       "Clang"; do
+            grep "$prefix '$suite'.*'$GPU_TRIPLE'"':'" $GPU_COUNT[,}]" $tl;
+          done
+        fi
       fi
     # Run the test suite.
     #

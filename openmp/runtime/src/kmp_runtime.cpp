@@ -1363,12 +1363,12 @@ void __kmp_serialized_parallel(ident_t *loc, kmp_int32 global_tid) {
 //   function in omptarget.cpp dispatches ompt_callback_target_emi, and the
 //   following ompt_dispatch_callback_target_emi's callers (e.g.,
 //   __kmp_fork_call) are never reached.
-// - When offloading to other devices (e.g., x86_64-unknown-linux-gnu), the
-//   "target" function still dispatches ompt_callback_target_emi, but the
-//   following ompt_dispatch_callback_target_emi's callers are also reached.
-//   Thus, the following ompt_dispatch_callback_target_emi checks
-//   ompt_get_target_info to see if we've already entered a target region and
-//   thus don't need to make the callback here.
+// - When offloading to other devices (e.g., x86_64-pc-linux-gnu), the "target"
+//   function still dispatches ompt_callback_target_emi, but the following
+//   ompt_dispatch_callback_target_emi's callers are also reached.  Thus, the
+//   following ompt_dispatch_callback_target_emi checks ompt_get_target_info to
+//   see if we've already entered a target region and thus don't need to make
+//   the callback here.
 // - When offloading to the host, either because host was selected or because
 //   offloading is disabled, only the following
 //   ompt_dispatch_callback_target_emi's callers are reached, so we dispatch the

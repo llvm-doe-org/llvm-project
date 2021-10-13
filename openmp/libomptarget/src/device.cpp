@@ -736,6 +736,8 @@ int32_t DeviceTy::runRegion(void *TgtEntryPtr, void **TgtVarsPtr,
 
 // Run region on device
 bool DeviceTy::printDeviceInfo(int32_t RTLDevId) {
+  printf("    OpenMP device type: \t\t%s\n",
+         deviceTypeToString(RTL->DeviceType));
   if (!RTL->print_device_info)
     return false;
   RTL->print_device_info(RTLDevId);
