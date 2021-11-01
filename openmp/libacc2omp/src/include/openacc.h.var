@@ -83,15 +83,23 @@ int acc_get_device_num(acc_device_t dev_type);
 // When not using an installed Clang in traditional OpenACC compilation mode,
 // there are several caveats about acc_on_device:
 //
-// - OpenMP must be enabled, or this header leaves acc_on_device undefined:
+// - If both OpenACC and OpenMP are disabled, this header defines acc_on_device
+//   so it returns true only if its argument is acc_device_host:
+//   - This behavior appears to follow nvc 21.7-0's behavior.
+//   - This behavior makes sense as offloading is disabled if OpenACC and OpenMP
+//     are disabled.
+// - If OpenMP is enabled, this header defines acc_on_device so it behaves for
+//   OpenMP target regions as it would for OpenACC compute constructs if OpenACC
+//   were enabled:
 //   - The reason is that the definition of acc_on_device below employs OpenMP
-//     variant directives.
-//   - When OpenACC is enabled, Clang enables OpenMP only in system headers.
-//     Fortunately, an installed Clang treats this header as a system header.
-//     However, from Clang's build directory, Clang's -isystem command-line
+//     variant directives so that acc_on_device behaves correctly for OpenMP
+//     compilation after using Clang's OpenACC source-to-source mode, which
+//     does not rewrite acc_on_device calls.
+//   - This behavior does not appear to follow nvc 21.7-0's behavior.
+// - When OpenACC is enabled, Clang enables OpenMP only in system headers:
+//   - Fortunately, an installed Clang treats this header as a system header.
+//   - However, from Clang's build directory, Clang's -isystem command-line
 //     option might be needed.
-//   - Of course, after using Clang's OpenACC source-to-source mode, OpenMP is
-//     expected to be enabled everywhere anyway to compile the result.
 // - OpenMP enum variant support is required for acc_on_device calls to evaluate
 //   as constant expressions:
 //   - Such constant evaluations are specified by OpenACC 3.1, sec. 3.2.23
@@ -175,6 +183,10 @@ ACC2OMP_DEVICE_VARIANT(arch, ppc64le, acc_device_ppc64le)
   ((int)(acc2omp_get_device_kind() == DevType ||                               \
          (acc2omp_get_device_kind() == acc_device_not_host &&                  \
           acc2omp_get_device_arch() == DevType)))
+
+#else // !_OPENMP
+
+#define acc_on_device(DevType) ((int)(acc_device_host == DevType))
 
 #endif // _OPENMP
 

@@ -487,6 +487,14 @@ OpenACC Runtime Library API and Preprocessor
       `acc_host_t` enum could be provided in the future for use after
       `acc_on_device(acc_device_host)` determines that execution is
       currently on the host.
+    * When OpenACC and OpenMP are disabled, the result is true only if
+      the argument is `acc_device_host`.  This behavior appears to
+      follow nvc 21.7-0's behavior.
+    * When OpenMP is enabled, the behavior is the same for OpenMP
+      target regions as it would be for OpenACC compute constructs if
+      OpenACC were enabled.  This behavior supports OpenMP compilation
+      after OpenACC source-to-source translation.  It does not appear
+      to follow nvc 21.7-0's behavior.
     * `acc_on_device` is defined as a preprocessor function-like macro
       in Clacc's `openacc.h`.  Thus, it has no function address and
       cannot be linked.  This implementation facilitates Clacc's

@@ -24,17 +24,19 @@
 // RUN:   (run-env='env ACC_DEVICE_TYPE=host'        off-type=host           )
 // RUN: }
 // RUN: %data exes {
-// RUN:   (exe=%t.exe    )
-// RUN:   (exe=%t-s2s.exe)
+// RUN:   (exe=%t-noacc.exe run-if='%if-host(,:)')
+// RUN:   (exe=%t-s2s.exe   run-if=              )
+// RUN:   (exe=%t-trad.exe  run-if=              )
 // RUN: }
 // RUN: %for contexts {
+// RUN:   %if-host(,:) %clang-noacc %[context-cflags] -o %t-noacc.exe %s
 // RUN:   %clang-acc-prt-omp %[context-cflags] %s > %t-prt-omp.c
 // RUN:   %clang-omp %[context-cflags] -o %t-s2s.exe %t-prt-omp.c
-// RUN:   %clang-acc %[context-cflags] -o %t.exe %s
+// RUN:   %clang-acc %[context-cflags] -o %t-trad.exe %s
 // RUN:   %for run-envs {
 // RUN:     %for exes {
-// RUN:       %[run-env] %[exe] > %t.out 2>&1
-// RUN:       FileCheck -input-file %t.out %s -match-full-lines \
+// RUN:       %[run-if] %[run-env] %[exe] > %t.out 2>&1
+// RUN:       %[run-if] FileCheck -input-file %t.out %s -match-full-lines \
 // RUN:         -check-prefixes=CHECK,CHECK-%[off-type] \
 // RUN:         -check-prefixes=CHECK-%[const-expr] \
 // RUN:         -check-prefixes=CHECK-%[const-expr]-%[off-type]

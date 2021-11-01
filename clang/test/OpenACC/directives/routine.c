@@ -23,6 +23,10 @@
 
 // Check -ast-print and -fopenacc[-ast]-print.
 //
+// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %acc-includes \
+// RUN:   %s \
+// RUN: | FileCheck -check-prefixes=PRT,PRT-AST %s
+//
 // Strip comments and blank lines so checking -fopenacc-print output is easier.
 // RUN: echo "// expected""-no-diagnostics" > %t-acc.c
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's, *\(//.*\)\?$,,' >> %t-acc.c
