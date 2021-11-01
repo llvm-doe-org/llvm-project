@@ -4,7 +4,8 @@
 // in warn-acc-omp-update-present.c.  The "if" clause is tested in update-if.c.
 //
 // The various cases covered here should be kept consistent with present.c,
-// no-create.c, and subarray-errors.c  For example, a subarray that extends a
+// no-create.c, and subarray-errors.c (the last is located in
+// openmp/libacc2omp/test/directives).  For example, a subarray that extends a
 // subarray already present is consistently considered not present, so the
 // present clause produces a runtime error and the no_create clause doesn't
 // allocate.

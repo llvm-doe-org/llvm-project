@@ -1,3 +1,5 @@
+// Check that OpenMP is ignored when OpenACC is enabled.
+
 // RUN: %data accs {
 // RUN:   (acc=-fopenacc                               )
 // RUN:   (acc='-fopenacc-ast-print=acc     >/dev/null')

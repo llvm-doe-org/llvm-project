@@ -1,33 +1,27 @@
 // Check various cases of subarray extension errors.
 //
 // The various cases covered here should be kept consistent with present.c,
-// no-create.c, and update.c.  The present and no_create clauses are tested
-// separately because they have special behavior.  This test file is meant to
-// cover copy, copyin, copyout, and create, which we just cycle through across
-// the various subarray extension cases.
+// no-create.c, and update.c from clang/test/OpenACC/directives.  The present
+// and no_create clauses are tested separately because they have special
+// behavior.  This test file is meant to cover copy, copyin, copyout, and
+// create, which we just cycle through across the various subarray extension
+// cases.
 
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         host-or-off=HOST not-crash-if-off=             )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         host-or-off=OFF  not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         host-or-off=OFF  not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-off=OFF  not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         host-or-off=OFF  not-crash-if-off='not --crash')
-// RUN: }
 //      # "acc parallel loop" should be about the same as "acc parallel", so a
 //      # few cases are probably sufficient for it.
 // RUN: %data cases {
-// RUN:   (case=caseDataSubarrayPresent          not-crash-if-fail=                   )
-// RUN:   (case=caseDataSubarrayDisjoint         not-crash-if-fail=                   )
-// RUN:   (case=caseDataSubarrayOverlapStart     not-crash-if-fail=%[not-crash-if-off])
-// RUN:   (case=caseDataSubarrayOverlapEnd       not-crash-if-fail=%[not-crash-if-off])
-// RUN:   (case=caseDataSubarrayConcat2          not-crash-if-fail=%[not-crash-if-off])
-// RUN:   (case=caseDataSubarrayNonSubarray      not-crash-if-fail=%[not-crash-if-off])
-// RUN:   (case=caseParallelSubarrayPresent      not-crash-if-fail=                   )
-// RUN:   (case=caseParallelSubarrayDisjoint     not-crash-if-fail=                   )
-// RUN:   (case=caseParallelSubarrayOverlapStart not-crash-if-fail=%[not-crash-if-off])
-// RUN:   (case=caseParallelSubarrayOverlapEnd   not-crash-if-fail=%[not-crash-if-off])
-// RUN:   (case=caseParallelSubarrayConcat2      not-crash-if-fail=%[not-crash-if-off])
-// RUN:   (case=caseParallelSubarrayNonSubarray  not-crash-if-fail=%[not-crash-if-off])
+// RUN:   (case=caseDataSubarrayPresent          not-crash-if-fail=                         )
+// RUN:   (case=caseDataSubarrayDisjoint         not-crash-if-fail=                         )
+// RUN:   (case=caseDataSubarrayOverlapStart     not-crash-if-fail='%if-host(,%not --crash)')
+// RUN:   (case=caseDataSubarrayOverlapEnd       not-crash-if-fail='%if-host(,%not --crash)')
+// RUN:   (case=caseDataSubarrayConcat2          not-crash-if-fail='%if-host(,%not --crash)')
+// RUN:   (case=caseDataSubarrayNonSubarray      not-crash-if-fail='%if-host(,%not --crash)')
+// RUN:   (case=caseParallelSubarrayPresent      not-crash-if-fail=                         )
+// RUN:   (case=caseParallelSubarrayDisjoint     not-crash-if-fail=                         )
+// RUN:   (case=caseParallelSubarrayOverlapStart not-crash-if-fail='%if-host(,%not --crash)')
+// RUN:   (case=caseParallelSubarrayOverlapEnd   not-crash-if-fail='%if-host(,%not --crash)')
+// RUN:   (case=caseParallelSubarrayConcat2      not-crash-if-fail='%if-host(,%not --crash)')
+// RUN:   (case=caseParallelSubarrayNonSubarray  not-crash-if-fail='%if-host(,%not --crash)')
 // RUN: }
 // RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
 // RUN: %for cases {
@@ -37,22 +31,19 @@
 
 // Check execution with normal compilation.
 //
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenacc \
-// RUN:             %[tgt-cflags] %acc-includes \
-// RUN:             -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
-// RUN:   %for cases {
-// RUN:     %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2>&1
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:       -match-full-lines -allow-empty \
-// RUN:       -check-prefixes=EXE,EXE-%[case] \
-// RUN:       -check-prefixes=EXE-%[host-or-off],EXE-%[case]-%[host-or-off]
-// RUN:   }
+// RUN: %clang-acc -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
+// RUN: %for cases {
+// RUN:   %[not-crash-if-fail] %t.exe %[case] > %t.out 2>&1
+// RUN:   FileCheck -input-file %t.out %s \
+// RUN:     -match-full-lines -allow-empty \
+// RUN:     -check-prefixes=EXE,EXE-%[case] \
+// RUN:     -check-prefixes=EXE-%if-host(HOST,OFF) \
+// RUN:     -check-prefixes=EXE-%[case]-%if-host(HOST,OFF)
 // RUN: }
 
 // END.
 
-// expected-no-diagnostics
+// expected-error 0 {{}}
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:

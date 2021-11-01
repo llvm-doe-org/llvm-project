@@ -5,7 +5,8 @@
 // suppressed OpenACC implicit DAs.
 //
 // The various cases covered here should be kept consistent with present.c,
-// update.c, and subarray-errors.c.  For example, a subarray that extends a
+// update.c, and subarray-errors.c (the last is located in
+// openmp/libacc2omp/test/directives).  For example, a subarray that extends a
 // subarray already present is consistently considered not present, so the
 // present clause produces a runtime error and the no_create clause doesn't
 // allocate.  However, INHERITED cases have no meaning for the present clause.
