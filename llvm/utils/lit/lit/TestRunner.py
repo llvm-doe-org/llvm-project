@@ -10,6 +10,7 @@ import platform
 import shutil
 import tempfile
 import threading
+import typing
 
 import io
 try:
@@ -1201,6 +1202,11 @@ def applySubstitutions(script, substitutions, recursion_limit=None):
         for a,b in substitutions:
             if kIsWindows:
                 b = b.replace("\\","\\\\")
+            # If b is not a function, then it's a replacement string.  In the
+            # latter case, it might have been passed as, for example, an
+            # integer, so convert it to a string.
+            if not isinstance(b, typing.Callable):
+                b = str(b)
             # re.compile() has a built-in LRU cache with 512 entries. In some
             # test suites lit ends up thrashing that cache, which made e.g.
             # check-llvm run 50% slower.  Use an explicit, unbounded cache
@@ -1208,7 +1214,7 @@ def applySubstitutions(script, substitutions, recursion_limit=None):
             # short-lived, since the set of substitutions is fairly small, and
             # since thrashing has such bad consequences, not bounding the cache
             # seems reasonable.
-            ln = _caching_re_compile(a).sub(str(b), escape(ln))
+            ln = _caching_re_compile(a).sub(b, escape(ln))
 
         # Strip the trailing newline and any extra whitespace.
         return ln.strip()
