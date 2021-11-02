@@ -1,6 +1,10 @@
 // Check present clauses on different constructs and with different values of
-// -fopenacc-present-omp.  Diagnostics about present in the translation are
-// tested in warn-acc-omp-map-present.c.
+// -fopenacc-present-omp.
+//
+// Diagnostics about the present map type modifier in the translation are
+// checked in diagnostics/warn-acc-omp-map-present.c.  Diagnostics about bad
+// -fopenacc-present-omp arguments are checked in
+// diagnostics/fopenacc-present-omp.c.
 //
 // The various cases covered here should be kept consistent with no-create.c,
 // update.c, and subarray-errors.c (the last is located in
@@ -9,82 +13,54 @@
 // present clause produces a runtime error and the no_create clause doesn't
 // allocate.
 
-// Check bad -fopenacc-present-omp values.
-//
-// RUN: %data bad-vals {
-// RUN:   (val=foo)
-// RUN:   (val=   )
-// RUN: }
-// RUN: %data bad-vals-cmds {
-// RUN:   (cmd='%clang -fopenacc'    )
-// RUN:   (cmd='%clang_cc1 -fopenacc')
-// RUN:   (cmd='%clang'              )
-// RUN:   (cmd='%clang_cc1'          )
-// RUN: }
-// RUN: %for bad-vals {
-// RUN:   %for bad-vals-cmds {
-// RUN:     not %[cmd] -fopenacc-present-omp=%[val] %s 2>&1 \
-// RUN:     | FileCheck -check-prefix=BAD-VAL -DVAL=%[val] %s
-// RUN:   }
-// RUN: }
-//
-// BAD-VAL: error: invalid value '[[VAL]]' in '-fopenacc-present-omp=[[VAL]]'
-
-// Define some interrelated data we use several times below.
-//
 // RUN: %data present-opts {
-// RUN:   (present-opt=-Wno-openacc-omp-map-present                                 present-mt=present,ompx_hold,alloc not-if-present=not not-crash-if-present='not --crash')
-// RUN:   (present-opt='-fopenacc-present-omp=present -Wno-openacc-omp-map-present' present-mt=present,ompx_hold,alloc not-if-present=not not-crash-if-present='not --crash')
-// RUN:   (present-opt=-fopenacc-present-omp=no-present                             present-mt=ompx_hold,alloc         not-if-present=    not-crash-if-present=             )
-// RUN: }
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         not-if-off-and-present=                  not-crash-if-off-and-present=                        not-if-off=    not-crash-if-off=             )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
+// RUN:   (present-opt=                                 present-mt=present,ompx_hold,alloc not-if-present=not not-crash-if-present='not --crash')
+// RUN:   (present-opt=-fopenacc-present-omp=present    present-mt=present,ompx_hold,alloc not-if-present=not not-crash-if-present='not --crash')
+// RUN:   (present-opt=-fopenacc-present-omp=no-present present-mt=ompx_hold,alloc         not-if-present=    not-crash-if-present=             )
 // RUN: }
 // RUN: %data use-vars {
 // RUN:   (use-var-cflags=            )
 // RUN:   (use-var-cflags=-DDO_USE_VAR)
 // RUN: }
-//      # Due to a bug in Clang's OpenMP implementation, codegen and runtime
-//      # behavior used to be differently for "present" clauses on "acc data"
-//      # vs. "acc parallel" if -fopenacc-present-omp=no-present were specified,
-//      # so check all interesting cases for each.  Specifically, without the
-//      # "present" modifier, a map type for an unused variable within "omp
-//      # target teams" was dropped by Clang, so there was no runtime error for
-//      # collisions with prior mappings.  However, in the case of "omp target
-//      # data", a variable in a map clause was always mapped, so such runtime
-//      # errors did occur.  Both now behave like the latter.
-//      #
-//      # "acc parallel loop" should be about the same as "acc parallel", so a
-//      # few cases are probably sufficient.
+
+// Due to a bug in Clang's OpenMP implementation, codegen and runtime behavior
+// used to behave differently for "present" clauses on "acc data" vs. "acc
+// parallel" if -fopenacc-present-omp=no-present were specified, so check all
+// interesting cases for each.  Specifically, without the "present" modifier, a
+// map type for an unused variable within "omp target teams" was dropped by
+// Clang, so there was no runtime error for collisions with prior mappings.
+// However, in the case of "omp target data", a variable in a map clause was
+// always mapped, so such runtime errors did occur.  Both now behave like the
+// latter.
+// 
+// "acc parallel loop" should be about the same as "acc parallel", so a few
+// cases are probably sufficient.
+//
 // RUN: %data cases {
-// RUN:   (case=caseDataScalarPresent            not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=data    )
-// RUN:   (case=caseDataScalarAbsent             not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=data    )
-// RUN:   (case=caseDataArrayPresent             not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=data    )
-// RUN:   (case=caseDataArrayAbsent              not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=data    )
-// RUN:   (case=caseDataSubarrayPresent          not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=data    )
-// RUN:   (case=caseDataSubarrayDisjoint         not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=data    )
-// RUN:   (case=caseDataSubarrayOverlapStart     not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=data    )
-// RUN:   (case=caseDataSubarrayOverlapEnd       not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=data    )
-// RUN:   (case=caseDataSubarrayConcat2          not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=data    )
-// RUN:   (case=caseDataSubarrayNonSubarray      not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=data    )
-// RUN:   (case=caseParallelScalarPresent        not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
-// RUN:   (case=caseParallelScalarAbsent         not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=parallel)
-// RUN:   (case=caseParallelArrayPresent         not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
-// RUN:   (case=caseParallelArrayAbsent          not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=parallel)
-// RUN:   (case=caseParallelSubarrayPresent      not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
-// RUN:   (case=caseParallelSubarrayDisjoint     not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=parallel)
-// RUN:   (case=caseParallelSubarrayOverlapStart not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=parallel)
-// RUN:   (case=caseParallelSubarrayOverlapEnd   not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=parallel)
-// RUN:   (case=caseParallelSubarrayConcat2      not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=parallel)
-// RUN:   (case=caseParallelSubarrayNonSubarray  not-if-fail=%[not-if-off]             not-crash-if-fail=%[not-crash-if-off]             not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=%[not-if-off] construct=parallel)
-// RUN:   (case=caseParallelLoopScalarPresent    not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
-// RUN:   (case=caseParallelLoopScalarAbsent     not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=parallel)
-// RUN:   (case=caseConstPresent                 not-if-fail=                          not-crash-if-fail=                                not-if-presentError=                          not-if-arrayExtError=              construct=parallel)
-// RUN:   (case=caseConstAbsent                  not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present] not-if-presentError=%[not-if-off-and-present] not-if-arrayExtError=              construct=parallel)
+// RUN:   (case=caseDataScalarPresent            not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=data    )
+// RUN:   (case=caseDataScalarAbsent             not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=data    )
+// RUN:   (case=caseDataArrayPresent             not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=data    )
+// RUN:   (case=caseDataArrayAbsent              not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=data    )
+// RUN:   (case=caseDataSubarrayPresent          not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=data    )
+// RUN:   (case=caseDataSubarrayDisjoint         not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=data    )
+// RUN:   (case=caseDataSubarrayOverlapStart     not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=data    )
+// RUN:   (case=caseDataSubarrayOverlapEnd       not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=data    )
+// RUN:   (case=caseDataSubarrayConcat2          not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=data    )
+// RUN:   (case=caseDataSubarrayNonSubarray      not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=data    )
+// RUN:   (case=caseParallelScalarPresent        not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=parallel)
+// RUN:   (case=caseParallelScalarAbsent         not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=parallel)
+// RUN:   (case=caseParallelArrayPresent         not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=parallel)
+// RUN:   (case=caseParallelArrayAbsent          not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=parallel)
+// RUN:   (case=caseParallelSubarrayPresent      not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=parallel)
+// RUN:   (case=caseParallelSubarrayDisjoint     not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=parallel)
+// RUN:   (case=caseParallelSubarrayOverlapStart not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=parallel)
+// RUN:   (case=caseParallelSubarrayOverlapEnd   not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=parallel)
+// RUN:   (case=caseParallelSubarrayConcat2      not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=parallel)
+// RUN:   (case=caseParallelSubarrayNonSubarray  not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=parallel)
+// RUN:   (case=caseParallelLoopScalarPresent    not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=parallel)
+// RUN:   (case=caseParallelLoopScalarAbsent     not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=parallel)
+// RUN:   (case=caseConstPresent                 not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=parallel)
+// RUN:   (case=caseConstAbsent                  not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=parallel)
 // RUN: }
 // RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
 // RUN: %for cases {
@@ -92,160 +68,35 @@
 // RUN: }
 // RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
 
-// Check -ast-dump before and after AST serialization.
-//
-// We include dump checking on only a few representative cases, which should be
-// more than sufficient to show it's working for the present clause.
-//
 // RUN: %for present-opts {
-// RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
-// RUN:          %[present-opt] -DCASES_HEADER='"%t-cases.h"' \
-// RUN:   | FileCheck -check-prefixes=DMP %s
-// RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %s \
-// RUN:          %[present-opt] -DCASES_HEADER='"%t-cases.h"'
-// RUN:   %clang_cc1 -ast-dump-all %t.ast \
-// RUN:   | FileCheck -check-prefixes=DMP %s
-// RUN: }
-
-// Check -ast-print and -fopenacc[-ast]-print.
-//
-// We include print checking on only a few representative cases, which should be
-// more than sufficient to show it's working for the present clause.
-//
-// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only \
-// RUN:        -DCASES_HEADER='"%t-cases.h"' %s \
-// RUN: | FileCheck -check-prefixes=PRT %s
-//
-// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
-// within prt-args after the first prt-args iteration, significantly shortening
-// the prt-args definition.
-//
-// Strip comments and blank lines so checking -fopenacc-print output is easier.
-// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
-// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
-//
-// RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
-// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
-// RUN: }
-// RUN: %data prt-args {
-// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-A       )
-// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT,PRT-A       )
-// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT,PRT-O       )
-// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT,PRT-A,PRT-AO)
-// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT,PRT-O,PRT-OA)
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT,PRT-A       )
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT,PRT-O       )
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT,PRT-A,PRT-AO)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT,PRT-O,PRT-OA)
-// RUN: }
-// RUN: %for present-opts {
-// RUN:   %for prt-args {
-// RUN:     %clang -Xclang -verify %[prt] %[present-opt] %t-acc.c \
-// RUN:            -DCASES_HEADER='"%t-cases.h"' \
-// RUN:            -Wno-openacc-omp-map-ompx-hold \
-// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DPRESENT_MT=%[present-mt] %s
-// RUN:   }
-// RUN: }
-
-// Check -ast-print after AST serialization.
-//
-// Some data related to printing (where to print comments about discarded
-// directives) is serialized and deserialized, so it's worthwhile to try all
-// OpenACC printing modes.
-//
-// RUN: %for present-opts {
-// RUN:   %clang -Xclang -verify -fopenacc %[present-opt] -emit-ast -o %t.ast \
-// RUN:          -DCASES_HEADER='"%t-cases.h"' %t-acc.c
-// RUN:   %for prt-args {
-// RUN:     %clang %[prt] %t.ast 2>&1 \
-// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DPRESENT_MT=%[present-mt] %s
-// RUN:   }
-// RUN: }
-
-// Can we print the OpenMP source code, compile, and run it successfully?
-//
-// We don't always bother to check this for offloading, but the present clause
-// has no effect when not offloading (that is, for shared memory), and one of
-// the main issues with the present clause is the various ways it can be
-// translated so it can be used in source-to-source when targeting other
-// compilers.  That is, we want to be sure source-to-source mode produces
-// working translations of the present clause in all cases.
-//
-// RUN: %for present-opts {
+// RUN:   %acc-check-dmp{                                                      \
+// RUN:     clang-args: %[present-opt] -DCASES_HEADER='"%t-cases.h"'}
+// RUN:   %acc-check-prt{                                                      \
+// RUN:     clang-args: %[present-opt] -DCASES_HEADER='"%t-cases.h"';          \
+// RUN:     fc-args:    -DPRESENT_MT=%[present-mt]}
 // RUN:   %for use-vars {
-// RUN:     %for prt-opts {
-// RUN:       %clang -Xclang -verify %[prt-opt]=omp %[present-opt] \
-// RUN:         %[use-var-cflags] %s > %t-%[prt-kind]-omp.c \
-// RUN:         -DCASES_HEADER='"%t-cases.h"' -Wno-openacc-omp-map-ompx-hold
-// RUN:       echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
-// RUN:       grep "^// nvptx64-" %s >> %t-%[prt-kind]-omp.c
-// RUN:     }
-// RUN:     %clang -fopenmp %fopenmp-version -Xclang -verify \
-// RUN:       %[use-var-cflags] -o %t.exe %t-ast-prt-omp.c \
-// RUN:       -DCASES_HEADER='"%t-cases.h"' -gline-tables-only
+// RUN:     %acc-check-exe-compile{                                            \
+// RUN:       clang-args: %[present-opt] -DCASES_HEADER='"%t-cases.h"'         \
+// RUN:                   %[use-var-cflags] -gline-tables-only}
 // RUN:     %for cases {
-// RUN:       %t.exe %[case] > %t.out 2> %t.err
-// RUN:       FileCheck -input-file %t.err -allow-empty %s \
-// RUN:         -check-prefixes=EXE-ERR,EXE-ERR-PASS \
-// RUN:         -check-prefixes=EXE-ERR-PASS-%[construct] \
-// RUN:         -check-prefixes=EXE-ERR-PRESENT \
-// RUN:         -check-prefixes=EXE-ERR-ARRAYEXT \
-// RUN:         -check-prefixes=EXE-ERR-PRESENT-ARRAYEXT
-// RUN:       FileCheck -input-file %t.out -allow-empty %s \
-// RUN:         -check-prefixes=EXE-OUT,EXE-OUT-PASS
-// RUN:     }
-// RUN:     %for tgts {
-// RUN:       %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] \
-// RUN:         %[use-var-cflags] -o %t.exe %t-prt-omp.c \
-// RUN:         -DCASES_HEADER='"%t-cases.h"' -gline-tables-only
-// RUN:       %for cases {
-// RUN:         %[run-if] %[not-crash-if-fail] %t.exe %[case] \
-// RUN:                   > %t.out 2> %t.err
-// RUN:         %[run-if] FileCheck -input-file %t.err -allow-empty %s \
-// RUN:           -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS \
-// RUN:           -check-prefixes=EXE-ERR-%[not-if-fail]PASS-%[construct] \
-// RUN:           -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT \
-// RUN:           -check-prefixes=EXE-ERR-%[not-if-arrayExtError]ARRAYEXT \
-// RUN:           -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT-%[not-if-arrayExtError]ARRAYEXT
-// RUN:         %[run-if] FileCheck -input-file %t.out -allow-empty %s \
-// RUN:           -check-prefixes=EXE-OUT,EXE-OUT-%[not-if-fail]PASS
-// RUN:       }
-// RUN:     }
-// RUN:   }
-// RUN: }
-
-// Check execution with normal compilation.
-//
-// RUN: %for present-opts {
-// RUN:   %for use-vars {
-// RUN:     %for tgts {
-// RUN:       %[run-if] %clang -fopenacc %[present-opt] \
-// RUN:                 %[tgt-cflags] %[use-var-cflags] -o %t.exe %s \
-// RUN:                 -DCASES_HEADER='"%t-cases.h"'
-// RUN:       %for cases {
-// RUN:         %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2> %t.err
-// RUN:         %[run-if] FileCheck -input-file %t.err -allow-empty %s \
-// RUN:           -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS \
-// RUN:           -check-prefixes=EXE-ERR-%[not-if-fail]PASS-%[construct] \
-// RUN:           -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT \
-// RUN:           -check-prefixes=EXE-ERR-%[not-if-arrayExtError]ARRAYEXT \
-// RUN:           -check-prefixes=EXE-ERR-%[not-if-presentError]PRESENT-%[not-if-arrayExtError]ARRAYEXT
-// RUN:         %[run-if] FileCheck -input-file %t.out -allow-empty %s \
-// RUN:           -check-prefixes=EXE-OUT,EXE-OUT-%[not-if-fail]PASS
-// RUN:       }
+// RUN:       %acc-check-exe-run{                                              \
+// RUN:         exe-args:  %[case];                                            \
+// RUN:         cmd-start: %[not-crash-if-fail]}
+// RUN:       %acc-check-exe-filecheck{                                        \
+// RUN:         fc-args: ;                                                     \
+// RUN:         fc-pres: %[not-if-fail]PASS,%[not-if-fail]PASS-%[construct],%[not-if-presentError]PRESENT,%[not-if-arrayExtError]ARRAYEXT,%[not-if-presentError]PRESENT-%[not-if-arrayExtError]ARRAYEXT}
 // RUN:     }
 // RUN:   }
 // RUN: }
 
 // END.
 
-// expected-no-diagnostics
+/* expected-error 0 {{}} */
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
-// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
-// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}} */
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
 
 #include <stdio.h>
 #include <string.h>
@@ -270,27 +121,23 @@
 FOREACH_CASE(AddCase)
 #undef AddCase
 
-//                      EXE-ERR-NOT: {{.}}
-//                          EXE-ERR: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
-//                     EXE-ERR-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
-//         EXE-ERR-notARRAYEXT-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
-//          EXE-ERR-notPRESENT-NEXT: Libomptarget message: device mapping required by 'present' map type modifier does not exist for host address 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes)
+//                      EXE-NOT: {{.}}
+//                          EXE: start
+//                     EXE-NEXT: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//                     EXE-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//         EXE-notARRAYEXT-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+//          EXE-notPRESENT-NEXT: Libomptarget message: device mapping required by 'present' map type modifier does not exist for host address 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes)
 //                                   # FIXME: Names like getTargetPointer are meaningless to users.
-//          EXE-ERR-notPRESENT-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer ('present' map type modifier).
-// EXE-ERR-PRESENT-notARRAYEXT-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping)
-//    EXE-ERR-notPASS-parallel-NEXT: Libomptarget error: Call to targetDataBegin failed, abort target.
-//    EXE-ERR-notPASS-parallel-NEXT: Libomptarget error: Failed to process data before launching the kernel.
-//             EXE-ERR-notPASS-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
-//             EXE-ERR-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//          EXE-notPRESENT-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer ('present' map type modifier).
+// EXE-PRESENT-notARRAYEXT-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping)
+//    EXE-notPASS-parallel-NEXT: Libomptarget error: Call to targetDataBegin failed, abort target.
+//    EXE-notPASS-parallel-NEXT: Libomptarget error: Failed to process data before launching the kernel.
+//             EXE-notPASS-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+//             EXE-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                   # An abort message usually follows.
-//              EXE-ERR-notPASS-NOT: Libomptarget
-//                 EXE-ERR-PASS-NOT: {{.}}
-
-//       EXE-OUT-NOT: {{.}}
-//           EXE-OUT: start
-// EXE-OUT-PASS-NEXT: end
-//       EXE-OUT-NOT: {{.}}
-
+//              EXE-notPASS-NOT: Libomptarget
+//                EXE-PASS-NEXT: end
+//                 EXE-PASS-NOT: {{.}}
 int main(int argc, char *argv[]) {
   CASE((*caseFn));
   if (argc != 2) {

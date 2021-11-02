@@ -1,4 +1,9 @@
 // Check when -Wopenacc-omp-map-ompx-no-alloc is enabled and when it's an error.
+//
+// Diagnostics about bad -fopenacc-no-create-omp arguments are checked in
+// diagnostics/fopenacc-no-create-omp.c.  The behavior of no_create clauses for
+// different values of -fopenacc-no-create-omp is checked in
+// directives/Tests/no-create.c.
 
 // RUN: %data prt-opts {
 //        # Default is error.

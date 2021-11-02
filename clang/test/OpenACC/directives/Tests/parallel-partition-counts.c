@@ -2,115 +2,25 @@
 // "acc parallel loop".  Correct usage of num_gangs is checked in parallel.c
 // and loop.c.
 
-// Check -ast-dump before and after AST serialization.
-//
-// RUN: %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
-// RUN: | FileCheck -check-prefix=DMP %s
-// RUN: %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %s
-// RUN: %clang_cc1 -ast-dump-all %t.ast \
-// RUN: | FileCheck -check-prefixes=DMP %s
-
-// Check -ast-print and -fopenacc[-ast]-print.
-//
-// RUN: %clang -Xclang -verify=noacc -Xclang -ast-print -fsyntax-only %s \
-// RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
-//
-// Strip comments and blank lines so checking -fopenacc-print output is easier.
-// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' > %t-acc.c
-//
-// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
-// within prt-args after the first prt-args iteration, significantly shortening
-// the prt-args definition.
-//
-// RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
-// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
-// RUN: }
-// RUN: %data prt-args {
-// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-A)
-// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT,PRT-A)
-// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT,PRT-O)
-// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT,PRT-A,PRT-AO)
-// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT,PRT-O,PRT-OA)
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-PRE,PRT,PRT-A)
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-PRE,PRT,PRT-O)
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-PRE,PRT,PRT-A,PRT-AO)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-PRE,PRT,PRT-O,PRT-OA)
-// RUN: }
-// RUN: %for prt-args {
-// RUN:   %clang -Xclang -verify %[prt] %t-acc.c \
-// RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
-// RUN: }
-
-// Check -ast-print after AST serialization.
-//
-// Some data related to printing (where to print comments about discarded
-// directives) is serialized and deserialized, so it's worthwhile to try all
-// OpenACC printing modes.
-//
-// RUN: %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast
-// RUN: %for prt-args {
-// RUN:   %clang %[prt] %t.ast 2>&1 \
-// RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
-// RUN: }
-
-// Can we print the OpenMP source code, compile, and run it successfully?
-//
-// FIXME: amdgcn doesn't yet support printf in a kernel.
-//
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                    '                      tgt=host    tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple '                      tgt=x86_64  tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple'                      tgt=ppc64le tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed' tgt=nvptx64 tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple -DTGT_USE_STDIO=0'     tgt=amdgcn  tgt-use-stdio=NO-TGT-USE-STDIO)
-// RUN: }
-//      # FIXME: amdgcn doesn't yet support printf in a kernel, but
-//      # -fopenacc-print=omp still fails to suppress macro expansion in some
-//      # kernels.  To avoid expanding TGT_PRINTF to printf here and thus
-//      # breaking amdgcn compilation later, we prototype TGT_PRINTF as a
-//      # function here, and then we define it to either printf or nothing when
-//      # we compile for the target.  When either of those limitations is fixed,
-//      # this hack can go away.  Once it does, the -DTGT_PRINTF=printf in the
-//      # %t-ast-prt-omp.c case below will be redundant and so can go away too.
-// RUN: %for prt-opts {
-// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-%[prt-kind]-omp.c \
-// RUN:     -DTGT_PRINTF_PROTO
-// RUN:   echo "// noacc""-no-diagnostics" >> %t-%[prt-kind]-omp.c
-// RUN: }
-// RUN: %clang -Xclang -verify=noacc -fopenmp %fopenmp-version \
-// RUN:   -Wno-unused-function -o %t %t-ast-prt-omp.c -DTGT_PRINTF=printf
-// RUN: %t 2 > %t.out 2>&1
-// RUN: FileCheck -input-file %t.out -check-prefixes=EXE,EXE-TGT-USE-STDIO %s
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify=%[tgt] -fopenmp %fopenmp-version \
-// RUN:     %[tgt-cflags] -o %t %t-prt-omp.c
-// RUN:   %[run-if] %t 2 > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out %s \
-// RUN:     -check-prefixes=EXE,EXE-%[tgt-use-stdio]
-// RUN: }
-
-// Check execution with normal compilation.
-//
 // FIXME: Several upstream compiler bugs were recently introduced that break
 // behavior when offloading to nvptx64 unless we add -O1 or higher, but that
 // causes many diagnostics like:
 //
 //   loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
 //
-// To avoid all this until upstream fixes it, we add -O1 -Wno-pass-failed.
+// To avoid all this until upstream fixes it, we add:
 //
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify=expected,%[tgt] -fopenacc %s -o %t \
-// RUN:                    %[tgt-cflags]
-// RUN:   %[run-if] %t 2 > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out %s \
-// RUN:     -check-prefixes=EXE,EXE-%[tgt-use-stdio]
-// RUN: }
+//   -O1 -Wno-pass-failed
+//
+// RUN: %acc-check-dmp{}
+// RUN: %acc-check-prt{}
+// RUN: %acc-check-exe{                                                        \
+// RUN:   clang-args: %if-tgt-nvptx64<-O1 -Wno-pass-failed|>;                  \
+// RUN:   exe-args: 2}
 
 // END.
 
-// noacc-no-diagnostics
+/* expected-error 0 {{}} */
 
 // FIXME: Clang produces spurious note diagnostics here.  This issue is not
 // limited to Clacc.  For example, using upstream Clang, the same spurious notes
@@ -149,13 +59,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifndef TGT_USE_STDIO
-# define TGT_USE_STDIO 1
-#endif
-
-#if TGT_PRINTF_PROTO
-int TGT_PRINTF(const char *, ...);
-#elif TGT_USE_STDIO
+#if TGT_USE_STDIO
 # define TGT_PRINTF(...) printf(__VA_ARGS__)
 #else
 # define TGT_PRINTF(...)
@@ -2022,12 +1926,12 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NOT:      OMP
     //
-    // PRT-PRE-NEXT: /* expected{{-warning.*}} */
+    // PRT-SRC-NEXT: /* acc{{-warning.*}} */
     // PRT-A-NEXT:   {{^ *}}#pragma acc parallel num_gangs(1) num_workers(1) vector_length(vl){{$}}
     // PRT-AO-NEXT:  {{^ *}}// #pragma omp target teams num_teams(1){{$}}
     // PRT-O-NEXT:   {{^ *}}#pragma omp target teams num_teams(1){{$}}
     // PRT-OA-NEXT:  {{^ *}}// #pragma acc parallel num_gangs(1) num_workers(1) vector_length(vl){{$}}
-    /* expected-warning@+1 {{'vector_length' ignored because argument is not an integer constant expression}} */
+    /* acc-warning@+1 {{'vector_length' ignored because argument is not an integer constant expression}} */
     #pragma acc parallel num_gangs(1) num_workers(1) vector_length(vl)
     // DMP: CompoundStmt
     // PRT-NEXT: {
@@ -2105,7 +2009,7 @@ int main(int argc, char *argv[]) {
     // DMP:              ForStmt
     // DMP:                CallExpr
     //
-    // PRT-PRE-NEXT: /* expected{{-warning.*}} */
+    // PRT-SRC-NEXT: /* acc{{-warning.*}} */
     //
     // PRT-NOACC-NEXT: for (int i = 0; i < 8; ++i) {
     // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
@@ -2143,7 +2047,7 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    // }
     // PRT-OA-NEXT:    // ^----------ACC----------^
     //
-    /* expected-warning@+1 {{'vector_length' ignored because argument is not an integer constant expression}} */
+    /* acc-warning@+1 {{'vector_length' ignored because argument is not an integer constant expression}} */
     #pragma acc parallel loop vector num_gangs(1) num_workers(1) vector_length(++vl)
     for (int i = 0; i < 8; ++i) {
       // sequential as partitioned only across 1 vector lane
@@ -2194,7 +2098,7 @@ int main(int argc, char *argv[]) {
     // DMP:            ForStmt
     // DMP:              CallExpr
     //
-    // PRT-PRE-NEXT: /* expected{{-warning.*}} */
+    // PRT-SRC-NEXT: /* acc{{-warning.*}} */
     //
     // PRT-NOACC-NEXT: for (int i = 0; i < 8; ++i) {
     // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
@@ -2234,7 +2138,7 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    // }
     // PRT-OA-NEXT:    // ^----------ACC----------^
     //
-    /* expected-warning@+1 {{'vector_length' ignored because argument is not an integer constant expression}} */
+    /* acc-warning@+1 {{'vector_length' ignored because argument is not an integer constant expression}} */
     #pragma acc parallel num_gangs(1) num_workers(1) vector_length(vl--)
     #pragma acc loop worker
     for (int i = 0; i < 8; ++i) {
@@ -2286,7 +2190,7 @@ int main(int argc, char *argv[]) {
     // DMP:            ForStmt
     // DMP:              CallExpr
     //
-    // PRT-PRE-NEXT: /* expected{{-warning.*}} */
+    // PRT-SRC-NEXT: /* acc{{-warning.*}} */
     //
     // PRT-NOACC-NEXT: for (int i = 0; i < 8; ++i) {
     // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
@@ -2331,7 +2235,7 @@ int main(int argc, char *argv[]) {
     // EXE-NEXT: foo
     // EXE-NEXT: bar
     //
-    /* expected-warning@+1 {{'vector_length' ignored because argument is not an integer constant expression}} */
+    /* acc-warning@+1 {{'vector_length' ignored because argument is not an integer constant expression}} */
     #pragma acc parallel num_gangs(1) num_workers(foo()) vector_length(bar())
     #pragma acc loop gang
     for (int i = 0; i < 8; ++i) {

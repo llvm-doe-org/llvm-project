@@ -1,4 +1,9 @@
 // Check when -Wopenacc-omp-update-present is enabled and when it's an error.
+//
+// Diagnostics about bad -fopenacc-update-present-omp arguments are checked in
+// diagnostics/fopenacc-update-present-omp.c.  The behavior of the update
+// directive for different values of -fopenacc-update-present-omp is checked in
+// directives/Tests/update.c.
 
 // RUN: %data prt-opts {
 //        # Default is error.

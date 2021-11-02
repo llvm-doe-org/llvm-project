@@ -5,136 +5,34 @@
 // codegen.  We do not attempt to check every alias in every scenario as that
 // would make the test much slower and more difficult to maintain.
 
-// Check -ast-dump before and after AST serialization.
-//
-// RUN: %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
-// RUN: | FileCheck -check-prefix=DMP %s
-// RUN: %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %s
-// RUN: %clang_cc1 -ast-dump-all %t.ast \
-// RUN: | FileCheck -check-prefixes=DMP %s
-
-// Check -ast-print and -fopenacc[-ast]-print.
-//
-// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
-// RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
-//
-// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
-// within prt-args after the first prt-args iteration, significantly shortening
-// the prt-args definition.
-//
-// Strip comments and blank lines so checking -fopenacc-print output is easier.
-// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
-// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
-//
-// RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
-// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
-// RUN: }
-// RUN: %data prt-args {
-// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT-A,PRT)
-// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT-A,PRT)
-// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT-O,PRT)
-// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT-A,PRT-AO,PRT)
-// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT-O,PRT-OA,PRT)
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-A,PRT,PRT-SRC)
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-O,PRT,PRT-SRC)
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-A,PRT-AO,PRT,PRT-SRC)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT,PRT-SRC)
-// RUN: }
-// RUN: %for prt-args {
-// RUN:   %clang -Xclang -verify %[prt] %t-acc.c \
-// RUN:          -Wno-openacc-omp-map-ompx-hold \
-// RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
-// RUN: }
-
-// Check -ast-print after AST serialization.
-//
-// Some data related to printing (where to print comments about discarded
-// directives) is serialized and deserialized, so it's worthwhile to try all
-// OpenACC printing modes.
-//
-// RUN: %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast
-// RUN: %for prt-args {
-// RUN:   %clang %[prt] %t.ast 2>&1 \
-// RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
-// RUN: }
-
-// For some Linux platforms, -latomic is required for OpenMP support for
-// reductions on complex types.
-
-// Can we print the OpenMP source code, compile, and run it successfully?
-//
-// -fopenacc-ast-print is guaranteed to expand includes and macros appropiately
-// only for the host architecture, so don't try to use it for offload
-// compilation.  Do try it for the host as it's good way to catch AST printing
-// issues.
-//
 // FIXME: Several upstream compiler bugs were recently introduced that break
 // behavior when offloading to nvptx64 unless we add -O1 or higher, but that
 // causes many diagnostics like:
 //
 //   loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
 //
-// To avoid all this until upstream fixes it, we add -O1 -Wno-pass-failed.
+// To avoid all this until upstream fixes it, we add:
 //
-// FIXME: amdgcn doesn't yet support printf in a kernel.
+//   -O1 -Wno-pass-failed.
 //
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST    tgt-cflags='                                     -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed -Xclang -verify=nvptx64' tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-amdgcn  tgt=AMDGCN  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify -DTGT_USE_STDIO=0'            tgt-use-stdio=NO-TGT-USE-STDIO)
-// RUN: }
-// RUN: %for prt-opts {
-// RUN:   %clang -Xclang -verify %[prt-opt]=omp %s > %t-%[prt-kind]-omp.c \
-// RUN:     -Wno-openacc-omp-map-ompx-hold
-// RUN:   echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
-// RUN: }
-// RUN: %clang -fopenmp %fopenmp-version -Xclang -verify -DTGT_HOST_EXE -o %t \
-// RUN:   %t-ast-prt-omp.c %libatomic -Wno-unused-function
-// RUN: %t > %t.out 2>&1
-// RUN: FileCheck -input-file %t.out %s \
-// RUN:   -check-prefixes=EXE,EXE-TGT-HOST \
-// RUN:   -check-prefixes=EXE-TGT-USE-STDIO,EXE-TGT-HOST-TGT-USE-STDIO
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] \
-// RUN:     -DTGT_%[tgt]_EXE -o %t %t-prt-omp.c %libatomic
-// RUN:   %[run-if] %t > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out %s \
-// RUN:     -check-prefixes=EXE,EXE-TGT-%[tgt] \
-// RUN:     -check-prefixes=EXE-%[tgt-use-stdio],EXE-TGT-%[tgt]-%[tgt-use-stdio]
-// RUN: }
-
-// Check execution with normal compilation.
-//
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenacc %s -o %t %libatomic \
-// RUN:                    %[tgt-cflags] -DTGT_%[tgt]_EXE
-// RUN:   %[run-if] %t > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out %s \
-// RUN:     -check-prefixes=EXE,EXE-TGT-%[tgt] \
-// RUN:     -check-prefixes=EXE-%[tgt-use-stdio],EXE-TGT-%[tgt]-%[tgt-use-stdio]
-// RUN: }
+// RUN: %acc-check-dmp{}
+// RUN: %acc-check-prt{}
+// RUN: %acc-check-exe{clang-args: %if-tgt-nvptx64<-O1 -Wno-pass-failed|>}
 
 // END.
 
-// expected-no-diagnostics
+/* expected-error 0 {{}} */
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
-// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
-// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}} */
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
 
 // FIXME: For amdgcn, we get the following compile error:
 //
 //   File /home/jdenny/llvm/build/lib/clang/14.0.0/include/__clang_hip_math.h Line 23: 'omp.h' file not found
-#if !TGT_AMDGCN_EXE
+#if !TGT_AMDGCN
 # include <complex.h>
-#endif
-
-#ifndef TGT_USE_STDIO
-# define TGT_USE_STDIO 1
 #endif
 
 #if TGT_USE_STDIO
@@ -379,8 +277,8 @@ int main() {
     // PRT-NEXT: printf
     // PRT-NEXT: printf
     // EXE-NEXT: out0 = -8.5
-    // EXE-TGT-HOST-NEXT: out1 = -7.4
-    // EXE-TGT-HOST-NEXT: out2 = -6.3
+    // EXE-HOST-NEXT: out1 = -7.4
+    // EXE-HOST-NEXT: out2 = -6.3
     // EXE-TGT-X86_64-NEXT: out1 = 1.4
     // EXE-TGT-X86_64-NEXT: out2 =
     // EXE-TGT-PPC64LE-NEXT: out1 = 1.4
@@ -647,8 +545,8 @@ int main() {
   // reductions.
   // FIXME: Clang fails an assert here for amdgcn offloading.
 
-// PRT-SRC-NEXT: #if !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
-#if !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_NVPTX64 && !TGT_AMDGCN
+#if !TGT_NVPTX64 && !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: _Bool out0 = 1;
@@ -737,8 +635,8 @@ int main() {
       } // PRT-NEXT: }
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      // EXE-TGT-HOST-DAG: out1 = 0
-      // EXE-TGT-HOST-DAG: out1 = 0
+      // EXE-HOST-DAG: out1 = 0
+      // EXE-HOST-DAG: out1 = 0
       // EXE-TGT-X86_64-DAG: out1 = 0
       // EXE-TGT-X86_64-DAG: out1 = 0
       // EXE-TGT-PPC64LE-DAG: out1 = 0
@@ -746,8 +644,8 @@ int main() {
       TGT_PRINTF("out1 = %d\n", out1);
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      // EXE-TGT-HOST-DAG: out2 = 0
-      // EXE-TGT-HOST-DAG: out2 = 0
+      // EXE-HOST-DAG: out2 = 0
+      // EXE-HOST-DAG: out2 = 0
       // EXE-TGT-X86_64-DAG: out2 = 0
       // EXE-TGT-X86_64-DAG: out2 = 0
       // EXE-TGT-PPC64LE-DAG: out2 = 0
@@ -755,8 +653,8 @@ int main() {
       TGT_PRINTF("out2 = %d\n", out2);
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      // EXE-TGT-HOST-DAG: in: 11
-      // EXE-TGT-HOST-DAG: in: 11
+      // EXE-HOST-DAG: in: 11
+      // EXE-HOST-DAG: in: 11
       // EXE-TGT-X86_64-DAG: in: 11
       // EXE-TGT-X86_64-DAG: in: 11
       // EXE-TGT-PPC64LE-DAG: in: 11
@@ -765,25 +663,25 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-TGT-HOST-NEXT: out0 = 0
+    // EXE-HOST-NEXT: out0 = 0
     // EXE-TGT-X86_64-NEXT: out0 = 0
     // EXE-TGT-PPC64LE-NEXT: out0 = 0
     printf("out0 = %d\n", out0);
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-TGT-HOST-NEXT: out1 = 1
+    // EXE-HOST-NEXT: out1 = 1
     // EXE-TGT-X86_64-NEXT: out1 = 1
     // EXE-TGT-PPC64LE-NEXT: out1 = 1
     printf("out1 = %d\n", out1);
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-TGT-HOST-NEXT: out2 = 1
+    // EXE-HOST-NEXT: out2 = 1
     // EXE-TGT-X86_64-NEXT: out2 = 1
     // EXE-TGT-PPC64LE-NEXT: out2 = 1
     printf("out2 = %d\n", out2);
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-TGT-HOST-NEXT: out3 = 1
+    // EXE-HOST-NEXT: out3 = 1
     // EXE-TGT-X86_64-NEXT: out3 = 1
     // EXE-TGT-PPC64LE-NEXT: out3 = 1
     printf("out3 = %d\n", out3);
@@ -896,8 +794,8 @@ int main() {
     // PRT-NEXT: printf
     // PRT-NEXT: printf
     // EXE-NEXT: out0 = -8.5
-    // EXE-TGT-HOST-NEXT: out1 = -7.4
-    // EXE-TGT-HOST-NEXT: out2 = -6.3
+    // EXE-HOST-NEXT: out1 = -7.4
+    // EXE-HOST-NEXT: out2 = -6.3
     // EXE-TGT-X86_64-NEXT: out1 = 1.4
     // EXE-TGT-X86_64-NEXT: out2 =
     // EXE-TGT-PPC64LE-NEXT: out1 = 1.4
@@ -914,8 +812,8 @@ int main() {
   // Reduction var is not private at loop due to copy clause implied by
   // reduction on combined construct.
 
-// PRT-SRC-NEXT: #if !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
-#if !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_NVPTX64 && !TGT_AMDGCN
+#if !TGT_NVPTX64 && !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: _Bool out = 1;
@@ -963,7 +861,7 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-TGT-HOST-NEXT: out = 0
+    // EXE-HOST-NEXT: out = 0
     // EXE-TGT-X86_64-NEXT: out = 0
     // EXE-TGT-PPC64LE-NEXT: out = 0
     printf("out = %d\n", out);
@@ -988,8 +886,8 @@ int main() {
   // Reduction vars are private at the loop except out1 due to the copy clause
   // implied by the reduction on the gang loop.
 
-// PRT-SRC-NEXT: #if !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
-#if !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_NVPTX64 && !TGT_AMDGCN
+#if !TGT_NVPTX64 && !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: _Complex double out0 = 2;
@@ -1086,8 +984,8 @@ int main() {
         in = in || 10;
       } // PRT-NEXT: }
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      // EXE-TGT-HOST-DAG: out2: 0.0 + 0.0i
-      // EXE-TGT-HOST-DAG: out2: 0.0 + 0.0i
+      // EXE-HOST-DAG: out2: 0.0 + 0.0i
+      // EXE-HOST-DAG: out2: 0.0 + 0.0i
       // EXE-TGT-X86_64-DAG: out2: 0.0 + 0.0i
       // EXE-TGT-X86_64-DAG: out2: 0.0 + 0.0i
       // EXE-TGT-PPC64LE-DAG: out2: 0.0 + 0.0i
@@ -1095,8 +993,8 @@ int main() {
       TGT_PRINTF("out2: %.1f + %.1fi\n", creal(out2), cimag(out2));
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      //    EXE-TGT-HOST-DAG: in: 1.0
-      //    EXE-TGT-HOST-DAG: in: 1.0
+      //        EXE-HOST-DAG: in: 1.0
+      //        EXE-HOST-DAG: in: 1.0
       //  EXE-TGT-X86_64-DAG: in: 1.0
       //  EXE-TGT-X86_64-DAG: in: 1.0
       // EXE-TGT-PPC64LE-DAG: in: 1.0
@@ -1105,25 +1003,25 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out0 = 0.0 + 0.0i
+    //        EXE-HOST-NEXT: out0 = 0.0 + 0.0i
     //  EXE-TGT-X86_64-NEXT: out0 = 0.0 + 0.0i
     // EXE-TGT-PPC64LE-NEXT: out0 = 0.0 + 0.0i
     printf("out0 = %.1f + %.1fi\n", creal(out0), cimag(out0));
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out1 = 0.0 + 0.0i
+    //        EXE-HOST-NEXT: out1 = 0.0 + 0.0i
     //  EXE-TGT-X86_64-NEXT: out1 = 0.0 + 0.0i
     // EXE-TGT-PPC64LE-NEXT: out1 = 0.0 + 0.0i
     printf("out1 = %.1f + %.1fi\n", creal(out1), cimag(out1));
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out2 = 4.0 + 0.0i
+    //        EXE-HOST-NEXT: out2 = 4.0 + 0.0i
     //  EXE-TGT-X86_64-NEXT: out2 = 4.0 + 0.0i
     // EXE-TGT-PPC64LE-NEXT: out2 = 4.0 + 0.0i
     printf("out2 = %.1f + %.1fi\n", creal(out2), cimag(out2));
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out3 = 5.0 + 0.0i
+    //        EXE-HOST-NEXT: out3 = 5.0 + 0.0i
     //  EXE-TGT-X86_64-NEXT: out3 = 5.0 + 0.0i
     // EXE-TGT-PPC64LE-NEXT: out3 = 5.0 + 0.0i
     printf("out3 = %.1f + %.1fi\n", creal(out3), cimag(out3));
@@ -1135,8 +1033,8 @@ int main() {
   // clause.
 
   // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: double out0 =
@@ -1242,9 +1140,9 @@ int main() {
     // PRT-NEXT: printf
     // PRT-NEXT: printf
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out0 = -4.1
-    //    EXE-TGT-HOST-NEXT: out1 = -3.0
-    //    EXE-TGT-HOST-NEXT: out2 = -1.9
+    //        EXE-HOST-NEXT: out0 = -4.1
+    //        EXE-HOST-NEXT: out1 = -3.0
+    //        EXE-HOST-NEXT: out2 = -1.9
     //  EXE-TGT-X86_64-NEXT: out0 = -4.1
     //  EXE-TGT-X86_64-NEXT: out1 = 1.4
     //  EXE-TGT-X86_64-NEXT: out2 =
@@ -1265,8 +1163,8 @@ int main() {
   // reduction on combined construct.
 
   // FIXME: We couldn't include complex.h for amdgcn (see above).
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: _Complex double out = 2;
@@ -1317,7 +1215,7 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out = 0.0 + 0.0i
+    //        EXE-HOST-NEXT: out = 0.0 + 0.0i
     //  EXE-TGT-X86_64-NEXT: out = 0.0 + 0.0i
     // EXE-TGT-PPC64LE-NEXT: out = 0.0 + 0.0i
     // EXE-TGT-NVPTX64-NEXT: out = 0.0 + 0.0i
@@ -1337,8 +1235,8 @@ int main() {
   // OpenMP offloading to ppc64le isn't supported for long double.
   // OpenMP offloading to amdgcn isn't supported for long double.
 
-// PRT-SRC-NEXT: #if !TGT_PPC64LE_EXE && !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
-#if !TGT_PPC64LE_EXE && !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_PPC64LE && !TGT_NVPTX64 && !TGT_AMDGCN
+#if !TGT_PPC64LE && !TGT_NVPTX64 && !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: long out0 = 5;
@@ -1436,27 +1334,27 @@ int main() {
       } // PRT-NEXT: }
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      // EXE-TGT-HOST-DAG:   out2 = 17
-      // EXE-TGT-HOST-DAG:   out2 = 17
+      //       EXE-HOST-DAG: out2 = 17
+      //       EXE-HOST-DAG: out2 = 17
       // EXE-TGT-X86_64-DAG: out2 = 17
       // EXE-TGT-X86_64-DAG: out2 = 17
       TGT_PRINTF("out2 = %ld\n", out2);
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      // EXE-TGT-HOST-DAG:   in: -3.0
-      // EXE-TGT-HOST-DAG:   in: -3.0
+      //       EXE-HOST-DAG: in: -3.0
+      //       EXE-HOST-DAG: in: -3.0
       // EXE-TGT-X86_64-DAG: in: -3.0
       // EXE-TGT-X86_64-DAG: in: -3.0
       TGT_PRINTF("in: %.1f\n", (double)in);
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-TGT-HOST-NEXT:   out0 = 25
+    //       EXE-HOST-NEXT: out0 = 25
     // EXE-TGT-X86_64-NEXT: out0 = 25
     printf("out0 = %ld\n", out0);
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-TGT-HOST-NEXT:   out1 = 26
+    //       EXE-HOST-NEXT: out1 = 26
     // EXE-TGT-X86_64-NEXT: out1 = 26
     printf("out1 = %ld\n", out1);
   } // PRT-NEXT: }
@@ -1572,16 +1470,16 @@ int main() {
     // PRT-NEXT: printf
     // PRT-NEXT: printf
     // EXE-NEXT: out0 = -4.1
-    // EXE-TGT-HOST-NEXT: out1 = -3.0
-    // EXE-TGT-HOST-NEXT: out2 = -1.9
-    // EXE-TGT-X86_64-NEXT: out1 = 1.4
-    // EXE-TGT-X86_64-NEXT: out2 =
+    //        EXE-HOST-NEXT: out1 = -3.0
+    //        EXE-HOST-NEXT: out2 = -1.9
+    //  EXE-TGT-X86_64-NEXT: out1 = 1.4
+    //  EXE-TGT-X86_64-NEXT: out2 =
     // EXE-TGT-PPC64LE-NEXT: out1 = 1.4
     // EXE-TGT-PPC64LE-NEXT: out2 =
     // EXE-TGT-NVPTX64-NEXT: out1 = 1.4
     // EXE-TGT-NVPTX64-NEXT: out2 =
-    // EXE-TGT-AMDGCN-NEXT: out1 = 1.4
-    // EXE-TGT-AMDGCN-NEXT: out2 =
+    //  EXE-TGT-AMDGCN-NEXT: out1 = 1.4
+    //  EXE-TGT-AMDGCN-NEXT: out2 =
     printf("out0 = %.1f\n", out0);
     printf("out1 = %.1f\n", out1);
     printf("out2 = %.1f\n", out2);
@@ -1652,8 +1550,8 @@ int main() {
   // implied by the reduction on the gang loop.
 
   // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: float out0 = -5;
@@ -1752,15 +1650,15 @@ int main() {
       } // PRT-NEXT: }
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      //    EXE-TGT-HOST-DAG: out2 = -63.0
+      //        EXE-HOST-DAG: out2 = -63.0
       //  EXE-TGT-X86_64-DAG: out2 = -63.0
       // EXE-TGT-PPC64LE-DAG: out2 = -63.0
       // EXE-TGT-NVPTX64-DAG: out2 = -63.0
       TGT_PRINTF("out2 = %.1f\n", out2);
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      //    EXE-TGT-HOST-DAG: in: 11
-      //    EXE-TGT-HOST-DAG: in: 11
+      //        EXE-HOST-DAG: in: 11
+      //        EXE-HOST-DAG: in: 11
       //  EXE-TGT-X86_64-DAG: in: 11
       //  EXE-TGT-X86_64-DAG: in: 11
       // EXE-TGT-PPC64LE-DAG: in: 11
@@ -1771,28 +1669,28 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out0 = -405.0
+    //        EXE-HOST-NEXT: out0 = -405.0
     //  EXE-TGT-X86_64-NEXT: out0 = -405.0
     // EXE-TGT-PPC64LE-NEXT: out0 = -405.0
     // EXE-TGT-NVPTX64-NEXT: out0 = -405.0
     printf("out0 = %.1f\n", out0);
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out1 = -486.0
+    //        EXE-HOST-NEXT: out1 = -486.0
     //  EXE-TGT-X86_64-NEXT: out1 = -486.0
     // EXE-TGT-PPC64LE-NEXT: out1 = -486.0
     // EXE-TGT-NVPTX64-NEXT: out1 = -486.0
     printf("out1 = %.1f\n", out1);
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out2 = -7.0
+    //        EXE-HOST-NEXT: out2 = -7.0
     //  EXE-TGT-X86_64-NEXT: out2 = -7.0
     // EXE-TGT-PPC64LE-NEXT: out2 = -7.0
     // EXE-TGT-NVPTX64-NEXT: out2 = -7.0
     printf("out2 = %.1f\n", out2);
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out3 = -8.0
+    //        EXE-HOST-NEXT: out3 = -8.0
     //  EXE-TGT-X86_64-NEXT: out3 = -8.0
     // EXE-TGT-PPC64LE-NEXT: out3 = -8.0
     // EXE-TGT-NVPTX64-NEXT: out3 = -8.0
@@ -1805,8 +1703,8 @@ int main() {
   // clause.
 
   // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: double out0 =
@@ -1865,12 +1763,12 @@ int main() {
       // PRT-NEXT: {{TGT_PRINTF|printf}}
       // PRT-NEXT: {{TGT_PRINTF|printf}}
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      //    EXE-TGT-HOST-DAG: out0 init = 0.0{{$}}
-      //    EXE-TGT-HOST-DAG: out0 init = 0.0{{$}}
-      //    EXE-TGT-HOST-DAG: out1 init = 0.0{{$}}
-      //    EXE-TGT-HOST-DAG: out1 init = 0.0{{$}}
-      //    EXE-TGT-HOST-DAG: out2 init = 0.0{{$}}
-      //    EXE-TGT-HOST-DAG: out2 init = 0.0{{$}}
+      //        EXE-HOST-DAG: out0 init = 0.0{{$}}
+      //        EXE-HOST-DAG: out0 init = 0.0{{$}}
+      //        EXE-HOST-DAG: out1 init = 0.0{{$}}
+      //        EXE-HOST-DAG: out1 init = 0.0{{$}}
+      //        EXE-HOST-DAG: out2 init = 0.0{{$}}
+      //        EXE-HOST-DAG: out2 init = 0.0{{$}}
       //  EXE-TGT-X86_64-DAG: out0 init = 0.0{{$}}
       //  EXE-TGT-X86_64-DAG: out0 init = 0.0{{$}}
       //  EXE-TGT-X86_64-DAG: out1 init = 0.0{{$}}
@@ -1931,9 +1829,9 @@ int main() {
     // PRT-NEXT: printf
     // PRT-NEXT: printf
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out0 = -4.1
-    //    EXE-TGT-HOST-NEXT: out1 = -3.0
-    //    EXE-TGT-HOST-NEXT: out2 = -1.9
+    //        EXE-HOST-NEXT: out0 = -4.1
+    //        EXE-HOST-NEXT: out1 = -3.0
+    //        EXE-HOST-NEXT: out2 = -1.9
     //  EXE-TGT-X86_64-NEXT: out0 = -4.1
     //  EXE-TGT-X86_64-NEXT: out1 = 1.4
     //  EXE-TGT-X86_64-NEXT: out2 =
@@ -1954,8 +1852,8 @@ int main() {
   // reduction on combined construct.
 
   // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: float out = -5;
@@ -2008,7 +1906,7 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-     //   EXE-TGT-HOST-NEXT: out = -405.0
+     //       EXE-HOST-NEXT: out = -405.0
      // EXE-TGT-X86_64-NEXT: out = -405.0
     // EXE-TGT-PPC64LE-NEXT: out = -405.0
     // EXE-TGT-NVPTX64-NEXT: out = -405.0
@@ -2218,8 +2116,8 @@ int main() {
   //--------------------------------------------------
 
   // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out = 3;
@@ -2277,8 +2175,8 @@ int main() {
       } // PRT-NEXT: }
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      //    EXE-TGT-HOST-NEXT: in = 7{{$}}
-      //    EXE-TGT-HOST-NEXT: in = 7{{$}}
+      //        EXE-HOST-NEXT: in = 7{{$}}
+      //        EXE-HOST-NEXT: in = 7{{$}}
       //  EXE-TGT-X86_64-NEXT: in = 7{{$}}
       //  EXE-TGT-X86_64-NEXT: in = 7{{$}}
       // EXE-TGT-PPC64LE-NEXT: in = 7{{$}}
@@ -2289,7 +2187,7 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out = 11
+    //        EXE-HOST-NEXT: out = 11
     //  EXE-TGT-X86_64-NEXT: out = 11
     // EXE-TGT-PPC64LE-NEXT: out = 11
     // EXE-TGT-NVPTX64-NEXT: out = 11
@@ -2299,8 +2197,8 @@ int main() {
 #endif
 
   // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out = 3;
@@ -2352,7 +2250,7 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out = 11
+    //        EXE-HOST-NEXT: out = 11
     //  EXE-TGT-X86_64-NEXT: out = 11
     // EXE-TGT-PPC64LE-NEXT: out = 11
     // EXE-TGT-NVPTX64-NEXT: out = 11
@@ -2496,8 +2394,8 @@ int main() {
   //--------------------------------------------------
 
   // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out = 3;
@@ -2556,8 +2454,8 @@ int main() {
       } // PRT-NEXT: }
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      //    EXE-TGT-HOST-NEXT: in = 7{{$}}
-      //    EXE-TGT-HOST-NEXT: in = 7{{$}}
+      //        EXE-HOST-NEXT: in = 7{{$}}
+      //        EXE-HOST-NEXT: in = 7{{$}}
       //  EXE-TGT-X86_64-NEXT: in = 7{{$}}
       //  EXE-TGT-X86_64-NEXT: in = 7{{$}}
       // EXE-TGT-PPC64LE-NEXT: in = 7{{$}}
@@ -2568,7 +2466,7 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out = 11
+    //        EXE-HOST-NEXT: out = 11
     //  EXE-TGT-X86_64-NEXT: out = 11
     // EXE-TGT-PPC64LE-NEXT: out = 11
     // EXE-TGT-NVPTX64-NEXT: out = 11
@@ -2578,8 +2476,8 @@ int main() {
 #endif
 
   // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out = 3;
@@ -2633,7 +2531,7 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out = 11
+    //        EXE-HOST-NEXT: out = 11
     //  EXE-TGT-X86_64-NEXT: out = 11
     // EXE-TGT-PPC64LE-NEXT: out = 11
     // EXE-TGT-NVPTX64-NEXT: out = 11
@@ -2647,8 +2545,8 @@ int main() {
   //--------------------------------------------------
 
   // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out = 3;
@@ -2742,8 +2640,8 @@ int main() {
       } // PRT-NEXT: }
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      //    EXE-TGT-HOST-NEXT: in = 11{{$}}
-      //    EXE-TGT-HOST-NEXT: in = 11{{$}}
+      //        EXE-HOST-NEXT: in = 11{{$}}
+      //        EXE-HOST-NEXT: in = 11{{$}}
       //  EXE-TGT-X86_64-NEXT: in = 11{{$}}
       //  EXE-TGT-X86_64-NEXT: in = 11{{$}}
       // EXE-TGT-PPC64LE-NEXT: in = 11{{$}}
@@ -2754,7 +2652,7 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out = 19
+    //        EXE-HOST-NEXT: out = 19
     //  EXE-TGT-X86_64-NEXT: out = 19
     // EXE-TGT-PPC64LE-NEXT: out = 19
     // EXE-TGT-NVPTX64-NEXT: out = 19
@@ -2764,8 +2662,8 @@ int main() {
 #endif
 
   // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out = 3;
@@ -2860,7 +2758,7 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out = 19
+    //        EXE-HOST-NEXT: out = 19
     //  EXE-TGT-X86_64-NEXT: out = 19
     // EXE-TGT-PPC64LE-NEXT: out = 19
     // EXE-TGT-NVPTX64-NEXT: out = 19
@@ -3342,8 +3240,8 @@ int main() {
   // order to access its original value.
 
   // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out0 = 5;
@@ -3507,9 +3405,9 @@ int main() {
     // PRT-NEXT: printf
     // PRT-NEXT: printf
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out0 = 5
-    //    EXE-TGT-HOST-NEXT: out1 = 6
-    //    EXE-TGT-HOST-NEXT: out2 = 7
+    //        EXE-HOST-NEXT: out0 = 5
+    //        EXE-HOST-NEXT: out1 = 6
+    //        EXE-HOST-NEXT: out2 = 7
     //  EXE-TGT-X86_64-NEXT: out0 = 5
     //  EXE-TGT-X86_64-NEXT: out1 = 6
     //  EXE-TGT-X86_64-NEXT: out2 = 7
@@ -3537,8 +3435,8 @@ int main() {
   // shouldn't have any observable effect.
 
   // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out0 = 5;
@@ -3707,9 +3605,9 @@ int main() {
     // PRT-NEXT: printf
     // PRT-NEXT: printf
     // PRT-NEXT: printf
-    //    EXE-TGT-HOST-NEXT: out0 = 5
-    //    EXE-TGT-HOST-NEXT: out1 = 22
-    //    EXE-TGT-HOST-NEXT: out2 = 7
+    //        EXE-HOST-NEXT: out0 = 5
+    //        EXE-HOST-NEXT: out1 = 22
+    //        EXE-HOST-NEXT: out2 = 7
     //  EXE-TGT-X86_64-NEXT: out0 = 5
     //  EXE-TGT-X86_64-NEXT: out1 = 22
     //  EXE-TGT-X86_64-NEXT: out2 = 7

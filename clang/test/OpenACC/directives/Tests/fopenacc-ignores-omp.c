@@ -1,47 +1,35 @@
 // Check that OpenMP is ignored when OpenACC is enabled.
 
-// RUN: %data accs {
-// RUN:   (acc=-fopenacc                               )
-// RUN:   (acc='-fopenacc-ast-print=acc     >/dev/null')
-// RUN:   (acc='-fopenacc-ast-print=omp     >/dev/null')
-// RUN:   (acc='-fopenacc-ast-print=acc-omp >/dev/null')
-// RUN:   (acc='-fopenacc-ast-print=omp-acc >/dev/null')
-// RUN:   (acc='-fopenacc-print=acc         >/dev/null')
-// RUN:   (acc='-fopenacc-print=omp         >/dev/null')
-// RUN:   (acc='-fopenacc-print=acc-omp     >/dev/null')
-// RUN:   (acc='-fopenacc-print=omp-acc     >/dev/null')
-// RUN: }
-// RUN: %data prts {
-// RUN:   (acc='-Xclang -ast-print -fsyntax-only -fopenacc' prt=PRT,PRT-A)
-// RUN:   (acc=-fopenacc-ast-print=acc                      prt=PRT,PRT-A)
-// RUN:   (acc=-fopenacc-ast-print=omp                      prt=PRT,PRT-O)
-// RUN:   (acc=-fopenacc-ast-print=acc-omp                  prt=PRT,PRT-A,PRT-AO)
-// RUN:   (acc=-fopenacc-ast-print=omp-acc                  prt=PRT,PRT-O,PRT-OA)
-// RUN:   (acc=-fopenacc-print=acc                          prt=PRT,PRT-A,PRT-SRC,PRT-A-SRC)
-// RUN:   (acc=-fopenacc-print=omp                          prt=PRT,PRT-O,PRT-SRC,PRT-O-SRC)
-// RUN:   (acc=-fopenacc-print=acc-omp                      prt=PRT,PRT-A,PRT-AO,PRT-SRC,PRT-A-SRC,PRT-AO-SRC)
-// RUN:   (acc=-fopenacc-print=omp-acc                      prt=PRT,PRT-O,PRT-OA,PRT-SRC,PRT-O-SRC,PRT-OA-SRC)
-// RUN: }
-// RUN: %for accs {
-// RUN:   %clang_cc1 -verify -Wsource-uses-openmp %[acc] -DCC1 %s
-// RUN:   %clang -Xclang -verify -Wsource-uses-openmp %[acc] %s
-// RUN:   %clang -Xclang -verify -Wsource-uses-openmp %[acc] %s -DONLY_IN_ACC
-// RUN: }
-// RUN: %clang -Xclang -verify -Wsource-uses-openmp -fopenacc %s \
-// RUN:        -Xclang -ast-dump -fsyntax-only \
-// RUN: | FileCheck -check-prefix DMP %s
-// RUN: %for prts {
-// RUN:   %clang -Xclang -verify -Wsource-uses-openmp %[acc] %s \
-// RUN:   | FileCheck -check-prefixes=%[prt] %s
-// RUN: }
-// RUN: %clang -Xclang -verify -Wsource-uses-openmp -fopenacc %s -o %t
-// RUN: %t 2 2>&1 | FileCheck -check-prefixes=EXE %s
+// Checking compilation after translation to OpenMP doesn't make sense for this
+// test: -fopenacc-print=omp keeps all original source code including the
+// original OpenMP directives, which would then be compiled.  However, this test
+// is designed to ensure OpenMP directives are *not* effective, and so it only
+// makes sense for traditional compilation.
+//
+// FIXME: amdgcn doesn't yet support printf in a kernel.  Unfortunately, that
+// means most of our execution checks on amdgcn don't verify much except that
+// nothing crashes.
+//
+// RUN: %acc-check-dmp{clang-args: -Wsource-uses-openmp}
+// RUN: %acc-check-prt{clang-args: -Wsource-uses-openmp}
+// RUN: %acc-check-prt{clang-args: -Wsource-uses-openmp -DONLY_IN_ACC}
+// RUN: %acc-check-exe-no-s2s{clang-args: -Wsource-uses-openmp}
+
 // END.
 
-#if CC1
-int printf(const char *, ...);
+#include <stdio.h>
+
+/* expected-error 0 {{}} */
+
+// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
+// issue is not limited to Clacc and is present upstream:
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}} */
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
+
+#if TGT_USE_STDIO
+# define TGT_PRINTF(...) printf(__VA_ARGS__)
 #else
-# include <stdio.h>
+# define TGT_PRINTF(...)
 #endif
 
 int main() {
@@ -56,15 +44,18 @@ int main() {
   // DMP-NOT: OMP
   //
   // PRT-SRC:      {{^ *}}#if !ONLY_IN_ACC
-  // PRT-SRC-NEXT: {{^ *}}  // expected
+  // PRT-SRC-NEXT: {{^ *}}  /* noacc-
+  // PRT-SRC-NEXT: {{^ *}}  /* acc-
   // PRT-SRC-NEXT: {{^ *}}  #pragma omp target teams num_teams(2)
+  // PRT-SRC-NEXT: {{^ *}}#endif
   // PRT-NEXT:     {{^ *}}  {
   // PRT-NEXT:     {{^ *}}    printf("hello world\n");
+  // PRT-SRC-NEXT: {{^ *}}#if !ONLY_IN_ACC
   // PRT-SRC-NEXT: {{^ *}}    #pragma omp distribute
+  // PRT-SRC-NEXT: {{^ *}}#endif
   // PRT-NEXT:     {{^ *}}    for (int i = 0; i < 2; ++i)
   // PRT-NEXT:     {{^ *}}      printf("i=%d\n", i);
   // PRT-NEXT:     {{^ *}}  }
-  // PRT-SRC-NEXT: {{^ *}}#endif
   //
   // If teams had an effect, "hello world" would print twice, and the order of
   // all these prints wouldn't be guaranteed.
@@ -72,15 +63,18 @@ int main() {
   // EXE-NEXT: i=0
   // EXE-NEXT: i=1
 #if !ONLY_IN_ACC
-  // expected-warning@+1 {{unexpected '#pragma omp ...' in program}}
+  /* noacc-warning@+2 {{unexpected '#pragma omp ...' in program}} */
+  /* acc-warning@+1 {{unexpected '#pragma omp ...' in program}} */
   #pragma omp target teams num_teams(2)
+#endif
   {
     printf("hello world\n");
+#if !ONLY_IN_ACC
     #pragma omp distribute
+#endif
     for (int i = 0; i < 2; ++i)
       printf("i=%d\n", i);
   }
-#endif
 
   //--------------------------------------------------
   // OpenMP within OpenACC where only directive is rewritten when printing
@@ -100,20 +94,21 @@ int main() {
   // PRT-OA-NEXT:  {{^ *}}// #pragma acc parallel num_gangs(2)
   // PRT-SRC-NEXT: {{^ *}}#pragma omp distribute
   // PRT-NEXT:     {{^ *}}for (int i = 0; i < 2; ++i)
-  // PRT-NEXT:     {{^ *}}  printf("i=%d\n", i);
+  // PRT-NEXT:     {{^ *}}  {{printf|TGT_PRINTF}}("i=%d\n", i);
   //
   // If distribute had an effect, each value of i would print just once.
-  // EXE-DAG: i=0
-  // EXE-DAG: i=1
-  // EXE-DAG: i=0
-  // EXE-DAG: i=1
+  // EXE-TGT-USE-STDIO-DAG: i=0
+  // EXE-TGT-USE-STDIO-DAG: i=1
+  // EXE-TGT-USE-STDIO-DAG: i=0
+  // EXE-TGT-USE-STDIO-DAG: i=1
 #if ONLY_IN_ACC
-  // expected-warning@+3 {{unexpected '#pragma omp ...' in program}}
+  /* noacc-warning@+4 {{unexpected '#pragma omp ...' in program}} */
+  /* acc-warning@+3 {{unexpected '#pragma omp ...' in program}} */
 #endif
   #pragma acc parallel num_gangs(2)
   #pragma omp distribute
   for (int i = 0; i < 2; ++i)
-    printf("i=%d\n", i);
+    TGT_PRINTF("i=%d\n", i);
 
   //--------------------------------------------------
   // OpenMP within OpenACC where full construct is rewritten when printing
@@ -163,7 +158,7 @@ int main() {
   // PRT-A-NEXT:      {{^ *}}for (int i = 0; i < 2; ++i)
   // PRT-A-SRC-NEXT:  {{^ *}}  #pragma omp simd
   // PRT-A-NEXT:      {{^ *}}  for (int j = 0; j < 2; ++j)
-  // PRT-A-NEXT:      {{^ *}}    printf("i=%d, j=%d\n", i, j);
+  // PRT-A-NEXT:      {{^ *}}    {{printf|TGT_PRINTF}}("i=%d, j=%d\n", i, j);
   // PRT-AO-NEXT:     {{^ *}}// ---------ACC->OMP--------
   // PRT-AO-NEXT:     {{^ *}}// {
   // PRT-AO-NEXT:     {{^ *}}//   const int __clang_acc_num_workers__ = (x = 2);
@@ -190,20 +185,20 @@ int main() {
   // PRT-OA-NEXT:     {{^ *}}// for (int i = 0; i < 2; ++i)
   // PRT-OA-SRC-NEXT: {{^ *}}//   #pragma omp simd
   // PRT-OA-NEXT:     {{^ *}}//   for (int j = 0; j < 2; ++j)
-  // PRT-OA-NEXT:     {{^ *}}//     printf("i=%d, j=%d\n", i, j);
+  // PRT-OA-NEXT:     {{^ *}}//     {{printf|TGT_PRINTF}}("i=%d, j=%d\n", i, j);
   // PRT-OA-NEXT:     {{^ *}}// ^----------ACC----------^
   //
-  // EXE-DAG: i=0, j=0
-  // EXE-DAG: i=0, j=1
-  // EXE-DAG: i=1, j=0
-  // EXE-DAG: i=1, j=1
+  // EXE-TGT-USE-STDIO-DAG: i=0, j=0
+  // EXE-TGT-USE-STDIO-DAG: i=0, j=1
+  // EXE-TGT-USE-STDIO-DAG: i=1, j=0
+  // EXE-TGT-USE-STDIO-DAG: i=1, j=1
   int x = 0;
   #pragma acc parallel num_workers((x = 2))
   #pragma acc loop worker
   for (int i = 0; i < 2; ++i)
     #pragma omp simd
     for (int j = 0; j < 2; ++j)
-      printf("i=%d, j=%d\n", i, j);
+      TGT_PRINTF("i=%d, j=%d\n", i, j);
 
   // EXE-NOT: {{.}}
   return 0;

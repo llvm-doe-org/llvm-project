@@ -1,5 +1,5 @@
 // Check "acc parallel" reductions across redundant gangs.
-//
+
 // When ADD_LOOP_TO_PAR is not set, this file checks gang reductions for "acc
 // parallel" without "loop".
 //
@@ -12,132 +12,37 @@
 // RUN:   (dir=PARLOOP dir-cflags=-DADD_LOOP_TO_PAR dir-loop=' loop seq')
 // RUN: }
 
-// Check -ast-dump before and after AST serialization.
-//
 // RUN: %for directives {
-// RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
-// RUN:          %[dir-cflags] \
-// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[dir] %s
-// RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %[dir-cflags] %s
-// RUN:   %clang_cc1 -ast-dump-all %t.ast \
-// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[dir] %s
-// RUN: }
-
-// Check -ast-print and -fopenacc[-ast]-print.
-//
-// RUN: %for directives {
-// RUN:   %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
-// RUN:          %[dir-cflags] \
-// RUN:   | FileCheck -check-prefixes=PRT,PRT-%[dir] -DLOOP=%'dir-loop' %s
-// RUN: }
-//
-// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
-// (which would need additional fields) within prt-args after the first
-// prt-args iteration, significantly shortening the prt-args definition.
-//
-// Strip comments and blank lines so checking -fopenacc-print output is easier.
-// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
-// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
-//
-// RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
-// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
-// RUN: }
-// RUN: %data prt-args {
-// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
-// RUN:   (prt=-fopenacc-ast-print=acc                      LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir])
-// RUN:   (prt=-fopenacc-ast-print=omp                      LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir])
-// RUN:   (prt=-fopenacc-ast-print=acc-omp                  LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir],PRT-AO,PRT-AO-%[dir])
-// RUN:   (prt=-fopenacc-ast-print=omp-acc                  LOOP="%'dir-loop'" prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir],PRT-OA,PRT-OA-%[dir])
-// RUN:   (prt=-fopenacc-print=acc                          LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir],PRT-SRC)
-// RUN:   (prt=-fopenacc-print=omp                          LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir],PRT-SRC)
-// RUN:   (prt=-fopenacc-print=acc-omp                      LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-A,PRT-A-%[dir],PRT-AO,PRT-AO-%[dir],PRT-SRC)
-// RUN:   (prt=-fopenacc-print=omp-acc                      LOOP="' LOOP'"     prt-chk=PRT,PRT-%[dir],PRT-O,PRT-O-%[dir],PRT-OA,PRT-OA-%[dir],PRT-SRC)
-// RUN: }
-// RUN: %for directives {
-// RUN:   %for prt-args {
-// RUN:     %clang -Xclang -verify %[prt] %[dir-cflags] %t-acc.c \
-// RUN:            -Wno-openacc-omp-map-ompx-hold \
-// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DLOOP=%[LOOP] %s
-// RUN:   }
-// RUN: }
-
-// Check -ast-print after AST serialization.
-//
-// Some data related to printing (where to print comments about discarded
-// directives) is serialized and deserialized, so it's worthwhile to try all
-// OpenACC printing modes.
-//
-// RUN: %for directives {
-// RUN:   %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast \
-// RUN:          %[dir-cflags]
-// RUN:   %for prt-args {
-// RUN:     %clang %[prt] %t.ast 2>&1 \
-// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DLOOP=%[LOOP] %s
-// RUN:   }
-// RUN: }
-
-// For some Linux platforms, -latomic is required for OpenMP support for
-// reductions on complex types.
-
-// Can we print the OpenMP source code, compile, and run it successfully?
-//
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST    tgt-cflags='                                     -Xclang -verify'        )
-// RUN:   (run-if=%run-if-x86_64  tgt=X86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'        )
-// RUN:   (run-if=%run-if-ppc64le tgt=PPC64LE tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'        )
-// RUN:   (run-if=%run-if-nvptx64 tgt=NVPTX64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64')
-// RUN:   (run-if=%run-if-amdgcn  tgt=AMDGCN  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang'                )
-// RUN: }
-// RUN: %for directives {
-// RUN:   %for prt-opts {
-// RUN:     %clang -Xclang -verify %[prt-opt]=omp %[dir-cflags] %s \
-// RUN:       -Wno-openacc-omp-map-ompx-hold > %t-%[prt-kind]-omp.c
-// RUN:     echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
-// RUN:   }
-// RUN:   %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:     -Wno-unused-function %libatomic %[dir-cflags] -o %t %t-ast-prt-omp.c
-// RUN:   %t > %t.out 2>&1
-// RUN:   FileCheck -input-file %t.out %s \
-// RUN:     -check-prefixes=EXE,EXE-%[dir],EXE-TGT-HOST,EXE-%[dir]-TGT-HOST
-// RUN:   %for tgts {
-// RUN:     %[run-if] %clang -fopenmp %fopenmp-version %t-prt-omp.c -o %t \
-// RUN:       %libatomic %[tgt-cflags] %[dir-cflags] -DTGT_%[tgt]_EXE
-// RUN:     %[run-if] %t > %t.out 2>&1
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:       -check-prefixes=EXE,EXE-%[dir] \
-// RUN:       -check-prefixes=EXE-TGT-%[tgt],EXE-%[dir]-TGT-%[tgt]
-// RUN:   }
-// RUN: }
-
-// Check execution with normal compilation.
-//
-// RUN: %for directives {
-// RUN:   %for tgts {
-// RUN:     %[run-if] %clang -fopenacc %s -o %t %libatomic \
-// RUN:       %[tgt-cflags] %[dir-cflags] -DTGT_%[tgt]_EXE
-// RUN:     %[run-if] %t > %t.out 2>&1
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:       -check-prefixes=EXE,EXE-%[dir] \
-// RUN:       -check-prefixes=EXE-TGT-%[tgt],EXE-%[dir]-TGT-%[tgt]
-// RUN:   }
+// RUN:   %acc-check-dmp{                                                      \
+// RUN:     clang-args: %[dir-cflags];                                         \
+// RUN:     fc-args:    ;                                                      \
+// RUN:     fc-pres:    %[dir]}
+// RUN:   %acc-check-prt{                                                      \
+// RUN:     clang-args: %[dir-cflags];                                         \
+// RUN:     fc-args:    -DLOOP=%'dir-loop';                                    \
+// RUN:     fc-pres:    %[dir]}
+// RUN:   %acc-check-exe{                                                      \
+// RUN:     clang-args: %[dir-cflags];                                         \
+// RUN:     exe-args:   ;                                                      \
+// RUN:     fc-args:    ;                                                      \
+// RUN:     fc-pres:    %[dir]}
 // RUN: }
 
 // END.
 
-// expected-no-diagnostics
+/* expected-error 0 {{}} */
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
-// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
-// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}} */
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
 
 #include <assert.h>
 
 // FIXME: For amdgcn, we get the following compile error:
 //
 //   File /home/jdenny/llvm/build/lib/clang/14.0.0/include/__clang_hip_math.h Line 23: 'omp.h' file not found
-#if !TGT_AMDGCN_EXE
+#if !TGT_AMDGCN
 # include <complex.h>
 #endif
 
@@ -210,13 +115,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
     //
     // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
-    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
+    // PRT-OA-AST-NEXT:    {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
+    // PRT-OA-SRC-NEXT:    {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -285,13 +192,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'float'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(*: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(*: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(*: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(*: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(*: acc){{$}}
     //
     // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(*: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(*: acc){{$}}
-    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(*: acc){{$}}
+    // PRT-OA-AST-NEXT:     {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(*: acc){{$}}
+    // PRT-OA-SRC-NEXT:     {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(*: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(*: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -317,8 +226,8 @@ int main() {
   // pass into acc parallel as null, but otherwise they pass in just fine.
   // What does the OpenMP spec say is supposed to happen?
 
-// PRT-SRC-NEXT: #if !TGT_X86_64_EXE && !TGT_PPC64LE_EXE && !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
-#if !TGT_X86_64_EXE && !TGT_PPC64LE_EXE && !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if TGT_HOST
+#if TGT_HOST
   // PRT-NEXT: {
   {
     // PRT-NEXT: int arr[]
@@ -368,13 +277,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int *'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(max: acc){{$}}
     //
     // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(max: acc){{$}}
-    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
+    // PRT-OA-AST-NEXT:     {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
+    // PRT-OA-SRC-NEXT:     {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(max: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -386,7 +297,7 @@ int main() {
       acc = val > acc ? val : acc;
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-TGT-HOST-NEXT: acc == arr + 2: 1
+    // EXE-HOST-NEXT: acc == arr + 2: 1
     printf("acc == arr + 2: %d\n", acc == arr + 2);
   }
   // PRT-NEXT: }
@@ -442,13 +353,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(max: acc){{$}}
     //
     // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(max: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(max: acc){{$}}
-    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
+    // PRT-OA-AST-NEXT:     {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
+    // PRT-OA-SRC-NEXT:     {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(max: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(max: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -516,13 +429,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'double'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(min: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(min: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(min: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(min: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(min: acc){{$}}
     //
     // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(min: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(min: acc){{$}}
-    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(min: acc){{$}}
+    // PRT-OA-AST-NEXT:    {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(min: acc){{$}}
+    // PRT-OA-SRC-NEXT:    {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(min: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(min: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -590,13 +505,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'char'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(&: acc){{$}}
     //
     // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(&: acc){{$}}
-    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
+    // PRT-OA-AST-NEXT:    {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
+    // PRT-OA-SRC-NEXT:    {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -664,13 +581,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(|: acc){{$}}
     //
     // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(|: acc){{$}}
-    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
+    // PRT-OA-AST-NEXT:    {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
+    // PRT-OA-SRC-NEXT:    {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(|: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -738,13 +657,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(3) firstprivate(val) reduction(^: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(3) firstprivate(val) reduction(^: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(3) firstprivate(val) reduction(^: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(val) reduction(^: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(^: acc){{$}}
     //
     // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(3) firstprivate(val) reduction(^: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(3) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(^: acc){{$}}
-    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(3) firstprivate(val) reduction(^: acc){{$}}
+    // PRT-OA-AST-NEXT:     {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(3) firstprivate(val) reduction(^: acc){{$}}
+    // PRT-OA-SRC-NEXT:     {{^ *}}// #pragma acc parallel LOOP num_gangs(3) firstprivate(val) reduction(^: acc){{$}}
     #pragma acc parallel LOOP num_gangs(3) firstprivate(val) reduction(^: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -819,13 +740,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&&: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&&: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&&: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&&: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(&&: acc){{$}}
     //
     // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&&: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(&&: acc){{$}}
-    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&&: acc){{$}}
+    // PRT-OA-AST-NEXT:     {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&&: acc){{$}}
+    // PRT-OA-SRC-NEXT:     {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&&: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&&: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -896,13 +819,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(||: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(||: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(||: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(||: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(||: acc){{$}}
     //
     // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(||: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(||: acc){{$}}
-    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(||: acc){{$}}
+    // PRT-OA-AST-NEXT:     {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(||: acc){{$}}
+    // PRT-OA-SRC-NEXT:     {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(||: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(||: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -977,13 +902,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'enum E'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(&: acc){{$}}
     //
     // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(&: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(&: acc){{$}}
-    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
+    // PRT-OA-AST-NEXT:     {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
+    // PRT-OA-SRC-NEXT:     {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(&: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -1008,8 +935,8 @@ int main() {
   // reductions.
   // FIXME: Clang fails an assert here for amdgcn offloading.
 
-// PRT-SRC-NEXT: #if !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
-#if !TGT_NVPTX64_EXE && !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_NVPTX64 && !TGT_AMDGCN
+#if !TGT_NVPTX64 && !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: {{_Bool|bool}} acc = 3;
@@ -1057,13 +984,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' '{{bool|_Bool}}'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(|: acc){{$}}
     //
     // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(|: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(|: acc){{$}}
-    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
+    // PRT-OA-AST-NEXT:     {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
+    // PRT-OA-SRC-NEXT:     {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(|: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(|: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -1075,7 +1004,7 @@ int main() {
       acc |= val;
     // DMP: CallExpr
     // PRT-NEXT: printf
-    // EXE-TGT-HOST-NEXT: acc: 1
+    // EXE-HOST-NEXT: acc: 1
     // EXE-TGT-X86_64-NEXT: acc: 1
     // EXE-TGT-PPC64LE-NEXT: acc: 1
     printf("acc: %d\n", acc);
@@ -1089,8 +1018,8 @@ int main() {
   //--------------------------------------------------
 
   // FIXME: We couldn't include complex.h for amdgcn (see above).
-// PRT-SRC-NEXT: #if !TGT_AMDGCN_EXE
-#if !TGT_AMDGCN_EXE
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: {{_Complex float|float complex}} acc
@@ -1138,13 +1067,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' '_Complex float'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
     //
     // PRT-O-PAR-NEXT:      {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
-    // PRT-OA-NEXT:         {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
+    // PRT-OA-AST-NEXT:     {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
+    // PRT-OA-SRC-NEXT:     {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -1156,14 +1087,14 @@ int main() {
       acc += val;
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //        EXE-PAR-TGT-HOST-NEXT: acc = 18.0 + 13.0i
-    //      EXE-PAR-TGT-X86_64-NEXT: acc = 18.0 + 13.0i
-    //     EXE-PAR-TGT-PPC64LE-NEXT: acc = 18.0 + 13.0i
-    //     EXE-PAR-TGT-NVPTX64-NEXT: acc = 18.0 + 13.0i
-    //    EXE-PARLOOP-TGT-HOST-NEXT: acc = 26.0 + 25.0i
-    //  EXE-PARLOOP-TGT-X86_64-NEXT: acc = 26.0 + 25.0i
-    // EXE-PARLOOP-TGT-PPC64LE-NEXT: acc = 26.0 + 25.0i
-    // EXE-PARLOOP-TGT-NVPTX64-NEXT: acc = 26.0 + 25.0i
+    //            EXE-HOST-PAR-NEXT: acc = 18.0 + 13.0i
+    //      EXE-TGT-X86_64-PAR-NEXT: acc = 18.0 + 13.0i
+    //     EXE-TGT-PPC64LE-PAR-NEXT: acc = 18.0 + 13.0i
+    //     EXE-TGT-NVPTX64-PAR-NEXT: acc = 18.0 + 13.0i
+    //        EXE-HOST-PARLOOP-NEXT: acc = 26.0 + 25.0i
+    //  EXE-TGT-X86_64-PARLOOP-NEXT: acc = 26.0 + 25.0i
+    // EXE-TGT-PPC64LE-PARLOOP-NEXT: acc = 26.0 + 25.0i
+    // EXE-TGT-NVPTX64-PARLOOP-NEXT: acc = 26.0 + 25.0i
     printf("acc = %.1f + %.1fi\n", creal(acc), cimag(acc));
   }
   // PRT-NEXT: }
@@ -1225,13 +1156,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copy(acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copy(acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc) copy(acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
     //
     // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
-    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copy(acc){{$}}
+    // PRT-OA-AST-NEXT:    {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copy(acc){{$}}
+    // PRT-OA-SRC-NEXT:    {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc) copy(acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc) copy(acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -1304,13 +1237,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCSharedClause {{.*}} <implicit>
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'val' 'int'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copyin(acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copyin(acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc) copyin(acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,to: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,to: acc) reduction(+: acc){{$}}
     //
     // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) reduction(+: acc) map(ompx_hold,to: acc){{$}}
     // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) firstprivate(val) map(ompx_hold,to: acc) reduction(+: acc){{$}}
-    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copyin(acc){{$}}
+    // PRT-OA-AST-NEXT:    {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) firstprivate(val) reduction(+: acc) copyin(acc){{$}}
+    // PRT-OA-SRC-NEXT:    {{^ *}}// #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc) copyin(acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) firstprivate(val) reduction(+: acc) copyin(acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt
@@ -1322,12 +1257,12 @@ int main() {
       acc += val;
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //     EXE-PAR-TGT-HOST-NEXT: acc = 18
-    // EXE-PARLOOP-TGT-HOST-NEXT: acc = 26
-    //       EXE-TGT-X86_64-NEXT: acc = 10
-    //      EXE-TGT-PPC64LE-NEXT: acc = 10
-    //      EXE-TGT-NVPTX64-NEXT: acc = 10
-    //       EXE-TGT-AMDGCN-NEXT: acc = 10
+    //     EXE-HOST-PAR-NEXT: acc = 18
+    // EXE-HOST-PARLOOP-NEXT: acc = 26
+    //   EXE-TGT-X86_64-NEXT: acc = 10
+    //  EXE-TGT-PPC64LE-NEXT: acc = 10
+    //  EXE-TGT-NVPTX64-NEXT: acc = 10
+    //   EXE-TGT-AMDGCN-NEXT: acc = 10
     printf("acc = %d\n", acc);
   }
   // PRT-NEXT: }
@@ -1368,13 +1303,15 @@ int main() {
     // DMP-PARLOOP-NEXT:        ACCReductionClause {{.*}} '+'
     // DMP-PARLOOP-NEXT:          DeclRefExpr {{.*}} 'acc' 'int'
     //
-    // PRT-A-NEXT:          {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) reduction(+: acc){{$}}
+    // PRT-A-AST-NEXT:      {{^ *}}#pragma acc parallel[[LOOP]] num_gangs(4) reduction(+: acc){{$}}
+    // PRT-A-SRC-NEXT:      {{^ *}}#pragma acc parallel LOOP num_gangs(4) reduction(+: acc){{$}}
     // PRT-AO-PAR-NEXT:     {{^ *}}// #pragma omp target teams num_teams(4) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-AO-PARLOOP-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
     //
     // PRT-O-PAR-NEXT:     {{^ *}}#pragma omp target teams num_teams(4) reduction(+: acc) map(ompx_hold,tofrom: acc){{$}}
     // PRT-O-PARLOOP-NEXT: {{^ *}}#pragma omp target teams num_teams(4) map(ompx_hold,tofrom: acc) reduction(+: acc){{$}}
-    // PRT-OA-NEXT:        {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(+: acc){{$}}
+    // PRT-OA-AST-NEXT:    {{^ *}}// #pragma acc parallel[[LOOP]] num_gangs(4) reduction(+: acc){{$}}
+    // PRT-OA-SRC-NEXT:    {{^ *}}// #pragma acc parallel LOOP num_gangs(4) reduction(+: acc){{$}}
     #pragma acc parallel LOOP num_gangs(4) reduction(+: acc)
     // DMP-PAR-NOT:      ForStmt
     // DMP-PARLOOP-NEXT: impl: ForStmt

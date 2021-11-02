@@ -5,119 +5,18 @@
 // using "ompx_hold".  exit-data-uninit.c checks the case where "acc exit data"
 // occurs before runtime initialization.
 
-// Check -ast-dump before and after AST serialization.
-//
-// RUN: %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc \
-// RUN:        %acc-includes %s \
-// RUN: | FileCheck -check-prefix=DMP %s
-// RUN: %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %acc-includes %s
-// RUN: %clang_cc1 -ast-dump-all %t.ast \
-// RUN: | FileCheck -check-prefixes=DMP %s
-
-// Check -ast-print and -fopenacc[-ast]-print.
-//
-// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only \
-// RUN:        %acc-includes %s \
-// RUN: | FileCheck -check-prefixes=PRT %s
-//
-// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
-// within prt-args after the first prt-args iteration, significantly shortening
-// the prt-args definition.
-//
-// Strip comments and blank lines so checking -fopenacc-print output is easier.
-// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
-// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
-//
-// RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
-// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
-// RUN: }
-// RUN: %data prt-args {
-// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT-A,PRT)
-// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT-A,PRT)
-// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT-O,PRT)
-// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT-A,PRT-AO,PRT)
-// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT-O,PRT-OA,PRT)
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-A,PRT)
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-O,PRT)
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-A,PRT-AO,PRT)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT)
-// RUN: }
-// RUN: %for prt-args {
-// RUN:   %clang -Xclang -verify %[prt] %t-acc.c %acc-includes \
-// RUN:          -Wno-openacc-omp-map-ompx-hold -Wno-openacc-omp-map-present \
-// RUN:          -Wno-openacc-omp-map-ompx-no-alloc \
-// RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
-// RUN: }
-
-// Check -ast-print after AST serialization.
-//
-// Some data related to printing (where to print comments about discarded
-// directives) is serialized and deserialized, so it's worthwhile to try all
-// OpenACC printing modes.
-//
-// RUN: %clang -Xclang -verify -fopenacc -emit-ast %acc-includes %t-acc.c \
-// RUN:        -o %t.ast
-// RUN: %for prt-args {
-// RUN:   %clang %[prt] %t.ast 2>&1 \
-// RUN:          -Wno-openacc-omp-map-ompx-hold -Wno-openacc-omp-map-present \
-// RUN:          -Wno-openacc-omp-map-ompx-no-alloc \
-// RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
-// RUN: }
-
-// Can we print the OpenMP source code, compile, and run it successfully?
-//
-// -fopenacc-ast-print is guaranteed to expand includes and macros appropiately
-// only for the host architecture, so don't try to use it for offload
-// compilation.  Do try it for the host as it's good way to catch AST printing
-// issues.
-//
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         host-or-dev=HOST)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         host-or-dev=DEV )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         host-or-dev=DEV )
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-dev=DEV )
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         host-or-dev=DEV )
-// RUN: }
-// RUN: %for prt-opts {
-// RUN:   %clang -Xclang -verify %[prt-opt]=omp %acc-includes %s \
-// RUN:     > %t-%[prt-kind]-omp.c \
-// RUN:     -Wno-openacc-omp-map-ompx-hold \
-// RUN:     -Wno-openacc-omp-map-present \
-// RUN:     -Wno-openacc-omp-map-ompx-no-alloc
-// RUN:   echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
-// RUN:   grep "^// nvptx64-" %s >> %t-%[prt-kind]-omp.c
-// RUN: }
-// RUN: %clang -fopenmp %fopenmp-version %acc-includes -Wno-unused-function \
-// RUN:   -Xclang -verify -o %t %t-ast-prt-omp.c %acc-libs
-// RUN: %t > %t.out 2>&1
-// RUN: FileCheck -input-file %t.out %s -check-prefixes=EXE,EXE-HOST
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenmp %fopenmp-version %acc-includes \
-// RUN:     -Wno-unused-function %[tgt-cflags] -o %t %t-prt-omp.c %acc-libs
-// RUN:   %[run-if] %t > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out %s \
-// RUN:     -check-prefixes=EXE,EXE-%[host-or-dev]
-// RUN: }
-
-// Check execution with normal compilation.
-//
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenacc %acc-includes %s -o %t \
-// RUN:                    %[tgt-cflags]
-// RUN:   %[run-if] %t > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out %s \
-// RUN:                       -check-prefixes=EXE,EXE-%[host-or-dev]
-// RUN: }
+// RUN: %acc-check-dmp{}
+// RUN: %acc-check-prt{}
+// RUN: %acc-check-exe{}
 
 // END.
 
-// expected-no-diagnostics
+/* expected-error 0 {{}} */
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
-// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
-// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}} */
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
 
 #include <openacc.h>
 #include <stdbool.h>
@@ -252,14 +151,14 @@ int main() {
     // EXE-HOST-NEXT: device crdl present 60{{$}}
     // EXE-HOST-NEXT: device   co present 70{{$}}
     // EXE-HOST-NEXT: device   dl present 80{{$}}
-    //  EXE-DEV-NEXT: device ci   present 10{{$}}
-    //  EXE-DEV-NEXT: device cico present 20{{$}}
-    //  EXE-DEV-NEXT: device cidl present 30{{$}}
-    //  EXE-DEV-NEXT: device cr   present
-    //  EXE-DEV-NEXT: device crco present
-    //  EXE-DEV-NEXT: device crdl present
-    //  EXE-DEV-NEXT: device   co absent{{$}}
-    //  EXE-DEV-NEXT: device   dl absent{{$}}
+    //  EXE-OFF-NEXT: device ci   present 10{{$}}
+    //  EXE-OFF-NEXT: device cico present 20{{$}}
+    //  EXE-OFF-NEXT: device cidl present 30{{$}}
+    //  EXE-OFF-NEXT: device cr   present
+    //  EXE-OFF-NEXT: device crco present
+    //  EXE-OFF-NEXT: device crdl present
+    //  EXE-OFF-NEXT: device   co absent{{$}}
+    //  EXE-OFF-NEXT: device   dl absent{{$}}
     printHostInt(ci);
     printHostInt(cico);
     printHostInt(cidl);
@@ -350,22 +249,22 @@ int main() {
     // EXE-HOST-NEXT: device   co present 70{{$}}
     // EXE-HOST-NEXT: device   dl present 80{{$}}
     //
-    //  EXE-DEV-NEXT: host ci     10{{$}}
-    //  EXE-DEV-NEXT: host cico   21{{$}}
-    //  EXE-DEV-NEXT: host cidl   30{{$}}
-    //  EXE-DEV-NEXT: host cr     40{{$}}
-    //  EXE-DEV-NEXT: host crco   51{{$}}
-    //  EXE-DEV-NEXT: host crdl   60{{$}}
-    //  EXE-DEV-NEXT: host   co   70{{$}}
-    //  EXE-DEV-NEXT: host   dl   80{{$}}
-    //  EXE-DEV-NEXT: device ci   present 11{{$}}
-    //  EXE-DEV-NEXT: device cico absent{{$}}
-    //  EXE-DEV-NEXT: device cidl absent{{$}}
-    //  EXE-DEV-NEXT: device cr   present 41{{$}}
-    //  EXE-DEV-NEXT: device crco absent{{$}}
-    //  EXE-DEV-NEXT: device crdl absent{{$}}
-    //  EXE-DEV-NEXT: device   co absent{{$}}
-    //  EXE-DEV-NEXT: device   dl absent{{$}}
+    //  EXE-OFF-NEXT: host ci     10{{$}}
+    //  EXE-OFF-NEXT: host cico   21{{$}}
+    //  EXE-OFF-NEXT: host cidl   30{{$}}
+    //  EXE-OFF-NEXT: host cr     40{{$}}
+    //  EXE-OFF-NEXT: host crco   51{{$}}
+    //  EXE-OFF-NEXT: host crdl   60{{$}}
+    //  EXE-OFF-NEXT: host   co   70{{$}}
+    //  EXE-OFF-NEXT: host   dl   80{{$}}
+    //  EXE-OFF-NEXT: device ci   present 11{{$}}
+    //  EXE-OFF-NEXT: device cico absent{{$}}
+    //  EXE-OFF-NEXT: device cidl absent{{$}}
+    //  EXE-OFF-NEXT: device cr   present 41{{$}}
+    //  EXE-OFF-NEXT: device crco absent{{$}}
+    //  EXE-OFF-NEXT: device crdl absent{{$}}
+    //  EXE-OFF-NEXT: device   co absent{{$}}
+    //  EXE-OFF-NEXT: device   dl absent{{$}}
     printHostInt(ci);
     printHostInt(cico);
     printHostInt(cidl);
@@ -424,7 +323,7 @@ int main() {
       // PRT-NEXT: printHostInt
       // PRT-NEXT: printDeviceInt
       // EXE-HOST-NEXT:   host x         11{{$}}
-      //  EXE-DEV-NEXT:   host x         10{{$}}
+      //  EXE-OFF-NEXT:   host x         10{{$}}
       //      EXE-NEXT: device x present 11{{$}}
       printHostInt(x);
       printDeviceInt(x);
@@ -438,7 +337,7 @@ int main() {
       // PRT-NEXT: printHostInt
       // PRT-NEXT: printDeviceInt
       // EXE-HOST-NEXT:   host x         11{{$}}
-      //  EXE-DEV-NEXT:   host x         10{{$}}
+      //  EXE-OFF-NEXT:   host x         10{{$}}
       //      EXE-NEXT: device x present 11{{$}}
       printHostInt(x);
       printDeviceInt(x);
@@ -452,7 +351,7 @@ int main() {
       // PRT-NEXT: printHostInt
       // PRT-NEXT: printDeviceInt
       // EXE-HOST-NEXT:   host x         11{{$}}
-      //  EXE-DEV-NEXT:   host x         10{{$}}
+      //  EXE-OFF-NEXT:   host x         10{{$}}
       //      EXE-NEXT: device x present 11{{$}}
       printHostInt(x);
       printDeviceInt(x);
@@ -466,7 +365,7 @@ int main() {
       // PRT-NEXT: printHostInt
       // PRT-NEXT: printDeviceInt
       // EXE-HOST-NEXT:   host x         11{{$}}
-      //  EXE-DEV-NEXT:   host x         10{{$}}
+      //  EXE-OFF-NEXT:   host x         10{{$}}
       //      EXE-NEXT: device x present 11{{$}}
       printHostInt(x);
       printDeviceInt(x);
@@ -486,7 +385,7 @@ int main() {
       // PRT-NEXT: printHostInt
       // PRT-NEXT: printDeviceInt
       // EXE-HOST-NEXT:   host x         11{{$}}
-      //  EXE-DEV-NEXT:   host x         10{{$}}
+      //  EXE-OFF-NEXT:   host x         10{{$}}
       //      EXE-NEXT: device x present 11{{$}}
       printHostInt(x);
       printDeviceInt(x);
@@ -495,8 +394,8 @@ int main() {
     // PRT-NEXT: printDeviceInt
     // EXE-HOST-NEXT:   host x         11{{$}}
     // EXE-HOST-NEXT: device x present 11{{$}}
-    //  EXE-DEV-NEXT:   host x         10{{$}}
-    //  EXE-DEV-NEXT: device x absent{{$}}
+    //  EXE-OFF-NEXT:   host x         10{{$}}
+    //  EXE-OFF-NEXT: device x absent{{$}}
     printHostInt(x);
     printDeviceInt(x);
   } // PRT-NEXT: }
@@ -534,7 +433,7 @@ int main() {
     for (int i = 0; i < 5; ++i)
     ;
     // EXE-HOST-NEXT:   host x         11{{$}}
-    //  EXE-DEV-NEXT:   host x         10{{$}}
+    //  EXE-OFF-NEXT:   host x         10{{$}}
     //      EXE-NEXT: device x present 11{{$}}
     printHostInt(x);
     printDeviceInt(x);
@@ -542,7 +441,7 @@ int main() {
     // Inc dynamic ref count to 2.
     #pragma acc enter data create(x)
     // EXE-HOST-NEXT:   host x         11{{$}}
-    //  EXE-DEV-NEXT:   host x         10{{$}}
+    //  EXE-OFF-NEXT:   host x         10{{$}}
     //      EXE-NEXT: device x present 11{{$}}
     printHostInt(x);
     printDeviceInt(x);
@@ -550,7 +449,7 @@ int main() {
     // Inc dynamic ref count to 3.
     #pragma acc enter data copyin(x)
     // EXE-HOST-NEXT:   host x         11{{$}}
-    //  EXE-DEV-NEXT:   host x         10{{$}}
+    //  EXE-OFF-NEXT:   host x         10{{$}}
     //      EXE-NEXT: device x present 11{{$}}
     printHostInt(x);
     printDeviceInt(x);
@@ -558,7 +457,7 @@ int main() {
     // Dec dynamic ref count to 2.
     #pragma acc exit data delete(x)
     // EXE-HOST-NEXT:   host x         11{{$}}
-    //  EXE-DEV-NEXT:   host x         10{{$}}
+    //  EXE-OFF-NEXT:   host x         10{{$}}
     //      EXE-NEXT: device x present 11{{$}}
     printHostInt(x);
     printDeviceInt(x);
@@ -566,7 +465,7 @@ int main() {
     // Dec dynamic ref count to 1.
     #pragma acc exit data copyout(x)
     // EXE-HOST-NEXT:   host x         11{{$}}
-    //  EXE-DEV-NEXT:   host x         10{{$}}
+    //  EXE-OFF-NEXT:   host x         10{{$}}
     //      EXE-NEXT: device x present 11{{$}}
     printHostInt(x);
     printDeviceInt(x);
@@ -575,8 +474,8 @@ int main() {
     #pragma acc exit data copyout(x)
     // EXE-HOST-NEXT:   host x         11{{$}}
     // EXE-HOST-NEXT: device x present 11{{$}}
-    //  EXE-DEV-NEXT:   host x         11{{$}}
-    //  EXE-DEV-NEXT: device x absent{{$}}
+    //  EXE-OFF-NEXT:   host x         11{{$}}
+    //  EXE-OFF-NEXT: device x absent{{$}}
     printHostInt(x);
     printDeviceInt(x);
 
@@ -587,8 +486,8 @@ int main() {
     #pragma acc exit data delete(x)
     // EXE-HOST-NEXT:   host x         11{{$}}
     // EXE-HOST-NEXT: device x present 11{{$}}
-    //  EXE-DEV-NEXT:   host x         11{{$}}
-    //  EXE-DEV-NEXT: device x absent{{$}}
+    //  EXE-OFF-NEXT:   host x         11{{$}}
+    //  EXE-OFF-NEXT: device x absent{{$}}
     printHostInt(x);
     printDeviceInt(x);
   }
@@ -648,14 +547,14 @@ int main() {
       // EXE-HOST-NEXT:   host str[1]         61{{$}}
       // EXE-HOST-NEXT:   host str[2]         71{{$}}
       // EXE-HOST-NEXT:   host str[3]         80{{$}}
-      //  EXE-DEV-NEXT:   host dyn[0]         10{{$}}
-      //  EXE-DEV-NEXT:   host dyn[1]         20{{$}}
-      //  EXE-DEV-NEXT:   host dyn[2]         30{{$}}
-      //  EXE-DEV-NEXT:   host dyn[3]         40{{$}}
-      //  EXE-DEV-NEXT:   host str[0]         50{{$}}
-      //  EXE-DEV-NEXT:   host str[1]         60{{$}}
-      //  EXE-DEV-NEXT:   host str[2]         70{{$}}
-      //  EXE-DEV-NEXT:   host str[3]         80{{$}}
+      //  EXE-OFF-NEXT:   host dyn[0]         10{{$}}
+      //  EXE-OFF-NEXT:   host dyn[1]         20{{$}}
+      //  EXE-OFF-NEXT:   host dyn[2]         30{{$}}
+      //  EXE-OFF-NEXT:   host dyn[3]         40{{$}}
+      //  EXE-OFF-NEXT:   host str[0]         50{{$}}
+      //  EXE-OFF-NEXT:   host str[1]         60{{$}}
+      //  EXE-OFF-NEXT:   host str[2]         70{{$}}
+      //  EXE-OFF-NEXT:   host str[3]         80{{$}}
       //      EXE-NEXT: device dyn[1] present 21{{$}}
       //      EXE-NEXT: device dyn[2] present 31{{$}}
       //      EXE-NEXT: device str[1] present 61{{$}}
@@ -687,10 +586,10 @@ int main() {
     // EXE-HOST-NEXT:   host dyn[1]         21{{$}}
     // EXE-HOST-NEXT:   host dyn[2]         31{{$}}
     // EXE-HOST-NEXT:   host dyn[3]         40{{$}}
-    //  EXE-DEV-NEXT:   host dyn[0]         10{{$}}
-    //  EXE-DEV-NEXT:   host dyn[1]         20{{$}}
-    //  EXE-DEV-NEXT:   host dyn[2]         30{{$}}
-    //  EXE-DEV-NEXT:   host dyn[3]         40{{$}}
+    //  EXE-OFF-NEXT:   host dyn[0]         10{{$}}
+    //  EXE-OFF-NEXT:   host dyn[1]         20{{$}}
+    //  EXE-OFF-NEXT:   host dyn[2]         30{{$}}
+    //  EXE-OFF-NEXT:   host dyn[3]         40{{$}}
     //      EXE-NEXT: device dyn[1] present 21{{$}}
     //      EXE-NEXT: device dyn[2] present 31{{$}}
     printHostInt(dyn[0]);

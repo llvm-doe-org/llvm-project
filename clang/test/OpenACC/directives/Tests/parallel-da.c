@@ -3,7 +3,7 @@
 // - The present clause is checked in present.c.
 // - The no_create clause is checked in no-create.c.
 // - The effect of an enclosing "acc data" is checked in "data.c".
-//
+
 // When ADD_LOOP_TO_PAR is not set, this file checks implicit and explicit
 // data attributes on "acc parallel" without "loop".
 //
@@ -16,266 +16,91 @@
 // RUN:   (dir=PARLOOP dir-cflags=-DADD_LOOP_TO_PAR)
 // RUN: }
 
-// Check -ast-dump before and after AST serialization.
-//
 // RUN: %data dmps {
-// RUN:   (mode=MODE_I   pre=DMP,DMP-I,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-I,DMP-%[dir]-ICCiCoCrF                                                                    )
-// RUN:   (mode=MODE_C0  pre=DMP,DMP-C,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF  )
-// RUN:   (mode=MODE_C1  pre=DMP,DMP-C,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF  )
-// RUN:   (mode=MODE_C2  pre=DMP,DMP-C,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-C,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF  )
-// RUN:   (mode=MODE_Ci0 pre=DMP,DMP-Ci,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Ci,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Ci1 pre=DMP,DMP-Ci,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Ci,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Ci2 pre=DMP,DMP-Ci,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Ci,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Co0 pre=DMP,DMP-Co,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Co,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Co1 pre=DMP,DMP-Co,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Co,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Co2 pre=DMP,DMP-Co,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Co,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Cr0 pre=DMP,DMP-Cr,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Cr,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Cr1 pre=DMP,DMP-Cr,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Cr,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Cr2 pre=DMP,DMP-Cr,DMP-CCiCoCr,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-Cr,DMP-%[dir]-CCiCoCr,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_F   pre=DMP,DMP-F,DMP-CCiCoCrF,DMP-CCiCoCrFP,DMP-ICCiCoCrF,DMP-%[dir],DMP-%[dir]-F,DMP-%[dir]-CCiCoCrF,DMP-%[dir]-CCiCoCrFP,DMP-%[dir]-ICCiCoCrF                                 )
-// RUN:   (mode=MODE_P   pre=DMP,DMP-P,DMP-CCiCoCrFP,DMP-%[dir],DMP-%[dir]-P,DMP-%[dir]-CCiCoCrFP                                                                                                     )
-// RUN: }
-// RUN: %for directives {
-// RUN:   %for dmps {
-// RUN:     %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc \
-// RUN:            -DMODE=%[mode] %[dir-cflags] %s \
-// RUN:     | FileCheck -check-prefixes=%[pre] %s
-// RUN:     %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast \
-// RUN:            -DMODE=%[mode] %[dir-cflags] %s
-// RUN:     %clang_cc1 -ast-dump-all %t.ast \
-// RUN:     | FileCheck -check-prefixes=%[pre] %s
-// RUN:   }
+// RUN:   (mode=MODE_I   pre=I,ICCiCoCrF,%[dir],%[dir]-I,%[dir]-ICCiCoCrF                                                                             )
+// RUN:   (mode=MODE_C0  pre=C,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-C,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF  )
+// RUN:   (mode=MODE_C1  pre=C,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-C,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF  )
+// RUN:   (mode=MODE_C2  pre=C,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-C,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF  )
+// RUN:   (mode=MODE_Ci0 pre=Ci,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Ci,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Ci1 pre=Ci,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Ci,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Ci2 pre=Ci,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Ci,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Co0 pre=Co,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Co,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Co1 pre=Co,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Co,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Co2 pre=Co,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Co,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Cr0 pre=Cr,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Cr,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Cr1 pre=Cr,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Cr,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_Cr2 pre=Cr,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Cr,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
+// RUN:   (mode=MODE_F   pre=F,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-F,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF                         )
+// RUN:   (mode=MODE_P   pre=P,CCiCoCrFP,%[dir],%[dir]-P,%[dir]-CCiCoCrFP                                                                             )
 // RUN: }
 
-// Check -ast-print after AST serialization.  -ast-print before serialization
-// is indirectly checked below via -fopenacc[-ast]-print.
-//
-// RUN: %data asts {
-// RUN:   (mode=MODE_I   pre=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-A,PRT-A-I,PRT-A-%[dir],PRT-A-%[dir]-I)
-// RUN:   (mode=MODE_C0  pre=PRT,PRT-C0,PRT-%[dir],PRT-%[dir]-C0,PRT-A,PRT-A-C0,PRT-A-%[dir],PRT-A-%[dir]-C0)
-// RUN:   (mode=MODE_C1  pre=PRT,PRT-C1,PRT-%[dir],PRT-%[dir]-C1,PRT-A,PRT-A-C1,PRT-A-%[dir],PRT-A-%[dir]-C1)
-// RUN:   (mode=MODE_C2  pre=PRT,PRT-C2,PRT-%[dir],PRT-%[dir]-C2,PRT-A,PRT-A-C2,PRT-A-%[dir],PRT-A-%[dir]-C2)
-// RUN:   (mode=MODE_Ci0 pre=PRT,PRT-Ci0,PRT-%[dir],PRT-%[dir]-Ci0,PRT-A,PRT-A-Ci0,PRT-A-%[dir],PRT-A-%[dir]-Ci0)
-// RUN:   (mode=MODE_Ci1 pre=PRT,PRT-Ci1,PRT-%[dir],PRT-%[dir]-Ci1,PRT-A,PRT-A-Ci1,PRT-A-%[dir],PRT-A-%[dir]-Ci1)
-// RUN:   (mode=MODE_Ci2 pre=PRT,PRT-Ci2,PRT-%[dir],PRT-%[dir]-Ci2,PRT-A,PRT-A-Ci2,PRT-A-%[dir],PRT-A-%[dir]-Ci2)
-// RUN:   (mode=MODE_Co0 pre=PRT,PRT-Co0,PRT-%[dir],PRT-%[dir]-Co0,PRT-A,PRT-A-Co0,PRT-A-%[dir],PRT-A-%[dir]-Co0)
-// RUN:   (mode=MODE_Co1 pre=PRT,PRT-Co1,PRT-%[dir],PRT-%[dir]-Co1,PRT-A,PRT-A-Co1,PRT-A-%[dir],PRT-A-%[dir]-Co1)
-// RUN:   (mode=MODE_Co2 pre=PRT,PRT-Co2,PRT-%[dir],PRT-%[dir]-Co2,PRT-A,PRT-A-Co2,PRT-A-%[dir],PRT-A-%[dir]-Co2)
-// RUN:   (mode=MODE_Cr0 pre=PRT,PRT-Cr0,PRT-%[dir],PRT-%[dir]-Cr0,PRT-A,PRT-A-Cr0,PRT-A-%[dir],PRT-A-%[dir]-Cr0)
-// RUN:   (mode=MODE_Cr1 pre=PRT,PRT-Cr1,PRT-%[dir],PRT-%[dir]-Cr1,PRT-A,PRT-A-Cr1,PRT-A-%[dir],PRT-A-%[dir]-Cr1)
-// RUN:   (mode=MODE_Cr2 pre=PRT,PRT-Cr2,PRT-%[dir],PRT-%[dir]-Cr2,PRT-A,PRT-A-Cr2,PRT-A-%[dir],PRT-A-%[dir]-Cr2)
-// RUN:   (mode=MODE_F   pre=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-A,PRT-A-F,PRT-A-%[dir],PRT-A-%[dir]-F)
-// RUN:   (mode=MODE_P   pre=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-A,PRT-A-P,PRT-A-%[dir],PRT-A-%[dir]-P)
-// RUN: }
-// RUN: %for directives {
-// RUN:   %for asts {
-// RUN:     %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast \
-// RUN:            -DMODE=%[mode] %[dir-cflags] %s
-// RUN:     %clang_cc1 -ast-print %t.ast 2>&1 \
-// RUN:     | FileCheck -check-prefixes=%[pre] %s
-// RUN:   }
+// RUN: %data prts {
+// RUN:   (mode=MODE_I   pre=I,%[dir],%[dir]-I    )
+// RUN:   (mode=MODE_C0  pre=C0,%[dir],%[dir]-C0  )
+// RUN:   (mode=MODE_C1  pre=C1,%[dir],%[dir]-C1  )
+// RUN:   (mode=MODE_C2  pre=C2,%[dir],%[dir]-C2  )
+// RUN:   (mode=MODE_Ci0 pre=Ci0,%[dir],%[dir]-Ci0)
+// RUN:   (mode=MODE_Ci1 pre=Ci1,%[dir],%[dir]-Ci1)
+// RUN:   (mode=MODE_Ci2 pre=Ci2,%[dir],%[dir]-Ci2)
+// RUN:   (mode=MODE_Co0 pre=Co0,%[dir],%[dir]-Co0)
+// RUN:   (mode=MODE_Co1 pre=Co1,%[dir],%[dir]-Co1)
+// RUN:   (mode=MODE_Co2 pre=Co2,%[dir],%[dir]-Co2)
+// RUN:   (mode=MODE_Cr0 pre=Cr0,%[dir],%[dir]-Cr0)
+// RUN:   (mode=MODE_Cr1 pre=Cr1,%[dir],%[dir]-Cr1)
+// RUN:   (mode=MODE_Cr2 pre=Cr2,%[dir],%[dir]-Cr2)
+// RUN:   (mode=MODE_F   pre=F,%[dir],%[dir]-F    )
+// RUN:   (mode=MODE_P   pre=P,%[dir],%[dir]-P    )
 // RUN: }
 
-// Check -fopenacc[-ast]-print.  Default is checked above.
-//
-// Strip comments and blank lines so checking -fopenacc-print output is easier.
-// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
-// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
-//
-// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
-// (which would need additional fields) within prt-args, significantly
-// shortening the prt-args definition.
-//
-// RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
-// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
-// RUN: }
-// RUN: %data prt-args {
-// RUN:   (mode=MODE_I  prt=%[prt-opt]=acc     prt-chk=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-A,PRT-A-I,PRT-A-%[dir],PRT-A-%[dir]-I                                              )
-// RUN:   (mode=MODE_I  prt=%[prt-opt]=omp     prt-chk=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-O,PRT-O-I,PRT-O-%[dir],PRT-O-%[dir]-I                                              )
-// RUN:   (mode=MODE_I  prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-A,PRT-A-I,PRT-A-%[dir],PRT-A-%[dir]-I,PRT-AO,PRT-AO-I,PRT-AO-%[dir],PRT-AO-%[dir]-I)
-// RUN:   (mode=MODE_I  prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-I,PRT-%[dir],PRT-%[dir]-I,PRT-O,PRT-O-I,PRT-O-%[dir],PRT-O-%[dir]-I,PRT-OA,PRT-OA-I,PRT-OA-%[dir],PRT-OA-%[dir]-I)
-//
-// RUN:   (mode=MODE_C0  prt=%[prt-opt]=acc     prt-chk=PRT,PRT-C0,PRT-%[dir],PRT-%[dir]-C0,PRT-A,PRT-A-C0,PRT-A-%[dir],PRT-A-%[dir]-C0                                                )
-// RUN:   (mode=MODE_C0  prt=%[prt-opt]=omp     prt-chk=PRT,PRT-C0,PRT-%[dir],PRT-%[dir]-C0,PRT-O,PRT-O-C0,PRT-O-%[dir],PRT-O-%[dir]-C0                                                )
-// RUN:   (mode=MODE_C0  prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-C0,PRT-%[dir],PRT-%[dir]-C0,PRT-A,PRT-A-C0,PRT-A-%[dir],PRT-A-%[dir]-C0,PRT-AO,PRT-AO-C0,PRT-AO-%[dir],PRT-AO-%[dir]-C0)
-// RUN:   (mode=MODE_C0  prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-C0,PRT-%[dir],PRT-%[dir]-C0,PRT-O,PRT-O-C0,PRT-O-%[dir],PRT-O-%[dir]-C0,PRT-OA,PRT-OA-C0,PRT-OA-%[dir],PRT-OA-%[dir]-C0)
-//
-// RUN:   (mode=MODE_C1  prt=%[prt-opt]=acc     prt-chk=PRT,PRT-C1,PRT-%[dir],PRT-%[dir]-C1,PRT-A,PRT-A-C1,PRT-A-%[dir],PRT-A-%[dir]-C1                                                )
-// RUN:   (mode=MODE_C1  prt=%[prt-opt]=omp     prt-chk=PRT,PRT-C1,PRT-%[dir],PRT-%[dir]-C1,PRT-O,PRT-O-C1,PRT-O-%[dir],PRT-O-%[dir]-C1                                                )
-// RUN:   (mode=MODE_C1  prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-C1,PRT-%[dir],PRT-%[dir]-C1,PRT-A,PRT-A-C1,PRT-A-%[dir],PRT-A-%[dir]-C1,PRT-AO,PRT-AO-C1,PRT-AO-%[dir],PRT-AO-%[dir]-C1)
-// RUN:   (mode=MODE_C1  prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-C1,PRT-%[dir],PRT-%[dir]-C1,PRT-O,PRT-O-C1,PRT-O-%[dir],PRT-O-%[dir]-C1,PRT-OA,PRT-OA-C1,PRT-OA-%[dir],PRT-OA-%[dir]-C1)
-//
-// RUN:   (mode=MODE_C2  prt=%[prt-opt]=acc     prt-chk=PRT,PRT-C2,PRT-%[dir],PRT-%[dir]-C2,PRT-A,PRT-A-C2,PRT-A-%[dir],PRT-A-%[dir]-C2                                                )
-// RUN:   (mode=MODE_C2  prt=%[prt-opt]=omp     prt-chk=PRT,PRT-C2,PRT-%[dir],PRT-%[dir]-C2,PRT-O,PRT-O-C2,PRT-O-%[dir],PRT-O-%[dir]-C2                                                )
-// RUN:   (mode=MODE_C2  prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-C2,PRT-%[dir],PRT-%[dir]-C2,PRT-A,PRT-A-C2,PRT-A-%[dir],PRT-A-%[dir]-C2,PRT-AO,PRT-AO-C2,PRT-AO-%[dir],PRT-AO-%[dir]-C2)
-// RUN:   (mode=MODE_C2  prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-C2,PRT-%[dir],PRT-%[dir]-C2,PRT-O,PRT-O-C2,PRT-O-%[dir],PRT-O-%[dir]-C2,PRT-OA,PRT-OA-C2,PRT-OA-%[dir],PRT-OA-%[dir]-C2)
-//
-// RUN:   (mode=MODE_Ci0 prt=%[prt-opt]=acc     prt-chk=PRT,PRT-Ci0,PRT-%[dir],PRT-%[dir]-Ci0,PRT-A,PRT-A-Ci0,PRT-A-%[dir],PRT-A-%[dir]-Ci0                                                  )
-// RUN:   (mode=MODE_Ci0 prt=%[prt-opt]=omp     prt-chk=PRT,PRT-Ci0,PRT-%[dir],PRT-%[dir]-Ci0,PRT-O,PRT-O-Ci0,PRT-O-%[dir],PRT-O-%[dir]-Ci0                                                  )
-// RUN:   (mode=MODE_Ci0 prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-Ci0,PRT-%[dir],PRT-%[dir]-Ci0,PRT-A,PRT-A-Ci0,PRT-A-%[dir],PRT-A-%[dir]-Ci0,PRT-AO,PRT-AO-Ci0,PRT-AO-%[dir],PRT-AO-%[dir]-Ci0)
-// RUN:   (mode=MODE_Ci0 prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-Ci0,PRT-%[dir],PRT-%[dir]-Ci0,PRT-O,PRT-O-Ci0,PRT-O-%[dir],PRT-O-%[dir]-Ci0,PRT-OA,PRT-OA-Ci0,PRT-OA-%[dir],PRT-OA-%[dir]-Ci0)
-//
-// RUN:   (mode=MODE_Ci1 prt=%[prt-opt]=acc     prt-chk=PRT,PRT-Ci1,PRT-%[dir],PRT-%[dir]-Ci1,PRT-A,PRT-A-Ci1,PRT-A-%[dir],PRT-A-%[dir]-Ci1                                                  )
-// RUN:   (mode=MODE_Ci1 prt=%[prt-opt]=omp     prt-chk=PRT,PRT-Ci1,PRT-%[dir],PRT-%[dir]-Ci1,PRT-O,PRT-O-Ci1,PRT-O-%[dir],PRT-O-%[dir]-Ci1                                                  )
-// RUN:   (mode=MODE_Ci1 prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-Ci1,PRT-%[dir],PRT-%[dir]-Ci1,PRT-A,PRT-A-Ci1,PRT-A-%[dir],PRT-A-%[dir]-Ci1,PRT-AO,PRT-AO-Ci1,PRT-AO-%[dir],PRT-AO-%[dir]-Ci1)
-// RUN:   (mode=MODE_Ci1 prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-Ci1,PRT-%[dir],PRT-%[dir]-Ci1,PRT-O,PRT-O-Ci1,PRT-O-%[dir],PRT-O-%[dir]-Ci1,PRT-OA,PRT-OA-Ci1,PRT-OA-%[dir],PRT-OA-%[dir]-Ci1)
-//
-// RUN:   (mode=MODE_Ci2 prt=%[prt-opt]=acc     prt-chk=PRT,PRT-Ci2,PRT-%[dir],PRT-%[dir]-Ci2,PRT-A,PRT-A-Ci2,PRT-A-%[dir],PRT-A-%[dir]-Ci2                                                  )
-// RUN:   (mode=MODE_Ci2 prt=%[prt-opt]=omp     prt-chk=PRT,PRT-Ci2,PRT-%[dir],PRT-%[dir]-Ci2,PRT-O,PRT-O-Ci2,PRT-O-%[dir],PRT-O-%[dir]-Ci2                                                  )
-// RUN:   (mode=MODE_Ci2 prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-Ci2,PRT-%[dir],PRT-%[dir]-Ci2,PRT-A,PRT-A-Ci2,PRT-A-%[dir],PRT-A-%[dir]-Ci2,PRT-AO,PRT-AO-Ci2,PRT-AO-%[dir],PRT-AO-%[dir]-Ci2)
-// RUN:   (mode=MODE_Ci2 prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-Ci2,PRT-%[dir],PRT-%[dir]-Ci2,PRT-O,PRT-O-Ci2,PRT-O-%[dir],PRT-O-%[dir]-Ci2,PRT-OA,PRT-OA-Ci2,PRT-OA-%[dir],PRT-OA-%[dir]-Ci2)
-//
-// RUN:   (mode=MODE_Co0 prt=%[prt-opt]=acc     prt-chk=PRT,PRT-Co0,PRT-%[dir],PRT-%[dir]-Co0,PRT-A,PRT-A-Co0,PRT-A-%[dir],PRT-A-%[dir]-Co0                                                  )
-// RUN:   (mode=MODE_Co0 prt=%[prt-opt]=omp     prt-chk=PRT,PRT-Co0,PRT-%[dir],PRT-%[dir]-Co0,PRT-O,PRT-O-Co0,PRT-O-%[dir],PRT-O-%[dir]-Co0                                                  )
-// RUN:   (mode=MODE_Co0 prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-Co0,PRT-%[dir],PRT-%[dir]-Co0,PRT-A,PRT-A-Co0,PRT-A-%[dir],PRT-A-%[dir]-Co0,PRT-AO,PRT-AO-Co0,PRT-AO-%[dir],PRT-AO-%[dir]-Co0)
-// RUN:   (mode=MODE_Co0 prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-Co0,PRT-%[dir],PRT-%[dir]-Co0,PRT-O,PRT-O-Co0,PRT-O-%[dir],PRT-O-%[dir]-Co0,PRT-OA,PRT-OA-Co0,PRT-OA-%[dir],PRT-OA-%[dir]-Co0)
-//
-// RUN:   (mode=MODE_Co1 prt=%[prt-opt]=acc     prt-chk=PRT,PRT-Co1,PRT-%[dir],PRT-%[dir]-Co1,PRT-A,PRT-A-Co1,PRT-A-%[dir],PRT-A-%[dir]-Co1                                                  )
-// RUN:   (mode=MODE_Co1 prt=%[prt-opt]=omp     prt-chk=PRT,PRT-Co1,PRT-%[dir],PRT-%[dir]-Co1,PRT-O,PRT-O-Co1,PRT-O-%[dir],PRT-O-%[dir]-Co1                                                  )
-// RUN:   (mode=MODE_Co1 prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-Co1,PRT-%[dir],PRT-%[dir]-Co1,PRT-A,PRT-A-Co1,PRT-A-%[dir],PRT-A-%[dir]-Co1,PRT-AO,PRT-AO-Co1,PRT-AO-%[dir],PRT-AO-%[dir]-Co1)
-// RUN:   (mode=MODE_Co1 prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-Co1,PRT-%[dir],PRT-%[dir]-Co1,PRT-O,PRT-O-Co1,PRT-O-%[dir],PRT-O-%[dir]-Co1,PRT-OA,PRT-OA-Co1,PRT-OA-%[dir],PRT-OA-%[dir]-Co1)
-//
-// RUN:   (mode=MODE_Co2 prt=%[prt-opt]=acc     prt-chk=PRT,PRT-Co2,PRT-%[dir],PRT-%[dir]-Co2,PRT-A,PRT-A-Co2,PRT-A-%[dir],PRT-A-%[dir]-Co2                                                  )
-// RUN:   (mode=MODE_Co2 prt=%[prt-opt]=omp     prt-chk=PRT,PRT-Co2,PRT-%[dir],PRT-%[dir]-Co2,PRT-O,PRT-O-Co2,PRT-O-%[dir],PRT-O-%[dir]-Co2                                                  )
-// RUN:   (mode=MODE_Co2 prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-Co2,PRT-%[dir],PRT-%[dir]-Co2,PRT-A,PRT-A-Co2,PRT-A-%[dir],PRT-A-%[dir]-Co2,PRT-AO,PRT-AO-Co2,PRT-AO-%[dir],PRT-AO-%[dir]-Co2)
-// RUN:   (mode=MODE_Co2 prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-Co2,PRT-%[dir],PRT-%[dir]-Co2,PRT-O,PRT-O-Co2,PRT-O-%[dir],PRT-O-%[dir]-Co2,PRT-OA,PRT-OA-Co2,PRT-OA-%[dir],PRT-OA-%[dir]-Co2)
-//
-// RUN:   (mode=MODE_Cr0 prt=%[prt-opt]=acc     prt-chk=PRT,PRT-Cr0,PRT-%[dir],PRT-%[dir]-Cr0,PRT-A,PRT-A-Cr0,PRT-A-%[dir],PRT-A-%[dir]-Cr0                                                  )
-// RUN:   (mode=MODE_Cr0 prt=%[prt-opt]=omp     prt-chk=PRT,PRT-Cr0,PRT-%[dir],PRT-%[dir]-Cr0,PRT-O,PRT-O-Cr0,PRT-O-%[dir],PRT-O-%[dir]-Cr0                                                  )
-// RUN:   (mode=MODE_Cr0 prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-Cr0,PRT-%[dir],PRT-%[dir]-Cr0,PRT-A,PRT-A-Cr0,PRT-A-%[dir],PRT-A-%[dir]-Cr0,PRT-AO,PRT-AO-Cr0,PRT-AO-%[dir],PRT-AO-%[dir]-Cr0)
-// RUN:   (mode=MODE_Cr0 prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-Cr0,PRT-%[dir],PRT-%[dir]-Cr0,PRT-O,PRT-O-Cr0,PRT-O-%[dir],PRT-O-%[dir]-Cr0,PRT-OA,PRT-OA-Cr0,PRT-OA-%[dir],PRT-OA-%[dir]-Cr0)
-//
-// RUN:   (mode=MODE_Cr1 prt=%[prt-opt]=acc     prt-chk=PRT,PRT-Cr1,PRT-%[dir],PRT-%[dir]-Cr1,PRT-A,PRT-A-Cr1,PRT-A-%[dir],PRT-A-%[dir]-Cr1                                                  )
-// RUN:   (mode=MODE_Cr1 prt=%[prt-opt]=omp     prt-chk=PRT,PRT-Cr1,PRT-%[dir],PRT-%[dir]-Cr1,PRT-O,PRT-O-Cr1,PRT-O-%[dir],PRT-O-%[dir]-Cr1                                                  )
-// RUN:   (mode=MODE_Cr1 prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-Cr1,PRT-%[dir],PRT-%[dir]-Cr1,PRT-A,PRT-A-Cr1,PRT-A-%[dir],PRT-A-%[dir]-Cr1,PRT-AO,PRT-AO-Cr1,PRT-AO-%[dir],PRT-AO-%[dir]-Cr1)
-// RUN:   (mode=MODE_Cr1 prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-Cr1,PRT-%[dir],PRT-%[dir]-Cr1,PRT-O,PRT-O-Cr1,PRT-O-%[dir],PRT-O-%[dir]-Cr1,PRT-OA,PRT-OA-Cr1,PRT-OA-%[dir],PRT-OA-%[dir]-Cr1)
-//
-// RUN:   (mode=MODE_Cr2 prt=%[prt-opt]=acc     prt-chk=PRT,PRT-Cr2,PRT-%[dir],PRT-%[dir]-Cr2,PRT-A,PRT-A-Cr2,PRT-A-%[dir],PRT-A-%[dir]-Cr2                                                  )
-// RUN:   (mode=MODE_Cr2 prt=%[prt-opt]=omp     prt-chk=PRT,PRT-Cr2,PRT-%[dir],PRT-%[dir]-Cr2,PRT-O,PRT-O-Cr2,PRT-O-%[dir],PRT-O-%[dir]-Cr2                                                  )
-// RUN:   (mode=MODE_Cr2 prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-Cr2,PRT-%[dir],PRT-%[dir]-Cr2,PRT-A,PRT-A-Cr2,PRT-A-%[dir],PRT-A-%[dir]-Cr2,PRT-AO,PRT-AO-Cr2,PRT-AO-%[dir],PRT-AO-%[dir]-Cr2)
-// RUN:   (mode=MODE_Cr2 prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-Cr2,PRT-%[dir],PRT-%[dir]-Cr2,PRT-O,PRT-O-Cr2,PRT-O-%[dir],PRT-O-%[dir]-Cr2,PRT-OA,PRT-OA-Cr2,PRT-OA-%[dir],PRT-OA-%[dir]-Cr2)
-//
-// RUN:   (mode=MODE_F  prt=%[prt-opt]=acc     prt-chk=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-A,PRT-A-F,PRT-A-%[dir],PRT-A-%[dir]-F                                              )
-// RUN:   (mode=MODE_F  prt=%[prt-opt]=omp     prt-chk=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-O,PRT-O-F,PRT-O-%[dir],PRT-O-%[dir]-F                                              )
-// RUN:   (mode=MODE_F  prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-A,PRT-A-F,PRT-A-%[dir],PRT-A-%[dir]-F,PRT-AO,PRT-AO-F,PRT-AO-%[dir],PRT-AO-%[dir]-F)
-// RUN:   (mode=MODE_F  prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-F,PRT-%[dir],PRT-%[dir]-F,PRT-O,PRT-O-F,PRT-O-%[dir],PRT-O-%[dir]-F,PRT-OA,PRT-OA-F,PRT-OA-%[dir],PRT-OA-%[dir]-F)
-//
-// RUN:   (mode=MODE_P  prt=%[prt-opt]=acc     prt-chk=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-A,PRT-A-P,PRT-A-%[dir],PRT-A-%[dir]-P                                              )
-// RUN:   (mode=MODE_P  prt=%[prt-opt]=omp     prt-chk=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-O,PRT-O-P,PRT-O-%[dir],PRT-O-%[dir]-P                                              )
-// RUN:   (mode=MODE_P  prt=%[prt-opt]=acc-omp prt-chk=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-A,PRT-A-P,PRT-A-%[dir],PRT-A-%[dir]-P,PRT-AO,PRT-AO-P,PRT-AO-%[dir],PRT-AO-%[dir]-P)
-// RUN:   (mode=MODE_P  prt=%[prt-opt]=omp-acc prt-chk=PRT,PRT-P,PRT-%[dir],PRT-%[dir]-P,PRT-O,PRT-O-P,PRT-O-%[dir],PRT-O-%[dir]-P,PRT-OA,PRT-OA-P,PRT-OA-%[dir],PRT-OA-%[dir]-P)
-// RUN: }
-// RUN: %for directives {
-// RUN:   %for prt-opts {
-// RUN:     %for prt-args {
-// RUN:       %clang -Xclang -verify %[prt] -DMODE=%[mode] %[dir-cflags] \
-// RUN:              %t-acc.c -Wno-openacc-omp-map-ompx-hold \
-// RUN:       | FileCheck -check-prefixes=%[prt-chk] %s
-// RUN:     }
-// RUN:   }
-// RUN: }
-
-// Can we print the OpenMP source code, compile, and run it successfully?
-//
 // When we are targeting the host, memory is shared, so copy, copyin, copyout,
 // create, and their aliases all act like copy.
 //
 // RUN: %data exes {
-// RUN:   (mode=MODE_I   cflags=                 pre-host=EXE-I,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-ICiCrFP,EXE-IF,EXE pre-tgt=EXE-I,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-ICiCrFP,EXE-IF,EXE    )
-// RUN:   (mode=MODE_I   cflags=-DSTORAGE=static pre-host=EXE-I,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-ICiCrFP,EXE-IF,EXE pre-tgt=EXE-I,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-ICiCrFP,EXE-IF,EXE    )
-// RUN:   (mode=MODE_C0  cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE       )
-// RUN:   (mode=MODE_C0  cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE       )
-// RUN:   (mode=MODE_C1  cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE       )
-// RUN:   (mode=MODE_C1  cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE       )
-// RUN:   (mode=MODE_C2  cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE       )
-// RUN:   (mode=MODE_C2  cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE       )
-// RUN:   (mode=MODE_Ci0 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CCi,EXE-CiCrFP,EXE)
-// RUN:   (mode=MODE_Ci0 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CCi,EXE-CiCrFP,EXE)
-// RUN:   (mode=MODE_Ci1 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CCi,EXE-CiCrFP,EXE)
-// RUN:   (mode=MODE_Ci1 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CCi,EXE-CiCrFP,EXE)
-// RUN:   (mode=MODE_Ci2 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CCi,EXE-CiCrFP,EXE)
-// RUN:   (mode=MODE_Ci2 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Ci,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CCi,EXE-CiCrFP,EXE)
-// RUN:   (mode=MODE_Co0 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoCrP,EXE                                    )
-// RUN:   (mode=MODE_Co0 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoCrP,EXE                                    )
-// RUN:   (mode=MODE_Co1 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoCrP,EXE                                    )
-// RUN:   (mode=MODE_Co1 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoCrP,EXE                                    )
-// RUN:   (mode=MODE_Co2 cflags=                 pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoCrP,EXE                                    )
-// RUN:   (mode=MODE_Co2 cflags=-DSTORAGE=static pre-host=EXE-C,EXE-ICCi,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICCo,EXE-CCi,EXE-CCo,EXE    pre-tgt=EXE-Co,EXE-ICCo,EXE-CCo,EXE-CoCrP,EXE                                    )
-// RUN:   (mode=MODE_F   cflags=                 pre-host=EXE-F,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE-IF,EXE        pre-tgt=EXE-F,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE-IF,EXE           )
-// RUN:   (mode=MODE_F   cflags=-DSTORAGE=static pre-host=EXE-F,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE-IF,EXE        pre-tgt=EXE-F,EXE-ICCiF,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE-IF,EXE           )
-// RUN:   (mode=MODE_P   cflags=                 pre-host=EXE-P,EXE-CoCrP,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE               pre-tgt=EXE-P,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE                            )
-// RUN:   (mode=MODE_P   cflags=-DSTORAGE=static pre-host=EXE-P,EXE-CoCrP,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE               pre-tgt=EXE-P,EXE-ICCiCrFP,EXE-ICiCrFP,EXE-CiCrFP,EXE                            )
+// RUN:   (mode=MODE_I   cflags=                 pre=I,ICCi,ICCiF,ICCiCrFP,ICCo,ICiCrFP,IF                                                         )
+// RUN:   (mode=MODE_I   cflags=-DSTORAGE=static pre=I,ICCi,ICCiF,ICCiCrFP,ICCo,ICiCrFP,IF                                                         )
+// RUN:   (mode=MODE_C0  cflags=                 pre=C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                            )
+// RUN:   (mode=MODE_C0  cflags=-DSTORAGE=static pre=C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                            )
+// RUN:   (mode=MODE_C1  cflags=                 pre=C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                            )
+// RUN:   (mode=MODE_C1  cflags=-DSTORAGE=static pre=C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                            )
+// RUN:   (mode=MODE_C2  cflags=                 pre=C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                            )
+// RUN:   (mode=MODE_C2  cflags=-DSTORAGE=static pre=C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                            )
+// RUN:   (mode=MODE_Ci0 cflags=                 pre=%if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP>)
+// RUN:   (mode=MODE_Ci0 cflags=-DSTORAGE=static pre=%if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP>)
+// RUN:   (mode=MODE_Ci1 cflags=                 pre=%if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP>)
+// RUN:   (mode=MODE_Ci1 cflags=-DSTORAGE=static pre=%if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP>)
+// RUN:   (mode=MODE_Ci2 cflags=                 pre=%if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP>)
+// RUN:   (mode=MODE_Ci2 cflags=-DSTORAGE=static pre=%if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP>)
+// RUN:   (mode=MODE_Co0 cflags=                 pre=%if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                            )
+// RUN:   (mode=MODE_Co0 cflags=-DSTORAGE=static pre=%if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                            )
+// RUN:   (mode=MODE_Co1 cflags=                 pre=%if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                            )
+// RUN:   (mode=MODE_Co1 cflags=-DSTORAGE=static pre=%if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                            )
+// RUN:   (mode=MODE_Co2 cflags=                 pre=%if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                            )
+// RUN:   (mode=MODE_Co2 cflags=-DSTORAGE=static pre=%if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                            )
+// RUN:   (mode=MODE_F   cflags=                 pre=F,ICCiF,ICCiCrFP,ICiCrFP,CiCrFP,IF                                                            )
+// RUN:   (mode=MODE_F   cflags=-DSTORAGE=static pre=F,ICCiF,ICCiCrFP,ICiCrFP,CiCrFP,IF                                                            )
+// RUN:   (mode=MODE_P   cflags=                 pre=P,%if-tgt-host<CoCrP,|>ICCiCrFP,ICiCrFP,CiCrFP                                                )
+// RUN:   (mode=MODE_P   cflags=-DSTORAGE=static pre=P,%if-tgt-host<CoCrP,|>ICCiCrFP,ICiCrFP,CiCrFP                                                )
 // RUN: }
-//
-// FIXME: amdgcn doesn't yet support printf in a kernel.
-//
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'                   host-or-tgt=host tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'                   host-or-tgt=tgt  tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'                   host-or-tgt=tgt  tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64'           host-or-tgt=tgt  tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify -DTGT_USE_STDIO=0' host-or-tgt=tgt  tgt-use-stdio=NO-TGT-USE-STDIO)
-// RUN: }
-//
+
 // RUN: %for directives {
-// RUN:   %for exes {
-//          # FIXME: amdgcn doesn't yet support printf in a kernel, but
-//          # -fopenacc-print=omp still fails to suppress macro expansion in
-//          # some kernels.  To avoid expanding TGT_PRINTF to printf here and
-//          # thus breaking amdgcn compilation later, we prototype TGT_PRINTF as
-//          # a function here, and then we define it to either printf or nothing
-//          # when we compile for the target.  When either of those limitations
-//          # is fixed, this hack can go away.  Once it does, the
-//          # -DTGT_PRINTF=printf in the %t-ast-prt-omp.c case below will be
-//          # redundant and so can go away too.
-// RUN:     %for prt-opts {
-// RUN:       %clang -Xclang -verify %[prt-opt]=omp %s > %t-%[prt-kind]-omp.c \
-// RUN:         -DMODE=%[mode] %[cflags] %[dir-cflags] \
-// RUN:         -Wno-openacc-omp-map-ompx-hold -DTGT_PRINTF_PROTO
-// RUN:       echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
-// RUN:     }
-// RUN:     %clang -Xclang -verify -fopenmp %fopenmp-version -o %t \
-// RUN:       -DMODE=%[mode] %[cflags] %[dir-cflags] %t-ast-prt-omp.c \
-// RUN:       -DTGT_PRINTF=printf
-// RUN:     %t > %t.out 2>&1
-// RUN:     echo \
-// RUN:       'FileCheck -input-file %t.out %s ' \
-// RUN:       '-check-prefixes=%[pre-host],' \
-// RUN:     | sed -e 's/\([^,=]*\),/\1,\1-TGT-USE-STDIO,/g' -e 's/,$//' \
-// RUN:     > %t-fc
-// RUN:     sh %t-fc
-// RUN:     %for tgts {
-// RUN:       %[run-if] %clang -fopenmp %fopenmp-version -o %t \
-// RUN:         -DMODE=%[mode] -DEXE_ON_%[host-or-tgt] \
-// RUN:         %[cflags] %[tgt-cflags] %[dir-cflags] %t-prt-omp.c
-// RUN:       %[run-if] %t > %t.out 2>&1
-// RUN:       echo \
-// RUN:         'FileCheck -input-file %t.out %s ' \
-// RUN:         '-check-prefixes=%[pre-%[host-or-tgt]],' \
-// RUN:       | sed -e 's/\([^,=]*\),/\1,\1-%[tgt-use-stdio],/g' -e 's/,$//' \
-// RUN:       > %t-fc
-// RUN:       %[run-if] sh %t-fc
-// RUN:     }
+// RUN:   %for dmps {
+// RUN:     %acc-check-dmp{                                                    \
+// RUN:       clang-args: -DMODE=%[mode] %[dir-cflags];                        \
+// RUN:       fc-args:    ;                                                    \
+// RUN:       fc-pres:    %[pre]}
 // RUN:   }
-// RUN: }
-//
-// Check execution with normal compilation.
-//
-// RUN: %for directives {
+// RUN:   %for prts {
+// RUN:     %acc-check-prt{                                                    \
+// RUN:       clang-args: -DMODE=%[mode] %[dir-cflags];                        \
+// RUN:       fc-args:    ;                                                    \
+// RUN:       fc-pres:    %[pre]}
+// RUN:   }
 // RUN:   %for exes {
-// RUN:     %for tgts {
-// RUN:       %[run-if] %clang -fopenacc %s -o %t \
-// RUN:                        -DMODE=%[mode] -DEXE_ON_%[host-or-tgt] \
-// RUN:                        %[cflags] %[tgt-cflags] %[dir-cflags]
-// RUN:       %[run-if] %t > %t.out 2>&1
-// RUN:       echo \
-// RUN:         'FileCheck -input-file %t.out %s ' \
-// RUN:         '-check-prefixes=%[pre-%[host-or-tgt]],' \
-// RUN:       | sed -e 's/\([^,=]*\),/\1,\1-%[tgt-use-stdio],/g' -e 's/,$//' \
-// RUN:       > %t-fc
-// RUN:       %[run-if] sh %t-fc
-// RUN:     }
+// RUN:     %acc-check-exe{                                                    \
+// RUN:       clang-args: -DMODE=%[mode] %[dir-cflags] %[cflags];              \
+// RUN:       exe-args:   ;                                                    \
+// RUN:       fc-args:    ;                                                    \
+// RUN:       fc-pres:    %[pre]}
 // RUN:   }
 // RUN: }
 
@@ -290,9 +115,9 @@
 // RUN:   (mode=MODE_P  cflags=-DSTORAGE=static)
 // RUN: }
 // RUN: %for llvm {
-// RUN:   %clang -Xclang -verify -fopenacc -S -emit-llvm -o %t -DMODE=%[mode] \
-// RUN:          %[cflags] %s
-// RUN:   cat %t | FileCheck -check-prefixes=LLVM %s
+// RUN:   %if-exe-host %clang -Xclang -verify -fopenacc -S -emit-llvm \
+// RUN:     -o %t.llvm -DMODE=%[mode] %[cflags] %s
+// RUN:   %if-exe-host FileCheck -input-file %t.llvm -check-prefixes=LLVM %s
 // RUN: }
 //
 // LLVM: define internal void @.omp_outlined.
@@ -301,23 +126,17 @@
 
 // END.
 
-// expected-no-diagnostics
+/* expected-error 0 {{}} */
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
-// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
-// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}} */
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
 
 #include <stdio.h>
 #include <stdint.h>
 
-#ifndef TGT_USE_STDIO
-# define TGT_USE_STDIO 1
-#endif
-
-#if TGT_PRINTF_PROTO
-int TGT_PRINTF(const char *, ...);
-#elif TGT_USE_STDIO
+#if TGT_USE_STDIO
 # define TGT_PRINTF(...) printf(__VA_ARGS__)
 #else
 # define TGT_PRINTF(...)
@@ -419,7 +238,7 @@ int TGT_PRINTF(const char *, ...);
 // FIXME: When OpenMP offloading is activated by -fopenmp-targets, pointers
 // pass into acc parallel as null, but otherwise they pass in just fine.
 // What does the OpenMP spec say is supposed to happen?
-#if EXE_ON_host
+#if TGT_HOST
 # define DEREF_PTR(Ptr) (*(Ptr))
 #else
 # define DEREF_PTR(Ptr) 9999
@@ -486,6 +305,9 @@ int main() {
   // explicit data attributes.
   CONST int ci = 53;
   CONST int ca[3] = {10, 11, 12};
+
+  // PRT: int START_OF_PRT;
+  int START_OF_PRT;
 
   //                DMP-PARLOOP: ACCParallelLoopDirective
   //           DMP-PARLOOP-NEXT:   ACCSeqClause

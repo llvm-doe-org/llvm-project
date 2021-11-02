@@ -1,105 +1,25 @@
 // Check "acc routine".
 
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags=                                     host-or-dev=HOST verify=expected)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags=-fopenmp-targets=%run-x86_64-triple  host-or-dev=DEV  verify=expected)
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags=-fopenmp-targets=%run-ppc64le-triple host-or-dev=DEV  verify=expected)
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags=-fopenmp-targets=%run-nvptx64-triple host-or-dev=DEV  verify=nvptx64 )
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags=-fopenmp-targets=%run-amdgcn-triple  host-or-dev=DEV  verify=expected)
-// RUN: }
-
-// Check -ast-dump before and after AST serialization.
+// RUN: %acc-check-dmp{                                                        \
+// RUN:   clang-args: ;                                                        \
+// RUN:   fc-args:    -implicit-check-not=ACCRoutineDeclAttr                   \
+// RUN:               -implicit-check-not=OMPDeclareTargetDeclAttr}
+// RUN: %acc-check-prt{}
 //
-// RUN: %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only \
-// RUN:        %acc-includes -fopenacc %s \
-// RUN: | FileCheck -check-prefixes=DMP %s \
-// RUN:             -implicit-check-not=ACCRoutineDeclAttr \
-// RUN:             -implicit-check-not=OMPDeclareTargetDeclAttr
-// RUN: %clang -Xclang -verify -fopenacc -emit-ast %acc-includes -o %t.ast %s
-// RUN: %clang_cc1 -ast-dump-all %t.ast \
-// RUN: | FileCheck -check-prefixes=DMP %s \
-// RUN:             -implicit-check-not=ACCRoutineDeclAttr \
-// RUN:             -implicit-check-not=OMPDeclareTargetDeclAttr
-
-// Check -ast-print and -fopenacc[-ast]-print.
-//
-// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %acc-includes \
-// RUN:   %s \
-// RUN: | FileCheck -check-prefixes=PRT,PRT-AST %s
-//
-// Strip comments and blank lines so checking -fopenacc-print output is easier.
-// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
-// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's, *\(//.*\)\?$,,' >> %t-acc.c
-//
-// RUN: %data prt-args {
-// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-A,PRT-AST,PRT-AST-A)
-// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT,PRT-A,PRT-AST,PRT-AST-A)
-// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT,PRT-O,PRT-AST,PRT-AST-O)
-// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT,PRT-A,PRT-AO,PRT-AST,PRT-AST-A,PRT-AST-AO)
-// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT,PRT-O,PRT-OA,PRT-AST,PRT-AST-O,PRT-AST-OA)
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT,PRT-A,PRT-SRC,PRT-SRC-A)
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT,PRT-O,PRT-SRC,PRT-SRC-O)
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT,PRT-A,PRT-AO,PRT-SRC,PRT-SRC-A,PRT-SRC-AO)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT,PRT-O,PRT-OA,PRT-SRC,PRT-SRC-O,PRT-SRC-OA)
-// RUN: }
-// RUN: %for prt-args {
-// RUN:   %clang -Xclang -verify %[prt] %acc-includes %t-acc.c \
-// RUN:     -Wno-openacc-omp-map-ompx-hold \
-// RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
-// RUN: }
-
-// Check -ast-print after AST serialization.
-//
-// Some data related to printing (where to print comments about discarded
-// directives) is serialized and deserialized, so it's worthwhile to try all
-// OpenACC printing modes.
-//
-// RUN: %clang -Xclang -verify -fopenacc -emit-ast %acc-includes %t-acc.c \
-// RUN:        -o %t.ast
-// RUN: %for prt-args {
-// RUN:   %clang %[prt] %t.ast 2>&1 \
-// RUN:   | FileCheck -check-prefixes=%[prt-chk] %s
-// RUN: }
-
-// Can we print the OpenMP source code, compile, and run it successfully?
-//
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify -fopenacc-print=omp %acc-includes \
-// RUN:     -Wno-openacc-omp-map-ompx-hold %s > %t-omp.c
-// RUN:   %[run-if] echo "// expected""-no-diagnostics" >> %t-omp.c
-// RUN:   %[run-if] %clang -fopenacc-print=omp %acc-includes -DCOMPILE_OTHER \
-// RUN:                    %s > %t-other-omp.c
-// RUN:   %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] \
-// RUN:                    -DCOMPILE_OTHER %acc-includes -c -o %t-other.o \
-// RUN:                    %t-other-omp.c
-// RUN:   %[run-if] %clang -Xclang -verify=%[verify] -fopenmp %fopenmp-version \
-// RUN:                    %[tgt-cflags] %acc-includes -o %t.exe %t-omp.c \
-// RUN:                    %t-other.o
-// RUN:   %[run-if] %t.exe > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out %s \
-// RUN:     -strict-whitespace -check-prefixes=EXE,EXE-%[host-or-dev]
-// RUN: }
-
-// Check execution with normal compilation.
-//
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenacc %[tgt-cflags] %acc-includes -c \
-// RUN:                    -o %t-other.o -DCOMPILE_OTHER %s
-// RUN:   %[run-if] %clang -Xclang -verify=%[verify] -fopenacc %[tgt-cflags] \
-// RUN:                    %acc-includes -o %t.exe %s %t-other.o
-// RUN:   %[run-if] %t.exe > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out %s \
-// RUN:     -strict-whitespace -check-prefixes=EXE,EXE-%[host-or-dev]
-// RUN: }
+// RUN: %acc-check-exe-compile-c{base-name: main}
+// RUN: %acc-check-exe-compile-c{base-name: other; clang-args: -DCOMPILE_OTHER}
+// RUN: %acc-check-exe-link{clang-args: main.o other.o}
+// RUN: %acc-check-exe-run{}
+// RUN: %acc-check-exe-filecheck{fc-args: -strict-whitespace}
 
 // END.
 
-// expected-no-diagnostics
+/* expected-error 0 {{}} */
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
-// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
-// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}} */
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
 
 #include <openacc.h>
 #include <stdio.h>
@@ -429,6 +349,7 @@ void onDefOnDecl(Result *);
 //
 // FIXME: AST printing is broken due to the struct.
 //
+//    PRT-SRC-NEXT: #if !EXE_S2S_AST_PRT
 //      PRT-A-NEXT: {{^ *}}#pragma acc routine seq{{$}}
 //     PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //      PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
@@ -436,13 +357,16 @@ void onDefOnDecl(Result *);
 //        PRT-NEXT: struct fnDefAddsType *fnDefAddsType(Result *Res) {
 //             PRT: }{{$}}
 //    PRT-AST-NEXT: ;
-//  PRT-SRC-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
-// PRT-SRC-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
+//  PRT-O-SRC-NEXT: {{^ *}}#pragma omp end declare target{{$}}
+// PRT-AO-SRC-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
+//    PRT-SRC-NEXT: #endif
+#if !EXE_S2S_AST_PRT
 #pragma acc routine seq
 struct fnDefAddsType *fnDefAddsType(Result *Res) { // type decl not in function's DeclGroup
   WRITE_RESULT(Res);
   return 0;
 }
+#endif
 
 //      DMP: FunctionDecl [[#%#x,fnDeclAddsType:]] {{.*}} fnDeclAddsType 'struct fnDeclAddsType *(Result *)'
 //  DMP-NOT: FunctionDecl
@@ -455,23 +379,27 @@ struct fnDefAddsType *fnDefAddsType(Result *Res) { // type decl not in function'
 //
 // FIXME: AST printing is broken due to the struct.
 //
+//    PRT-SRC-NEXT: #if !EXE_S2S_AST_PRT
 //      PRT-A-NEXT: {{^ *}}#pragma acc routine seq{{$}}
 //     PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
 //      PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
 //     PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
 //    PRT-SRC-NEXT: struct fnDeclAddsType *fnDeclAddsType(Result *);
-//  PRT-SRC-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
-// PRT-SRC-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
+//  PRT-O-SRC-NEXT: {{^ *}}#pragma omp end declare target{{ *$}}
+// PRT-AO-SRC-NEXT: {{^ *}}// #pragma omp end declare target{{ $}}
 //    PRT-SRC-NEXT: struct fnDeclAddsType *fnDeclAddsType(Result *Res) {
 //    PRT-AST-NEXT: struct fnDeclAddsType *fnDeclAddsType(Result *), *fnDeclAddsType(Result *Res) {
 //             PRT: }{{$}}
 //    PRT-AST-NEXT: ;
+//    PRT-SRC-NEXT: #endif
+#if !EXE_S2S_AST_PRT
 #pragma acc routine seq
 struct fnDeclAddsType *fnDeclAddsType(Result *); // type decl in function's Declgroup
 struct fnDeclAddsType *fnDeclAddsType(Result *Res) { // type isn't new so has no decl
   WRITE_RESULT(Res);
   return 0;
 }
+#endif
 
 // EXE-NOT: {{.}}
 int main(int argc, char *argv[]) {
@@ -500,8 +428,13 @@ int main(int argc, char *argv[]) {
   onDeclOnDecl(&Res); PRINT_RESULT(onDeclOnDecl, Res);
   onDeclOnDef(&Res); PRINT_RESULT(onDeclOnDef, Res);
   onDefOnDecl(&Res); PRINT_RESULT(onDefOnDecl, Res);
+#if !EXE_S2S_AST_PRT
   fnDefAddsType(&Res); PRINT_RESULT(fnDefAddsType, Res);
   fnDeclAddsType(&Res); PRINT_RESULT(fnDeclAddsType, Res);
+#else
+  printf("fnDefAddsType: host=1, not_host=0\n");
+  printf("fnDeclAddsType: host=1, not_host=0\n");
+#endif
   // EXE-HOST-NEXT:         onDecl: host=1, not_host=0
   // EXE-HOST-NEXT:          onDef: host=1, not_host=0
   // EXE-HOST-NEXT:     onDeclDecl: host=1, not_host=0
@@ -515,19 +448,19 @@ int main(int argc, char *argv[]) {
   // EXE-HOST-NEXT:    onDefOnDecl: host=1, not_host=0
   // EXE-HOST-NEXT:  fnDefAddsType: host=1, not_host=0
   // EXE-HOST-NEXT: fnDeclAddsType: host=1, not_host=0
-  //  EXE-DEV-NEXT:         onDecl: host=0, not_host=1
-  //  EXE-DEV-NEXT:          onDef: host=0, not_host=1
-  //  EXE-DEV-NEXT:     onDeclDecl: host=0, not_host=1
-  //  EXE-DEV-NEXT:      onDeclDef: host=0, not_host=1
-  //  EXE-DEV-NEXT:      onDefDecl: host=0, not_host=1
-  //  EXE-DEV-NEXT:     declOnDecl: host=0, not_host=1
-  //  EXE-DEV-NEXT:      declOnDef: host=0, not_host=1
-  //  EXE-DEV-NEXT:      defOnDecl: host=0, not_host=1
-  //  EXE-DEV-NEXT:   onDeclOnDecl: host=0, not_host=1
-  //  EXE-DEV-NEXT:    onDeclOnDef: host=0, not_host=1
-  //  EXE-DEV-NEXT:    onDefOnDecl: host=0, not_host=1
-  //  EXE-DEV-NEXT:  fnDefAddsType: host=0, not_host=1
-  //  EXE-DEV-NEXT: fnDeclAddsType: host=0, not_host=1
+  //  EXE-OFF-NEXT:         onDecl: host=0, not_host=1
+  //  EXE-OFF-NEXT:          onDef: host=0, not_host=1
+  //  EXE-OFF-NEXT:     onDeclDecl: host=0, not_host=1
+  //  EXE-OFF-NEXT:      onDeclDef: host=0, not_host=1
+  //  EXE-OFF-NEXT:      onDefDecl: host=0, not_host=1
+  //  EXE-OFF-NEXT:     declOnDecl: host=0, not_host=1
+  //  EXE-OFF-NEXT:      declOnDef: host=0, not_host=1
+  //  EXE-OFF-NEXT:      defOnDecl: host=0, not_host=1
+  //  EXE-OFF-NEXT:   onDeclOnDecl: host=0, not_host=1
+  //  EXE-OFF-NEXT:    onDeclOnDef: host=0, not_host=1
+  //  EXE-OFF-NEXT:    onDefOnDecl: host=0, not_host=1
+  //  EXE-OFF-NEXT:  fnDefAddsType: host=0, not_host=1
+  //  EXE-OFF-NEXT: fnDeclAddsType: host=0, not_host=1
   #pragma acc parallel num_gangs(1) copyout(Res)
   onDecl(&Res); PRINT_RESULT(onDecl, Res);
   #pragma acc parallel num_gangs(1) copyout(Res)
@@ -550,10 +483,18 @@ int main(int argc, char *argv[]) {
   onDeclOnDef(&Res); PRINT_RESULT(onDeclOnDef, Res);
   #pragma acc parallel num_gangs(1) copyout(Res)
   onDefOnDecl(&Res); PRINT_RESULT(onDefOnDecl, Res);
+#if !EXE_S2S_AST_PRT
   #pragma acc parallel num_gangs(1) copyout(Res)
   fnDefAddsType(&Res); PRINT_RESULT(fnDefAddsType, Res);
   #pragma acc parallel num_gangs(1) copyout(Res)
   fnDeclAddsType(&Res); PRINT_RESULT(fnDeclAddsType, Res);
+#elif TGT_HOST
+  printf("fnDefAddsType: host=1, not_host=0\n");
+  printf("fnDeclAddsType: host=1, not_host=0\n");
+#else
+  printf("fnDefAddsType: host=0, not_host=1\n");
+  printf("fnDeclAddsType: host=0, not_host=1\n");
+#endif
   return 0;
 }
 // EXE-NOT: {{.}}

@@ -1,5 +1,5 @@
 // Check nested acc loops.
-//
+
 // When CMB is not set, this file checks cases when the outermost "acc loop"
 // is separate from the enclosing "acc parallel".
 //
@@ -7,151 +7,50 @@
 // loop" directive in order to check the same cases but for combined "acc
 // parallel loop" directives.
 //
-// Abbreviations:
-//   A     = OpenACC
-//   AO    = commented OpenMP is printed after OpenACC
-//   O     = OpenMP
-//   OA    = commented OpenACC is printed after OpenMP
-//
 // RUN: %data cmbs {
 // RUN:   (cmb-cflags=      cmb=SEP)
 // RUN:   (cmb-cflags=-DCMB cmb=CMB)
 // RUN: }
 
-// Check -ast-dump before and after AST serialization.
-//
-// RUN: %for cmbs {
-// RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
-// RUN:          %[cmb-cflags] \
-// RUN:   | FileCheck %s -check-prefixes=DMP,DMP-%[cmb]
-// RUN:   %clang -Xclang -verify -fopenacc -emit-ast %[cmb-cflags] -o %t.ast %s
-// RUN:   %clang_cc1 -ast-dump-all %t.ast \
-// RUN:   | FileCheck %s -check-prefixes=DMP,DMP-%[cmb]
-// RUN: }
-
-// Check -ast-print and -fopenacc[-ast]-print.
-//
-// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
-// RUN: | FileCheck -check-prefixes=PRT,PRT-NOACC %s
-//
-// Strip comments and blank lines so checking -fopenacc-print output is easier.
-// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
-// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
-//
-// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
-// (which would need additional fields) within prt-args after the first
-// prt-args iteration, significantly shortening the prt-args definition.
-//
-// RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
-// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
-// RUN: }
-// RUN: %data prt-args {
-// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb])
-// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb])
-// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT,PRT-%[cmb],PRT-O,PRT-O-%[cmb])
-// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb],PRT-AO,PRT-AO-%[cmb])
-// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT,PRT-%[cmb],PRT-O,PRT-O-%[cmb],PRT-OA,PRT-OA-%[cmb])
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-PRE,PRT-PRE-%[cmb],PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb])
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-PRE,PRT-PRE-%[cmb],PRT,PRT-%[cmb],PRT-O,PRT-O-%[cmb])
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-PRE,PRT-PRE-%[cmb],PRT,PRT-%[cmb],PRT-A,PRT-A-%[cmb],PRT-AO,PRT-AO-%[cmb])
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-PRE,PRT-PRE-%[cmb],PRT,PRT-%[cmb],PRT-O,PRT-O-%[cmb],PRT-OA,PRT-OA-%[cmb])
-// RUN: }
-// RUN: %for cmbs {
-// RUN:   %for prt-args {
-// RUN:     %clang -Xclang -verify %[prt] %t-acc.c %[cmb-cflags] \
-// RUN:     | FileCheck -check-prefixes=%[prt-chk] %s
-// RUN:   }
-// RUN: }
-
-// Check -ast-print after AST serialization.
-//
-// Some data related to printing (where to print comments about discarded
-// directives) is serialized and deserialized, so it's worthwhile to try all
-// OpenACC printing modes.
-//
-// RUN: %for cmbs {
-// RUN:   %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast \
-// RUN:          %[cmb-cflags]
-// RUN:   %for prt-args {
-// RUN:     %clang %[prt] %t.ast 2>&1 \
-// RUN:     | FileCheck -check-prefixes=%[prt-chk] %s
-// RUN:   }
-// RUN: }
-
-// Can we print the OpenMP source code, compile, and run it successfully?
-//
-// -fopenacc-ast-print is guaranteed to expand includes and macros appropiately
-// only for the host architecture, so don't try to use it for offload
-// compilation.  Do try it for the host as it's good way to catch AST printing
-// issues.
-//
 // FIXME: Several upstream compiler bugs were recently introduced that break
 // behavior when offloading to nvptx64 unless we add -O1 or higher, but that
 // causes many diagnostics like:
 //
 //   loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
 //
-// To avoid all this until upstream fixes it, we add -O1 -Wno-pass-failed.
+// To avoid all this until upstream fixes it, we add:
 //
-// FIXME: amdgcn doesn't yet support printf in a kernel.  Unfortunately, That
+//   -O1 -Wno-pass-failed.
+//
+// FIXME: amdgcn doesn't yet support printf in a kernel.  Unfortunately, that
 // means our execution checks on amdgcn don't verify much except that nothing
 // crashes.
 //
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'                              tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -O1 -Wno-pass-failed -Xclang -verify=nvptx64' tgt-use-stdio=TGT-USE-STDIO   )
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify -DTGT_USE_STDIO=0'            tgt-use-stdio=NO-TGT-USE-STDIO)
-// RUN: }
 // RUN: %for cmbs {
-// RUN:   %for prt-opts {
-// RUN:     %clang -Xclang -verify %[prt-opt]=omp %s > %t-%[prt-kind]-omp.c \
-// RUN:       %[cmb-cflags]
-// RUN:     echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
-// RUN:   }
-// RUN:   %clang -fopenmp %fopenmp-version -Xclang -verify -o %t \
-// RUN:     %t-ast-prt-omp.c -Wno-unused-function %[cmb-cflags]
-// RUN:   %t > %t.out 2>&1
-// RUN:   FileCheck -input-file %t.out %s -check-prefixes=EXE,EXE-TGT-USE-STDIO
-// RUN:   %for tgts {
-// RUN:     %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] -o %t \
-// RUN:       %t-prt-omp.c %[cmb-cflags]
-// RUN:     %[run-if] %t > %t.out 2>&1
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:       -check-prefixes=EXE,EXE-%[tgt-use-stdio]
-// RUN:   }
-// RUN: }
-
-// Check execution with normal compilation.
-//
-// RUN: %for cmbs {
-// RUN:   %for tgts {
-// RUN:     %[run-if] %clang -fopenacc %s -o %t \
-// RUN:                      %[cmb-cflags] %[tgt-cflags]
-// RUN:     %[run-if] %t > %t.out 2>&1
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:       -check-prefixes=EXE,EXE-%[tgt-use-stdio]
-// RUN:   }
+// RUN:   %acc-check-dmp{                                                      \
+// RUN:     clang-args: %[cmb-cflags];                                         \
+// RUN:     fc-args:    ;                                                      \
+// RUN:     fc-pres:    %[cmb]}
+// RUN:   %acc-check-prt{                                                      \
+// RUN:     clang-args: %[cmb-cflags];                                         \
+// RUN:     fc-args:    ;                                                      \
+// RUN:     fc-pres:    %[cmb]}
+// RUN:   %acc-check-exe{                                                      \
+// RUN:     clang-args: %[cmb-cflags] %if-tgt-nvptx64<-O1 -Wno-pass-failed|>}
 // RUN: }
 
 // END.
 
-// expected-no-diagnostics
+/* expected-error 0 {{}} */
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
-// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
-// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}} */
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#ifndef TGT_USE_STDIO
-# define TGT_USE_STDIO 1
-#endif
 
 #if TGT_USE_STDIO
 # define TGT_PRINTF(...) printf(__VA_ARGS__)
@@ -202,7 +101,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -214,22 +113,20 @@ int main() {
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop seq
   //  PRT-OA-SEP-SAME:     {{^}} // discarded in OpenMP translation
   //  PRT-OA-SEP-SAME:     {{^$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop seq{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop seq{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop seq
@@ -250,9 +147,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
@@ -332,7 +229,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -344,22 +241,20 @@ int main() {
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop seq
   //  PRT-OA-SEP-SAME:     {{^}} // discarded in OpenMP translation
   //  PRT-OA-SEP-SAME:     {{^$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop seq{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop seq{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop gang{{$}}
@@ -378,9 +273,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
@@ -454,7 +349,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -466,22 +361,20 @@ int main() {
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop seq
   //  PRT-OA-SEP-SAME:     {{^}} // discarded in OpenMP translation
   //  PRT-OA-SEP-SAME:     {{^$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop seq{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop seq{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop worker{{$}}
@@ -500,9 +393,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
@@ -583,7 +476,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -595,22 +488,20 @@ int main() {
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop seq
   //  PRT-OA-SEP-SAME:     {{^}} // discarded in OpenMP translation
   //  PRT-OA-SEP-SAME:     {{^$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop seq{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop seq{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop vector{{$}}
@@ -629,9 +520,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
@@ -717,7 +608,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -727,24 +618,22 @@ int main() {
   //  PRT-AO-SEP-NEXT:     // #pragma omp distribute{{$}}
   //   PRT-O-SEP-NEXT:     #pragma omp distribute{{$}}
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop gang{{$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) gang{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) gang{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop gang{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop gang{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) gang{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp distribute{{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp distribute{{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) gang{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop seq
@@ -763,9 +652,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
@@ -835,7 +724,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -847,22 +736,20 @@ int main() {
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop seq
   //  PRT-OA-SEP-SAME:     {{^}} // discarded in OpenMP translation
   //  PRT-OA-SEP-SAME:     {{^$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop seq{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop seq{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop gang worker{{$}}
@@ -881,9 +768,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
@@ -968,7 +855,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -978,24 +865,22 @@ int main() {
   //  PRT-AO-SEP-NEXT:     // #pragma omp distribute{{$}}
   //   PRT-O-SEP-NEXT:     #pragma omp distribute{{$}}
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop gang{{$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) gang{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) gang{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop gang{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop gang{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) gang{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp distribute{{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp distribute{{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) gang{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop seq
@@ -1014,9 +899,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
@@ -1085,7 +970,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -1097,22 +982,20 @@ int main() {
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop seq
   //  PRT-OA-SEP-SAME:     {{^}} // discarded in OpenMP translation
   //  PRT-OA-SEP-SAME:     {{^$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop seq{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop seq{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop gang vector{{$}}
@@ -1131,9 +1014,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
@@ -1219,7 +1102,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -1229,24 +1112,22 @@ int main() {
   //  PRT-AO-SEP-NEXT:     // #pragma omp distribute parallel for{{$}}
   //   PRT-O-SEP-NEXT:     #pragma omp distribute parallel for{{$}}
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop worker{{$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) worker{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) worker{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop worker{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop worker{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) worker{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp distribute parallel for{{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp distribute parallel for{{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) worker{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 4; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop seq
@@ -1265,9 +1146,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
@@ -1346,7 +1227,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -1358,22 +1239,20 @@ int main() {
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop seq
   //  PRT-OA-SEP-SAME:     {{^}} // discarded in OpenMP translation
   //  PRT-OA-SEP-SAME:     {{^$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop seq{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop seq{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop worker vector{{$}}
@@ -1392,9 +1271,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
@@ -1493,7 +1372,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -1503,24 +1382,22 @@ int main() {
   //  PRT-AO-SEP-NEXT:     // #pragma omp distribute{{$}}
   //   PRT-O-SEP-NEXT:     #pragma omp distribute{{$}}
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop gang{{$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) gang{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) gang{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop gang{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop gang{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) gang{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp distribute{{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp distribute{{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) gang{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop worker{{$}}
@@ -1537,9 +1414,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
@@ -1614,7 +1491,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -1624,24 +1501,22 @@ int main() {
   //  PRT-AO-SEP-NEXT:     // #pragma omp distribute parallel for{{$}}
   //   PRT-O-SEP-NEXT:     #pragma omp distribute parallel for{{$}}
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop gang worker{{$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) gang worker{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) gang worker{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop gang worker{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop gang worker{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) gang worker{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp distribute parallel for{{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp distribute parallel for{{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) gang worker{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 4; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop seq
@@ -1660,9 +1535,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
@@ -1745,7 +1620,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -1755,24 +1630,22 @@ int main() {
   //  PRT-AO-SEP-NEXT:     // #pragma omp distribute{{$}}
   //   PRT-O-SEP-NEXT:     #pragma omp distribute{{$}}
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop gang{{$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) gang{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) gang{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop gang{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop gang{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) gang{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp distribute{{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp distribute{{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) gang{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 4; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop seq
@@ -1791,9 +1664,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1
@@ -1872,7 +1745,7 @@ int main() {
   //      DMP-CMB:   ACCLoopDirective
   //      DMP-CMB:     ACCLoopDirective
   //
-  // PRT-PRE-SEP-NEXT: #if !CMB
+  // PRT-SRC-SEP-NEXT: #if !CMB
   //   PRT-A-SEP-NEXT:   #pragma acc parallel num_gangs(2){{$}}
   //  PRT-AO-SEP-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-SEP-NEXT:   #pragma omp target teams num_teams(2){{$}}
@@ -1884,22 +1757,20 @@ int main() {
   //  PRT-OA-SEP-NEXT:     // #pragma acc loop seq
   //  PRT-OA-SEP-SAME:     {{^}} // discarded in OpenMP translation
   //  PRT-OA-SEP-SAME:     {{^$}}
-  // PRT-PRE-SEP-NEXT: #else
-  // PRT-PRE-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-SEP-NEXT: #endif
+  // PRT-SRC-SEP-NEXT: #else
+  // PRT-SRC-SEP-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
+  // PRT-SRC-SEP-NEXT: #endif
   //
-  // PRT-PRE-CMB-NEXT: #if !CMB
-  // PRT-PRE-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
-  // PRT-PRE-CMB-NEXT:   {
-  // PRT-PRE-CMB-NEXT:     #pragma acc loop seq{{$}}
-  // PRT-PRE-CMB-NEXT: #else
+  // PRT-SRC-CMB-NEXT: #if !CMB
+  // PRT-SRC-CMB-NEXT:   #pragma acc parallel num_gangs(2){{$}}
+  // PRT-SRC-CMB-NEXT:   {
+  // PRT-SRC-CMB-NEXT:     #pragma acc loop seq{{$}}
+  // PRT-SRC-CMB-NEXT: #else
   //   PRT-A-CMB-NEXT:   #pragma acc parallel loop num_gangs(2) seq{{$}}
   //  PRT-AO-CMB-NEXT:   // #pragma omp target teams num_teams(2){{$}}
   //   PRT-O-CMB-NEXT:   #pragma omp target teams num_teams(2){{$}}
   //  PRT-OA-CMB-NEXT:   // #pragma acc parallel loop num_gangs(2) seq{{$}}
-  // PRT-PRE-CMB-NEXT: #endif
-  //
-  //        PRT-NOACC:   {
+  // PRT-SRC-CMB-NEXT: #endif
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop gang worker vector{{$}}
@@ -1918,9 +1789,9 @@ int main() {
   //         PRT-NEXT:       }
   //         PRT-NEXT:     }
   //
-  //     PRT-PRE-NEXT: #if !CMB
-  //     PRT-PRE-NEXT:   }
-  //     PRT-PRE-NEXT: #endif
+  //     PRT-SRC-NEXT: #if !CMB
+  //     PRT-SRC-NEXT:   }
+  //     PRT-SRC-NEXT: #endif
   //
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 0
   // EXE-TGT-USE-STDIO-DAG: 0, 0, 1

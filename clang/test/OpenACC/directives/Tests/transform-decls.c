@@ -6,100 +6,23 @@
 // spurious compiler errors or assert fails can occur during Sema or CodeGen.
 // Additionally, unhandled declaration kinds produce an assert fail directly
 // within TransformContext.
+
+// We have written no dump checks, so the generated dump test is a dummy.
 //
 // We check printing of the computed OpenMP source as any easy way to see if any
 // components of the declarations are lost by the transformations.
-
-// Check -ast-print and -fopenacc[-ast]-print.
 //
-// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
-// RUN: | FileCheck -check-prefixes=PRT -match-full-lines %s
-//
-// Strip comments and blank lines so checking -fopenacc-print output is easier.
-// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
-// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
-//
-// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
-// within prt-args after the first prt-args iteration, significantly shortening
-// the prt-args definition.
-//
-// RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
-// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
-// RUN: }
-// RUN: %data prt-args {
-// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT,PRT-A       )
-// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT,PRT-A       )
-// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT,PRT-O       )
-// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT,PRT-A,PRT-AO)
-// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT,PRT-O,PRT-OA)
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT,PRT-A       )
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT,PRT-O       )
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT,PRT-A,PRT-AO)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT,PRT-O,PRT-OA)
-// RUN: }
-// RUN: %for prt-args {
-// RUN:   %clang -Xclang -verify %[prt] %t-acc.c \
-// RUN:     -Wno-openacc-omp-map-ompx-hold \
-// RUN:   | FileCheck -check-prefixes=%[prt-chk] -match-full-lines %s
-// RUN: }
-
-// Check -ast-print after AST serialization.
-//
-// Some data related to printing (where to print comments about discarded
-// directives) is serialized and deserialized, so it's worthwhile to try all
-// OpenACC printing modes.
-//
-// RUN: %clang -Xclang -verify -fopenacc -emit-ast %t-acc.c -o %t.ast
-// RUN: %for prt-args {
-// RUN:   %clang %[prt] -Wno-openacc-omp-map-ompx-hold %t.ast 2>&1 \
-// RUN:   | FileCheck -check-prefixes=%[prt-chk] -match-full-lines %s
-// RUN: }
-
-// Can we print the OpenMP source code, compile, and run it successfully?
-//
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                               -Xclang -verify'         nvptx64=NO-NVPTX64)
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple            -Xclang -verify'         nvptx64=NO-NVPTX64)
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple           -Xclang -verify'         nvptx64=NO-NVPTX64)
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -DNVPTX64 -Xclang -verify=nvptx64' nvptx64=NVPTX64   )
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple            -Xclang -verify'         nvptx64=NO-NVPTX64)
-// RUN: }
-// RUN: %for prt-opts {
-// RUN:   %clang -Xclang -verify %[prt-opt]=omp -Wno-openacc-omp-map-ompx-hold \
-// RUN:     %s > %t-%[prt-kind]-omp.c
-// RUN:   echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
-// RUN: }
-// RUN: %clang -Xclang -verify -fopenmp %fopenmp-version \
-// RUN:   -Wno-unused-function -o %t %t-ast-prt-omp.c
-// RUN: %t 2 > %t.out 2>&1
-// RUN: FileCheck -input-file %t.out \
-// RUN:   -check-prefixes=EXE,EXE-NO-NVPTX64 -match-full-lines %s
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenmp %fopenmp-version %[tgt-cflags] -o %t \
-// RUN:     %t-prt-omp.c
-// RUN:   %[run-if] %t 2 > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out \
-// RUN:       -check-prefixes=EXE,EXE-%[nvptx64] -match-full-lines %s
-// RUN: }
-
-// Check execution with normal compilation.
-//
-// RUN: %for tgts {
-// RUN:   %[run-if] %clang -fopenacc %[tgt-cflags] -o %t %s
-// RUN:   %[run-if] %t 2 > %t.out 2>&1
-// RUN:   %[run-if] FileCheck -input-file %t.out \
-// RUN:       -check-prefixes=EXE,EXE-%[nvptx64] -match-full-lines %s
-// RUN: }
+// RUN: %acc-check-prt{clang-args: ; fc-args: -match-full-lines}
+// RUN: %acc-check-exe{clang-args: ; exe-args: ; fc-args: -match-full-lines}
 
 // END.
 
-// expected-no-diagnostics
+/* expected-error 0 {{}} */
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
-// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
-// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}} */
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
 
 #include <stdio.h>
 
@@ -214,7 +137,7 @@ int main() {
 
   // Check struct declarations.
   //
-  //    PRT-NEXT: {{(^#if !NVPTX64$[[:space:]]*)?;}}
+  //    PRT-NEXT: {{(^#if !TGT_NVPTX64$[[:space:]]*)?;}}
   //    PRT-NEXT: {
   //    PRT-NEXT:   int siCopy;
   //    PRT-NEXT:   int sxiCopy;
@@ -243,10 +166,19 @@ int main() {
   //    PRT-NEXT: }
   //    PRT-NEXT: {{(^#endif$[[:space:]]*)?;}}
   //
-  // EXE-NO-NVPTX64-NEXT: s.i=23
-  // EXE-NO-NVPTX64-NEXT: s.x.i=918
-  // EXE-NO-NVPTX64-NEXT: s.x.j=17
-#if !NVPTX64
+  //        EXE-HOST-NEXT: s.i=23
+  //        EXE-HOST-NEXT: s.x.i=918
+  //        EXE-HOST-NEXT: s.x.j=17
+  //  EXE-TGT-X86_64-NEXT: s.i=23
+  //  EXE-TGT-X86_64-NEXT: s.x.i=918
+  //  EXE-TGT-X86_64-NEXT: s.x.j=17
+  // EXE-TGT-PPC64LE-NEXT: s.i=23
+  // EXE-TGT-PPC64LE-NEXT: s.x.i=918
+  // EXE-TGT-PPC64LE-NEXT: s.x.j=17
+  //  EXE-TGT-AMDGCN-NEXT: s.i=23
+  //  EXE-TGT-AMDGCN-NEXT: s.x.i=918
+  //  EXE-TGT-AMDGCN-NEXT: s.x.j=17
+#if !TGT_NVPTX64
   ;
   {
     int siCopy;

@@ -61,6 +61,16 @@ print, and execution checks are included only where stated below:
       OpenACC directives and that seem to deserve special scrutiny
       beyond the directive-specific print checks in `directives`.
 
+## LIT substitutions
+
+LIT substitutions common to all these subdirectories are defined in
+the top-level `lit.local.cfg` and are documented in its comments.
+
+Tests in `directives` use a sophisticated set of LIT substitutions in
+addition to those.  See `directives/Tests/lit.local.cfg` comments for
+important documentation before attempting to modify or debug those
+tests.
+
 ## Running the test suite
 
 Clang's entire OpenACC test suite can be run as follows:
@@ -75,6 +85,17 @@ For example:
 ```
 $ make check-clang-openacc-diagnostics
 $ make check-clang-openacc-directives
+```
+
+Subdirectories of `directives` can be specified similarly.  For
+example:
+
+```
+$ make check-clang-openacc-directives-dump
+$ make check-clang-openacc-directives-print
+$ make check-clang-openacc-directives-host
+$ make check-clang-openacc-directives-x86_64-pc-linux-gnu
+$ make check-clang-openacc-directives-nvptx64-nvidia-cuda
 ```
 
 ## Relationship with libacc2omp's test suite

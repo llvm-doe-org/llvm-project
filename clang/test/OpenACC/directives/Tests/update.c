@@ -1,7 +1,10 @@
 // Check "acc update" with different values of -fopenacc-update-present-omp.
 //
-// Diagnostics about the present motion modifier in the translation are tested
-// in warn-acc-omp-update-present.c.  The "if" clause is tested in update-if.c.
+// Diagnostics about the present motion modifier in the translation are checked
+// in diagnostics/warn-acc-omp-update-present.c.  Diagnostics about bad
+// -fopenacc-update-present-omp arguments are checked in
+// diagnostics/fopenacc-update-present-omp.c.  The "if" clause is checked in
+// update-if.c.
 //
 // The various cases covered here should be kept consistent with present.c,
 // no-create.c, and subarray-errors.c (the last is located in
@@ -10,59 +13,29 @@
 // present clause produces a runtime error and the no_create clause doesn't
 // allocate.
 
-// Check bad -fopenacc-update-present-omp values.
-//
-// RUN: %data bad-vals {
-// RUN:   (val=foo)
-// RUN:   (val=   )
-// RUN: }
-// RUN: %data bad-vals-cmds {
-// RUN:   (cmd='%clang -fopenacc'    )
-// RUN:   (cmd='%clang_cc1 -fopenacc')
-// RUN:   (cmd='%clang'              )
-// RUN:   (cmd='%clang_cc1'          )
-// RUN: }
-// RUN: %for bad-vals {
-// RUN:   %for bad-vals-cmds {
-// RUN:     not %[cmd] -fopenacc-update-present-omp=%[val] %s 2>&1 \
-// RUN:     | FileCheck -check-prefix=BAD-VAL -DVAL=%[val] %s
-// RUN:   }
-// RUN: }
-//
-// BAD-VAL: error: invalid value '[[VAL]]' in '-fopenacc-update-present-omp=[[VAL]]'
-
-// Define some interrelated data we use several times below.
-//
 // RUN: %data present-opts {
-// RUN:   (present-opt='-DIF_PRESENT=                                                    -Wno-openacc-omp-update-present' present='present: ' if-present=           not-if-present=not not-crash-if-present='not --crash')
-// RUN:   (present-opt='-DIF_PRESENT=           -fopenacc-update-present-omp=present     -Wno-openacc-omp-update-present' present='present: ' if-present=           not-if-present=not not-crash-if-present='not --crash')
-// RUN:   (present-opt='-DIF_PRESENT=           -fopenacc-update-present-omp=no-present'                                  present=            if-present=           not-if-present=    not-crash-if-present=             )
-// RUN:   (present-opt='-DIF_PRESENT=if_present'                                                                          present=            if-present=IF_PRESENT not-if-present=    not-crash-if-present=             )
-// RUN:   (present-opt='-DIF_PRESENT=if_present -fopenacc-update-present-omp=no-present'                                  present=            if-present=IF_PRESENT not-if-present=    not-crash-if-present=             )
-// RUN: }
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt-cflags='                                     -Xclang -verify'         host-or-dev=HOST not-if-off-and-present=                  not-crash-if-off-and-present=                        not-if-off=    not-crash-if-off=             )
-// RUN:   (run-if=%run-if-x86_64  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'         host-or-dev=DEV  not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-ppc64le tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'         host-or-dev=DEV  not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-nvptx64 tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64' host-or-dev=DEV  not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
-// RUN:   (run-if=%run-if-amdgcn  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'         host-or-dev=DEV  not-if-off-and-present=%[not-if-present] not-crash-if-off-and-present=%[not-crash-if-present] not-if-off=not not-crash-if-off='not --crash')
+// RUN:   (present-opt='-DIF_PRESENT=                                                  ' present='present: ' if-present=NOT_IF_PRESENT not-if-present=not not-crash-if-present='not --crash')
+// RUN:   (present-opt='-DIF_PRESENT=           -fopenacc-update-present-omp=present   ' present='present: ' if-present=NOT_IF_PRESENT not-if-present=not not-crash-if-present='not --crash')
+// RUN:   (present-opt='-DIF_PRESENT=           -fopenacc-update-present-omp=no-present' present=            if-present=NOT_IF_PRESENT not-if-present=    not-crash-if-present=             )
+// RUN:   (present-opt='-DIF_PRESENT=if_present'                                         present=            if-present=IF_PRESENT     not-if-present=    not-crash-if-present=             )
+// RUN:   (present-opt='-DIF_PRESENT=if_present -fopenacc-update-present-omp=no-present' present=            if-present=IF_PRESENT     not-if-present=    not-crash-if-present=             )
 // RUN: }
 // RUN: %data cases {
-// RUN:   (case=caseNoParentPresent      not-if-fail=                          not-crash-if-fail=                               )
-// RUN:   (case=caseNoParentAbsent       not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
-// RUN:   (case=caseScalarPresent        not-if-fail=                          not-crash-if-fail=                               )
-// RUN:   (case=caseScalarAbsent         not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
-// RUN:   (case=caseStructPresent        not-if-fail=                          not-crash-if-fail=                               )
-// RUN:   (case=caseStructAbsent         not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
-// RUN:   (case=caseArrayPresent         not-if-fail=                          not-crash-if-fail=                               )
-// RUN:   (case=caseArrayAbsent          not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
-// RUN:   (case=caseSubarrayPresent      not-if-fail=                          not-crash-if-fail=                               )
-// RUN:   (case=caseSubarrayPresent2     not-if-fail=                          not-crash-if-fail=                               )
-// RUN:   (case=caseSubarrayDisjoint     not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
-// RUN:   (case=caseSubarrayOverlapStart not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
-// RUN:   (case=caseSubarrayOverlapEnd   not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
-// RUN:   (case=caseSubarrayConcat2      not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
-// RUN:   (case=caseSubarrayNonSubarray  not-if-fail=%[not-if-off-and-present] not-crash-if-fail=%[not-crash-if-off-and-present])
+// RUN:   (case=caseNoParentPresent      not-if-fail=                                 not-crash-if-fail=                                      )
+// RUN:   (case=caseNoParentAbsent       not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
+// RUN:   (case=caseScalarPresent        not-if-fail=                                 not-crash-if-fail=                                      )
+// RUN:   (case=caseScalarAbsent         not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
+// RUN:   (case=caseStructPresent        not-if-fail=                                 not-crash-if-fail=                                      )
+// RUN:   (case=caseStructAbsent         not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
+// RUN:   (case=caseArrayPresent         not-if-fail=                                 not-crash-if-fail=                                      )
+// RUN:   (case=caseArrayAbsent          not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
+// RUN:   (case=caseSubarrayPresent      not-if-fail=                                 not-crash-if-fail=                                      )
+// RUN:   (case=caseSubarrayPresent2     not-if-fail=                                 not-crash-if-fail=                                      )
+// RUN:   (case=caseSubarrayDisjoint     not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
+// RUN:   (case=caseSubarrayOverlapStart not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
+// RUN:   (case=caseSubarrayOverlapEnd   not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
+// RUN:   (case=caseSubarrayConcat2      not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
+// RUN:   (case=caseSubarrayNonSubarray  not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
 // RUN: }
 // RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
 // RUN: %for cases {
@@ -70,151 +43,38 @@
 // RUN: }
 // RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
 
-// Check -ast-dump before and after AST serialization.
-//
-// RUN: %for present-opts {
-// RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc %s \
-// RUN:          -DCASES_HEADER='"%t-cases.h"' %[present-opt] \
-// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[if-present] %s
-// RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast %s \
-// RUN:          -DCASES_HEADER='"%t-cases.h"' %[present-opt]
-// RUN:   %clang_cc1 -ast-dump-all %t.ast \
-// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[if-present] %s
-// RUN: }
-
-// Check -ast-print and -fopenacc[-ast]-print.
-//
 // We include print checking on only a few representative cases, which should be
 // more than sufficient to show it's working for the update directive.
 //
-// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
-// RUN:        -DCASES_HEADER='"%t-cases.h"' \
-// RUN: | FileCheck -check-prefixes=PRT %s
-//
-// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
-// within prt-args after the first prt-args iteration, significantly shortening
-// the prt-args definition.
-//
-// Strip comments and blank lines so checking -fopenacc-print output is easier.
-// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
-// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
-//
-// RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
-// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
-// RUN: }
-// RUN: %data prt-args {
-// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-chk=PRT-A,PRT)
-// RUN:   (prt=-fopenacc-ast-print=acc                      prt-chk=PRT-A,PRT)
-// RUN:   (prt=-fopenacc-ast-print=omp                      prt-chk=PRT-O,PRT)
-// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-chk=PRT-A,PRT-AO,PRT)
-// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-chk=PRT-O,PRT-OA,PRT)
-// RUN:   (prt=-fopenacc-print=acc                          prt-chk=PRT-A,PRT)
-// RUN:   (prt=-fopenacc-print=omp                          prt-chk=PRT-O,PRT)
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-chk=PRT-A,PRT-AO,PRT)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-chk=PRT-O,PRT-OA,PRT)
-// RUN: }
 // RUN: %for present-opts {
-// RUN:   %for prt-args {
-// RUN:     %clang -Xclang -verify %[prt] %[present-opt] %t-acc.c \
-// RUN:             -DCASES_HEADER='"%t-cases.h"' \
-// RUN:             -Wno-openacc-omp-map-ompx-hold \
-// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DPRESENT='%[present]' %s
-// RUN:   }
-// RUN: }
-
-// Check -ast-print after AST serialization.
-//
-// Some data related to printing (where to print comments about discarded
-// directives) is serialized and deserialized, so it's worthwhile to try all
-// OpenACC printing modes.
-//
-// RUN: %for present-opts {
-// RUN:   %clang -Xclang -verify -fopenacc %[present-opt] -emit-ast %t-acc.c \
-// RUN:          -DCASES_HEADER='"%t-cases.h"' -o %t.ast
-// RUN:   %for prt-args {
-// RUN:     %clang %[prt] %t.ast 2>&1 \
-// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DPRESENT='%[present]' %s
-// RUN:   }
-// RUN: }
-
-// Can we print the OpenMP source code, compile, and run it successfully?
-//
-// We don't always bother to check this for offloading, but the update directive
-// has no effect when not offloading (that is, for shared memory), and one of
-// the main issues with the update directive is the various ways it can be
-// translated so it can be used in source-to-source when targeting other
-// compilers.  That is, we want to be sure source-to-source mode produces
-// working translations of the update directive in all cases.
-//
-// RUN: %for present-opts {
-// RUN:   %for prt-opts {
-// RUN:     %clang -Xclang -verify %[prt-opt]=omp %[present-opt] \
-// RUN:       -DCASES_HEADER='"%t-cases.h"' -Wno-openacc-omp-map-ompx-hold %s \
-// RUN:       > %t-%[prt-kind]-omp.c
-// RUN:     echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
-// RUN:     grep "^// nvptx64-" %s >> %t-%[prt-kind]-omp.c
-// RUN:   }
-// RUN:   %clang -fopenmp %fopenmp-version -Xclang -verify \
-// RUN:     -DCASES_HEADER='"%t-cases.h"' -gline-tables-only -o %t.exe \
-// RUN:     %t-ast-prt-omp.c
+// RUN:   %acc-check-dmp{                                                      \
+// RUN:     clang-args: -DCASES_HEADER='"%t-cases.h"' %[present-opt];          \
+// RUN:     fc-args:    ;                                                      \
+// RUN:     fc-pres:    %[if-present]}
+// RUN:   %acc-check-prt{                                                      \
+// RUN:     clang-args: -DCASES_HEADER='"%t-cases.h"' %[present-opt];          \
+// RUN:     fc-args:    -DPRESENT='%[present]'}
+// RUN:   %acc-check-exe-compile{                                              \
+// RUN:     clang-args: -DCASES_HEADER='"%t-cases.h"' %[present-opt]           \
+// RUN:                 -gline-tables-only}
 // RUN:   %for cases {
-// RUN:     %t.exe %[case] > %t.out 2> %t.err
-// RUN:     FileCheck -input-file %t.err -allow-empty %s \
-// RUN:       -check-prefixes=EXE-ERR,EXE-ERR-PASS
-// RUN:     FileCheck -input-file %t.out -allow-empty %s \
-// RUN:       -strict-whitespace \
-// RUN:       -check-prefixes=EXE-OUT,EXE-OUT-%[case] \
-// RUN:       -check-prefixes=EXE-OUT-%[case]-PASS \
-// RUN:       -check-prefixes=EXE-OUT-%[case]-HOST \
-// RUN:       -check-prefixes=EXE-OUT-%[case]-HOST-PASS
-// RUN:   }
-// RUN:   %for tgts {
-// RUN:     %[run-if] %clang -fopenmp %fopenmp-version \
-// RUN:       %[tgt-cflags] -DCASES_HEADER='"%t-cases.h"' -o %t.exe \
-// RUN:       -gline-tables-only %t-prt-omp.c
-// RUN:     %for cases {
-// RUN:       %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2> %t.err
-// RUN:       %[run-if] FileCheck -input-file %t.err -allow-empty %s \
-// RUN:         -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS
-// RUN:       %[run-if] FileCheck -input-file %t.out -allow-empty %s \
-// RUN:         -strict-whitespace \
-// RUN:         -check-prefixes=EXE-OUT,EXE-OUT-%[case] \
-// RUN:         -check-prefixes=EXE-OUT-%[case]-%[not-if-fail]PASS \
-// RUN:         -check-prefixes=EXE-OUT-%[case]-%[host-or-dev] \
-// RUN:         -check-prefixes=EXE-OUT-%[case]-%[host-or-dev]-%[not-if-fail]PASS
-// RUN:     }
-// RUN:   }
-// RUN: }
-
-// Check execution with normal compilation.
-//
-// RUN: %for present-opts {
-// RUN:   %for tgts {
-// RUN:     %[run-if] %clang -fopenacc %[present-opt] \
-// RUN:               %[tgt-cflags] -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
-// RUN:     %for cases {
-// RUN:       %[run-if] %[not-crash-if-fail] %t.exe %[case] > %t.out 2> %t.err
-// RUN:       %[run-if] FileCheck -input-file %t.err -allow-empty %s \
-// RUN:         -check-prefixes=EXE-ERR,EXE-ERR-%[not-if-fail]PASS
-// RUN:       %[run-if] FileCheck -input-file %t.out -allow-empty %s \
-// RUN:         -strict-whitespace \
-// RUN:         -check-prefixes=EXE-OUT,EXE-OUT-%[case] \
-// RUN:         -check-prefixes=EXE-OUT-%[case]-%[not-if-fail]PASS \
-// RUN:         -check-prefixes=EXE-OUT-%[case]-%[host-or-dev] \
-// RUN:         -check-prefixes=EXE-OUT-%[case]-%[host-or-dev]-%[not-if-fail]PASS
-// RUN:     }
+// RUN:     %acc-check-exe-run{                                                \
+// RUN:       exe-args:  %[case];                                              \
+// RUN:       cmd-start: %[not-crash-if-fail]}
+// RUN:     %acc-check-exe-filecheck{                                          \
+// RUN:       fc-args: -strict-whitespace;                                     \
+// RUN:       fc-pres: %[case],%[not-if-fail]PASS,%[case]-%[not-if-fail]PASS}
 // RUN:   }
 // RUN: }
 
 // END.
 
-// expected-no-diagnostics
+/* expected-error 0 {{}} */
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
-// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
-// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}} */
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
 
 #include <stdio.h>
 #include <string.h>
@@ -242,14 +102,14 @@ void setDeviceInt_(int *p, int v) {
 #define printDeviceInt(Var) printDeviceInt_(#Var, &Var)
 
 void printHostInt_(const char *Name, int *Var) {
-  printf("    host %s=%d\n", Name, *Var);
+  fprintf(stderr, "    host %s=%d\n", Name, *Var);
 }
 void printDeviceInt_(const char *Name, int *Var) {
-  printf("  device %s=", Name);
+  fprintf(stderr, "  device %s=", Name);
   int VarCopy;
   #pragma acc parallel num_gangs(1) copyout(VarCopy)
   VarCopy = *Var;
-  printf("%d\n", VarCopy);
+  fprintf(stderr, "%d\n", VarCopy);
 }
 
 // DMP-LABEL: FunctionDecl {{.*}} updateNotNested
@@ -309,7 +169,7 @@ void updateNotNested(int *s, int *h, int *d) {
   #pragma acc update self(s[0:1]) host(h[0:1]) device(d[0:1]) IF_PRESENT
 
   // DMP: CallExpr
-  printf("updated\n");
+  fprintf(stderr, "updated\n");
 }
 
 // Make each static to ensure we get a compile warning if it's never called.
@@ -335,12 +195,16 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // EXE-OUT: start
-  printf("start\n");
-  fflush(stdout);
+  fprintf(stderr, "start\n");
+  fflush(stderr);
   caseFn();
   return 0;
 }
+
+//  EXE-NOT: {{.}}
+//      EXE: start
+// EXE-NEXT: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+// EXE-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
 
 //--------------------------------------------------
 // Check acc update not statically nested within another construct.
@@ -363,17 +227,17 @@ CASE(caseNoParentPresent) {
     setDeviceInt(h, 21);
     setDeviceInt(d, 31);
 
-    // EXE-OUT-caseNoParentPresent-NEXT: updated
+    // EXE-caseNoParentPresent-NEXT: updated
     updateNotNested(&s, &h, &d);
 
-    //      EXE-OUT-caseNoParentPresent-NEXT:   host s=11{{$}}
-    //      EXE-OUT-caseNoParentPresent-NEXT:   host h=21{{$}}
-    //  EXE-OUT-caseNoParentPresent-DEV-NEXT:   host d=30{{$}}
-    // EXE-OUT-caseNoParentPresent-HOST-NEXT:   host d=31{{$}}
-    //      EXE-OUT-caseNoParentPresent-NEXT: device s=11{{$}}
-    //      EXE-OUT-caseNoParentPresent-NEXT: device h=21{{$}}
-    //  EXE-OUT-caseNoParentPresent-DEV-NEXT: device d=30{{$}}
-    // EXE-OUT-caseNoParentPresent-HOST-NEXT: device d=31{{$}}
+    //      EXE-caseNoParentPresent-NEXT:   host s=11{{$}}
+    //      EXE-caseNoParentPresent-NEXT:   host h=21{{$}}
+    //  EXE-OFF-caseNoParentPresent-NEXT:   host d=30{{$}}
+    // EXE-HOST-caseNoParentPresent-NEXT:   host d=31{{$}}
+    //      EXE-caseNoParentPresent-NEXT: device s=11{{$}}
+    //      EXE-caseNoParentPresent-NEXT: device h=21{{$}}
+    //  EXE-OFF-caseNoParentPresent-NEXT: device d=30{{$}}
+    // EXE-HOST-caseNoParentPresent-NEXT: device d=31{{$}}
     printHostInt(s);
     printHostInt(h);
     printHostInt(d);
@@ -393,12 +257,12 @@ CASE(caseNoParentAbsent) {
   setHostInt(h, 20);
   setHostInt(d, 30);
 
-  // EXE-OUT-caseNoParentAbsent-PASS-NEXT: updated
+  // EXE-caseNoParentAbsent-PASS-NEXT: updated
   updateNotNested(&s, &h, &d);
 
-  // EXE-OUT-caseNoParentAbsent-PASS-NEXT: host s=10{{$}}
-  // EXE-OUT-caseNoParentAbsent-PASS-NEXT: host h=20{{$}}
-  // EXE-OUT-caseNoParentAbsent-PASS-NEXT: host d=30{{$}}
+  // EXE-caseNoParentAbsent-PASS-NEXT: host s=10{{$}}
+  // EXE-caseNoParentAbsent-PASS-NEXT: host h=20{{$}}
+  // EXE-caseNoParentAbsent-PASS-NEXT: host d=30{{$}}
   printHostInt(s);
   printHostInt(h);
   printHostInt(d);
@@ -483,14 +347,14 @@ CASE(caseScalarPresent) {
     // PRT-NEXT: printDeviceInt
     // PRT-NEXT: printDeviceInt
     // PRT-NEXT: printDeviceInt
-    //      EXE-OUT-caseScalarPresent-NEXT:   host s=11{{$}}
-    //      EXE-OUT-caseScalarPresent-NEXT:   host h=21{{$}}
-    //  EXE-OUT-caseScalarPresent-DEV-NEXT:   host d=30{{$}}
-    // EXE-OUT-caseScalarPresent-HOST-NEXT:   host d=31{{$}}
-    //      EXE-OUT-caseScalarPresent-NEXT: device s=11{{$}}
-    //      EXE-OUT-caseScalarPresent-NEXT: device h=21{{$}}
-    //  EXE-OUT-caseScalarPresent-DEV-NEXT: device d=30{{$}}
-    // EXE-OUT-caseScalarPresent-HOST-NEXT: device d=31{{$}}
+    //      EXE-caseScalarPresent-NEXT:   host s=11{{$}}
+    //      EXE-caseScalarPresent-NEXT:   host h=21{{$}}
+    //  EXE-OFF-caseScalarPresent-NEXT:   host d=30{{$}}
+    // EXE-HOST-caseScalarPresent-NEXT:   host d=31{{$}}
+    //      EXE-caseScalarPresent-NEXT: device s=11{{$}}
+    //      EXE-caseScalarPresent-NEXT: device h=21{{$}}
+    //  EXE-OFF-caseScalarPresent-NEXT: device d=30{{$}}
+    // EXE-HOST-caseScalarPresent-NEXT: device d=31{{$}}
     printHostInt(s);
     printHostInt(h);
     printHostInt(d);
@@ -517,9 +381,9 @@ CASE(caseScalarAbsent) {
   #pragma acc update self(s) IF_PRESENT
   #pragma acc update host(h) device(d) IF_PRESENT
 
-  // EXE-OUT-caseScalarAbsent-PASS-NEXT: host s=10{{$}}
-  // EXE-OUT-caseScalarAbsent-PASS-NEXT: host h=20{{$}}
-  // EXE-OUT-caseScalarAbsent-PASS-NEXT: host d=30{{$}}
+  // EXE-caseScalarAbsent-PASS-NEXT: host s=10{{$}}
+  // EXE-caseScalarAbsent-PASS-NEXT: host h=20{{$}}
+  // EXE-caseScalarAbsent-PASS-NEXT: host d=30{{$}}
   printHostInt(s);
   printHostInt(h);
   printHostInt(d);
@@ -577,22 +441,22 @@ CASE(caseStructPresent) {
     // PRT-OA-NEXT: {{^ *}}// #pragma acc update self(s) host(h) device(d){{( IF_PRESENT| if_present)?$}}
     #pragma acc update self(s) host(h) device(d) IF_PRESENT
 
-    //      EXE-OUT-caseStructPresent-NEXT:   host s.i=11{{$}}
-    //      EXE-OUT-caseStructPresent-NEXT:   host s.j=21{{$}}
-    //      EXE-OUT-caseStructPresent-NEXT:   host h.i=31{{$}}
-    //      EXE-OUT-caseStructPresent-NEXT:   host h.j=41{{$}}
-    //  EXE-OUT-caseStructPresent-DEV-NEXT:   host d.i=50{{$}}
-    //  EXE-OUT-caseStructPresent-DEV-NEXT:   host d.j=60{{$}}
-    // EXE-OUT-caseStructPresent-HOST-NEXT:   host d.i=51{{$}}
-    // EXE-OUT-caseStructPresent-HOST-NEXT:   host d.j=61{{$}}
-    //      EXE-OUT-caseStructPresent-NEXT: device s.i=11{{$}}
-    //      EXE-OUT-caseStructPresent-NEXT: device s.j=21{{$}}
-    //      EXE-OUT-caseStructPresent-NEXT: device h.i=31{{$}}
-    //      EXE-OUT-caseStructPresent-NEXT: device h.j=41{{$}}
-    //  EXE-OUT-caseStructPresent-DEV-NEXT: device d.i=50{{$}}
-    //  EXE-OUT-caseStructPresent-DEV-NEXT: device d.j=60{{$}}
-    // EXE-OUT-caseStructPresent-HOST-NEXT: device d.i=51{{$}}
-    // EXE-OUT-caseStructPresent-HOST-NEXT: device d.j=61{{$}}
+    //      EXE-caseStructPresent-NEXT:   host s.i=11{{$}}
+    //      EXE-caseStructPresent-NEXT:   host s.j=21{{$}}
+    //      EXE-caseStructPresent-NEXT:   host h.i=31{{$}}
+    //      EXE-caseStructPresent-NEXT:   host h.j=41{{$}}
+    //  EXE-OFF-caseStructPresent-NEXT:   host d.i=50{{$}}
+    //  EXE-OFF-caseStructPresent-NEXT:   host d.j=60{{$}}
+    // EXE-HOST-caseStructPresent-NEXT:   host d.i=51{{$}}
+    // EXE-HOST-caseStructPresent-NEXT:   host d.j=61{{$}}
+    //      EXE-caseStructPresent-NEXT: device s.i=11{{$}}
+    //      EXE-caseStructPresent-NEXT: device s.j=21{{$}}
+    //      EXE-caseStructPresent-NEXT: device h.i=31{{$}}
+    //      EXE-caseStructPresent-NEXT: device h.j=41{{$}}
+    //  EXE-OFF-caseStructPresent-NEXT: device d.i=50{{$}}
+    //  EXE-OFF-caseStructPresent-NEXT: device d.j=60{{$}}
+    // EXE-HOST-caseStructPresent-NEXT: device d.i=51{{$}}
+    // EXE-HOST-caseStructPresent-NEXT: device d.j=61{{$}}
     printHostInt(s.i);
     printHostInt(s.j);
     printHostInt(h.i);
@@ -631,12 +495,12 @@ CASE(caseStructAbsent) {
   #pragma acc update host(h) IF_PRESENT
   #pragma acc update device(d) self(s) IF_PRESENT
 
-  // EXE-OUT-caseStructAbsent-PASS-NEXT: host s.i=10{{$}}
-  // EXE-OUT-caseStructAbsent-PASS-NEXT: host s.j=20{{$}}
-  // EXE-OUT-caseStructAbsent-PASS-NEXT: host h.i=30{{$}}
-  // EXE-OUT-caseStructAbsent-PASS-NEXT: host h.j=40{{$}}
-  // EXE-OUT-caseStructAbsent-PASS-NEXT: host d.i=50{{$}}
-  // EXE-OUT-caseStructAbsent-PASS-NEXT: host d.j=60{{$}}
+  // EXE-caseStructAbsent-PASS-NEXT: host s.i=10{{$}}
+  // EXE-caseStructAbsent-PASS-NEXT: host s.j=20{{$}}
+  // EXE-caseStructAbsent-PASS-NEXT: host h.i=30{{$}}
+  // EXE-caseStructAbsent-PASS-NEXT: host h.j=40{{$}}
+  // EXE-caseStructAbsent-PASS-NEXT: host d.i=50{{$}}
+  // EXE-caseStructAbsent-PASS-NEXT: host d.j=60{{$}}
   printHostInt(s.i);
   printHostInt(s.j);
   printHostInt(h.i);
@@ -696,22 +560,22 @@ CASE(caseArrayPresent) {
     // PRT-OA-NEXT: {{^ *}}// #pragma acc update self(s) host(h) device(d){{( IF_PRESENT| if_present)?$}}
     #pragma acc update self(s) host(h) device(d) IF_PRESENT
 
-    //      EXE-OUT-caseArrayPresent-NEXT:   host s[0]=11{{$}}
-    //      EXE-OUT-caseArrayPresent-NEXT:   host s[1]=21{{$}}
-    //      EXE-OUT-caseArrayPresent-NEXT:   host h[0]=31{{$}}
-    //      EXE-OUT-caseArrayPresent-NEXT:   host h[1]=41{{$}}
-    //  EXE-OUT-caseArrayPresent-DEV-NEXT:   host d[0]=50{{$}}
-    //  EXE-OUT-caseArrayPresent-DEV-NEXT:   host d[1]=60{{$}}
-    // EXE-OUT-caseArrayPresent-HOST-NEXT:   host d[0]=51{{$}}
-    // EXE-OUT-caseArrayPresent-HOST-NEXT:   host d[1]=61{{$}}
-    //      EXE-OUT-caseArrayPresent-NEXT: device s[0]=11{{$}}
-    //      EXE-OUT-caseArrayPresent-NEXT: device s[1]=21{{$}}
-    //      EXE-OUT-caseArrayPresent-NEXT: device h[0]=31{{$}}
-    //      EXE-OUT-caseArrayPresent-NEXT: device h[1]=41{{$}}
-    //  EXE-OUT-caseArrayPresent-DEV-NEXT: device d[0]=50{{$}}
-    //  EXE-OUT-caseArrayPresent-DEV-NEXT: device d[1]=60{{$}}
-    // EXE-OUT-caseArrayPresent-HOST-NEXT: device d[0]=51{{$}}
-    // EXE-OUT-caseArrayPresent-HOST-NEXT: device d[1]=61{{$}}
+    //      EXE-caseArrayPresent-NEXT:   host s[0]=11{{$}}
+    //      EXE-caseArrayPresent-NEXT:   host s[1]=21{{$}}
+    //      EXE-caseArrayPresent-NEXT:   host h[0]=31{{$}}
+    //      EXE-caseArrayPresent-NEXT:   host h[1]=41{{$}}
+    //  EXE-OFF-caseArrayPresent-NEXT:   host d[0]=50{{$}}
+    //  EXE-OFF-caseArrayPresent-NEXT:   host d[1]=60{{$}}
+    // EXE-HOST-caseArrayPresent-NEXT:   host d[0]=51{{$}}
+    // EXE-HOST-caseArrayPresent-NEXT:   host d[1]=61{{$}}
+    //      EXE-caseArrayPresent-NEXT: device s[0]=11{{$}}
+    //      EXE-caseArrayPresent-NEXT: device s[1]=21{{$}}
+    //      EXE-caseArrayPresent-NEXT: device h[0]=31{{$}}
+    //      EXE-caseArrayPresent-NEXT: device h[1]=41{{$}}
+    //  EXE-OFF-caseArrayPresent-NEXT: device d[0]=50{{$}}
+    //  EXE-OFF-caseArrayPresent-NEXT: device d[1]=60{{$}}
+    // EXE-HOST-caseArrayPresent-NEXT: device d[0]=51{{$}}
+    // EXE-HOST-caseArrayPresent-NEXT: device d[1]=61{{$}}
     printHostInt(s[0]);
     printHostInt(s[1]);
     printHostInt(h[0]);
@@ -749,12 +613,12 @@ CASE(caseArrayAbsent) {
   #pragma acc update device(d) IF_PRESENT
   #pragma acc update self(s) host(h) IF_PRESENT
 
-  // EXE-OUT-caseArrayAbsent-PASS-NEXT: host s[0]=10{{$}}
-  // EXE-OUT-caseArrayAbsent-PASS-NEXT: host s[1]=20{{$}}
-  // EXE-OUT-caseArrayAbsent-PASS-NEXT: host h[0]=30{{$}}
-  // EXE-OUT-caseArrayAbsent-PASS-NEXT: host h[1]=40{{$}}
-  // EXE-OUT-caseArrayAbsent-PASS-NEXT: host d[0]=50{{$}}
-  // EXE-OUT-caseArrayAbsent-PASS-NEXT: host d[1]=60{{$}}
+  // EXE-caseArrayAbsent-PASS-NEXT: host s[0]=10{{$}}
+  // EXE-caseArrayAbsent-PASS-NEXT: host s[1]=20{{$}}
+  // EXE-caseArrayAbsent-PASS-NEXT: host h[0]=30{{$}}
+  // EXE-caseArrayAbsent-PASS-NEXT: host h[1]=40{{$}}
+  // EXE-caseArrayAbsent-PASS-NEXT: host d[0]=50{{$}}
+  // EXE-caseArrayAbsent-PASS-NEXT: host d[1]=60{{$}}
   printHostInt(s[0]);
   printHostInt(s[1]);
   printHostInt(h[0]);
@@ -860,54 +724,54 @@ CASE(caseSubarrayPresent) {
     // PRT-OA-NEXT: {{^ *}}// #pragma acc update self(s[1:2]) host(h[1:2]) device(d[1:2]){{( IF_PRESENT| if_present)?$}}
     #pragma acc update self(s[1:2]) host(h[1:2]) device(d[1:2]) IF_PRESENT
 
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT:   host s[0]=10{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT:   host s[1]=21{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT:   host s[2]=31{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT:   host s[3]=40{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT:   host h[0]=50{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT:   host h[1]=61{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT:   host h[2]=71{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT:   host h[3]=80{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT:   host d[0]=90{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT:   host d[1]=100{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT:   host d[2]=110{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT:   host d[3]=120{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT:   host s[0]=11{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT:   host s[1]=21{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT:   host s[2]=31{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT:   host s[3]=41{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT:   host h[0]=51{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT:   host h[1]=61{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT:   host h[2]=71{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT:   host h[3]=81{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT:   host d[0]=91{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT:   host d[1]=101{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT:   host d[2]=111{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT:   host d[3]=121{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT: device s[0]=11{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT: device s[1]=21{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT: device s[2]=31{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT: device s[3]=41{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT: device h[0]=51{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT: device h[1]=61{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT: device h[2]=71{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT: device h[3]=81{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT: device d[0]=91{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT: device d[1]=100{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT: device d[2]=110{{$}}
-    //  EXE-OUT-caseSubarrayPresent-DEV-NEXT: device d[3]=121{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT: device s[0]=11{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT: device s[1]=21{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT: device s[2]=31{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT: device s[3]=41{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT: device h[0]=51{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT: device h[1]=61{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT: device h[2]=71{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT: device h[3]=81{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT: device d[0]=91{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT: device d[1]=101{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT: device d[2]=111{{$}}
-    // EXE-OUT-caseSubarrayPresent-HOST-NEXT: device d[3]=121{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT:   host s[0]=10{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT:   host s[1]=21{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT:   host s[2]=31{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT:   host s[3]=40{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT:   host h[0]=50{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT:   host h[1]=61{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT:   host h[2]=71{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT:   host h[3]=80{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT:   host d[0]=90{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT:   host d[1]=100{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT:   host d[2]=110{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT:   host d[3]=120{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT:   host s[0]=11{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT:   host s[1]=21{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT:   host s[2]=31{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT:   host s[3]=41{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT:   host h[0]=51{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT:   host h[1]=61{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT:   host h[2]=71{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT:   host h[3]=81{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT:   host d[0]=91{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT:   host d[1]=101{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT:   host d[2]=111{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT:   host d[3]=121{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT: device s[0]=11{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT: device s[1]=21{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT: device s[2]=31{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT: device s[3]=41{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT: device h[0]=51{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT: device h[1]=61{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT: device h[2]=71{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT: device h[3]=81{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT: device d[0]=91{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT: device d[1]=100{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT: device d[2]=110{{$}}
+    //  EXE-OFF-caseSubarrayPresent-NEXT: device d[3]=121{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT: device s[0]=11{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT: device s[1]=21{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT: device s[2]=31{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT: device s[3]=41{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT: device h[0]=51{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT: device h[1]=61{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT: device h[2]=71{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT: device h[3]=81{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT: device d[0]=91{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT: device d[1]=101{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT: device d[2]=111{{$}}
+    // EXE-HOST-caseSubarrayPresent-NEXT: device d[3]=121{{$}}
     printHostInt(s[0]);
     printHostInt(s[1]);
     printHostInt(s[2]);
@@ -1037,54 +901,54 @@ CASE(caseSubarrayPresent2) {
     // PRT-OA-NEXT: {{^ *}}// #pragma acc update self(s[start:length]) host(h[start:length]) device(d[start:length]){{( IF_PRESENT| if_present)?$}}
     #pragma acc update self(s[start:length]) host(h[start:length]) device(d[start:length]) IF_PRESENT
 
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT:   host s[0]=10{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT:   host s[1]=21{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT:   host s[2]=31{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT:   host s[3]=40{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT:   host h[0]=50{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT:   host h[1]=61{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT:   host h[2]=71{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT:   host h[3]=80{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT:   host d[0]=90{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT:   host d[1]=100{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT:   host d[2]=110{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT:   host d[3]=120{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT:   host s[0]=11{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT:   host s[1]=21{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT:   host s[2]=31{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT:   host s[3]=41{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT:   host h[0]=51{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT:   host h[1]=61{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT:   host h[2]=71{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT:   host h[3]=81{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT:   host d[0]=91{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT:   host d[1]=101{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT:   host d[2]=111{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT:   host d[3]=121{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT: device s[0]=11{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT: device s[1]=21{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT: device s[2]=31{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT: device s[3]=41{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT: device h[0]=51{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT: device h[1]=61{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT: device h[2]=71{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT: device h[3]=81{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT: device d[0]=91{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT: device d[1]=100{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT: device d[2]=110{{$}}
-    //  EXE-OUT-caseSubarrayPresent2-DEV-NEXT: device d[3]=121{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT: device s[0]=11{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT: device s[1]=21{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT: device s[2]=31{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT: device s[3]=41{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT: device h[0]=51{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT: device h[1]=61{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT: device h[2]=71{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT: device h[3]=81{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT: device d[0]=91{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT: device d[1]=101{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT: device d[2]=111{{$}}
-    // EXE-OUT-caseSubarrayPresent2-HOST-NEXT: device d[3]=121{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT:   host s[0]=10{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT:   host s[1]=21{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT:   host s[2]=31{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT:   host s[3]=40{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT:   host h[0]=50{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT:   host h[1]=61{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT:   host h[2]=71{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT:   host h[3]=80{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT:   host d[0]=90{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT:   host d[1]=100{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT:   host d[2]=110{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT:   host d[3]=120{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT:   host s[0]=11{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT:   host s[1]=21{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT:   host s[2]=31{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT:   host s[3]=41{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT:   host h[0]=51{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT:   host h[1]=61{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT:   host h[2]=71{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT:   host h[3]=81{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT:   host d[0]=91{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT:   host d[1]=101{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT:   host d[2]=111{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT:   host d[3]=121{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT: device s[0]=11{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT: device s[1]=21{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT: device s[2]=31{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT: device s[3]=41{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT: device h[0]=51{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT: device h[1]=61{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT: device h[2]=71{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT: device h[3]=81{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT: device d[0]=91{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT: device d[1]=100{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT: device d[2]=110{{$}}
+    //  EXE-OFF-caseSubarrayPresent2-NEXT: device d[3]=121{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT: device s[0]=11{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT: device s[1]=21{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT: device s[2]=31{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT: device s[3]=41{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT: device h[0]=51{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT: device h[1]=61{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT: device h[2]=71{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT: device h[3]=81{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT: device d[0]=91{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT: device d[1]=101{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT: device d[2]=111{{$}}
+    // EXE-HOST-caseSubarrayPresent2-NEXT: device d[3]=121{{$}}
     printHostInt(s[0]);
     printHostInt(s[1]);
     printHostInt(s[2]);
@@ -1152,36 +1016,36 @@ CASE(caseSubarrayDisjoint) {
     #pragma acc update self(s[2:2]) IF_PRESENT
     #pragma acc update host(s[2:2]) device(h[2:2]) IF_PRESENT
 
-    //  EXE-OUT-caseSubarrayDisjoint-DEV-PASS-NEXT:   host s[0]=10{{$}}
-    //  EXE-OUT-caseSubarrayDisjoint-DEV-PASS-NEXT:   host s[1]=20{{$}}
-    //  EXE-OUT-caseSubarrayDisjoint-DEV-PASS-NEXT:   host s[2]=30{{$}}
-    //  EXE-OUT-caseSubarrayDisjoint-DEV-PASS-NEXT:   host s[3]=40{{$}}
-    //  EXE-OUT-caseSubarrayDisjoint-DEV-PASS-NEXT:   host h[0]=50{{$}}
-    //  EXE-OUT-caseSubarrayDisjoint-DEV-PASS-NEXT:   host h[1]=60{{$}}
-    //  EXE-OUT-caseSubarrayDisjoint-DEV-PASS-NEXT:   host h[2]=70{{$}}
-    //  EXE-OUT-caseSubarrayDisjoint-DEV-PASS-NEXT:   host h[3]=80{{$}}
-    //  EXE-OUT-caseSubarrayDisjoint-DEV-PASS-NEXT:   host d[0]=90{{$}}
-    //  EXE-OUT-caseSubarrayDisjoint-DEV-PASS-NEXT:   host d[1]=100{{$}}
-    //  EXE-OUT-caseSubarrayDisjoint-DEV-PASS-NEXT:   host d[2]=110{{$}}
-    //  EXE-OUT-caseSubarrayDisjoint-DEV-PASS-NEXT:   host d[3]=120{{$}}
-    // EXE-OUT-caseSubarrayDisjoint-HOST-PASS-NEXT:   host s[0]=11{{$}}
-    // EXE-OUT-caseSubarrayDisjoint-HOST-PASS-NEXT:   host s[1]=21{{$}}
-    // EXE-OUT-caseSubarrayDisjoint-HOST-PASS-NEXT:   host s[2]=30{{$}}
-    // EXE-OUT-caseSubarrayDisjoint-HOST-PASS-NEXT:   host s[3]=40{{$}}
-    // EXE-OUT-caseSubarrayDisjoint-HOST-PASS-NEXT:   host h[0]=51{{$}}
-    // EXE-OUT-caseSubarrayDisjoint-HOST-PASS-NEXT:   host h[1]=61{{$}}
-    // EXE-OUT-caseSubarrayDisjoint-HOST-PASS-NEXT:   host h[2]=70{{$}}
-    // EXE-OUT-caseSubarrayDisjoint-HOST-PASS-NEXT:   host h[3]=80{{$}}
-    // EXE-OUT-caseSubarrayDisjoint-HOST-PASS-NEXT:   host d[0]=91{{$}}
-    // EXE-OUT-caseSubarrayDisjoint-HOST-PASS-NEXT:   host d[1]=101{{$}}
-    // EXE-OUT-caseSubarrayDisjoint-HOST-PASS-NEXT:   host d[2]=110{{$}}
-    // EXE-OUT-caseSubarrayDisjoint-HOST-PASS-NEXT:   host d[3]=120{{$}}
-    //      EXE-OUT-caseSubarrayDisjoint-PASS-NEXT: device s[0]=11{{$}}
-    //      EXE-OUT-caseSubarrayDisjoint-PASS-NEXT: device s[1]=21{{$}}
-    //      EXE-OUT-caseSubarrayDisjoint-PASS-NEXT: device h[0]=51{{$}}
-    //      EXE-OUT-caseSubarrayDisjoint-PASS-NEXT: device h[1]=61{{$}}
-    //      EXE-OUT-caseSubarrayDisjoint-PASS-NEXT: device d[0]=91{{$}}
-    //      EXE-OUT-caseSubarrayDisjoint-PASS-NEXT: device d[1]=101{{$}}
+    //  EXE-OFF-caseSubarrayDisjoint-PASS-NEXT:   host s[0]=10{{$}}
+    //  EXE-OFF-caseSubarrayDisjoint-PASS-NEXT:   host s[1]=20{{$}}
+    //  EXE-OFF-caseSubarrayDisjoint-PASS-NEXT:   host s[2]=30{{$}}
+    //  EXE-OFF-caseSubarrayDisjoint-PASS-NEXT:   host s[3]=40{{$}}
+    //  EXE-OFF-caseSubarrayDisjoint-PASS-NEXT:   host h[0]=50{{$}}
+    //  EXE-OFF-caseSubarrayDisjoint-PASS-NEXT:   host h[1]=60{{$}}
+    //  EXE-OFF-caseSubarrayDisjoint-PASS-NEXT:   host h[2]=70{{$}}
+    //  EXE-OFF-caseSubarrayDisjoint-PASS-NEXT:   host h[3]=80{{$}}
+    //  EXE-OFF-caseSubarrayDisjoint-PASS-NEXT:   host d[0]=90{{$}}
+    //  EXE-OFF-caseSubarrayDisjoint-PASS-NEXT:   host d[1]=100{{$}}
+    //  EXE-OFF-caseSubarrayDisjoint-PASS-NEXT:   host d[2]=110{{$}}
+    //  EXE-OFF-caseSubarrayDisjoint-PASS-NEXT:   host d[3]=120{{$}}
+    // EXE-HOST-caseSubarrayDisjoint-PASS-NEXT:   host s[0]=11{{$}}
+    // EXE-HOST-caseSubarrayDisjoint-PASS-NEXT:   host s[1]=21{{$}}
+    // EXE-HOST-caseSubarrayDisjoint-PASS-NEXT:   host s[2]=30{{$}}
+    // EXE-HOST-caseSubarrayDisjoint-PASS-NEXT:   host s[3]=40{{$}}
+    // EXE-HOST-caseSubarrayDisjoint-PASS-NEXT:   host h[0]=51{{$}}
+    // EXE-HOST-caseSubarrayDisjoint-PASS-NEXT:   host h[1]=61{{$}}
+    // EXE-HOST-caseSubarrayDisjoint-PASS-NEXT:   host h[2]=70{{$}}
+    // EXE-HOST-caseSubarrayDisjoint-PASS-NEXT:   host h[3]=80{{$}}
+    // EXE-HOST-caseSubarrayDisjoint-PASS-NEXT:   host d[0]=91{{$}}
+    // EXE-HOST-caseSubarrayDisjoint-PASS-NEXT:   host d[1]=101{{$}}
+    // EXE-HOST-caseSubarrayDisjoint-PASS-NEXT:   host d[2]=110{{$}}
+    // EXE-HOST-caseSubarrayDisjoint-PASS-NEXT:   host d[3]=120{{$}}
+    //      EXE-caseSubarrayDisjoint-PASS-NEXT: device s[0]=11{{$}}
+    //      EXE-caseSubarrayDisjoint-PASS-NEXT: device s[1]=21{{$}}
+    //      EXE-caseSubarrayDisjoint-PASS-NEXT: device h[0]=51{{$}}
+    //      EXE-caseSubarrayDisjoint-PASS-NEXT: device h[1]=61{{$}}
+    //      EXE-caseSubarrayDisjoint-PASS-NEXT: device d[0]=91{{$}}
+    //      EXE-caseSubarrayDisjoint-PASS-NEXT: device d[1]=101{{$}}
     printHostInt(s[0]);
     printHostInt(s[1]);
     printHostInt(s[2]);
@@ -1239,36 +1103,36 @@ CASE(caseSubarrayOverlapStart) {
     #pragma acc update host(h[0:3]) IF_PRESENT
     #pragma acc update device(d[0:3]) self(s[0:3]) IF_PRESENT
 
-    //  EXE-OUT-caseSubarrayOverlapStart-DEV-PASS-NEXT:   host s[0]=10{{$}}
-    //  EXE-OUT-caseSubarrayOverlapStart-DEV-PASS-NEXT:   host s[1]=20{{$}}
-    //  EXE-OUT-caseSubarrayOverlapStart-DEV-PASS-NEXT:   host s[2]=30{{$}}
-    //  EXE-OUT-caseSubarrayOverlapStart-DEV-PASS-NEXT:   host s[3]=40{{$}}
-    //  EXE-OUT-caseSubarrayOverlapStart-DEV-PASS-NEXT:   host h[0]=50{{$}}
-    //  EXE-OUT-caseSubarrayOverlapStart-DEV-PASS-NEXT:   host h[1]=60{{$}}
-    //  EXE-OUT-caseSubarrayOverlapStart-DEV-PASS-NEXT:   host h[2]=70{{$}}
-    //  EXE-OUT-caseSubarrayOverlapStart-DEV-PASS-NEXT:   host h[3]=80{{$}}
-    //  EXE-OUT-caseSubarrayOverlapStart-DEV-PASS-NEXT:   host d[0]=90{{$}}
-    //  EXE-OUT-caseSubarrayOverlapStart-DEV-PASS-NEXT:   host d[1]=100{{$}}
-    //  EXE-OUT-caseSubarrayOverlapStart-DEV-PASS-NEXT:   host d[2]=110{{$}}
-    //  EXE-OUT-caseSubarrayOverlapStart-DEV-PASS-NEXT:   host d[3]=120{{$}}
-    // EXE-OUT-caseSubarrayOverlapStart-HOST-PASS-NEXT:   host s[0]=10{{$}}
-    // EXE-OUT-caseSubarrayOverlapStart-HOST-PASS-NEXT:   host s[1]=21{{$}}
-    // EXE-OUT-caseSubarrayOverlapStart-HOST-PASS-NEXT:   host s[2]=31{{$}}
-    // EXE-OUT-caseSubarrayOverlapStart-HOST-PASS-NEXT:   host s[3]=40{{$}}
-    // EXE-OUT-caseSubarrayOverlapStart-HOST-PASS-NEXT:   host h[0]=50{{$}}
-    // EXE-OUT-caseSubarrayOverlapStart-HOST-PASS-NEXT:   host h[1]=61{{$}}
-    // EXE-OUT-caseSubarrayOverlapStart-HOST-PASS-NEXT:   host h[2]=71{{$}}
-    // EXE-OUT-caseSubarrayOverlapStart-HOST-PASS-NEXT:   host h[3]=80{{$}}
-    // EXE-OUT-caseSubarrayOverlapStart-HOST-PASS-NEXT:   host d[0]=90{{$}}
-    // EXE-OUT-caseSubarrayOverlapStart-HOST-PASS-NEXT:   host d[1]=101{{$}}
-    // EXE-OUT-caseSubarrayOverlapStart-HOST-PASS-NEXT:   host d[2]=111{{$}}
-    // EXE-OUT-caseSubarrayOverlapStart-HOST-PASS-NEXT:   host d[3]=120{{$}}
-    //      EXE-OUT-caseSubarrayOverlapStart-PASS-NEXT: device s[1]=21{{$}}
-    //      EXE-OUT-caseSubarrayOverlapStart-PASS-NEXT: device s[2]=31{{$}}
-    //      EXE-OUT-caseSubarrayOverlapStart-PASS-NEXT: device h[1]=61{{$}}
-    //      EXE-OUT-caseSubarrayOverlapStart-PASS-NEXT: device h[2]=71{{$}}
-    //      EXE-OUT-caseSubarrayOverlapStart-PASS-NEXT: device d[1]=101{{$}}
-    //      EXE-OUT-caseSubarrayOverlapStart-PASS-NEXT: device d[2]=111{{$}}
+    //  EXE-OFF-caseSubarrayOverlapStart-PASS-NEXT:   host s[0]=10{{$}}
+    //  EXE-OFF-caseSubarrayOverlapStart-PASS-NEXT:   host s[1]=20{{$}}
+    //  EXE-OFF-caseSubarrayOverlapStart-PASS-NEXT:   host s[2]=30{{$}}
+    //  EXE-OFF-caseSubarrayOverlapStart-PASS-NEXT:   host s[3]=40{{$}}
+    //  EXE-OFF-caseSubarrayOverlapStart-PASS-NEXT:   host h[0]=50{{$}}
+    //  EXE-OFF-caseSubarrayOverlapStart-PASS-NEXT:   host h[1]=60{{$}}
+    //  EXE-OFF-caseSubarrayOverlapStart-PASS-NEXT:   host h[2]=70{{$}}
+    //  EXE-OFF-caseSubarrayOverlapStart-PASS-NEXT:   host h[3]=80{{$}}
+    //  EXE-OFF-caseSubarrayOverlapStart-PASS-NEXT:   host d[0]=90{{$}}
+    //  EXE-OFF-caseSubarrayOverlapStart-PASS-NEXT:   host d[1]=100{{$}}
+    //  EXE-OFF-caseSubarrayOverlapStart-PASS-NEXT:   host d[2]=110{{$}}
+    //  EXE-OFF-caseSubarrayOverlapStart-PASS-NEXT:   host d[3]=120{{$}}
+    // EXE-HOST-caseSubarrayOverlapStart-PASS-NEXT:   host s[0]=10{{$}}
+    // EXE-HOST-caseSubarrayOverlapStart-PASS-NEXT:   host s[1]=21{{$}}
+    // EXE-HOST-caseSubarrayOverlapStart-PASS-NEXT:   host s[2]=31{{$}}
+    // EXE-HOST-caseSubarrayOverlapStart-PASS-NEXT:   host s[3]=40{{$}}
+    // EXE-HOST-caseSubarrayOverlapStart-PASS-NEXT:   host h[0]=50{{$}}
+    // EXE-HOST-caseSubarrayOverlapStart-PASS-NEXT:   host h[1]=61{{$}}
+    // EXE-HOST-caseSubarrayOverlapStart-PASS-NEXT:   host h[2]=71{{$}}
+    // EXE-HOST-caseSubarrayOverlapStart-PASS-NEXT:   host h[3]=80{{$}}
+    // EXE-HOST-caseSubarrayOverlapStart-PASS-NEXT:   host d[0]=90{{$}}
+    // EXE-HOST-caseSubarrayOverlapStart-PASS-NEXT:   host d[1]=101{{$}}
+    // EXE-HOST-caseSubarrayOverlapStart-PASS-NEXT:   host d[2]=111{{$}}
+    // EXE-HOST-caseSubarrayOverlapStart-PASS-NEXT:   host d[3]=120{{$}}
+    //      EXE-caseSubarrayOverlapStart-PASS-NEXT: device s[1]=21{{$}}
+    //      EXE-caseSubarrayOverlapStart-PASS-NEXT: device s[2]=31{{$}}
+    //      EXE-caseSubarrayOverlapStart-PASS-NEXT: device h[1]=61{{$}}
+    //      EXE-caseSubarrayOverlapStart-PASS-NEXT: device h[2]=71{{$}}
+    //      EXE-caseSubarrayOverlapStart-PASS-NEXT: device d[1]=101{{$}}
+    //      EXE-caseSubarrayOverlapStart-PASS-NEXT: device d[2]=111{{$}}
     printHostInt(s[0]);
     printHostInt(s[1]);
     printHostInt(s[2]);
@@ -1326,36 +1190,36 @@ CASE(caseSubarrayOverlapEnd) {
     #pragma acc update device(d[2:2]) IF_PRESENT
     #pragma acc update self(s[2:2]) host(h[2:2]) IF_PRESENT
 
-    //  EXE-OUT-caseSubarrayOverlapEnd-DEV-PASS-NEXT:   host s[0]=10{{$}}
-    //  EXE-OUT-caseSubarrayOverlapEnd-DEV-PASS-NEXT:   host s[1]=20{{$}}
-    //  EXE-OUT-caseSubarrayOverlapEnd-DEV-PASS-NEXT:   host s[2]=30{{$}}
-    //  EXE-OUT-caseSubarrayOverlapEnd-DEV-PASS-NEXT:   host s[3]=40{{$}}
-    //  EXE-OUT-caseSubarrayOverlapEnd-DEV-PASS-NEXT:   host h[0]=50{{$}}
-    //  EXE-OUT-caseSubarrayOverlapEnd-DEV-PASS-NEXT:   host h[1]=60{{$}}
-    //  EXE-OUT-caseSubarrayOverlapEnd-DEV-PASS-NEXT:   host h[2]=70{{$}}
-    //  EXE-OUT-caseSubarrayOverlapEnd-DEV-PASS-NEXT:   host h[3]=80{{$}}
-    //  EXE-OUT-caseSubarrayOverlapEnd-DEV-PASS-NEXT:   host d[0]=90{{$}}
-    //  EXE-OUT-caseSubarrayOverlapEnd-DEV-PASS-NEXT:   host d[1]=100{{$}}
-    //  EXE-OUT-caseSubarrayOverlapEnd-DEV-PASS-NEXT:   host d[2]=110{{$}}
-    //  EXE-OUT-caseSubarrayOverlapEnd-DEV-PASS-NEXT:   host d[3]=120{{$}}
-    // EXE-OUT-caseSubarrayOverlapEnd-HOST-PASS-NEXT:   host s[0]=10{{$}}
-    // EXE-OUT-caseSubarrayOverlapEnd-HOST-PASS-NEXT:   host s[1]=21{{$}}
-    // EXE-OUT-caseSubarrayOverlapEnd-HOST-PASS-NEXT:   host s[2]=31{{$}}
-    // EXE-OUT-caseSubarrayOverlapEnd-HOST-PASS-NEXT:   host s[3]=40{{$}}
-    // EXE-OUT-caseSubarrayOverlapEnd-HOST-PASS-NEXT:   host h[0]=50{{$}}
-    // EXE-OUT-caseSubarrayOverlapEnd-HOST-PASS-NEXT:   host h[1]=61{{$}}
-    // EXE-OUT-caseSubarrayOverlapEnd-HOST-PASS-NEXT:   host h[2]=71{{$}}
-    // EXE-OUT-caseSubarrayOverlapEnd-HOST-PASS-NEXT:   host h[3]=80{{$}}
-    // EXE-OUT-caseSubarrayOverlapEnd-HOST-PASS-NEXT:   host d[0]=90{{$}}
-    // EXE-OUT-caseSubarrayOverlapEnd-HOST-PASS-NEXT:   host d[1]=101{{$}}
-    // EXE-OUT-caseSubarrayOverlapEnd-HOST-PASS-NEXT:   host d[2]=111{{$}}
-    // EXE-OUT-caseSubarrayOverlapEnd-HOST-PASS-NEXT:   host d[3]=120{{$}}
-    //      EXE-OUT-caseSubarrayOverlapEnd-PASS-NEXT: device s[1]=21{{$}}
-    //      EXE-OUT-caseSubarrayOverlapEnd-PASS-NEXT: device s[2]=31{{$}}
-    //      EXE-OUT-caseSubarrayOverlapEnd-PASS-NEXT: device h[1]=61{{$}}
-    //      EXE-OUT-caseSubarrayOverlapEnd-PASS-NEXT: device h[2]=71{{$}}
-    //      EXE-OUT-caseSubarrayOverlapEnd-PASS-NEXT: device d[1]=101{{$}}
-    //      EXE-OUT-caseSubarrayOverlapEnd-PASS-NEXT: device d[2]=111{{$}}
+    //  EXE-OFF-caseSubarrayOverlapEnd-PASS-NEXT:   host s[0]=10{{$}}
+    //  EXE-OFF-caseSubarrayOverlapEnd-PASS-NEXT:   host s[1]=20{{$}}
+    //  EXE-OFF-caseSubarrayOverlapEnd-PASS-NEXT:   host s[2]=30{{$}}
+    //  EXE-OFF-caseSubarrayOverlapEnd-PASS-NEXT:   host s[3]=40{{$}}
+    //  EXE-OFF-caseSubarrayOverlapEnd-PASS-NEXT:   host h[0]=50{{$}}
+    //  EXE-OFF-caseSubarrayOverlapEnd-PASS-NEXT:   host h[1]=60{{$}}
+    //  EXE-OFF-caseSubarrayOverlapEnd-PASS-NEXT:   host h[2]=70{{$}}
+    //  EXE-OFF-caseSubarrayOverlapEnd-PASS-NEXT:   host h[3]=80{{$}}
+    //  EXE-OFF-caseSubarrayOverlapEnd-PASS-NEXT:   host d[0]=90{{$}}
+    //  EXE-OFF-caseSubarrayOverlapEnd-PASS-NEXT:   host d[1]=100{{$}}
+    //  EXE-OFF-caseSubarrayOverlapEnd-PASS-NEXT:   host d[2]=110{{$}}
+    //  EXE-OFF-caseSubarrayOverlapEnd-PASS-NEXT:   host d[3]=120{{$}}
+    // EXE-HOST-caseSubarrayOverlapEnd-PASS-NEXT:   host s[0]=10{{$}}
+    // EXE-HOST-caseSubarrayOverlapEnd-PASS-NEXT:   host s[1]=21{{$}}
+    // EXE-HOST-caseSubarrayOverlapEnd-PASS-NEXT:   host s[2]=31{{$}}
+    // EXE-HOST-caseSubarrayOverlapEnd-PASS-NEXT:   host s[3]=40{{$}}
+    // EXE-HOST-caseSubarrayOverlapEnd-PASS-NEXT:   host h[0]=50{{$}}
+    // EXE-HOST-caseSubarrayOverlapEnd-PASS-NEXT:   host h[1]=61{{$}}
+    // EXE-HOST-caseSubarrayOverlapEnd-PASS-NEXT:   host h[2]=71{{$}}
+    // EXE-HOST-caseSubarrayOverlapEnd-PASS-NEXT:   host h[3]=80{{$}}
+    // EXE-HOST-caseSubarrayOverlapEnd-PASS-NEXT:   host d[0]=90{{$}}
+    // EXE-HOST-caseSubarrayOverlapEnd-PASS-NEXT:   host d[1]=101{{$}}
+    // EXE-HOST-caseSubarrayOverlapEnd-PASS-NEXT:   host d[2]=111{{$}}
+    // EXE-HOST-caseSubarrayOverlapEnd-PASS-NEXT:   host d[3]=120{{$}}
+    //      EXE-caseSubarrayOverlapEnd-PASS-NEXT: device s[1]=21{{$}}
+    //      EXE-caseSubarrayOverlapEnd-PASS-NEXT: device s[2]=31{{$}}
+    //      EXE-caseSubarrayOverlapEnd-PASS-NEXT: device h[1]=61{{$}}
+    //      EXE-caseSubarrayOverlapEnd-PASS-NEXT: device h[2]=71{{$}}
+    //      EXE-caseSubarrayOverlapEnd-PASS-NEXT: device d[1]=101{{$}}
+    //      EXE-caseSubarrayOverlapEnd-PASS-NEXT: device d[2]=111{{$}}
     printHostInt(s[0]);
     printHostInt(s[1]);
     printHostInt(s[2]);
@@ -1420,42 +1284,42 @@ CASE(caseSubarrayConcat2) {
     #pragma acc update self(s[0:4]) IF_PRESENT
     #pragma acc update host(h[0:4]) device(d[0:4]) IF_PRESENT
 
-    //  EXE-OUT-caseSubarrayConcat2-DEV-PASS-NEXT:   host s[0]=10{{$}}
-    //  EXE-OUT-caseSubarrayConcat2-DEV-PASS-NEXT:   host s[1]=20{{$}}
-    //  EXE-OUT-caseSubarrayConcat2-DEV-PASS-NEXT:   host s[2]=30{{$}}
-    //  EXE-OUT-caseSubarrayConcat2-DEV-PASS-NEXT:   host s[3]=40{{$}}
-    //  EXE-OUT-caseSubarrayConcat2-DEV-PASS-NEXT:   host h[0]=50{{$}}
-    //  EXE-OUT-caseSubarrayConcat2-DEV-PASS-NEXT:   host h[1]=60{{$}}
-    //  EXE-OUT-caseSubarrayConcat2-DEV-PASS-NEXT:   host h[2]=70{{$}}
-    //  EXE-OUT-caseSubarrayConcat2-DEV-PASS-NEXT:   host h[3]=80{{$}}
-    //  EXE-OUT-caseSubarrayConcat2-DEV-PASS-NEXT:   host d[0]=90{{$}}
-    //  EXE-OUT-caseSubarrayConcat2-DEV-PASS-NEXT:   host d[1]=100{{$}}
-    //  EXE-OUT-caseSubarrayConcat2-DEV-PASS-NEXT:   host d[2]=110{{$}}
-    //  EXE-OUT-caseSubarrayConcat2-DEV-PASS-NEXT:   host d[3]=120{{$}}
-    // EXE-OUT-caseSubarrayConcat2-HOST-PASS-NEXT:   host s[0]=11{{$}}
-    // EXE-OUT-caseSubarrayConcat2-HOST-PASS-NEXT:   host s[1]=21{{$}}
-    // EXE-OUT-caseSubarrayConcat2-HOST-PASS-NEXT:   host s[2]=31{{$}}
-    // EXE-OUT-caseSubarrayConcat2-HOST-PASS-NEXT:   host s[3]=41{{$}}
-    // EXE-OUT-caseSubarrayConcat2-HOST-PASS-NEXT:   host h[0]=51{{$}}
-    // EXE-OUT-caseSubarrayConcat2-HOST-PASS-NEXT:   host h[1]=61{{$}}
-    // EXE-OUT-caseSubarrayConcat2-HOST-PASS-NEXT:   host h[2]=71{{$}}
-    // EXE-OUT-caseSubarrayConcat2-HOST-PASS-NEXT:   host h[3]=81{{$}}
-    // EXE-OUT-caseSubarrayConcat2-HOST-PASS-NEXT:   host d[0]=91{{$}}
-    // EXE-OUT-caseSubarrayConcat2-HOST-PASS-NEXT:   host d[1]=101{{$}}
-    // EXE-OUT-caseSubarrayConcat2-HOST-PASS-NEXT:   host d[2]=111{{$}}
-    // EXE-OUT-caseSubarrayConcat2-HOST-PASS-NEXT:   host d[3]=121{{$}}
-    //      EXE-OUT-caseSubarrayConcat2-PASS-NEXT: device s[0]=11{{$}}
-    //      EXE-OUT-caseSubarrayConcat2-PASS-NEXT: device s[1]=21{{$}}
-    //      EXE-OUT-caseSubarrayConcat2-PASS-NEXT: device s[2]=31{{$}}
-    //      EXE-OUT-caseSubarrayConcat2-PASS-NEXT: device s[3]=41{{$}}
-    //      EXE-OUT-caseSubarrayConcat2-PASS-NEXT: device h[0]=51{{$}}
-    //      EXE-OUT-caseSubarrayConcat2-PASS-NEXT: device h[1]=61{{$}}
-    //      EXE-OUT-caseSubarrayConcat2-PASS-NEXT: device h[2]=71{{$}}
-    //      EXE-OUT-caseSubarrayConcat2-PASS-NEXT: device h[3]=81{{$}}
-    //      EXE-OUT-caseSubarrayConcat2-PASS-NEXT: device d[0]=91{{$}}
-    //      EXE-OUT-caseSubarrayConcat2-PASS-NEXT: device d[1]=101{{$}}
-    //      EXE-OUT-caseSubarrayConcat2-PASS-NEXT: device d[2]=111{{$}}
-    //      EXE-OUT-caseSubarrayConcat2-PASS-NEXT: device d[3]=121{{$}}
+    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host s[0]=10{{$}}
+    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host s[1]=20{{$}}
+    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host s[2]=30{{$}}
+    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host s[3]=40{{$}}
+    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host h[0]=50{{$}}
+    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host h[1]=60{{$}}
+    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host h[2]=70{{$}}
+    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host h[3]=80{{$}}
+    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host d[0]=90{{$}}
+    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host d[1]=100{{$}}
+    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host d[2]=110{{$}}
+    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host d[3]=120{{$}}
+    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host s[0]=11{{$}}
+    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host s[1]=21{{$}}
+    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host s[2]=31{{$}}
+    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host s[3]=41{{$}}
+    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host h[0]=51{{$}}
+    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host h[1]=61{{$}}
+    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host h[2]=71{{$}}
+    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host h[3]=81{{$}}
+    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host d[0]=91{{$}}
+    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host d[1]=101{{$}}
+    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host d[2]=111{{$}}
+    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host d[3]=121{{$}}
+    //      EXE-caseSubarrayConcat2-PASS-NEXT: device s[0]=11{{$}}
+    //      EXE-caseSubarrayConcat2-PASS-NEXT: device s[1]=21{{$}}
+    //      EXE-caseSubarrayConcat2-PASS-NEXT: device s[2]=31{{$}}
+    //      EXE-caseSubarrayConcat2-PASS-NEXT: device s[3]=41{{$}}
+    //      EXE-caseSubarrayConcat2-PASS-NEXT: device h[0]=51{{$}}
+    //      EXE-caseSubarrayConcat2-PASS-NEXT: device h[1]=61{{$}}
+    //      EXE-caseSubarrayConcat2-PASS-NEXT: device h[2]=71{{$}}
+    //      EXE-caseSubarrayConcat2-PASS-NEXT: device h[3]=81{{$}}
+    //      EXE-caseSubarrayConcat2-PASS-NEXT: device d[0]=91{{$}}
+    //      EXE-caseSubarrayConcat2-PASS-NEXT: device d[1]=101{{$}}
+    //      EXE-caseSubarrayConcat2-PASS-NEXT: device d[2]=111{{$}}
+    //      EXE-caseSubarrayConcat2-PASS-NEXT: device d[3]=121{{$}}
     printHostInt(s[0]);
     printHostInt(s[1]);
     printHostInt(s[2]);
@@ -1519,36 +1383,36 @@ CASE(caseSubarrayNonSubarray) {
     #pragma acc update host(h) IF_PRESENT
     #pragma acc update device(d) self(s) IF_PRESENT
 
-    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host s[0]=10{{$}}
-    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host s[1]=20{{$}}
-    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host s[2]=30{{$}}
-    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host s[3]=40{{$}}
-    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host h[0]=50{{$}}
-    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host h[1]=60{{$}}
-    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host h[2]=70{{$}}
-    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host h[3]=80{{$}}
-    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host d[0]=90{{$}}
-    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host d[1]=100{{$}}
-    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host d[2]=110{{$}}
-    //  EXE-OUT-caseSubarrayNonSubarray-DEV-PASS-NEXT:   host d[3]=120{{$}}
-    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host s[0]=10{{$}}
-    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host s[1]=21{{$}}
-    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host s[2]=31{{$}}
-    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host s[3]=40{{$}}
-    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host h[0]=50{{$}}
-    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host h[1]=61{{$}}
-    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host h[2]=71{{$}}
-    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host h[3]=80{{$}}
-    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host d[0]=90{{$}}
-    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host d[1]=101{{$}}
-    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host d[2]=111{{$}}
-    // EXE-OUT-caseSubarrayNonSubarray-HOST-PASS-NEXT:   host d[3]=120{{$}}
-    //      EXE-OUT-caseSubarrayNonSubarray-PASS-NEXT: device s[1]=21{{$}}
-    //      EXE-OUT-caseSubarrayNonSubarray-PASS-NEXT: device s[2]=31{{$}}
-    //      EXE-OUT-caseSubarrayNonSubarray-PASS-NEXT: device h[1]=61{{$}}
-    //      EXE-OUT-caseSubarrayNonSubarray-PASS-NEXT: device h[2]=71{{$}}
-    //      EXE-OUT-caseSubarrayNonSubarray-PASS-NEXT: device d[1]=101{{$}}
-    //      EXE-OUT-caseSubarrayNonSubarray-PASS-NEXT: device d[2]=111{{$}}
+    //  EXE-OFF-caseSubarrayNonSubarray-PASS-NEXT:   host s[0]=10{{$}}
+    //  EXE-OFF-caseSubarrayNonSubarray-PASS-NEXT:   host s[1]=20{{$}}
+    //  EXE-OFF-caseSubarrayNonSubarray-PASS-NEXT:   host s[2]=30{{$}}
+    //  EXE-OFF-caseSubarrayNonSubarray-PASS-NEXT:   host s[3]=40{{$}}
+    //  EXE-OFF-caseSubarrayNonSubarray-PASS-NEXT:   host h[0]=50{{$}}
+    //  EXE-OFF-caseSubarrayNonSubarray-PASS-NEXT:   host h[1]=60{{$}}
+    //  EXE-OFF-caseSubarrayNonSubarray-PASS-NEXT:   host h[2]=70{{$}}
+    //  EXE-OFF-caseSubarrayNonSubarray-PASS-NEXT:   host h[3]=80{{$}}
+    //  EXE-OFF-caseSubarrayNonSubarray-PASS-NEXT:   host d[0]=90{{$}}
+    //  EXE-OFF-caseSubarrayNonSubarray-PASS-NEXT:   host d[1]=100{{$}}
+    //  EXE-OFF-caseSubarrayNonSubarray-PASS-NEXT:   host d[2]=110{{$}}
+    //  EXE-OFF-caseSubarrayNonSubarray-PASS-NEXT:   host d[3]=120{{$}}
+    // EXE-HOST-caseSubarrayNonSubarray-PASS-NEXT:   host s[0]=10{{$}}
+    // EXE-HOST-caseSubarrayNonSubarray-PASS-NEXT:   host s[1]=21{{$}}
+    // EXE-HOST-caseSubarrayNonSubarray-PASS-NEXT:   host s[2]=31{{$}}
+    // EXE-HOST-caseSubarrayNonSubarray-PASS-NEXT:   host s[3]=40{{$}}
+    // EXE-HOST-caseSubarrayNonSubarray-PASS-NEXT:   host h[0]=50{{$}}
+    // EXE-HOST-caseSubarrayNonSubarray-PASS-NEXT:   host h[1]=61{{$}}
+    // EXE-HOST-caseSubarrayNonSubarray-PASS-NEXT:   host h[2]=71{{$}}
+    // EXE-HOST-caseSubarrayNonSubarray-PASS-NEXT:   host h[3]=80{{$}}
+    // EXE-HOST-caseSubarrayNonSubarray-PASS-NEXT:   host d[0]=90{{$}}
+    // EXE-HOST-caseSubarrayNonSubarray-PASS-NEXT:   host d[1]=101{{$}}
+    // EXE-HOST-caseSubarrayNonSubarray-PASS-NEXT:   host d[2]=111{{$}}
+    // EXE-HOST-caseSubarrayNonSubarray-PASS-NEXT:   host d[3]=120{{$}}
+    //      EXE-caseSubarrayNonSubarray-PASS-NEXT: device s[1]=21{{$}}
+    //      EXE-caseSubarrayNonSubarray-PASS-NEXT: device s[2]=31{{$}}
+    //      EXE-caseSubarrayNonSubarray-PASS-NEXT: device h[1]=61{{$}}
+    //      EXE-caseSubarrayNonSubarray-PASS-NEXT: device h[2]=71{{$}}
+    //      EXE-caseSubarrayNonSubarray-PASS-NEXT: device d[1]=101{{$}}
+    //      EXE-caseSubarrayNonSubarray-PASS-NEXT: device d[2]=111{{$}}
     printHostInt(s[0]);
     printHostInt(s[1]);
     printHostInt(s[2]);
@@ -1570,14 +1434,9 @@ CASE(caseSubarrayNonSubarray) {
   }
 }
 
-//          EXE-ERR-NOT: {{.}}
-//              EXE-ERR: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
-//         EXE-ERR-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
-// EXE-ERR-notPASS-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes)
-// EXE-ERR-notPASS-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
-// EXE-ERR-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-//                       # An abort message usually follows.
-//  EXE-ERR-notPASS-NOT: Libomptarget
-//     EXE-ERR-PASS-NOT: {{.}}
-
-// EXE-OUT-NOT: {{.}}
+// EXE-notPASS-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes)
+// EXE-notPASS-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+// EXE-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                   # An abort message usually follows.
+//  EXE-notPASS-NOT: Libomptarget
+//     EXE-PASS-NOT: {{.}}

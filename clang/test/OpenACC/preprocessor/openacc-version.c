@@ -1,26 +1,23 @@
 // Check _OPENACC definition.
 
-// Check that #define _OPENACC is generated as expected for various offload
-// configurations.
+// Check that #define _OPENACC is generated as expected.
 //
 // RUN: %data tgts {
-// RUN:   (run-if=                cflags=                                                      fc=DEFS                   )
-// RUN:   (run-if=                cflags=-fopenacc                                             fc=DEFS,DEFS-ACC          )
-// RUN:   (run-if=%run-if-x86_64  cflags='-fopenacc -fopenmp-targets=%run-x86_64-triple -o -'  fc=DEFS,DEFS-ACC,DEFS-ACC2)
-// RUN:   (run-if=%run-if-ppc64le cflags='-fopenacc -fopenmp-targets=%run-ppc64le-triple -o -' fc=DEFS,DEFS-ACC,DEFS-ACC2)
-// RUN:   (run-if=%run-if-nvptx64 cflags='-fopenacc -fopenmp-targets=%run-nvptx64-triple -o -' fc=DEFS,DEFS-ACC,DEFS-ACC2)
-// RUN:   (run-if=%run-if-amdgcn  cflags='-fopenacc -fopenmp-targets=%run-amdgcn-triple  -o -' fc=DEFS,DEFS-ACC,DEFS-ACC2)
+// RUN:   (ndefs=0                   not-if-0=not cflags=                                                    )
+// RUN:   (ndefs=1                   not-if-0=    cflags=-fopenacc                                           )
+// RUN:   (ndefs='%num-off-tgts + 1' not-if-0=    cflags='-fopenacc -fopenmp-targets=%off-tgts -o - %libs-bc')
 // RUN: }
 // RUN: %for tgts {
-// RUN:   %[run-if] %clang -Xclang -verify=none -E -dM %[cflags] %s > %t.out
-// RUN:   %[run-if] FileCheck -check-prefixes=%[fc] -DACC_VERSION=%acc-version \
-// RUN:                       -input-file=%t.out %s
+// RUN:   %clang -Xclang -verify=none -E -dM %[cflags] %s > %t.out
+// RUN:   %[not-if-0] grep -c '#define _OPENACC' %t.out | \
+// RUN:     FileCheck -D#N=%'ndefs' %s
+// RUN:   %[not-if-0] grep -c '#define _OPENACC %acc-version' %t.out | \
+// RUN:     FileCheck -D#N=%'ndefs' %s
 // RUN: }
 //
-//  DEFS-NOT: #define _OPENACC
-//  DEFS-ACC: #define _OPENACC [[ACC_VERSION]]
-// DEFS-ACC2: #define _OPENACC [[ACC_VERSION]]
-//  DEFS-NOT: #define _OPENACC
+// CHECK-NOT: {{.}}
+//     CHECK: [[#N]]
+// CHECK-NOT: {{.}}
 
 // Sanity-check one of those configurations to be sure we can actually use the
 // _OPENACC macro as expected.

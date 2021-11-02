@@ -1,4 +1,9 @@
 // Check when -Wopenacc-omp-map-ompx-hold is enabled and when it's an error.
+//
+// Diagnostics about bad -fopenacc-structured-ref-count-omp arguments are
+// checked in diagnostics/fopenacc-structured-ref-count-omp.c.  The behavior of
+// data clauses for different values of -fopenacc-structured-ref-count-omp is
+// checked in directives/Tests/fopenacc-structured-ref-count-omp.c.
 
 // RUN: %data prt-opts {
 //        # Default is error.

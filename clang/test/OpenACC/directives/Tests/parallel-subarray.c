@@ -15,120 +15,29 @@
 // RUN:   (accc=create  ompmt=ompx_hold,alloc  fc=CR)
 // RUN: }
 
-// Check -ast-dump before and after AST serialization.
-//
 // RUN: %for clauses {
-// RUN:   %clang -Xclang -verify -Xclang -ast-dump -fsyntax-only -fopenacc \
-// RUN:          -DACCC=%[accc] %s \
-// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[fc] %s
-// RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast \
-// RUN:          -DACCC=%[accc] %s
-// RUN:   %clang_cc1 -ast-dump-all %t.ast \
-// RUN:   | FileCheck -check-prefixes=DMP,DMP-%[fc] %s
-// RUN: }
-
-// Check -ast-print and -fopenacc[-ast]-print.
-//
-// RUN: %clang -Xclang -verify -Xclang -ast-print -fsyntax-only %s \
-// RUN: | FileCheck -check-prefixes=PRT %s
-//
-// TODO: If lit were to support %for inside a %data, we could iterate prt-opts
-// within prt-args after the first prt-args iteration, significantly shortening
-// the prt-args definition.
-//
-// Strip comments and blank lines so checking -fopenacc-print output is easier.
-// RUN: echo "// expected""-no-diagnostics" > %t-acc.c
-// RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' >> %t-acc.c
-//
-// RUN: %data prt-opts {
-// RUN:   (prt-opt=-fopenacc-ast-print prt-kind=ast-prt)
-// RUN:   (prt-opt=-fopenacc-print     prt-kind=prt    )
-// RUN: }
-// RUN: %data prt-args {
-// RUN:   (prt='-Xclang -ast-print -fsyntax-only -fopenacc' prt-accc=%[accc] prt-chk=PRT,PRT-A)
-// RUN:   (prt=-fopenacc-ast-print=acc                      prt-accc=%[accc] prt-chk=PRT,PRT-A)
-// RUN:   (prt=-fopenacc-ast-print=omp                      prt-accc=%[accc] prt-chk=PRT,PRT-O)
-// RUN:   (prt=-fopenacc-ast-print=acc-omp                  prt-accc=%[accc] prt-chk=PRT,PRT-A,PRT-AO)
-// RUN:   (prt=-fopenacc-ast-print=omp-acc                  prt-accc=%[accc] prt-chk=PRT,PRT-O,PRT-OA)
-// RUN:   (prt=-fopenacc-print=acc                          prt-accc=ACCC    prt-chk=PRT,PRT-A)
-// RUN:   (prt=-fopenacc-print=omp                          prt-accc=ACCC    prt-chk=PRT,PRT-O)
-// RUN:   (prt=-fopenacc-print=acc-omp                      prt-accc=ACCC    prt-chk=PRT,PRT-A,PRT-AO)
-// RUN:   (prt=-fopenacc-print=omp-acc                      prt-accc=ACCC    prt-chk=PRT,PRT-O,PRT-OA)
-// RUN: }
-// RUN: %for clauses {
-// RUN:   %for prt-args {
-// RUN:     %clang -Xclang -verify %[prt] -DACCC=%[accc] %t-acc.c \
-// RUN:            -Wno-openacc-omp-map-ompx-hold \
-// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DACCC=%[prt-accc] \
-// RUN:                 -DOMPMT=%[ompmt] %s
-// RUN:   }
-// RUN: }
-
-// Check -ast-print after AST serialization.
-//
-// Some data related to printing (where to print comments about discarded
-// directives) is serialized and deserialized, so it's worthwhile to try all
-// OpenACC printing modes.
-//
-// RUN: %for clauses {
-// RUN:   %clang -Xclang -verify -fopenacc -emit-ast -o %t.ast -DACCC=%[accc] \
-// RUN:          %t-acc.c
-// RUN:   %for prt-args {
-// RUN:     %clang %[prt] %t.ast 2>&1 \
-// RUN:     | FileCheck -check-prefixes=%[prt-chk] -DACCC=%[prt-accc] \
-// RUN:                 -DOMPMT=%[ompmt] %s
-// RUN:   }
-// RUN: }
-
-// Can we print the OpenMP source code, compile, and run it successfully?
-//
-// RUN: %data tgts {
-// RUN:   (run-if=                tgt=HOST tgt-cflags='                                     -Xclang -verify'        )
-// RUN:   (run-if=%run-if-x86_64  tgt=OFF  tgt-cflags='-fopenmp-targets=%run-x86_64-triple  -Xclang -verify'        )
-// RUN:   (run-if=%run-if-ppc64le tgt=OFF  tgt-cflags='-fopenmp-targets=%run-ppc64le-triple -Xclang -verify'        )
-// RUN:   (run-if=%run-if-nvptx64 tgt=OFF  tgt-cflags='-fopenmp-targets=%run-nvptx64-triple -Xclang -verify=nvptx64')
-// RUN:   (run-if=%run-if-amdgcn  tgt=OFF  tgt-cflags='-fopenmp-targets=%run-amdgcn-triple  -Xclang -verify'        )
-// RUN: }
-// RUN: %for clauses {
-// RUN:   %for prt-opts {
-// RUN:     %clang -Xclang -verify %[prt-opt]=omp -DACCC=%[accc] \
-// RUN:       -Wno-openacc-omp-map-ompx-hold %s > %t-%[prt-kind]-omp.c
-// RUN:     echo "// expected""-no-diagnostics" >> %t-%[prt-kind]-omp.c
-// RUN:   }
-// RUN:   %clang -Xclang -verify -fopenmp %fopenmp-version -o %t \
-// RUN:     -DACCC=%[accc] %t-ast-prt-omp.c
-// RUN:   %t > %t.out 2>&1
-// RUN:   FileCheck -input-file %t.out %s \
-// RUN:     -check-prefixes=EXE,EXE-%[fc],EXE-TGT-HOST-%[fc]
-// RUN:   %for tgts {
-// RUN:     %[run-if] %clang -fopenmp %fopenmp-version -o %t %[tgt-cflags] \
-// RUN:       -DACCC=%[accc] %t-prt-omp.c
-// RUN:     %[run-if] %t > %t.out 2>&1
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:       -check-prefixes=EXE,EXE-%[fc],EXE-TGT-%[tgt]-%[fc]
-// RUN:   }
-// RUN: }
-
-// Check execution with normal compilation.
-//
-// RUN: %for clauses {
-// RUN:   %for tgts {
-// RUN:     %[run-if] %clang -fopenacc -o %t %[tgt-cflags] \
-// RUN:               -DACCC=%[accc] %s
-// RUN:     %[run-if] %t > %t.out 2>&1
-// RUN:     %[run-if] FileCheck -input-file %t.out %s \
-// RUN:                         -check-prefixes=EXE,EXE-%[fc],EXE-TGT-%[tgt]-%[fc]
-// RUN:   }
+// RUN:   %acc-check-dmp{                                                      \
+// RUN:     clang-args: -DACCC=%[accc];                                        \
+// RUN:     fc-args:    ;                                                      \
+// RUN:     fc-pres:    %[fc]}
+// RUN:   %acc-check-prt{                                                      \
+// RUN:     clang-args: -DACCC=%[accc];                                        \
+// RUN:     fc-args:    -DACCC=%[accc] -DOMPMT=%[ompmt]}
+// RUN:   %acc-check-exe{                                                      \
+// RUN:     clang-args: -DACCC=%[accc];                                        \
+// RUN:     exe-args:   ;                                                      \
+// RUN:     fc-args:    ;                                                      \
+// RUN:     fc-pres:    %[fc]}
 // RUN: }
 
 // END.
 
-// expected-no-diagnostics
+/* expected-error 0 {{}} */
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
-// nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}}
-// nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}}
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}} */
+/* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
 
 #include <stdio.h>
 
@@ -210,20 +119,22 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:1]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:1]) shared(arr1){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:1]) shared(arr1){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:1]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:1]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[0:1]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:1]) shared(arr1){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:1]) shared(arr1){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:1]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(arr1[0:1]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[0:1])
     for (int i = 0; i < 1; ++i)
       arr1[i] = 99;
 
-    //           EXE-C-NEXT: arr1[0:1] after: <99, 11, 11, 11, 11, 11>
-    //          EXE-CO-NEXT: arr1[0:1] after: <99, 11, 11, 11, 11, 11>
-    // EXE-TGT-HOST-CI-NEXT: arr1[0:1] after: <99, 11, 11, 11, 11, 11>
-    // EXE-TGT-HOST-CR-NEXT: arr1[0:1] after: <99, 11, 11, 11, 11, 11>
-    //  EXE-TGT-OFF-CI-NEXT: arr1[0:1] after: <11, 11, 11, 11, 11, 11>
-    //  EXE-TGT-OFF-CR-NEXT: arr1[0:1] after: <11, 11, 11, 11, 11, 11>
+    //       EXE-C-NEXT: arr1[0:1] after: <99, 11, 11, 11, 11, 11>
+    //      EXE-CO-NEXT: arr1[0:1] after: <99, 11, 11, 11, 11, 11>
+    // EXE-HOST-CI-NEXT: arr1[0:1] after: <99, 11, 11, 11, 11, 11>
+    // EXE-HOST-CR-NEXT: arr1[0:1] after: <99, 11, 11, 11, 11, 11>
+    //  EXE-OFF-CI-NEXT: arr1[0:1] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-OFF-CR-NEXT: arr1[0:1] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[0:1] after", arr1, n);
   }
 
@@ -271,20 +182,22 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:2]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:2]) shared(arr1){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:2]) shared(arr1){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:2]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:2]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[0:2]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:2]) shared(arr1){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[0:2]) shared(arr1){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:2]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(arr1[0:2]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[0:2])
     for (int i = 0; i < 2; ++i)
       arr1[i] = 99;
 
-    //           EXE-C-NEXT: arr1[0:2] after: <99, 99, 11, 11, 11, 11>
-    //          EXE-CO-NEXT: arr1[0:2] after: <99, 99, 11, 11, 11, 11>
-    // EXE-TGT-HOST-CI-NEXT: arr1[0:2] after: <99, 99, 11, 11, 11, 11>
-    // EXE-TGT-HOST-CR-NEXT: arr1[0:2] after: <99, 99, 11, 11, 11, 11>
-    //  EXE-TGT-OFF-CI-NEXT: arr1[0:2] after: <11, 11, 11, 11, 11, 11>
-    //  EXE-TGT-OFF-CR-NEXT: arr1[0:2] after: <11, 11, 11, 11, 11, 11>
+    //       EXE-C-NEXT: arr1[0:2] after: <99, 99, 11, 11, 11, 11>
+    //      EXE-CO-NEXT: arr1[0:2] after: <99, 99, 11, 11, 11, 11>
+    // EXE-HOST-CI-NEXT: arr1[0:2] after: <99, 99, 11, 11, 11, 11>
+    // EXE-HOST-CR-NEXT: arr1[0:2] after: <99, 99, 11, 11, 11, 11>
+    //  EXE-OFF-CI-NEXT: arr1[0:2] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-OFF-CR-NEXT: arr1[0:2] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[0:2] after", arr1, n);
   }
 
@@ -333,20 +246,22 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'pi' 'int *'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](pi[0:3]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pi[0:3]) shared(pi){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: pi[0:3]) shared(pi){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pi[0:3]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](pi[0:3]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(pi[0:3]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pi[0:3]) shared(pi){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: pi[0:3]) shared(pi){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pi[0:3]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(pi[0:3]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(pi[0:3])
     for (int i = 0; i < 3; ++i)
       pi[i] = 99;
 
-    //           EXE-C-NEXT: pi[0:3] after: <99, 99, 99, 11, 11, 11>
-    //          EXE-CO-NEXT: pi[0:3] after: <99, 99, 99, 11, 11, 11>
-    // EXE-TGT-HOST-CI-NEXT: pi[0:3] after: <99, 99, 99, 11, 11, 11>
-    // EXE-TGT-HOST-CR-NEXT: pi[0:3] after: <99, 99, 99, 11, 11, 11>
-    //  EXE-TGT-OFF-CI-NEXT: pi[0:3] after: <11, 11, 11, 11, 11, 11>
-    //  EXE-TGT-OFF-CR-NEXT: pi[0:3] after: <11, 11, 11, 11, 11, 11>
+    //       EXE-C-NEXT: pi[0:3] after: <99, 99, 99, 11, 11, 11>
+    //      EXE-CO-NEXT: pi[0:3] after: <99, 99, 99, 11, 11, 11>
+    // EXE-HOST-CI-NEXT: pi[0:3] after: <99, 99, 99, 11, 11, 11>
+    // EXE-HOST-CR-NEXT: pi[0:3] after: <99, 99, 99, 11, 11, 11>
+    //  EXE-OFF-CI-NEXT: pi[0:3] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-OFF-CR-NEXT: pi[0:3] after: <11, 11, 11, 11, 11, 11>
     printArr1("pi[0:3] after", arr1, n);
   }
 
@@ -394,20 +309,22 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[1:3]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[1:3]) shared(arr1){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[1:3]) shared(arr1){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[1:3]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[1:3]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[1:3]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[1:3]) shared(arr1){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[1:3]) shared(arr1){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[1:3]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(arr1[1:3]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[1:3])
     for (int i = 1; i < 4; ++i)
       arr1[i] = 99;
 
-    //           EXE-C-NEXT: arr1[1:3] after: <11, 99, 99, 99, 11, 11>
-    //          EXE-CO-NEXT: arr1[1:3] after: <11, 99, 99, 99, 11, 11>
-    // EXE-TGT-HOST-CI-NEXT: arr1[1:3] after: <11, 99, 99, 99, 11, 11>
-    // EXE-TGT-HOST-CR-NEXT: arr1[1:3] after: <11, 99, 99, 99, 11, 11>
-    //  EXE-TGT-OFF-CI-NEXT: arr1[1:3] after: <11, 11, 11, 11, 11, 11>
-    //  EXE-TGT-OFF-CR-NEXT: arr1[1:3] after: <11, 11, 11, 11, 11, 11>
+    //       EXE-C-NEXT: arr1[1:3] after: <11, 99, 99, 99, 11, 11>
+    //      EXE-CO-NEXT: arr1[1:3] after: <11, 99, 99, 99, 11, 11>
+    // EXE-HOST-CI-NEXT: arr1[1:3] after: <11, 99, 99, 99, 11, 11>
+    // EXE-HOST-CR-NEXT: arr1[1:3] after: <11, 99, 99, 99, 11, 11>
+    //  EXE-OFF-CI-NEXT: arr1[1:3] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-OFF-CR-NEXT: arr1[1:3] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[1:3] after", arr1, n);
   }
 
@@ -460,20 +377,22 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:length]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:length]) shared(arr1){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:length]) shared(arr1){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:length]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:length]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[start:length]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:length]) shared(arr1){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:length]) shared(arr1){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:length]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(arr1[start:length]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[start:length])
     for (int i = 2; i < 5; ++i)
       arr1[i] = 99;
 
-    //           EXE-C-NEXT: arr1[start:length] after: <11, 11, 99, 99, 99, 11>
-    //          EXE-CO-NEXT: arr1[start:length] after: <11, 11, 99, 99, 99, 11>
-    // EXE-TGT-HOST-CI-NEXT: arr1[start:length] after: <11, 11, 99, 99, 99, 11>
-    // EXE-TGT-HOST-CR-NEXT: arr1[start:length] after: <11, 11, 99, 99, 99, 11>
-    //  EXE-TGT-OFF-CI-NEXT: arr1[start:length] after: <11, 11, 11, 11, 11, 11>
-    //  EXE-TGT-OFF-CR-NEXT: arr1[start:length] after: <11, 11, 11, 11, 11, 11>
+    //       EXE-C-NEXT: arr1[start:length] after: <11, 11, 99, 99, 99, 11>
+    //      EXE-CO-NEXT: arr1[start:length] after: <11, 11, 99, 99, 99, 11>
+    // EXE-HOST-CI-NEXT: arr1[start:length] after: <11, 11, 99, 99, 99, 11>
+    // EXE-HOST-CR-NEXT: arr1[start:length] after: <11, 11, 99, 99, 99, 11>
+    //  EXE-OFF-CI-NEXT: arr1[start:length] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-OFF-CR-NEXT: arr1[start:length] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[start:length] after", arr1, n);
   }
 
@@ -524,20 +443,22 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:length]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:length]) shared(arr1){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:length]) shared(arr1){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:length]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:length]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[:length]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:length]) shared(arr1){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:length]) shared(arr1){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:length]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(arr1[:length]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[:length])
     for (int i = 0; i < 5; ++i)
       arr1[i] = 99;
 
-    //           EXE-C-NEXT: arr1[:length] after: <99, 99, 99, 99, 99, 11>
-    //          EXE-CO-NEXT: arr1[:length] after: <99, 99, 99, 99, 99, 11>
-    // EXE-TGT-HOST-CI-NEXT: arr1[:length] after: <99, 99, 99, 99, 99, 11>
-    // EXE-TGT-HOST-CR-NEXT: arr1[:length] after: <99, 99, 99, 99, 99, 11>
-    //  EXE-TGT-OFF-CI-NEXT: arr1[:length] after: <11, 11, 11, 11, 11, 11>
-    //  EXE-TGT-OFF-CR-NEXT: arr1[:length] after: <11, 11, 11, 11, 11, 11>
+    //       EXE-C-NEXT: arr1[:length] after: <99, 99, 99, 99, 99, 11>
+    //      EXE-CO-NEXT: arr1[:length] after: <99, 99, 99, 99, 99, 11>
+    // EXE-HOST-CI-NEXT: arr1[:length] after: <99, 99, 99, 99, 99, 11>
+    // EXE-HOST-CR-NEXT: arr1[:length] after: <99, 99, 99, 99, 99, 11>
+    //  EXE-OFF-CI-NEXT: arr1[:length] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-OFF-CR-NEXT: arr1[:length] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[:length] after", arr1, n);
   }
 
@@ -588,20 +509,22 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:]) shared(arr1){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:]) shared(arr1){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[start:]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:]) shared(arr1){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[start:]) shared(arr1){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(arr1[start:]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[start:])
     for (int i = 3; i < 6; ++i)
       arr1[i] = 99;
 
-    //           EXE-C-NEXT: arr1[start:] after: <11, 11, 11, 99, 99, 99>
-    //          EXE-CO-NEXT: arr1[start:] after: <11, 11, 11, 99, 99, 99>
-    // EXE-TGT-HOST-CI-NEXT: arr1[start:] after: <11, 11, 11, 99, 99, 99>
-    // EXE-TGT-HOST-CR-NEXT: arr1[start:] after: <11, 11, 11, 99, 99, 99>
-    //  EXE-TGT-OFF-CI-NEXT: arr1[start:] after: <11, 11, 11, 11, 11, 11>
-    //  EXE-TGT-OFF-CR-NEXT: arr1[start:] after: <11, 11, 11, 11, 11, 11>
+    //       EXE-C-NEXT: arr1[start:] after: <11, 11, 11, 99, 99, 99>
+    //      EXE-CO-NEXT: arr1[start:] after: <11, 11, 11, 99, 99, 99>
+    // EXE-HOST-CI-NEXT: arr1[start:] after: <11, 11, 11, 99, 99, 99>
+    // EXE-HOST-CR-NEXT: arr1[start:] after: <11, 11, 11, 99, 99, 99>
+    //  EXE-OFF-CI-NEXT: arr1[start:] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-OFF-CR-NEXT: arr1[start:] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[start:] after", arr1, n);
   }
 
@@ -650,20 +573,22 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:]) shared(arr1){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:]) shared(arr1){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[:]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:]) shared(arr1){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: arr1[:]) shared(arr1){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(arr1[:]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr1[:])
     for (int i = 0; i < 6; ++i)
       arr1[i] = 99;
 
-    //           EXE-C-NEXT: arr1[:] after: <99, 99, 99, 99, 99, 99>
-    //          EXE-CO-NEXT: arr1[:] after: <99, 99, 99, 99, 99, 99>
-    // EXE-TGT-HOST-CI-NEXT: arr1[:] after: <99, 99, 99, 99, 99, 99>
-    // EXE-TGT-HOST-CR-NEXT: arr1[:] after: <99, 99, 99, 99, 99, 99>
-    //  EXE-TGT-OFF-CI-NEXT: arr1[:] after: <11, 11, 11, 11, 11, 11>
-    //  EXE-TGT-OFF-CR-NEXT: arr1[:] after: <11, 11, 11, 11, 11, 11>
+    //       EXE-C-NEXT: arr1[:] after: <99, 99, 99, 99, 99, 99>
+    //      EXE-CO-NEXT: arr1[:] after: <99, 99, 99, 99, 99, 99>
+    // EXE-HOST-CI-NEXT: arr1[:] after: <99, 99, 99, 99, 99, 99>
+    // EXE-HOST-CR-NEXT: arr1[:] after: <99, 99, 99, 99, 99, 99>
+    //  EXE-OFF-CI-NEXT: arr1[:] after: <11, 11, 11, 11, 11, 11>
+    //  EXE-OFF-CR-NEXT: arr1[:] after: <11, 11, 11, 11, 11, 11>
     printArr1("arr1[:] after", arr1, n);
   }
 
@@ -720,21 +645,23 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr2[2:3][0:2]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[2:3][0:2]) shared(arr2){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[2:3][0:2]) shared(arr2){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr2[2:3][0:2]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr2[2:3][0:2]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr2[2:3][0:2]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[2:3][0:2]) shared(arr2){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[2:3][0:2]) shared(arr2){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr2[2:3][0:2]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(arr2[2:3][0:2]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr2[2:3][0:2])
     for (int i = 2; i < 5; ++i)
       for (int j = 0; j < 2; ++j)
         arr2[i][j] = 99;
 
-    //           EXE-C-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
-    //          EXE-CO-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
-    // EXE-TGT-HOST-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
-    // EXE-TGT-HOST-CR-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
-    //  EXE-TGT-OFF-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    //  EXE-TGT-OFF-CR-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //       EXE-C-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
+    //      EXE-CO-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
+    // EXE-HOST-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
+    // EXE-HOST-CR-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>>
+    //  EXE-OFF-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-OFF-CR-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("arr2[2:3][0:2] after", arr2, n);
   }
 
@@ -791,21 +718,23 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](arr2[3:1][1:1]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[3:1][1:1]) shared(arr2){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[3:1][1:1]) shared(arr2){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr2[3:1][1:1]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr2[3:1][1:1]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr2[3:1][1:1]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[3:1][1:1]) shared(arr2){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: arr2[3:1][1:1]) shared(arr2){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](arr2[3:1][1:1]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(arr2[3:1][1:1]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(arr2[3:1][1:1])
     for (int i = 3; i < 4; ++i)
       for (int j = 1; j < 2; ++j)
         arr2[i][j] = 99;
 
-    //           EXE-C-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
-    //          EXE-CO-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
-    // EXE-TGT-HOST-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
-    // EXE-TGT-HOST-CR-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
-    //  EXE-TGT-OFF-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    //  EXE-TGT-OFF-CR-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //       EXE-C-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
+    //      EXE-CO-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
+    // EXE-HOST-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
+    // EXE-HOST-CR-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>, <11, 11>>
+    //  EXE-OFF-CI-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-OFF-CR-NEXT: arr2[2:3][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("arr2[2:3][0:2] after", arr2, n);
   }
 
@@ -863,21 +792,23 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'pa' 'int (*)[2]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](pa[1:3][:]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pa[1:3][:]) shared(pa){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: pa[1:3][:]) shared(pa){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pa[1:3][:]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](pa[1:3][:]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(pa[1:3][:]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pa[1:3][:]) shared(pa){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: pa[1:3][:]) shared(pa){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pa[1:3][:]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(pa[1:3][:]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(pa[1:3][:])
     for (int i = 1; i < 4; ++i)
       for (int j = 0; j < 2; ++j)
         pa[i][j] = 99;
 
-    //           EXE-C-NEXT: pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
-    //          EXE-CO-NEXT: pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
-    // EXE-TGT-HOST-CI-NEXT: pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
-    // EXE-TGT-HOST-CR-NEXT: pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
-    //  EXE-TGT-OFF-CI-NEXT: pa[1:3][:] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    //  EXE-TGT-OFF-CR-NEXT: pa[1:3][:] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //       EXE-C-NEXT: pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
+    //      EXE-CO-NEXT: pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
+    // EXE-HOST-CI-NEXT: pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
+    // EXE-HOST-CR-NEXT: pa[1:3][:] after: <<11, 11>, <99, 99>, <99, 99>, <99, 99>, <11, 11>, <11, 11>>
+    //  EXE-OFF-CI-NEXT: pa[1:3][:] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-OFF-CR-NEXT: pa[1:3][:] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("pa[1:3][:] after", arr2, n);
   }
 
@@ -938,21 +869,23 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'ap' 'int *[6]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](ap[2:1][0:2]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[2:1][0:2]) shared(ap){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[2:1][0:2]) shared(ap){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](ap[2:1][0:2]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](ap[2:1][0:2]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(ap[2:1][0:2]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[2:1][0:2]) shared(ap){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[2:1][0:2]) shared(ap){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](ap[2:1][0:2]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(ap[2:1][0:2]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(ap[2:1][0:2])
     for (int i = 2; i < 3; ++i)
       for (int j = 0; j < 2; ++j)
         ap[i][j] = 99;
 
-    //           EXE-C-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
-    //          EXE-CO-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-HOST-CI-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
-    // EXE-TGT-HOST-CR-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
-    //  EXE-TGT-OFF-CI-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    //  EXE-TGT-OFF-CR-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //       EXE-C-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
+    //      EXE-CO-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
+    // EXE-HOST-CI-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
+    // EXE-HOST-CR-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-OFF-CI-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-OFF-CR-NEXT: ap[2:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("ap[2:1][0:2] after", arr2, 6);
   }
 
@@ -1013,21 +946,23 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'ap' 'int *[6]'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](ap[5:1][0:1]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[5:1][0:1]) shared(ap){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[5:1][0:1]) shared(ap){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](ap[5:1][0:1]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](ap[5:1][0:1]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(ap[5:1][0:1]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[5:1][0:1]) shared(ap){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: ap[5:1][0:1]) shared(ap){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](ap[5:1][0:1]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(ap[5:1][0:1]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(ap[5:1][0:1])
     for (int i = 5; i < 6; ++i)
       for (int j = 0; j < 1; ++j)
         ap[i][j] = 99;
 
-    //           EXE-C-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
-    //          EXE-CO-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
-    // EXE-TGT-HOST-CI-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
-    // EXE-TGT-HOST-CR-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
-    //  EXE-TGT-OFF-CI-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    //  EXE-TGT-OFF-CR-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //       EXE-C-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
+    //      EXE-CO-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
+    // EXE-HOST-CI-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
+    // EXE-HOST-CR-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <99, 11>>
+    //  EXE-OFF-CI-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-OFF-CR-NEXT: ap[5:1][0:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("ap[5:1][0:1] after", arr2, 6);
   }
 
@@ -1089,21 +1024,23 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'pp' 'int **'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](pp[3:1][0:2]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[3:1][0:2]) shared(pp){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[3:1][0:2]) shared(pp){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pp[3:1][0:2]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](pp[3:1][0:2]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(pp[3:1][0:2]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[3:1][0:2]) shared(pp){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[3:1][0:2]) shared(pp){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pp[3:1][0:2]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(pp[3:1][0:2]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(pp[3:1][0:2])
     for (int i = 3; i < 4; ++i)
       for (int j = 0; j < 2; ++j)
         pp[i][j] = 99;
 
-    //           EXE-C-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
-    //          EXE-CO-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
-    // EXE-TGT-HOST-CI-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
-    // EXE-TGT-HOST-CR-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
-    //  EXE-TGT-OFF-CI-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    //  EXE-TGT-OFF-CR-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //       EXE-C-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
+    //      EXE-CO-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
+    // EXE-HOST-CI-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
+    // EXE-HOST-CR-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <99, 99>, <11, 11>, <11, 11>>
+    //  EXE-OFF-CI-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-OFF-CR-NEXT: pp[3:1][0:2] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("pp[3:1][0:2] after", arr2, 6);
   }
 
@@ -1165,21 +1102,23 @@ int main() {
     // DMP-NEXT:        OMPSharedClause
     // DMP-NEXT:          DeclRefExpr {{.*}} 'pp' 'int **'
     //
-    // PRT-A-NEXT:  #pragma acc parallel num_gangs(1) [[ACCC]](pp[4:1][1:1]){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[4:1][1:1]) shared(pp){{$}}
-    // PRT-O-NEXT:  #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[4:1][1:1]) shared(pp){{$}}
-    // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pp[4:1][1:1]){{$}}
+    //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](pp[4:1][1:1]){{$}}
+    //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(pp[4:1][1:1]){{$}}
+    //     PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[4:1][1:1]) shared(pp){{$}}
+    //      PRT-O-NEXT: #pragma omp target teams num_teams(1) map([[OMPMT]]: pp[4:1][1:1]) shared(pp){{$}}
+    // PRT-OA-AST-NEXT: // #pragma acc parallel num_gangs(1) [[ACCC]](pp[4:1][1:1]){{$}}
+    // PRT-OA-SRC-NEXT: // #pragma acc parallel num_gangs(1) ACCC(pp[4:1][1:1]){{$}}
     #pragma acc parallel num_gangs(1) ACCC(pp[4:1][1:1])
     for (int i = 4; i < 5; ++i)
       for (int j = 1; j < 2; ++j)
         pp[i][j] = 99;
 
-    //           EXE-C-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
-    //          EXE-CO-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
-    // EXE-TGT-HOST-CI-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
-    // EXE-TGT-HOST-CR-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
-    //  EXE-TGT-OFF-CI-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
-    //  EXE-TGT-OFF-CR-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //       EXE-C-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
+    //      EXE-CO-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
+    // EXE-HOST-CI-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
+    // EXE-HOST-CR-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 99>, <11, 11>>
+    //  EXE-OFF-CI-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
+    //  EXE-OFF-CR-NEXT: pp[4:1][1:1] after: <<11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>, <11, 11>>
     printArr2("pp[4:1][1:1] after", arr2, 6);
   }
 

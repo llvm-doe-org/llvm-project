@@ -1,4 +1,9 @@
 // Check when -Wopenacc-omp-map-present is enabled and when it's an error.
+//
+// Diagnostics about bad -fopenacc-present-omp arguments are checked in
+// diagnostics/fopenacc-present-omp.c.  The behavior of present clauses for
+// different values of -fopenacc-present-omp is checked in
+// directives/Tests/present.c.
 
 // RUN: %data prt-opts {
 //        # Default is error.
