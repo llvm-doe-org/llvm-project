@@ -24,6 +24,7 @@ static_library("Orc") {
     "EPCEHFrameRegistrar.cpp",
     "EPCGenericDylibManager.cpp",
     "EPCGenericJITLinkMemoryManager.cpp",
+    "EPCGenericRTDyldMemoryManager.cpp",
     "EPCIndirectionUtils.cpp",
     "ExecutionUtils.cpp",
     "ExecutorProcessControl.cpp",
@@ -45,6 +46,7 @@ static_library("Orc") {
     "SimpleRemoteEPC.cpp",
     "SpeculateAnalyses.cpp",
     "Speculation.cpp",
+    "TaskDispatch.cpp",
     "ThreadSafeModule.cpp",
   ]
 }

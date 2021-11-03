@@ -32,21 +32,19 @@ using namespace mlir;
 /// expression is simplified before returning. This method only utilizes map
 /// composition to construct lower and upper bounds before computing the trip
 /// count expressions.
-void mlir::buildTripCountMapAndOperands(
+void mlir::getTripCountMapAndOperands(
     AffineForOp forOp, AffineMap *tripCountMap,
     SmallVectorImpl<Value> *tripCountOperands) {
-  int64_t loopSpan;
-
+  MLIRContext *context = forOp.getContext();
   int64_t step = forOp.getStep();
-  OpBuilder b(forOp.getOperation());
-
+  int64_t loopSpan;
   if (forOp.hasConstantBounds()) {
     int64_t lb = forOp.getConstantLowerBound();
     int64_t ub = forOp.getConstantUpperBound();
     loopSpan = ub - lb;
     if (loopSpan < 0)
       loopSpan = 0;
-    *tripCountMap = b.getConstantAffineMap(ceilDiv(loopSpan, step));
+    *tripCountMap = AffineMap::getConstantMap(ceilDiv(loopSpan, step), context);
     tripCountOperands->clear();
     return;
   }
@@ -65,7 +63,7 @@ void mlir::buildTripCountMapAndOperands(
   SmallVector<AffineExpr, 4> lbSplatExpr(ubValueMap.getNumResults(),
                                          lbMap.getResult(0));
   auto lbMapSplat = AffineMap::get(lbMap.getNumDims(), lbMap.getNumSymbols(),
-                                   lbSplatExpr, b.getContext());
+                                   lbSplatExpr, context);
   AffineValueMap lbSplatValueMap(lbMapSplat, forOp.getLowerBoundOperands());
 
   AffineValueMap tripCountValueMap;
@@ -82,14 +80,10 @@ void mlir::buildTripCountMapAndOperands(
 /// Returns the trip count of the loop if it's a constant, None otherwise. This
 /// method uses affine expression analysis (in turn using getTripCount) and is
 /// able to determine constant trip count in non-trivial cases.
-// FIXME(mlir-team): this is really relying on buildTripCountMapAndOperands;
-// being an analysis utility, it shouldn't. Replace with a version that just
-// works with analysis structures (FlatAffineConstraints) and thus doesn't
-// update the IR.
 Optional<uint64_t> mlir::getConstantTripCount(AffineForOp forOp) {
   SmallVector<Value, 4> operands;
   AffineMap map;
-  buildTripCountMapAndOperands(forOp, &map, &operands);
+  getTripCountMapAndOperands(forOp, &map, &operands);
 
   if (!map)
     return None;
@@ -115,7 +109,7 @@ Optional<uint64_t> mlir::getConstantTripCount(AffineForOp forOp) {
 uint64_t mlir::getLargestDivisorOfTripCount(AffineForOp forOp) {
   SmallVector<Value, 4> operands;
   AffineMap map;
-  buildTripCountMapAndOperands(forOp, &map, &operands);
+  getTripCountMapAndOperands(forOp, &map, &operands);
 
   if (!map)
     return 1;
@@ -225,15 +219,8 @@ static bool isContiguousAccess(Value iv, LoadOrStoreOp memoryOp,
   assert(memRefDim && "memRefDim == nullptr");
   auto memRefType = memoryOp.getMemRefType();
 
-  auto layoutMap = memRefType.getAffineMaps();
-  // TODO: remove dependence on Builder once we support non-identity layout map.
-  Builder b(memoryOp.getContext());
-  if (layoutMap.size() >= 2 ||
-      (layoutMap.size() == 1 &&
-       !(layoutMap[0] ==
-         b.getMultiDimIdentityMap(layoutMap[0].getNumDims())))) {
+  if (!memRefType.getLayout().isIdentity())
     return memoryOp.emitError("NYI: non-trivial layoutMap"), false;
-  }
 
   int uniqueVaryingIndexAlongIv = -1;
   auto accessMap = memoryOp.getAffineMap();

@@ -101,9 +101,12 @@ public:
 ///
 /// Other implementations of the Delta Debugging algorithm can also be found in
 /// the CReduce, Delta, and Lithium projects.
-void runDeltaPass(TestRunner &Test, int Targets,
-                  std::function<void(const std::vector<Chunk> &, Module *)>
-                      ExtractChunksFromModule);
+void runDeltaPass(
+    TestRunner &Test, int Targets,
+    function_ref<void(Oracle &, Module &)> ExtractChunksFromModule);
+void runDeltaPass(
+    TestRunner &Test, int Targets,
+    function_ref<void(Oracle &, MachineFunction &)> ExtractChunksFromModule);
 } // namespace llvm
 
 #endif

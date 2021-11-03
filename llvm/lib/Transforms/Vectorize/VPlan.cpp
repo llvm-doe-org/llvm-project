@@ -884,6 +884,13 @@ void VPlan::print(raw_ostream &O) const {
   VPSlotTracker SlotTracker(this);
 
   O << "VPlan '" << Name << "' {";
+
+  if (BackedgeTakenCount && BackedgeTakenCount->getNumUsers()) {
+    O << "\nLive-in ";
+    BackedgeTakenCount->printAsOperand(O, SlotTracker);
+    O << " = backedge-taken count\n";
+  }
+
   for (const VPBlockBase *Block : depth_first(getEntry())) {
     O << '\n';
     Block->print(O, "", SlotTracker);
@@ -1257,7 +1264,7 @@ void VPWidenCanonicalIVRecipe::execute(VPTransformState &State) {
         VF.isScalar() ? Indices.back() : ConstantVector::get(Indices);
     // Add the consecutive indices to the vector value.
     Value *CanonicalVectorIV = Builder.CreateAdd(VStart, VStep, "vec.iv");
-    State.set(getVPSingleValue(), CanonicalVectorIV, Part);
+    State.set(this, CanonicalVectorIV, Part);
   }
 }
 
@@ -1265,7 +1272,7 @@ void VPWidenCanonicalIVRecipe::execute(VPTransformState &State) {
 void VPWidenCanonicalIVRecipe::print(raw_ostream &O, const Twine &Indent,
                                      VPSlotTracker &SlotTracker) const {
   O << Indent << "EMIT ";
-  getVPSingleValue()->printAsOperand(O, SlotTracker);
+  printAsOperand(O, SlotTracker);
   O << " = WIDEN-CANONICAL-INDUCTION";
 }
 #endif
@@ -1336,7 +1343,8 @@ void VPReductionPHIRecipe::execute(VPTransformState &State) {
 
   Value *Iden = nullptr;
   RecurKind RK = RdxDesc.getRecurrenceKind();
-  if (RecurrenceDescriptor::isMinMaxRecurrenceKind(RK)) {
+  if (RecurrenceDescriptor::isMinMaxRecurrenceKind(RK) ||
+      RecurrenceDescriptor::isSelectCmpRecurrenceKind(RK)) {
     // MinMax reduction have the start value as their identify.
     if (ScalarPHI) {
       Iden = StartV;
@@ -1347,12 +1355,11 @@ void VPReductionPHIRecipe::execute(VPTransformState &State) {
           Builder.CreateVectorSplat(State.VF, StartV, "minmax.ident");
     }
   } else {
-    Constant *IdenC = RecurrenceDescriptor::getRecurrenceIdentity(
-        RK, VecTy->getScalarType(), RdxDesc.getFastMathFlags());
-    Iden = IdenC;
+    Iden = RdxDesc.getRecurrenceIdentity(RK, VecTy->getScalarType(),
+                                         RdxDesc.getFastMathFlags());
 
     if (!ScalarPHI) {
-      Iden = ConstantVector::getSplat(State.VF, IdenC);
+      Iden = Builder.CreateVectorSplat(State.VF, Iden);
       IRBuilderBase::InsertPointGuard IPBuilder(Builder);
       Builder.SetInsertPoint(State.CFG.VectorPreHeader->getTerminator());
       Constant *Zero = Builder.getInt32(0);

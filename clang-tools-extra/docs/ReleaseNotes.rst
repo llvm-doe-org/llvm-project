@@ -67,7 +67,11 @@ The improvements are...
 Improvements to clang-tidy
 --------------------------
 
-The improvements are...
+- Added support for globbing in `NOLINT*` expressions, to simplify suppressing
+  multiple warnings in the same line.
+
+- Added support for `NOLINTBEGIN` ... `NOLINTEND` comments to suppress
+  Clang-Tidy warnings over multiple lines.
 
 New checks
 ^^^^^^^^^^
@@ -99,6 +103,11 @@ New checks
 New check aliases
 ^^^^^^^^^^^^^^^^^
 
+- New alias :doc:`cert-err33-c
+  <clang-tidy/checks/cert-err33-c>` to
+  :doc:`bugprone-unused-return-value
+  <clang-tidy/checks/bugprone-unused-return-value>` was added.
+
 - New alias :doc:`cert-exp42-c
   <clang-tidy/checks/cert-exp42-c>` to
   :doc:`bugprone-suspicious-memory-comparison
@@ -111,6 +120,10 @@ New check aliases
 
 Changes in existing checks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Removed default setting `cppcoreguidelines-explicit-virtual-functions.IgnoreDestructors = "true"`,
+  to match the current state of the C++ Core Guidelines.
+
 
 Removed checks
 ^^^^^^^^^^^^^^

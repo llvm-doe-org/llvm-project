@@ -12,6 +12,7 @@
 #include "CallContext.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/DebugInfo/Symbolize/Symbolize.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
@@ -68,6 +69,27 @@ struct InstructionPointer {
   void update(uint64_t Addr);
 };
 
+using RangesTy = std::vector<std::pair<uint64_t, uint64_t>>;
+
+struct BinaryFunction {
+  StringRef FuncName;
+  RangesTy Ranges;
+};
+
+// Info about function range. A function can be split into multiple
+// non-continuous ranges, each range corresponds to one FuncRange.
+struct FuncRange {
+  uint64_t StartOffset;
+  // EndOffset is a exclusive bound.
+  uint64_t EndOffset;
+  // Function the range belongs to
+  BinaryFunction *Func;
+  // Whether the start offset is the real entry of the function.
+  bool IsFuncEntry = false;
+
+  StringRef getFuncName() { return Func->FuncName; }
+};
+
 // PrologEpilog offset tracker, used to filter out broken stack samples
 // Currently we use a heuristic size (two) to infer prolog and epilog
 // based on the start address and return address. In the future,
@@ -79,8 +101,7 @@ struct PrologEpilogTracker {
   PrologEpilogTracker(ProfiledBinary *Bin) : Binary(Bin){};
 
   // Take the two addresses from the start of function as prolog
-  void inferPrologOffsets(std::map<uint64_t, std::pair<std::string, uint64_t>>
-                              &FuncStartOffsetMap) {
+  void inferPrologOffsets(std::map<uint64_t, FuncRange> &FuncStartOffsetMap) {
     for (auto I : FuncStartOffsetMap) {
       PrologEpilogSet.insert(I.first);
       InstructionPointer IP(Binary, I.first);
@@ -164,18 +185,30 @@ class ProfiledBinary {
   // A list of text sections sorted by start RVA and size. Used to check
   // if a given RVA is a valid code address.
   std::set<std::pair<uint64_t, uint64_t>> TextSections;
-  // An ordered map of mapping function's start offset to its name and
-  // end offset.
-  std::map<uint64_t, std::pair<std::string, uint64_t>> FuncStartOffsetMap;
+
+  // A map of mapping function name to BinaryFunction info.
+  std::unordered_map<std::string, BinaryFunction> BinaryFunctions;
+
+  // An ordered map of mapping function's start offset to function range
+  // relevant info. Currently to determine if the offset of ELF is the start of
+  // a real function, we leverage the function range info from DWARF.
+  std::map<uint64_t, FuncRange> StartOffset2FuncRangeMap;
+
   // Offset to context location map. Used to expand the context.
   std::unordered_map<uint64_t, SampleContextFrameVector> Offset2LocStackMap;
+
+  // Offset to instruction size map. Also used for quick offset lookup.
+  std::unordered_map<uint64_t, uint64_t> Offset2InstSizeMap;
+
   // An array of offsets of all instructions sorted in increasing order. The
   // sorting is needed to fast advance to the next forward/backward instruction.
-  std::vector<uint64_t> CodeAddrs;
+  std::vector<uint64_t> CodeAddrOffsets;
   // A set of call instruction offsets. Used by virtual unwinding.
-  std::unordered_set<uint64_t> CallAddrs;
+  std::unordered_set<uint64_t> CallOffsets;
   // A set of return instruction offsets. Used by virtual unwinding.
-  std::unordered_set<uint64_t> RetAddrs;
+  std::unordered_set<uint64_t> RetOffsets;
+  // A set of branch instruction offsets.
+  std::unordered_set<uint64_t> BranchOffsets;
 
   // Estimate and track function prolog and epilog ranges.
   PrologEpilogTracker ProEpilogTracker;
@@ -217,6 +250,14 @@ class ProfiledBinary {
   void setUpDisassembler(const ELFObjectFileBase *Obj);
   void setupSymbolizer();
 
+  // Load debug info of subprograms from DWARF section.
+  void loadSymbolsFromDWARF(ObjectFile &Obj);
+
+  // A function may be spilt into multiple non-continuous address ranges. We use
+  // this to set whether start offset of a function is the real entry of the
+  // function and also set false to the non-function label.
+  void setIsFuncEntry(uint64_t Offset, StringRef RangeSymName);
+
   /// Dissassemble the text section and build various address maps.
   void disassemble(const ELFObjectFileBase *O);
 
@@ -227,7 +268,6 @@ class ProfiledBinary {
   SampleContextFrameVector symbolize(const InstructionPointer &IP,
                                      bool UseCanonicalFnName = false,
                                      bool UseProbeDiscriminator = false);
-
   /// Decode the interesting parts of the binary and build internal data
   /// structures. On high level, the parts of interest are:
   ///   1. Text sections, including the main code section and the PLT
@@ -267,36 +307,47 @@ public:
     return TextSegmentOffsets;
   }
 
+  bool offsetIsCode(uint64_t Offset) const {
+    return Offset2InstSizeMap.find(Offset) != Offset2InstSizeMap.end();
+  }
   bool addressIsCode(uint64_t Address) const {
     uint64_t Offset = virtualAddrToOffset(Address);
-    return Offset2LocStackMap.find(Offset) != Offset2LocStackMap.end();
+    return offsetIsCode(Offset);
   }
   bool addressIsCall(uint64_t Address) const {
     uint64_t Offset = virtualAddrToOffset(Address);
-    return CallAddrs.count(Offset);
+    return CallOffsets.count(Offset);
   }
   bool addressIsReturn(uint64_t Address) const {
     uint64_t Offset = virtualAddrToOffset(Address);
-    return RetAddrs.count(Offset);
+    return RetOffsets.count(Offset);
   }
   bool addressInPrologEpilog(uint64_t Address) const {
     uint64_t Offset = virtualAddrToOffset(Address);
     return ProEpilogTracker.PrologEpilogSet.count(Offset);
   }
 
+  bool offsetIsTransfer(uint64_t Offset) {
+    return BranchOffsets.count(Offset) || RetOffsets.count(Offset) ||
+           CallOffsets.count(Offset);
+  }
+
   uint64_t getAddressforIndex(uint64_t Index) const {
-    return offsetToVirtualAddr(CodeAddrs[Index]);
+    return offsetToVirtualAddr(CodeAddrOffsets[Index]);
   }
 
   bool usePseudoProbes() const { return UsePseudoProbes; }
-  // Get the index in CodeAddrs for the address
+  // Get the index in CodeAddrOffsets for the address
   // As we might get an address which is not the code
   // here it would round to the next valid code address by
   // using lower bound operation
+  uint32_t getIndexForOffset(uint64_t Offset) const {
+    auto Low = llvm::lower_bound(CodeAddrOffsets, Offset);
+    return Low - CodeAddrOffsets.begin();
+  }
   uint32_t getIndexForAddr(uint64_t Address) const {
     uint64_t Offset = virtualAddrToOffset(Address);
-    auto Low = llvm::lower_bound(CodeAddrs, Offset);
-    return Low - CodeAddrs.begin();
+    return getIndexForOffset(Offset);
   }
 
   uint64_t getCallAddrFromFrameAddr(uint64_t FrameAddr) const {
@@ -307,30 +358,56 @@ public:
     return 0;
   }
 
-  StringRef getFuncFromStartOffset(uint64_t Offset) {
-    auto I = FuncStartOffsetMap.find(Offset);
-    if (I == FuncStartOffsetMap.end())
-      return StringRef();
-    return I->second.first;
+  FuncRange *findFuncRangeForStartOffset(uint64_t Offset) {
+    auto I = StartOffset2FuncRangeMap.find(Offset);
+    if (I == StartOffset2FuncRangeMap.end())
+      return nullptr;
+    return &I->second;
   }
 
-  OffsetRange findFuncOffsetRange(uint64_t Offset) {
-    auto I = FuncStartOffsetMap.upper_bound(Offset);
-    if (I == FuncStartOffsetMap.begin())
-      return {0, 0};
+  // Binary search the function range which includes the input offset.
+  FuncRange *findFuncRangeForOffset(uint64_t Offset) {
+    auto I = StartOffset2FuncRangeMap.upper_bound(Offset);
+    if (I == StartOffset2FuncRangeMap.begin())
+      return nullptr;
     I--;
-    return {I->first, I->second.second};
+
+    if (Offset >= I->second.EndOffset)
+      return nullptr;
+
+    return &I->second;
+  }
+
+  // Get all ranges of one function.
+  RangesTy getRangesForOffset(uint64_t Offset) {
+    auto *FRange = findFuncRangeForOffset(Offset);
+    // Ignore the range which falls into plt section or system lib.
+    if (!FRange)
+      return RangesTy();
+
+    return FRange->Func->Ranges;
+  }
+
+  const std::unordered_map<std::string, BinaryFunction> &
+  getAllBinaryFunctions() {
+    return BinaryFunctions;
   }
 
   uint32_t getFuncSizeForContext(SampleContext &Context) {
     return FuncSizeTracker.getFuncSizeForContext(Context);
   }
 
-  const SampleContextFrameVector &getFrameLocationStack(uint64_t Offset) const {
-    auto I = Offset2LocStackMap.find(Offset);
-    assert(I != Offset2LocStackMap.end() &&
-           "Can't find location for offset in the binary");
-    return I->second;
+  // Load the symbols from debug table and populate into symbol list.
+  void populateSymbolListFromDWARF(ProfileSymbolList &SymbolList);
+
+  const SampleContextFrameVector &
+  getFrameLocationStack(uint64_t Offset, bool UseProbeDiscriminator = false) {
+    auto I = Offset2LocStackMap.emplace(Offset, SampleContextFrameVector());
+    if (I.second) {
+      InstructionPointer IP(this, Offset);
+      I.first->second = symbolize(IP, true, UseProbeDiscriminator);
+    }
+    return I.first->second;
   }
 
   Optional<SampleContextFrame> getInlineLeafFrameLoc(uint64_t Offset) {
@@ -341,14 +418,18 @@ public:
   }
 
   // Compare two addresses' inline context
-  bool inlineContextEqual(uint64_t Add1, uint64_t Add2) const;
+  bool inlineContextEqual(uint64_t Add1, uint64_t Add2);
 
   // Get the full context of the current stack with inline context filled in.
   // It will search the disassembling info stored in Offset2LocStackMap. This is
   // used as the key of function sample map
   SampleContextFrameVector
   getExpandedContext(const SmallVectorImpl<uint64_t> &Stack,
-                     bool &WasLeafInlined) const;
+                     bool &WasLeafInlined);
+  // Go through instructions among the given range and record its size for the
+  // inline context.
+  void computeInlinedContextSizeForRange(uint64_t StartOffset,
+                                         uint64_t EndOffset);
 
   const MCDecodedPseudoProbe *getCallProbeForAddr(uint64_t Address) const {
     return ProbeDecoder.getCallProbeForAddr(Address);
@@ -376,6 +457,8 @@ public:
   getInlinerDescForProbe(const MCDecodedPseudoProbe *Probe) {
     return ProbeDecoder.getInlinerDescForProbe(Probe);
   }
+
+  bool getTrackFuncContextSize() { return TrackFuncContextSize; }
 
   bool getIsLoadedByMMap() { return IsLoadedByMMap; }
 

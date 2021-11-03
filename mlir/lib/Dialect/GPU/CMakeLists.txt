@@ -24,9 +24,11 @@ add_mlir_dialect_library(MLIRGPUOps
 
   DEPENDS
   MLIRGPUOpsIncGen
+  MLIRGPUOpsEnumsGen
   MLIRGPUOpInterfacesIncGen
 
   LINK_LIBS PUBLIC
+  MLIRArithmetic
   MLIRDLTI
   MLIRIR
   MLIRMemRef
@@ -60,6 +62,7 @@ add_mlir_dialect_library(MLIRGPUTransforms
   MLIRParallelLoopMapperEnumsGen
 
   LINK_LIBS PUBLIC
+  MLIRArithmetic
   MLIRAsync
   MLIRDataLayoutInterfaces
   MLIRGPUOps

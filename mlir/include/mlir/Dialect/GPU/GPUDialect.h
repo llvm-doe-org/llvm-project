@@ -14,6 +14,7 @@
 #ifndef MLIR_DIALECT_GPU_GPUDIALECT_H
 #define MLIR_DIALECT_GPU_GPUDIALECT_H
 
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DLTI/Traits.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -164,6 +165,8 @@ void addAsyncDependency(Operation *op, Value token);
 
 } // end namespace gpu
 } // end namespace mlir
+
+#include "mlir/Dialect/GPU/GPUOpsEnums.h.inc"
 
 #include "mlir/Dialect/GPU/GPUOpsDialect.h.inc"
 

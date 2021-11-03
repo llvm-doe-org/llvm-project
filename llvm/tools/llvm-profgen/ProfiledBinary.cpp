@@ -12,9 +12,9 @@
 #include "llvm/ADT/Triple.h"
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/IR/DebugInfoMetadata.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Format.h"
-#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 
 #define DEBUG_TYPE "load-binary"
@@ -22,21 +22,26 @@
 using namespace llvm;
 using namespace sampleprof;
 
-cl::opt<bool> ShowDisassemblyOnly("show-disassembly-only", cl::ReallyHidden,
-                                  cl::init(false), cl::ZeroOrMore,
+cl::opt<bool> ShowDisassemblyOnly("show-disassembly-only", cl::init(false),
+                                  cl::ZeroOrMore,
                                   cl::desc("Print disassembled code."));
 
-cl::opt<bool> ShowSourceLocations("show-source-locations", cl::ReallyHidden,
-                                  cl::init(false), cl::ZeroOrMore,
+cl::opt<bool> ShowSourceLocations("show-source-locations", cl::init(false),
+                                  cl::ZeroOrMore,
                                   cl::desc("Print source locations."));
 
-cl::opt<bool> ShowCanonicalFnName("show-canonical-fname", cl::ReallyHidden,
-                                  cl::init(false), cl::ZeroOrMore,
-                                  cl::desc("Print canonical function name."));
+static cl::opt<bool>
+    ShowCanonicalFnName("show-canonical-fname", cl::init(false), cl::ZeroOrMore,
+                        cl::desc("Print canonical function name."));
 
-cl::opt<bool> ShowPseudoProbe(
-    "show-pseudo-probe", cl::ReallyHidden, cl::init(false), cl::ZeroOrMore,
+static cl::opt<bool> ShowPseudoProbe(
+    "show-pseudo-probe", cl::init(false), cl::ZeroOrMore,
     cl::desc("Print pseudo probe section and disassembled info."));
+
+static cl::opt<bool> UseDwarfCorrelation(
+    "use-dwarf-correlation", cl::init(false), cl::ZeroOrMore,
+    cl::desc("Use dwarf for profile correlation even when binary contains "
+             "pseudo probe."));
 
 static cl::list<std::string> DisassembleFunctions(
     "disassemble-functions", cl::CommaSeparated,
@@ -62,8 +67,8 @@ void BinarySizeContextTracker::addInstructionForContext(
   ContextTrieNode *CurNode = &RootContext;
   bool IsLeaf = true;
   for (const auto &Callsite : reverse(Context)) {
-    StringRef CallerName = Callsite.CallerName;
-    LineLocation CallsiteLoc = IsLeaf ? LineLocation(0, 0) : Callsite.Callsite;
+    StringRef CallerName = Callsite.FuncName;
+    LineLocation CallsiteLoc = IsLeaf ? LineLocation(0, 0) : Callsite.Location;
     CurNode = CurNode->getOrCreateChildContext(CallsiteLoc, CallerName);
     IsLeaf = false;
   }
@@ -88,7 +93,7 @@ BinarySizeContextTracker::getFuncSizeForContext(const SampleContext &Context) {
     const auto &ChildFrame = Frames[I--];
     PrevNode = CurrNode;
     CurrNode =
-        CurrNode->getChildContext(ChildFrame.Callsite, ChildFrame.CallerName);
+        CurrNode->getChildContext(ChildFrame.Location, ChildFrame.FuncName);
     if (CurrNode && CurrNode->getFunctionSize().hasValue())
       Size = CurrNode->getFunctionSize().getValue();
   }
@@ -170,6 +175,9 @@ void ProfiledBinary::load() {
   // Decode pseudo probe related section
   decodePseudoProbe(Obj);
 
+  // Load debug info of subprograms from DWARF section.
+  loadSymbolsFromDWARF(*dyn_cast<ObjectFile>(&Binary));
+
   // Disassemble the text sections.
   disassemble(Obj);
 
@@ -178,14 +186,13 @@ void ProfiledBinary::load() {
     FuncSizeTracker.trackInlineesOptimizedAway(ProbeDecoder);
 
   // Use function start and return address to infer prolog and epilog
-  ProEpilogTracker.inferPrologOffsets(FuncStartOffsetMap);
-  ProEpilogTracker.inferEpilogOffsets(RetAddrs);
+  ProEpilogTracker.inferPrologOffsets(StartOffset2FuncRangeMap);
+  ProEpilogTracker.inferEpilogOffsets(RetOffsets);
 
   // TODO: decode other sections.
 }
 
-bool ProfiledBinary::inlineContextEqual(uint64_t Address1,
-                                        uint64_t Address2) const {
+bool ProfiledBinary::inlineContextEqual(uint64_t Address1, uint64_t Address2) {
   uint64_t Offset1 = virtualAddrToOffset(Address1);
   uint64_t Offset2 = virtualAddrToOffset(Address2);
   const SampleContextFrameVector &Context1 = getFrameLocationStack(Offset1);
@@ -202,7 +209,7 @@ bool ProfiledBinary::inlineContextEqual(uint64_t Address1,
 
 SampleContextFrameVector
 ProfiledBinary::getExpandedContext(const SmallVectorImpl<uint64_t> &Stack,
-                                   bool &WasLeafInlined) const {
+                                   bool &WasLeafInlined) {
   SampleContextFrameVector ContextVec;
   // Process from frame root to leaf
   for (auto Address : Stack) {
@@ -219,11 +226,17 @@ ProfiledBinary::getExpandedContext(const SmallVectorImpl<uint64_t> &Stack,
     ContextVec.append(ExpandedContext);
   }
 
+  // Replace with decoded base discriminator
+  for (auto &Frame : ContextVec) {
+    Frame.Location.Discriminator = ProfileGeneratorBase::getBaseDiscriminator(
+        Frame.Location.Discriminator);
+  }
+
   assert(ContextVec.size() && "Context length should be at least 1");
 
   // Compress the context string except for the leaf frame
   auto LeafFrame = ContextVec.back();
-  LeafFrame.Callsite = LineLocation(0, 0);
+  LeafFrame.Location = LineLocation(0, 0);
   ContextVec.pop_back();
   CSProfileGenerator::compressRecursionContext(ContextVec);
   CSProfileGenerator::trimContext(ContextVec);
@@ -234,11 +247,17 @@ ProfiledBinary::getExpandedContext(const SmallVectorImpl<uint64_t> &Stack,
 template <class ELFT>
 void ProfiledBinary::setPreferredTextSegmentAddresses(const ELFFile<ELFT> &Obj, StringRef FileName) {
   const auto &PhdrRange = unwrapOrError(Obj.program_headers(), FileName);
+  // FIXME: This should be the page size of the system running profiling.
+  // However such info isn't available at post-processing time, assuming
+  // 4K page now. Note that we don't use EXEC_PAGESIZE from <linux/param.h>
+  // because we may build the tools on non-linux.
+  uint32_t PageSize = 0x1000;
   for (const typename ELFT::Phdr &Phdr : PhdrRange) {
     if ((Phdr.p_type == ELF::PT_LOAD) && (Phdr.p_flags & ELF::PF_X)) {
         // Segments will always be loaded at a page boundary.
-        PreferredTextSegmentAddresses.push_back(Phdr.p_vaddr & ~(Phdr.p_align - 1U));
-        TextSegmentOffsets.push_back(Phdr.p_offset & ~(Phdr.p_align - 1U));
+        PreferredTextSegmentAddresses.push_back(Phdr.p_vaddr &
+                                                ~(PageSize - 1U));
+        TextSegmentOffsets.push_back(Phdr.p_offset & ~(PageSize - 1U));
       }
   }
 
@@ -260,6 +279,9 @@ void ProfiledBinary::setPreferredTextSegmentAddresses(const ELFObjectFileBase *O
 }
 
 void ProfiledBinary::decodePseudoProbe(const ELFObjectFileBase *Obj) {
+  if (UseDwarfCorrelation)
+    return;
+
   StringRef FileName = Obj->getFileName();
   for (section_iterator SI = Obj->section_begin(), SE = Obj->section_end();
        SI != SE; ++SI) {
@@ -287,6 +309,20 @@ void ProfiledBinary::decodePseudoProbe(const ELFObjectFileBase *Obj) {
     ProbeDecoder.printGUID2FuncDescMap(outs());
 }
 
+void ProfiledBinary::setIsFuncEntry(uint64_t Offset, StringRef RangeSymName) {
+  // Note that the start offset of each ELF section can be a non-function
+  // symbol, we need to binary search for the start of a real function range.
+  auto *FuncRange = findFuncRangeForOffset(Offset);
+  // Skip external function symbol.
+  if (!FuncRange)
+    return;
+
+  // Set IsFuncEntry to ture if the RangeSymName from ELF is equal to its
+  // DWARF-based function name.
+  if (!FuncRange->IsFuncEntry && FuncRange->getFuncName() == RangeSymName)
+    FuncRange->IsFuncEntry = true;
+}
+
 bool ProfiledBinary::dissassembleSymbol(std::size_t SI, ArrayRef<uint8_t> Bytes,
                                         SectionSymbolsTy &Symbols,
                                         const SectionRef &Section) {
@@ -294,10 +330,10 @@ bool ProfiledBinary::dissassembleSymbol(std::size_t SI, ArrayRef<uint8_t> Bytes,
   uint64_t SectionOffset = Section.getAddress() - getPreferredBaseAddress();
   uint64_t SectSize = Section.getSize();
   uint64_t StartOffset = Symbols[SI].Addr - getPreferredBaseAddress();
-  uint64_t EndOffset = (SI + 1 < SE)
-                           ? Symbols[SI + 1].Addr - getPreferredBaseAddress()
-                           : SectionOffset + SectSize;
-  if (StartOffset >= EndOffset)
+  uint64_t NextStartOffset =
+      (SI + 1 < SE) ? Symbols[SI + 1].Addr - getPreferredBaseAddress()
+                    : SectionOffset + SectSize;
+  if (StartOffset > NextStartOffset)
     return true;
 
   StringRef SymbolName =
@@ -320,7 +356,7 @@ bool ProfiledBinary::dissassembleSymbol(std::size_t SI, ArrayRef<uint8_t> Bytes,
   // Size of a consecutive invalid instruction range starting from Offset -1
   // backwards.
   uint64_t InvalidInstLength = 0;
-  while (Offset < EndOffset) {
+  while (Offset < NextStartOffset) {
     MCInst Inst;
     uint64_t Size;
     // Disassemble an instruction.
@@ -354,31 +390,18 @@ bool ProfiledBinary::dissassembleSymbol(std::size_t SI, ArrayRef<uint8_t> Bytes,
 
     if (Disassembled) {
       const MCInstrDesc &MCDesc = MII->get(Inst.getOpcode());
-      // Populate a vector of the symbolized callsite at this location
-      // We don't need symbolized info for probe-based profile, just use an
-      // empty stack as an entry to indicate a valid binary offset
-      SampleContextFrameVector SymbolizedCallStack;
-      if (!UsePseudoProbes || TrackFuncContextSize) {
-        InstructionPointer IP(this, Offset);
-        // TODO: reallocation of Offset2LocStackMap will lead to dangling
-        // strings We need ProfiledBinary to owned these string.
-        Offset2LocStackMap[Offset] = symbolize(IP, true, UsePseudoProbes);
-        SampleContextFrameVector &SymbolizedCallStack =
-            Offset2LocStackMap[Offset];
-        // Record instruction size for the corresponding context
-        if (TrackFuncContextSize && !SymbolizedCallStack.empty())
-          FuncSizeTracker.addInstructionForContext(Offset2LocStackMap[Offset],
-                                                   Size);
-      } else {
-        Offset2LocStackMap[Offset] = SampleContextFrameVector();
-      }
+
+      // Record instruction size.
+      Offset2InstSizeMap[Offset] = Size;
 
       // Populate address maps.
-      CodeAddrs.push_back(Offset);
+      CodeAddrOffsets.push_back(Offset);
       if (MCDesc.isCall())
-        CallAddrs.insert(Offset);
+        CallOffsets.insert(Offset);
       else if (MCDesc.isReturn())
-        RetAddrs.insert(Offset);
+        RetOffsets.insert(Offset);
+      else if (MCDesc.isBranch())
+        BranchOffsets.insert(Offset);
 
       if (InvalidInstLength) {
         WarnInvalidInsts(Offset - InvalidInstLength, Offset - 1);
@@ -397,8 +420,8 @@ bool ProfiledBinary::dissassembleSymbol(std::size_t SI, ArrayRef<uint8_t> Bytes,
   if (ShowDisassembly)
     outs() << "\n";
 
-  FuncStartOffsetMap.emplace(StartOffset,
-                             std::make_pair(Symbols[SI].Name.str(), EndOffset));
+  setIsFuncEntry(StartOffset, Symbols[SI].Name);
+
   return true;
 }
 
@@ -510,6 +533,77 @@ void ProfiledBinary::disassemble(const ELFObjectFileBase *Obj) {
   }
 }
 
+void ProfiledBinary::loadSymbolsFromDWARF(ObjectFile &Obj) {
+  auto DebugContext = llvm::DWARFContext::create(Obj);
+  if (!DebugContext)
+    exitWithError("Misssing debug info.", Path);
+
+  for (const auto &CompilationUnit : DebugContext->compile_units()) {
+    for (const auto &DieInfo : CompilationUnit->dies()) {
+      llvm::DWARFDie Die(CompilationUnit.get(), &DieInfo);
+
+      if (!Die.isSubprogramDIE())
+        continue;
+      auto Name = Die.getName(llvm::DINameKind::LinkageName);
+      if (!Name)
+        Name = Die.getName(llvm::DINameKind::ShortName);
+      if (!Name)
+        continue;
+
+      auto RangesOrError = Die.getAddressRanges();
+      if (!RangesOrError)
+        continue;
+      const DWARFAddressRangesVector &Ranges = RangesOrError.get();
+
+      if (Ranges.empty())
+        continue;
+
+      // Different DWARF symbols can have same function name, search or create
+      // BinaryFunction indexed by the name.
+      auto Ret = BinaryFunctions.emplace(Name, BinaryFunction());
+      auto &Func = Ret.first->second;
+      if (Ret.second)
+        Func.FuncName = Ret.first->first;
+
+      for (const auto &Range : Ranges) {
+        uint64_t FuncStart = Range.LowPC;
+        uint64_t FuncSize = Range.HighPC - FuncStart;
+
+        if (FuncSize == 0 || FuncStart < getPreferredBaseAddress())
+          continue;
+
+        uint64_t StartOffset = FuncStart - getPreferredBaseAddress();
+        uint64_t EndOffset = Range.HighPC - getPreferredBaseAddress();
+
+        // We may want to know all ranges for one function. Here group the
+        // ranges and store them into BinaryFunction.
+        Func.Ranges.emplace_back(StartOffset, EndOffset);
+
+        auto R = StartOffset2FuncRangeMap.emplace(StartOffset, FuncRange());
+        if (R.second) {
+          FuncRange &FRange = R.first->second;
+          FRange.Func = &Func;
+          FRange.StartOffset = StartOffset;
+          FRange.EndOffset = EndOffset;
+        } else {
+          WithColor::warning()
+              << "Duplicated symbol start address at "
+              << format("%8" PRIx64, StartOffset + getPreferredBaseAddress())
+              << " " << R.first->second.getFuncName() << " and " << Name
+              << "\n";
+        }
+      }
+    }
+  }
+  assert(!StartOffset2FuncRangeMap.empty() && "Misssing debug info.");
+}
+
+void ProfiledBinary::populateSymbolListFromDWARF(
+    ProfileSymbolList &SymbolList) {
+  for (auto &I : StartOffset2FuncRangeMap)
+    SymbolList.add(I.second.getFuncName());
+}
+
 void ProfiledBinary::setupSymbolizer() {
   symbolize::LLVMSymbolizer::Options SymbolizerOpts;
   SymbolizerOpts.PrintFunctions =
@@ -548,9 +642,9 @@ SampleContextFrameVector ProfiledBinary::symbolize(const InstructionPointer &IP,
           PseudoProbeDwarfDiscriminator::extractProbeIndex(Discriminator);
       Discriminator = 0;
     } else {
-      Discriminator = DILocation::getBaseDiscriminatorFromDiscriminator(
-          CallerFrame.Discriminator,
-          /* IsFSDiscriminator */ false);
+      // Filter out invalid negative(int type) lineOffset
+      if (LineOffset & 0xffff0000)
+        return SampleContextFrameVector();
     }
 
     LineLocation Line(LineOffset, Discriminator);
@@ -559,6 +653,26 @@ SampleContextFrameVector ProfiledBinary::symbolize(const InstructionPointer &IP,
   }
 
   return CallStack;
+}
+
+void ProfiledBinary::computeInlinedContextSizeForRange(uint64_t StartOffset,
+                                                       uint64_t EndOffset) {
+  uint32_t Index = getIndexForOffset(StartOffset);
+  if (CodeAddrOffsets[Index] != StartOffset)
+    WithColor::warning() << "Invalid start instruction at "
+                         << format("%8" PRIx64, StartOffset) << "\n";
+
+  uint64_t Offset = CodeAddrOffsets[Index];
+  while (Offset < EndOffset) {
+    const SampleContextFrameVector &SymbolizedCallStack =
+        getFrameLocationStack(Offset, UsePseudoProbes);
+    uint64_t Size = Offset2InstSizeMap[Offset];
+
+    // Record instruction size for the corresponding context
+    FuncSizeTracker.addInstructionForContext(SymbolizedCallStack, Size);
+
+    Offset = CodeAddrOffsets[++Index];
+  }
 }
 
 InstructionPointer::InstructionPointer(const ProfiledBinary *Binary,

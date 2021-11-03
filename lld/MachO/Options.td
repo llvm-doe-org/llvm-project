@@ -290,6 +290,7 @@ def no_branch_islands : Flag<["-"], "no_branch_islands">,
     Group<grp_opts>;
 def no_deduplicate : Flag<["-"], "no_deduplicate">,
     HelpText<"Disable code deduplicaiton (synonym for `--icf=none')">,
+    Alias<icf_eq>, AliasArgs<["none"]>,
     Group<grp_opts>;
 
 def grp_version : OptionGroup<"version">, HelpText<"VERSION TARGETING">;
@@ -556,7 +557,6 @@ def grp_symtab : OptionGroup<"symtab">, HelpText<"SYMBOL TABLE">;
 
 def S : Flag<["-"], "S">,
     HelpText<"Strip debug information (STABS or DWARF) from the output">,
-    Flags<[HelpHidden]>,
     Group<grp_symtab>;
 def x : Flag<["-"], "x">,
     HelpText<"Exclude non-global symbols from the output symbol table">,
@@ -575,7 +575,6 @@ def non_global_symbols_no_strip_list : Separate<["-"], "non_global_symbols_no_st
 def oso_prefix : Separate<["-"], "oso_prefix">,
     MetaVarName<"<path>">,
     HelpText<"Remove the prefix <path> from OSO symbols in the debug map">,
-    Flags<[HelpHidden]>,
     Group<grp_symtab>;
 def add_ast_path : Separate<["-"], "add_ast_path">,
     MetaVarName<"<path>">,
@@ -947,6 +946,9 @@ def mllvm : Separate<["-"], "mllvm">,
 def mcpu : Separate<["-"], "mcpu">,
     HelpText<"Processor family target for LTO code generation">,
     Group<grp_rare>;
+def no_dtrace_dof : Flag<["-"], "no_dtrace_dof">,
+    HelpText<"Disable dtrace-dof processing (default).">,
+    Group<grp_rare>;
 
 def grp_deprecated : OptionGroup<"deprecated">, HelpText<"DEPRECATED">;
 
@@ -1269,10 +1271,6 @@ def kexts_use_stubs : Flag<["-"], "kexts_use_stubs">,
     Flags<[HelpHidden]>,
     Group<grp_undocumented>;
 def no_compact_unwind : Flag<["-"], "no_compact_unwind">,
-    HelpText<"This option is undocumented in ld64">,
-    Flags<[HelpHidden]>,
-    Group<grp_undocumented>;
-def no_dtrace_dof : Flag<["-"], "no_dtrace_dof">,
     HelpText<"This option is undocumented in ld64">,
     Flags<[HelpHidden]>,
     Group<grp_undocumented>;

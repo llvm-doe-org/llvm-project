@@ -15,6 +15,8 @@
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -60,15 +62,17 @@ AsmParser::~AsmParser() {}
 DialectAsmParser::~DialectAsmParser() {}
 OpAsmParser::~OpAsmParser() {}
 
-//===--------------------------------------------------------------------===//
+MLIRContext *AsmParser::getContext() const { return getBuilder().getContext(); }
+
+//===----------------------------------------------------------------------===//
 // DialectAsmPrinter
-//===--------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 DialectAsmPrinter::~DialectAsmPrinter() {}
 
-//===--------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 // OpAsmPrinter
-//===--------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 OpAsmPrinter::~OpAsmPrinter() {}
 
@@ -100,9 +104,9 @@ void OpAsmPrinter::printFunctionalType(Operation *op) {
     os << ')';
 }
 
-//===--------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 // Operation OpAsm interface.
-//===--------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 
 /// The OpAsmOpInterface, see OpAsmInterface.td for more details.
 #include "mlir/IR/OpAsmInterface.cpp.inc"
@@ -515,6 +519,7 @@ private:
     // guaranteed to go unused.
     os << "%";
   }
+  void printKeywordOrString(StringRef) override {}
   void printSymbolName(StringRef) override {}
   void printSuccessor(Block *) override {}
   void printSuccessorAndUseList(Block *, ValueRange) override {}
@@ -1545,18 +1550,30 @@ static void printDialectSymbol(raw_ostream &os, StringRef symPrefix,
 
 /// Returns true if the given string can be represented as a bare identifier.
 static bool isBareIdentifier(StringRef name) {
-  assert(!name.empty() && "invalid name");
-
   // By making this unsigned, the value passed in to isalnum will always be
   // in the range 0-255. This is important when building with MSVC because
   // its implementation will assert. This situation can arise when dealing
   // with UTF-8 multibyte characters.
-  unsigned char firstChar = static_cast<unsigned char>(name[0]);
-  if (!isalpha(firstChar) && firstChar != '_')
+  if (name.empty() || (!isalpha(name[0]) && name[0] != '_'))
     return false;
   return llvm::all_of(name.drop_front(), [](unsigned char c) {
     return isalnum(c) || c == '_' || c == '$' || c == '.';
   });
+}
+
+/// Print the given string as a keyword, or a quoted and escaped string if it
+/// has any special or non-printable characters in it.
+static void printKeywordOrString(StringRef keyword, raw_ostream &os) {
+  // If it can be represented as a bare identifier, write it directly.
+  if (isBareIdentifier(keyword)) {
+    os << keyword;
+    return;
+  }
+
+  // Otherwise, output the keyword wrapped in quotes with proper escaping.
+  os << "\"";
+  printEscapedString(keyword, os);
+  os << '"';
 }
 
 /// Print the given string as a symbol reference. A symbol reference is
@@ -1564,17 +1581,8 @@ static bool isBareIdentifier(StringRef name) {
 /// ""'s and escaped if it has any special or non-printable characters in it.
 static void printSymbolReference(StringRef symbolRef, raw_ostream &os) {
   assert(!symbolRef.empty() && "expected valid symbol reference");
-
-  // If the symbol can be represented as a bare identifier, write it directly.
-  if (isBareIdentifier(symbolRef)) {
-    os << '@' << symbolRef;
-    return;
-  }
-
-  // Otherwise, output the reference wrapped in quotes with proper escaping.
-  os << "@\"";
-  printEscapedString(symbolRef, os);
-  os << '"';
+  os << '@';
+  printKeywordOrString(symbolRef, os);
 }
 
 // Print out a valid ElementsAttr that is succinct and can represent any
@@ -1600,6 +1608,9 @@ void AsmPrinter::Impl::printAttribute(Attribute attr,
   // Try to print an alias for this attribute.
   if (state && succeeded(state->getAliasState().getAlias(attr, os)))
     return;
+
+  if (!isa<BuiltinDialect>(attr.getDialect()))
+    return printDialectAttribute(attr);
 
   auto attrType = attr.getType();
   if (auto opaqueAttr = attr.dyn_cast<OpaqueAttr>()) {
@@ -1721,11 +1732,7 @@ void AsmPrinter::Impl::printAttribute(Attribute attr,
 
   } else if (auto locAttr = attr.dyn_cast<LocationAttr>()) {
     printLocation(locAttr);
-
-  } else {
-    return printDialectAttribute(attr);
   }
-
   // Don't print the type if we must elide it, or if it is a None type.
   if (typeElision != AttrTypeElision::Must && !attrType.isa<NoneType>()) {
     os << " : ";
@@ -1918,7 +1925,7 @@ void AsmPrinter::Impl::printType(Type type) {
         os << ") -> ";
         ArrayRef<Type> results = funcTy.getResults();
         if (results.size() == 1 && !results[0].isa<FunctionType>()) {
-          os << results[0];
+          printType(results[0]);
         } else {
           os << '(';
           interleaveComma(results, [&](Type ty) { printType(ty); });
@@ -1929,7 +1936,8 @@ void AsmPrinter::Impl::printType(Type type) {
         os << "vector<";
         for (int64_t dim : vectorTy.getShape())
           os << dim << 'x';
-        os << vectorTy.getElementType() << '>';
+        printType(vectorTy.getElementType());
+        os << '>';
       })
       .Case<RankedTensorType>([&](RankedTensorType tensorTy) {
         os << "tensor<";
@@ -1940,7 +1948,7 @@ void AsmPrinter::Impl::printType(Type type) {
             os << dim;
           os << 'x';
         }
-        os << tensorTy.getElementType();
+        printType(tensorTy.getElementType());
         // Only print the encoding attribute value if set.
         if (tensorTy.getEncoding()) {
           os << ", ";
@@ -1963,9 +1971,9 @@ void AsmPrinter::Impl::printType(Type type) {
           os << 'x';
         }
         printType(memrefTy.getElementType());
-        for (auto map : memrefTy.getAffineMaps()) {
+        if (!memrefTy.getLayout().isIdentity()) {
           os << ", ";
-          printAttribute(AffineMapAttr::get(map));
+          printAttribute(memrefTy.getLayout(), AttrTypeElision::May);
         }
         // Only print the memory space if it is the non-default one.
         if (memrefTy.getMemorySpace()) {
@@ -2034,13 +2042,10 @@ void AsmPrinter::Impl::printOptionalAttrDict(ArrayRef<NamedAttribute> attrs,
 }
 
 void AsmPrinter::Impl::printNamedAttribute(NamedAttribute attr) {
-  if (isBareIdentifier(attr.first)) {
-    os << attr.first;
-  } else {
-    os << '"';
-    printEscapedString(attr.first.strref(), os);
-    os << '"';
-  }
+  assert(attr.first.size() != 0 && "expected valid named attribute");
+
+  // Print the name without quotes if possible.
+  ::printKeywordOrString(attr.first.strref(), os);
 
   // Pretty printing elides the attribute value for unit attributes.
   if (attr.second.isa<UnitAttr>())
@@ -2109,6 +2114,11 @@ void AsmPrinter::printAttributeWithoutType(Attribute attr) {
   assert(impl &&
          "expected AsmPrinter::printAttributeWithoutType to be overriden");
   impl->printAttribute(attr, Impl::AttrTypeElision::Must);
+}
+
+void AsmPrinter::printKeywordOrString(StringRef keyword) {
+  assert(impl && "expected AsmPrinter::printKeywordOrString to be overriden");
+  ::printKeywordOrString(keyword, impl->getStream());
 }
 
 void AsmPrinter::printSymbolName(StringRef symbolRef) {

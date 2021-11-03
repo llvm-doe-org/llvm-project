@@ -67,14 +67,12 @@ std::pair<tooling::Replacements, unsigned> QualifierAlignmentFixer::analyze(
                                     NextStartColumn, LastStartColumn);
   llvm::Optional<std::string> CurrentCode = None;
   tooling::Replacements Fixes;
-  unsigned Penalty = 0;
   for (size_t I = 0, E = Passes.size(); I < E; ++I) {
     std::pair<tooling::Replacements, unsigned> PassFixes = Passes[I](*Env);
     auto NewCode = applyAllReplacements(
         CurrentCode ? StringRef(*CurrentCode) : Code, PassFixes.first);
     if (NewCode) {
       Fixes = Fixes.merge(PassFixes.first);
-      Penalty += PassFixes.second;
       if (I + 1 < E) {
         CurrentCode = std::move(*NewCode);
         Env = std::make_unique<Environment>(
@@ -84,7 +82,21 @@ std::pair<tooling::Replacements, unsigned> QualifierAlignmentFixer::analyze(
       }
     }
   }
-  return {Fixes, Penalty};
+
+  // Don't make replacements that replace nothing.
+  tooling::Replacements NonNoOpFixes;
+
+  for (auto I = Fixes.begin(), E = Fixes.end(); I != E; ++I) {
+    StringRef OriginalCode = Code.substr(I->getOffset(), I->getLength());
+
+    if (!OriginalCode.equals(I->getReplacementText())) {
+      auto Err = NonNoOpFixes.add(*I);
+      if (Err)
+        llvm::errs() << "Error adding replacements : "
+                     << llvm::toString(std::move(Err)) << "\n";
+    }
+  }
+  return {NonNoOpFixes, 0};
 }
 
 static void replaceToken(const SourceManager &SourceMgr,
@@ -349,7 +361,7 @@ FormatToken *LeftRightQualifierAlignmentFixer::analyzeLeft(
 
 tok::TokenKind LeftRightQualifierAlignmentFixer::getTokenFromQualifier(
     const std::string &Qualifier) {
-  // don't let 'type' be an indentifier steal typeof token
+  // Don't let 'type' be an identifier, but steal typeof token.
   return llvm::StringSwitch<tok::TokenKind>(Qualifier)
       .Case("type", tok::kw_typeof)
       .Case("const", tok::kw_const)
@@ -407,7 +419,7 @@ void QualifierAlignmentFixer::PrepareLeftRightOrdering(
   // To iterate forward or backward through the order list as qualifier
   // can push through each other.
   // The Order list must define the position of "type" to signify
-  assert(std::find(Order.begin(), Order.end(), "type") != Order.end() &&
+  assert(llvm::is_contained(Order, "type") &&
          "QualifierOrder must contain type");
   // Split the Order list by type and reverse the left side.
 
@@ -435,8 +447,7 @@ void QualifierAlignmentFixer::PrepareLeftRightOrdering(
 bool LeftRightQualifierAlignmentFixer::isQualifierOrType(
     const FormatToken *Tok, const std::vector<tok::TokenKind> &specifiedTypes) {
   return Tok && (Tok->isSimpleTypeSpecifier() || Tok->is(tok::kw_auto) ||
-                 (std::find(specifiedTypes.begin(), specifiedTypes.end(),
-                            Tok->Tok.getKind()) != specifiedTypes.end()));
+                 llvm::is_contained(specifiedTypes, Tok->Tok.getKind()));
 }
 
 // If a token is an identifier and it's upper case, it could

@@ -41,7 +41,7 @@ Error validatePointerSectionExtent(const char *SectionName,
   if (SE.size().getValue() % sizeof(uintptr_t)) {
     std::ostringstream ErrMsg;
     ErrMsg << std::hex << "Size of " << SectionName << " 0x"
-           << SE.StartAddress.getValue() << " -- 0x" << SE.EndAddress.getValue()
+           << SE.Start.getValue() << " -- 0x" << SE.End.getValue()
            << " is not a pointer multiple";
     return make_error<StringError>(ErrMsg.str());
   }
@@ -84,11 +84,12 @@ private:
   };
 
 public:
-  static void initialize();
+  static void initialize(void *DSOHandle);
   static ELFNixPlatformRuntimeState &get();
   static void destroy();
 
-  ELFNixPlatformRuntimeState() = default;
+  ELFNixPlatformRuntimeState(void *DSOHandle)
+      : PlatformJDDSOHandle(DSOHandle) {}
 
   // Delete copy and move constructors.
   ELFNixPlatformRuntimeState(const ELFNixPlatformRuntimeState &) = delete;
@@ -111,6 +112,8 @@ public:
   /// Returns the base address of the section containing ThreadData.
   Expected<std::pair<const char *, size_t>>
   getThreadDataSectionFor(const char *ThreadData);
+
+  void *getPlatformJDDSOHandle() { return PlatformJDDSOHandle; }
 
 private:
   PerJITDylibState *getJITDylibStateByHeaderAddr(void *DSOHandle);
@@ -136,6 +139,8 @@ private:
   const std::vector<std::pair<const char *, InitSectionHandler>> InitSections =
       {{".init_array", runInitArray}};
 
+  void *PlatformJDDSOHandle;
+
   // FIXME: Move to thread-state.
   std::string DLFcnError;
 
@@ -149,9 +154,9 @@ private:
 
 ELFNixPlatformRuntimeState *ELFNixPlatformRuntimeState::MOPS = nullptr;
 
-void ELFNixPlatformRuntimeState::initialize() {
+void ELFNixPlatformRuntimeState::initialize(void *DSOHandle) {
   assert(!MOPS && "ELFNixPlatformRuntimeState should be null");
-  MOPS = new ELFNixPlatformRuntimeState();
+  MOPS = new ELFNixPlatformRuntimeState(DSOHandle);
 }
 
 ELFNixPlatformRuntimeState &ELFNixPlatformRuntimeState::get() {
@@ -166,10 +171,10 @@ void ELFNixPlatformRuntimeState::destroy() {
 
 Error ELFNixPlatformRuntimeState::registerObjectSections(
     ELFNixPerObjectSectionsToRegister POSR) {
-  if (POSR.EHFrameSection.StartAddress)
-    __register_frame(POSR.EHFrameSection.StartAddress.toPtr<const char *>());
+  if (POSR.EHFrameSection.Start)
+    __register_frame(POSR.EHFrameSection.Start.toPtr<const char *>());
 
-  if (POSR.ThreadDataSection.StartAddress) {
+  if (POSR.ThreadDataSection.Start) {
     if (auto Err = registerThreadDataSection(
             POSR.ThreadDataSection.toSpan<const char>()))
       return Err;
@@ -180,8 +185,8 @@ Error ELFNixPlatformRuntimeState::registerObjectSections(
 
 Error ELFNixPlatformRuntimeState::deregisterObjectSections(
     ELFNixPerObjectSectionsToRegister POSR) {
-  if (POSR.EHFrameSection.StartAddress)
-    __deregister_frame(POSR.EHFrameSection.StartAddress.toPtr<const char *>());
+  if (POSR.EHFrameSection.Start)
+    __deregister_frame(POSR.EHFrameSection.Start.toPtr<const char *>());
 
   return Error::success();
 }
@@ -434,8 +439,13 @@ void destroyELFNixTLVMgr(void *ELFNixTLVMgr) {
 
 ORC_RT_INTERFACE __orc_rt_CWrapperFunctionResult
 __orc_rt_elfnix_platform_bootstrap(char *ArgData, size_t ArgSize) {
-  ELFNixPlatformRuntimeState::initialize();
-  return WrapperFunctionResult().release();
+  return WrapperFunction<void(uint64_t)>::handle(
+             ArgData, ArgSize,
+             [](uint64_t &DSOHandle) {
+               ELFNixPlatformRuntimeState::initialize(
+                   reinterpret_cast<void *>(DSOHandle));
+             })
+      .release();
 }
 
 ORC_RT_INTERFACE __orc_rt_CWrapperFunctionResult
@@ -509,6 +519,12 @@ int __orc_rt_elfnix_cxa_atexit(void (*func)(void *), void *arg,
                                void *dso_handle) {
   return ELFNixPlatformRuntimeState::get().registerAtExit(func, arg,
                                                           dso_handle);
+}
+
+int __orc_rt_elfnix_atexit(void (*func)(void *)) {
+  auto &PlatformRTState = ELFNixPlatformRuntimeState::get();
+  return ELFNixPlatformRuntimeState::get().registerAtExit(
+      func, NULL, PlatformRTState.getPlatformJDDSOHandle());
 }
 
 void __orc_rt_elfnix_cxa_finalize(void *dso_handle) {

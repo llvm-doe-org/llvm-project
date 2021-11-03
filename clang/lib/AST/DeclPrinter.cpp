@@ -153,11 +153,14 @@ static QualType GetBaseType(QualType T) {
   while (!BaseType->isSpecifierType()) {
     if (const PointerType *PTy = BaseType->getAs<PointerType>())
       BaseType = PTy->getPointeeType();
+    else if (const ObjCObjectPointerType *OPT =
+                 BaseType->getAs<ObjCObjectPointerType>())
+      BaseType = OPT->getPointeeType();
     else if (const BlockPointerType *BPy = BaseType->getAs<BlockPointerType>())
       BaseType = BPy->getPointeeType();
-    else if (const ArrayType* ATy = dyn_cast<ArrayType>(BaseType))
+    else if (const ArrayType *ATy = dyn_cast<ArrayType>(BaseType))
       BaseType = ATy->getElementType();
-    else if (const FunctionType* FTy = BaseType->getAs<FunctionType>())
+    else if (const FunctionType *FTy = BaseType->getAs<FunctionType>())
       BaseType = FTy->getReturnType();
     else if (const VectorType *VTy = BaseType->getAs<VectorType>())
       BaseType = VTy->getElementType();
@@ -1102,9 +1105,9 @@ void DeclPrinter::printTemplateArguments(ArrayRef<TemplateArgument> Args,
     if (TemplOverloaded || !Params)
       Args[I].print(Policy, Out, /*IncludeType*/ true);
     else
-      Args[I].print(
-          Policy, Out,
-          TemplateParameterList::shouldIncludeTypeForArgument(Params, I));
+      Args[I].print(Policy, Out,
+                    TemplateParameterList::shouldIncludeTypeForArgument(
+                        Policy, Params, I));
   }
   Out << ">";
 }
@@ -1121,7 +1124,8 @@ void DeclPrinter::printTemplateArguments(ArrayRef<TemplateArgumentLoc> Args,
     else
       Args[I].getArgument().print(
           Policy, Out,
-          TemplateParameterList::shouldIncludeTypeForArgument(Params, I));
+          TemplateParameterList::shouldIncludeTypeForArgument(Policy, Params,
+                                                              I));
   }
   Out << ">";
 }

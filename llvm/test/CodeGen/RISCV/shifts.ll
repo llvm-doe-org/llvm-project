@@ -7,6 +7,9 @@
 ; Basic shift support is tested as part of ALU.ll. This file ensures that
 ; shifts which may not be supported natively are lowered properly.
 
+declare i64 @llvm.fshr.i64(i64, i64, i64)
+declare i128 @llvm.fshr.i128(i128, i128, i128)
+
 define i64 @lshr64(i64 %a, i64 %b) nounwind {
 ; RV32I-LABEL: lshr64:
 ; RV32I:       # %bb.0:
@@ -563,4 +566,133 @@ define i128 @shl128(i128 %a, i128 %b) nounwind {
 ; RV64I-NEXT:    ret
   %1 = shl i128 %a, %b
   ret i128 %1
+}
+
+define i64 @fshr64_minsize(i64 %a, i64 %b) minsize nounwind {
+; RV32I-LABEL: fshr64_minsize:
+; RV32I:       # %bb.0:
+; RV32I-NEXT:    andi a4, a2, 32
+; RV32I-NEXT:    mv a3, a0
+; RV32I-NEXT:    beqz a4, .LBB9_2
+; RV32I-NEXT:  # %bb.1:
+; RV32I-NEXT:    mv a3, a1
+; RV32I-NEXT:  .LBB9_2:
+; RV32I-NEXT:    srl a5, a3, a2
+; RV32I-NEXT:    beqz a4, .LBB9_4
+; RV32I-NEXT:  # %bb.3:
+; RV32I-NEXT:    mv a1, a0
+; RV32I-NEXT:  .LBB9_4:
+; RV32I-NEXT:    slli a0, a1, 1
+; RV32I-NEXT:    not a4, a2
+; RV32I-NEXT:    sll a0, a0, a4
+; RV32I-NEXT:    or a0, a0, a5
+; RV32I-NEXT:    srl a1, a1, a2
+; RV32I-NEXT:    slli a2, a3, 1
+; RV32I-NEXT:    sll a2, a2, a4
+; RV32I-NEXT:    or a1, a2, a1
+; RV32I-NEXT:    ret
+;
+; RV64I-LABEL: fshr64_minsize:
+; RV64I:       # %bb.0:
+; RV64I-NEXT:    srl a2, a0, a1
+; RV64I-NEXT:    neg a1, a1
+; RV64I-NEXT:    sll a0, a0, a1
+; RV64I-NEXT:    or a0, a2, a0
+; RV64I-NEXT:    ret
+  %res = tail call i64 @llvm.fshr.i64(i64 %a, i64 %a, i64 %b)
+  ret i64 %res
+}
+
+define i128 @fshr128_minsize(i128 %a, i128 %b) minsize nounwind {
+; RV32I-LABEL: fshr128_minsize:
+; RV32I:       # %bb.0:
+; RV32I-NEXT:    lw t2, 8(a1)
+; RV32I-NEXT:    lw a3, 0(a1)
+; RV32I-NEXT:    lw a2, 0(a2)
+; RV32I-NEXT:    lw a7, 4(a1)
+; RV32I-NEXT:    lw t1, 12(a1)
+; RV32I-NEXT:    andi a1, a2, 64
+; RV32I-NEXT:    mv a5, a7
+; RV32I-NEXT:    mv a6, a3
+; RV32I-NEXT:    beqz a1, .LBB10_2
+; RV32I-NEXT:  # %bb.1:
+; RV32I-NEXT:    mv a5, t1
+; RV32I-NEXT:    mv a6, t2
+; RV32I-NEXT:  .LBB10_2:
+; RV32I-NEXT:    andi a4, a2, 32
+; RV32I-NEXT:    mv t0, a6
+; RV32I-NEXT:    bnez a4, .LBB10_13
+; RV32I-NEXT:  # %bb.3:
+; RV32I-NEXT:    bnez a1, .LBB10_14
+; RV32I-NEXT:  .LBB10_4:
+; RV32I-NEXT:    beqz a4, .LBB10_6
+; RV32I-NEXT:  .LBB10_5:
+; RV32I-NEXT:    mv a5, t2
+; RV32I-NEXT:  .LBB10_6:
+; RV32I-NEXT:    slli t3, a5, 1
+; RV32I-NEXT:    not a3, a2
+; RV32I-NEXT:    beqz a1, .LBB10_8
+; RV32I-NEXT:  # %bb.7:
+; RV32I-NEXT:    mv t1, a7
+; RV32I-NEXT:  .LBB10_8:
+; RV32I-NEXT:    srl a7, t0, a2
+; RV32I-NEXT:    sll a1, t3, a3
+; RV32I-NEXT:    srl a5, a5, a2
+; RV32I-NEXT:    beqz a4, .LBB10_10
+; RV32I-NEXT:  # %bb.9:
+; RV32I-NEXT:    mv t2, t1
+; RV32I-NEXT:  .LBB10_10:
+; RV32I-NEXT:    or a7, a1, a7
+; RV32I-NEXT:    slli a1, t2, 1
+; RV32I-NEXT:    sll a1, a1, a3
+; RV32I-NEXT:    or a5, a1, a5
+; RV32I-NEXT:    srl a1, t2, a2
+; RV32I-NEXT:    beqz a4, .LBB10_12
+; RV32I-NEXT:  # %bb.11:
+; RV32I-NEXT:    mv t1, a6
+; RV32I-NEXT:  .LBB10_12:
+; RV32I-NEXT:    slli a4, t1, 1
+; RV32I-NEXT:    sll a4, a4, a3
+; RV32I-NEXT:    or a1, a4, a1
+; RV32I-NEXT:    srl a2, t1, a2
+; RV32I-NEXT:    slli a4, t0, 1
+; RV32I-NEXT:    sll a3, a4, a3
+; RV32I-NEXT:    or a2, a3, a2
+; RV32I-NEXT:    sw a2, 12(a0)
+; RV32I-NEXT:    sw a1, 8(a0)
+; RV32I-NEXT:    sw a5, 4(a0)
+; RV32I-NEXT:    sw a7, 0(a0)
+; RV32I-NEXT:    ret
+; RV32I-NEXT:  .LBB10_13:
+; RV32I-NEXT:    mv t0, a5
+; RV32I-NEXT:    beqz a1, .LBB10_4
+; RV32I-NEXT:  .LBB10_14:
+; RV32I-NEXT:    mv t2, a3
+; RV32I-NEXT:    bnez a4, .LBB10_5
+; RV32I-NEXT:    j .LBB10_6
+;
+; RV64I-LABEL: fshr128_minsize:
+; RV64I:       # %bb.0:
+; RV64I-NEXT:    andi a4, a2, 64
+; RV64I-NEXT:    mv a3, a0
+; RV64I-NEXT:    beqz a4, .LBB10_2
+; RV64I-NEXT:  # %bb.1:
+; RV64I-NEXT:    mv a3, a1
+; RV64I-NEXT:  .LBB10_2:
+; RV64I-NEXT:    srl a5, a3, a2
+; RV64I-NEXT:    beqz a4, .LBB10_4
+; RV64I-NEXT:  # %bb.3:
+; RV64I-NEXT:    mv a1, a0
+; RV64I-NEXT:  .LBB10_4:
+; RV64I-NEXT:    slli a0, a1, 1
+; RV64I-NEXT:    not a4, a2
+; RV64I-NEXT:    sll a0, a0, a4
+; RV64I-NEXT:    or a0, a0, a5
+; RV64I-NEXT:    srl a1, a1, a2
+; RV64I-NEXT:    slli a2, a3, 1
+; RV64I-NEXT:    sll a2, a2, a4
+; RV64I-NEXT:    or a1, a2, a1
+; RV64I-NEXT:    ret
+  %res = tail call i128 @llvm.fshr.i128(i128 %a, i128 %a, i128 %b)
+  ret i128 %res
 }
