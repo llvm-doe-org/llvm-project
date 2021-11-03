@@ -100,24 +100,24 @@ int main() {
     // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:        OMPMapClause
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int[n]'
     //
     //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:1]){{$}}
     //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[0:1]){{$}}
@@ -163,24 +163,24 @@ int main() {
     // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:        OMPMapClause
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int[n]'
     //
     //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[0:2]){{$}}
     //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[0:2]){{$}}
@@ -290,24 +290,24 @@ int main() {
     // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:        OMPMapClause
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int[n]'
     //
     //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[1:3]){{$}}
     //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[1:3]){{$}}
@@ -354,28 +354,28 @@ int main() {
     // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'start' 'int'
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'length' 'int'
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:        OMPMapClause
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:              DeclRefExpr {{.*}} 'start' 'int'
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:              DeclRefExpr {{.*}} 'length' 'int'
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int[n]'
     //
     //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:length]){{$}}
     //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[start:length]){{$}}
@@ -422,26 +422,26 @@ int main() {
     // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'length' 'int'
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:        OMPMapClause
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:              DeclRefExpr {{.*}} 'length' 'int'
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int[n]'
     //
     //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:length]){{$}}
     //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[:length]){{$}}
@@ -488,26 +488,26 @@ int main() {
     // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:            DeclRefExpr {{.*}} 'start' 'int'
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:        OMPMapClause
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:              DeclRefExpr {{.*}} 'start' 'int'
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int[n]'
     //
     //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[start:]){{$}}
     //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[start:]){{$}}
@@ -554,24 +554,24 @@ int main() {
     // DMP-CR-NEXT:   ACCCreateClause
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:            DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:        OMPMapClause
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr1' 'int[n]'
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int [n]'
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr1' 'int[n]'
     //
     //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr1[:]){{$}}
     //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr1[:]){{$}}
@@ -619,7 +619,7 @@ int main() {
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int (*)[2]' <ArrayToPointerDecay>
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr2' 'int[n][2]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:            <<<NULL>>>
@@ -627,7 +627,7 @@ int main() {
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr2' 'int[n][2]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -635,7 +635,7 @@ int main() {
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            OMPArraySectionExpr
     // DMP-NEXT:              ImplicitCastExpr {{.*}} 'int (*)[2]' <ArrayToPointerDecay>
-    // DMP-NEXT:                DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'arr2' 'int[n][2]'
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:              <<<NULL>>>
@@ -643,7 +643,7 @@ int main() {
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr2' 'int[n][2]'
     //
     //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr2[2:3][0:2]){{$}}
     //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr2[2:3][0:2]){{$}}
@@ -692,7 +692,7 @@ int main() {
     // DMP-NEXT:        OMPArraySectionExpr
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            ImplicitCastExpr {{.*}} 'int (*)[2]' <ArrayToPointerDecay>
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
+    // DMP-NEXT:              DeclRefExpr {{.*}} 'arr2' 'int[n][2]'
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            <<<NULL>>>
@@ -700,7 +700,7 @@ int main() {
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:          <<<NULL>>>
     // DMP-NEXT:      ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
+    // DMP-NEXT:        DeclRefExpr {{.*}} 'arr2' 'int[n][2]'
     // DMP-NEXT:      impl: OMPTargetTeamsDirective
     // DMP-NEXT:        OMPNum_teamsClause
     // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 1
@@ -708,7 +708,7 @@ int main() {
     // DMP-NEXT:          OMPArraySectionExpr
     // DMP-NEXT:            OMPArraySectionExpr
     // DMP-NEXT:              ImplicitCastExpr {{.*}} 'int (*)[2]' <ArrayToPointerDecay>
-    // DMP-NEXT:                DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'arr2' 'int[n][2]'
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:              <<<NULL>>>
@@ -716,7 +716,7 @@ int main() {
     // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:            <<<NULL>>>
     // DMP-NEXT:        OMPSharedClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr2' 'int [n][2]'
+    // DMP-NEXT:          DeclRefExpr {{.*}} 'arr2' 'int[n][2]'
     //
     //  PRT-A-AST-NEXT: #pragma acc parallel num_gangs(1) [[ACCC]](arr2[3:1][1:1]){{$}}
     //  PRT-A-SRC-NEXT: #pragma acc parallel num_gangs(1) ACCC(arr2[3:1][1:1]){{$}}

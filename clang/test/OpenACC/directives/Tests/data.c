@@ -42,13 +42,13 @@ int main() {
   // DMP-NEXT:   ACCCreateClause
   //  DMP-NOT:     <implicit>
   // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
-  // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int[1]'
   // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
   // DMP-NEXT:   impl: OMPTargetDataDirective
   // DMP-NEXT:     OMPMapClause
   //  DMP-NOT:       <implicit>
   // DMP-NEXT:       DeclRefExpr {{.*}} 'pr' 'int'
-  // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int [1]'
+  // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int[1]'
   // DMP-NEXT:       DeclRefExpr {{.*}} 'prStruct' 'struct T'
   #pragma acc data create(pr,prArr,prStruct)
   test();
@@ -66,11 +66,11 @@ void prSet() {
   // DMP-NEXT:   ACCPresentClause
   //  DMP-NOT:     <implicit>
   // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
-  // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int[1]'
   // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
   // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
   // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
-  // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int[1]'
   // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
@@ -78,7 +78,7 @@ void prSet() {
   // DMP-NEXT:     OMPMapClause
   //  DMP-NOT:       <implicit>
   // DMP-NEXT:       DeclRefExpr {{.*}} 'pr' 'int'
-  // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int [1]'
+  // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int[1]'
   // DMP-NEXT:       DeclRefExpr {{.*}} 'prStruct' 'struct T'
   #pragma acc parallel num_gangs(1) present(pr, prArr, prStruct)
   {
@@ -796,41 +796,41 @@ void test() {
     // DMP:      ACCDataDirective
     // DMP-NEXT:   ACCPresentClause
     // DMP-NOT:      <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int[1]'
     // DMP-NEXT:   ACCCopyClause
     // DMP-NOT:      <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int [1]'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int[1]'
     // DMP-NEXT:   ACCCopyinClause
     // DMP-NOT:      <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int [1]'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int[1]'
     // DMP-NEXT:   ACCCopyoutClause
     // DMP-NOT:      <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int [1]'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int[1]'
     // DMP-NEXT:   ACCCreateClause
     // DMP-NOT:      <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int [1]'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int[1]'
     // DMP-NEXT:   ACCNoCreateClause
     // DMP-NOT:      <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int [1]'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int[1]'
     // DMP-NEXT:   impl: OMPTargetDataDirective
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int [1]'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int[1]'
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int [1]'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int[1]'
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int [1]'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int[1]'
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int [1]'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int[1]'
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int [1]'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int[1]'
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int [1]'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int[1]'
     // DMP-NOT:      OMP
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc data present(prArr){{( *\\$[[:space:]])?}}
@@ -867,33 +867,33 @@ void test() {
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int[1]'
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int[1]'
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:     OMPMapClause
       // DMP-NOT:        <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int [1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int[1]'
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int [1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int[1]'
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
@@ -974,38 +974,38 @@ void test() {
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCCopyinClause
       // DMP-NOT:      <implicit>
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int[1]'
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int [1]'
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int [1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr' 'int[1]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int[1]'
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:     OMPMapClause
       // DMP-NOT:        <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int [1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int[1]'
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int [1]'
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int [1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int[1]'
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) copyin(prArr,c,ci,co,cr,nc){{$}}
@@ -1617,7 +1617,7 @@ void test() {
     // DMP-NOT:      <implicit>
     // DMP-NEXT:     OMPArraySectionExpr
     // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:         DeclRefExpr {{.*}} 'arr' 'int [5]'
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'arr' 'int[5]'
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:       <<<NULL>>>
@@ -1626,7 +1626,7 @@ void test() {
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       OMPArraySectionExpr
     // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr' 'int [5]'
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr' 'int[5]'
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:         <<<NULL>>>
@@ -1653,15 +1653,15 @@ void test() {
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
@@ -1710,12 +1710,12 @@ void test() {
       // DMP-NOT:      <implicit>
       // DMP-NEXT:     OMPArraySectionExpr
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-      // DMP-NEXT:         DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:         DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
       // DMP-NEXT:       <<<NULL>>>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
@@ -1723,13 +1723,13 @@ void test() {
       // DMP-NOT:        <implicit>
       // DMP-NEXT:       OMPArraySectionExpr
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-      // DMP-NEXT:           DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:           DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
       // DMP-NEXT:         <<<NULL>>>
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) copy(arr[1:3]){{$}}
@@ -1796,7 +1796,7 @@ void test() {
     // DMP-NOT:      <implicit>
     // DMP-NEXT:     OMPArraySectionExpr
     // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:         DeclRefExpr {{.*}} 'arr' 'int [5]'
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'arr' 'int[5]'
     // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:         DeclRefExpr {{.*}} 's0' 'int'
     // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
@@ -1807,7 +1807,7 @@ void test() {
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       OMPArraySectionExpr
     // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr' 'int [5]'
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr' 'int[5]'
     // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     // DMP-NEXT:           DeclRefExpr {{.*}} 's0' 'int'
     // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
@@ -1836,15 +1836,15 @@ void test() {
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
@@ -1893,14 +1893,14 @@ void test() {
       // DMP-NOT:      <implicit>
       // DMP-NEXT:     OMPArraySectionExpr
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-      // DMP-NEXT:         DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:         DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
       // DMP-NEXT:         DeclRefExpr {{.*}} 's1' 'int'
       // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
       // DMP-NEXT:         DeclRefExpr {{.*}} 'l1' 'int'
       // DMP-NEXT:       <<<NULL>>>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
@@ -1908,7 +1908,7 @@ void test() {
       // DMP-NOT:        <implicit>
       // DMP-NEXT:       OMPArraySectionExpr
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-      // DMP-NEXT:           DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:           DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
       // DMP-NEXT:           DeclRefExpr {{.*}} 's1' 'int'
       // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
@@ -1916,7 +1916,7 @@ void test() {
       // DMP-NEXT:         <<<NULL>>>
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int [5]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int[5]'
       // DMP-NOT:      OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) copy(arr[s1:l1]){{$}}
@@ -1996,13 +1996,13 @@ void test() {
     // DMP-NOT:      <implicit>
     // DMP-NEXT:     OMPArraySectionExpr
     // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:         DeclRefExpr {{.*}} 'arr0' 'int [5]'
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'arr0' 'int[5]'
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:       <<<NULL>>>
     // DMP-NEXT:     OMPArraySectionExpr
     // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:         DeclRefExpr {{.*}} 'arr1' 'int [5]'
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'arr1' 'int[5]'
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:       <<<NULL>>>
@@ -2011,13 +2011,13 @@ void test() {
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       OMPArraySectionExpr
     // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr0' 'int [5]'
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr0' 'int[5]'
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:         <<<NULL>>>
     // DMP-NEXT:       OMPArraySectionExpr
     // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr1' 'int [5]'
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr1' 'int[5]'
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:         <<<NULL>>>
@@ -2034,13 +2034,13 @@ void test() {
     // DMP-NOT:      <implicit>
     // DMP-NEXT:     OMPArraySectionExpr
     // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:         DeclRefExpr {{.*}} 'arr0' 'int [5]'
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'arr0' 'int[5]'
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:       <<<NULL>>>
     // DMP-NEXT:     OMPArraySectionExpr
     // DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:         DeclRefExpr {{.*}} 'arr1' 'int [5]'
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'arr1' 'int[5]'
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:       <<<NULL>>>
@@ -2049,13 +2049,13 @@ void test() {
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       OMPArraySectionExpr
     // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr0' 'int [5]'
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr0' 'int[5]'
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
     // DMP-NEXT:         <<<NULL>>>
     // DMP-NEXT:       OMPArraySectionExpr
     // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr1' 'int [5]'
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr1' 'int[5]'
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     // DMP-NEXT:         <<<NULL>>>
@@ -2073,18 +2073,18 @@ void test() {
     // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'arr0' 'int [5]'
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'arr1' 'int [5]'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'arr0' 'int[5]'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'arr1' 'int[5]'
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'arr0' 'int [5]'
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'arr1' 'int [5]'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'arr0' 'int[5]'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'arr1' 'int[5]'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:     OMPSharedClause
     // DMP-NOT:        <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'arr0' 'int [5]'
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'arr1' 'int [5]'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'arr0' 'int[5]'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'arr1' 'int[5]'
     // DMP-NOT:      OMP
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}

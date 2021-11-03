@@ -282,7 +282,7 @@ int main() {
   // expected-error@+2 {{subarray specified for pointer to function type 'int ()'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data copyin(fp[0:2])
-  // expected-error@+2 {{subarray specified for pointer to incomplete type 'int []'}}
+  // expected-error@+2 {{subarray specified for pointer to incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
   #pragma acc exit data delete((&incomplete)[0:2])
 
@@ -379,35 +379,35 @@ int main() {
 
   // Variables of incomplete type.
 
-  // expected-error@+2 {{variable in 'copyin' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'copyin' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data copyin(incomplete)
-  // expected-error@+2 {{variable in 'pcopyin' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'pcopyin' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data pcopyin(incomplete)
-  // expected-error@+2 {{variable in 'present_or_copyin' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'present_or_copyin' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data present_or_copyin(incomplete)
-  // expected-error@+2 {{variable in 'create' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'create' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data create(incomplete)
-  // expected-error@+2 {{variable in 'pcreate' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'pcreate' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data pcreate(incomplete)
-  // expected-error@+2 {{variable in 'present_or_create' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'present_or_create' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data present_or_create(incomplete)
 
-  // expected-error@+2 {{variable in 'copyout' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'copyout' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
   #pragma acc exit data copyout(incomplete)
-  // expected-error@+2 {{variable in 'pcopyout' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'pcopyout' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
   #pragma acc exit data pcopyout(incomplete)
-  // expected-error@+2 {{variable in 'present_or_copyout' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'present_or_copyout' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
   #pragma acc exit data present_or_copyout(incomplete)
-  // expected-error@+2 {{variable in 'delete' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'delete' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
   #pragma acc exit data delete(incomplete)
 

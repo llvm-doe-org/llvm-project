@@ -100,8 +100,7 @@ enum {
   MemCount,
 };
 
-void FillProfileCallback(uptr p, uptr rss, bool file,
-                         uptr *mem, uptr stats_size) {
+void FillProfileCallback(uptr p, uptr rss, bool file, uptr *mem) {
   mem[MemTotal] += rss;
   if (p >= ShadowBeg() && p < ShadowEnd())
     mem[MemShadow] += rss;
@@ -122,15 +121,15 @@ void FillProfileCallback(uptr p, uptr rss, bool file,
 void WriteMemoryProfile(char *buf, uptr buf_size, u64 uptime_ns) {
   uptr mem[MemCount];
   internal_memset(mem, 0, sizeof(mem));
-  GetMemoryProfile(FillProfileCallback, mem, 7);
+  GetMemoryProfile(FillProfileCallback, mem);
   auto meta = ctx->metamap.GetMemoryStats();
-  StackDepotStats *stacks = StackDepotGetStats();
+  StackDepotStats stacks = StackDepotGetStats();
   uptr nthread, nlive;
   ctx->thread_registry.GetNumberOfThreads(&nthread, &nlive);
   uptr internal_stats[AllocatorStatCount];
   internal_allocator()->GetStats(internal_stats);
   // All these are allocated from the common mmap region.
-  mem[MemMmap] -= meta.mem_block + meta.sync_obj + stacks->allocated +
+  mem[MemMmap] -= meta.mem_block + meta.sync_obj + stacks.allocated +
                   internal_stats[AllocatorStatMapped];
   if (s64(mem[MemMmap]) < 0)
     mem[MemMmap] = 0;
@@ -143,8 +142,8 @@ void WriteMemoryProfile(char *buf, uptr buf_size, u64 uptime_ns) {
       mem[MemShadow] >> 20, mem[MemMeta] >> 20, mem[MemFile] >> 20,
       mem[MemMmap] >> 20, mem[MemTrace] >> 20, mem[MemHeap] >> 20,
       mem[MemOther] >> 20, internal_stats[AllocatorStatMapped] >> 20,
-      meta.mem_block >> 20, meta.sync_obj >> 20, stacks->allocated >> 20,
-      stacks->n_uniq_ids, nlive, nthread);
+      meta.mem_block >> 20, meta.sync_obj >> 20, stacks.allocated >> 20,
+      stacks.n_uniq_ids, nlive, nthread);
 }
 
 #  if SANITIZER_LINUX
@@ -453,6 +452,8 @@ static void InitializeLongjmpXorKey() {
 }
 #endif
 
+extern "C" void __tsan_tls_initialization() {}
+
 void ImitateTlsWrite(ThreadState *thr, uptr tls_addr, uptr tls_size) {
   // Check that the thr object is in tls;
   const uptr thr_beg = (uptr)thr;
@@ -462,9 +463,10 @@ void ImitateTlsWrite(ThreadState *thr, uptr tls_addr, uptr tls_size) {
   CHECK_GE(thr_end, tls_addr);
   CHECK_LE(thr_end, tls_addr + tls_size);
   // Since the thr object is huge, skip it.
-  MemoryRangeImitateWrite(thr, /*pc=*/2, tls_addr, thr_beg - tls_addr);
-  MemoryRangeImitateWrite(thr, /*pc=*/2, thr_end,
-                          tls_addr + tls_size - thr_end);
+  const uptr pc = StackTrace::GetNextInstructionPc(
+      reinterpret_cast<uptr>(__tsan_tls_initialization));
+  MemoryRangeImitateWrite(thr, pc, tls_addr, thr_beg - tls_addr);
+  MemoryRangeImitateWrite(thr, pc, thr_end, tls_addr + tls_size - thr_end);
 }
 
 // Note: this function runs with async signals enabled,

@@ -125,6 +125,7 @@ def SPV_VersionAttr : SPV_I32EnumAttr<"Version", "valid SPIR-V version", [
 
 class MinVersion<I32EnumAttrCase min> : MinVersionBase<
     "QueryMinVersionInterface", SPV_VersionAttr, min> {
+  let cppNamespace = "::mlir::spirv";
   let interfaceDescription = [{
     Querying interface for minimal required SPIR-V version.
 
@@ -136,6 +137,7 @@ class MinVersion<I32EnumAttrCase min> : MinVersionBase<
 
 class MaxVersion<I32EnumAttrCase max> : MaxVersionBase<
     "QueryMaxVersionInterface", SPV_VersionAttr, max> {
+  let cppNamespace = "::mlir::spirv";
   let interfaceDescription = [{
     Querying interface for maximal supported SPIR-V version.
 
@@ -146,6 +148,7 @@ class MaxVersion<I32EnumAttrCase max> : MaxVersionBase<
 }
 
 class Extension<list<StrEnumAttrCase> extensions> : Availability {
+  let cppNamespace = "::mlir::spirv";
   let interfaceName = "QueryExtensionInterface";
   let interfaceDescription = [{
     Querying interface for required SPIR-V extensions.
@@ -189,6 +192,7 @@ class Extension<list<StrEnumAttrCase> extensions> : Availability {
 }
 
 class Capability<list<I32EnumAttrCase> capabilities> : Availability {
+  let cppNamespace = "::mlir::spirv";
   let interfaceName = "QueryCapabilityInterface";
   let interfaceDescription = [{
     Querying interface for required SPIR-V capabilities.
@@ -3150,7 +3154,7 @@ def SPV_Composite :
 def SPV_Type : AnyTypeOf<[
     SPV_Void, SPV_Bool, SPV_Integer, SPV_Float, SPV_Vector,
     SPV_AnyPtr, SPV_AnyArray, SPV_AnyRTArray, SPV_AnyStruct,
-    SPV_AnyCooperativeMatrix, SPV_AnyMatrix
+    SPV_AnyCooperativeMatrix, SPV_AnyMatrix, SPV_AnySampledImage
   ]>;
 
 def SPV_SignedInt : SignedIntOfWidths<[8, 16, 32, 64]>;
@@ -3348,6 +3352,8 @@ def SPV_OC_OpBitReverse                : I32EnumAttrCase<"OpBitReverse", 204>;
 def SPV_OC_OpBitCount                  : I32EnumAttrCase<"OpBitCount", 205>;
 def SPV_OC_OpControlBarrier            : I32EnumAttrCase<"OpControlBarrier", 224>;
 def SPV_OC_OpMemoryBarrier             : I32EnumAttrCase<"OpMemoryBarrier", 225>;
+def SPV_OC_OpAtomicExchange            : I32EnumAttrCase<"OpAtomicExchange", 229>;
+def SPV_OC_OpAtomicCompareExchange     : I32EnumAttrCase<"OpAtomicCompareExchange", 230>;
 def SPV_OC_OpAtomicCompareExchangeWeak : I32EnumAttrCase<"OpAtomicCompareExchangeWeak", 231>;
 def SPV_OC_OpAtomicIIncrement          : I32EnumAttrCase<"OpAtomicIIncrement", 232>;
 def SPV_OC_OpAtomicIDecrement          : I32EnumAttrCase<"OpAtomicIDecrement", 233>;
@@ -3438,6 +3444,7 @@ def SPV_OpcodeAttr :
       SPV_OC_OpBitwiseAnd, SPV_OC_OpNot, SPV_OC_OpBitFieldInsert,
       SPV_OC_OpBitFieldSExtract, SPV_OC_OpBitFieldUExtract, SPV_OC_OpBitReverse,
       SPV_OC_OpBitCount, SPV_OC_OpControlBarrier, SPV_OC_OpMemoryBarrier,
+      SPV_OC_OpAtomicExchange, SPV_OC_OpAtomicCompareExchange,
       SPV_OC_OpAtomicCompareExchangeWeak, SPV_OC_OpAtomicIIncrement,
       SPV_OC_OpAtomicIDecrement, SPV_OC_OpAtomicIAdd, SPV_OC_OpAtomicISub,
       SPV_OC_OpAtomicSMin, SPV_OC_OpAtomicUMin, SPV_OC_OpAtomicSMax,

@@ -346,12 +346,12 @@ void fn() {
   {
     // Not integer type and not constant expression
 
-    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int []'}}
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int[]'}}
     // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
     #pragma acc CMB_PAR loop collapse(incomplete)
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int [2]'}}
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int[2]'}}
     // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
     #pragma acc CMB_PAR loop independent collapse(a)
     for (int i = 0; i < 5; ++i)
@@ -417,7 +417,7 @@ void fn() {
 
     // Constant expression but not integer type
 
-    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int [2]'}}
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int[2]'}}
     // expected-error@+1 {{argument to 'collapse' clause must be an integer constant expression}}
     #pragma acc CMB_PAR loop collapse((int[]){1, 2}) auto
     for (int i = 0; i < 5; ++i)
@@ -2036,8 +2036,8 @@ void fn() {
   #pragma acc parallel
 #endif
   {
-    // expected-error@+2 {{variable in 'private' clause cannot have incomplete type 'int []'}}
-    // expected-error@+1 {{variable in 'reduction' clause cannot have incomplete type 'int []'}}
+    // expected-error@+2 {{variable in 'private' clause cannot have incomplete type 'int[]'}}
+    // expected-error@+1 {{variable in 'reduction' clause cannot have incomplete type 'int[]'}}
     #pragma acc CMB_PAR loop worker private(incomplete) vector reduction(|:incomplete) gang
     for (int i = 0; i < 5; ++i)
       ;

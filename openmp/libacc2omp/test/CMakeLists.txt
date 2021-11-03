@@ -27,12 +27,14 @@ string(REGEX MATCHALL "([^\ ]+\ |[^\ ]+$)" SYSTEM_TARGETS
        "${LIBOMPTARGET_SYSTEM_TARGETS}")
 foreach(CURRENT_TARGET IN LISTS SYSTEM_TARGETS)
   string(STRIP "${CURRENT_TARGET}" CURRENT_TARGET)
-  add_openmp_testsuite(check-libacc2omp-${CURRENT_TARGET}
-    "Running libacc2omp tests" ${CMAKE_CURRENT_BINARY_DIR}/${CURRENT_TARGET}
-    DEPENDS acc2omp)
-  list(APPEND LIBACC2OMP_LIT_TESTSUITES
-       ${CMAKE_CURRENT_BINARY_DIR}/${CURRENT_TARGET})
-  configure_file(lit.site.cfg.in ${CURRENT_TARGET}/lit.site.cfg @ONLY)
+  if (NOT CURRENT_TARGET MATCHES "-newRTL$")
+    add_openmp_testsuite(check-libacc2omp-${CURRENT_TARGET}
+      "Running libacc2omp tests" ${CMAKE_CURRENT_BINARY_DIR}/${CURRENT_TARGET}
+      DEPENDS acc2omp)
+    list(APPEND LIBACC2OMP_LIT_TESTSUITES
+         ${CMAKE_CURRENT_BINARY_DIR}/${CURRENT_TARGET})
+    configure_file(lit.site.cfg.in ${CURRENT_TARGET}/lit.site.cfg @ONLY)
+  endif()
 endforeach()
 
 # Generate a test suite that compiles for all target device types available on

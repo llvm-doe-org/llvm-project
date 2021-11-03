@@ -391,11 +391,11 @@ int main() {
       // DMP-NEXT:     DeclRefExpr {{.*}} 'in' 'int *'
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
-      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int [2]'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int[2]'
       // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeDirective
       // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int [2]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int[2]'
       // DMP:          ForStmt
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop reduction(max: out) reduction(min: in){{$}}

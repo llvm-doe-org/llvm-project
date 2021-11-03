@@ -372,10 +372,10 @@ int main() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnly' 'int'
     // DMP-NEXT:   ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:   ACCFirstprivateClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnly' 'int'
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
@@ -384,11 +384,11 @@ int main() {
     // DMP-NEXT:     OMPMapClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:     OMPSharedClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:     OMPFirstprivateClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
@@ -420,7 +420,7 @@ int main() {
       // DMP-NEXT:                 DeclRefExpr {{.*}} 'j' 'int'
       // DMP-NEXT:                 DeclRefExpr {{.*}} 'loopOnly' 'int'
       // DMP-NEXT:                 DeclRefExpr {{.*}} 'save'
-      // DMP-NEXT:                 DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+      // DMP-NEXT:                 DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
       // DMP-AGIMP-NEXT:         ACCGangClause {{.*}} <implicit>
       // DMP-OPRG-NEXT:          impl: [[OMPDD]]
       // DMP-OPRG-NEXT:            OMPSharedClause
@@ -429,7 +429,7 @@ int main() {
       // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'j' 'int'
       // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'loopOnly' 'int'
       // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'save'
-      // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+      // DMP-OPRG-NEXT:              DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
       // DMP-OPRG:                 ForStmt
       // DMP-OPRGPLC-NEXT:       impl: [[OMPDD]]
       // DMP-OPRGPLC-NEXT:         OMPSharedClause
@@ -438,7 +438,7 @@ int main() {
       // DMP-OPRGPLC-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
       // DMP-OPRGPLC-NEXT:           DeclRefExpr {{.*}} 'loopOnly' 'int'
       // DMP-OPRGPLC-NEXT:           DeclRefExpr {{.*}} 'save'
-      // DMP-OPRGPLC-NEXT:           DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+      // DMP-OPRGPLC-NEXT:           DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
       // DMP-OPRGPLC:              ForStmt
       // DMP-OSEQ-NEXT:          impl: ForStmt
       // DMP-OSEQPLC-NEXT:       impl: ForStmt
@@ -603,10 +603,10 @@ int main() {
     // DMP-NEXT:                DeclRefExpr {{.*}} 'loopOnly' 'int'
     // DMP-NEXT:              ACCCopyClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:                DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:              ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:                DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:                DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:              ACCFirstprivateClause {{.*}} <implicit>
     // DMP-NEXT:                DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:                DeclRefExpr {{.*}} 'loopOnly' 'int'
@@ -616,11 +616,11 @@ int main() {
     // DMP-NEXT:                OMPMapClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:                OMPSharedClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:                OMPFirstprivateClause
     // DMP-NOT:                   <implicit>
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'j' 'int'
@@ -641,7 +641,7 @@ int main() {
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnly' 'int'
     // DMP-NEXT:                  DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-NEXT:                  DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-AGIMP-NEXT:          ACCGangClause {{.*}} <implicit>
     // DMP-OPRG-NEXT:           impl: [[OMPDD]]
     // DMP-OPRG-NEXT:             OMPSharedClause
@@ -650,7 +650,7 @@ int main() {
     // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
     // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'loopOnly' 'int'
     // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'save'
-    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-OPRG-NEXT:               DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-OPRG:                  ForStmt
     // DMP-OPRGPLC-NEXT:        impl: [[OMPDD]]
     // DMP-OPRGPLC-NEXT:          OMPSharedClause
@@ -659,7 +659,7 @@ int main() {
     // DMP-OPRGPLC-NEXT:            DeclRefExpr {{.*}} 'j'
     // DMP-OPRGPLC-NEXT:            DeclRefExpr {{.*}} 'loopOnly' 'int'
     // DMP-OPRGPLC-NEXT:            DeclRefExpr {{.*}} 'save'
-    // DMP-OPRGPLC-NEXT:            DeclRefExpr {{.*}} 'loopOnlyArr' 'int [1]'
+    // DMP-OPRGPLC-NEXT:            DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-OPRGPLC:               ForStmt
     // DMP-OSEQ-NEXT:           impl: ForStmt
     // DMP-OSEQPLC-NEXT:        impl: ForStmt

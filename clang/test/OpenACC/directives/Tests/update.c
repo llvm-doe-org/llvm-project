@@ -539,19 +539,19 @@ CASE(caseArrayPresent) {
 
     //                 DMP: ACCUpdateDirective
     //            DMP-NEXT:   ACCSelfClause
-    //            DMP-NEXT:     DeclRefExpr {{.*}} 's' 'int [2]'
+    //            DMP-NEXT:     DeclRefExpr {{.*}} 's' 'int[2]'
     //            DMP-NEXT:   ACCSelfClause
-    //            DMP-NEXT:     DeclRefExpr {{.*}} 'h' 'int [2]'
+    //            DMP-NEXT:     DeclRefExpr {{.*}} 'h' 'int[2]'
     //            DMP-NEXT:   ACCDeviceClause
-    //            DMP-NEXT:     DeclRefExpr {{.*}} 'd' 'int [2]'
+    //            DMP-NEXT:     DeclRefExpr {{.*}} 'd' 'int[2]'
     // DMP-IF_PRESENT-NEXT:   ACCIfPresentClause
     //            DMP-NEXT:   impl: OMPTargetUpdateDirective
     //            DMP-NEXT:     OMPFromClause
-    //            DMP-NEXT:       DeclRefExpr {{.*}} 's' 'int [2]'
+    //            DMP-NEXT:       DeclRefExpr {{.*}} 's' 'int[2]'
     //            DMP-NEXT:     OMPFromClause
-    //            DMP-NEXT:       DeclRefExpr {{.*}} 'h' 'int [2]'
+    //            DMP-NEXT:       DeclRefExpr {{.*}} 'h' 'int[2]'
     //            DMP-NEXT:     OMPToClause
-    //            DMP-NEXT:       DeclRefExpr {{.*}} 'd' 'int [2]'
+    //            DMP-NEXT:       DeclRefExpr {{.*}} 'd' 'int[2]'
     //             DMP-NOT: OMP
     //
     //       PRT-A: {{^ *}}#pragma acc update self(s) host(h) device(d){{( IF_PRESENT| if_present)?$}}
@@ -675,21 +675,21 @@ CASE(caseSubarrayPresent) {
     //            DMP-NEXT:   ACCSelfClause
     //            DMP-NEXT:     OMPArraySectionExpr
     //            DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    //            DMP-NEXT:         DeclRefExpr {{.*}} 's' 'int [4]'
+    //            DMP-NEXT:         DeclRefExpr {{.*}} 's' 'int[4]'
     //            DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     //            DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     //            DMP-NEXT:       <<<NULL>>>
     //            DMP-NEXT:   ACCSelfClause
     //            DMP-NEXT:     OMPArraySectionExpr
     //            DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    //            DMP-NEXT:         DeclRefExpr {{.*}} 'h' 'int [4]'
+    //            DMP-NEXT:         DeclRefExpr {{.*}} 'h' 'int[4]'
     //            DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     //            DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     //            DMP-NEXT:       <<<NULL>>>
     //            DMP-NEXT:   ACCDeviceClause
     //            DMP-NEXT:     OMPArraySectionExpr
     //            DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    //            DMP-NEXT:         DeclRefExpr {{.*}} 'd' 'int [4]'
+    //            DMP-NEXT:         DeclRefExpr {{.*}} 'd' 'int[4]'
     //            DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     //            DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
     //            DMP-NEXT:       <<<NULL>>>
@@ -698,21 +698,21 @@ CASE(caseSubarrayPresent) {
     //            DMP-NEXT:     OMPFromClause
     //            DMP-NEXT:       OMPArraySectionExpr
     //            DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    //            DMP-NEXT:           DeclRefExpr {{.*}} 's' 'int [4]'
+    //            DMP-NEXT:           DeclRefExpr {{.*}} 's' 'int[4]'
     //            DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
     //            DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     //            DMP-NEXT:         <<<NULL>>>
     //            DMP-NEXT:     OMPFromClause
     //            DMP-NEXT:       OMPArraySectionExpr
     //            DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    //            DMP-NEXT:           DeclRefExpr {{.*}} 'h' 'int [4]'
+    //            DMP-NEXT:           DeclRefExpr {{.*}} 'h' 'int[4]'
     //            DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
     //            DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     //            DMP-NEXT:         <<<NULL>>>
     //            DMP-NEXT:     OMPToClause
     //            DMP-NEXT:       OMPArraySectionExpr
     //            DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    //            DMP-NEXT:           DeclRefExpr {{.*}} 'd' 'int [4]'
+    //            DMP-NEXT:           DeclRefExpr {{.*}} 'd' 'int[4]'
     //            DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
     //            DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
     //            DMP-NEXT:         <<<NULL>>>
@@ -840,7 +840,7 @@ CASE(caseSubarrayPresent2) {
     //            DMP-NEXT:   ACCSelfClause
     //            DMP-NEXT:     OMPArraySectionExpr
     //            DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    //            DMP-NEXT:         DeclRefExpr {{.*}} 's' 'int [4]'
+    //            DMP-NEXT:         DeclRefExpr {{.*}} 's' 'int[4]'
     //            DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     //            DMP-NEXT:       `-DeclRefExpr {{.*}} 'start' 'int'
     //            DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
@@ -849,7 +849,7 @@ CASE(caseSubarrayPresent2) {
     //            DMP-NEXT:   ACCSelfClause
     //            DMP-NEXT:     OMPArraySectionExpr
     //            DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    //            DMP-NEXT:         DeclRefExpr {{.*}} 'h' 'int [4]'
+    //            DMP-NEXT:         DeclRefExpr {{.*}} 'h' 'int[4]'
     //            DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     //            DMP-NEXT:       `-DeclRefExpr {{.*}} 'start' 'int'
     //            DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
@@ -858,7 +858,7 @@ CASE(caseSubarrayPresent2) {
     //            DMP-NEXT:   ACCDeviceClause
     //            DMP-NEXT:     OMPArraySectionExpr
     //            DMP-NEXT:       ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    //            DMP-NEXT:         DeclRefExpr {{.*}} 'd' 'int [4]'
+    //            DMP-NEXT:         DeclRefExpr {{.*}} 'd' 'int[4]'
     //            DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     //            DMP-NEXT:       `-DeclRefExpr {{.*}} 'start' 'int'
     //            DMP-NEXT:       ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
@@ -869,7 +869,7 @@ CASE(caseSubarrayPresent2) {
     //            DMP-NEXT:     OMPFromClause
     //            DMP-NEXT:       OMPArraySectionExpr
     //            DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    //            DMP-NEXT:           DeclRefExpr {{.*}} 's' 'int [4]'
+    //            DMP-NEXT:           DeclRefExpr {{.*}} 's' 'int[4]'
     //            DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     //            DMP-NEXT:         `-DeclRefExpr {{.*}} 'start' 'int'
     //            DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
@@ -878,7 +878,7 @@ CASE(caseSubarrayPresent2) {
     //            DMP-NEXT:     OMPFromClause
     //            DMP-NEXT:       OMPArraySectionExpr
     //            DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    //            DMP-NEXT:           DeclRefExpr {{.*}} 'h' 'int [4]'
+    //            DMP-NEXT:           DeclRefExpr {{.*}} 'h' 'int[4]'
     //            DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     //            DMP-NEXT:         `-DeclRefExpr {{.*}} 'start' 'int'
     //            DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
@@ -887,7 +887,7 @@ CASE(caseSubarrayPresent2) {
     //            DMP-NEXT:     OMPToClause
     //            DMP-NEXT:       OMPArraySectionExpr
     //            DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
-    //            DMP-NEXT:           DeclRefExpr {{.*}} 'd' 'int [4]'
+    //            DMP-NEXT:           DeclRefExpr {{.*}} 'd' 'int[4]'
     //            DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>
     //            DMP-NEXT:         `-DeclRefExpr {{.*}} 'start' 'int'
     //            DMP-NEXT:         ImplicitCastExpr {{.*}} 'int' <LValueToRValue>

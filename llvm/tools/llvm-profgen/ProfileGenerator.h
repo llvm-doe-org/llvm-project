@@ -34,9 +34,19 @@ public:
   virtual ~ProfileGeneratorBase() = default;
   static std::unique_ptr<ProfileGeneratorBase>
   create(ProfiledBinary *Binary, const ContextSampleCounterMap &SampleCounters,
-         enum PerfScriptType SampleType);
+         bool ProfileIsCS);
   virtual void generateProfile() = 0;
   void write();
+
+  static uint32_t getDuplicationFactor(unsigned Discriminator) {
+    return llvm::DILocation::getDuplicationFactorFromDiscriminator(
+        Discriminator);
+  }
+
+  static uint32_t getBaseDiscriminator(unsigned Discriminator) {
+    return DILocation::getBaseDiscriminatorFromDiscriminator(
+        Discriminator, /* IsFSDiscriminator */ false);
+  }
 
 protected:
   // Use SampleProfileWriter to serialize profile map
@@ -64,7 +74,8 @@ protected:
   void updateBodySamplesforFunctionProfile(FunctionSamples &FunctionProfile,
                                            const SampleContextFrame &LeafLoc,
                                            uint64_t Count);
-
+  void updateTotalSamples();
+  StringRef getCalleeNameForOffset(uint64_t TargetOffset);
   // Used by SampleProfileWriter
   SampleProfileMap ProfileMap;
 
@@ -89,8 +100,7 @@ private:
   // inline stack and meanwhile it adds the total samples for each frame's
   // function profile.
   FunctionSamples &
-  getLeafProfileAndAddTotalSamples(const SampleContextFrameVector &FrameVec,
-                                   uint64_t Count);
+  getLeafFrameProfile(const SampleContextFrameVector &FrameVec);
   void populateBodySamplesForAllFunctions(const RangeSample &RangeCounter);
   void
   populateBoundarySamplesForAllFunctions(const BranchSample &BranchCounters);
@@ -228,6 +238,9 @@ private:
   FunctionSamples &
   getFunctionProfileForContext(const SampleContextFrameVector &Context,
                                bool WasLeafInlined = false);
+  // For profiled only functions, on-demand compute their inline context
+  // function byte size which is used by the pre-inliner.
+  void computeSizeForProfiledFunctions();
   // Post processing for profiles before writing out, such as mermining
   // and trimming cold profiles, running preinliner on profiles.
   void postProcessProfiles();

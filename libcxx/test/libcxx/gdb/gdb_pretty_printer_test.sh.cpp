@@ -1,4 +1,3 @@
-// -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -8,12 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 // REQUIRES: host-has-gdb-with-python
+// REQUIRES: locale.en_US.UTF-8
 // UNSUPPORTED: libcpp-has-no-localization
 // UNSUPPORTED: c++03
 
 // RUN: %{cxx} %{flags} %s -o %t.exe %{compile_flags} -g %{link_flags}
 // Ensure locale-independence for unicode tests.
-// RUN: %{gdb} -nx -batch -iex "set autoload off" -ex "source %S/../../../utils/gdb/libcxx/printers.py" -ex "python register_libcxx_printer_loader()" -ex "source %S/gdb_pretty_printer_test.py" %t.exe
+// RUN: env LANG=en_US.UTF-8 %{gdb} -nx -batch -iex "set autoload off" -ex "source %S/../../../utils/gdb/libcxx/printers.py" -ex "python register_libcxx_printer_loader()" -ex "source %S/gdb_pretty_printer_test.py" %t.exe
 
 #include <bitset>
 #include <deque>
@@ -244,14 +244,14 @@ void unique_ptr_test() {
 
 void bitset_test() {
   std::bitset<258> i_am_empty(0);
-  ComparePrettyPrintToChars(i_am_empty, "std::bitset<258>");
+  ComparePrettyPrintToChars(i_am_empty, "std::bitset<258ul>");
 
   std::bitset<0> very_empty;
-  ComparePrettyPrintToChars(very_empty, "std::bitset<0>");
+  ComparePrettyPrintToChars(very_empty, "std::bitset<0ul>");
 
   std::bitset<15> b_000001111111100(1020);
   ComparePrettyPrintToChars(b_000001111111100,
-      "std::bitset<15> = {[2] = 1, [3] = 1, [4] = 1, [5] = 1, [6] = 1, "
+      "std::bitset<15ul> = {[2] = 1, [3] = 1, [4] = 1, [5] = 1, [6] = 1, "
       "[7] = 1, [8] = 1, [9] = 1}");
 
   std::bitset<258> b_0_129_132(0);
@@ -259,7 +259,7 @@ void bitset_test() {
   b_0_129_132[129] = true;
   b_0_129_132[132] = true;
   ComparePrettyPrintToChars(b_0_129_132,
-      "std::bitset<258> = {[0] = 1, [129] = 1, [132] = 1}");
+      "std::bitset<258ul> = {[0] = 1, [129] = 1, [132] = 1}");
 }
 
 void list_test() {
@@ -659,6 +659,7 @@ int main(int, char**) {
   string_test();
   a_namespace::string_view_test();
 
+  //u16string_test();
   u32string_test();
   tuple_test();
   unique_ptr_test();

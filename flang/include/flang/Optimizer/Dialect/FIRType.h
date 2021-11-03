@@ -33,6 +33,7 @@ class DialectAsmParser;
 class DialectAsmPrinter;
 class ComplexType;
 class FloatType;
+class ValueRange;
 } // namespace mlir
 
 namespace fir {
@@ -122,6 +123,9 @@ inline bool isa_complex(mlir::Type t) {
   return t.isa<fir::ComplexType>() || t.isa<mlir::ComplexType>();
 }
 
+/// Is `t` a CHARACTER type? Does not check the length.
+inline bool isa_char(mlir::Type t) { return t.isa<fir::CharacterType>(); }
+
 /// Is `t` a CHARACTER type with a LEN other than 1?
 inline bool isa_char_string(mlir::Type t) {
   if (auto ct = t.dyn_cast_or_null<fir::CharacterType>())
@@ -134,6 +138,35 @@ inline bool isa_char_string(mlir::Type t) {
 /// of unknown rank or type.
 bool isa_unknown_size_box(mlir::Type t);
 
+/// Returns true iff `t` is a fir.char type and has an unknown length.
+inline bool characterWithDynamicLen(mlir::Type t) {
+  if (auto charTy = t.dyn_cast<fir::CharacterType>())
+    return charTy.hasDynamicLen();
+  return false;
+}
+
+/// Returns true iff `seqTy` has either an unknown shape or a non-constant shape
+/// (where rank > 0).
+inline bool sequenceWithNonConstantShape(fir::SequenceType seqTy) {
+  return seqTy.hasUnknownShape() || !seqTy.hasConstantShape();
+}
+
+/// Returns true iff the type `t` does not have a constant size.
+bool hasDynamicSize(mlir::Type t);
+
+/// If `t` is a SequenceType return its element type, otherwise return `t`.
+inline mlir::Type unwrapSequenceType(mlir::Type t) {
+  if (auto seqTy = t.dyn_cast<fir::SequenceType>())
+    return seqTy.getEleTy();
+  return t;
+}
+
+inline mlir::Type unwrapRefType(mlir::Type t) {
+  if (auto eleTy = dyn_cast_ptrEleTy(t))
+    return eleTy;
+  return t;
+}
+
 #ifndef NDEBUG
 // !fir.ptr<X> and !fir.heap<X> where X is !fir.ptr, !fir.heap, or !fir.ref
 // is undefined and disallowed.
@@ -141,6 +174,11 @@ inline bool singleIndirectionLevel(mlir::Type ty) {
   return !fir::isa_ref_type(ty);
 }
 #endif
+
+/// Apply the components specified by `path` to `rootTy` to determine the type
+/// of the resulting component element. `rootTy` should be an aggregate type.
+/// Returns null on error.
+mlir::Type applyPathToType(mlir::Type rootTy, mlir::ValueRange path);
 
 } // namespace fir
 

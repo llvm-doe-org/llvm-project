@@ -2596,33 +2596,37 @@ enum CXCursorKind {
    */
   CXCursor_OMPMetaDirective = 294,
 
+  /** OpenMP loop directive.
+   */
+  CXCursor_OMPGenericLoopDirective = 295,
+
   /** OpenACC update directive.
    */
-  CXCursor_ACCUpdateDirective = 295,
+  CXCursor_ACCUpdateDirective = 296,
 
   /** OpenACC enter data directive.
    */
-  CXCursor_ACCEnterDataDirective = 296,
+  CXCursor_ACCEnterDataDirective = 297,
 
   /** OpenACC exit data directive.
    */
-  CXCursor_ACCExitDataDirective = 297,
+  CXCursor_ACCExitDataDirective = 298,
 
   /** OpenACC data directive.
    */
-  CXCursor_ACCDataDirective = 298,
+  CXCursor_ACCDataDirective = 299,
 
   /** OpenACC parallel directive.
    */
-  CXCursor_ACCParallelDirective = 299,
+  CXCursor_ACCParallelDirective = 300,
 
   /** OpenACC loop directive.
    */
-  CXCursor_ACCLoopDirective = 300,
+  CXCursor_ACCLoopDirective = 301,
 
   /** OpenACC parallel loop directive.
    */
-  CXCursor_ACCParallelLoopDirective = 301,
+  CXCursor_ACCParallelLoopDirective = 302,
 
   CXCursor_LastStmt = CXCursor_ACCParallelLoopDirective,
 

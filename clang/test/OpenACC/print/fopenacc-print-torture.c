@@ -661,7 +661,7 @@ void fullRewriteOuterDirOnly() {
   // PRT-AO-NEXT:  //     int i;
   // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             ptr = (int [2]){0, 1};
+  // PRT-AO-NEXT:  //             ptr = (int[2]){0, 1};
   // PRT-AO-NEXT:  // }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
@@ -671,7 +671,7 @@ void fullRewriteOuterDirOnly() {
   //  PRT-O-NEXT:      int i;
   //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              ptr = (int [2]){0, 1};
+  //  PRT-O-NEXT:              ptr = (int[2]){0, 1};
   //  PRT-O-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
@@ -792,7 +792,7 @@ void fullRewriteOuterDirOnly() {
   // PRT-AO-NEXT:  //     int i;
   // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             var = sizeof(int [i]);
+  // PRT-AO-NEXT:  //             var = sizeof(int[i]);
   // PRT-AO-NEXT:  // }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
@@ -802,7 +802,7 @@ void fullRewriteOuterDirOnly() {
   //  PRT-O-NEXT:      int i;
   //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              var = sizeof(int [i]);
+  //  PRT-O-NEXT:              var = sizeof(int[i]);
   //  PRT-O-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
@@ -825,7 +825,7 @@ void fullRewriteOuterDirOnly() {
   // PRT-AO-NEXT:  //     int i;
   // PRT-AO-NEXT:  //     #pragma omp distribute simd
   // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             var = _Alignof(int [i]);
+  // PRT-AO-NEXT:  //             var = _Alignof(int[i]);
   // PRT-AO-NEXT:  // }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
@@ -835,7 +835,7 @@ void fullRewriteOuterDirOnly() {
   //  PRT-O-NEXT:      int i;
   //  PRT-O-NEXT:      #pragma omp distribute simd
   //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              var = _Alignof(int [i]);
+  //  PRT-O-NEXT:              var = _Alignof(int[i]);
   //  PRT-O-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector

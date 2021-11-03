@@ -114,6 +114,10 @@ const char *AMDGCN::OpenMPLinker::constructLLVMLinkCommand(
     }
   }
 
+  AddStaticDeviceLibsLinking(C, *this, JA, Inputs, Args, CmdArgs, "amdgcn",
+                      SubArchName,
+                      /* bitcode SDL?*/ true,
+                      /* PostClang Link? */ false);
   // Add an intermediate output file.
   CmdArgs.push_back("-o");
   const char *OutputFileName =
@@ -247,8 +251,8 @@ void AMDGPUOpenMPToolChain::addClangTargetOptions(
 
   std::string BitcodeSuffix;
   if (DriverArgs.hasFlag(options::OPT_fopenmp_target_new_runtime,
-                         options::OPT_fno_openmp_target_new_runtime, false))
-    BitcodeSuffix = "new-amdgcn-" + GPUArch;
+                         options::OPT_fno_openmp_target_new_runtime, true))
+    BitcodeSuffix = "new-amdgpu-" + GPUArch;
   else
     BitcodeSuffix = "amdgcn-" + GPUArch;
 

@@ -25,7 +25,6 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/FoldingSet.h"
-#include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/SetVector.h"
@@ -538,6 +537,9 @@ public:
   std::pair<SCEV::NoWrapFlags, bool /*Deduced*/>
   getStrengthenedNoWrapFlagsFromBinOp(const OverflowingBinaryOperator *OBO);
 
+  /// Notify this ScalarEvolution that \p User directly uses SCEVs in \p Ops.
+  void registerUser(const SCEV *User, ArrayRef<const SCEV *> Ops);
+
   /// Return a SCEV expression for the full generality of the specified
   /// expression.
   const SCEV *getSCEV(Value *V);
@@ -760,9 +762,13 @@ public:
   /// Convert from an "exit count" (i.e. "backedge taken count") to a "trip
   /// count".  A "trip count" is the number of times the header of the loop
   /// will execute if an exit is taken after the specified number of backedges
-  /// have been taken.  (e.g. TripCount = ExitCount + 1)  A zero result
-  /// must be interpreted as a loop having an unknown trip count.
-  const SCEV *getTripCountFromExitCount(const SCEV *ExitCount);
+  /// have been taken.  (e.g. TripCount = ExitCount + 1).  Note that the
+  /// expression can overflow if ExitCount = UINT_MAX.  \p Extend controls
+  /// how potential overflow is handled.  If true, a wider result type is
+  /// returned. ex: EC = 255 (i8), TC = 256 (i9).  If false, result unsigned
+  /// wraps with 2s-complement semantics.  ex: EC = 255 (i8), TC = 0 (i8)
+  const SCEV *getTripCountFromExitCount(const SCEV *ExitCount,
+                                        bool Extend = true);
 
   /// Returns the exact trip count of the loop if we can compute it, and
   /// the result is a small constant.  '0' is used to represent an unknown
@@ -786,6 +792,13 @@ public:
   /// value.
   /// Returns 0 if the trip count is unknown or not constant.
   unsigned getSmallConstantMaxTripCount(const Loop *L);
+
+  /// Returns the upper bound of the loop trip count infered from array size.
+  /// Can not access bytes starting outside the statically allocated size
+  /// without being immediate UB.
+  /// Returns SCEVCouldNotCompute if the trip count could not inferred
+  /// from array accesses.
+  const SCEV *getConstantMaxTripCountFromArray(const Loop *L);
 
   /// Returns the largest constant divisor of the trip count as a normal
   /// unsigned value, if possible. This means that the actual trip count is
@@ -1159,6 +1172,18 @@ public:
   /// Try to apply information from loop guards for \p L to \p Expr.
   const SCEV *applyLoopGuards(const SCEV *Expr, const Loop *L);
 
+  /// Return true if the loop has no abnormal exits. That is, if the loop
+  /// is not infinite, it must exit through an explicit edge in the CFG.
+  /// (As opposed to either a) throwing out of the function or b) entering a
+  /// well defined infinite loop in some callee.)
+  bool loopHasNoAbnormalExits(const Loop *L) {
+    return getLoopProperties(L).HasNoAbnormalExits;
+  }
+
+  /// Return true if this loop is finite by assumption.  That is,
+  /// to be infinite, it must also be undefined.
+  bool loopIsFiniteByAssumption(const Loop *L);
+
 private:
   /// A CallbackVH to arrange for ScalarEvolution to be notified whenever a
   /// Value is deleted.
@@ -1457,15 +1482,15 @@ private:
       LoopDispositions;
 
   struct LoopProperties {
-    /// Set to true if the loop contains no instruction that can have side
-    /// effects (i.e. via throwing an exception, volatile or atomic access).
-    bool HasNoAbnormalExits;
-
     /// Set to true if the loop contains no instruction that can abnormally exit
     /// the loop (i.e. via throwing an exception, by terminating the thread
     /// cleanly or by infinite looping in a called function).  Strictly
     /// speaking, the last one is not leaving the loop, but is identical to
     /// leaving the loop for reasoning about undefined behavior.
+    bool HasNoAbnormalExits;
+
+    /// Set to true if the loop contains no instruction that can have side
+    /// effects (i.e. via throwing an exception, volatile or atomic access).
     bool HasNoSideEffects;
   };
 
@@ -1479,14 +1504,6 @@ private:
     return getLoopProperties(L).HasNoSideEffects;
   }
 
-  bool loopHasNoAbnormalExits(const Loop *L) {
-    return getLoopProperties(L).HasNoAbnormalExits;
-  }
-
-  /// Return true if this loop is finite by assumption.  That is,
-  /// to be infinite, it must also be undefined.
-  bool loopIsFiniteByAssumption(const Loop *L);
-
   /// Compute a LoopDisposition value.
   LoopDisposition computeLoopDisposition(const SCEV *S, const Loop *L);
 
@@ -1498,6 +1515,9 @@ private:
 
   /// Compute a BlockDisposition value.
   BlockDisposition computeBlockDisposition(const SCEV *S, const BasicBlock *BB);
+
+  /// Stores all SCEV that use a given SCEV as its direct operand.
+  DenseMap<const SCEV *, SmallPtrSet<const SCEV *, 8> > SCEVUsers;
 
   /// Memoized results from getRange
   DenseMap<const SCEV *, ConstantRange> UnsignedRanges;
@@ -1525,22 +1545,22 @@ private:
   /// copied if its needed for longer.
   const ConstantRange &getRangeRef(const SCEV *S, RangeSignHint Hint);
 
-  /// Determines the range for the affine SCEVAddRecExpr {\p Start,+,\p Stop}.
+  /// Determines the range for the affine SCEVAddRecExpr {\p Start,+,\p Step}.
   /// Helper for \c getRange.
-  ConstantRange getRangeForAffineAR(const SCEV *Start, const SCEV *Stop,
+  ConstantRange getRangeForAffineAR(const SCEV *Start, const SCEV *Step,
                                     const SCEV *MaxBECount, unsigned BitWidth);
 
   /// Determines the range for the affine non-self-wrapping SCEVAddRecExpr {\p
-  /// Start,+,\p Stop}<nw>.
+  /// Start,+,\p Step}<nw>.
   ConstantRange getRangeForAffineNoSelfWrappingAR(const SCEVAddRecExpr *AddRec,
                                                   const SCEV *MaxBECount,
                                                   unsigned BitWidth,
                                                   RangeSignHint SignHint);
 
   /// Try to compute a range for the affine SCEVAddRecExpr {\p Start,+,\p
-  /// Stop} by "factoring out" a ternary expression from the add recurrence.
+  /// Step} by "factoring out" a ternary expression from the add recurrence.
   /// Helper called by \c getRange.
-  ConstantRange getRangeViaFactoring(const SCEV *Start, const SCEV *Stop,
+  ConstantRange getRangeViaFactoring(const SCEV *Start, const SCEV *Step,
                                      const SCEV *MaxBECount, unsigned BitWidth);
 
   /// If the unknown expression U corresponds to a simple recurrence, return
@@ -1685,12 +1705,6 @@ private:
                                                  SwitchInst *Switch,
                                                  BasicBlock *ExitingBB,
                                                  bool IsSubExpr);
-
-  /// Given an exit condition of 'icmp op load X, cst', try to see if we can
-  /// compute the backedge-taken count.
-  ExitLimit computeLoadConstantCompareExitLimit(LoadInst *LI, Constant *RHS,
-                                                const Loop *L,
-                                                ICmpInst::Predicate p);
 
   /// Compute the exit limit of a loop that is controlled by a
   /// "(IV >> 1) != 0" type comparison.  We cannot compute the exact trip
@@ -1881,8 +1895,11 @@ private:
   bool splitBinaryAdd(const SCEV *Expr, const SCEV *&L, const SCEV *&R,
                       SCEV::NoWrapFlags &Flags);
 
-  /// Drop memoized information computed for S.
-  void forgetMemoizedResults(const SCEV *S);
+  /// Drop memoized information for all \p SCEVs.
+  void forgetMemoizedResults(ArrayRef<const SCEV *> SCEVs);
+
+  /// Helper for forgetMemoizedResults.
+  void forgetMemoizedResultsImpl(const SCEV *S);
 
   /// Return an existing SCEV for V if there is one, otherwise return nullptr.
   const SCEV *getExistingSCEV(Value *V);
@@ -1919,6 +1936,21 @@ private:
   /// how poison produced from no-wrap flags on this value (e.g. a nuw add)
   /// would trigger undefined behavior on overflow.
   SCEV::NoWrapFlags getNoWrapFlagsFromUB(const Value *V);
+
+  /// Return a scope which provides an upper bound on the defining scope of
+  /// 'S'. Specifically, return the first instruction in said bounding scope.
+  /// Return nullptr if the scope is trivial (function entry).
+  /// (See scope definition rules associated with flag discussion above)
+  const Instruction *getNonTrivialDefiningScopeBound(const SCEV *S);
+
+  /// Return a scope which provides an upper bound on the defining scope for
+  /// a SCEV with the operands in Ops.
+  const Instruction *getDefiningScopeBound(ArrayRef<const SCEV *> Ops);
+
+  /// Given two instructions in the same function, return true if we can
+  /// prove B must execute given A executes.
+  bool isGuaranteedToTransferExecutionTo(const Instruction *A,
+                                         const Instruction *B);
 
   /// Return true if the SCEV corresponding to \p I is never poison.  Proving
   /// this is more complex than proving that just \p I is never poison, since
@@ -2000,10 +2032,6 @@ private:
   /// an add rec on said loop.
   void getUsedLoops(const SCEV *S, SmallPtrSetImpl<const Loop *> &LoopsUsed);
 
-  /// Find all of the loops transitively used in \p S, and update \c LoopUsers
-  /// accordingly.
-  void addToLoopUseLists(const SCEV *S);
-
   /// Try to match the pattern generated by getURemExpr(A, B). If successful,
   /// Assign A and B to LHS and RHS, respectively.
   bool matchURem(const SCEV *Expr, const SCEV *&LHS, const SCEV *&RHS);
@@ -2016,9 +2044,8 @@ private:
   FoldingSet<SCEVPredicate> UniquePreds;
   BumpPtrAllocator SCEVAllocator;
 
-  /// This maps loops to a list of SCEV expressions that (transitively) use said
-  /// loop.
-  DenseMap<const Loop *, SmallVector<const SCEV *, 4>> LoopUsers;
+  /// This maps loops to a list of addrecs that directly use said loop.
+  DenseMap<const Loop *, SmallVector<const SCEVAddRecExpr *, 4>> LoopUsers;
 
   /// Cache tentative mappings from UnknownSCEVs in a Loop, to a SCEV expression
   /// they can be rewritten into under certain predicates.

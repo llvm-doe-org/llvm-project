@@ -193,7 +193,7 @@ int main() {
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data present_or_create(fp[0:2])
     ;
-  // expected-error@+2 {{subarray specified for pointer to incomplete type 'int []'}}
+  // expected-error@+2 {{subarray specified for pointer to incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data no_create((&incomplete)[0:2])
     ;
@@ -214,7 +214,7 @@ int main() {
                           m[2:][1], \
                           a[:], m[0:2][0:2])
     ;
-  // expected-error@+2 {{variable in 'copyout' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'copyout' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data copyout(incomplete)
     ;
@@ -223,8 +223,8 @@ int main() {
   // expected-error@+1 {{const variable cannot be written by 'pcopyout'}}
   #pragma acc data pcopyin(constADecl) pcopyout(constA)
   {
-    // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
-    // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
+    // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int[3]'}}
+    // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int[3]'}}
     constA[0] = 5;
     constADecl[1] = 5;
   }

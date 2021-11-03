@@ -63,7 +63,9 @@ public:
   static ConstString GetStaticPluginName() {
     return ConstString("placeholder");
   }
-  ConstString GetPluginName() override { return GetStaticPluginName(); }
+  llvm::StringRef GetPluginName() override {
+    return GetStaticPluginName().GetStringRef();
+  }
   bool ParseHeader() override { return true; }
   Type CalculateType() override { return eTypeUnknown; }
   Strata CalculateStrata() override { return eStrataUnknown; }
@@ -188,12 +190,7 @@ void HashElfTextSection(ModuleSP module_sp, std::vector<uint8_t> &breakpad_uuid,
 
 } // namespace
 
-ConstString ProcessMinidump::GetPluginNameStatic() {
-  static ConstString g_name("minidump");
-  return g_name;
-}
-
-const char *ProcessMinidump::GetPluginDescriptionStatic() {
+llvm::StringRef ProcessMinidump::GetPluginDescriptionStatic() {
   return "Minidump plug-in.";
 }
 
@@ -303,8 +300,6 @@ Status ProcessMinidump::DoLoadCore() {
 
   return error;
 }
-
-ConstString ProcessMinidump::GetPluginName() { return GetPluginNameStatic(); }
 
 Status ProcessMinidump::DoDestroy() { return Status(); }
 
@@ -444,8 +439,8 @@ void ProcessMinidump::BuildMemoryRegions() {
   llvm::sort(*m_memory_regions);
 }
 
-Status ProcessMinidump::GetMemoryRegionInfo(lldb::addr_t load_addr,
-                                            MemoryRegionInfo &region) {
+Status ProcessMinidump::DoGetMemoryRegionInfo(lldb::addr_t load_addr,
+                                              MemoryRegionInfo &region) {
   BuildMemoryRegions();
   region = MinidumpParser::GetMemoryRegionInfo(*m_memory_regions, load_addr);
   return Status();
@@ -581,8 +576,9 @@ void ProcessMinidump::ReadModuleList() {
       // we don't then we will end up setting the load address of a different
       // PlaceholderObjectFile and an assertion will fire.
       auto *objfile = module_sp->GetObjectFile();
-      if (objfile && objfile->GetPluginName() ==
-          PlaceholderObjectFile::GetStaticPluginName()) {
+      if (objfile &&
+          objfile->GetPluginName() ==
+              PlaceholderObjectFile::GetStaticPluginName().GetStringRef()) {
         if (((PlaceholderObjectFile *)objfile)->GetBaseImageAddress() !=
             load_addr)
           module_sp.reset();

@@ -747,7 +747,7 @@ int main() {
   // expected-error@+1 {{subarray specified for pointer to function type 'int ()'}}
   #pragma acc parallel LOOP copyin(fp[0:2])
     FORLOOP
-  // expected-error@+1 {{subarray specified for pointer to incomplete type 'int []'}}
+  // expected-error@+1 {{subarray specified for pointer to incomplete type 'int[]'}}
   #pragma acc parallel LOOP pcopyin((&incomplete)[0:2])
     FORLOOP
   // expected-error@+1 {{subarray must be a subset of the original array}}
@@ -963,23 +963,23 @@ int main() {
 
   // Variables of incomplete type.
 
-  // expected-error@+18 {{variable in 'present' clause cannot have incomplete type 'int []'}}
-  // expected-error@+18 {{variable in 'copy' clause cannot have incomplete type 'int []'}}
-  // expected-error@+17 {{variable in 'pcopy' clause cannot have incomplete type 'int []'}}
-  // expected-error@+16 {{variable in 'present_or_copy' clause cannot have incomplete type 'int []'}}
-  // expected-error@+16 {{variable in 'copyin' clause cannot have incomplete type 'int []'}}
-  // expected-error@+15 {{variable in 'pcopyin' clause cannot have incomplete type 'int []'}}
-  // expected-error@+14 {{variable in 'present_or_copyin' clause cannot have incomplete type 'int []'}}
-  // expected-error@+14 {{variable in 'copyout' clause cannot have incomplete type 'int []'}}
-  // expected-error@+13 {{variable in 'pcopyout' clause cannot have incomplete type 'int []'}}
-  // expected-error@+12 {{variable in 'present_or_copyout' clause cannot have incomplete type 'int []'}}
-  // expected-error@+12 {{variable in 'create' clause cannot have incomplete type 'int []'}}
-  // expected-error@+11 {{variable in 'pcreate' clause cannot have incomplete type 'int []'}}
-  // expected-error@+10 {{variable in 'present_or_create' clause cannot have incomplete type 'int []'}}
-  // expected-error@+10 {{variable in 'no_create' clause cannot have incomplete type 'int []'}}
-  // expected-error@+10 {{variable in 'firstprivate' clause cannot have incomplete type 'int []'}}
-  // expected-error@+9  {{variable in 'private' clause cannot have incomplete type 'int []'}}
-  // expected-error@+8  {{variable in 'reduction' clause cannot have incomplete type 'int []'}}
+  // expected-error@+18 {{variable in 'present' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+18 {{variable in 'copy' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+17 {{variable in 'pcopy' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+16 {{variable in 'present_or_copy' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+16 {{variable in 'copyin' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+15 {{variable in 'pcopyin' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+14 {{variable in 'present_or_copyin' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+14 {{variable in 'copyout' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+13 {{variable in 'pcopyout' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+12 {{variable in 'present_or_copyout' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+12 {{variable in 'create' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+11 {{variable in 'pcreate' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+10 {{variable in 'present_or_create' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+10 {{variable in 'no_create' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+10 {{variable in 'firstprivate' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+9  {{variable in 'private' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+8  {{variable in 'reduction' clause cannot have incomplete type 'int[]'}}
   #pragma acc parallel LOOP \
       present(incomplete) \
       copy(incomplete) pcopy(incomplete) present_or_copy(incomplete) \
@@ -989,14 +989,14 @@ int main() {
       no_create(incomplete) \
       firstprivate(incomplete) private(incomplete) reduction(&:incomplete)
     FORLOOP
-  // expected-error@+4 {{variable in implied 'copy' clause cannot have incomplete type 'int []'}}
+  // expected-error@+4 {{variable in implied 'copy' clause cannot have incomplete type 'int[]'}}
   // expected-note@+1 {{'copy' clause implied here}}
   #pragma acc parallel LOOP
     FORLOOP_HEAD {
       i = *incomplete;
     }
-  // expected-error@+3 {{variable in 'copy' clause cannot have incomplete type 'int []'}}
-  // expected-error@+4 {{variable in implied 'copy' clause cannot have incomplete type 'int []'}}
+  // expected-error@+3 {{variable in 'copy' clause cannot have incomplete type 'int[]'}}
+  // expected-error@+4 {{variable in implied 'copy' clause cannot have incomplete type 'int[]'}}
   // expected-note@+1 {{'copy' clause implied here}}
   #pragma acc parallel LOOP copy(incomplete)
     FORLOOP_HEAD {
@@ -1065,35 +1065,35 @@ int main() {
     }
   #pragma acc parallel LOOP copy(constADecl)
     FORLOOP_HEAD {
-      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
-      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int[3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int[3]'}}
       constA[0] = 5;
       constADecl[1] = 5;
     }
   #pragma acc parallel LOOP pcopy(constA)
     FORLOOP_HEAD {
-      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
-      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int[3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int[3]'}}
       constA[0] = 5;
       constADecl[1] = 5;
     }
   #pragma acc parallel LOOP present_or_copy(constADecl)
     FORLOOP_HEAD {
-      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
-      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int[3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int[3]'}}
       constADecl[1] = 5;
       constA[0] = 5;
     }
   #pragma acc parallel LOOP copyin(constA) pcopyin(constADecl)
     FORLOOP_HEAD {
-      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
-      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int [3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int[3]'}}
+      // expected-noacc-error@+2 {{cannot assign to variable 'constADecl' with const-qualified type 'const int[3]'}}
       constA[0] = 5;
       constADecl[1] = 5;
     }
   #pragma acc parallel LOOP present_or_copyin(constA)
     FORLOOP_HEAD {
-      // expected-noacc-error@+1 {{cannot assign to variable 'constA' with const-qualified type 'const int [3]'}}
+      // expected-noacc-error@+1 {{cannot assign to variable 'constA' with const-qualified type 'const int[3]'}}
       constA[0] = 5;
     }
   #pragma acc parallel LOOP no_create(constI)

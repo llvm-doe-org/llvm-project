@@ -12,6 +12,7 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Async/IR/Async.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -76,7 +77,7 @@ struct AsyncAPI {
 
   static FunctionType addOrDropRefFunctionType(MLIRContext *ctx) {
     auto ref = opaquePointerType(ctx);
-    auto count = IntegerType::get(ctx, 32);
+    auto count = IntegerType::get(ctx, 64);
     return FunctionType::get(ctx, {ref, count}, {});
   }
 
@@ -85,9 +86,9 @@ struct AsyncAPI {
   }
 
   static FunctionType createValueFunctionType(MLIRContext *ctx) {
-    auto i32 = IntegerType::get(ctx, 32);
+    auto i64 = IntegerType::get(ctx, 64);
     auto value = opaquePointerType(ctx);
-    return FunctionType::get(ctx, {i32}, {value});
+    return FunctionType::get(ctx, {i64}, {value});
   }
 
   static FunctionType createGroupFunctionType(MLIRContext *ctx) {
@@ -559,19 +560,19 @@ public:
       // Returns the size requirements for the async value storage.
       auto sizeOf = [&](ValueType valueType) -> Value {
         auto loc = op->getLoc();
-        auto i32 = rewriter.getI32Type();
+        auto i64 = rewriter.getI64Type();
 
         auto storedType = converter->convertType(valueType.getValueType());
         auto storagePtrType = LLVM::LLVMPointerType::get(storedType);
 
         // %Size = getelementptr %T* null, int 1
-        // %SizeI = ptrtoint %T* %Size to i32
+        // %SizeI = ptrtoint %T* %Size to i64
         auto nullPtr = rewriter.create<LLVM::NullOp>(loc, storagePtrType);
         auto one = rewriter.create<LLVM::ConstantOp>(
-            loc, i32, rewriter.getI32IntegerAttr(1));
+            loc, i64, rewriter.getI64IntegerAttr(1));
         auto gep = rewriter.create<LLVM::GEPOp>(loc, storagePtrType, nullPtr,
                                                 one.getResult());
-        return rewriter.create<LLVM::PtrToIntOp>(loc, i32, gep);
+        return rewriter.create<LLVM::PtrToIntOp>(loc, i64, gep);
       };
 
       rewriter.replaceOpWithNewOp<CallOp>(op, kCreateValue, resultType,
@@ -742,7 +743,7 @@ public:
         op->getLoc(), LLVM::LLVMPointerType::get(resumeFnTy), kResume);
 
     rewriter.create<CallOp>(op->getLoc(), apiFuncName, TypeRange(),
-                            ValueRange({operand, handle, resumePtr.res()}));
+                            ValueRange({operand, handle, resumePtr.getRes()}));
     rewriter.eraseOp(op);
 
     return success();
@@ -770,8 +771,8 @@ public:
 
     // Call async runtime API to execute a coroutine in the managed thread.
     auto coroHdl = adaptor.handle();
-    rewriter.replaceOpWithNewOp<CallOp>(op, TypeRange(), kExecute,
-                                        ValueRange({coroHdl, resumePtr.res()}));
+    rewriter.replaceOpWithNewOp<CallOp>(
+        op, TypeRange(), kExecute, ValueRange({coroHdl, resumePtr.getRes()}));
 
     return success();
   }
@@ -903,9 +904,9 @@ public:
   LogicalResult
   matchAndRewrite(RefCountingOp op, typename RefCountingOp::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto count =
-        rewriter.create<ConstantOp>(op->getLoc(), rewriter.getI32Type(),
-                                    rewriter.getI32IntegerAttr(op.count()));
+    auto count = rewriter.create<arith::ConstantOp>(
+        op->getLoc(), rewriter.getI64Type(),
+        rewriter.getI64IntegerAttr(op.count()));
 
     auto operand = adaptor.operand();
     rewriter.replaceOpWithNewOp<CallOp>(op, TypeRange(), apiFunctionName,
@@ -1008,7 +1009,8 @@ void ConvertAsyncToLLVMPass::runOnOperation() {
           converter, ctx);
 
   ConversionTarget target(*ctx);
-  target.addLegalOp<ConstantOp, UnrealizedConversionCastOp>();
+  target
+      .addLegalOp<arith::ConstantOp, ConstantOp, UnrealizedConversionCastOp>();
   target.addLegalDialect<LLVM::LLVMDialect>();
 
   // All operations from Async dialect must be lowered to the runtime API and

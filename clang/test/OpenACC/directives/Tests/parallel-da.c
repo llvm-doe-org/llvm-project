@@ -324,7 +324,7 @@ int main() {
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'gi' 'int'
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'ga' 'int[2]'
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'gu' 'union U':'union U'
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'gUnref' 'int'
@@ -339,7 +339,7 @@ int main() {
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'li' 'int'
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'la' 'int[2]'
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'lu' 'union U':'union U'
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'lUnref' 'int'
@@ -353,7 +353,7 @@ int main() {
   // DMP-PARLOOP-CCiCoCrFP-SAME:     {{$}}
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'shadowed' 'int'
   // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
-  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
+  // DMP-PARLOOP-CCiCoCrFP-NEXT:     DeclRefExpr {{.*}} 'ca' '{{(const )?}}int[3]'
 
   //           DMP-PARLOOP-NEXT:   effect: ACCParallelDirective
   //                    DMP-PAR:   ACCParallelDirective
@@ -370,7 +370,7 @@ int main() {
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gp' 'const int *'
-  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ga' 'int[2]'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gUnref' 'int'
@@ -384,7 +384,7 @@ int main() {
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'lp' 'const int *'
-  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'la' 'int[2]'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'lUnref' 'int'
@@ -397,24 +397,24 @@ int main() {
   //          DMP-CCiCoCrF-SAME:       {{$}}
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
-  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ca' '{{(const )?}}int[3]'
   //           DMP-CCiCoCr-NEXT:     ACCSharedClause {{.*}} <implicit>
   //                 DMP-F-NEXT:     ACCNomapClause {{.*}} <implicit>
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gp' 'const int *'
-  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ga' 'int[2]'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'lp' 'const int *'
-  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'la' 'int[2]'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
   //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
-  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
+  //          DMP-CCiCoCrF-NEXT:       DeclRefExpr {{.*}} 'ca' '{{(const )?}}int[3]'
   //           DMP-CCiCoCrF-NOT:       DeclRefExpr {{.*}} 'gUnref' 'int'
   //           DMP-CCiCoCrF-NOT:       DeclRefExpr {{.*}} 'lUnref' 'int'
 
@@ -424,7 +424,7 @@ int main() {
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gp' 'const int *'
-  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ga' 'int[2]'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gUnref' 'int'
@@ -434,7 +434,7 @@ int main() {
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'lp' 'const int *'
-  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'la' 'int[2]'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'lUnref' 'int'
@@ -444,24 +444,24 @@ int main() {
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
                                        // The test omits const when testing private.
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ci' 'int'
-  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ca' 'int [3]'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ca' 'int[3]'
   //             DMP-PAR-P-NEXT:     ACCNomapClause {{.*}} <implicit>
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gp' 'const int *'
-  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ga' 'int[2]'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'li' 'int'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'lp' 'const int *'
-  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'la' 'int[2]'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
                                        // The test omits const when testing private.
   //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ci' 'int'
-  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ca' 'int [3]'
+  //             DMP-PAR-P-NEXT:       DeclRefExpr {{.*}} 'ca' 'int[3]'
   //              DMP-PAR-P-NOT:       DeclRefExpr {{.*}} 'gUnref' 'int'
   //              DMP-PAR-P-NOT:       DeclRefExpr {{.*}} 'lUnref' 'int'
 
@@ -475,21 +475,21 @@ int main() {
   //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'shadowed' 'int'
   //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ci' 'const int'
   //                 DMP-I-NEXT:     ACCCopyClause {{.*}} <implicit>
-  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ga' 'int[2]'
   //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'la' 'int[2]'
   //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ca' 'const int[3]'
   //                 DMP-I-NEXT:     ACCSharedClause {{.*}} <implicit>
-  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ga' 'int[2]'
   //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'la' 'int [2]'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'la' 'int[2]'
   //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'ca' 'const int[3]'
   //                 DMP-I-NEXT:     ACCFirstprivateClause {{.*}} <implicit>
   //                 DMP-I-NEXT:       DeclRefExpr {{.*}} 'gi' 'int'
   //                 DMP-I-NEXT:       DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
@@ -511,7 +511,7 @@ int main() {
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gp' 'const int *'
-  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ga' 'int[2]'
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gUnref' 'int'
@@ -522,7 +522,7 @@ int main() {
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'lp' 'const int *'
-  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'la' 'int[2]'
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'lUnref' 'int'
@@ -532,25 +532,25 @@ int main() {
   //          DMP-CCiCoCrF-SAME:         {{$}}
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
   //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
-  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
+  //          DMP-CCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ca' '{{(const )?}}int[3]'
   //           DMP-CCiCoCr-NEXT:       OMPSharedClause
   //            DMP-CCiCoCr-NOT:         <implicit>
   //           DMP-CCiCoCr-SAME:         {{$}}
   //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
   //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
   //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'gp' 'const int *'
-  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'ga' 'int[2]'
   //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
   //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
   //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
   //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'lp' 'const int *'
-  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'la' 'int[2]'
   //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
   //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
   //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
-  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
+  //           DMP-CCiCoCr-NEXT:         DeclRefExpr {{.*}} 'ca' '{{(const )?}}int[3]'
   //            DMP-CCiCoCr-NOT:         DeclRefExpr {{.*}} 'gUnref' 'int'
   //            DMP-CCiCoCr-NOT:         DeclRefExpr {{.*}} 'lUnref' 'int'
 
@@ -560,7 +560,7 @@ int main() {
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'gp' 'const int *'
-  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'ga' 'int[2]'
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'gUnref' 'int'
@@ -570,7 +570,7 @@ int main() {
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'lp' 'const int *'
-  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'la' 'int[2]'
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'lUnref' 'int'
@@ -580,28 +580,28 @@ int main() {
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
                                          // The test omits const when testing private.
   //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'ci' 'int'
-  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'ca' 'int [3]'
+  //             DMP-PAR-P-NEXT:         DeclRefExpr {{.*}} 'ca' 'int[3]'
 
   //                 DMP-I-NEXT:       OMPMapClause
   //                  DMP-I-NOT:         <implicit>
   //                 DMP-I-SAME:         {{$}}
-  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ga' 'int[2]'
   //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'la' 'int[2]'
   //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ca' 'const int[3]'
   //                 DMP-I-NEXT:       OMPSharedClause
   //                  DMP-I-NOT:         <implicit>
   //                 DMP-I-SAME:         {{$}}
-  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ga' 'int[2]'
   //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
-  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'la' 'int[2]'
   //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
-  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ca' 'const int [3]'
+  //                 DMP-I-NEXT:         DeclRefExpr {{.*}} 'ca' 'const int[3]'
   //                 DMP-I-NEXT:       OMPFirstprivateClause
   //                  DMP-I-NOT:         <implicit>
   //                 DMP-I-SAME:         {{$}}
@@ -623,7 +623,7 @@ int main() {
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gp' 'const int *'
-  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'ga' 'int[2]'
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'gUnref' 'int'
@@ -633,7 +633,7 @@ int main() {
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'lp' 'const int *'
-  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'la' 'int[2]'
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'lUnref' 'int'
@@ -643,24 +643,24 @@ int main() {
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
                                          // The test omits const when testing private.
   //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'ci' 'int'
-  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'ca' 'int [3]'
+  //         DMP-PARLOOP-P-NEXT:         DeclRefExpr {{.*}} 'ca' 'int[3]'
 
   // DMP-PARLOOP-ICCiCoCrF-NEXT:       ACCSharedClause {{.*}} <implicit>
   // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gi' 'int'
   // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} {{'gt' '__uint128_t'|'gt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'gt_lw' 'uint64_t'}}
   // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gp' 'const int *'
-  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ga' 'int [2]'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ga' 'int[2]'
   // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gs' 'struct S':'struct S'
   // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'gu' 'union U':'union U'
   // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'li' 'int'
   // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} {{'lt' '__uint128_t'|'lt_hi' 'uint64_t'$[[:space:]]*DeclRefExpr .* 'lt_lw' 'uint64_t'}}
   // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'lp' 'const int *'
-  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'la' 'int [2]'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'la' 'int[2]'
   // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ls' 'struct S':'struct S'
   // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'lu' 'union U':'union U'
   // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'shadowed' 'int'
   // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ci' '{{(const )?}}int'
-  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ca' '{{(const )?}}int [3]'
+  // DMP-PARLOOP-ICCiCoCrF-NEXT:         DeclRefExpr {{.*}} 'ca' '{{(const )?}}int[3]'
 
   // DMP-PARLOOP-ICCiCoCrF-NEXT:       impl: ForStmt
   //         DMP-PARLOOP-P-NEXT:       impl: CompoundStmt
@@ -671,7 +671,7 @@ int main() {
   //         DMP-PARLOOP-P-NEXT:         DeclStmt
   //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} gp 'const int *'
   //         DMP-PARLOOP-P-NEXT:         DeclStmt
-  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} ga 'int [2]'
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} ga 'int[2]'
   //         DMP-PARLOOP-P-NEXT:         DeclStmt
   //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} gs 'struct S':'struct S'
   //         DMP-PARLOOP-P-NEXT:         DeclStmt
@@ -685,7 +685,7 @@ int main() {
   //         DMP-PARLOOP-P-NEXT:         DeclStmt
   //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} lp 'const int *'
   //         DMP-PARLOOP-P-NEXT:         DeclStmt
-  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} la 'int [2]'
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} la 'int[2]'
   //         DMP-PARLOOP-P-NEXT:         DeclStmt
   //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} ls 'struct S':'struct S'
   //         DMP-PARLOOP-P-NEXT:         DeclStmt
@@ -698,7 +698,7 @@ int main() {
   //         DMP-PARLOOP-P-NEXT:         DeclStmt
   //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} ci 'int'
   //         DMP-PARLOOP-P-NEXT:         DeclStmt
-  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} ca 'int [3]'
+  //         DMP-PARLOOP-P-NEXT:           VarDecl {{.*}} ca 'int[3]'
   //         DMP-PARLOOP-P-NEXT:         ForStmt
 
   // PRT-NOT:       #pragma

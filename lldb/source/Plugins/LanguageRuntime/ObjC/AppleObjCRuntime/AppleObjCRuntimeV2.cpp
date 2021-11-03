@@ -292,6 +292,7 @@ struct objc_clsopt_v16_t {
    uint32_t occupied;
    uint32_t shift;
    uint32_t mask;
+   uint32_t zero;
    uint64_t salt;
    uint32_t scramble[256];
    uint8_t  tab[0]; // tab[mask+1]
@@ -950,50 +951,65 @@ protected:
 
     Process *process = m_exe_ctx.GetProcessPtr();
     ExecutionContext exe_ctx(process);
+
     ObjCLanguageRuntime *objc_runtime = ObjCLanguageRuntime::Get(*process);
-    if (objc_runtime) {
-      ObjCLanguageRuntime::TaggedPointerVendor *tagged_ptr_vendor =
-          objc_runtime->GetTaggedPointerVendor();
-      if (tagged_ptr_vendor) {
-        for (size_t i = 0; i < command.GetArgumentCount(); i++) {
-          const char *arg_str = command.GetArgumentAtIndex(i);
-          if (!arg_str)
-            continue;
-          Status error;
-          lldb::addr_t arg_addr = OptionArgParser::ToAddress(
-              &exe_ctx, arg_str, LLDB_INVALID_ADDRESS, &error);
-          if (arg_addr == 0 || arg_addr == LLDB_INVALID_ADDRESS || error.Fail())
-            continue;
-          auto descriptor_sp = tagged_ptr_vendor->GetClassDescriptor(arg_addr);
-          if (!descriptor_sp)
-            continue;
-          uint64_t info_bits = 0;
-          uint64_t value_bits = 0;
-          uint64_t payload = 0;
-          if (descriptor_sp->GetTaggedPointerInfo(&info_bits, &value_bits,
-                                                  &payload)) {
-            result.GetOutputStream().Printf(
-                "0x%" PRIx64 " is tagged.\n\tpayload = 0x%" PRIx64
-                "\n\tvalue = 0x%" PRIx64 "\n\tinfo bits = 0x%" PRIx64
-                "\n\tclass = %s\n",
-                (uint64_t)arg_addr, payload, value_bits, info_bits,
-                descriptor_sp->GetClassName().AsCString("<unknown>"));
-          } else {
-            result.GetOutputStream().Printf("0x%" PRIx64 " is not tagged.\n",
-                                            (uint64_t)arg_addr);
-          }
-        }
-      } else {
-        result.AppendError("current process has no tagged pointer support");
+    if (!objc_runtime) {
+      result.AppendError("current process has no Objective-C runtime loaded");
+      result.SetStatus(lldb::eReturnStatusFailed);
+      return false;
+    }
+
+    ObjCLanguageRuntime::TaggedPointerVendor *tagged_ptr_vendor =
+        objc_runtime->GetTaggedPointerVendor();
+    if (!tagged_ptr_vendor) {
+      result.AppendError("current process has no tagged pointer support");
+      result.SetStatus(lldb::eReturnStatusFailed);
+      return false;
+    }
+
+    for (size_t i = 0; i < command.GetArgumentCount(); i++) {
+      const char *arg_str = command.GetArgumentAtIndex(i);
+      if (!arg_str)
+        continue;
+
+      Status error;
+      lldb::addr_t arg_addr = OptionArgParser::ToAddress(
+          &exe_ctx, arg_str, LLDB_INVALID_ADDRESS, &error);
+      if (arg_addr == 0 || arg_addr == LLDB_INVALID_ADDRESS || error.Fail()) {
+        result.AppendErrorWithFormat(
+            "could not convert '%s' to a valid address\n", arg_str);
         result.SetStatus(lldb::eReturnStatusFailed);
         return false;
       }
-      result.SetStatus(lldb::eReturnStatusSuccessFinishResult);
-      return true;
+
+      auto descriptor_sp = tagged_ptr_vendor->GetClassDescriptor(arg_addr);
+      if (!descriptor_sp) {
+        result.AppendErrorWithFormat(
+            "could not get class descriptor for 0x%" PRIx64 "\n",
+            (uint64_t)arg_addr);
+        result.SetStatus(lldb::eReturnStatusFailed);
+        return false;
+      }
+
+      uint64_t info_bits = 0;
+      uint64_t value_bits = 0;
+      uint64_t payload = 0;
+      if (descriptor_sp->GetTaggedPointerInfo(&info_bits, &value_bits,
+                                              &payload)) {
+        result.GetOutputStream().Printf(
+            "0x%" PRIx64 " is tagged.\n\tpayload = 0x%" PRIx64
+            "\n\tvalue = 0x%" PRIx64 "\n\tinfo bits = 0x%" PRIx64
+            "\n\tclass = %s\n",
+            (uint64_t)arg_addr, payload, value_bits, info_bits,
+            descriptor_sp->GetClassName().AsCString("<unknown>"));
+      } else {
+        result.GetOutputStream().Printf("0x%" PRIx64 " is not tagged.\n",
+                                        (uint64_t)arg_addr);
+      }
     }
-    result.AppendError("current process has no Objective-C runtime loaded");
-    result.SetStatus(lldb::eReturnStatusFailed);
-    return false;
+
+    result.SetStatus(lldb::eReturnStatusSuccessFinishResult);
+    return true;
   }
 };
 
@@ -1058,16 +1074,6 @@ void AppleObjCRuntimeV2::Initialize() {
 
 void AppleObjCRuntimeV2::Terminate() {
   PluginManager::UnregisterPlugin(CreateInstance);
-}
-
-lldb_private::ConstString AppleObjCRuntimeV2::GetPluginNameStatic() {
-  static ConstString g_name("apple-objc-v2");
-  return g_name;
-}
-
-// PluginInterface protocol
-lldb_private::ConstString AppleObjCRuntimeV2::GetPluginName() {
-  return GetPluginNameStatic();
 }
 
 BreakpointResolverSP
@@ -1999,6 +2005,11 @@ AppleObjCRuntimeV2::SharedCacheClassInfoExtractor::UpdateISAToDescriptorMap() {
   const uint32_t num_classes = 128 * 1024;
 
   UtilityFunction *get_class_info_code = GetClassInfoUtilityFunction(exe_ctx);
+  if (!get_class_info_code) {
+    // The callee will have already logged a useful error message.
+    return DescriptorMapUpdateResult::Fail();
+  }
+
   FunctionCaller *get_shared_cache_class_info_function =
       get_class_info_code->GetFunctionCaller();
 
@@ -2301,13 +2312,9 @@ static bool DoesProcessHaveSharedCache(Process &process) {
   if (!platform_sp)
     return true; // this should not happen
 
-  ConstString platform_plugin_name = platform_sp->GetPluginName();
-  if (platform_plugin_name) {
-    llvm::StringRef platform_plugin_name_sr =
-        platform_plugin_name.GetStringRef();
-    if (platform_plugin_name_sr.endswith("-simulator"))
-      return false;
-  }
+  llvm::StringRef platform_plugin_name_sr = platform_sp->GetPluginName();
+  if (platform_plugin_name_sr.endswith("-simulator"))
+    return false;
 
   return true;
 }

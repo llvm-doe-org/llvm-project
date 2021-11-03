@@ -356,7 +356,7 @@ private:
     bool WithFrameRecord;
 
     void init(Triple &TargetTriple, bool InstrumentWithCalls);
-    unsigned getObjectAlignment() const { return 1U << Scale; }
+    uint64_t getObjectAlignment() const { return 1ULL << Scale; }
   };
 
   ShadowMapping Mapping;
@@ -839,7 +839,7 @@ void HWAddressSanitizer::getInterestingMemoryOperands(
     Interesting.emplace_back(I, XCHG->getPointerOperandIndex(), true,
                              XCHG->getCompareOperand()->getType(), None);
   } else if (auto CI = dyn_cast<CallInst>(I)) {
-    for (unsigned ArgNo = 0; ArgNo < CI->getNumArgOperands(); ArgNo++) {
+    for (unsigned ArgNo = 0; ArgNo < CI->arg_size(); ArgNo++) {
       if (!ClInstrumentByval || !CI->isByValArgument(ArgNo) ||
           ignoreAccess(I, CI->getArgOperand(ArgNo)))
         continue;
@@ -1771,9 +1771,10 @@ void HWAddressSanitizer::instrumentGlobals() {
   Hasher.update(M.getSourceFileName());
   MD5::MD5Result Hash;
   Hasher.final(Hash);
-  uint8_t Tag = Hash[0] & TagMaskByte;
+  uint8_t Tag = Hash[0];
 
   for (GlobalVariable *GV : Globals) {
+    Tag &= TagMaskByte;
     // Skip tag 0 in order to avoid collisions with untagged memory.
     if (Tag == 0)
       Tag = 1;

@@ -341,9 +341,9 @@ define i32 @test30(i32 %A) {
 ; CHECK-NEXT:    [[E:%.*]] = or i32 [[D]], 32962
 ; CHECK-NEXT:    ret i32 [[E]]
 ;
-  %B = or i32 %A, 32962
-  %C = and i32 %A, -65536
-  %D = and i32 %B, 40186
+  %B = or i32 %A, 32962   ; 0b1000_0000_1100_0010
+  %C = and i32 %A, -65536 ; 0xffff0000
+  %D = and i32 %B, 40186  ; 0b1001_1100_1111_1010
   %E = or i32 %D, %C
   ret i32 %E
 }
@@ -1384,4 +1384,87 @@ define i32 @test5_use3(i32 %x, i32 %y) {
   call void @use(i32 %xor)
   %or1 = or i32 %xor, %neg
   ret i32 %or1
+}
+
+define i8 @ashr_bitwidth_mask(i8 %x, i8 %y) {
+; CHECK-LABEL: @ashr_bitwidth_mask(
+; CHECK-NEXT:    [[SIGN:%.*]] = ashr i8 [[X:%.*]], 7
+; CHECK-NEXT:    [[R:%.*]] = or i8 [[SIGN]], [[Y:%.*]]
+; CHECK-NEXT:    ret i8 [[R]]
+;
+  %sign = ashr i8 %x, 7
+  %r = or i8 %sign, %y
+  ret i8 %r
+}
+
+define <2 x i8> @ashr_bitwidth_mask_vec_commute(<2 x i8> %x, <2 x i8> %py) {
+; CHECK-LABEL: @ashr_bitwidth_mask_vec_commute(
+; CHECK-NEXT:    [[Y:%.*]] = mul <2 x i8> [[PY:%.*]], <i8 42, i8 2>
+; CHECK-NEXT:    [[SIGN:%.*]] = ashr <2 x i8> [[X:%.*]], <i8 7, i8 7>
+; CHECK-NEXT:    [[R:%.*]] = or <2 x i8> [[Y]], [[SIGN]]
+; CHECK-NEXT:    ret <2 x i8> [[R]]
+;
+  %y = mul <2 x i8> %py, <i8 42, i8 2>      ; thwart complexity-based ordering
+  %sign = ashr <2 x i8> %x, <i8 7, i8 7>
+  %r = or <2 x i8> %y, %sign
+  ret <2 x i8> %r
+}
+
+define i32 @ashr_bitwidth_mask_use(i32 %x, i32 %y) {
+; CHECK-LABEL: @ashr_bitwidth_mask_use(
+; CHECK-NEXT:    [[SIGN:%.*]] = ashr i32 [[X:%.*]], 7
+; CHECK-NEXT:    call void @use(i32 [[SIGN]])
+; CHECK-NEXT:    [[R:%.*]] = or i32 [[SIGN]], [[Y:%.*]]
+; CHECK-NEXT:    ret i32 [[R]]
+;
+  %sign = ashr i32 %x, 7
+  call void @use(i32 %sign)
+  %r = or i32 %sign, %y
+  ret i32 %r
+}
+
+define i8 @ashr_not_bitwidth_mask(i8 %x, i8 %y) {
+; CHECK-LABEL: @ashr_not_bitwidth_mask(
+; CHECK-NEXT:    [[SIGN:%.*]] = ashr i8 [[X:%.*]], 6
+; CHECK-NEXT:    [[R:%.*]] = or i8 [[SIGN]], [[Y:%.*]]
+; CHECK-NEXT:    ret i8 [[R]]
+;
+  %sign = ashr i8 %x, 6
+  %r = or i8 %sign, %y
+  ret i8 %r
+}
+
+define i8 @lshr_bitwidth_mask(i8 %x, i8 %y) {
+; CHECK-LABEL: @lshr_bitwidth_mask(
+; CHECK-NEXT:    [[SIGN:%.*]] = lshr i8 [[X:%.*]], 7
+; CHECK-NEXT:    [[R:%.*]] = or i8 [[SIGN]], [[Y:%.*]]
+; CHECK-NEXT:    ret i8 [[R]]
+;
+  %sign = lshr i8 %x, 7
+  %r = or i8 %sign, %y
+  ret i8 %r
+}
+
+define i1 @cmp_overlap(i32 %x) {
+; CHECK-LABEL: @cmp_overlap(
+; CHECK-NEXT:    [[TMP1:%.*]] = icmp slt i32 [[X:%.*]], 1
+; CHECK-NEXT:    ret i1 [[TMP1]]
+;
+  %isneg = icmp slt i32 %x, 0
+  %negx = sub i32 0, %x
+  %isnotneg = icmp sgt i32 %negx, -1
+  %r = or i1 %isneg, %isnotneg
+  ret i1 %r
+}
+
+define <2 x i1> @cmp_overlap_splat(<2 x i5> %x) {
+; CHECK-LABEL: @cmp_overlap_splat(
+; CHECK-NEXT:    [[TMP1:%.*]] = icmp slt <2 x i5> [[X:%.*]], <i5 1, i5 1>
+; CHECK-NEXT:    ret <2 x i1> [[TMP1]]
+;
+  %isneg = icmp slt <2 x i5> %x, zeroinitializer
+  %negx = sub <2 x i5> zeroinitializer, %x
+  %isnotneg = icmp sgt <2 x i5> %negx, <i5 -1, i5 -1>
+  %r = or <2 x i1> %isneg, %isnotneg
+  ret <2 x i1> %r
 }

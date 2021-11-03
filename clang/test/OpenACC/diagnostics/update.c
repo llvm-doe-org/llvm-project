@@ -210,7 +210,7 @@ int main() {
   // expected-error@+2 {{subarray specified for pointer to function type 'int ()'}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update self(fp[0:2])
-  // expected-error@+2 {{subarray specified for pointer to incomplete type 'int []'}}
+  // expected-error@+2 {{subarray specified for pointer to incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update host((&incomplete)[0:2])
 
@@ -250,13 +250,13 @@ int main() {
 
   // Variables of incomplete type.
 
-  // expected-error@+2 {{variable in 'self' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'self' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update self(incomplete)
-  // expected-error@+2 {{variable in 'host' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'host' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update host(incomplete)
-  // expected-error@+2 {{variable in 'device' clause cannot have incomplete type 'int []'}}
+  // expected-error@+2 {{variable in 'device' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update device(incomplete)
 
