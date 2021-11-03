@@ -151,7 +151,7 @@ stages:
   tags: [shell, kold]
   variables:
     BUILD_ID: kold
-    MODULES: gnu/9.1.0
+    MODULES: gnu/11.1.0
     PATH_PREPEND: ""
     CMAKE: cmake3
     NINJA: ninja-build
@@ -164,24 +164,8 @@ stages:
       -DCLANG_ACC_TEST_EXE_NVPTX64=0
     LLVM_ENABLE_PROJECTS: "clang"
     LLVM_ENABLE_RUNTIMES: "openmp"
-    LIT_XFAIL:
-      "
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-sret.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-sibling-call.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-tail-call.ll
-      LLVM :: CodeGen/AMDGPU/abi-attribute-hints-undefined-behavior.ll
-      LLVM :: CodeGen/AMDGPU/indirect-call-known-callees.ll
-      LLVM :: CodeGen/AMDGPU/call-constant.ll
-      LLVM :: CodeGen/AMDGPU/indirect-call.ll
-      LLVM :: CodeGen/AMDGPU/returnaddress.ll
-      "
-    LIT_XFAIL_NOT:
-      ""
+    LIT_XFAIL: ""
+    LIT_XFAIL_NOT: ""
 
 .no-asserts:
   extends: [.kold]
@@ -194,19 +178,6 @@ stages:
       "
       Clang :: Headers/wasm.c
       LLVM :: Analysis/CostModel/X86/interleaved-store-accesses-with-gaps.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-abi-attribute-hints.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-implicit-args.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-return-values.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call-sret.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-call.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-indirect-call.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-sibling-call.ll
-      LLVM :: CodeGen/AMDGPU/GlobalISel/irtranslator-tail-call.ll
-      LLVM :: CodeGen/AMDGPU/abi-attribute-hints-undefined-behavior.ll
-      LLVM :: CodeGen/AMDGPU/indirect-call-known-callees.ll
-      LLVM :: CodeGen/AMDGPU/call-constant.ll
-      LLVM :: CodeGen/AMDGPU/indirect-call.ll
-      LLVM :: CodeGen/AMDGPU/returnaddress.ll
       "
     LIT_XFAIL_NOT:
       ""
