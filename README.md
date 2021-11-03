@@ -21,31 +21,104 @@ issues, etc. can be found in the wiki:
 
 > <https://github.com/llvm-doe-org/llvm-project/wiki>
 
-## Building and Testing
-
-For a brief guide to getting started with LLVM, see the section [The
-LLVM Compiler Infrastructure](#the-llvm-compiler-infrastructure)
-below, which contains the contents of the upstream LLVM `README.md`.
+## Building
 
 Clacc should be built in the same manner as upstream LLVM when Clang
 and OpenMP support are desired.  At minimum, you must build the
-`clang` and `openmp` subprojects of LLVM.  For example, depending on
-your system configuration, the following might prove sufficient:
+`clang` and `openmp` subprojects of LLVM.  For example:
 
 ```
 $ cd $LLVM_GIT_DIR
 $ mkdir build && cd build
 $ cmake -DCMAKE_INSTALL_PREFIX=../install \
-        -DLLVM_ENABLE_PROJECTS='clang' \
-        -DLLVM_ENABLE_RUNTIMES='openmp' \
+        -DLLVM_ENABLE_PROJECTS=clang      \
+        -DLLVM_ENABLE_RUNTIMES=openmp     \
         ../llvm
 $ make
 $ make install
 ```
 
-For further details on building OpenMP support, see the following FAQ:
+Building LLVM successfully can be challenging, and the above minimal
+procedure might not be sufficient for your system, or you might wish
+to tweak some options.  It is not practical to capture all possible
+issues here.  However, there are several resources that can help:
 
-> <https://openmp.llvm.org/docs/SupportAndFAQ.html>
+* See the example Clacc build procedures in the remainder of this
+  section.  Even if none of them fit your requirements exactly, they
+  might reveal the options you should investigate.
+* For further details on building OpenMP support, see the following FAQ:
+
+    > <https://openmp.llvm.org/docs/SupportAndFAQ.html>
+
+* For a brief guide to getting started with LLVM, see the section [The
+  LLVM Compiler Infrastructure](#the-llvm-compiler-infrastructure)
+  below, which contains the contents of the upstream LLVM `README.md`.
+* Contact the Clacc maintainers.  See the [contact info
+  above](#clacc).
+
+### Example Build: ORNL ExCL's equinox
+
+System details: x86_64, 4 NVIDIA V100 GPUs
+
+```
+$ cd $LLVM_GIT_DIR
+$ mkdir build && cd build
+$ module load nvhpc/21.7
+$ PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/21.7/cuda/11.4/bin:$PATH
+$ cmake -DCMAKE_INSTALL_PREFIX=../install    \
+        -DCMAKE_BUILD_TYPE=Release           \
+        -DLLVM_ENABLE_PROJECTS=clang         \
+        -DLLVM_ENABLE_RUNTIMES=openmp        \
+        -DLLVM_TARGETS_TO_BUILD="host;NVPTX" \
+        -DCMAKE_C_COMPILER=gcc               \
+        -DCMAKE_CXX_COMPILER=g++             \
+        ../llvm
+$ make
+$ make install
+```
+
+### Example Build: ORNL ExCL's explorer
+
+System details: AMD EPYC 7272, 2 AMD MI60 Instinct GPUs
+
+```
+$ cd $LLVM_GIT_DIR
+$ mkdir build && cd build
+$ cmake -DCMAKE_INSTALL_PREFIX=../install     \
+        -DCMAKE_BUILD_TYPE=Release            \
+        -DLLVM_ENABLE_PROJECTS="clang;lld"    \
+        -DLLVM_ENABLE_RUNTIMES=openmp         \
+        -DLLVM_TARGETS_TO_BUILD="host;AMDGPU" \
+        -DCMAKE_C_COMPILER=gcc                \
+        -DCMAKE_CXX_COMPILER=g++              \
+        ../llvm
+$ make
+$ make install
+```
+
+### Example Build: ORNL ExCL's leconte
+
+System details: 2 POWER9 CPUs, 6 NVIDIA V100 GPUs
+
+```
+$ cd $LLVM_GIT_DIR
+$ mkdir build && cd build
+$ module load cmake/3.19.2 gnu/9.2.0 nvhpc/21.2
+$ PATH=/opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin:$PATH
+$ cmake -DCMAKE_INSTALL_PREFIX=../install    \
+        -DCMAKE_BUILD_TYPE=Release           \
+        -DLLVM_ENABLE_PROJECTS=clang         \
+        -DLLVM_ENABLE_RUNTIMES=openmp        \
+        -DLLVM_TARGETS_TO_BUILD="host;NVPTX" \
+        -DCMAKE_C_COMPILER=gcc               \
+        -DCMAKE_CXX_COMPILER=g++             \
+        -DGCC_INSTALL_PREFIX=$GCC_DIR        \
+        ../llvm
+$ make
+$ make install
+```
+
+## Testing
 
 Test suites checking Clacc's OpenACC support can be run by themselves
 or as part of larger test suites, as follows:
@@ -68,7 +141,7 @@ base language.
 Clacc's compiler is the `clang` executable in the `bin` subdirectory
 of the install directory.  Here's a simple example of using it, where
 `$CLACC_INSTALL_DIR` is `$LLVM_GIT_DIR/install` when following the
-build procedure above:
+build procedures above:
 
 ```
 $ export PATH=$CLACC_INSTALL_DIR/bin:$PATH
@@ -124,7 +197,7 @@ upstream and is not unique to Clacc.
 
 For example, to compile and run for an NVIDIA GPU, where
 `$CLACC_BUILD_DIR` is `$LLVM_GIT_DIR/build` when following the build
-procedure above:
+procedures above:
 
 ```
 $ export PATH=$CLACC_BUILD_DIR/bin:$PATH
