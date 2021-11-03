@@ -2,7 +2,7 @@
 
 Clacc is a project to add [OpenACC](https://www.openacc.org/) support
 to [Clang](http://clang.llvm.org/) and [LLVM](http://llvm.org/).
-Clacc is funded by the [U.S. Exascale Computing Project
+Clacc is funded by the [Exascale Computing Project
 (ECP)](https://www.exascaleproject.org) and is maintained by [Oak
 Ridge National Laboratory](https://www.ornl.gov/).  Please contact
 [Joel E. Denny](mailto:dennyje@ornl.gov) with any questions.
@@ -58,7 +58,8 @@ issues here.  However, there are several resources that can help:
 
 ### Example Build: ORNL ExCL's equinox
 
-System details: x86_64, 4 NVIDIA V100 GPUs
+[System details](https://excl.ornl.gov/excl-systems/): x86_64, 4
+NVIDIA V100 GPUs
 
 ```
 $ cd $LLVM_GIT_DIR
@@ -79,7 +80,8 @@ $ make install
 
 ### Example Build: ORNL ExCL's explorer
 
-System details: AMD EPYC 7272, 2 AMD MI60 Instinct GPUs
+[System details](https://excl.ornl.gov/excl-systems/): AMD EPYC 7272,
+2 AMD MI60 Instinct GPUs
 
 ```
 $ cd $LLVM_GIT_DIR
@@ -98,7 +100,8 @@ $ make install
 
 ### Example Build: ORNL ExCL's leconte
 
-System details: 2 POWER9 CPUs, 6 NVIDIA V100 GPUs
+[System details](https://excl.ornl.gov/excl-systems/): 2 POWER9 CPUs,
+6 NVIDIA V100 GPUs
 
 ```
 $ cd $LLVM_GIT_DIR
@@ -298,8 +301,37 @@ The following documentation is maintained in the Clacc git repo:
 * `clang/README-OpenACC-design.md` describes the current design of
   Clacc.
 
-The [next section](#the-llvm-compiler-infrastructure) contains the
-contents of the upstream LLVM `README.md`.
+The [next top-level section](#the-llvm-compiler-infrastructure)
+contains the contents of the upstream LLVM `README.md`.
+
+## Acknowledgement
+
+Clacc development depends on funding and resources from several
+organizations.
+
+### ECP
+
+This research was supported by the [Exascale Computing
+Project](https://www.exascaleproject.org) (17-SC-20-SC), a joint
+project of the U.S. Department of Energy’s Office of Science and
+National Nuclear Security Administration, responsible for delivering a
+capable exascale ecosystem, including software, applications, and
+hardware technology, to support the nation’s exascale computing
+imperative.
+
+### ExCL
+
+This research used resources of the [Experimental Computing
+Laboratory](https://excl.ornl.gov/) (ExCL) at the Oak Ridge National
+Laboratory, which is supported by the Office of Science of the U.S.
+Department of Energy under Contract No. DE-AC05-00OR22725.
+
+### OLCF
+
+This research used resources of the [Oak Ridge Leadership Computing
+Facility](https://www.olcf.ornl.gov/) at the Oak Ridge National
+Laboratory, which is supported by the Office of Science of the U.S.
+Department of Energy under Contract No. DE-AC05-00OR22725.
 
 # The LLVM Compiler Infrastructure
 
