@@ -44,16 +44,7 @@
 
 // FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
 // issue is not limited to Clacc and is present upstream:
-/* nvptx64-warning@*:* 0+ {{Linking two modules of different data layouts}} */
 /* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
-
-// This hack enables these Clang -verify prefixes to be used alone (without
-// expecting any error diagnostics) or with other prefixes (without requiring
-// a prefix-no-diagnostics declaration that could contradict other prefixes).
-/* host-warning 0 {{}} */
-/* x86_64-warning 0 {{}} */
-/* ppc64le-warning 0 {{}} */
-/* amdgcn-warning 0 {{}} */
 
 #include <assert.h>
 #include <stdio.h>
