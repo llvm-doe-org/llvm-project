@@ -538,7 +538,11 @@ debug (build):
          echo "Test counts for libomptarget "'::'" $GPU_TRIPLE (expecting > 0):"
          && grep -c "^ *libomptarget "'::'" $GPU_TRIPLE ::" $tl;
       fi
-    - clacc_branch=`echo "$CI_COMMIT_BRANCH" | grep '^\(clacc\|jdenny-openacc\)'`
+    - clacc_branch=`
+        echo "$CI_COMMIT_BRANCH" |
+        grep '^\(clacc\|jdenny-openacc\)' |
+        grep -v '^clacc/llvm.org-ci/' ||
+        true`
     - echo "$clacc_branch"
     # A grep failure within the "if" terminates the "if" as expected, but
     # somehow it doesn't cause the job to fail and prevent commands in
