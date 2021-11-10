@@ -2,21 +2,9 @@
 // "acc parallel loop".  Correct usage of num_gangs is checked in parallel.c
 // and loop.c.
 
-// FIXME: Several upstream compiler bugs were recently introduced that break
-// behavior when offloading to nvptx64 unless we add -O1 or higher, but that
-// causes many diagnostics like:
-//
-//   loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
-//
-// To avoid all this until upstream fixes it, we add:
-//
-//   -O1 -Wno-pass-failed
-//
 // RUN: %acc-check-dmp{}
 // RUN: %acc-check-prt{}
-// RUN: %acc-check-exe{                                                        \
-// RUN:   clang-args: %if-tgt-nvptx64<-O1 -Wno-pass-failed|>;                  \
-// RUN:   exe-args: 2}
+// RUN: %acc-check-exe{clang-args: ; exe-args: 2}
 
 // END.
 

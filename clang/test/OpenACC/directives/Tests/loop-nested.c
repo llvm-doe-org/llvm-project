@@ -20,7 +20,7 @@
 //
 // To avoid all this until upstream fixes it, we add:
 //
-//   -O1 -Wno-pass-failed.
+//   -O1 -Wno-pass-failed
 //
 // FIXME: amdgcn doesn't yet support printf in a kernel.  Unfortunately, that
 // means our execution checks on amdgcn don't verify much except that nothing

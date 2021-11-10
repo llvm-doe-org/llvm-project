@@ -13,7 +13,7 @@
 //
 // To avoid all this until upstream fixes it, we add:
 //
-//   -O1 -Wno-pass-failed.
+//   -O1 -Wno-pass-failed
 //
 // RUN: %acc-check-dmp{}
 // RUN: %acc-check-prt{}

@@ -281,7 +281,7 @@
 // 
 // To avoid all this until upstream fixes it, we add:
 // 
-//   -O1 -Wno-pass-failed.
+//   -O1 -Wno-pass-failed
 // 
 // FIXME: amdgcn misbehaves with worker partitioning, so skip it there for now.
 //
