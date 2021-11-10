@@ -532,9 +532,11 @@ debug (build):
     - LIT_OPTS=--show-tests $NINJA check-all > $tl 2>&1
     - echo "$CPU_TRIPLE" "$CPU_COUNT"
     - echo "$GPU_TRIPLE" "$GPU_COUNT"
+    - echo "Test counts for libomptarget "'::'" $CPU_TRIPLE (expecting > 0):"
     - grep -c "^ *libomptarget "'::'" $CPU_TRIPLE ::" $tl
     - if test x"$GPU_TRIPLE" != x; then
-         grep -c "^ *libomptarget "'::'" $GPU_TRIPLE ::" $tl;
+         echo "Test counts for libomptarget "'::'" $GPU_TRIPLE (expecting > 0):"
+         && grep -c "^ *libomptarget "'::'" $GPU_TRIPLE ::" $tl;
       fi
     - clacc_branch=`echo "$CI_COMMIT_BRANCH" | grep '^\(clacc\|jdenny-openacc\)'`
     - echo "$clacc_branch"
@@ -543,7 +545,7 @@ debug (build):
     # subsequent list items from executing unless we have the "|| false" here.
     # This doesn't make sense to me, but it's how gitlab CI works right now.
     - if test x"$clacc_branch" != x; then
-        echo "Test counts for libacc2omp "'::'" $CPU_TRIPLE:" &&
+        echo "Test counts for libacc2omp "'::'" $CPU_TRIPLE (expecting > 0):" &&
         grep -c "^ *libacc2omp "'::'" $CPU_TRIPLE ::" $tl &&
         prefix="Device counts for" &&
         echo "Device counts for $CPU_TRIPLE (expecting $CPU_COUNT):" &&
@@ -553,8 +555,8 @@ debug (build):
           grep "$prefix '$suite'.*'$CPU_TRIPLE'"':'" $CPU_COUNT[,}]" $tl;
         done &&
         if test x"$GPU_TRIPLE" != x; then
-          echo "Test counts for libacc2omp "'::'" $GPU_TRIPLE:" &&
-          grep -c "^ *libacc2omp "'::'" $GPU_TRIPLE ::" $tl &&
+          echo "Test counts for libacc2omp "'::'" $GPU_TRIPLE (expecting > 0):"
+          && grep -c "^ *libacc2omp "'::'" $GPU_TRIPLE ::" $tl &&
           echo "Device counts for $GPU_TRIPLE (expecting $GPU_COUNT):" &&
           for suite in "libacc2omp "'::'" $GPU_TRIPLE"
                        "libacc2omp "'::'" multitarget"
