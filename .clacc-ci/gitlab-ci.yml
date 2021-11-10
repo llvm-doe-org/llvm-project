@@ -538,6 +538,10 @@ debug (build):
       fi
     - clacc_branch=`echo "$CI_COMMIT_BRANCH" | grep '^\(clacc\|jdenny-openacc\)'`
     - echo "$clacc_branch"
+    # A grep failure within the "if" terminates the "if" as expected, but
+    # somehow it doesn't cause the job to fail and prevent commands in
+    # subsequent list items from executing unless we have the "|| false" here.
+    # This doesn't make sense to me, but it's how gitlab CI works right now.
     - if test x"$clacc_branch" != x; then
         echo "Test counts for libacc2omp "'::'" $CPU_TRIPLE:" &&
         grep -c "^ *libacc2omp "'::'" $CPU_TRIPLE ::" $tl &&
@@ -558,7 +562,7 @@ debug (build):
             grep "$prefix '$suite'.*'$GPU_TRIPLE'"':'" $GPU_COUNT[,}]" $tl;
           done
         fi
-      fi
+      fi || false
     # Run the test suite.
     #
     # LIT_NPROC_DIVISOR is set to limit the number of tests launched at once so
