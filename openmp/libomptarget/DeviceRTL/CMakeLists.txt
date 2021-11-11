@@ -117,7 +117,12 @@ set(src_files
   ${source_directory}/Workshare.cpp
 )
 
-set(clang_opt_flags -O1 -mllvm -openmp-opt-disable -DSHARED_SCRATCHPAD_SIZE=2048)
+# -fno-openmp-target-runtime-globals prevents Clang from defining globals (e.g.,
+# __omp_rtl_debug_kind) with values that might conflict with the values they're
+# set to when compiling an OpenMP application (e.g., due to
+# -fopenmp-target-debug).
+set(clang_opt_flags -O1 -mllvm -openmp-opt-disable -DSHARED_SCRATCHPAD_SIZE=2048
+    -fno-openmp-target-runtime-globals)
 set(link_opt_flags  -O1        -openmp-opt-disable)
 
 # Prepend -I to each list element

@@ -33,7 +33,19 @@ void __assert_fail(const char *assertion, const char *file, unsigned line,
 
 /// Current indentation level for the function trace. Only accessed by thread 0.
 static uint32_t Level = 0;
+// FIXME: Suppressing this directive for amdgcn suppresses an amdgcn-link error
+// when compiling the application:
+//
+//   <unknown>:0: error: _ZL5Level: unsupported initializer for address space
+//   clang-14: error: amdgcn-link command failed with exit code 1 (use -v to see invocation)
+//
+// We're not sure what impact losing this directive has, but amdgcn doesn't
+// currently support printing to stdio anyway, so it probably doesn't matter
+// too much.  This workaround does not appear upstream.  We're hoping AMD will
+// determine an appropriate fix when the new device runtime becomes the default.
+#ifndef __AMDGCN__
 #pragma omp allocate(Level) allocator(omp_pteam_mem_alloc)
+#endif
 
 DebugEntryRAII::DebugEntryRAII(const char *File, const unsigned Line,
                                const char *Function) {

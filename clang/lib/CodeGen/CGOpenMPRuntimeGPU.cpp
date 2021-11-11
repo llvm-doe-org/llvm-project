@@ -1200,7 +1200,8 @@ CGOpenMPRuntimeGPU::CGOpenMPRuntimeGPU(CodeGenModule &CGM)
     llvm_unreachable("OpenMP NVPTX can only handle device code.");
 
   llvm::OpenMPIRBuilder &OMPBuilder = getOMPBuilder();
-  if (CGM.getLangOpts().OpenMPTargetNewRuntime) {
+  if (CGM.getLangOpts().OpenMPTargetNewRuntime &&
+      CGM.getLangOpts().OpenMPTargetRuntimeGlobals) {
     OMPBuilder.createGlobalFlag(CGM.getLangOpts().OpenMPTargetDebug,
                                 "__omp_rtl_debug_kind");
     OMPBuilder.createGlobalFlag(CGM.getLangOpts().OpenMPTeamSubscription,

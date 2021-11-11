@@ -5860,6 +5860,13 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                         /*Default=*/true))
         CmdArgs.push_back("-fno-openmp-target-new-runtime");
 
+      // When in OpenMP offloading mode, enable or disable the device runtime
+      // globals.
+      if (!Args.hasFlag(options::OPT_fopenmp_target_runtime_globals,
+                        options::OPT_fno_openmp_target_runtime_globals,
+                        /*Default=*/true))
+        CmdArgs.push_back("-fno-openmp-target-runtime-globals");
+
       // When in OpenMP offloading mode, enable debugging on the device.
       Args.AddAllArgs(CmdArgs, options::OPT_fopenmp_target_debug_EQ);
       if (Args.hasFlag(options::OPT_fopenmp_target_debug,

@@ -3543,6 +3543,9 @@ void CompilerInvocation::GenerateLangArgs(const LangOptions &Opts,
   if (!Opts.OpenMPTargetNewRuntime)
     GenerateArg(Args, OPT_fno_openmp_target_new_runtime, SA);
 
+  if (!Opts.OpenMPTargetRuntimeGlobals)
+    GenerateArg(Args, OPT_fno_openmp_target_runtime_globals, SA);
+
   if (Opts.OpenMPThreadSubscription)
     GenerateArg(Args, OPT_fopenmp_assume_threads_oversubscription, SA);
 
@@ -4028,6 +4031,8 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   Opts.OpenMPTargetNewRuntime =
       Opts.OpenMPIsDevice &&
       !Args.hasArg(options::OPT_fno_openmp_target_new_runtime);
+  Opts.OpenMPTargetRuntimeGlobals =
+      !Args.hasArg(options::OPT_fno_openmp_target_runtime_globals);
 
   Opts.ConvergentFunctions = Opts.ConvergentFunctions || Opts.OpenMPIsDevice;
 

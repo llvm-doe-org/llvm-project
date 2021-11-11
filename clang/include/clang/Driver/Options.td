@@ -2442,6 +2442,11 @@ defm openmp_target_new_runtime: BoolFOption<"openmp-target-new-runtime",
   LangOpts<"OpenMPTargetNewRuntime">, DefaultTrue,
   NegFlag<SetFalse, [CC1Option], "Do not use the new bitcode library for OpenMP offloading">,
   PosFlag<SetTrue>>;
+defm openmp_target_runtime_globals: BoolFOption<"openmp-target-runtime-globals",
+  LangOpts<"OpenMPTargetRuntimeGlobals">, DefaultTrue,
+  NegFlag<SetFalse, [CC1Option],
+          "Do not generate definitions for __omp_rtl_* globals">,
+  PosFlag<SetTrue>>;
 defm openmp_optimistic_collapse : BoolFOption<"openmp-optimistic-collapse",
   LangOpts<"OpenMPOptimisticCollapse">, DefaultFalse,
   PosFlag<SetTrue, [CC1Option]>, NegFlag<SetFalse>, BothFlags<[NoArgumentUnused, HelpHidden]>>;
