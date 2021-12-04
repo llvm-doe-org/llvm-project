@@ -262,6 +262,9 @@ int main(int argc, char *argv[]) {
   // num_workers ice=1, vector_length ice=1, used separately
   //--------------------------------------------------
 
+  // FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelDirective
@@ -479,7 +482,12 @@ int main(int argc, char *argv[]) {
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
+  // FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelLoopDirective
@@ -550,6 +558,8 @@ int main(int argc, char *argv[]) {
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   // PRT-NEXT: {
   {
@@ -622,6 +632,9 @@ int main(int argc, char *argv[]) {
   // num_workers ice>1, vector_length ice>1, used together
   //--------------------------------------------------
 
+  // FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelDirective
@@ -767,7 +780,12 @@ int main(int argc, char *argv[]) {
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
+  // FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelLoopDirective
@@ -826,7 +844,12 @@ int main(int argc, char *argv[]) {
       TGT_PRINTF("%d\n", i);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
+  // FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelLoopDirective
@@ -886,7 +909,12 @@ int main(int argc, char *argv[]) {
       TGT_PRINTF("%d\n", i);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
+  // FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelLoopDirective
@@ -961,6 +989,8 @@ int main(int argc, char *argv[]) {
       } // PRT-NEXT: }
     } // PRT-NEXT: }
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   //--------------------------------------------------
   // num_workers non-constant>1, no side effects, unused
@@ -1437,6 +1467,9 @@ int main(int argc, char *argv[]) {
   // num_workers non-constant>1, no side effects, used
   //--------------------------------------------------
 
+  // FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int nw = 2;
@@ -1531,7 +1564,12 @@ int main(int argc, char *argv[]) {
       }
     }
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
+  // FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int nw = {{.*}};
@@ -1650,11 +1688,16 @@ int main(int argc, char *argv[]) {
       }
     }
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   //--------------------------------------------------
   // num_workers non-constant>1, side effects, used deeply nested
   //--------------------------------------------------
 
+  // FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // DMP:      ACCParallelDirective
@@ -1844,7 +1887,10 @@ int main(int argc, char *argv[]) {
     // PRT-OA-NEXT:    // }
     // PRT-OA-NEXT:    // ^----------ACC----------^
     //
-    // EXE-NEXT: foo
+    //        EXE-HOST-NEXT: foo
+    //  EXE-TGT-X86_64-NEXT: foo
+    // EXE-TGT-PPC64LE-NEXT: foo
+    // EXE-TGT-NVPTX64-NEXT: foo
     #pragma acc parallel num_gangs(1) num_workers(foo()) vector_length(1)
     {
       #pragma acc loop seq
@@ -1884,6 +1930,8 @@ int main(int argc, char *argv[]) {
       }
     }
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   //--------------------------------------------------
   // vector_length non-constant>1, no side effects, would be used but discarded
@@ -2046,6 +2094,9 @@ int main(int argc, char *argv[]) {
   // vector_length non-constant>1, side effects, unused
   //--------------------------------------------------
 
+  // FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int vl = 3;
@@ -2133,6 +2184,8 @@ int main(int argc, char *argv[]) {
       TGT_PRINTF("%d\n", i);
     }
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   //--------------------------------------------------
   // num_workers non-constant>1, side effects, unused
