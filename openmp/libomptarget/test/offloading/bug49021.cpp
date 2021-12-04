@@ -1,8 +1,12 @@
 // RUN: %libomptarget-compilexx-generic -O3 && %libomptarget-run-generic
 
-// Wrong results on amdgcn
+// Wrong results on amdgpu
+// FIXME: Upstream marks this XFAIL only.  However, we find that, after running
+// it, we have to reset our AMD GPUs.  Otherwise, our
+// clang/test/OpenACC/directives/amdgcn-amd-amdhsa/parallel-partition-counts.c
+// then fails with "Page not present or supervisor privilege" errors.  Thus, we
+// mark this UNSUPPORTED so it won't run on AMD GPUs.
 // UNSUPPORTED: amdgcn-amd-amdhsa
-// UNSUPPORTED: amdgcn-amd-amdhsa-newRTL
 
 #include <iostream>
 

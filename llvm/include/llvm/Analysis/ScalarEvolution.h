@@ -519,12 +519,25 @@ public:
   // Returns a wider type among {Ty1, Ty2}.
   Type *getWiderType(Type *Ty1, Type *Ty2) const;
 
+  /// Return true if there exists a point in the program at which both
+  /// A and B could be operands to the same instruction.
+  /// SCEV expressions are generally assumed to correspond to instructions
+  /// which could exists in IR.  In general, this requires that there exists
+  /// a use point in the program where all operands dominate the use.
+  ///
+  /// Example:
+  /// loop {
+  ///   if
+  ///     loop { v1 = load @global1; }
+  ///   else
+  ///     loop { v2 = load @global2; }
+  /// }
+  /// No SCEV with operand V1, and v2 can exist in this program.
+  bool instructionCouldExistWitthOperands(const SCEV *A, const SCEV *B);
+
   /// Return true if the SCEV is a scAddRecExpr or it contains
   /// scAddRecExpr. The result will be cached in HasRecMap.
   bool containsAddRecurrence(const SCEV *S);
-
-  /// Erase Value from ValueExprMap and ExprValueMap.
-  void eraseValueFromMap(Value *V);
 
   /// Is operation \p BinOp between \p LHS and \p RHS provably does not have
   /// a signed/unsigned overflow (\p Signed)?
@@ -539,6 +552,9 @@ public:
 
   /// Notify this ScalarEvolution that \p User directly uses SCEVs in \p Ops.
   void registerUser(const SCEV *User, ArrayRef<const SCEV *> Ops);
+
+  /// Return true if the SCEV expression contains an undef value.
+  bool containsUndefs(const SCEV *S) const;
 
   /// Return a SCEV expression for the full generality of the specified
   /// expression.
@@ -1362,6 +1378,8 @@ private:
   /// includes an exact count and a maximum count.
   ///
   class BackedgeTakenInfo {
+    friend class ScalarEvolution;
+
     /// A list of computable exits and their not-taken counts.  Loops almost
     /// never have more than one computable exit.
     SmallVector<ExitNotTakenInfo, 1> ExitNotTaken;
@@ -1381,9 +1399,6 @@ private:
 
     /// True iff the backedge is taken either exactly Max or zero times.
     bool MaxOrZero = false;
-
-    /// SCEV expressions used in any of the ExitNotTakenInfo counts.
-    SmallPtrSet<const SCEV *, 4> Operands;
 
     bool isComplete() const { return IsComplete; }
     const SCEV *getConstantMax() const { return ConstantMax; }
@@ -1450,10 +1465,6 @@ private:
     /// Return true if the number of times this backedge is taken is either the
     /// value returned by getConstantMax or zero.
     bool isConstantMaxOrZero(ScalarEvolution *SE) const;
-
-    /// Return true if any backedge taken count expressions refer to the given
-    /// subexpression.
-    bool hasOperand(const SCEV *S) const;
   };
 
   /// Cache the backedge-taken count of the loops for this function as they
@@ -1463,6 +1474,10 @@ private:
   /// Cache the predicated backedge-taken count of the loops for this
   /// function as they are computed.
   DenseMap<const Loop *, BackedgeTakenInfo> PredicatedBackedgeTakenCounts;
+
+  /// Loops whose backedge taken counts directly use this non-constant SCEV.
+  DenseMap<const SCEV *, SmallPtrSet<PointerIntPair<const Loop *, 1, bool>, 4>>
+      BECountUsers;
 
   /// This map contains entries for all of the PHI instructions that we
   /// attempt to compute constant evolutions for.  This allows us to avoid
@@ -1475,6 +1490,11 @@ private:
   /// extreme cases.
   DenseMap<const SCEV *, SmallVector<std::pair<const Loop *, const SCEV *>, 2>>
       ValuesAtScopes;
+
+  /// Reverse map for invalidation purposes: Stores of which SCEV and which
+  /// loop this is the value-at-scope of.
+  DenseMap<const SCEV *, SmallVector<std::pair<const Loop *, const SCEV *>, 2>>
+      ValuesAtScopesUsers;
 
   /// Memoized computeLoopDisposition results.
   DenseMap<const SCEV *,
@@ -1599,11 +1619,6 @@ private:
   /// Implementation code for getSCEVAtScope; called at most once for each
   /// SCEV+Loop pair.
   const SCEV *computeSCEVAtScope(const SCEV *S, const Loop *L);
-
-  /// This looks up computed SCEV values for all instructions that depend on
-  /// the given instruction and removes them from the ValueExprMap map if they
-  /// reference SymName. This is used during PHI resolution.
-  void forgetSymbolicName(Instruction *I, const SCEV *SymName);
 
   /// Return the BackedgeTakenInfo for the given loop, lazily computing new
   /// values if the loop hasn't been analyzed yet. The returned result is
@@ -1895,6 +1910,9 @@ private:
   bool splitBinaryAdd(const SCEV *Expr, const SCEV *&L, const SCEV *&R,
                       SCEV::NoWrapFlags &Flags);
 
+  /// Forget predicated/non-predicated backedge taken counts for the given loop.
+  void forgetBackedgeTakenCounts(const Loop *L, bool Predicated);
+
   /// Drop memoized information for all \p SCEVs.
   void forgetMemoizedResults(ArrayRef<const SCEV *> SCEVs);
 
@@ -1903,6 +1921,12 @@ private:
 
   /// Return an existing SCEV for V if there is one, otherwise return nullptr.
   const SCEV *getExistingSCEV(Value *V);
+
+  /// Erase Value from ValueExprMap and ExprValueMap.
+  void eraseValueFromMap(Value *V);
+
+  /// Insert V to S mapping into ValueExprMap and ExprValueMap.
+  void insertValueToMap(Value *V, const SCEV *S);
 
   /// Return false iff given SCEV contains a SCEVUnknown with NULL value-
   /// pointer.
@@ -1944,7 +1968,13 @@ private:
   const Instruction *getNonTrivialDefiningScopeBound(const SCEV *S);
 
   /// Return a scope which provides an upper bound on the defining scope for
-  /// a SCEV with the operands in Ops.
+  /// a SCEV with the operands in Ops.  The outparam Precise is set if the
+  /// bound found is a precise bound (i.e. must be the defining scope.)
+  const Instruction *getDefiningScopeBound(ArrayRef<const SCEV *> Ops,
+                                           bool &Precise);
+
+  /// Wrapper around the above for cases which don't care if the bound
+  /// is precise.
   const Instruction *getDefiningScopeBound(ArrayRef<const SCEV *> Ops);
 
   /// Given two instructions in the same function, return true if we can

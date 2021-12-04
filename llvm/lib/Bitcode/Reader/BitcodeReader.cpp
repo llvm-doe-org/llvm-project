@@ -3996,8 +3996,8 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
       // See if anything took the address of blocks in this function.
       auto BBFRI = BasicBlockFwdRefs.find(F);
       if (BBFRI == BasicBlockFwdRefs.end()) {
-        for (unsigned i = 0, e = FunctionBBs.size(); i != e; ++i)
-          FunctionBBs[i] = BasicBlock::Create(Context, "", F);
+        for (BasicBlock *&BB : FunctionBBs)
+          BB = BasicBlock::Create(Context, "", F);
       } else {
         auto &BBRefs = BBFRI->second;
         // Check for invalid basic block references.
@@ -4605,9 +4605,8 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
               CaseVals.push_back(ConstantInt::get(Context, Low));
           }
           BasicBlock *DestBB = getBasicBlock(Record[CurIdx++]);
-          for (SmallVector<ConstantInt*, 1>::iterator cvi = CaseVals.begin(),
-                 cve = CaseVals.end(); cvi != cve; ++cvi)
-            SI->addCase(*cvi, DestBB);
+          for (ConstantInt *Cst : CaseVals)
+            SI->addCase(Cst, DestBB);
         }
         I = SI;
         break;
@@ -5538,21 +5537,16 @@ Error BitcodeReader::materialize(GlobalValue *GV) {
 
   // Upgrade any old intrinsic calls in the function.
   for (auto &I : UpgradedIntrinsics) {
-    for (auto UI = I.first->materialized_user_begin(), UE = I.first->user_end();
-         UI != UE;) {
-      User *U = *UI;
-      ++UI;
+    for (User *U : llvm::make_early_inc_range(I.first->materialized_users()))
       if (CallInst *CI = dyn_cast<CallInst>(U))
         UpgradeIntrinsicCall(CI, I.second);
-    }
   }
 
   // Update calls to the remangled intrinsics
   for (auto &I : RemangledIntrinsics)
-    for (auto UI = I.first->materialized_user_begin(), UE = I.first->user_end();
-         UI != UE;)
+    for (User *U : llvm::make_early_inc_range(I.first->materialized_users()))
       // Don't expect any other users than call sites
-      cast<CallBase>(*UI++)->setCalledFunction(I.second);
+      cast<CallBase>(U)->setCalledFunction(I.second);
 
   // Finish fn->subprogram upgrade for materialized functions.
   if (DISubprogram *SP = MDLoader->lookupSubprogramForFunction(F))

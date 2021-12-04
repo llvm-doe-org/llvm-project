@@ -225,8 +225,8 @@ std::string doSystemDiff(StringRef Before, StringRef After,
     return "Unable to read result.";
 
   // Clean up.
-  for (unsigned I = 0; I < NumFiles; ++I) {
-    std::error_code EC = sys::fs::remove(FileName[I]);
+  for (const std::string &I : FileName) {
+    std::error_code EC = sys::fs::remove(I);
     if (EC)
       return "Unable to remove temporary file.";
   }
@@ -1553,8 +1553,6 @@ public:
 protected:
   // Return the string surrounded by HTML to make it the appropriate colour.
   std::string colourize(std::string S, IRChangeDiffType T) const;
-  // Return the string containing the colour to use as a Dot attribute.
-  std::string attribute(IRChangeDiffType T) const;
 
   void createNode(StringRef Label, const BlockDataT<DCData> &BD,
                   IRChangeDiffType T) {
@@ -1644,10 +1642,6 @@ std::string DotCfgDiff::colourize(std::string S, IRChangeDiffType T) const {
   if (S.length() == 0)
     return S;
   return "<FONT COLOR=\"" + Colours[T] + "\">" + S + "</FONT>";
-}
-
-std::string DotCfgDiff::attribute(IRChangeDiffType T) const {
-  return "color=" + Colours[T];
 }
 
 std::string DotCfgDiffDisplayGraph::attribute(IRChangeDiffType T) const {

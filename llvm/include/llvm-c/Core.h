@@ -2377,8 +2377,19 @@ void LLVMSetExternallyInitialized(LLVMValueRef GlobalVar, LLVMBool IsExtInit);
  *
  * @{
  */
+
+/** Deprecated: Use LLVMAddAlias2 instead. */
 LLVMValueRef LLVMAddAlias(LLVMModuleRef M, LLVMTypeRef Ty, LLVMValueRef Aliasee,
                           const char *Name);
+
+/**
+ * Add a GlobalAlias with the given value type, address space and aliasee.
+ *
+ * @see llvm::GlobalAlias::create()
+ */
+LLVMValueRef LLVMAddAlias2(LLVMModuleRef M, LLVMTypeRef ValueTy,
+                           unsigned AddrSpace, LLVMValueRef Aliasee,
+                           const char *Name);
 
 /**
  * Obtain a GlobalAlias value from a Module by its name.
@@ -4091,6 +4102,7 @@ void LLVMDisposeMemoryBuffer(LLVMMemoryBufferRef MemBuf);
 
 /**
  * @defgroup LLVMCCorePassRegistry Pass Registry
+ * @ingroup LLVMCCore
  *
  * @{
  */
@@ -4105,6 +4117,7 @@ LLVMPassRegistryRef LLVMGetGlobalPassRegistry(void);
 
 /**
  * @defgroup LLVMCCorePassManagers Pass Managers
+ * @ingroup LLVMCCore
  *
  * @{
  */

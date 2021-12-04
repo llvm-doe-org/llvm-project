@@ -139,7 +139,7 @@ convertDenseElementsAttr(Location loc, DenseElementsAttr denseElementsAttr,
   if (denseElementsAttr.isSplat() &&
       (type.isa<VectorType>() || hasVectorElementType)) {
     llvm::Constant *splatValue = LLVM::detail::getLLVMConstant(
-        innermostLLVMType, denseElementsAttr.getSplatValue(), loc,
+        innermostLLVMType, denseElementsAttr.getSplatValue<Attribute>(), loc,
         moduleTranslation, /*isTopLevel=*/false);
     llvm::Constant *splatVector =
         llvm::ConstantDataVector::getSplat(0, splatValue);
@@ -254,8 +254,9 @@ llvm::Constant *mlir::LLVM::detail::getLLVMConstant(
         isa<llvm::ArrayType, llvm::VectorType>(elementType);
     llvm::Constant *child = getLLVMConstant(
         elementType,
-        elementTypeSequential ? splatAttr : splatAttr.getSplatValue(), loc,
-        moduleTranslation, false);
+        elementTypeSequential ? splatAttr
+                              : splatAttr.getSplatValue<Attribute>(),
+        loc, moduleTranslation, false);
     if (!child)
       return nullptr;
     if (llvmType->isVectorTy())
@@ -609,8 +610,8 @@ LogicalResult ModuleTranslation::convertGlobals() {
     auto dtorOp = dyn_cast<GlobalDtorsOp>(op);
     if (!ctorOp && !dtorOp)
       continue;
-    auto range = ctorOp ? llvm::zip(ctorOp.ctors(), ctorOp.priorities())
-                        : llvm::zip(dtorOp.dtors(), dtorOp.priorities());
+    auto range = ctorOp ? llvm::zip(ctorOp.getCtors(), ctorOp.getPriorities())
+                        : llvm::zip(dtorOp.getDtors(), dtorOp.getPriorities());
     auto appendGlobalFn =
         ctorOp ? llvm::appendToGlobalCtors : llvm::appendToGlobalDtors;
     for (auto symbolAndPriority : range) {

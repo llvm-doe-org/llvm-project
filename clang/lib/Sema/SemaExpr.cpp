@@ -5743,7 +5743,7 @@ Sema::VariadicCallType
 Sema::getVariadicCallType(FunctionDecl *FDecl, const FunctionProtoType *Proto,
                           Expr *Fn) {
   if (Proto && Proto->isVariadic()) {
-    if (dyn_cast_or_null<CXXConstructorDecl>(FDecl))
+    if (isa_and_nonnull<CXXConstructorDecl>(FDecl))
       return VariadicConstructor;
     else if (Fn && Fn->getType()->isBlockPointerType())
       return VariadicBlock;
@@ -11219,7 +11219,6 @@ QualType Sema::CheckShiftOperands(ExprResult &LHS, ExprResult &RHS,
       isScopedEnumerationType(RHSType)) {
     return InvalidOperands(Loc, LHS, RHS);
   }
-  // Sanity-check shift operands
   DiagnoseBadShiftValues(*this, LHS, RHS, Loc, Opc, LHSType);
 
   // "The type of the result is that of the promoted left operand."
@@ -16601,6 +16600,17 @@ Sema::PushExpressionEvaluationContext(
     ExpressionEvaluationContextRecord::ExpressionKind ExprContext) {
   ExprEvalContexts.emplace_back(NewContext, ExprCleanupObjects.size(), Cleanup,
                                 LambdaContextDecl, ExprContext);
+
+  // Discarded statements and immediate contexts nested in other
+  // discarded statements or immediate context are themselves
+  // a discarded statement or an immediate context, respectively.
+  ExprEvalContexts.back().InDiscardedStatement =
+      ExprEvalContexts[ExprEvalContexts.size() - 2]
+          .isDiscardedStatementContext();
+  ExprEvalContexts.back().InImmediateFunctionContext =
+      ExprEvalContexts[ExprEvalContexts.size() - 2]
+          .isImmediateFunctionContext();
+
   Cleanup.reset();
   if (!MaybeODRUseExprs.empty())
     std::swap(MaybeODRUseExprs, ExprEvalContexts.back().SavedMaybeODRUseExprs);
@@ -18901,12 +18911,20 @@ class EvaluatedExprMarker : public UsedDeclVisitor<EvaluatedExprMarker> {
 public:
   typedef UsedDeclVisitor<EvaluatedExprMarker> Inherited;
   bool SkipLocalVariables;
+  ArrayRef<const Expr *> StopAt;
 
-  EvaluatedExprMarker(Sema &S, bool SkipLocalVariables)
-      : Inherited(S), SkipLocalVariables(SkipLocalVariables) {}
+  EvaluatedExprMarker(Sema &S, bool SkipLocalVariables,
+                      ArrayRef<const Expr *> StopAt)
+      : Inherited(S), SkipLocalVariables(SkipLocalVariables), StopAt(StopAt) {}
 
   void visitUsedDecl(SourceLocation Loc, Decl *D) {
     S.MarkFunctionReferenced(Loc, cast<FunctionDecl>(D));
+  }
+
+  void Visit(Expr *E) {
+    if (std::find(StopAt.begin(), StopAt.end(), E) != StopAt.end())
+      return;
+    Inherited::Visit(E);
   }
 
   void VisitDeclRefExpr(DeclRefExpr *E) {
@@ -18935,9 +18953,11 @@ public:
 ///
 /// \param SkipLocalVariables If true, don't mark local variables as
 /// 'referenced'.
+/// \param StopAt Subexpressions that we shouldn't recurse into.
 void Sema::MarkDeclarationsReferencedInExpr(Expr *E,
-                                            bool SkipLocalVariables) {
-  EvaluatedExprMarker(*this, SkipLocalVariables).Visit(E);
+                                            bool SkipLocalVariables,
+                                            ArrayRef<const Expr*> StopAt) {
+  EvaluatedExprMarker(*this, SkipLocalVariables, StopAt).Visit(E);
 }
 
 /// Emit a diagnostic when statements are reachable.
@@ -18990,6 +19010,10 @@ bool Sema::DiagIfReachable(SourceLocation Loc, ArrayRef<const Stmt *> Stmts,
 /// during overload resolution or within sizeof/alignof/typeof/typeid.
 bool Sema::DiagRuntimeBehavior(SourceLocation Loc, ArrayRef<const Stmt*> Stmts,
                                const PartialDiagnostic &PD) {
+
+  if (ExprEvalContexts.back().isDiscardedStatementContext())
+    return false;
+
   switch (ExprEvalContexts.back().Context) {
   case ExpressionEvaluationContext::Unevaluated:
   case ExpressionEvaluationContext::UnevaluatedList:

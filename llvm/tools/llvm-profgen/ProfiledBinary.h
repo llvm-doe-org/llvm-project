@@ -10,6 +10,7 @@
 #define LLVM_TOOLS_LLVM_PROFGEN_PROFILEDBINARY_H
 
 #include "CallContext.h"
+#include "ErrorHandling.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
@@ -64,8 +65,8 @@ struct InstructionPointer {
   uint64_t Index = 0;
   InstructionPointer(const ProfiledBinary *Binary, uint64_t Address,
                      bool RoundToNext = false);
-  void advance();
-  void backward();
+  bool advance();
+  bool backward();
   void update(uint64_t Addr);
 };
 
@@ -73,14 +74,23 @@ using RangesTy = std::vector<std::pair<uint64_t, uint64_t>>;
 
 struct BinaryFunction {
   StringRef FuncName;
+  // End of range is an exclusive bound.
   RangesTy Ranges;
+
+  uint64_t getFuncSize() {
+    uint64_t Sum = 0;
+    for (auto &R : Ranges) {
+      Sum += R.second - R.first;
+    }
+    return Sum;
+  }
 };
 
 // Info about function range. A function can be split into multiple
 // non-continuous ranges, each range corresponds to one FuncRange.
 struct FuncRange {
   uint64_t StartOffset;
-  // EndOffset is a exclusive bound.
+  // EndOffset is an exclusive bound.
   uint64_t EndOffset;
   // Function the range belongs to
   BinaryFunction *Func;
@@ -105,7 +115,8 @@ struct PrologEpilogTracker {
     for (auto I : FuncStartOffsetMap) {
       PrologEpilogSet.insert(I.first);
       InstructionPointer IP(Binary, I.first);
-      IP.advance();
+      if (!IP.advance())
+        break;
       PrologEpilogSet.insert(IP.Offset);
     }
   }
@@ -115,7 +126,8 @@ struct PrologEpilogTracker {
     for (auto Addr : RetAddrs) {
       PrologEpilogSet.insert(Addr);
       InstructionPointer IP(Binary, Addr);
-      IP.backward();
+      if (!IP.backward())
+        break;
       PrologEpilogSet.insert(IP.Offset);
     }
   }
@@ -169,6 +181,8 @@ class ProfiledBinary {
   Triple TheTriple;
   // The runtime base address that the first executable segment is loaded at.
   uint64_t BaseAddress = 0;
+  // The runtime base address that the first loadabe segment is loaded at.
+  uint64_t FirstLoadableAddress = 0;
   // The preferred load address of each executable segment.
   std::vector<uint64_t> PreferredTextSegmentAddresses;
   // The file offset of each executable segment.
@@ -230,6 +244,8 @@ class ProfiledBinary {
 
   bool UsePseudoProbes = false;
 
+  bool UseFSDiscriminator = false;
+
   // Whether we need to symbolize all instructions to get function context size.
   bool TrackFuncContextSize = false;
 
@@ -246,6 +262,10 @@ class ProfiledBinary {
 
   void decodePseudoProbe(const ELFObjectFileBase *Obj);
 
+  void
+  checkUseFSDiscriminator(const ELFObjectFileBase *Obj,
+                          std::map<SectionRef, SectionSymbolsTy> &AllSymbols);
+
   // Set up disassembler and related components.
   void setUpDisassembler(const ELFObjectFileBase *Obj);
   void setupSymbolizer();
@@ -257,6 +277,9 @@ class ProfiledBinary {
   // this to set whether start offset of a function is the real entry of the
   // function and also set false to the non-function label.
   void setIsFuncEntry(uint64_t Offset, StringRef RangeSymName);
+
+  // Warn if no entry range exists in the function.
+  void warnNoFuncEntry();
 
   /// Dissassemble the text section and build various address maps.
   void disassemble(const ELFObjectFileBase *O);
@@ -298,6 +321,8 @@ public:
 
   // Return the preferred load address for the first executable segment.
   uint64_t getPreferredBaseAddress() const { return PreferredTextSegmentAddresses[0]; }
+  // Return the preferred load address for the first loadable segment.
+  uint64_t getFirstLoadableAddress() const { return FirstLoadableAddress; }
   // Return the file offset for the first executable segment.
   uint64_t getTextSegmentOffset() const { return TextSegmentOffsets[0]; }
   const std::vector<uint64_t> &getPreferredTextSegmentAddresses() const {
@@ -336,7 +361,10 @@ public:
     return offsetToVirtualAddr(CodeAddrOffsets[Index]);
   }
 
+  size_t getCodeOffsetsSize() const { return CodeAddrOffsets.size(); }
+
   bool usePseudoProbes() const { return UsePseudoProbes; }
+  bool useFSDiscriminator() const { return UseFSDiscriminator; }
   // Get the index in CodeAddrOffsets for the address
   // As we might get an address which is not the code
   // here it would round to the next valid code address by
@@ -393,6 +421,13 @@ public:
     return BinaryFunctions;
   }
 
+  BinaryFunction *getBinaryFunction(StringRef FName) {
+    auto I = BinaryFunctions.find(FName.str());
+    if (I == BinaryFunctions.end())
+      return nullptr;
+    return &I->second;
+  }
+
   uint32_t getFuncSizeForContext(SampleContext &Context) {
     return FuncSizeTracker.getFuncSizeForContext(Context);
   }
@@ -441,7 +476,13 @@ public:
     SmallVector<MCPseduoProbeFrameLocation, 16> ProbeInlineContext;
     ProbeDecoder.getInlineContextForProbe(Probe, ProbeInlineContext,
                                           IncludeLeaf);
-    for (auto &Callsite : ProbeInlineContext) {
+    for (uint32_t I = 0; I < ProbeInlineContext.size(); I++) {
+      auto &Callsite = ProbeInlineContext[I];
+      // Clear the current context for an unknown probe.
+      if (Callsite.second == 0 && I != ProbeInlineContext.size() - 1) {
+        InlineContextStack.clear();
+        continue;
+      }
       InlineContextStack.emplace_back(Callsite.first,
                                       LineLocation(Callsite.second, 0));
     }

@@ -91,7 +91,7 @@ struct PrintingPolicy {
         MSVCFormatting(false), ConstantsAsWritten(false),
         SuppressImplicitBase(false), FullyQualifiedName(false),
         PrintCanonicalTypes(false), PrintInjectedClassNameWithArguments(true),
-        UsePreferredNames(true), UseIntegerTypeSuffixesAlways(false),
+        UsePreferredNames(true), AlwaysIncludeTypeForTemplateArgument(false),
         OpenACCPrint(OpenACCPrint_ACC) {}
 
   /// Adjust this printing policy for cases where it's known that we're
@@ -297,7 +297,7 @@ struct PrintingPolicy {
 
   /// Whether to use type suffixes (eg: 1U) on integral non-type template
   /// parameters.
-  unsigned UseIntegerTypeSuffixesAlways : 1;
+  unsigned AlwaysIncludeTypeForTemplateArgument : 1;
 
   /// Callbacks to use to allow the behavior of printing to be customized.
   const PrintingCallbacks *Callbacks = nullptr;

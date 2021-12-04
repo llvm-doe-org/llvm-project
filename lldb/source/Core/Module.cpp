@@ -1379,12 +1379,15 @@ void Module::PreloadSymbols() {
   if (!sym_file)
     return;
 
-  // Prime the symbol file first, since it adds symbols to the symbol table.
-  sym_file->PreloadSymbols();
-
-  // Now we can prime the symbol table.
+  // Load the object file symbol table and any symbols from the SymbolFile that
+  // get appended using SymbolFile::AddSymbols(...).
   if (Symtab *symtab = sym_file->GetSymtab())
     symtab->PreloadSymbols();
+
+  // Now let the symbol file preload its data and the symbol table will be
+  // available without needing to take the module lock.
+  sym_file->PreloadSymbols();
+
 }
 
 void Module::SetSymbolFileFileSpec(const FileSpec &file) {
@@ -1627,10 +1630,10 @@ void Module::RegisterXcodeSDK(llvm::StringRef sdk_name, llvm::StringRef sysroot)
 bool Module::MergeArchitecture(const ArchSpec &arch_spec) {
   if (!arch_spec.IsValid())
     return false;
-  LLDB_LOG(GetLogIfAllCategoriesSet(LIBLLDB_LOG_OBJECT | LIBLLDB_LOG_MODULES),
-           "module has arch %s, merging/replacing with arch %s",
-           m_arch.GetTriple().getTriple().c_str(),
-           arch_spec.GetTriple().getTriple().c_str());
+  LLDB_LOGF(GetLogIfAllCategoriesSet(LIBLLDB_LOG_OBJECT | LIBLLDB_LOG_MODULES),
+            "module has arch %s, merging/replacing with arch %s",
+            m_arch.GetTriple().getTriple().c_str(),
+            arch_spec.GetTriple().getTriple().c_str());
   if (!m_arch.IsCompatibleMatch(arch_spec)) {
     // The new architecture is different, we just need to replace it.
     return SetArchitecture(arch_spec);

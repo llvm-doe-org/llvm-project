@@ -17,10 +17,14 @@
 #include "flang/Optimizer/Support/Utils.h"
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Matchers.h"
+#include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -57,8 +61,6 @@ static bool verifyInType(mlir::Type inType,
       if (verifyInType(field.second, visited))
         return true;
     visited.pop_back();
-  } else if (auto rt = inType.dyn_cast<fir::PointerType>()) {
-    return verifyInType(rt.getEleTy(), visited);
   }
   return false;
 }
@@ -497,6 +499,8 @@ static mlir::LogicalResult verify(fir::ArrayFetchOp op) {
 //===----------------------------------------------------------------------===//
 
 static mlir::LogicalResult verify(fir::ArrayUpdateOp op) {
+  if (fir::isa_ref_type(op.merge().getType()))
+    return op.emitOpError("does not support reference type for merge");
   auto arrTy = op.sequence().getType().cast<fir::SequenceType>();
   auto indSize = op.indices().size();
   if (indSize < arrTy.getDimension())
@@ -762,19 +766,9 @@ static mlir::ParseResult parseConstcOp(mlir::OpAsmParser &parser,
 }
 
 static void print(mlir::OpAsmPrinter &p, fir::ConstcOp &op) {
-  p << " (0x";
-  auto f1 = op.getOperation()
-                ->getAttr(fir::ConstcOp::realAttrName())
-                .cast<mlir::FloatAttr>();
-  auto i1 = f1.getValue().bitcastToAPInt();
-  p.getStream().write_hex(i1.getZExtValue());
-  p << ", 0x";
-  auto f2 = op.getOperation()
-                ->getAttr(fir::ConstcOp::imagAttrName())
-                .cast<mlir::FloatAttr>();
-  auto i2 = f2.getValue().bitcastToAPInt();
-  p.getStream().write_hex(i2.getZExtValue());
-  p << ") : ";
+  p << '(';
+  p << op.getOperation()->getAttr(fir::ConstcOp::realAttrName()) << ", ";
+  p << op.getOperation()->getAttr(fir::ConstcOp::imagAttrName()) << ") : ";
   p.printType(op.getType());
 }
 
@@ -826,8 +820,9 @@ bool fir::ConvertOp::isFloatCompatible(mlir::Type ty) {
 
 bool fir::ConvertOp::isPointerCompatible(mlir::Type ty) {
   return ty.isa<fir::ReferenceType>() || ty.isa<fir::PointerType>() ||
-         ty.isa<fir::HeapType>() || ty.isa<mlir::MemRefType>() ||
-         ty.isa<mlir::FunctionType>() || ty.isa<fir::TypeDescType>();
+         ty.isa<fir::HeapType>() || ty.isa<fir::LLVMPointerType>() ||
+         ty.isa<mlir::MemRefType>() || ty.isa<mlir::FunctionType>() ||
+         ty.isa<fir::TypeDescType>();
 }
 
 static mlir::LogicalResult verify(fir::ConvertOp &op) {
@@ -1155,6 +1150,10 @@ static mlir::LogicalResult verify(fir::GenTypeDescOp &op) {
 // GlobalOp
 //===----------------------------------------------------------------------===//
 
+mlir::Type fir::GlobalOp::resultType() {
+  return wrapAllocaResultType(getType());
+}
+
 static ParseResult parseGlobalOp(OpAsmParser &parser, OperationState &result) {
   // Parse the optional linkage
   llvm::StringRef linkage;
@@ -1289,10 +1288,6 @@ mlir::ParseResult fir::GlobalOp::verifyValidLinkage(StringRef linkage) {
 // GlobalLenOp
 //===----------------------------------------------------------------------===//
 
-mlir::Type fir::GlobalOp::resultType() {
-  return wrapAllocaResultType(getType());
-}
-
 static mlir::ParseResult parseGlobalLenOp(mlir::OpAsmParser &parser,
                                           mlir::OperationState &result) {
   llvm::StringRef fieldName;
@@ -1385,14 +1380,62 @@ void fir::FieldIndexOp::build(mlir::OpBuilder &builder,
 // InsertOnRangeOp
 //===----------------------------------------------------------------------===//
 
+static ParseResult
+parseCustomRangeSubscript(mlir::OpAsmParser &parser,
+                          mlir::DenseIntElementsAttr &coord) {
+  llvm::SmallVector<int64_t> lbounds;
+  llvm::SmallVector<int64_t> ubounds;
+  if (parser.parseKeyword("from") ||
+      parser.parseCommaSeparatedList(
+          AsmParser::Delimiter::Paren,
+          [&] { return parser.parseInteger(lbounds.emplace_back(0)); }) ||
+      parser.parseKeyword("to") ||
+      parser.parseCommaSeparatedList(AsmParser::Delimiter::Paren, [&] {
+        return parser.parseInteger(ubounds.emplace_back(0));
+      }))
+    return failure();
+  llvm::SmallVector<int64_t> zippedBounds;
+  for (auto zip : llvm::zip(lbounds, ubounds)) {
+    zippedBounds.push_back(std::get<0>(zip));
+    zippedBounds.push_back(std::get<1>(zip));
+  }
+  coord = mlir::Builder(parser.getContext()).getIndexTensorAttr(zippedBounds);
+  return success();
+}
+
+void printCustomRangeSubscript(mlir::OpAsmPrinter &printer, InsertOnRangeOp op,
+                               mlir::DenseIntElementsAttr coord) {
+  printer << "from (";
+  auto enumerate = llvm::enumerate(coord.getValues<int64_t>());
+  // Even entries are the lower bounds.
+  llvm::interleaveComma(
+      make_filter_range(
+          enumerate,
+          [](auto indexed_value) { return indexed_value.index() % 2 == 0; }),
+      printer, [&](auto indexed_value) { printer << indexed_value.value(); });
+  printer << ") to (";
+  // Odd entries are the upper bounds.
+  llvm::interleaveComma(
+      make_filter_range(
+          enumerate,
+          [](auto indexed_value) { return indexed_value.index() % 2 != 0; }),
+      printer, [&](auto indexed_value) { printer << indexed_value.value(); });
+  printer << ")";
+}
+
 /// Range bounds must be nonnegative, and the range must not be empty.
 static mlir::LogicalResult verify(fir::InsertOnRangeOp op) {
-  if (op.coor().size() < 2 || op.coor().size() % 2 != 0)
+  if (fir::hasDynamicSize(op.seq().getType()))
+    return op.emitOpError("must have constant shape and size");
+  mlir::DenseIntElementsAttr coor = op.coor();
+  if (coor.size() < 2 || coor.size() % 2 != 0)
     return op.emitOpError("has uneven number of values in ranges");
   bool rangeIsKnownToBeNonempty = false;
-  for (auto i = op.coor().end(), b = op.coor().begin(); i != b;) {
-    int64_t ub = (*--i).cast<IntegerAttr>().getInt();
-    int64_t lb = (*--i).cast<IntegerAttr>().getInt();
+  for (auto i = coor.getValues<int64_t>().end(),
+            b = coor.getValues<int64_t>().begin();
+       i != b;) {
+    int64_t ub = (*--i);
+    int64_t lb = (*--i);
     if (lb < 0 || ub < 0)
       return op.emitOpError("negative range bound");
     if (rangeIsKnownToBeNonempty)
@@ -1755,16 +1798,8 @@ void fir::LoadOp::build(mlir::OpBuilder &builder, mlir::OperationState &result,
   result.addTypes(eleTy);
 }
 
-/// Get the element type of a reference like type; otherwise null
-static mlir::Type elementTypeOf(mlir::Type ref) {
-  return llvm::TypeSwitch<mlir::Type, mlir::Type>(ref)
-      .Case<ReferenceType, PointerType, HeapType>(
-          [](auto type) { return type.getEleTy(); })
-      .Default([](mlir::Type) { return mlir::Type{}; });
-}
-
 mlir::ParseResult fir::LoadOp::getElementOf(mlir::Type &ele, mlir::Type ref) {
-  if ((ele = elementTypeOf(ref)))
+  if ((ele = fir::dyn_cast_ptrEleTy(ref)))
     return mlir::success();
   return mlir::failure();
 }
@@ -2229,7 +2264,7 @@ getMutableSuccessorOperands(unsigned pos, mlir::MutableOperandRange operands,
   NamedAttribute targetOffsetAttr =
       *owner->getAttrDictionary().getNamed(offsetAttr);
   return getSubOperands(
-      pos, operands, targetOffsetAttr.second.cast<DenseIntElementsAttr>(),
+      pos, operands, targetOffsetAttr.getValue().cast<DenseIntElementsAttr>(),
       mlir::MutableOperandRange::OperandSegment(pos, targetOffsetAttr));
 }
 
@@ -2255,6 +2290,15 @@ fir::SelectOp::getMutableSuccessorOperands(unsigned oper) {
 llvm::Optional<llvm::ArrayRef<mlir::Value>>
 fir::SelectOp::getSuccessorOperands(llvm::ArrayRef<mlir::Value> operands,
                                     unsigned oper) {
+  auto a =
+      (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(getTargetOffsetAttr());
+  auto segments = (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(
+      getOperandSegmentSizeAttr());
+  return {getSubOperands(oper, getSubOperands(2, operands, segments), a)};
+}
+
+llvm::Optional<mlir::ValueRange>
+fir::SelectOp::getSuccessorOperands(mlir::ValueRange operands, unsigned oper) {
   auto a =
       (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(getTargetOffsetAttr());
   auto segments = (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(
@@ -2288,6 +2332,16 @@ fir::SelectCaseOp::getCompareOperands(llvm::ArrayRef<mlir::Value> operands,
   return {getSubOperands(cond, getSubOperands(1, operands, segments), a)};
 }
 
+llvm::Optional<mlir::ValueRange>
+fir::SelectCaseOp::getCompareOperands(mlir::ValueRange operands,
+                                      unsigned cond) {
+  auto a = (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(
+      getCompareOffsetAttr());
+  auto segments = (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(
+      getOperandSegmentSizeAttr());
+  return {getSubOperands(cond, getSubOperands(1, operands, segments), a)};
+}
+
 llvm::Optional<mlir::MutableOperandRange>
 fir::SelectCaseOp::getMutableSuccessorOperands(unsigned oper) {
   return ::getMutableSuccessorOperands(oper, targetArgsMutable(),
@@ -2296,6 +2350,16 @@ fir::SelectCaseOp::getMutableSuccessorOperands(unsigned oper) {
 
 llvm::Optional<llvm::ArrayRef<mlir::Value>>
 fir::SelectCaseOp::getSuccessorOperands(llvm::ArrayRef<mlir::Value> operands,
+                                        unsigned oper) {
+  auto a =
+      (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(getTargetOffsetAttr());
+  auto segments = (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(
+      getOperandSegmentSizeAttr());
+  return {getSubOperands(oper, getSubOperands(2, operands, segments), a)};
+}
+
+llvm::Optional<mlir::ValueRange>
+fir::SelectCaseOp::getSuccessorOperands(mlir::ValueRange operands,
                                         unsigned oper) {
   auto a =
       (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(getTargetOffsetAttr());
@@ -2547,6 +2611,16 @@ fir::SelectRankOp::getMutableSuccessorOperands(unsigned oper) {
 
 llvm::Optional<llvm::ArrayRef<mlir::Value>>
 fir::SelectRankOp::getSuccessorOperands(llvm::ArrayRef<mlir::Value> operands,
+                                        unsigned oper) {
+  auto a =
+      (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(getTargetOffsetAttr());
+  auto segments = (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(
+      getOperandSegmentSizeAttr());
+  return {getSubOperands(oper, getSubOperands(2, operands, segments), a)};
+}
+
+llvm::Optional<mlir::ValueRange>
+fir::SelectRankOp::getSuccessorOperands(mlir::ValueRange operands,
                                         unsigned oper) {
   auto a =
       (*this)->getAttrOfType<mlir::DenseIntElementsAttr>(getTargetOffsetAttr());

@@ -209,10 +209,8 @@ void X86ExpandPseudo::expandCALL_RVMARKER(MachineBasicBlock &MBB,
     llvm_unreachable("unexpected opcode");
 
   OriginalCall = BuildMI(MBB, MBBI, MI.getDebugLoc(), TII->get(Opc)).getInstr();
-  unsigned OpStart = 1;
   bool RAXImplicitDead = false;
-  for (; OpStart < MI.getNumOperands(); ++OpStart) {
-    MachineOperand &Op = MI.getOperand(OpStart);
+  for (MachineOperand &Op : llvm::drop_begin(MI.operands())) {
     // RAX may be 'implicit dead', if there are no other users of the return
     // value. We introduce a new use, so change it to 'implicit def'.
     if (Op.isReg() && Op.isImplicit() && Op.isDead() &&
@@ -394,10 +392,10 @@ bool X86ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
     MachineInstrBuilder MIB;
     if (StackAdj == 0) {
       MIB = BuildMI(MBB, MBBI, DL,
-                    TII->get(STI->is64Bit() ? X86::RETQ : X86::RETL));
+                    TII->get(STI->is64Bit() ? X86::RET64 : X86::RET32));
     } else if (isUInt<16>(StackAdj)) {
       MIB = BuildMI(MBB, MBBI, DL,
-                    TII->get(STI->is64Bit() ? X86::RETIQ : X86::RETIL))
+                    TII->get(STI->is64Bit() ? X86::RETI64 : X86::RETI32))
                 .addImm(StackAdj);
     } else {
       assert(!STI->is64Bit() &&
@@ -407,7 +405,7 @@ bool X86ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
       BuildMI(MBB, MBBI, DL, TII->get(X86::POP32r)).addReg(X86::ECX, RegState::Define);
       X86FL->emitSPUpdate(MBB, MBBI, DL, StackAdj, /*InEpilogue=*/true);
       BuildMI(MBB, MBBI, DL, TII->get(X86::PUSH32r)).addReg(X86::ECX);
-      MIB = BuildMI(MBB, MBBI, DL, TII->get(X86::RETL));
+      MIB = BuildMI(MBB, MBBI, DL, TII->get(X86::RET32));
     }
     for (unsigned I = 1, E = MBBI->getNumOperands(); I != E; ++I)
       MIB.add(MBBI->getOperand(I));

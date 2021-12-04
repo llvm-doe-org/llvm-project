@@ -12,6 +12,7 @@ Clang-Tidy Checks
 .. csv-table::
    :header: "Name", "Offers fixes"
 
+   `abseil-cleanup-ctad <abseil-cleanup-ctad.html>`_, "Yes"
    `abseil-duration-addition <abseil-duration-addition.html>`_, "Yes"
    `abseil-duration-comparison <abseil-duration-comparison.html>`_, "Yes"
    `abseil-duration-conversion-cast <abseil-duration-conversion-cast.html>`_, "Yes"
@@ -91,6 +92,7 @@ Clang-Tidy Checks
    `bugprone-string-constructor <bugprone-string-constructor.html>`_, "Yes"
    `bugprone-string-integer-assignment <bugprone-string-integer-assignment.html>`_, "Yes"
    `bugprone-string-literal-with-embedded-nul <bugprone-string-literal-with-embedded-nul.html>`_,
+   `bugprone-stringview-nullptr <bugprone-stringview-nullptr.html>`_, "Yes"
    `bugprone-suspicious-enum-usage <bugprone-suspicious-enum-usage.html>`_,
    `bugprone-suspicious-include <bugprone-suspicious-include.html>`_,
    `bugprone-suspicious-memory-comparison <bugprone-suspicious-memory-comparison.html>`_,
@@ -211,6 +213,7 @@ Clang-Tidy Checks
    `llvmlibc-implementation-in-namespace <llvmlibc-implementation-in-namespace.html>`_,
    `llvmlibc-restrict-system-libc-headers <llvmlibc-restrict-system-libc-headers.html>`_, "Yes"
    `misc-definitions-in-headers <misc-definitions-in-headers.html>`_, "Yes"
+   `misc-misleading-identifier <misc-mileading-identifier.html>`_,
    `misc-misplaced-const <misc-misplaced-const.html>`_,
    `misc-new-delete-overloads <misc-new-delete-overloads.html>`_,
    `misc-no-recursion <misc-no-recursion.html>`_,
@@ -286,6 +289,7 @@ Clang-Tidy Checks
    `readability-avoid-const-params-in-decls <readability-avoid-const-params-in-decls.html>`_,
    `readability-braces-around-statements <readability-braces-around-statements.html>`_, "Yes"
    `readability-const-return-type <readability-const-return-type.html>`_, "Yes"
+   `readability-container-data-pointer <readability-container-data-pointer.html>`_, "Yes"
    `readability-container-size-empty <readability-container-size-empty.html>`_, "Yes"
    `readability-convert-member-functions-to-static <readability-convert-member-functions-to-static.html>`_,
    `readability-delete-null-pointer <readability-delete-null-pointer.html>`_, "Yes"
