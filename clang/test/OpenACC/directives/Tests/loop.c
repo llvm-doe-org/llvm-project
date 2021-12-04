@@ -273,16 +273,6 @@
 // RUN:    exe=NOPART,GREDUN,PLC)
 // RUN: }
 
-// FIXME: Several upstream compiler bugs were recently introduced that break
-// behavior when offloading to nvptx64 unless we add -O1 or higher, but that
-// causes many diagnostics like:
-// 
-//   loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
-// 
-// To avoid all this until upstream fixes it, we add:
-// 
-//   -O1 -Wno-pass-failed
-// 
 // FIXME: amdgcn misbehaves with worker partitioning, so skip it there for now.
 //
 // RUN: %for loop-clauses {
@@ -295,7 +285,7 @@
 // RUN:     fc-args:    -DACCC=%'accc_sp'%'accc' -DOMPDP=%'ompdp';             \
 // RUN:     fc-pres:    %[ompdk],%[ompdk]-%[ompsk]}
 // RUN:   %acc-check-exe{                                                      \
-// RUN:     clang-args: -DACCC=%'accc' %if-tgt-nvptx64<-O1 -Wno-pass-failed|>; \
+// RUN:     clang-args: -DACCC=%'accc';                                        \
 // RUN:     exe-args:   ;                                                      \
 // RUN:     fc-args:    ;                                                      \
 // RUN:     fc-pres:    %[exe];                                                \

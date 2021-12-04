@@ -12,16 +12,6 @@
 // RUN:   (cmb-cflags=-DCMB cmb=CMB)
 // RUN: }
 
-// FIXME: Several upstream compiler bugs were recently introduced that break
-// behavior when offloading to nvptx64 unless we add -O1 or higher, but that
-// causes many diagnostics like:
-//
-//   loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
-//
-// To avoid all this until upstream fixes it, we add:
-//
-//   -O1 -Wno-pass-failed
-//
 // FIXME: amdgcn doesn't yet support printf in a kernel.  Unfortunately, that
 // means our execution checks on amdgcn don't verify much except that nothing
 // crashes.
@@ -36,7 +26,7 @@
 // RUN:     fc-args:    ;                                                      \
 // RUN:     fc-pres:    %[cmb]}
 // RUN:   %acc-check-exe{                                                      \
-// RUN:     clang-args: %[cmb-cflags] %if-tgt-nvptx64<-O1 -Wno-pass-failed|>}
+// RUN:     clang-args: %[cmb-cflags]}
 // RUN: }
 
 // END.
