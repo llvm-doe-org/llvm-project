@@ -528,26 +528,28 @@ debug (build):
     #
     # Check that device counts are computed correctly by the test suite based on
     # known device counts for each host.
+    #
+    # A grep failure within an "if" terminates the "if" as expected, but somehow
+    # it doesn't cause the job to fail or prevent commands in subsequent list
+    # items from executing unless we have the "|| false" after the "fi".  This
+    # doesn't make sense to me, but it's how gitlab CI apparently works right
+    # now.
     - tl=$CI_PROJECT_DIR/check-all-show-tests.txt
     - LIT_OPTS=--show-tests $NINJA check-all > $tl 2>&1
-    - echo "$CPU_TRIPLE" "$CPU_COUNT"
-    - echo "$GPU_TRIPLE" "$GPU_COUNT"
-    - echo "Test counts for libomptarget "'::'" $CPU_TRIPLE (expecting > 0):"
-    - grep -c "^ *libomptarget "'::'" $CPU_TRIPLE ::" $tl
+    - echo "$CPU_TRIPLE" "$CPU_COUNT" &&
+      echo "$GPU_TRIPLE" "$GPU_COUNT"
+    - echo "Test counts for libomptarget "'::'" $CPU_TRIPLE (expecting > 0):" &&
+      grep -c "^ *libomptarget "'::'" $CPU_TRIPLE ::" $tl
     - if test x"$GPU_TRIPLE" != x; then
          echo "Test counts for libomptarget "'::'" $GPU_TRIPLE (expecting > 0):"
          && grep -c "^ *libomptarget "'::'" $GPU_TRIPLE ::" $tl;
-      fi
+      fi || false
     - clacc_branch=`
         echo "$CI_COMMIT_BRANCH" |
         grep '^\(clacc\|jdenny-openacc\)' |
         grep -v '^clacc/llvm.org-ci/' ||
         true`
     - echo "$clacc_branch"
-    # A grep failure within the "if" terminates the "if" as expected, but
-    # somehow it doesn't cause the job to fail and prevent commands in
-    # subsequent list items from executing unless we have the "|| false" here.
-    # This doesn't make sense to me, but it's how gitlab CI works right now.
     - if test x"$clacc_branch" != x; then
         echo "Test counts for libacc2omp "'::'" $CPU_TRIPLE (expecting > 0):" &&
         grep -c "^ *libacc2omp "'::'" $CPU_TRIPLE ::" $tl &&
