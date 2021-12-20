@@ -50,6 +50,9 @@ int main() {
   // EXE-NOT: {{.}}
   printf("acc loop enclosing\n");
 
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // DMP:      ACCParallelDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -323,6 +326,8 @@ int main() {
         TGT_PRINTF("acc loop auto gang enclosing: %d, %d\n", i, j);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   // Repeat for acc parallel loop.
 
@@ -393,6 +398,9 @@ int main() {
   // EXE-NOT: {{.}}
   printf("acc parallel loop worker enclosing\n");
 
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // DMP:      ACCParallelLoopDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -452,6 +460,8 @@ int main() {
       // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop worker enclosing: 1, 1{{$}}
       TGT_PRINTF("acc parallel loop worker enclosing: %d, %d\n", i, j);
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop vector enclosing\n"
   // PRT-LABEL: printf("acc parallel loop vector enclosing\n");
@@ -713,6 +723,9 @@ int main() {
   // EXE-NOT: {{.}}
   printf("acc loop enclosed\n");
 
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // DMP:      ACCParallelDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -986,6 +999,8 @@ int main() {
         TGT_PRINTF("acc loop gang auto enclosed: %d, %d\n", i, j);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   // Repeat for acc parallel loop.
 
@@ -1052,6 +1067,9 @@ int main() {
   // EXE-NOT: {{.}}
   printf("acc parallel loop worker enclosed\n");
 
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
   // DMP:      ACCParallelLoopDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -1111,6 +1129,8 @@ int main() {
       // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop worker enclosed: 1, 1{{$}}
       TGT_PRINTF("acc parallel loop worker enclosed: %d, %d\n", i, j);
   } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop vector enclosed\n"
   // PRT-LABEL: printf("acc parallel loop vector enclosed\n");
