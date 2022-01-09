@@ -1962,28 +1962,6 @@ to OpenMP is as follows:
 In the Clang AST, a single `OMPDeclareTargetDeclAttr` represents an
 `omp declare target` and `omp end declare target` pair.
 
-If a function's first occurrence of the `acc routine` directive
-appears on a declaration of the function after the function's
-definition, then Clacc adds `omp declare target` and
-`omp end declare target` directives around the function definition as
-well.  Otherwise, upstream Clang's current OpenMP support would not
-compile the function for offloading.  However, both behaviors might
-change in the future as the OpenMP behavior does not appear to fully
-support OpenMP 5.1, sec. 2.14.7 "Declare Target Directive", p. 212,
-L15-16: "If a function appears in a **to** clause in the same
-compilation unit in which the definition of the function occurs then a
-device-specific version of the function is created."
-
-In the AST, `TransformACCToOMP` adds an `ACCRoutineDeclAttr` where it
-adds the `OMPDeclareTargetDeclAttr` to the aforementioned function
-definition.  This behavior enables the `OMPNode` and
-`IsOpenACCTranslation` properties to be consistent with other nodes.
-However, `TransformACCToOMP` also marks these nodes as implicit, and
-`-ast-print` and source-to-source mode generally do not print an
-implicit `ACCDeclAttr` because, unlike the directives represented by
-an implicit `OMPDeclAttr` in OpenMP source, the directive it
-represents isn't necessary in the OpenACC source.
-
 Potentially Unmappable Features
 -------------------------------
 

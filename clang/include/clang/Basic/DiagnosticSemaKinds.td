@@ -10990,6 +10990,9 @@ def err_acc_routine_unexpected_directive : Error<
 def err_acc_routine_static_local : Error<
   "static local variable '%0' is not permitted within function '%1' because "
   "the latter is attributed with '#pragma acc routine'">;
+def err_acc_routine_not_in_scope_at_function_def : Error<
+  "'#pragma acc routine' is not in scope at definition of associated function "
+  "'%0'">;
 def note_acc_routine : Note<
   "function '%0' attributed with '#pragma acc routine' here">;
 } // end of OpenACC category

@@ -59,51 +59,6 @@ int var, i;
 const int *ptr = 0;
 
 //--------------------------------------------------
-// No directive.
-//
-// OpenMP directives are added to a function definition because an OpenACC
-// routine directive appears on a later declaration of that function.
-//--------------------------------------------------
-
-//  PRT-O-NEXT:#pragma omp declare target
-// PRT-AO-NEXT:// #pragma omp declare target
-//    PRT-NEXT:void noDirective_routineNoMacro() {int i = 5;}
-//  PRT-O-NEXT:#pragma omp end declare target
-// PRT-AO-NEXT:// #pragma omp end declare target
-void noDirective_routineNoMacro() {int i = 5;}
-
-//    PRT-NEXT:#define MAC noDirective_routineMacro() {int i = 5;
-//  PRT-O-NEXT:#pragma omp declare target
-// PRT-AO-NEXT:// #pragma omp declare target
-//    PRT-NEXT:void MAC}
-//  PRT-O-NEXT:#pragma omp end declare target
-// PRT-AO-NEXT:// #pragma omp end declare target
-//    PRT-NEXT:#undef MAC
-#define MAC noDirective_routineMacro() {int i = 5;
-void MAC}
-#undef MAC
-
-//  PRT-A-NEXT:#pragma acc routine seq
-// PRT-AO-NEXT:// #pragma omp declare target
-//  PRT-O-NEXT:#pragma omp declare target
-// PRT-OA-NEXT:// #pragma acc routine seq
-//    PRT-NEXT:void noDirective_routineNoMacro();
-//  PRT-O-NEXT:#pragma omp end declare target
-// PRT-AO-NEXT:// #pragma omp end declare target
-#pragma acc routine seq
-void noDirective_routineNoMacro();
-
-//  PRT-A-NEXT:#pragma acc routine seq
-// PRT-AO-NEXT:// #pragma omp declare target
-//  PRT-O-NEXT:#pragma omp declare target
-// PRT-OA-NEXT:// #pragma acc routine seq
-//    PRT-NEXT:void noDirective_routineMacro();
-//  PRT-O-NEXT:#pragma omp end declare target
-// PRT-AO-NEXT:// #pragma omp end declare target
-#pragma acc routine seq
-void noDirective_routineMacro();
-
-//--------------------------------------------------
 // Directive only rewrite, not nested.
 //--------------------------------------------------
 
@@ -1691,13 +1646,6 @@ void lineContinuations() {
 
 // Adequate indentation, which is reused in commented OpenACC.
 
-// PRT-AO-NEXT:  // #pragma omp declare target
-//  PRT-O-NEXT:  #pragma omp declare target
-//    PRT-NEXT:  void lineContinuations_routineAdequateIndent() {}
-//  PRT-O-NEXT:  #pragma omp end declare target
-// PRT-AO-NEXT:  // #pragma omp end declare target
-  void lineContinuations_routineAdequateIndent() {}
-
 //  PRT-A-NEXT: #pragma acc routine \
 //  PRT-A-NEXT:             seq
 // PRT-AO-NEXT: // #pragma omp declare target
@@ -1776,50 +1724,6 @@ for (i = 0; i < 5; ++i) {
   var = non_const_expr ;
 }
 }// PRT-NEXT:}
-
-//--------------------------------------------------
-// No directive, text preceding associate.
-//--------------------------------------------------
-
-//  PRT-O-NEXT:  #pragma omp declare target
-// PRT-AO-NEXT:  // #pragma omp declare target
-//    PRT-NEXT:  void noDirectiveButPrecedingText_routineWs() {}
-//  PRT-O-NEXT:  #pragma omp end declare target
-// PRT-AO-NEXT:  // #pragma omp end declare target
-  void noDirectiveButPrecedingText_routineWs() {}
-
-// PRT-AA-NEXT:  int noDirectiveButPrecedingText_var; void noDirectiveButPrecedingText_routineNonWs() {}
-//
-// PRT-AO-NEXT:  int noDirectiveButPrecedingText_var;{{ }}
-// PRT-AO-NEXT:  // #pragma omp declare target
-// PRT-AO-NEXT:  void noDirectiveButPrecedingText_routineNonWs() {}
-// PRT-AO-NEXT:  // #pragma omp end declare target
-//
-//  PRT-O-NEXT:  int noDirectiveButPrecedingText_var;{{ }}
-//  PRT-O-NEXT:  #pragma omp declare target
-//  PRT-O-NEXT:  void noDirectiveButPrecedingText_routineNonWs() {}
-//  PRT-O-NEXT:  #pragma omp end declare target
-  int noDirectiveButPrecedingText_var; void noDirectiveButPrecedingText_routineNonWs() {}
-
-//  PRT-A-NEXT:#pragma acc routine seq
-// PRT-AO-NEXT:// #pragma omp declare target
-//  PRT-O-NEXT:#pragma omp declare target
-// PRT-OA-NEXT:// #pragma acc routine seq
-//    PRT-NEXT:void noDirectiveButPrecedingText_routineWs();
-//  PRT-O-NEXT:#pragma omp end declare target
-// PRT-AO-NEXT:// #pragma omp end declare target
-#pragma acc routine seq
-void noDirectiveButPrecedingText_routineWs();
-
-//  PRT-A-NEXT:#pragma acc routine seq
-// PRT-AO-NEXT:// #pragma omp declare target
-//  PRT-O-NEXT:#pragma omp declare target
-// PRT-OA-NEXT:// #pragma acc routine seq
-//    PRT-NEXT:void noDirectiveButPrecedingText_routineNonWs();
-//  PRT-O-NEXT:#pragma omp end declare target
-// PRT-AO-NEXT:// #pragma omp end declare target
-#pragma acc routine seq
-void noDirectiveButPrecedingText_routineNonWs();
 
 //--------------------------------------------------
 // Directive only rewrite, comment after.

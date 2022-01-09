@@ -437,10 +437,11 @@ public:
            "both be inherited or neither");
     if (ACCAttr->isInherited())
       return true;
-
-    // Are we rewriting an OpenACC directive or adding OpenMP directives where
-    // there was no OpenACC directive?
-    bool RewriteDirective = !ACCAttr->isImplicit();
+    assert(!ACCAttr->isImplicit() &&
+           "expected that implicit ACCDeclAttr is never generated");
+    assert(!OMPAttr->isImplicit() &&
+           "expected that explicit ACCDeclAttr is never translated to "
+           "implicit OMPDeclAttr");
 
     // Can we rewrite the directive?
     //
@@ -450,24 +451,13 @@ public:
     // rewritable, apparently we have _Pragma form.  Otherwise, we have #pragma
     // form, whose begin and end locations are always rewritable.
     SourceRange DirectiveRange = ACCAttr->getRange();
-    if (RewriteDirective) {
-      if (!Rewrite.isRewritable(DirectiveRange.getEnd())) {
-        Context->getDiagnostics().Report(
-            DirectiveRange.getEnd(),
-            diag::err_rewrite_acc_routine_in_pragma_op);
-        return true;
-      }
-      assert(Rewrite.isRewritable(DirectiveRange.getBegin()) &&
-             "expected start of directive to be rewritable because end is");
-    }
-
-    // Can we insert before the associated function prototype or definition?
-    SourceLocation FDBegin = FD->getBeginLoc();
-    if (!RewriteDirective && !Rewrite.isRewritable(FDBegin)) {
+    if (!Rewrite.isRewritable(DirectiveRange.getEnd())) {
       Context->getDiagnostics().Report(
-          FDBegin, diag::err_rewrite_acc_routine_function_start_in_macro);
+          DirectiveRange.getEnd(), diag::err_rewrite_acc_routine_in_pragma_op);
       return true;
     }
+    assert(Rewrite.isRewritable(DirectiveRange.getBegin()) &&
+           "expected start of directive to be rewritable because end is");
 
     // Can we insert after the associated function prototype or definition?
     //
@@ -485,11 +475,8 @@ public:
       return true;
 
     // What is the existing indentation?
-    StringRef IndentText;
-    if (RewriteDirective)
-      IndentText = Lexer::getIndentationForLine(DirectiveRange.getBegin(), SM);
-    else
-      IndentText = Lexer::getIndentationForLine(FDBegin, SM);
+    StringRef IndentText =
+        Lexer::getIndentationForLine(DirectiveRange.getBegin(), SM);
     unsigned IndentWidth = IndentText.size();
 
     // Set up buffers for the new text.
@@ -501,22 +488,6 @@ public:
     // Generate new text.
     PrintingPolicy PolicyOMP(LO);
     PolicyOMP.OpenACCPrint = OpenACCPrint_OMP;
-    if (!RewriteDirective) {
-      // If the rest of the line preceding the function declaration isn't
-      // blank, insert a newline before the inserted directive.  Otherwise,
-      // don't or you'll create a blank line.
-      FileID File = SM.getFileID(FDBegin);
-      StringRef Buffer = SM.getBufferData(File);
-      const char *P = SM.getCharacterData(FDBegin);
-      if (P != Buffer.begin())
-        --P;
-      for (; P != Buffer.begin() && *P != '\n'; --P) {
-        if (!std::isspace(*P)) {
-          RewriteBeginStream << '\n' << IndentText;
-          break;
-        }
-      }
-    }
     RewriteEndStream << '\n' << IndentText;
     switch (OpenACCPrint) {
     case OpenACCPrint_ACC:
@@ -525,23 +496,20 @@ public:
     case OpenACCPrint_OMP:
       OMPAttr->printPretty(RewriteBeginStream, PolicyOMP);
       break;
-    case OpenACCPrint_OMP_ACC:
+    case OpenACCPrint_OMP_ACC: {
       OMPAttr->printPretty(RewriteBeginStream, PolicyOMP);
-      if (RewriteDirective) {
-        clang::commented_raw_ostream ComStream(RewriteBeginStream, IndentWidth,
-                                               /*IndentPreReuses=*/true,
-                                               /*IndentPost=*/1,
-                                               /*ComStart=*/true);
-        ComStream << Rewrite.getRewrittenText(
-            CharSourceRange::getCharRange(DirectiveRange));
-      }
+      clang::commented_raw_ostream ComStream(RewriteBeginStream, IndentWidth,
+                                             /*IndentPreReuses=*/true,
+                                             /*IndentPost=*/1,
+                                             /*ComStart=*/true);
+      ComStream << Rewrite.getRewrittenText(
+          CharSourceRange::getCharRange(DirectiveRange));
       break;
-    case OpenACCPrint_ACC_OMP:
-      if (RewriteDirective) {
-        RewriteBeginStream << Rewrite.getRewrittenText(
-            CharSourceRange::getCharRange(DirectiveRange));
-        RewriteBeginStream << '\n' << IndentText;
-      }
+    }
+    case OpenACCPrint_ACC_OMP: {
+      RewriteBeginStream << Rewrite.getRewrittenText(
+          CharSourceRange::getCharRange(DirectiveRange));
+      RewriteBeginStream << '\n' << IndentText;
       clang::commented_raw_ostream ComStream(RewriteBeginStream, IndentWidth,
                                              /*IndentPreReuses=*/false,
                                              /*IndentPost=*/1,
@@ -551,8 +519,7 @@ public:
       RewriteEndStream << "// ";
       break;
     }
-    if (!RewriteDirective)
-      RewriteBeginStream << IndentText;
+    }
     RewriteEndStream << "#pragma omp end declare target";
     // We previously asserted that FDEnd is either ';' or '}'.  The next
     // character comes after that token.  If the rest of the line isn't blank,
@@ -570,17 +537,14 @@ public:
     RewriteBeginStream.flush();
     RewriteEndStream.flush();
 
-    // If RewriteBeginString will replace DirectiveRange, which doesn't include
-    // the original directive's trailing newline, don't include one here.
-    if (RewriteDirective && RewriteBeginString.back() == '\n')
+    // RewriteBeginString will replace DirectiveRange, which doesn't include
+    // the original directive's trailing newline, so don't include one here.
+    if (RewriteBeginString.back() == '\n')
       RewriteBeginString.pop_back();
 
     // Perform replacement.
-    if (RewriteDirective)
-      Rewrite.ReplaceText(CharSourceRange::getCharRange(DirectiveRange),
-                          RewriteBeginString);
-    else
-      Rewrite.InsertTextBefore(FDBegin, RewriteBeginString);
+    Rewrite.ReplaceText(CharSourceRange::getCharRange(DirectiveRange),
+                        RewriteBeginString);
     Rewrite.InsertTextAfterToken(FDEnd, RewriteEndString);
     return true;
   }

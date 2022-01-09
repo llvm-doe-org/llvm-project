@@ -1327,35 +1327,6 @@ public:
         Context, OMPDeclareTargetDeclAttr::MT_To,
         OMPDeclareTargetDeclAttr::DT_Any, -1, /*IsOpenACCTranslation=*/true,
         ACCAttr->getRange());
-    // FIXME: Upstream Clang does not appear to fully support OpenMP 5.1, sec.
-    // 2.14.7 "Declare Target Directive", p. 212, L15-16:
-    // "If a function appears in a to clause in the same compilation unit in
-    // which the definition of the function occurs then a device-specific
-    // version of the function is created."
-    // Specifically, function definitions don't see later OpenMP declare target
-    // directives.
-    //
-    // Thus, if there's a definition, be sure to add attributes to it, and mark
-    // the attributes as implicit instead of inherited so OpenACC
-    // source-to-source mode will know to print them for OpenMP.  If Clang's
-    // OpenMP support is fixed later, source-to-source mode will no longer need
-    // to print the attribute, and maybe we won't need the extra attribute in
-    // the AST either, depending on how OpenMP codegen will then work.  See the
-    // related fixme in DeclPrinter::prettyPrintPragmas.
-    //
-    // On the other hand, if the definition comes later, it will inherit the
-    // attributes automatically.
-    if (FunctionDecl *Def = FD->getDefinition()) {
-      if (Def != FD) {
-        ACCRoutineDeclAttr *ACCAttrClone = ACCAttr->clone(Context);
-        InheritableAttr *OMPAttrClone = OMPAttr->clone(Context);
-        ACCAttrClone->setImplicit(true);
-        OMPAttrClone->setImplicit(true);
-        Def->addAttr(ACCAttrClone);
-        Def->addAttr(OMPAttrClone);
-        ACCAttrClone->setOMPNode(Def, OMPAttrClone);
-      }
-    }
     return OMPAttr;
   }
 };

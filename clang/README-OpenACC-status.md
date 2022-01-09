@@ -321,26 +321,35 @@ Run-Time Environment Variables
 
 * Lexical context
     * Appearing at file scope is supported.
-    * Appearing within a function definition is not supported.
+    * Appearing within a function definition is not yet supported.
 * Supported clauses
     * `seq` (required)
-* Associated declaration
-    * A lone function definition or prototype is supported.
+    * Specifying a name is not yet supported, so an immediately
+      following prototype or definition is required.
+* Immediately following declaration
+    * A lone function prototype or definition is supported, and the
+      `routine` directive applies to that function.
     * A declaration containing multiple declarators is not supported.
       For example, `void foo(), bar();`.
-* Function definition body
+* Scope of the directive
+    * A `routine` directive's scope starts at the `routine` directive
+      and extends to the end of the immediately enclosing scope.
+    * A definition or use of any function must appear within the scope
+      of at least one explicit and applying `routine` directive if
+      there is any within the compilation unit.  Otherwise, a
+      compile-time error diagnostic is produced.  (TODO: So far these
+      diagnostics have been implemented for definitions but not uses.)
+    * OpenACC 3.2 is not clear about the required locations of
+      definitions and uses of a function relative to applying
+      `routine` directives.  Clarifications are under discussion among
+      the OpenACC technical committee for inclusion in the OpenACC
+      spec after 3.2.
+* Body of the associated function's definition
     * Appearance of any OpenACC directive produces a compile-time
       error diagnostic.  Thus, orphaned `loop` constructs are not yet
       supported.
     * Declaration of a static local variable produces a compile-time
       error diagnostic.
-
-As described in the section "Routine Directive" in
-`README-OpenACC-design.md`, and as revealed by source-to-source mode,
-Clacc sometimes propagates the OpenMP translation of the `routine`
-directive to the function's definition for compatibility with Clang's
-OpenMP support.  This behavior might be eliminated in the future if it
-proves to be no longer necessary.
 
 Subarrays
 ---------
@@ -648,10 +657,6 @@ Source-to-Source Mode Limitations
             * In the case of `#pragma` form, whether the associated
               code must be rewritten depends on Clacc's mapping for
               the directive to OpenMP.
-        * In the case of a `routine` directive, an OpenMP directive is
-          added to a previous definition of the associated function,
-          but the definition's first or last token is expanded from a
-          preprocessor macro.
     * Clacc reports an error diagnostic for every such OpenACC
       directive in the source file.  Clacc then prints a version of
       the source in which all OpenACC directives are transformed

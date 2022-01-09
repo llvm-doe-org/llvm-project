@@ -176,50 +176,6 @@ void declOnDef(Result *);
 #pragma acc routine seq
 void declOnDef(Result *Res) { WRITE_RESULT(Res); }
 
-// This case is special because codegen is performed on the function definition,
-// but the OpenACC routine directive hasn't been seen yet at that point.
-//
-// Thus, the OpenACC routine directive's attribute must be implied on the
-// function definition in the in-memory AST in order for traditional OpenACC
-// compilation to generate device code.
-//
-// FIXME: The OpenMP declare target directive must also be printed explicitly by
-// OpenACC source-to-source mode, or the same problem would occur during OpenMP
-// compilation.  The problem here is that upstream Clang does not appear to
-// fully support OpenMP 5.1, sec. 2.14.7 "Declare Target Directive", p. 212,
-// L15-16:
-// "If a function appears in a to clause in the same compilation unit in which
-// the definition of the function occurs then a device-specific version of the
-// function is created."
-//
-// In either case, omitting the attribute/directive would cause a linking error.
-//
-//      DMP: FunctionDecl [[#%#x,defOnDecl:]] {{.*}} defOnDecl 'void (Result *)'
-//  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
-// DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> Implicit MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
-//      DMP: FunctionDecl {{.*}} prev [[#defOnDecl]] {{.*}} defOnDecl 'void (Result *)'
-//  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
-// DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
-//
-//  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
-// PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
-//    PRT-NEXT: void defOnDecl(Result *Res) {
-//         PRT: }{{$}}
-//  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
-// PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
-//  PRT-A-NEXT: {{^ *}}#pragma acc routine seq{{$}}
-// PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
-//  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
-// PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void defOnDecl(Result *);
-//  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
-// PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
-void defOnDecl(Result *Res) { WRITE_RESULT(Res); }
-#pragma acc routine seq
-void defOnDecl(Result *);
-
 //      DMP: FunctionDecl [[#%#x,onDeclOnDecl:]] {{.*}} onDeclOnDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
@@ -410,7 +366,6 @@ int main(int argc, char *argv[]) {
   // EXE-NEXT:      onDefDecl: host=1, not_host=0
   // EXE-NEXT:     declOnDecl: host=1, not_host=0
   // EXE-NEXT:      declOnDef: host=1, not_host=0
-  // EXE-NEXT:      defOnDecl: host=1, not_host=0
   // EXE-NEXT:   onDeclOnDecl: host=1, not_host=0
   // EXE-NEXT:    onDeclOnDef: host=1, not_host=0
   // EXE-NEXT:    onDefOnDecl: host=1, not_host=0
@@ -423,7 +378,6 @@ int main(int argc, char *argv[]) {
   onDefDecl(&Res); PRINT_RESULT(onDefDecl, Res);
   declOnDecl(&Res); PRINT_RESULT(declOnDecl, Res);
   declOnDef(&Res); PRINT_RESULT(declOnDef, Res);
-  defOnDecl(&Res); PRINT_RESULT(defOnDecl, Res);
   onDeclOnDecl(&Res); PRINT_RESULT(onDeclOnDecl, Res);
   onDeclOnDef(&Res); PRINT_RESULT(onDeclOnDef, Res);
   onDefOnDecl(&Res); PRINT_RESULT(onDefOnDecl, Res);
@@ -441,7 +395,6 @@ int main(int argc, char *argv[]) {
   // EXE-HOST-NEXT:      onDefDecl: host=1, not_host=0
   // EXE-HOST-NEXT:     declOnDecl: host=1, not_host=0
   // EXE-HOST-NEXT:      declOnDef: host=1, not_host=0
-  // EXE-HOST-NEXT:      defOnDecl: host=1, not_host=0
   // EXE-HOST-NEXT:   onDeclOnDecl: host=1, not_host=0
   // EXE-HOST-NEXT:    onDeclOnDef: host=1, not_host=0
   // EXE-HOST-NEXT:    onDefOnDecl: host=1, not_host=0
@@ -454,7 +407,6 @@ int main(int argc, char *argv[]) {
   //  EXE-OFF-NEXT:      onDefDecl: host=0, not_host=1
   //  EXE-OFF-NEXT:     declOnDecl: host=0, not_host=1
   //  EXE-OFF-NEXT:      declOnDef: host=0, not_host=1
-  //  EXE-OFF-NEXT:      defOnDecl: host=0, not_host=1
   //  EXE-OFF-NEXT:   onDeclOnDecl: host=0, not_host=1
   //  EXE-OFF-NEXT:    onDeclOnDef: host=0, not_host=1
   //  EXE-OFF-NEXT:    onDefOnDecl: host=0, not_host=1
@@ -474,8 +426,6 @@ int main(int argc, char *argv[]) {
   declOnDecl(&Res); PRINT_RESULT(declOnDecl, Res);
   #pragma acc parallel num_gangs(1) copyout(Res)
   declOnDef(&Res); PRINT_RESULT(declOnDef, Res);
-  #pragma acc parallel num_gangs(1) copyout(Res)
-  defOnDecl(&Res); PRINT_RESULT(defOnDecl, Res);
   #pragma acc parallel num_gangs(1) copyout(Res)
   onDeclOnDecl(&Res); PRINT_RESULT(onDeclOnDecl, Res);
   #pragma acc parallel num_gangs(1) copyout(Res)

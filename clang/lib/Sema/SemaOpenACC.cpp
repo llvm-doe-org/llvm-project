@@ -2051,6 +2051,17 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
   FunctionDecl *FD = TheDecl->getAsFunction();
   ACCRoutineDeclAttr *ACCAttr = FD->getAttr<ACCRoutineDeclAttr>();
   if (!ACCAttr) {
+    // The routine directive is required to appear before the function
+    // definition.
+    if (FunctionDecl *Def = FD->getDefinition()) {
+      if (Def != FD) {
+        Diag(Def->getBeginLoc(),
+             diag::err_acc_routine_not_in_scope_at_function_def)
+            << FD->getName();
+        Diag(StartLoc, diag::note_acc_routine) << FD->getName();
+        return;
+      }
+    }
     ACCAttr = ACCRoutineDeclAttr::Create(Context, ACCRoutineDeclAttr::Seq,
                                          SourceRange(StartLoc, EndLoc));
     FD->addAttr(ACCAttr);

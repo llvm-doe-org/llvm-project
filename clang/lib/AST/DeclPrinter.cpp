@@ -266,37 +266,31 @@ void DeclPrinter::prettyPrintPragmas(Decl *D) {
         // original source, so don't print it.
         if (ACCAttr->isInherited())
           continue;
-        // If the OpenACC attribute is implicit, it didn't appear in the
-        // original source, so don't print it.  However, it's there because the
-        // OpenMP attribute is required (for a function definition), so print
-        // the OpenMP attribute.  FIXME: Keeping the OpenMP attribute might not
-        // be necessary in the future.  See the related fixme in
-        // TransformACCToOMP::TransformACCRoutineDeclAttrToOMP.
-        bool SkipACC = ACCAttr->isImplicit();
+        assert(!ACCAttr->isImplicit() &&
+               "expected that implicit ACCDeclAttr is never generated");
         InheritableAttr *OMPAttr = ACCAttr->getOMPNode(D);
         if (!OMPAttr)
           continue; // there must have been an error during the translation
+        assert(!OMPAttr->isImplicit() &&
+               "expected that explicit ACCDeclAttr is never translated to "
+               "implicit OMPDeclAttr");
         switch (Policy.OpenACCPrint) {
         case OpenACCPrint_ACC:
-          if (!SkipACC)
-            ACCAttr->printPretty(Out, Policy);
+          ACCAttr->printPretty(Out, Policy);
           break;
         case OpenACCPrint_OMP:
         case OpenACCPrint_OMP_HEAD:
           OMPAttr->printPretty(Out, Policy);
           break;
         case OpenACCPrint_ACC_OMP:
-          if (!SkipACC)
-            ACCAttr->printPretty(Out, Policy);
+          ACCAttr->printPretty(Out, Policy);
           Out << "// ";
           OMPAttr->printPretty(Out, Policy);
           break;
         case OpenACCPrint_OMP_ACC:
           OMPAttr->printPretty(Out, Policy);
-          if (!SkipACC) {
-            Out << "// ";
-            ACCAttr->printPretty(Out, Policy);
-          }
+          Out << "// ";
+          ACCAttr->printPretty(Out, Policy);
           break;
         }
         continue;
@@ -306,11 +300,11 @@ void DeclPrinter::prettyPrintPragmas(Decl *D) {
         // associated ACCDeclAttr, where OpenACC printing modes are handled.
         if (OMPAttr->getIsOpenACCTranslation())
           continue;
-        // TODO: If this isn't an OpenACC translation, print exactly the way
-        // upstream prints it to avoid merge conflicts in tests.  However, we
-        // need to come to terms with why inherited attributes should be printed
-        // as that seems to indicate they weren't specified in the original
-        // source.  See related todo in DeclPrinter::VisitDeclContext.
+        // If this isn't an OpenACC translation, print exactly the way upstream
+        // prints it to avoid merge conflicts in tests.  TODO: However, we need
+        // to come to terms with why inherited attributes should be printed as
+        // that seems to indicate they weren't specified in the original source.
+        // See related todo in DeclPrinter::VisitDeclContext.
       }
       switch (A->getKind()) {
 #define ATTR(X)
@@ -543,8 +537,8 @@ void DeclPrinter::VisitDeclContext(DeclContext *DC, bool Indent) {
     // assumes "ending" construct so print it here.
     if (OMPDeclareTargetDeclAttr *Attr =
             D->getAttr<OMPDeclareTargetDeclAttr>()) {
-      // TODO: If this isn't an OpenACC translation, print exactly the way
-      // upstream prints it to avoid merge conflicts in tests.  However, we need
+      // If this isn't an OpenACC translation, print exactly the way upstream
+      // prints it to avoid merge conflicts in tests.  TODO: However, we need
       // to come to terms with why inherited attributes should be printed as
       // that seems to indicate they weren't specified in the original source.
       // See related todo in DeclPrinter::printPrettyPragmas.

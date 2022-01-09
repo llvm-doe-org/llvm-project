@@ -331,12 +331,9 @@ def err_rewrite_acc_end_in_pragma_op : Error<
 def err_rewrite_acc_routine_in_pragma_op : Error<
   "cannot rewrite OpenACC routine directive that appears within a _Pragma "
   "operator">;
-def err_rewrite_acc_routine_function_start_in_macro : Error<
-  "for implicit OpenACC routine directive, cannot rewrite associated function "
-  "declaration that starts within a macro expansion">;
 def err_rewrite_acc_routine_function_end_in_macro : Error<
-  "for%select{| implicit}0 OpenACC routine directive, cannot rewrite "
-  "associated function declaration that ends within a macro expansion">;
+  "for OpenACC routine directive, cannot rewrite associated function "
+  "declaration that ends within a macro expansion">;
 } // end of RewriteOpenACC category
 
 }

@@ -273,7 +273,7 @@ struct AssociatedDeclIsType {
 };
 
 //--------------------------------------------------
-// Restrictions within the function body.
+// Restrictions on the function definition.
 //--------------------------------------------------
 
 // Does the definition check see the attached routine directive?
@@ -336,23 +336,18 @@ void onDeclDef() {
 }
 
 // Does the definition check see the routine directive on the following decl?
+// No, that's an error.
+// expected-error@+1 {{'#pragma acc routine' is not in scope at definition of associated function 'defOnDecl'}}
 void defOnDecl() {
-  // expected-error@+1 {{static local variable 's' is not permitted within function 'defOnDecl' because the latter is attributed with '#pragma acc routine'}}
   static int s;
   int i;
-  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'defOnDecl' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{'#pragma acc enter data' is not permitted within function 'defOnDecl' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc enter data copyin(i)
-  // expected-error@+1 {{'#pragma acc exit data' is not permitted within function 'defOnDecl' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc exit data copyout(i)
-  // expected-error@+1 {{'#pragma acc data' is not permitted within function 'defOnDecl' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc data copy(i)
   ;
-  // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'defOnDecl' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc parallel
   ;
-  // expected-error@+1 {{'#pragma acc parallel loop' is not permitted within function 'defOnDecl' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc parallel loop seq
   for (int i = 0; i < 5; ++i)
   ;
@@ -361,7 +356,7 @@ void defOnDecl() {
   for (int i = 0; i < 5; ++i)
     ;
 }
-// expected-note@+1 7 {{function 'defOnDecl' attributed with '#pragma acc routine' here}}
+// expected-note@+1 {{function 'defOnDecl' attributed with '#pragma acc routine' here}}
 #pragma acc routine seq
 void defOnDecl();
 
