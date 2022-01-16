@@ -39,12 +39,14 @@ endforeach()
 
 # Generate a test suite that compiles for all target device types available on
 # the current system.
-add_openmp_testsuite(check-libacc2omp-multitarget
-  "Running libacc2omp tests" ${CMAKE_CURRENT_BINARY_DIR}/multitarget
-  DEPENDS acc2omp)
-list(APPEND LIBACC2OMP_LIT_TESTSUITES ${CMAKE_CURRENT_BINARY_DIR}/multitarget)
-set(CURRENT_TARGET multitarget)
-configure_file(lit.site.cfg.in ${CURRENT_TARGET}/lit.site.cfg @ONLY)
+if (SYSTEM_TARGETS)
+  add_openmp_testsuite(check-libacc2omp-multitarget
+    "Running libacc2omp tests" ${CMAKE_CURRENT_BINARY_DIR}/multitarget
+    DEPENDS acc2omp)
+  list(APPEND LIBACC2OMP_LIT_TESTSUITES ${CMAKE_CURRENT_BINARY_DIR}/multitarget)
+  set(CURRENT_TARGET multitarget)
+  configure_file(lit.site.cfg.in ${CURRENT_TARGET}/lit.site.cfg @ONLY)
+endif()
 
 # Add check-libacc2omp including all above test suites.
 add_openmp_testsuite(check-libacc2omp

@@ -34,13 +34,16 @@ endforeach()
 
 # Some tests compile for multiple target device types (such as x86_64 and
 # nvptx64) in the same compile command.
-add_openmp_testsuite(check-libomptarget-multitarget
-  "Running libomptarget tests" ${CMAKE_CURRENT_BINARY_DIR}/multitarget
-  DEPENDS omptarget omp ${LIBOMPTARGET_TESTED_PLUGINS}
-  ARGS ${LIBOMPTARGET_LIT_ARG_LIST})
-list(APPEND LIBOMPTARGET_LIT_TESTSUITES ${CMAKE_CURRENT_BINARY_DIR}/multitarget)
-set(CURRENT_TARGET multitarget)
-configure_file(lit.site.cfg.in multitarget/lit.site.cfg @ONLY)
+if (SYSTEM_TARGETS)
+  add_openmp_testsuite(check-libomptarget-multitarget
+    "Running libomptarget tests" ${CMAKE_CURRENT_BINARY_DIR}/multitarget
+    DEPENDS omptarget omp ${LIBOMPTARGET_TESTED_PLUGINS}
+    ARGS ${LIBOMPTARGET_LIT_ARG_LIST})
+  list(APPEND LIBOMPTARGET_LIT_TESTSUITES
+       ${CMAKE_CURRENT_BINARY_DIR}/multitarget)
+  set(CURRENT_TARGET multitarget)
+  configure_file(lit.site.cfg.in multitarget/lit.site.cfg @ONLY)
+endif()
 
 # Some tests compile without offloading.
 add_openmp_testsuite(check-libomptarget-host
