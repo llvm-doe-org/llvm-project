@@ -417,20 +417,11 @@ public:
     return Stack.empty() ? ACCD_unknown : Stack.back().EffectiveDKind;
   }
 
-  /// Returns the real directive for the construct lexically enclosing the
-  /// currently analyzed real directive, or returns ACCD_unknown if none.  In
-  /// the former case only, set ParentLoc as the returned directive's location.
-  ///
-  /// If the currently analyzed real directive appears within a definition, any
-  /// directive appearing outside the definition is not considered to lexically
-  /// enclose it and thus is never returned.  For example, if a loop directive
-  /// appears within a function definition and the routine directive is next on
-  /// the stack, the routine directive is not returned as the parent of the loop
-  /// directive, which is an orphaned loop directive, as defined in the OpenACC
-  /// spec.  Instead, the routine directive is attribute on the function just as
-  /// it would be if it appeared on a separate declaration of the function.  In
-  /// contrast, if there are two successive routine directives (at file scope),
-  /// the first is considered to lexically enclose the second.
+  /// Returns the real directive for the construct enclosing the currently
+  /// analyzed real directive, or returns ACCD_unknown if none.  In the former
+  /// case only, set ParentLoc as the returned directive's location.  A routine
+  /// directive that applies to a function is modeled as enclosing it even if it
+  /// is not lexically attached to it.
   OpenACCDirectiveKind getRealParentDirective(SourceLocation &ParentLoc) const {
     // Find real directive.
     auto I = Stack.rbegin();
@@ -444,16 +435,14 @@ public:
       return ACCD_unknown;
     while (I->RealDKind == ACCD_unknown)
       I = std::next(I);
-    // Routine directives can only appear at file scope.
-    if (I->RealDKind == ACCD_routine &&
-        !SemaRef.getCurLexicalContext()->isFileContext())
-      return ACCD_unknown;
     ParentLoc = I->DirectiveLoc;
     return I->RealDKind;
   }
 
-  /// Returns effective directive for construct enclosing currently analyzed
-  /// effective directive or returns ACCD_unknown if none.
+  /// Returns the effective directive for the construct enclosing the currently
+  /// analyzed effective directive or returns ACCD_unknown if none.  A routine
+  /// directive that applies to a function is modeled as enclosing it even if it
+  /// is not lexically attached to it.
   OpenACCDirectiveKind getEffectiveParentDirective() const {
     auto I = Stack.rbegin();
     if (I == Stack.rend())
@@ -620,18 +609,25 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
       ExpressionEvaluationContext::PotentiallyEvaluated);
 
   // Check directive nesting.
-  //
-  // Directives that should not appear within a function attributed with a
-  // routine directive are not diagnosed here.  getRealParentDirective does not
-  // identify that as a parenting relationship.
   SourceLocation ParentLoc;
   OpenACCDirectiveKind ParentDKind =
       DirStack->getRealParentDirective(ParentLoc);
   if (!isAllowedParentForDirective(RealDKind, ParentDKind)) {
-    if (ParentDKind == ACCD_unknown)
-      Diag(StartLoc, diag::err_acc_orphaned_directive)
-          << getOpenACCName(RealDKind);
-    else {
+    if ((ParentDKind == ACCD_unknown || ParentDKind == ACCD_routine) &&
+        RealDKind == ACCD_loop)
+      Diag(StartLoc, diag::err_acc_orphaned_loop_construct);
+    else if (ParentDKind == ACCD_routine && RealDKind != ACCD_routine) {
+      // Supporting a directive within a function attributed with a routine
+      // directive is like supporting it within a compute construct as the
+      // function is meant to be callable here.  We don't support any such
+      // cases.  TODO: Eventually we'll support orphaned loop constructs.
+      StringRef FnName = getCurFunctionDecl()->getName();
+      Diag(StartLoc, diag::err_acc_routine_unexpected_directive)
+          << getOpenACCName(RealDKind) << FnName;
+      Diag(ParentLoc, diag::note_acc_routine) << FnName;
+    } else {
+      assert(ParentDKind != ACCD_unknown &&
+             "expected only loop construct to require parent construct");
       Diag(StartLoc, diag::err_acc_directive_bad_nesting)
           << getOpenACCName(ParentDKind) << getOpenACCName(RealDKind);
       Diag(ParentLoc, diag::note_acc_enclosing_directive)
@@ -792,15 +788,6 @@ private:
   ACCRoutineDeclAttr *Attr;
 
 public:
-  void VisitACCDirectiveStmt(ACCDirectiveStmt *D) {
-    // Supporting a directive within a function attributed with a routine
-    // directive is like supporting it within a parallel directive as the
-    // function is meant to be callable here.  We don't support any such cases.
-    // TODO: Eventually we'll support orphaned loop directives.
-    SemaRef.Diag(D->getBeginLoc(), diag::err_acc_routine_unexpected_directive)
-        << getOpenACCName(D->getDirectiveKind()) << FD->getName();
-    SemaRef.Diag(Attr->getLocation(), diag::note_acc_routine) << FD->getName();
-  }
   void VisitDeclStmt(DeclStmt *S) {
     for (Decl *D : S->decls()) {
       if (VarDecl *VD = dyn_cast<VarDecl>(D)) {

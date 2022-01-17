@@ -10910,8 +10910,8 @@ def note_acc_enclosing_directive : Note<
 def err_acc_loop_bad_nested_partitioning : Error<
   "'#pragma acc %2' with '%3' clause cannot be nested within '#pragma acc %0'"
   " with '%1' clause">;
-def err_acc_orphaned_directive : Error<
-  "orphaned '#pragma acc %0' is not supported">;
+def err_acc_orphaned_loop_construct : Error<
+  "orphaned '#pragma acc loop' is not supported">;
 def err_acc_loop_cannot_use_stmt : Error<
   "'%0' statement cannot be used in partitionable OpenACC for loop">;
 def err_acc_not_for : Error<
