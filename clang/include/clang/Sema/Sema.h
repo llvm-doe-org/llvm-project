@@ -11485,7 +11485,7 @@ public:
   /// error.
   bool EndOpenACCAssociatedStatement();
   /// Called after the \c ActOn function for the directive.
-  void EndOpenACCDirectiveAndAssociate();
+  void EndOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind);
 
   /// If the current region is an OpenACC loop region, record any loop control
   /// variables assigned but not declared in \p Init, the init of the attached

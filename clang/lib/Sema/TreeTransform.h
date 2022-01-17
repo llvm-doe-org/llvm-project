@@ -10603,7 +10603,7 @@ TreeTransform<Derived>::TransformACCUpdateDirective(ACCUpdateDirective *D) {
           ACCD_update, D->getBeginLoc()))
     return StmtError();
   StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate();
+  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_update);
   return Res;
 }
 
@@ -10614,7 +10614,7 @@ StmtResult TreeTransform<Derived>::TransformACCEnterDataDirective(
           ACCD_enter_data, D->getBeginLoc()))
     return StmtError();
   StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate();
+  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_enter_data);
   return Res;
 }
 
@@ -10625,7 +10625,7 @@ TreeTransform<Derived>::TransformACCExitDataDirective(ACCExitDataDirective *D) {
           ACCD_exit_data, D->getBeginLoc()))
     return StmtError();
   StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate();
+  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_exit_data);
   return Res;
 }
 
@@ -10636,7 +10636,7 @@ TreeTransform<Derived>::TransformACCDataDirective(ACCDataDirective *D) {
           ACCD_data, D->getBeginLoc()))
     return StmtError();
   StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate();
+  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_data);
   return Res;
 }
 
@@ -10647,7 +10647,7 @@ TreeTransform<Derived>::TransformACCParallelDirective(ACCParallelDirective *D) {
           ACCD_parallel, D->getBeginLoc()))
     return StmtError();
   StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate();
+  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_parallel);
   return Res;
 }
 
@@ -10658,7 +10658,7 @@ TreeTransform<Derived>::TransformACCLoopDirective(ACCLoopDirective *D) {
           ACCD_loop, D->getBeginLoc()))
     return StmtError();
   StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate();
+  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_loop);
   return Res;
 }
 
@@ -10670,7 +10670,7 @@ TreeTransform<Derived>::TransformACCParallelLoopDirective(
           ACCD_parallel_loop, D->getBeginLoc()))
     return StmtError();
   StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate();
+  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_parallel_loop);
   return Res;
 }
 

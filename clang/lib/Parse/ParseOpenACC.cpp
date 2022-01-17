@@ -141,7 +141,7 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
     ParseTopLevelDecl(Group);
     Actions.ActOnOpenACCRoutineDirective(Clauses, StartLoc, EndLoc,
                                          Group.get());
-    Actions.EndOpenACCDirectiveAndAssociate();
+    Actions.EndOpenACCDirectiveAndAssociate(DKind);
     return Group;
   }
   case ACCD_unknown:
@@ -220,7 +220,7 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
         DKind, Clauses, AssociatedStmt.get(), StartLoc, EndLoc);
 
     // Exit scope.
-    Actions.EndOpenACCDirectiveAndAssociate();
+    Actions.EndOpenACCDirectiveAndAssociate(DKind);
     ACCDirectiveScope.Exit();
     // Don't bother translating to OpenMP if we've encountered errors or we
     // might end up with redundant diagnostics, some of which might mention

@@ -113,8 +113,10 @@ public:
     Stack.push_back(DirStackEntryTy(RealDKind, EffectiveDKind, Loc));
   }
 
-  void pop() {
+  void pop(OpenACCDirectiveKind EffectiveDKind) {
     assert(!Stack.empty() && "expected non-empty directive stack");
+    assert(Stack.back().EffectiveDKind == EffectiveDKind &&
+           "popping wrong effective OpenACC directive");
     Stack.pop_back();
   }
 
@@ -705,14 +707,16 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
 void Sema::EndOpenACCClause() {
 }
 
-void Sema::EndOpenACCDirectiveAndAssociate() {
+void Sema::EndOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind) {
+  assert(RealDKind == DirStack->getRealDirective() &&
+         "ending wrong real OpenACC directive");
   // For a combined directive, the first DirStack->pop() happens after the
   // inner effective directive is "acted upon" (AST node is constructed), so
   // this is the second DirStack->pop(), which happens after the entire
   // combined directive is acted upon.  However, if there was an error, we
   // need to pop the entire combined directive.
   for (OpenACCDirectiveKind DKind = ACCD_unknown; DKind == ACCD_unknown;
-       DirStack->pop())
+       DirStack->pop(DKind))
     DKind = DirStack->getEffectiveDirective();
   DiscardCleanupsInEvaluationContext();
   PopExpressionEvaluationContext();
@@ -2012,8 +2016,8 @@ StmtResult Sema::ActOnOpenACCParallelLoopDirective(
   // Build the effective loop directive.
   StmtResult Res = ActOnOpenACCDirectiveStmt(ACCD_loop, LoopClauses, AStmt,
                                              StartLoc, EndLoc);
-  // The second DirStack->pop() happens in EndOpenACCDABlock.
-  DirStack->pop();
+  // The second DirStack->pop() happens in EndOpenACCDirectiveAndAssociate.
+  DirStack->pop(ACCD_loop);
   if (Res.isInvalid())
     return StmtError();
   ACCLoopDirective *LoopDir = cast<ACCLoopDirective>(Res.get());
