@@ -11470,7 +11470,8 @@ public:
   /// Called at start of an OpenACC directive before its clauses.  Returns true
   /// in the case of an error.
   bool StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
-                                         SourceLocation Loc);
+                                         SourceLocation Loc,
+                                         Decl *DeclAppliesTo = nullptr);
   /// Called at start of a clause.
   void StartOpenACCClause(OpenACCClauseKind K);
   /// Called at end of a clause.
@@ -11495,9 +11496,12 @@ public:
   /// directive.
   void ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
                                       Scope *CurScope);
-  /// Check a function definition against any OpenACC restrictions (such as any
-  /// OpenACC routine directive).
-  void ActOnFunctionDefinitionForOpenACC(FunctionDecl *FD);
+  /// At the start of a function definition, push an applying routine directive
+  /// if necessary.
+  void ActOnStartOfFunctionDefForOpenACC(FunctionDecl *FD);
+  /// At the end of a function definition, pop an applying routine directive if
+  /// necessary.  Check function definition against any OpenACC restrictions.
+  void ActOnFinishedFunctionBodyForOpenACC(FunctionDecl *FD);
 
   StmtResult ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind Kind,
                                        ArrayRef<ACCClause *> Clauses,

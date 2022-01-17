@@ -14417,6 +14417,9 @@ Decl *Sema::ActOnStartOfFunctionDef(Scope *FnBodyScope, Decl *D,
       getCurLexicalContext()->getDeclKind() != Decl::ObjCImplementation)
     Diag(FD->getLocation(), diag::warn_function_def_in_objc_container);
 
+  if (LangOpts.OpenACC)
+    ActOnStartOfFunctionDefForOpenACC(FD);
+
   return D;
 }
 
@@ -14913,7 +14916,7 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
   }
 
   if (LangOpts.OpenACC)
-    ActOnFunctionDefinitionForOpenACC(FD);
+    ActOnFinishedFunctionBodyForOpenACC(FD);
 
   if (FD && !FD->isDeleted())
     checkTypeSupport(FD->getType(), FD->getLocation(), FD);
