@@ -154,7 +154,7 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
 
 /// Parsing of OpenACC executable directives and constructs.
 ///
-///   executable-directive:
+///   directive-stmt:
 ///     annot_pragma_openacc
 ///     'update' | 'enter data' | 'exit data' | 'data' | 'parallel' | 'loop'
 ///     | 'parallel loop'

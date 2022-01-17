@@ -81,7 +81,7 @@ private:
     /// the case of a non-combined directive.
     OpenACCDirectiveKind EffectiveDKind;
     ACCPartitioningKind LoopDirectiveKind;
-    SourceLocation ConstructLoc;
+    SourceLocation DirectiveLoc;
     SourceLocation LoopBreakLoc; // invalid if no break statement or not loop
     unsigned AssociatedLoops = 1; // from collapse clause
     unsigned AssociatedLoopsParsed = 0; // how many have been parsed so far
@@ -99,7 +99,7 @@ private:
     DirStackEntryTy(OpenACCDirectiveKind RealDKind,
                     OpenACCDirectiveKind EffectiveDKind, SourceLocation Loc)
         : RealDKind(RealDKind), EffectiveDKind(EffectiveDKind),
-          ConstructLoc(Loc) {}
+          DirectiveLoc(Loc) {}
   };
 
   /// The underlying directive stack.
@@ -225,7 +225,7 @@ public:
         while (I->RealDKind == ACCD_unknown)
           I = std::next(I);
         ParentDir = I->RealDKind;
-        ParentLoc = I->ConstructLoc;
+        ParentLoc = I->DirectiveLoc;
         return ParentKind;
       }
     }
@@ -426,7 +426,7 @@ public:
     if (I->RealDKind == ACCD_routine &&
         !SemaRef.getCurLexicalContext()->isFileContext())
       return ACCD_unknown;
-    ParentLoc = I->ConstructLoc;
+    ParentLoc = I->DirectiveLoc;
     return I->RealDKind;
   }
 
@@ -463,7 +463,7 @@ public:
     return Stack.empty() ? 0 : Stack.back().AssociatedLoopsParsed;
   }
 
-  SourceLocation getConstructLoc() { return Stack.back().ConstructLoc; }
+  SourceLocation getDirectiveLoc() { return Stack.back().DirectiveLoc; }
 };
 } // namespace
 
@@ -1389,7 +1389,7 @@ public:
                 << ACCReductionClause::printReductionOperatorToString(
                     EnclosingPrivate.ReductionClause->getNameInfo());
             if (EnclosingPrivate.ReductionClause->getBeginLoc().isInvalid())
-              Stack->SemaRef.Diag(Stack->getConstructLoc(),
+              Stack->SemaRef.Diag(Stack->getDirectiveLoc(),
                                   diag::note_acc_implied_as_gang_reduction);
           }
 
@@ -2262,13 +2262,13 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
 
 static bool RequireCompleteTypeACC(
     Sema &SemaRef, QualType Type, OpenACCDetermination Determination,
-    OpenACCClauseKind CKind, SourceLocation ConstructLoc, SourceLocation ELoc)
+    OpenACCClauseKind CKind, SourceLocation DirectiveLoc, SourceLocation ELoc)
 {
   if (SemaRef.RequireCompleteType(ELoc, Type, diag::err_acc_incomplete_type,
                                   Determination, getOpenACCName(CKind)))
   {
     if (Determination != ACC_EXPLICIT)
-      SemaRef.Diag(ConstructLoc, diag::note_acc_clause_determination)
+      SemaRef.Diag(DirectiveLoc, diag::note_acc_clause_determination)
           << Determination << getOpenACCName(CKind);
     return true;
   }
@@ -2322,7 +2322,7 @@ ACCClause *Sema::ActOnOpenACCPresentClause(
     // size, we cannot know if it's fully present.  Besides, it translates to
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_present,
-                               DirStack->getConstructLoc(), ELoc))
+                               DirStack->getDirectiveLoc(), ELoc))
       continue;
 
     if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_present,
@@ -2362,7 +2362,7 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, Determination, Kind,
-                               DirStack->getConstructLoc(), ELoc))
+                               DirStack->getDirectiveLoc(), ELoc))
       continue;
 
     if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_copy,
@@ -2401,7 +2401,7 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               DirStack->getConstructLoc(), ELoc))
+                               DirStack->getDirectiveLoc(), ELoc))
       continue;
 
     if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_copyin,
@@ -2440,7 +2440,7 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               DirStack->getConstructLoc(), ELoc))
+                               DirStack->getDirectiveLoc(), ELoc))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
@@ -2491,7 +2491,7 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               DirStack->getConstructLoc(), ELoc))
+                               DirStack->getDirectiveLoc(), ELoc))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const variable
@@ -2537,7 +2537,7 @@ ACCClause *Sema::ActOnOpenACCNoCreateClause(
     // size, we cannot know if it's fully present.  Besides, it translates to
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_no_create,
-                               DirStack->getConstructLoc(), ELoc))
+                               DirStack->getDirectiveLoc(), ELoc))
       continue;
 
     if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_no_create,
@@ -2573,7 +2573,7 @@ ACCClause *Sema::ActOnOpenACCDeleteClause(ArrayRef<Expr *> VarList,
     // size, we cannot know if it's fully present.  Besides, it translates to
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_delete,
-                               DirStack->getConstructLoc(), ELoc))
+                               DirStack->getDirectiveLoc(), ELoc))
       continue;
 
     if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_delete,
@@ -2633,7 +2633,7 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_private,
-                               DirStack->getConstructLoc(), ELoc))
+                               DirStack->getDirectiveLoc(), ELoc))
       continue;
 
     // The OpenACC 2.5 spec doesn't say, as far as I know, that a const
@@ -2683,7 +2683,7 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_firstprivate,
-                               DirStack->getConstructLoc(), ELoc))
+                               DirStack->getDirectiveLoc(), ELoc))
       continue;
 
     if (!DirStack->addDSA(VD, RefExpr->IgnoreParens(), ACC_DSA_firstprivate,
@@ -2837,7 +2837,7 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // variable must have a complete type.  However, you cannot copy data if
     // it doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_reduction,
-                               DirStack->getConstructLoc(), ELoc))
+                               DirStack->getDirectiveLoc(), ELoc))
       continue;
 
     // The OpenACC 2.6 spec doesn't say, as far as I know, that a const
@@ -2939,7 +2939,7 @@ ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
     // in a self clause must have a complete type.  However, it could not
     // have been allocated on the device copy if it didn't have a size.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               DirStack->getConstructLoc(), ELoc))
+                               DirStack->getDirectiveLoc(), ELoc))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
@@ -2984,7 +2984,7 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
     // in a device clause must have a complete type.  However, it could not
     // have been allocated on the device copy if it didn't have a size.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_device,
-                               DirStack->getConstructLoc(), ELoc))
+                               DirStack->getDirectiveLoc(), ELoc))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
