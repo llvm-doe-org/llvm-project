@@ -779,40 +779,6 @@ public:
   bool foundUse() const { return RUDV.foundUse(); }
 };
 
-/// Checks for various errors within functions attributed with the OpenACC
-/// routine directive.
-class RoutineChecker : public StmtVisitor<RoutineChecker> {
-private:
-  Sema &SemaRef;
-  FunctionDecl *FD;
-  ACCRoutineDeclAttr *Attr;
-
-public:
-  void VisitDeclStmt(DeclStmt *S) {
-    for (Decl *D : S->decls()) {
-      if (VarDecl *VD = dyn_cast<VarDecl>(D)) {
-        // OpenACC 3.1, sec. 2.15.1 "Routine Directive", L2794-2795:
-        // "In C and C++, function static variables are not supported in
-        // functions to which a routine directive applies."
-        if (VD->isStaticLocal()) {
-          SemaRef.Diag(VD->getLocation(), diag::err_acc_routine_static_local)
-              << VD->getName() << FD->getName();
-          SemaRef.Diag(Attr->getLocation(), diag::note_acc_routine)
-              << FD->getName();
-        }
-      }
-    }
-  }
-  void VisitStmt(Stmt *S) {
-    for (Stmt *C : S->children()) {
-      if (C)
-        Visit(C);
-    }
-  }
-  RoutineChecker(Sema &SemaRef, FunctionDecl *FD, ACCRoutineDeclAttr *Attr)
-      : SemaRef(SemaRef), FD(FD), Attr(Attr) {}
-};
-
 /// See the section "Implicit Gang Clauses" in the Clang OpenACC design
 /// document.
 class ImplicitGangAdder : public StmtVisitor<ImplicitGangAdder> {
@@ -1971,10 +1937,24 @@ void Sema::ActOnFinishedFunctionBodyForOpenACC(FunctionDecl *FD) {
     if (DeclAppliesTo == FD->getPreviousDecl())
       EndOpenACCDirectiveAndAssociate(ACCD_routine);
   }
-  ACCRoutineDeclAttr *Attr = FD->getAttr<ACCRoutineDeclAttr>();
-  Stmt *FnBody = FD->getBody();
-  if (Attr && FnBody)
-    RoutineChecker(*this, FD, Attr).Visit(FnBody);
+}
+void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
+  if (DirStack->getEffectiveDirective() != ACCD_routine)
+    return;
+  StringRef FnName = getCurFunctionDecl()->getName();
+  for (Decl *D : S->decls()) {
+    if (VarDecl *VD = dyn_cast<VarDecl>(D)) {
+      // OpenACC 3.1, sec. 2.15.1 "Routine Directive", L2794-2795:
+      // "In C and C++, function static variables are not supported in functions
+      // to which a routine directive applies."
+      if (VD->isStaticLocal()) {
+        Diag(VD->getLocation(), diag::err_acc_routine_static_local)
+            << VD->getName() << FnName;
+        Diag(DirStack->getDirectiveLoc(), diag::note_acc_routine)
+            << FnName;
+      }
+    }
+  }
 }
 
 StmtResult Sema::ActOnOpenACCLoopDirective(
@@ -2158,8 +2138,6 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
     ACCAttr = ACCRoutineDeclAttr::Create(Context, ACCRoutineDeclAttr::Seq,
                                          SourceRange(StartLoc, EndLoc));
     FD->addAttr(ACCAttr);
-    if (FD == FD->getDefinition())
-      ActOnFinishedFunctionBodyForOpenACC(FD);
     transformACCToOMP(ACCAttr, FD);
   } else {
     // TODO: Eventually, we need an error diagnostic if the previous routine

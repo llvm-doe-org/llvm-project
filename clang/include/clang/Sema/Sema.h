@@ -11500,8 +11500,10 @@ public:
   /// if necessary.
   void ActOnStartOfFunctionDefForOpenACC(FunctionDecl *FD);
   /// At the end of a function definition, pop an applying routine directive if
-  /// necessary.  Check function definition against any OpenACC restrictions.
+  /// necessary.
   void ActOnFinishedFunctionBodyForOpenACC(FunctionDecl *FD);
+  /// Check that a given declaration is ok for any current OpenACC directives.
+  void ActOnDeclStmtForOpenACC(DeclStmt *S);
 
   StmtResult ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind Kind,
                                        ArrayRef<ACCClause *> Clauses,

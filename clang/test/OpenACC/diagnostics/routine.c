@@ -505,10 +505,9 @@ void defOnDecl() {
 void defOnDecl();
 
 // Do we avoid repeated diagnostics?
-// expected-note@+1 {{function 'onDeclOnDef' attributed with '#pragma acc routine' here}}
 #pragma acc routine seq
 void onDeclOnDef();
-// expected-note@+1 6 {{function 'onDeclOnDef' attributed with '#pragma acc routine' here}}
+// expected-note@+1 7 {{function 'onDeclOnDef' attributed with '#pragma acc routine' here}}
 #pragma acc routine seq
 void onDeclOnDef() {
   // expected-error@+1 {{static local variable 's' is not permitted within function 'onDeclOnDef' because the latter is attributed with '#pragma acc routine'}}

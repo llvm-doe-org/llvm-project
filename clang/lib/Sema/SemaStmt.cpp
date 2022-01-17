@@ -77,7 +77,10 @@ StmtResult Sema::ActOnDeclStmt(DeclGroupPtrTy dg, SourceLocation StartLoc,
   // If we have an invalid decl, just return an error.
   if (DG.isNull()) return StmtError();
 
-  return new (Context) DeclStmt(DG, StartLoc, EndLoc);
+  DeclStmt *S = new (Context) DeclStmt(DG, StartLoc, EndLoc);
+  if (LangOpts.OpenACC)
+    ActOnDeclStmtForOpenACC(S);
+  return S;
 }
 
 void Sema::ActOnForEachDeclStmt(DeclGroupPtrTy dg) {
