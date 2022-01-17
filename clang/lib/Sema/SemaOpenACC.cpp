@@ -12,6 +12,8 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "UsedDeclVisitor.h"
+#include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/SemaInternal.h"
@@ -717,8 +719,49 @@ void Sema::EndOpenACCDirectiveAndAssociate() {
 }
 
 namespace {
-// Checks for various errors within functions attributed with the OpenACC
-// routine directive.
+/// Per \c Stmt helper for \c RoutineUseReporter.
+class RoutineUsedDeclVisitor : public UsedDeclVisitor<RoutineUsedDeclVisitor> {
+private:
+  FunctionDecl *FD;
+  SourceLocation RoutineDirectiveLoc;
+  bool FoundUse;
+
+public:
+  void visitUsedDecl(SourceLocation Loc, Decl *D) {
+    if (D->getCanonicalDecl() != FD->getCanonicalDecl())
+      return;
+    FoundUse = true;
+    S.Diag(Loc, diag::err_acc_routine_not_in_scope_at_function_use)
+        << FD->getName();
+    S.Diag(RoutineDirectiveLoc, diag::note_acc_routine) << FD->getName();
+  }
+  RoutineUsedDeclVisitor(Sema &SemaRef, FunctionDecl *FD,
+                         SourceLocation RoutineDirectiveLoc)
+      : UsedDeclVisitor<RoutineUsedDeclVisitor>(SemaRef), FD(FD),
+        RoutineDirectiveLoc(RoutineDirectiveLoc), FoundUse(false) {}
+  bool foundUse() const { return FoundUse; }
+};
+
+/// Reports existing uses of function just attributed with the OpenACC routine
+/// directive.
+class RoutineUseReporter : public RecursiveASTVisitor<RoutineUseReporter> {
+private:
+  RoutineUsedDeclVisitor RUDV;
+
+public:
+  bool TraverseStmt(Stmt *S) {
+    if (S)
+      RUDV.Visit(S);
+    return true;
+  }
+  RoutineUseReporter(Sema &SemaRef, FunctionDecl *FD,
+                     SourceLocation RoutineDirectiveLoc)
+      : RUDV(SemaRef, FD, RoutineDirectiveLoc) {}
+  bool foundUse() const { return RUDV.foundUse(); }
+};
+
+/// Checks for various errors within functions attributed with the OpenACC
+/// routine directive.
 class RoutineChecker : public StmtVisitor<RoutineChecker> {
 private:
   Sema &SemaRef;
@@ -2051,21 +2094,32 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
   FunctionDecl *FD = TheDecl->getAsFunction();
   ACCRoutineDeclAttr *ACCAttr = FD->getAttr<ACCRoutineDeclAttr>();
   if (!ACCAttr) {
-    // The routine directive is required to appear before the function
-    // definition.
+    // Proposed text for OpenACC after 3.2:
+    // - "In C and C++, a routine directive's scope starts at the routine
+    //   directive and ends at the end of the compilation unit."
+    // - "In C and C++, a definition or use of a procedure must appear within
+    //   the scope of at least one explicit and applying routine directive if
+    //   any appears in the same compilation unit."
+    // Uses include host uses and accelerator uses but only if they're evaluated
+    // (e.g., a reference in sizeof is not a use).
     if (FunctionDecl *Def = FD->getDefinition()) {
       if (Def != FD) {
         Diag(Def->getBeginLoc(),
              diag::err_acc_routine_not_in_scope_at_function_def)
             << FD->getName();
         Diag(StartLoc, diag::note_acc_routine) << FD->getName();
-        return;
       }
+    }
+    if (FD->isUsed()) {
+      RoutineUseReporter Reporter(*this, FD, StartLoc);
+      Reporter.TraverseAST(Context);
+      assert(Reporter.foundUse() && "expected to find function use");
     }
     ACCAttr = ACCRoutineDeclAttr::Create(Context, ACCRoutineDeclAttr::Seq,
                                          SourceRange(StartLoc, EndLoc));
     FD->addAttr(ACCAttr);
-    ActOnFunctionDefinitionForOpenACC(FD);
+    if (FD == FD->getDefinition())
+      ActOnFunctionDefinitionForOpenACC(FD);
     transformACCToOMP(ACCAttr, FD);
   } else {
     // TODO: Eventually, we need an error diagnostic if the previous routine

@@ -1,14 +1,16 @@
 // Check diagnostics for "acc routine".
 
 // OpenACC disabled
-// RUN: %clang_cc1 -verify=noacc %s
+// RUN: %clang_cc1 -verify=noacc -Wno-gnu-alignof-expression %s
 
 // OpenACC enabled
-// RUN: %clang_cc1 -verify=expected -fopenacc %s
+// RUN: %clang_cc1 -verify=expected -fopenacc -Wno-gnu-alignof-expression %s
 
 // END.
 
 // noacc-no-diagnostics
+
+#include <stddef.h>
 
 int i, jk;
 float f;
@@ -273,7 +275,149 @@ struct AssociatedDeclIsType {
 };
 
 //--------------------------------------------------
-// Restrictions on the function definition.
+// Restrictions on location of function definition and uses.
+//
+// Proposed text for OpenACC after 3.2:
+// - "In C and C++, a routine directive's scope starts at the routine directive
+//   and ends at the end of the compilation unit."
+// - "In C and C++, a definition or use of a procedure must appear within the
+//   scope of at least one explicit and applying routine directive if any
+//   appears in the same compilation unit."
+// Uses include host uses and accelerator uses but only if they're evaluated
+// (e.g., a reference in sizeof is not a use).
+//--------------------------------------------------
+
+// Evaluated host uses.
+void hostUseBefore();
+void hostUseBefore_hostUses() {
+  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'hostUseBefore'}}
+  hostUseBefore();
+  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'hostUseBefore'}}
+  void (*p)() = hostUseBefore;
+}
+// expected-note@+1 2 {{function 'hostUseBefore' attributed with '#pragma acc routine' here}}
+#pragma acc routine seq
+void hostUseBefore();
+#pragma acc routine seq // Should note only the first routine directive.
+void hostUseBefore();
+
+// Evaluated accelerator uses.
+void accUseBefore();
+#pragma acc routine seq
+void accUseBefore_accUses() {
+  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+  accUseBefore();
+  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+  void (*p)() = accUseBefore;
+}
+void accUseBefore_accUses2() {
+  #pragma acc parallel
+  {
+    // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+    accUseBefore();
+    // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+    void (*p)() = accUseBefore;
+  }
+}
+// expected-note@+1 4 {{function 'accUseBefore' attributed with '#pragma acc routine' here}}
+#pragma acc routine seq
+void accUseBefore();
+#pragma acc routine seq // Should note only the first routine directive.
+void accUseBefore();
+
+// Make sure use checks aren't skipped at a routine directive on a definition as
+// opposed to a prototype.
+void useBeforeOnDef();
+// expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'useBeforeOnDef'}}
+void useBeforeOnDef_hostUses() { useBeforeOnDef(); }
+// expected-error@+2 {{'#pragma acc routine' is not in scope at use of associated function 'useBeforeOnDef'}}
+#pragma acc routine seq
+void useBeforeOnDef_accUses() { useBeforeOnDef(); }
+// expected-note@+1 2 {{function 'useBeforeOnDef' attributed with '#pragma acc routine' here}}
+#pragma acc routine seq
+void useBeforeOnDef() {}
+
+// Unevaluated uses should not trigger an error.
+void unevaluatedUseBefore();
+void unevaluatedUseBefore_hostUses() {
+  size_t s = sizeof &unevaluatedUseBefore;
+  size_t a = _Alignof(&unevaluatedUseBefore);
+}
+#pragma acc routine seq
+void unevaluatedUseBefore_accUses() {
+  size_t s = sizeof &unevaluatedUseBefore;
+  size_t a = _Alignof(&unevaluatedUseBefore);
+}
+#pragma acc routine seq
+void unevaluatedUseBefore();
+
+// Unevaluated uses shouldn't be reported with evaluated uses.
+void notAllUseBefore();
+void notAllUseBefore_hostUses() {
+  size_t s = sizeof &notAllUseBefore;
+  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'notAllUseBefore'}}
+  notAllUseBefore();
+  size_t a = _Alignof(&notAllUseBefore);
+}
+#pragma acc routine seq
+void notAllUseBefore_accUses() {
+  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'notAllUseBefore'}}
+  notAllUseBefore();
+  size_t a = _Alignof(&notAllUseBefore);
+  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'notAllUseBefore'}}
+  void (*p)() = notAllUseBefore;
+}
+// expected-note@+1 3 {{function 'notAllUseBefore' attributed with '#pragma acc routine' here}}
+#pragma acc routine seq
+void notAllUseBefore();
+
+// Definition.
+// expected-error@+1 {{'#pragma acc routine' is not in scope at definition of associated function 'defBefore'}}
+void defBefore() {}
+// expected-note@+1 {{function 'defBefore' attributed with '#pragma acc routine' here}}
+#pragma acc routine seq
+void defBefore();
+#pragma acc routine seq // Should note only the first routine directive.
+void defBefore();
+
+// Use errors shouldn't suppress/break later definition errors.
+void useDefBefore();
+// expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'useDefBefore'}}
+void useDefBefore_uses() { useDefBefore(); }
+// expected-error@+1 {{'#pragma acc routine' is not in scope at definition of associated function 'useDefBefore'}}
+void useDefBefore() {} // def
+// expected-note@+1 2 {{function 'useDefBefore' attributed with '#pragma acc routine' here}}
+#pragma acc routine seq
+void useDefBefore();
+#pragma acc routine seq // Should note only the first routine directive.
+void useDefBefore();
+
+// Definition errors shouldn't suppress/break later use errors.
+// expected-error@+1 {{'#pragma acc routine' is not in scope at definition of associated function 'defUseBefore'}}
+void defUseBefore() {} // def
+// expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'defUseBefore'}}
+void defUseBefore_uses() { defUseBefore(); }
+// expected-note@+1 2 {{function 'defUseBefore' attributed with '#pragma acc routine' here}}
+#pragma acc routine seq
+void defUseBefore();
+#pragma acc routine seq // Should note only the first routine directive.
+void defUseBefore();
+
+// Only one routine directive has to be in scope, so additional routine
+// directives that are out of scope are fine.
+#pragma acc routine seq
+void useDefBetween();
+void useDefBetween_hostUses() { useDefBetween(); }
+#pragma acc routine seq
+void useDefBetween_accUses() { useDefBetween(); }
+void useDefBetween() {} // def
+#pragma acc routine seq
+void useDefBetween();
+#pragma acc routine seq
+void useDefBetween();
+
+//--------------------------------------------------
+// Restrictions on the function definition body.
 //--------------------------------------------------
 
 // Does the definition check see the attached routine directive?

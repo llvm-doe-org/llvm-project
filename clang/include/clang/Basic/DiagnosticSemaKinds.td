@@ -10993,6 +10993,8 @@ def err_acc_routine_static_local : Error<
 def err_acc_routine_not_in_scope_at_function_def : Error<
   "'#pragma acc routine' is not in scope at definition of associated function "
   "'%0'">;
+def err_acc_routine_not_in_scope_at_function_use : Error<
+  "'#pragma acc routine' is not in scope at use of associated function '%0'">;
 def note_acc_routine : Note<
   "function '%0' attributed with '#pragma acc routine' here">;
 } // end of OpenACC category

@@ -333,12 +333,13 @@ Run-Time Environment Variables
       For example, `void foo(), bar();`.
 * Scope of the directive
     * A `routine` directive's scope starts at the `routine` directive
-      and extends to the end of the immediately enclosing scope.
+      and ends at the end of the compilation unit.
     * A definition or use of any function must appear within the scope
       of at least one explicit and applying `routine` directive if
       there is any within the compilation unit.  Otherwise, a
-      compile-time error diagnostic is produced.  (TODO: So far these
-      diagnostics have been implemented for definitions but not uses.)
+      compile-time error diagnostic is produced.  Uses include host
+      uses and accelerator uses but only if they're evaluated (e.g., a
+      reference in `sizeof` is not a use).
     * OpenACC 3.2 is not clear about the required locations of
       definitions and uses of a function relative to applying
       `routine` directives.  Clarifications are under discussion among
