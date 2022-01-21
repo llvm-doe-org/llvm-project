@@ -112,8 +112,8 @@ public:
 
   void push(OpenACCDirectiveKind RealDKind, OpenACCDirectiveKind EffectiveDKind,
             SourceLocation Loc, Decl *DeclAppliesTo) {
-    Stack.push_back(DirStackEntryTy(RealDKind, EffectiveDKind, Loc,
-                                    DeclAppliesTo));
+    Stack.push_back(
+        DirStackEntryTy(RealDKind, EffectiveDKind, Loc, DeclAppliesTo));
   }
 
   void pop(OpenACCDirectiveKind EffectiveDKind) {
@@ -1950,8 +1950,7 @@ void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
       if (VD->isStaticLocal()) {
         Diag(VD->getLocation(), diag::err_acc_routine_static_local)
             << VD->getName() << FnName;
-        Diag(DirStack->getDirectiveLoc(), diag::note_acc_routine)
-            << FnName;
+        Diag(DirStack->getDirectiveLoc(), diag::note_acc_routine) << FnName;
       }
     }
   }
