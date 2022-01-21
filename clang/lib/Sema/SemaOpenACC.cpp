@@ -576,17 +576,27 @@ bool DirStackTy::hasVisibleDMA(VarDecl *VD) {
   return false;
 }
 
-void Sema::InitOpenACCDirectiveStack() {
-  OpenACCDirectiveStack = new DirStackTy(*this);
-}
+//===----------------------------------------------------------------------===//
+// Container for above OpenACC data.
+//===----------------------------------------------------------------------===//
 
-#define DirStack static_cast<DirStackTy *>(OpenACCDirectiveStack)
+struct Sema::OpenACCDataTy {
+  DirStackTy DirStack;
+  OpenACCDataTy(Sema &SemaRef) : DirStack(SemaRef) {}
+};
 
-void Sema::DestroyOpenACCDirectiveStack() { delete DirStack; }
+//===----------------------------------------------------------------------===//
+// Sema functions.
+//===----------------------------------------------------------------------===//
+
+void Sema::InitOpenACCData() { OpenACCData = new OpenACCDataTy(*this); }
+
+void Sema::DestroyOpenACCData() { delete OpenACCData; }
 
 bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
                                              SourceLocation StartLoc,
                                              Decl *DeclAppliesTo) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   // Push onto the directive stack.
   switch (RealDKind) {
   case ACCD_update:
@@ -596,11 +606,11 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
   case ACCD_parallel:
   case ACCD_loop:
   case ACCD_routine:
-    DirStack->push(RealDKind, RealDKind, StartLoc, DeclAppliesTo);
+    DirStack.push(RealDKind, RealDKind, StartLoc, DeclAppliesTo);
     break;
   case ACCD_parallel_loop:
-    DirStack->push(RealDKind, ACCD_parallel, StartLoc, DeclAppliesTo);
-    DirStack->push(ACCD_unknown, ACCD_loop, StartLoc, DeclAppliesTo);
+    DirStack.push(RealDKind, ACCD_parallel, StartLoc, DeclAppliesTo);
+    DirStack.push(ACCD_unknown, ACCD_loop, StartLoc, DeclAppliesTo);
     break;
   case ACCD_unknown:
     llvm_unreachable("expected OpenACC directive");
@@ -610,8 +620,7 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
 
   // Check directive nesting.
   SourceLocation ParentLoc;
-  OpenACCDirectiveKind ParentDKind =
-      DirStack->getRealParentDirective(ParentLoc);
+  OpenACCDirectiveKind ParentDKind = DirStack.getRealParentDirective(ParentLoc);
   if (!isAllowedParentForDirective(RealDKind, ParentDKind)) {
     if ((ParentDKind == ACCD_unknown || ParentDKind == ACCD_routine) &&
         RealDKind == ACCD_loop)
@@ -723,16 +732,17 @@ void Sema::EndOpenACCClause() {
 }
 
 void Sema::EndOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind) {
-  assert(RealDKind == DirStack->getRealDirective() &&
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  assert(RealDKind == DirStack.getRealDirective() &&
          "ending wrong real OpenACC directive");
-  // For a combined directive, the first DirStack->pop() happens after the
+  // For a combined directive, the first DirStack.pop() happens after the
   // inner effective directive is "acted upon" (AST node is constructed), so
-  // this is the second DirStack->pop(), which happens after the entire
+  // this is the second DirStack.pop(), which happens after the entire
   // combined directive is acted upon.  However, if there was an error, we
   // need to pop the entire combined directive.
   for (OpenACCDirectiveKind DKind = ACCD_unknown; DKind == ACCD_unknown;
-       DirStack->pop(DKind))
-    DKind = DirStack->getEffectiveDirective();
+       DirStack.pop(DKind))
+    DKind = DirStack.getEffectiveDirective();
   DiscardCleanupsInEvaluationContext();
   PopExpressionEvaluationContext();
 }
@@ -949,7 +959,7 @@ public:
 /// by \c ImplicitGangReductionAdder.
 class ImplicitDAAdder : public StmtVisitor<ImplicitDAAdder> {
   typedef StmtVisitor<ImplicitDAAdder> BaseVisitor;
-  DirStackTy *Stack;
+  DirStackTy &DirStack;
   ImplicitDATable &ImplicitDAs;
   llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
 
@@ -972,13 +982,13 @@ public:
         return;
 
       // Get predetermined and explicit DAs.
-      const DirStackTy::DAVarData &DVar = Stack->getTopDA(VD);
+      const DirStackTy::DAVarData &DVar = DirStack.getTopDA(VD);
 
       // Compute implicit DAs.
       VD = VD->getCanonicalDecl();
       OpenACCDMAKind DMAKind = ACC_DMA_unknown;
       OpenACCDSAKind DSAKind = ACC_DSA_unknown;
-      if (isOpenACCLoopDirective(Stack->getEffectiveDirective())) {
+      if (isOpenACCLoopDirective(DirStack.getEffectiveDirective())) {
         if (DVar.DSAKind == ACC_DSA_unknown) {
           // OpenACC 3.0 sec. 2.6.1 "Variables with Predetermined Data
           // Attributes" L1038-1039:
@@ -990,16 +1000,16 @@ public:
           // design document for the interpretation used here.
           // Sema::ActOnOpenACCDirectiveStmt handles the case without a seq
           // clause.
-          assert((!Stack->hasLoopControlVariable(VD) ||
-                  Stack->getLoopPartitioning().hasSeqExplicit()) &&
+          assert((!DirStack.hasLoopControlVariable(VD) ||
+                  DirStack.getLoopPartitioning().hasSeqExplicit()) &&
                  "expected predetermined private for loop control variable "
                  "with explicit seq");
           // See the section "Basic Data Attributes" in the Clang OpenACC
           // design document for discussion of the shared data attribute.
           DSAKind = ACC_DSA_shared;
         }
-      } else if (isOpenACCParallelDirective(Stack->getEffectiveDirective())) {
-        if (Stack->hasVisibleDMA(VD) || DVar.DSAKind != ACC_DSA_unknown) {
+      } else if (isOpenACCParallelDirective(DirStack.getEffectiveDirective())) {
+        if (DirStack.hasVisibleDMA(VD) || DVar.DSAKind != ACC_DSA_unknown) {
           // There's a visible explicit DMA, or there's a predetermined or
           // explicit DSA, so there's no implicit DA other than the defaults.
         } else if (!VD->getType()->isScalarType()) {
@@ -1053,7 +1063,7 @@ public:
     // Do reductions here imply copy clauses because we're computing implicit
     // clauses for an acc parallel and this is a gang-partitioned acc loop?
     bool ReductionsImplyCopy =
-        isOpenACCComputeDirective(Stack->getEffectiveDirective()) &&
+        isOpenACCComputeDirective(DirStack.getEffectiveDirective()) &&
         isOpenACCLoopDirective(D->getDirectiveKind()) &&
         cast<ACCLoopDirective>(D)->getPartitioning().hasGangPartitioning();
 
@@ -1076,7 +1086,7 @@ public:
           // happens to exist no explicit DSA that doesn't conflict with copy
           // except reduction, but that implies copy anyway.  (And there's no
           // possible predetermined DA on a compute directive.)
-          DirStackTy::DAVarData DVar = Stack->getTopDA(VD);
+          DirStackTy::DAVarData DVar = DirStack.getTopDA(VD);
           if (DVar.DMAKind != ACC_DMA_unknown ||
               DVar.DSAKind != ACC_DSA_unknown) {
             assert((DVar.DSAKind == ACC_DSA_unknown ||
@@ -1144,8 +1154,8 @@ public:
     }
   }
 
-  ImplicitDAAdder(DirStackTy *S, ImplicitDATable &T)
-      : Stack(S), ImplicitDAs(T) {
+  ImplicitDAAdder(DirStackTy &DirStack, ImplicitDATable &T)
+      : DirStack(DirStack), ImplicitDAs(T) {
     // OpenACC 3.0 sec. 2.5.13 "reduction clause" L984-985:
     //   "It implies a copy data clause for each reduction var, unless a data
     //   clause for that variable appears on the compute construct."
@@ -1156,11 +1166,11 @@ public:
     // A copy DMA is implied by a reduction clause even for a reduction
     // variable that is not referenced within the construct, so it is handled
     // here rather than in VisitDeclRefExpr.
-    if (Stack->getEffectiveDirective() == ACCD_parallel) {
-      for (Expr *VR : Stack->getReductionVars()) {
+    if (DirStack.getEffectiveDirective() == ACCD_parallel) {
+      for (Expr *VR : DirStack.getReductionVars()) {
         DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
         VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
-        const DirStackTy::DAVarData &DVar = Stack->getTopDA(VD);
+        const DirStackTy::DAVarData &DVar = DirStack.getTopDA(VD);
         if (DVar.DMAKind != ACC_DMA_unknown)
           continue;
         ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(VD);
@@ -1196,7 +1206,7 @@ public:
 class ImplicitGangReductionAdder
     : public StmtVisitor<ImplicitGangReductionAdder> {
   typedef StmtVisitor<ImplicitGangReductionAdder> BaseVisitor;
-  DirStackTy *Stack;
+  DirStackTy &DirStack;
   ImplicitDATable &ImplicitDAs;
   llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
 
@@ -1240,7 +1250,7 @@ public:
           // loop, so there's no implicit gang reduction, which makes the
           // variable gang-shared at the acc loop, so there is an implicit gang
           // reduction, and so on.
-          DirStackTy::DAVarData DVar = Stack->getTopDA(VD);
+          DirStackTy::DAVarData DVar = DirStack.getTopDA(VD);
           ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(VD);
           if (DVar.DSAKind == ACC_DSA_reduction ||
               ImplicitDA.getDSAKind() == ACC_DSA_reduction)
@@ -1297,8 +1307,8 @@ public:
         Visit(C);
     }
   }
-  ImplicitGangReductionAdder(DirStackTy *S, ImplicitDATable &T)
-      : Stack(S), ImplicitDAs(T) {
+  ImplicitGangReductionAdder(DirStackTy &DirStack, ImplicitDATable &T)
+      : DirStack(DirStack), ImplicitDAs(T) {
     LocalDefinitions.emplace_back();
   }
 };
@@ -1317,7 +1327,7 @@ class NestedReductionChecker : public StmtVisitor<NestedReductionChecker> {
         : ReductionClause(C), RE(RE) {}
   };
   typedef StmtVisitor<NestedReductionChecker> BaseVisitor;
-  DirStackTy *Stack;
+  DirStackTy &DirStack;
   llvm::SmallVector<llvm::DenseMap<VarDecl *, ReductionVar>, 8> Privates;
   bool Error = false;
 
@@ -1354,19 +1364,19 @@ public:
               ReductionClause->getNameInfo().getName() !=
               EnclosingPrivate.ReductionClause->getNameInfo().getName()) {
             Error = true;
-            Stack->SemaRef.Diag(DRE->getExprLoc(),
-                                diag::err_acc_conflicting_reduction)
+            DirStack.SemaRef.Diag(DRE->getExprLoc(),
+                                  diag::err_acc_conflicting_reduction)
                 << false
                 << ACCReductionClause::printReductionOperatorToString(
-                    ReductionClause->getNameInfo())
+                       ReductionClause->getNameInfo())
                 << VD;
-            Stack->SemaRef.Diag(EnclosingPrivate.RE->getExprLoc(),
-                                diag::note_acc_enclosing_reduction)
+            DirStack.SemaRef.Diag(EnclosingPrivate.RE->getExprLoc(),
+                                  diag::note_acc_enclosing_reduction)
                 << ACCReductionClause::printReductionOperatorToString(
-                    EnclosingPrivate.ReductionClause->getNameInfo());
+                       EnclosingPrivate.ReductionClause->getNameInfo());
             if (EnclosingPrivate.ReductionClause->getBeginLoc().isInvalid())
-              Stack->SemaRef.Diag(Stack->getDirectiveLoc(),
-                                  diag::note_acc_implied_as_gang_reduction);
+              DirStack.SemaRef.Diag(DirStack.getDirectiveLoc(),
+                                    diag::note_acc_implied_as_gang_reduction);
           }
 
           // Record this reduction.
@@ -1404,7 +1414,9 @@ public:
     }
   }
   bool hasError() { return Error; }
-  NestedReductionChecker(DirStackTy *S) : Stack(S) { Privates.emplace_back(); }
+  NestedReductionChecker(DirStackTy &DirStack) : DirStack(DirStack) {
+    Privates.emplace_back();
+  }
 };
 } // namespace
 
@@ -1445,7 +1457,8 @@ bool Sema::StartOpenACCAssociatedStatement(OpenACCDirectiveKind DKind,
     OpenACCDirectiveKind ParentDKind;
     SourceLocation ParentLoopLoc;
     ACCPartitioningKind ParentLoopKind =
-        DirStack->getParentLoopPartitioning(ParentDKind, ParentLoopLoc);
+        OpenACCData->DirStack.getParentLoopPartitioning(ParentDKind,
+                                                        ParentLoopLoc);
     if (ParentLoopKind.hasGangClause() && LoopKind.hasGangClause()) {
       // OpenACC 2.6, sec. 2.9.2:
       // "The region of a loop with the gang clause may not contain another
@@ -1493,7 +1506,7 @@ bool Sema::StartOpenACCAssociatedStatement(OpenACCDirectiveKind DKind,
       LoopKind.setSeqComputed();
 
     // Record partitioning on stack.
-    DirStack->setLoopPartitioning(LoopKind);
+    OpenACCData->DirStack.setLoopPartitioning(LoopKind);
   }
   return ErrorFound;
 }
@@ -1504,6 +1517,7 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
                                            ArrayRef<ACCClause *> Clauses,
                                            Stmt *AStmt, SourceLocation StartLoc,
                                            SourceLocation EndLoc) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   StmtResult Res = StmtError();
 
   // Our strategy for combined directives is to "act on" the clauses (already
@@ -1534,7 +1548,7 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
   llvm::SmallVector<ACCClause *, 8> ComputedClauses;
   bool ErrorFound = false;
   ComputedClauses.append(Clauses.begin(), Clauses.end());
-  ACCPartitioningKind LoopKind = DirStack->getLoopPartitioning();
+  ACCPartitioningKind LoopKind = DirStack.getLoopPartitioning();
   if (LoopKind.hasIndependentImplicit()) {
     ACCClause *Implicit = ActOnOpenACCIndependentClause(
         ACC_IMPLICIT, SourceLocation(), SourceLocation());
@@ -1544,7 +1558,7 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
 
   // Complain for break statement in loop with independent clause.
   if (LoopKind.hasIndependent()) {
-    SourceLocation BreakLoc = DirStack->getLoopBreakStatement();
+    SourceLocation BreakLoc = DirStack.getLoopBreakStatement();
     if (BreakLoc.isValid()) {
       Diag(BreakLoc, diag::err_acc_loop_cannot_use_stmt) << "break";
       ErrorFound = true;
@@ -1565,10 +1579,10 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
     // Iterate acc loop control variables.
     llvm::SmallVector<Expr *, 8> PrePrivate;
     for (std::pair<Expr *, VarDecl *> LCV :
-             DirStack->getLoopControlVariables()) {
+         DirStack.getLoopControlVariables()) {
       Expr *RefExpr = LCV.first;
       VarDecl *VD = LCV.second;
-      const DirStackTy::DAVarData &DVar = DirStack->getTopDA(VD);
+      const DirStackTy::DAVarData &DVar = DirStack.getTopDA(VD);
 
       // Complain for any reduction.
       //
@@ -1596,7 +1610,7 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
       // To avoid a spurious diagnostic about a conflicting (redundant) DA,
       // skip any variable for which there's already an explicit private
       // clause.
-      if (!DirStack->getLoopPartitioning().hasSeqExplicit() &&
+      if (!DirStack.getLoopPartitioning().hasSeqExplicit() &&
           DVar.DSAKind != ACC_DSA_private) {
         // OpenACC 3.0 sec. 2.6 "Data Environment" L1023-1024:
         //   "Variables with predetermined data attributes may not appear in a
@@ -1699,9 +1713,9 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
     Res = ActOnOpenACCDataDirective(ComputedClauses, AStmt, StartLoc, EndLoc);
     break;
   case ACCD_parallel:
-    Res = ActOnOpenACCParallelDirective(
-        ComputedClauses, AStmt, StartLoc, EndLoc,
-        DirStack->getNestedWorkerPartitioning());
+    Res =
+        ActOnOpenACCParallelDirective(ComputedClauses, AStmt, StartLoc, EndLoc,
+                                      DirStack.getNestedWorkerPartitioning());
     if (!Res.isInvalid()) {
       NestedReductionChecker Checker(DirStack);
       Checker.Visit(Res.get());
@@ -1711,13 +1725,12 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
     break;
   case ACCD_loop: {
     SmallVector<VarDecl *, 5> LCVVars;
-    for (std::pair<Expr *, VarDecl *> LCV :
-             DirStack->getLoopControlVariables())
+    for (std::pair<Expr *, VarDecl *> LCV : DirStack.getLoopControlVariables())
       LCVVars.push_back(LCV.second);
-    Res = ActOnOpenACCLoopDirective(
-        ComputedClauses, AStmt, StartLoc, EndLoc, LCVVars,
-        DirStack->getLoopPartitioning(),
-        DirStack->getNestedExplicitGangPartitioning());
+    Res =
+        ActOnOpenACCLoopDirective(ComputedClauses, AStmt, StartLoc, EndLoc,
+                                  LCVVars, DirStack.getLoopPartitioning(),
+                                  DirStack.getNestedExplicitGangPartitioning());
     break;
   }
   case ACCD_parallel_loop:
@@ -1880,20 +1893,21 @@ StmtResult Sema::ActOnOpenACCParallelDirective(
 }
 
 void Sema::ActOnOpenACCLoopInitialization(SourceLocation ForLoc, Stmt *Init) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   assert(getLangOpts().OpenACC && "OpenACC is not active.");
   assert(Init && "Expected loop in canonical form.");
-  if (DirStack->getAssociatedLoopsParsed() < DirStack->getAssociatedLoops() &&
-      isOpenACCLoopDirective(DirStack->getEffectiveDirective())) {
+  if (DirStack.getAssociatedLoopsParsed() < DirStack.getAssociatedLoops() &&
+      isOpenACCLoopDirective(DirStack.getEffectiveDirective())) {
     if (Expr *E = dyn_cast<Expr>(Init))
       Init = E->IgnoreParens();
     if (auto *BO = dyn_cast<BinaryOperator>(Init)) {
       if (BO->getOpcode() == BO_Assign) {
         auto *LHS = BO->getLHS()->IgnoreParens();
         if (auto *DRE = dyn_cast<DeclRefExpr>(LHS))
-          DirStack->addLoopControlVariable(DRE);
+          DirStack.addLoopControlVariable(DRE);
       }
     }
-    DirStack->incAssociatedLoopsParsed();
+    DirStack.incAssociatedLoopsParsed();
   }
 }
 
@@ -1902,18 +1916,19 @@ void Sema::ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
   assert(getLangOpts().OpenACC && "OpenACC is not active.");
   if (Scope *S = CurScope->getBreakParent()) {
     if (S->isOpenACCLoopScope())
-      DirStack->addLoopBreakStatement(BreakLoc);
+      OpenACCData->DirStack.addLoopBreakStatement(BreakLoc);
   }
 }
 
 void Sema::ActOnStartOfFunctionDefForOpenACC(FunctionDecl *FD) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   // If a routine directive was just pushed onto the directive stack without a
   // declaration to which it applies, then that routine directive is lexically
   // attached to (and applies to) FD, which we just started parsing after
   // pushing.  Set the declaration now.
-  if (DirStack->getEffectiveDirective() == ACCD_routine &&
-      !DirStack->getDeclAppliesTo()) {
-    DirStack->setDeclAppliesTo(FD);
+  if (DirStack.getEffectiveDirective() == ACCD_routine &&
+      !DirStack.getDeclAppliesTo()) {
+    DirStack.setDeclAppliesTo(FD);
     return;
   }
   // If there is any previous routine directive for FD, then there must also
@@ -1930,8 +1945,9 @@ void Sema::ActOnStartOfFunctionDefForOpenACC(FunctionDecl *FD) {
   }
 }
 void Sema::ActOnFinishedFunctionBodyForOpenACC(FunctionDecl *FD) {
-  if (DirStack->getEffectiveDirective() == ACCD_routine) {
-    Decl *DeclAppliesTo = DirStack->getDeclAppliesTo();
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  if (DirStack.getEffectiveDirective() == ACCD_routine) {
+    Decl *DeclAppliesTo = DirStack.getDeclAppliesTo();
     assert(DeclAppliesTo &&
            "expected declaration to which routine directive applies to be set");
     if (DeclAppliesTo == FD->getPreviousDecl())
@@ -1939,7 +1955,7 @@ void Sema::ActOnFinishedFunctionBodyForOpenACC(FunctionDecl *FD) {
   }
 }
 void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
-  if (DirStack->getEffectiveDirective() != ACCD_routine)
+  if (OpenACCData->DirStack.getEffectiveDirective() != ACCD_routine)
     return;
   StringRef FnName = getCurFunctionDecl()->getName();
   for (Decl *D : S->decls()) {
@@ -1950,7 +1966,8 @@ void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
       if (VD->isStaticLocal()) {
         Diag(VD->getLocation(), diag::err_acc_routine_static_local)
             << VD->getName() << FnName;
-        Diag(DirStack->getDirectiveLoc(), diag::note_acc_routine) << FnName;
+        Diag(OpenACCData->DirStack.getDirectiveLoc(), diag::note_acc_routine)
+            << FnName;
       }
     }
   }
@@ -1968,14 +1985,14 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
   // associated with the loop construct."
   // Complain if there aren't enough.
   Stmt *LoopStmt = AStmt;
-  for (unsigned LoopI = 0, LoopCount = DirStack->getAssociatedLoops();
-       LoopI < LoopCount; ++LoopI)
-  {
+  for (unsigned LoopI = 0,
+                LoopCount = OpenACCData->DirStack.getAssociatedLoops();
+       LoopI < LoopCount; ++LoopI) {
     LoopStmt = LoopStmt->IgnoreContainers();
     auto *LoopFor = dyn_cast_or_null<ForStmt>(LoopStmt);
     if (!LoopFor) {
       Diag(LoopStmt->getBeginLoc(), diag::err_acc_not_for)
-          << getOpenACCName(DirStack->getRealDirective());
+          << getOpenACCName(OpenACCData->DirStack.getRealDirective());
       auto CollapseClauses =
           ACCDirectiveStmt::getClausesOfKind<ACCCollapseClause>(Clauses);
       if (CollapseClauses.begin() != CollapseClauses.end()) {
@@ -2031,8 +2048,8 @@ StmtResult Sema::ActOnOpenACCParallelLoopDirective(
   // Build the effective loop directive.
   StmtResult Res = ActOnOpenACCDirectiveStmt(ACCD_loop, LoopClauses, AStmt,
                                              StartLoc, EndLoc);
-  // The second DirStack->pop() happens in EndOpenACCDirectiveAndAssociate.
-  DirStack->pop(ACCD_loop);
+  // The second DirStack.pop() happens in EndOpenACCDirectiveAndAssociate.
+  OpenACCData->DirStack.pop(ACCD_loop);
   if (Res.isInvalid())
     return StmtError();
   ACCLoopDirective *LoopDir = cast<ACCLoopDirective>(Res.get());
@@ -2301,8 +2318,8 @@ ACCClause *Sema::ActOnOpenACCNomapClause(ArrayRef<Expr *> VarList) {
     auto *VD = dyn_cast_or_null<VarDecl>(DE->getDecl());
     assert(VD && "OpenACC implicit nomap clause for non-VarDecl");
 
-    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_nomap,
-                          ACC_IMPLICIT))
+    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
+                                      ACC_DMA_nomap, ACC_IMPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
     else
       // Assert that the variable does not appear in an explicit data clause on
@@ -2339,11 +2356,11 @@ ACCClause *Sema::ActOnOpenACCPresentClause(
     // size, we cannot know if it's fully present.  Besides, it translates to
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_present,
-                               DirStack->getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
       continue;
 
-    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_present,
-                          Determination))
+    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
+                                      ACC_DMA_present, Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -2379,11 +2396,11 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, Determination, Kind,
-                               DirStack->getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
       continue;
 
-    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_copy,
-                          Determination))
+    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_copy,
+                                      Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -2418,11 +2435,11 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               DirStack->getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
       continue;
 
-    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_copyin,
-                          ACC_EXPLICIT))
+    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
+                                      ACC_DMA_copyin, ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -2457,7 +2474,7 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               DirStack->getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
@@ -2472,8 +2489,8 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
       continue;
     }
 
-    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_copyout,
-                          ACC_EXPLICIT))
+    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
+                                      ACC_DMA_copyout, ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -2508,7 +2525,7 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               DirStack->getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const variable
@@ -2521,8 +2538,8 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
       continue;
     }
 
-    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_create,
-                          ACC_EXPLICIT))
+    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
+                                      ACC_DMA_create, ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -2554,11 +2571,11 @@ ACCClause *Sema::ActOnOpenACCNoCreateClause(
     // size, we cannot know if it's fully present.  Besides, it translates to
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_no_create,
-                               DirStack->getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
       continue;
 
-    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_no_create,
-                          ACC_EXPLICIT))
+    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
+                                      ACC_DMA_no_create, ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -2590,11 +2607,11 @@ ACCClause *Sema::ActOnOpenACCDeleteClause(ArrayRef<Expr *> VarList,
     // size, we cannot know if it's fully present.  Besides, it translates to
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_delete,
-                               DirStack->getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
       continue;
 
-    if (!DirStack->addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_delete,
-                          ACC_EXPLICIT))
+    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
+                                      ACC_DMA_delete, ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -2613,8 +2630,8 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
     auto *VD = dyn_cast_or_null<VarDecl>(DE->getDecl());
     assert(VD && "OpenACC implicit shared clause for non-VarDecl");
 
-    if (!DirStack->addDSA(VD, RefExpr->IgnoreParens(), ACC_DSA_shared,
-                          ACC_IMPLICIT))
+    if (!OpenACCData->DirStack.addDSA(VD, RefExpr->IgnoreParens(),
+                                      ACC_DSA_shared, ACC_IMPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
     else
       // Assert that the variable does not appear in an explicit data clause on
@@ -2650,7 +2667,7 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_private,
-                               DirStack->getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
       continue;
 
     // The OpenACC 2.5 spec doesn't say, as far as I know, that a const
@@ -2667,8 +2684,8 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
       continue;
     }
 
-    if (!DirStack->addDSA(VD, RefExpr->IgnoreParens(), ACC_DSA_private,
-                          Determination))
+    if (!OpenACCData->DirStack.addDSA(VD, RefExpr->IgnoreParens(),
+                                      ACC_DSA_private, Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -2700,11 +2717,11 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_firstprivate,
-                               DirStack->getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
       continue;
 
-    if (!DirStack->addDSA(VD, RefExpr->IgnoreParens(), ACC_DSA_firstprivate,
-                          Determination))
+    if (!OpenACCData->DirStack.addDSA(VD, RefExpr->IgnoreParens(),
+                                      ACC_DSA_firstprivate, Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -2854,7 +2871,7 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // variable must have a complete type.  However, you cannot copy data if
     // it doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_reduction,
-                               DirStack->getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
       continue;
 
     // The OpenACC 2.6 spec doesn't say, as far as I know, that a const
@@ -2908,15 +2925,15 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     }
 
     // Record reduction item.
-    if (!DirStack->addDSA(VD, RefExpr->IgnoreParens(), ACC_DSA_reduction,
-                          Determination, ReductionId))
+    if (!OpenACCData->DirStack.addDSA(VD, RefExpr->IgnoreParens(),
+                                      ACC_DSA_reduction, Determination,
+                                      ReductionId))
       Vars.push_back(RefExpr);
   }
   if (Vars.empty())
     return nullptr;
-  return ACCReductionClause::Create(Context, Determination, StartLoc,
-                                    LParenLoc, ColonLoc, EndLoc, Vars,
-                                    ReductionId);
+  return ACCReductionClause::Create(Context, Determination, StartLoc, LParenLoc,
+                                    ColonLoc, EndLoc, Vars, ReductionId);
 }
 
 ACCClause *Sema::ActOnOpenACCIfClause(Expr *Condition, SourceLocation StartLoc,
@@ -2956,7 +2973,7 @@ ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
     // in a self clause must have a complete type.  However, it could not
     // have been allocated on the device copy if it didn't have a size.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               DirStack->getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
@@ -2969,7 +2986,7 @@ ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
       continue;
     }
 
-    if (!DirStack->addUpdateVar(VD, RefExpr->IgnoreParens()))
+    if (!OpenACCData->DirStack.addUpdateVar(VD, RefExpr->IgnoreParens()))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -3001,7 +3018,7 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
     // in a device clause must have a complete type.  However, it could not
     // have been allocated on the device copy if it didn't have a size.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_device,
-                               DirStack->getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
@@ -3014,7 +3031,7 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
       continue;
     }
 
-    if (!DirStack->addUpdateVar(VD, RefExpr->IgnoreParens()))
+    if (!OpenACCData->DirStack.addUpdateVar(VD, RefExpr->IgnoreParens()))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -3216,13 +3233,12 @@ ACCClause *Sema::ActOnOpenACCCollapseClause(Expr *Collapse,
   if (PosIntError == IsPositiveIntegerValue(Collapse, *this, ACCC_collapse,
                                             true))
     return nullptr;
-  DirStack->setAssociatedLoops(
+  OpenACCData->DirStack.setAssociatedLoops(
       Collapse->EvaluateKnownConstInt(Context).getExtValue());
   return new (Context) ACCCollapseClause(Collapse, StartLoc, LParenLoc,
                                          EndLoc);
 }
 
 bool Sema::isInOpenACCDirective() {
-  return static_cast<DirStackTy *>(OpenACCDirectiveStack)->getRealDirective() !=
-      ACCD_unknown;
+  return OpenACCData->DirStack.getRealDirective() != ACCD_unknown;
 }

@@ -11462,9 +11462,10 @@ public:
   // OpenACC directives and clauses.
   //
 private:
-  void *OpenACCDirectiveStack;
-  void InitOpenACCDirectiveStack();
-  void DestroyOpenACCDirectiveStack();
+  struct OpenACCDataTy;
+  OpenACCDataTy *OpenACCData;
+  void InitOpenACCData();
+  void DestroyOpenACCData();
 
 public:
   /// Called at start of an OpenACC directive before its clauses.  Returns true
