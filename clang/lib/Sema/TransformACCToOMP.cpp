@@ -1322,6 +1322,8 @@ public:
                                                     FunctionDecl *FD) {
     assert(FD->getAttr<ACCRoutineDeclAttr>() == ACCAttr &&
            "expected Attr to be attached to FunctionDecl");
+    if (ACCAttr->isImplicit())
+      return nullptr;
     ASTContext &Context = getSema().getASTContext();
     OMPDeclareTargetDeclAttr *OMPAttr = OMPDeclareTargetDeclAttr::Create(
         Context, OMPDeclareTargetDeclAttr::MT_To,

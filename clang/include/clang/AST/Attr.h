@@ -270,7 +270,8 @@ public:
   /// Set or get the OpenMP attribute to which this OpenACC attribute was
   /// translated, both of which must already have been attached to \a D, and
   /// \c getIsOpenACCTranslation() must already return true for the OpenMP
-  /// attribute.
+  /// attribute.  Return \c nullptr if this OpenACC attribute has not been
+  /// translated or the translation relies on implicit OpenMP behavior.
   InheritableAttr *getOMPNode(Decl *D) const;
   void setOMPNode(Decl *D, InheritableAttr *OMPNode);
   ///@}

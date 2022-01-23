@@ -139,8 +139,8 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
     ConsumeAnnotationToken();
     DeclGroupPtrTy Group;
     ParseTopLevelDecl(Group);
-    Actions.ActOnOpenACCRoutineDirective(Clauses, StartLoc, EndLoc,
-                                         Group.get());
+    Actions.ActOnOpenACCRoutineDirective(Clauses, ACC_EXPLICIT, StartLoc,
+                                         EndLoc, Group.get());
     Actions.EndOpenACCDirectiveAndAssociate(DKind);
     return Group;
   }

@@ -31,7 +31,7 @@ enum OpenACCDirectiveKind {
   ACCD_LAST_KIND = ACCD_unknown
 };
 
-/// How OpenACC clauses or data attributes are determined.
+/// How OpenACC clauses, data attributes, or directives are determined.
 ///
 /// Some diagnostics depend on the exact values here, so do not reorder.
 enum OpenACCDetermination {

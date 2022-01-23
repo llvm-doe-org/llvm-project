@@ -1,4 +1,8 @@
 // Check "acc routine".
+//
+// This mostly checks explicit routine directives with a few basic checks of
+// implicit routine directives, which are more thoroughly checked in
+// routine-implicit.c.
 
 // RUN: %acc-check-dmp{                                                        \
 // RUN:   clang-args: ;                                                        \
@@ -42,6 +46,23 @@ typedef struct {
 // This is just so we can use PRT*-NEXT consistently from now on.
 // PRT: int PrtStart;
 int PrtStart;
+
+//      DMP: FunctionDecl {{.*}} decl 'void (Result *)'
+//  DMP-NOT: FunctionDecl
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//  DMP-NOT:   OMPDeclareTargetDeclAttr
+//
+// PRT-NEXT: void decl(Result *);
+void decl(Result *);
+
+//      DMP: FunctionDecl {{.*}} def 'void (Result *)'
+//  DMP-NOT: FunctionDecl
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//  DMP-NOT:   OMPDeclareTargetDeclAttr
+//
+// PRT-NEXT: void def(Result *Res) {
+//      PRT: }{{$}}
+void def(Result *Res) { WRITE_RESULT(Res); }
 
 //      DMP: FunctionDecl {{.*}} onDecl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
@@ -359,6 +380,8 @@ struct fnDeclAddsType *fnDeclAddsType(Result *Res) { // type isn't new so has no
 // EXE-NOT: {{.}}
 int main(int argc, char *argv[]) {
   Result Res;
+  //      EXE:           decl: host=1, not_host=0
+  //      EXE:            def: host=1, not_host=0
   //      EXE:         onDecl: host=1, not_host=0
   // EXE-NEXT:          onDef: host=1, not_host=0
   // EXE-NEXT:     onDeclDecl: host=1, not_host=0
@@ -371,6 +394,8 @@ int main(int argc, char *argv[]) {
   // EXE-NEXT:    onDefOnDecl: host=1, not_host=0
   // EXE-NEXT:  fnDefAddsType: host=1, not_host=0
   // EXE-NEXT: fnDeclAddsType: host=1, not_host=0
+  decl(&Res); PRINT_RESULT(decl, Res);
+  def(&Res); PRINT_RESULT(def, Res);
   onDecl(&Res); PRINT_RESULT(onDecl, Res);
   onDef(&Res); PRINT_RESULT(onDef, Res);
   onDeclDecl(&Res); PRINT_RESULT(onDeclDecl, Res);
@@ -388,6 +413,8 @@ int main(int argc, char *argv[]) {
   printf("fnDefAddsType: host=1, not_host=0\n");
   printf("fnDeclAddsType: host=1, not_host=0\n");
 #endif
+  // EXE-HOST-NEXT:           decl: host=1, not_host=0
+  // EXE-HOST-NEXT:            def: host=1, not_host=0
   // EXE-HOST-NEXT:         onDecl: host=1, not_host=0
   // EXE-HOST-NEXT:          onDef: host=1, not_host=0
   // EXE-HOST-NEXT:     onDeclDecl: host=1, not_host=0
@@ -400,6 +427,8 @@ int main(int argc, char *argv[]) {
   // EXE-HOST-NEXT:    onDefOnDecl: host=1, not_host=0
   // EXE-HOST-NEXT:  fnDefAddsType: host=1, not_host=0
   // EXE-HOST-NEXT: fnDeclAddsType: host=1, not_host=0
+  //  EXE-OFF-NEXT:           decl: host=0, not_host=1
+  //  EXE-OFF-NEXT:            def: host=0, not_host=1
   //  EXE-OFF-NEXT:         onDecl: host=0, not_host=1
   //  EXE-OFF-NEXT:          onDef: host=0, not_host=1
   //  EXE-OFF-NEXT:     onDeclDecl: host=0, not_host=1
@@ -412,6 +441,10 @@ int main(int argc, char *argv[]) {
   //  EXE-OFF-NEXT:    onDefOnDecl: host=0, not_host=1
   //  EXE-OFF-NEXT:  fnDefAddsType: host=0, not_host=1
   //  EXE-OFF-NEXT: fnDeclAddsType: host=0, not_host=1
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  decl(&Res); PRINT_RESULT(decl, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  def(&Res); PRINT_RESULT(def, Res);
   #pragma acc parallel num_gangs(1) copyout(Res)
   onDecl(&Res); PRINT_RESULT(onDecl, Res);
   #pragma acc parallel num_gangs(1) copyout(Res)
@@ -449,6 +482,9 @@ int main(int argc, char *argv[]) {
 // EXE-NOT: {{.}}
 
 #else
+
+#pragma acc routine seq
+void decl(Result *Res) { WRITE_RESULT(Res); }
 
 #pragma acc routine seq
 void onDecl(Result *Res) { WRITE_RESULT(Res); }

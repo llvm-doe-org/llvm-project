@@ -18,9 +18,9 @@ Architectures
   accelerator devices.
 * Offload support inherits any limitations from upstream LLVM's OpenMP
   offload support.  For example, stdio (e.g., `printf`), worker loops
-  (that is, `parallel for` in an OpenMP `target teams` region), and
-  some standard math libraries (e.g., `complex.h`) are not yet
-  properly supported in kernels offloaded to AMD GPUs.
+  (that is, `parallel for` in an OpenMP `target teams` region), some
+  standard math libraries (e.g., `complex.h`), and recursive functions
+  are not yet properly supported in kernels offloaded to AMD GPUs.
 
 Build Platforms
 ---------------

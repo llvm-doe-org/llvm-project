@@ -11503,6 +11503,8 @@ public:
   /// At the end of a function definition, pop an applying routine directive if
   /// necessary.
   void ActOnFinishedFunctionBodyForOpenACC(FunctionDecl *FD);
+  /// Add implicit routine directive upon an offload device use of a function.
+  void ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc);
   /// Check that a given declaration is ok for any current OpenACC directives.
   void ActOnDeclStmtForOpenACC(DeclStmt *S);
 
@@ -11545,6 +11547,7 @@ public:
       SourceLocation EndLoc);
   /// Called on well-formed '\#pragma acc routine'.
   void ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
+                                    OpenACCDetermination Determination,
                                     SourceLocation StartLoc,
                                     SourceLocation EndLoc, DeclGroupRef Decl);
 
@@ -11559,7 +11562,8 @@ public:
                                 SourceLocation StartLoc,
                                 SourceLocation EndLoc);
   /// Called on well-formed 'seq' clause.
-  ACCClause *ActOnOpenACCSeqClause(SourceLocation StartLoc,
+  ACCClause *ActOnOpenACCSeqClause(OpenACCDetermination Determination,
+                                   SourceLocation StartLoc,
                                    SourceLocation EndLoc);
   /// Called on well-formed 'independent' clause.
   ACCClause *ActOnOpenACCIndependentClause(OpenACCDetermination Determination,
@@ -11693,7 +11697,8 @@ public:
   /// to OpenMP once, in its entirety.
   bool transformACCToOMP(ACCDirectiveStmt *D);
   /// Transform the OpenACC attribute \a ACCAttr on the function declaration or
-  /// definition \a FD to an OpenMP attribute, and attach the latter to \a FD.
+  /// definition \a FD to an OpenMP attribute, and attach the latter to \a FD
+  /// unless it does not require a translation.
   void transformACCToOMP(ACCDeclAttr *ACCAttr, FunctionDecl *FD);
 
   /// The kind of conversion being performed.

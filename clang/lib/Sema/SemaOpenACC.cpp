@@ -20,6 +20,36 @@
 using namespace clang;
 
 //===----------------------------------------------------------------------===//
+// OpenACC host function info.
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Info recorded about the definitions of functions that so far do not have
+/// routine directives but might eventually have implicit ones.
+class HostFunctionInfoTy {
+private:
+  struct HostFunctionInfoEntryTy {
+    /// Uses of other functions such that, in each case, the function has no
+    /// routine directive yet and the use does not appear in a compute
+    /// construct.
+    llvm::DenseSet<FunctionDecl *> HostFunctionUses;
+  };
+  llvm::DenseMap<FunctionDecl *, HostFunctionInfoEntryTy> Map;
+
+public:
+  void addHostFunctionUse(FunctionDecl *User, FunctionDecl *Usee) {
+    Map[User->getCanonicalDecl()].HostFunctionUses.insert(
+        Usee->getCanonicalDecl());
+  }
+  const llvm::DenseSet<FunctionDecl *> &
+  getHostFunctionUses(FunctionDecl *User) {
+    return Map[User->getCanonicalDecl()].HostFunctionUses;
+  }
+  void removeFunction(FunctionDecl *FD) { Map.erase(FD->getCanonicalDecl()); }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // OpenACC directive stack
 //===----------------------------------------------------------------------===//
 
@@ -401,6 +431,19 @@ public:
     return false;
   }
 
+  /// Returns true if in a compute construct or in a function for which an
+  /// applying routine directive has already been seen.  Otherwise, returns
+  /// false even if a routine directive will be implied later.
+  bool isInComputeRegion() const {
+    for (auto I = Stack.rbegin(); I != Stack.rend(); ++I) {
+      if (isOpenACCComputeDirective(I->EffectiveDKind))
+        return true;
+      if (I->EffectiveDKind == ACCD_routine)
+        return true;
+    }
+    return false;
+  }
+
   /// Returns currently analyzed directive.
   OpenACCDirectiveKind getRealDirective() const {
     auto I = Stack.rbegin();
@@ -581,8 +624,9 @@ bool DirStackTy::hasVisibleDMA(VarDecl *VD) {
 //===----------------------------------------------------------------------===//
 
 struct Sema::OpenACCDataTy {
+  HostFunctionInfoTy HostFunctionInfo;
   DirStackTy DirStack;
-  OpenACCDataTy(Sema &SemaRef) : DirStack(SemaRef) {}
+  OpenACCDataTy(Sema &SemaRef) : HostFunctionInfo(), DirStack(SemaRef) {}
 };
 
 //===----------------------------------------------------------------------===//
@@ -1954,6 +1998,36 @@ void Sema::ActOnFinishedFunctionBodyForOpenACC(FunctionDecl *FD) {
       EndOpenACCDirectiveAndAssociate(ACCD_routine);
   }
 }
+static void AddImplicitRoutineDirective(Sema &SemaRef,
+                                        HostFunctionInfoTy &HostFunctionInfo,
+                                        FunctionDecl *FD) {
+  assert(!FD->hasAttr<ACCRoutineDeclAttr>() &&
+         "expected function not to have routine directive already");
+  // Add the ACCRoutineDeclAttr to the most recent FunctionDecl for FD so that
+  // it's inherited by any later FunctionDecl for FD and so that we see it in
+  // the recursion check below, which examines the most recent FunctionDecl.
+  SemaRef.ActOnOpenACCRoutineDirective(
+      {SemaRef.ActOnOpenACCSeqClause(ACC_IMPLICIT, SourceLocation(),
+                                     SourceLocation())},
+      ACC_IMPLICIT, SourceLocation(), SourceLocation(),
+      DeclGroupRef(FD->getMostRecentDecl()));
+  for (FunctionDecl *Usee : HostFunctionInfo.getHostFunctionUses(FD)) {
+    Usee = Usee->getMostRecentDecl();
+    if (Usee->hasAttr<ACCRoutineDeclAttr>())
+      continue; // avoid infinite recursion
+    AddImplicitRoutineDirective(SemaRef, HostFunctionInfo, Usee);
+  }
+  HostFunctionInfo.removeFunction(FD);
+}
+void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc) {
+  if (FD->hasAttr<ACCRoutineDeclAttr>())
+    return;
+  if (OpenACCData->DirStack.isInComputeRegion()) {
+    AddImplicitRoutineDirective(*this, OpenACCData->HostFunctionInfo, FD);
+    return;
+  }
+  OpenACCData->HostFunctionInfo.addHostFunctionUse(getCurFunctionDecl(), FD);
+}
 void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
   if (OpenACCData->DirStack.getEffectiveDirective() != ACCD_routine)
     return;
@@ -2067,6 +2141,7 @@ StmtResult Sema::ActOnOpenACCParallelLoopDirective(
 }
 
 void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
+                                        OpenACCDetermination Determination,
                                         SourceLocation StartLoc,
                                         SourceLocation EndLoc,
                                         DeclGroupRef TheDeclGroup) {
@@ -2126,18 +2201,18 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
         << getOpenACCName(ACCD_routine);
     return;
   }
-
   FunctionDecl *FD = TheDecl->getAsFunction();
   ACCRoutineDeclAttr *ACCAttr = FD->getAttr<ACCRoutineDeclAttr>();
-  if (!ACCAttr) {
-    // Proposed text for OpenACC after 3.2:
-    // - "In C and C++, a routine directive's scope starts at the routine
-    //   directive and ends at the end of the compilation unit."
-    // - "In C and C++, a definition or use of a procedure must appear within
-    //   the scope of at least one explicit and applying routine directive if
-    //   any appears in the same compilation unit."
-    // Uses include host uses and accelerator uses but only if they're evaluated
-    // (e.g., a reference in sizeof is not a use).
+
+  // Proposed text for OpenACC after 3.2:
+  // - "In C and C++, a routine directive's scope starts at the routine
+  //   directive and ends at the end of the compilation unit."
+  // - "In C and C++, a definition or use of a procedure must appear within the
+  //   scope of at least one explicit and applying routine directive if any
+  //   appears in the same compilation unit."
+  // Uses include host uses and offload device uses but only if they're
+  // evaluated (e.g., a reference in sizeof is not a use).
+  if (Determination == ACC_EXPLICIT && (!ACCAttr || ACCAttr->isImplicit())) {
     if (FunctionDecl *Def = FD->getDefinition()) {
       if (Def != FD) {
         Diag(Def->getBeginLoc(),
@@ -2151,23 +2226,48 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
       Reporter.TraverseAST(Context);
       assert(Reporter.foundUse() && "expected to find function use");
     }
-    ACCAttr = ACCRoutineDeclAttr::Create(Context, ACCRoutineDeclAttr::Seq,
-                                         SourceRange(StartLoc, EndLoc));
+  }
+
+  // Create the new attributes or adjust the inherited ones.
+  if (!ACCAttr) {
+    switch (Determination) {
+    case ACC_EXPLICIT:
+      ACCAttr = ACCRoutineDeclAttr::Create(Context, ACCRoutineDeclAttr::Seq,
+                                           SourceRange(StartLoc, EndLoc));
+      break;
+    case ACC_IMPLICIT:
+      ACCAttr = ACCRoutineDeclAttr::CreateImplicit(
+          Context, ACCRoutineDeclAttr::Seq, SourceRange(StartLoc, EndLoc));
+      break;
+    case ACC_PREDETERMINED:
+    case ACC_UNDETERMINED:
+      llvm_unreachable(
+          "expected new routine directive to be explicit or implicit");
+    }
     FD->addAttr(ACCAttr);
     transformACCToOMP(ACCAttr, FD);
   } else {
+    assert(Determination == ACC_EXPLICIT &&
+           "expected new routine directive to be explicit if already have one");
     // TODO: Eventually, we need an error diagnostic if the previous routine
     // directive is at all different from this one, but for now only exactly
     // "acc routine seq" is supported.
     assert(ACCAttr->getPartitioning() == ACCRoutineDeclAttr::Seq &&
            "expected acc routine to have seq");
-    // It's explicit, so nothing was inherited even though a previous
-    // declaration had it too.  This is important for source-to-source mode and
-    // AST printing.
+    // The routine directive is explicit, so clear the inherited bit that was
+    // set automatically due to the previous routine directive.  This is
+    // important for source-to-source mode and AST printing.
+    //
+    // The routine directive is explicit, so it should have come before any use,
+    // so there shouldn't be an any existing implicit routine directive.
+    // However, in case we're doing an AST dump in that erroneous case, clear
+    // the implicit bit that is set automatically in that case.
     ACCAttr->setInherited(false);
+    ACCAttr->setImplicit(false);
     ACCAttr->setRange(SourceRange(StartLoc, EndLoc));
     if (InheritableAttr *OMPAttr = ACCAttr->getOMPNode(FD)) {
       OMPAttr->setInherited(false);
+      OMPAttr->setImplicit(false);
       OMPAttr->setRange(SourceRange(StartLoc, EndLoc));
     }
   }
@@ -3088,7 +3188,7 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
     Res = ActOnOpenACCIfPresentClause(StartLoc, EndLoc);
     break;
   case ACCC_seq:
-    Res = ActOnOpenACCSeqClause(StartLoc, EndLoc);
+    Res = ActOnOpenACCSeqClause(ACC_EXPLICIT, StartLoc, EndLoc);
     break;
   case ACCC_independent:
     Res = ActOnOpenACCIndependentClause(ACC_EXPLICIT, StartLoc, EndLoc);
@@ -3137,9 +3237,10 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   return Res;
 }
 
-ACCClause *Sema::ActOnOpenACCSeqClause(SourceLocation StartLoc,
+ACCClause *Sema::ActOnOpenACCSeqClause(OpenACCDetermination Determination,
+                                       SourceLocation StartLoc,
                                        SourceLocation EndLoc) {
-  return new (Context) ACCSeqClause(StartLoc, EndLoc);
+  return new (Context) ACCSeqClause(Determination, StartLoc, EndLoc);
 }
 
 ACCClause *Sema::ActOnOpenACCIndependentClause(

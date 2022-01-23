@@ -1450,8 +1450,9 @@ public:
   ///
   /// \param StartLoc Starting location of the clause.
   /// \param EndLoc Ending location of the clause.
-  ACCSeqClause(SourceLocation StartLoc, SourceLocation EndLoc)
-      : ACCClause(ACCC_seq, ACC_EXPLICIT, StartLoc, EndLoc) {}
+  ACCSeqClause(OpenACCDetermination Determination, SourceLocation StartLoc,
+               SourceLocation EndLoc)
+      : ACCClause(ACCC_seq, Determination, StartLoc, EndLoc) {}
 
   /// Build an empty clause.
   ACCSeqClause() : ACCClause(ACCC_seq) {}

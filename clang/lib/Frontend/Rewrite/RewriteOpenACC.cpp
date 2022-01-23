@@ -438,7 +438,7 @@ public:
     if (ACCAttr->isInherited())
       return true;
     assert(!ACCAttr->isImplicit() &&
-           "expected that implicit ACCDeclAttr is never generated");
+           "expected that implicit ACCDeclAttr has no OMPDeclAttr");
     assert(!OMPAttr->isImplicit() &&
            "expected that explicit ACCDeclAttr is never translated to "
            "implicit OMPDeclAttr");

@@ -262,13 +262,16 @@ void DeclPrinter::prettyPrintPragmas(Decl *D) {
     AttrVec &Attrs = D->getAttrs();
     for (auto *A : Attrs) {
       if (ACCDeclAttr *ACCAttr = dyn_cast<ACCDeclAttr>(A)) {
-        // If the OpenACC attribute is inherited, it didn't appear in the
-        // original source, so don't print it.
+        InheritableAttr *OMPAttr = ACCAttr->getOMPNode(D);
+        // If the OpenACC attribute is inherited or implicit, it didn't appear
+        // in the original source, so don't print it.
         if (ACCAttr->isInherited())
           continue;
-        assert(!ACCAttr->isImplicit() &&
-               "expected that implicit ACCDeclAttr is never generated");
-        InheritableAttr *OMPAttr = ACCAttr->getOMPNode(D);
+        if (ACCAttr->isImplicit()) {
+          assert(!OMPAttr &&
+                 "expected that implicit ACCDeclAttr has no OMPDeclAttr");
+          continue;
+        }
         if (!OMPAttr)
           continue; // there must have been an error during the translation
         assert(!OMPAttr->isImplicit() &&

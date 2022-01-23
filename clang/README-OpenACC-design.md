@@ -340,6 +340,21 @@ is.  That is, they can do so without having to maintain a separate
 encoding of the general mapping that `TransformACCToOMP` already
 maintains between OpenACC and OpenMP declarative directives.
 
+In some cases, `TransformACCToOMP` determines that an OpenACC
+declarative directive should simply be discarded when translating to
+OpenMP.  In this case, an `ACCDeclAttr` has no corresponding
+`OMPDeclAttr`, and its `getOMPNode` member function returns `NULL`.
+
+If an OpenACC declarative directive is syntactically attached to a
+declaration, then the directive's `ACCDeclAttr` and any `OMPDeclAttr`
+are attached to the `Decl` for that declaration.  Otherwise, the
+directive's `ACCDeclAttr` and any `OMPDeclAttr` are attached to the
+`Decl` for the associated symbol's most recent declaration when Clang
+determined the `ACCDeclAttr`.  In either case, a result is that the
+`ACCDeclAttr` and any `OMPDeclAttr` are inherited by the `Decl` for
+any declaration of the symbol in the remainder of the translation
+unit.
+
 `TreeTransform` Caveats and AST Traversals
 ------------------------------------------
 
@@ -1955,9 +1970,22 @@ Routine Directive
 Clacc's current mapping of an `acc routine` directive and its clauses
 to OpenMP is as follows:
 
-* `acc routine seq` -> `omp declare target` plus an
+* *exp* `acc routine seq` -> `omp declare target` plus an
   `omp end declare target` following the associated function
   declaration.
+* The translation discards *imp* `acc routine seq`.  Notes:
+    * OpenACC and OpenMP rules for implicitly determining that a
+      function must be compiled for offload appear to be the same
+      (basically, the function is used in offload code), so it seems
+      unnecessary to translate *imp* `acc routine seq` to OpenMP.
+    * Translating *imp* `acc routine seq` to OpenMP would sometimes
+      require seriously cluttering the application source.  Moreover,
+      it is not clear how to handle a function, such as `printf`, used
+      in the application's offload code but declared in a header file,
+      which is potentially from a different code base.
+    * Even so, *imp* `acc routine seq` is computed as it can be useful
+      in OpenACC analyses.  For example, it can be used to check
+      compatible levels of parallelism between caller and callee.
 
 In the Clang AST, a single `OMPDeclareTargetDeclAttr` represents an
 `omp declare target` and `omp end declare target` pair.
