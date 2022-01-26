@@ -10995,8 +10995,11 @@ def err_acc_routine_not_in_scope_at_function_def : Error<
   "'%0'">;
 def err_acc_routine_not_in_scope_at_function_use : Error<
   "'#pragma acc routine' is not in scope at use of associated function '%0'">;
-def note_acc_routine : Note<
-  "function '%0' attributed with '#pragma acc routine' here">;
+def note_acc_routine_explicit : Note<
+  "'#pragma acc routine' for function '%0' appears here">;
+def note_acc_routine_seq_implicit : Note<
+  "'#pragma acc routine seq' implied for function '%0' by use in "
+  "%select{construct|function}1 '%select{#pragma acc |}1%2' here">;
 } // end of OpenACC category
 
 let CategoryName = "Related Result Type Issue" in {
