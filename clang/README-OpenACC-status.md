@@ -359,9 +359,7 @@ Run-Time Environment Variables
     * An implicit `routine seq` directive has scope throughout the
       compilation unit and thus triggers the above diagnostics for the
       function definition's body as long it's in the same compilation
-      unit.  TODO: This does not yet work for static local variables
-      if the `routine seq` directive is not implied until after the
-      definition.
+      unit.
     * OpenACC 3.2 does not specify implicit `routine` directives
       except for C++ lambdas, but nvc 21.11 computes them.
       Clarifications are under discussion among the OpenACC technical

@@ -425,7 +425,7 @@ void useDefBetween();
 // Exhaustively test diagnostic kinds this time, but choose only a single
 // representative of each diagnostic kind after this.
 //
-// expected-note@+1 7 {{'#pragma acc routine' for function 'onDef' appears here}}
+// expected-note@+1 11 {{'#pragma acc routine' for function 'onDef' appears here}}
 #pragma acc routine seq
 void onDef() {
   // expected-error@+1 {{static local variable 's' is not permitted within function 'onDef' because the latter is attributed with '#pragma acc routine'}}
@@ -439,18 +439,28 @@ void onDef() {
   #pragma acc exit data copyout(i)
   // expected-error@+1 {{'#pragma acc data' is not permitted within function 'onDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc data copy(i)
-  ;
+  {
+    // expected-error@+1 {{static local variable 's' is not permitted within function 'onDef' because the latter is attributed with '#pragma acc routine'}}
+    static int s;
+  }
   // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'onDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc parallel
-  ;
+  {
+    // expected-error@+1 {{static local variable 's' is not permitted within function 'onDef' because the latter is attributed with '#pragma acc routine'}}
+    static int s;
+  }
   // expected-error@+1 {{'#pragma acc parallel loop' is not permitted within function 'onDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc parallel loop seq
-  for (int i = 0; i < 5; ++i)
-  ;
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{static local variable 's' is not permitted within function 'onDef' because the latter is attributed with '#pragma acc routine'}}
+    static int s;
+  }
   // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop seq
-  for (int i = 0; i < 5; ++i)
-    ;
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{static local variable 's' is not permitted within function 'onDef' because the latter is attributed with '#pragma acc routine'}}
+    static int s;
+  }
 }
 
 // Does the definition check see the routine directive on the preceding decl?
@@ -541,7 +551,7 @@ void parUseBeforeDef() {
 // Does the definition check see the routine directive later implied by a use
 // within a parallel construct?
 void parUseAfterDef() {
-  // FIXME: xxpected-error@+1 {{static local variable 's' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
@@ -552,7 +562,7 @@ void parUseAfterDef() {
 }
 void parUseAfterDef_use() {
   #pragma acc parallel
-  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'parUseAfterDef' by use in construct '#pragma acc parallel' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'parUseAfterDef' by use in construct '#pragma acc parallel' here}}
   parUseAfterDef();
 }
 
@@ -580,7 +590,7 @@ void parLoopUseBeforeDef() {
 // Does the definition check see the routine directive later implied by a use
 // within a parallel loop construct?
 void parLoopUseAfterDef() {
-  // FIXME: xxpected-error@+1 {{static local variable 's' is not permitted within function 'parLoopUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  // expected-error@+1 {{static local variable 's' is not permitted within function 'parLoopUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parLoopUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
@@ -592,7 +602,7 @@ void parLoopUseAfterDef() {
 void parLoopUseAfterDef_use() {
   #pragma acc parallel loop
   for (int i = 0; i < 5; ++i) {
-    // expected-note@+1 {{'#pragma acc routine seq' implied for function 'parLoopUseAfterDef' by use in construct '#pragma acc parallel loop' here}}
+    // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'parLoopUseAfterDef' by use in construct '#pragma acc parallel loop' here}}
     parLoopUseAfterDef();
   }
 }
@@ -620,7 +630,7 @@ void expOffFnUseBeforeDef() {
 // Does the definition check see the routine directive later implied by a use
 // within a function with an explicit routine directive?
 void expOffFnUseAfterDef() {
-  // FIXME: xxpected-error@+1 {{static local variable 's' is not permitted within function 'expOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  // expected-error@+1 {{static local variable 's' is not permitted within function 'expOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'expOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
@@ -629,10 +639,10 @@ void expOffFnUseAfterDef() {
   for (int i = 0; i < 5; ++i)
     ;
 }
-// expected-note@+1 {{'#pragma acc routine' for function 'expOffFnUseAfterDef_use' appears here}}
+// expected-note@+1 2 {{'#pragma acc routine' for function 'expOffFnUseAfterDef_use' appears here}}
 #pragma acc routine seq
 void expOffFnUseAfterDef_use() {
-  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'expOffFnUseAfterDef' by use in function 'expOffFnUseAfterDef_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'expOffFnUseAfterDef' by use in function 'expOffFnUseAfterDef_use' here}}
   expOffFnUseAfterDef();
 }
 
@@ -688,7 +698,7 @@ void chainedImpOffFnUseBeforeDef() {
 // Does the definition check see the routine directive later implied by a use
 // within a function with an implicit routine directive?
 void impOffFnUseAfterDef() {
-  // FIXME: xxpected-error@+1 {{static local variable 's' is not permitted within function 'impOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  // expected-error@+1 {{static local variable 's' is not permitted within function 'impOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'impOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
@@ -698,21 +708,21 @@ void impOffFnUseAfterDef() {
     ;
 }
 void impOffFnUseAfterDef_use();
-// expected-note@+1 {{'#pragma acc routine' for function 'impOffFnUseAfterDef_use_use' appears here}}
+// expected-note@+1 2 {{'#pragma acc routine' for function 'impOffFnUseAfterDef_use_use' appears here}}
 #pragma acc routine seq
 void impOffFnUseAfterDef_use_use() {
-  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'impOffFnUseAfterDef_use' by use in function 'impOffFnUseAfterDef_use_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'impOffFnUseAfterDef_use' by use in function 'impOffFnUseAfterDef_use_use' here}}
   impOffFnUseAfterDef_use();
 }
 void impOffFnUseAfterDef_use() {
-  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'impOffFnUseAfterDef' by use in function 'impOffFnUseAfterDef_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'impOffFnUseAfterDef' by use in function 'impOffFnUseAfterDef_use' here}}
   impOffFnUseAfterDef();
 }
 
 //// Repeat that but discover multiple implicit routine directives at once in a
 //// chain.
 void chainedImpOffFnUseAfterDef() {
-  // FIXME: xxpected-error@+1 {{static local variable 's' is not permitted within function 'chainedImpOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  // expected-error@+1 {{static local variable 's' is not permitted within function 'chainedImpOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'chainedImpOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
@@ -722,13 +732,13 @@ void chainedImpOffFnUseAfterDef() {
     ;
 }
 void chainedImpOffFnUseAfterDef_use() {
-  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseAfterDef' by use in function 'chainedImpOffFnUseAfterDef_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseAfterDef' by use in function 'chainedImpOffFnUseAfterDef_use' here}}
   chainedImpOffFnUseAfterDef();
 }
-// expected-note@+1 {{'#pragma acc routine' for function 'chainedImpOffFnUseAfterDef_use_use' appears here}}
+// expected-note@+1 2 {{'#pragma acc routine' for function 'chainedImpOffFnUseAfterDef_use_use' appears here}}
 #pragma acc routine seq
 void chainedImpOffFnUseAfterDef_use_use() {
-  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseAfterDef_use' by use in function 'chainedImpOffFnUseAfterDef_use_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseAfterDef_use' by use in function 'chainedImpOffFnUseAfterDef_use_use' here}}
   chainedImpOffFnUseAfterDef_use();
 }
 

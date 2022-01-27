@@ -417,6 +417,17 @@ public:
     return ACCD_unknown;
   }
 
+  /// If the parser is currently somewhere in a function for which an applying
+  /// routine directive is already known, returns true.  Otherwise, returns
+  /// false even if a routine directive will be implied later.
+  bool hasRoutineDirective() const {
+    for (auto I = Stack.rbegin(); I != Stack.rend(); ++I) {
+      if (I->RealDKind == ACCD_routine)
+        return true;
+    }
+    return false;
+  }
+
   /// If the parser is currently somewhere in a function for which an explicit
   /// and applying routine directive is already known, returns its location.
   /// Otherwise, returns an invalid location.
@@ -2166,8 +2177,7 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc) {
                                                          FD, Loc);
 }
 void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
-  if (OpenACCData->DirStack.getEffectiveDirective() != ACCD_routine)
-    return;
+  bool HasRoutineDirective = OpenACCData->DirStack.hasRoutineDirective();
   FunctionDecl *Fn = getCurFunctionDecl();
   StringRef FnName = getCurFunctionDecl()->getName();
   for (Decl *D : S->decls()) {
@@ -2176,9 +2186,15 @@ void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
       // "In C and C++, function static variables are not supported in functions
       // to which a routine directive applies."
       if (VD->isStaticLocal()) {
-        Diag(VD->getLocation(), diag::err_acc_routine_static_local)
-            << VD->getName() << FnName;
-        OpenACCData->ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Fn);
+        if (HasRoutineDirective) {
+          Diag(VD->getLocation(), diag::err_acc_routine_static_local)
+              << VD->getName() << FnName;
+          OpenACCData->ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Fn);
+        } else {
+          OpenACCData->ImplicitRoutineDirInfo.diagIfRoutineSeqDirLater(
+              Fn, VD->getLocation(), diag::err_acc_routine_static_local)
+              << VD->getName() << FnName;
+        }
       }
     }
   }
