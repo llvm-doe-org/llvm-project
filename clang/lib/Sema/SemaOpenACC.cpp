@@ -20,111 +20,6 @@
 using namespace clang;
 
 //===----------------------------------------------------------------------===//
-// OpenACC host function info.
-//===----------------------------------------------------------------------===//
-
-namespace {
-/// Info recorded about functions that at first are not known to have routine
-/// directives, but routine seq directives might be implied later.
-class HostFunctionInfoTy {
-private:
-  Sema &SemaRef;
-  struct HostFunctionInfoEntryTy {
-    /// This function's uses of other functions such that, in each case, the use
-    /// does not appear in a compute construct and neither function was known to
-    /// have a routine directive when the use was parsed.
-    llvm::DenseMap<FunctionDecl *, SourceLocation> HostFunctionUses;
-    /// The location of the use of this function that originally implied a
-    /// routine seq directive for this function.  Invalid if no routine seq
-    /// directive has been implied for this function yet.
-    SourceLocation UseLoc;
-    /// The function in which appeared the use of this function that originally
-    /// implied a routine seq directive for this function.  \c nullptr if no
-    /// routine seq directive has been implied for this function yet.
-    FunctionDecl *UserFn = nullptr;
-    /// The compute construct in which appeared the use of this function that
-    /// originally implied a routine seq directive for this function.
-    /// \c ACCD_routine if that use did not appear within a compute construct.
-    /// \c ACCD_unknown if no routine seq directive has been implied for this
-    /// function yet.
-    OpenACCDirectiveKind UserComputeConstruct = ACCD_unknown;
-  };
-  llvm::DenseMap<FunctionDecl *, HostFunctionInfoEntryTy> Map;
-
-public:
-  HostFunctionInfoTy(Sema &SemaRef) : SemaRef(SemaRef) {}
-  /// Record use of \a Usee at \a UseLoc within \a User such that the use does
-  /// not appear in a compute construct and neither function is yet known to
-  /// have a routine directive.
-  void addHostFunctionUse(FunctionDecl *User, FunctionDecl *Usee,
-                          SourceLocation UseLoc) {
-    HostFunctionInfoEntryTy &Entry = Map[User->getCanonicalDecl()];
-    assert(Entry.UseLoc.isInvalid() &&
-           "unexpected host function use after implicit routine directive");
-    Entry.HostFunctionUses.try_emplace(Usee->getCanonicalDecl(), UseLoc);
-  }
-  /// Retrieve all uses recorded by \c addHostFunctionUse where \a User is the
-  /// user, and discard their records here as they should never be needed again.
-  llvm::DenseMap<FunctionDecl *, SourceLocation>
-  removeHostFunctionUses(FunctionDecl *User) {
-    return std::move(Map[User->getCanonicalDecl()].HostFunctionUses);
-  }
-  /// Record routine seq directive implied for \a FD by its use at \a UseLoc
-  /// within \a UserFn and within a compute construct of kind
-  /// \a UserComputeConstruct (must be \c ACCD_routine if the use is not within
-  /// a compute construct).
-  void setImplicitRoutineSeqDirective(
-      FunctionDecl *FD, SourceLocation UseLoc, FunctionDecl *UserFn,
-      OpenACCDirectiveKind UserComputeConstruct) {
-    assert((isOpenACCComputeDirective(UserComputeConstruct) ||
-            UserComputeConstruct == ACCD_routine) &&
-           "expected compute construct");
-    HostFunctionInfoEntryTy &Entry = Map[FD->getCanonicalDecl()];
-    assert(Entry.UseLoc.isInvalid() &&
-           "unexpected second implicit routine seq directive for function");
-    Entry.UseLoc = UseLoc;
-    Entry.UserFn = UserFn;
-    Entry.UserComputeConstruct = UserComputeConstruct;
-  }
-  /// Emit notes identifying the origin of the routine directive for \a FD.
-  ///
-  /// If \a ExplicitRoutineDirLoc is valid, report it as the location of an
-  /// explicit routine directive for \a FD.  Otherwise, report the first use of
-  /// \a FD that implied its routine seq directive.  If that use appears in a
-  /// function but not a compute construct, recursively emit notes identifying
-  /// the origin of that function's routine directive.
-  ///
-  /// All routine directives in that chain must already be attached to the
-  /// functions they apply to, and all that are implicit must already be
-  /// recorded in this \c HostFunctionInfoTy.
-  void emitNotesForRoutineDirectiveChain(FunctionDecl *FD,
-                                         SourceLocation ExplicitRoutineDirLoc) {
-    if (ExplicitRoutineDirLoc.isValid()) {
-      SemaRef.Diag(ExplicitRoutineDirLoc, diag::note_acc_routine_explicit)
-        << FD->getName();
-      return;
-    }
-    HostFunctionInfoEntryTy &Entry = Map[FD->getCanonicalDecl()];
-    assert(Entry.UseLoc.isValid() && Entry.UserFn &&
-           Entry.UserComputeConstruct != ACCD_unknown &&
-           "expected function to have implicit seq routine directive");
-    bool UserIsFunction = Entry.UserComputeConstruct == ACCD_routine;
-    StringRef UserName =
-      UserIsFunction ? Entry.UserFn->getName()
-                     : getOpenACCName(Entry.UserComputeConstruct);
-    SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
-      << FD->getName() << UserIsFunction << UserName;
-    if (UserIsFunction) {
-      ACCRoutineDeclAttr *Attr = Entry.UserFn->getAttr<ACCRoutineDeclAttr>();
-      assert(Attr && "expected routine seq directive to be implied in compute "
-                     "construct or in function with routine directve");
-      emitNotesForRoutineDirectiveChain(Entry.UserFn, Attr->getLoc());
-    }
-  }
-};
-} // namespace
-
-//===----------------------------------------------------------------------===//
 // OpenACC directive stack
 //===----------------------------------------------------------------------===//
 
@@ -698,13 +593,119 @@ bool DirStackTy::hasVisibleDMA(VarDecl *VD) {
 }
 
 //===----------------------------------------------------------------------===//
+// OpenACC host function info.
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Info recorded about functions that at first are not known to have routine
+/// directives, but routine seq directives might be implied later.
+class HostFunctionInfoTy {
+private:
+  Sema &SemaRef;
+  struct HostFunctionInfoEntryTy {
+    /// This function's uses of other functions such that, in each case, the use
+    /// does not appear in a compute construct and neither function was known to
+    /// have a routine directive when the use was parsed.
+    llvm::DenseMap<FunctionDecl *, SourceLocation> HostFunctionUses;
+    /// The location of the use of this function that originally implied a
+    /// routine seq directive for this function.  Invalid if no routine seq
+    /// directive has been implied for this function yet.
+    SourceLocation UseLoc;
+    /// The function in which appeared the use of this function that originally
+    /// implied a routine seq directive for this function.  \c nullptr if no
+    /// routine seq directive has been implied for this function yet.
+    FunctionDecl *UserFn = nullptr;
+    /// The compute construct in which appeared the use of this function that
+    /// originally implied a routine seq directive for this function.
+    /// \c ACCD_routine if that use did not appear within a compute construct.
+    /// \c ACCD_unknown if no routine seq directive has been implied for this
+    /// function yet.
+    OpenACCDirectiveKind UserComputeConstruct = ACCD_unknown;
+  };
+  llvm::DenseMap<FunctionDecl *, HostFunctionInfoEntryTy> Map;
+
+public:
+  HostFunctionInfoTy(Sema &SemaRef) : SemaRef(SemaRef) {}
+  /// Record use of \a Usee at \a UseLoc within \a User such that the use does
+  /// not appear in a compute construct and neither function is yet known to
+  /// have a routine directive.
+  void addHostFunctionUse(FunctionDecl *User, FunctionDecl *Usee,
+                          SourceLocation UseLoc) {
+    HostFunctionInfoEntryTy &Entry = Map[User->getCanonicalDecl()];
+    assert(Entry.UseLoc.isInvalid() &&
+           "unexpected host function use after implicit routine directive");
+    Entry.HostFunctionUses.try_emplace(Usee->getCanonicalDecl(), UseLoc);
+  }
+  /// Retrieve all uses recorded by \c addHostFunctionUse where \a User is the
+  /// user, and discard their records here as they should never be needed again.
+  llvm::DenseMap<FunctionDecl *, SourceLocation>
+  removeHostFunctionUses(FunctionDecl *User) {
+    return std::move(Map[User->getCanonicalDecl()].HostFunctionUses);
+  }
+  /// Record routine seq directive implied for \a FD by its use at \a UseLoc
+  /// within \a UserFn and within a compute construct of kind
+  /// \a UserComputeConstruct (must be \c ACCD_routine if the use is not within
+  /// a compute construct).
+  void setImplicitRoutineSeqDirective(
+      FunctionDecl *FD, SourceLocation UseLoc, FunctionDecl *UserFn,
+      OpenACCDirectiveKind UserComputeConstruct) {
+    assert((isOpenACCComputeDirective(UserComputeConstruct) ||
+            UserComputeConstruct == ACCD_routine) &&
+           "expected compute construct");
+    HostFunctionInfoEntryTy &Entry = Map[FD->getCanonicalDecl()];
+    assert(Entry.UseLoc.isInvalid() &&
+           "unexpected second implicit routine seq directive for function");
+    Entry.UseLoc = UseLoc;
+    Entry.UserFn = UserFn;
+    Entry.UserComputeConstruct = UserComputeConstruct;
+  }
+  /// Emit notes identifying the origin of the routine directive for \a FD.
+  ///
+  /// If \a ExplicitRoutineDirLoc is valid, report it as the location of an
+  /// explicit routine directive for \a FD.  Otherwise, report the first use of
+  /// \a FD that implied its routine seq directive.  If that use appears in a
+  /// function but not a compute construct, recursively emit notes identifying
+  /// the origin of that function's routine directive.
+  ///
+  /// All routine directives in that chain must already be attached to the
+  /// functions they apply to, and all that are implicit must already be
+  /// recorded in this \c HostFunctionInfoTy.
+  void emitNotesForRoutineDirectiveChain(FunctionDecl *FD,
+                                         SourceLocation ExplicitRoutineDirLoc) {
+    if (ExplicitRoutineDirLoc.isValid()) {
+      SemaRef.Diag(ExplicitRoutineDirLoc, diag::note_acc_routine_explicit)
+        << FD->getName();
+      return;
+    }
+    HostFunctionInfoEntryTy &Entry = Map[FD->getCanonicalDecl()];
+    assert(Entry.UseLoc.isValid() && Entry.UserFn &&
+           Entry.UserComputeConstruct != ACCD_unknown &&
+           "expected function to have implicit seq routine directive");
+    bool UserIsFunction = Entry.UserComputeConstruct == ACCD_routine;
+    StringRef UserName =
+      UserIsFunction ? Entry.UserFn->getName()
+                     : getOpenACCName(Entry.UserComputeConstruct);
+    SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
+      << FD->getName() << UserIsFunction << UserName;
+    if (UserIsFunction) {
+      ACCRoutineDeclAttr *Attr = Entry.UserFn->getAttr<ACCRoutineDeclAttr>();
+      assert(Attr && "expected routine seq directive to be implied in compute "
+                     "construct or in function with routine directve");
+      emitNotesForRoutineDirectiveChain(Entry.UserFn, Attr->getLoc());
+    }
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Container for above OpenACC data.
 //===----------------------------------------------------------------------===//
 
 struct Sema::OpenACCDataTy {
-  HostFunctionInfoTy HostFunctionInfo;
   DirStackTy DirStack;
-  OpenACCDataTy(Sema &SemaRef) : HostFunctionInfo(SemaRef), DirStack(SemaRef) {}
+  HostFunctionInfoTy HostFunctionInfo;
+  OpenACCDataTy(Sema &SemaRef)
+    : DirStack(SemaRef), HostFunctionInfo(SemaRef) {}
 };
 
 //===----------------------------------------------------------------------===//
