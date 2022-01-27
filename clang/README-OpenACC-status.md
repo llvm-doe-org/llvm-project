@@ -351,6 +351,21 @@ Run-Time Environment Variables
       supported.
     * Declaration of a static local variable produces a compile-time
       error diagnostic.
+* Implicit `routine seq` directive
+    * Unless a function has an explicit `routine` directive in scope,
+      a `routine seq` directive is implied for it by any use of the
+      function within a compute construct or within another function
+      with a `routine` directive (whether implicit or explicit).
+    * An implicit `routine seq` directive has scope throughout the
+      compilation unit and thus triggers the above diagnostics for the
+      function definition's body as long it's in the same compilation
+      unit.  TODO: This does not yet work for static local variables
+      if the `routine seq` directive is not implied until after the
+      definition.
+    * OpenACC 3.2 does not specify implicit `routine` directives
+      except for C++ lambdas, but nvc 21.11 computes them.
+      Clarifications are under discussion among the OpenACC technical
+      committee for inclusion in the OpenACC spec after 3.2.
 
 Subarrays
 ---------

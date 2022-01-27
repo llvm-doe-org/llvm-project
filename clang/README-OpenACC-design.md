@@ -1984,8 +1984,9 @@ to OpenMP is as follows:
       in the application's offload code but declared in a header file,
       which is potentially from a different code base.
     * Even so, *imp* `acc routine seq` is computed as it can be useful
-      in OpenACC analyses.  For example, it can be used to check
-      compatible levels of parallelism between caller and callee.
+      in OpenACC analyses and diagnostics.  For example, it can be
+      used to check compatible levels of parallelism between caller
+      and callee.
 
 In the Clang AST, a single `OMPDeclareTargetDeclAttr` represents an
 `omp declare target` and `omp end declare target` pair.

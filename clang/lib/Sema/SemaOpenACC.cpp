@@ -417,6 +417,18 @@ public:
     return ACCD_unknown;
   }
 
+  /// If the parser is currently somewhere in a function for which an explicit
+  /// and applying routine directive is already known, returns its location.
+  /// Otherwise, returns an invalid location.
+  SourceLocation getExplicitRoutineDirectiveLoc() const {
+    for (auto I = Stack.rbegin(); I != Stack.rend(); ++I) {
+      if (I->RealDKind == ACCD_routine)
+        // Location is invalid if it's an implicit routine directive.
+        return I->DirectiveLoc;
+    }
+    return SourceLocation();
+  }
+
   /// Returns currently analyzed directive.
   OpenACCDirectiveKind getRealDirective() const {
     auto I = Stack.rbegin();
@@ -602,7 +614,12 @@ namespace {
 class HostFunctionInfoTy {
 private:
   Sema &SemaRef;
+  DirStackTy &DirStack;
   struct HostFunctionInfoEntryTy {
+    typedef std::pair<SourceLocation, PartialDiagnostic> DiagTy;
+    /// Diagnostics to report if a routine seq directive is implied for this
+    /// function later.
+    std::list<DiagTy> Diags;
     /// This function's uses of other functions such that, in each case, the use
     /// does not appear in a compute construct and neither function was known to
     /// have a routine directive when the use was parsed.
@@ -625,7 +642,8 @@ private:
   llvm::DenseMap<FunctionDecl *, HostFunctionInfoEntryTy> Map;
 
 public:
-  HostFunctionInfoTy(Sema &SemaRef) : SemaRef(SemaRef) {}
+  HostFunctionInfoTy(Sema &SemaRef, DirStackTy &DirStack)
+      : SemaRef(SemaRef), DirStack(DirStack) {}
   /// Record use of \a Usee at \a UseLoc within \a User such that the use does
   /// not appear in a compute construct and neither function is yet known to
   /// have a routine directive.
@@ -642,41 +660,76 @@ public:
   removeHostFunctionUses(FunctionDecl *User) {
     return std::move(Map[User->getCanonicalDecl()].HostFunctionUses);
   }
+  /// Record diagnostic to be emitted if a routine seq directive is implied for
+  /// \a FD later.
+  PartialDiagnostic &diagIfRoutineDirLater(FunctionDecl *FD, SourceLocation Loc,
+                                           unsigned DiagID) {
+    HostFunctionInfoEntryTy &Entry = Map[FD->getCanonicalDecl()];
+    assert(Entry.UseLoc.isInvalid() &&
+           "unexpected diagnostic after implicit routine directive");
+    Entry.Diags.emplace_back(Loc, SemaRef.PDiag(DiagID));
+    return Entry.Diags.back().second;
+  }
   /// Record routine seq directive implied for \a FD by its use at \a UseLoc
   /// within \a UserFn and within a compute construct of kind
   /// \a UserComputeConstruct (must be \c ACCD_routine if the use is not within
-  /// a compute construct).
+  /// a compute construct), and emit diagnostics that were previously recorded
+  /// for \a FD by \c diagIfRoutineDirLater.
+  ///
+  /// \c emitNotesForRoutineDirectiveChain is called for \a FD, so its
+  /// preconditions must be met.
+  ///
+  /// \c setImplicitRoutineSeqDirective must be called at most once per
+  /// function.
   void setImplicitRoutineSeqDirective(
       FunctionDecl *FD, SourceLocation UseLoc, FunctionDecl *UserFn,
       OpenACCDirectiveKind UserComputeConstruct) {
     assert((isOpenACCComputeDirective(UserComputeConstruct) ||
             UserComputeConstruct == ACCD_routine) &&
-           "expected compute construct");
+           "expected use to be in compute construct or function with a routine "
+           "directive");
     HostFunctionInfoEntryTy &Entry = Map[FD->getCanonicalDecl()];
     assert(Entry.UseLoc.isInvalid() &&
            "unexpected second implicit routine seq directive for function");
     Entry.UseLoc = UseLoc;
-    Entry.UserFn = UserFn;
+    Entry.UserFn = UserFn->getCanonicalDecl();
     Entry.UserComputeConstruct = UserComputeConstruct;
+    for (auto D : Entry.Diags) {
+      SemaRef.Diag(D.first, D.second);
+      emitNotesForRoutineDirectiveChain(FD);
+    }
+    Entry.Diags.clear();
   }
   /// Emit notes identifying the origin of the routine directive for \a FD.
   ///
-  /// If \a ExplicitRoutineDirLoc is valid, report it as the location of an
-  /// explicit routine directive for \a FD.  Otherwise, report the first use of
-  /// \a FD that implied its routine seq directive.  If that use appears in a
-  /// function but not a compute construct, recursively emit notes identifying
-  /// the origin of that function's routine directive.
+  /// If \a FD has an explicit routine directive, report it.  Otherwise, report
+  /// the first use of \a FD that implied its routine seq directive.  If that
+  /// use does not appear in a compute construct, recursively emit notes
+  /// identifying the origin of the routine directive for the function in which
+  /// the use appears.
   ///
   /// All routine directives in that chain must already be attached to the
-  /// functions they apply to, and all that are implicit must already be
-  /// recorded in this \c HostFunctionInfoTy.
-  void emitNotesForRoutineDirectiveChain(FunctionDecl *FD,
-                                         SourceLocation ExplicitRoutineDirLoc) {
-    if (ExplicitRoutineDirLoc.isValid()) {
-      SemaRef.Diag(ExplicitRoutineDirLoc, diag::note_acc_routine_explicit)
-        << FD->getName();
+  /// functions they apply to except that the routine directive of the function
+  /// currently being parsed might only be on the directive stack, and all that
+  /// are implicit must already be recorded in this \c HostFunctionInfoTy.
+  void emitNotesForRoutineDirectiveChain(FunctionDecl *FD) {
+    // Handle explicit routine directive.
+    SourceLocation Loc;
+    if (FD->getCanonicalDecl() ==
+        SemaRef.getCurFunctionDecl()->getCanonicalDecl())
+      Loc = DirStack.getExplicitRoutineDirectiveLoc();
+    else {
+      ACCRoutineDeclAttr *Attr =
+          FD->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
+      assert(Attr && "expected function to have routine directive");
+      Loc = Attr->getLoc();
+    }
+    if (Loc.isValid()) {
+      SemaRef.Diag(Loc, diag::note_acc_routine_explicit) << FD->getName();
       return;
     }
+
+    // Handle implicit routine directive.
     HostFunctionInfoEntryTy &Entry = Map[FD->getCanonicalDecl()];
     assert(Entry.UseLoc.isValid() && Entry.UserFn &&
            Entry.UserComputeConstruct != ACCD_unknown &&
@@ -687,12 +740,8 @@ public:
                      : getOpenACCName(Entry.UserComputeConstruct);
     SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
       << FD->getName() << UserIsFunction << UserName;
-    if (UserIsFunction) {
-      ACCRoutineDeclAttr *Attr = Entry.UserFn->getAttr<ACCRoutineDeclAttr>();
-      assert(Attr && "expected routine seq directive to be implied in compute "
-                     "construct or in function with routine directve");
-      emitNotesForRoutineDirectiveChain(Entry.UserFn, Attr->getLoc());
-    }
+    if (UserIsFunction)
+      emitNotesForRoutineDirectiveChain(Entry.UserFn);
   }
 };
 } // namespace
@@ -705,7 +754,7 @@ struct Sema::OpenACCDataTy {
   DirStackTy DirStack;
   HostFunctionInfoTy HostFunctionInfo;
   OpenACCDataTy(Sema &SemaRef)
-    : DirStack(SemaRef), HostFunctionInfo(SemaRef) {}
+      : DirStack(SemaRef), HostFunctionInfo(SemaRef, DirStack) {}
 };
 
 //===----------------------------------------------------------------------===//
@@ -744,6 +793,7 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
   // Check directive nesting.
   SourceLocation ParentLoc;
   OpenACCDirectiveKind ParentDKind = DirStack.getRealParentDirective(ParentLoc);
+  FunctionDecl *CurFnDecl = getCurFunctionDecl();
   if (!isAllowedParentForDirective(RealDKind, ParentDKind)) {
     if ((ParentDKind == ACCD_unknown || ParentDKind == ACCD_routine) &&
         RealDKind == ACCD_loop)
@@ -753,12 +803,11 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
       // directive is like supporting it within a compute construct as the
       // function is meant to be callable here.  We don't support any such
       // cases.  TODO: Eventually we'll support orphaned loop constructs.
-      FunctionDecl *CurFnDecl = getCurFunctionDecl();
       StringRef FnName = CurFnDecl->getName();
       Diag(StartLoc, diag::err_acc_routine_unexpected_directive)
           << getOpenACCName(RealDKind) << FnName;
       OpenACCData->HostFunctionInfo.emitNotesForRoutineDirectiveChain(
-          CurFnDecl, ParentLoc);
+          CurFnDecl);
     } else {
       assert(ParentDKind != ACCD_unknown &&
              "expected only loop construct to require parent construct");
@@ -768,6 +817,15 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
           << getOpenACCName(ParentDKind);
     }
     return true;
+  }
+  // Store any directive nesting diagnostic that should be emitted if a routine
+  // seq directive is later implied for this function.
+  if (ParentDKind == ACCD_unknown && RealDKind != ACCD_routine &&
+      !isAllowedParentForDirective(RealDKind, ACCD_routine)) {
+    StringRef FnName = CurFnDecl->getName();
+    OpenACCData->HostFunctionInfo.diagIfRoutineDirLater(
+        CurFnDecl, StartLoc, diag::err_acc_routine_unexpected_directive)
+        << getOpenACCName(RealDKind) << FnName;
   }
   return false;
 }
@@ -2102,8 +2160,8 @@ static void AddImplicitRoutineDirective(
     Usee = Usee->getMostRecentDecl();
     if (Usee->hasAttr<ACCRoutineDeclAttr>())
       continue; // avoid infinite recursion
-    AddImplicitRoutineDirective(SemaRef, HostFunctionInfo, Usee,
-                                UseeUseLoc, FD, ACCD_routine);
+    AddImplicitRoutineDirective(SemaRef, HostFunctionInfo, Usee, UseeUseLoc, FD,
+                                ACCD_routine);
   }
 }
 void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc) {
@@ -2131,8 +2189,7 @@ void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
       if (VD->isStaticLocal()) {
         Diag(VD->getLocation(), diag::err_acc_routine_static_local)
             << VD->getName() << FnName;
-        OpenACCData->HostFunctionInfo.emitNotesForRoutineDirectiveChain(
-            Fn, OpenACCData->DirStack.getDirectiveLoc());
+        OpenACCData->HostFunctionInfo.emitNotesForRoutineDirectiveChain(Fn);
       }
     }
   }

@@ -417,7 +417,7 @@ void useDefBetween();
 void useDefBetween();
 
 //--------------------------------------------------
-// Restrictions on the function definition body.
+// Restrictions on the function definition body for explicit routine directives.
 //--------------------------------------------------
 
 // Does the definition check see the attached routine directive?
@@ -483,7 +483,7 @@ void defOnDecl() {
 #pragma acc routine seq
 void defOnDecl();
 
-// Do we avoid repeated diagnostics?
+// Do we avoid repeated diagnostics and note the most recent routine directive?
 #pragma acc routine seq
 void onDeclOnDef();
 // expected-note@+1 2 {{'#pragma acc routine' for function 'onDeclOnDef' appears here}}
@@ -499,7 +499,7 @@ void onDeclOnDef() {
     ;
 }
 
-// Do we avoid repeated diagnostics?
+// Do we avoid repeated diagnostics and note the most recent routine directive?
 // expected-note@+1 2 {{'#pragma acc routine' for function 'onDefOnDecl' appears here}}
 #pragma acc routine seq
 void onDefOnDecl() {
@@ -514,6 +514,10 @@ void onDefOnDecl() {
 }
 #pragma acc routine seq
 void onDefOnDecl();
+
+//--------------------------------------------------
+// Restrictions on the function definition body for implicit routine directives.
+//--------------------------------------------------
 
 // Does the definition check see the routine directive previously implied by a
 // use within a parallel construct?
@@ -532,6 +536,24 @@ void parUseBeforeDef() {
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
+}
+
+// Does the definition check see the routine directive later implied by a use
+// within a parallel construct?
+void parUseAfterDef() {
+  // FIXME: xxpected-error@+1 {{static local variable 's' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  static int s;
+  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc update device(i)
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+void parUseAfterDef_use() {
+  #pragma acc parallel
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'parUseAfterDef' by use in construct '#pragma acc parallel' here}}
+  parUseAfterDef();
 }
 
 // Does the definition check see the routine directive previously implied by a
@@ -555,6 +577,26 @@ void parLoopUseBeforeDef() {
     ;
 }
 
+// Does the definition check see the routine directive later implied by a use
+// within a parallel loop construct?
+void parLoopUseAfterDef() {
+  // FIXME: xxpected-error@+1 {{static local variable 's' is not permitted within function 'parLoopUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  static int s;
+  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parLoopUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc update device(i)
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+void parLoopUseAfterDef_use() {
+  #pragma acc parallel loop
+  for (int i = 0; i < 5; ++i) {
+    // expected-note@+1 {{'#pragma acc routine seq' implied for function 'parLoopUseAfterDef' by use in construct '#pragma acc parallel loop' here}}
+    parLoopUseAfterDef();
+  }
+}
+
 // Does the definition check see the routine directive previously implied by a
 // use within a function with an explicit routine directive?
 void expOffFnUseBeforeDef();
@@ -573,6 +615,25 @@ void expOffFnUseBeforeDef() {
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
+}
+
+// Does the definition check see the routine directive later implied by a use
+// within a function with an explicit routine directive?
+void expOffFnUseAfterDef() {
+  // FIXME: xxpected-error@+1 {{static local variable 's' is not permitted within function 'expOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  static int s;
+  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'expOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc update device(i)
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+// expected-note@+1 {{'#pragma acc routine' for function 'expOffFnUseAfterDef_use' appears here}}
+#pragma acc routine seq
+void expOffFnUseAfterDef_use() {
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'expOffFnUseAfterDef' by use in function 'expOffFnUseAfterDef_use' here}}
+  expOffFnUseAfterDef();
 }
 
 // Does the definition check see the routine directive previously implied by a
@@ -622,6 +683,53 @@ void chainedImpOffFnUseBeforeDef() {
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
+}
+
+// Does the definition check see the routine directive later implied by a use
+// within a function with an implicit routine directive?
+void impOffFnUseAfterDef() {
+  // FIXME: xxpected-error@+1 {{static local variable 's' is not permitted within function 'impOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  static int s;
+  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'impOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc update device(i)
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+void impOffFnUseAfterDef_use();
+// expected-note@+1 {{'#pragma acc routine' for function 'impOffFnUseAfterDef_use_use' appears here}}
+#pragma acc routine seq
+void impOffFnUseAfterDef_use_use() {
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'impOffFnUseAfterDef_use' by use in function 'impOffFnUseAfterDef_use_use' here}}
+  impOffFnUseAfterDef_use();
+}
+void impOffFnUseAfterDef_use() {
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'impOffFnUseAfterDef' by use in function 'impOffFnUseAfterDef_use' here}}
+  impOffFnUseAfterDef();
+}
+
+//// Repeat that but discover multiple implicit routine directives at once in a
+//// chain.
+void chainedImpOffFnUseAfterDef() {
+  // FIXME: xxpected-error@+1 {{static local variable 's' is not permitted within function 'chainedImpOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  static int s;
+  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'chainedImpOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc update device(i)
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+void chainedImpOffFnUseAfterDef_use() {
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseAfterDef' by use in function 'chainedImpOffFnUseAfterDef_use' here}}
+  chainedImpOffFnUseAfterDef();
+}
+// expected-note@+1 {{'#pragma acc routine' for function 'chainedImpOffFnUseAfterDef_use_use' appears here}}
+#pragma acc routine seq
+void chainedImpOffFnUseAfterDef_use_use() {
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseAfterDef_use' by use in function 'chainedImpOffFnUseAfterDef_use_use' here}}
+  chainedImpOffFnUseAfterDef_use();
 }
 
 //--------------------------------------------------
