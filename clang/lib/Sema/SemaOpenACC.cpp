@@ -80,8 +80,19 @@ private:
     /// The effective directive kind, which is always the same as RealDKind in
     /// the case of a non-combined directive.
     OpenACCDirectiveKind EffectiveDKind;
+    /// The start of the directive.  For a combined directive, the same location
+    /// is stored with all effective directives.
+    SourceLocation DirectiveStartLoc;
+    /// The end of the directive, after clauses and before any associated
+    /// statement or declaration.  Invalid until all clauses have been parsed.
+    /// For a combined directive, the same location is stored with all effective
+    /// directives.
+    SourceLocation DirectiveEndLoc;
+    /// The clauses.  For a combined directive, the clauses are stored only with
+    /// the outer effective directive.  That way, they live as long as any part
+    /// of the real directive lives.
+    SmallVector<ACCClause *, 5> Clauses;
     ACCPartitioningKind LoopDirectiveKind;
-    SourceLocation DirectiveLoc;
     Decl *DeclAppliesTo;
     SourceLocation LoopBreakLoc; // invalid if no break statement or not loop
     unsigned AssociatedLoops = 1; // from collapse clause
@@ -98,10 +109,10 @@ private:
     // effective nested loop directive with worker partitioning.
     bool NestedWorkerPartitioning = false;
     DirStackEntryTy(OpenACCDirectiveKind RealDKind,
-                    OpenACCDirectiveKind EffectiveDKind, SourceLocation Loc,
-                    Decl *DeclAppliesTo)
+                    OpenACCDirectiveKind EffectiveDKind,
+                    SourceLocation StartLoc, Decl *DeclAppliesTo)
         : RealDKind(RealDKind), EffectiveDKind(EffectiveDKind),
-          DirectiveLoc(Loc), DeclAppliesTo(DeclAppliesTo) {}
+          DirectiveStartLoc(StartLoc), DeclAppliesTo(DeclAppliesTo) {}
   };
 
   /// The underlying directive stack.
@@ -131,6 +142,13 @@ public:
            "expected declaration to which directive applies not to be set yet");
     Stack.back().DeclAppliesTo = DeclAppliesTo;
   }
+  void addClause(ACCClause *C) {
+    assert(!Stack.empty() && "expected non-empty directive stack");
+    auto I = Stack.rbegin();
+    while (I->RealDKind == ACCD_unknown)
+      ++I;
+    I->Clauses.push_back(C);
+  }
 
   /// Get the declaration (e.g., function) this directive (e.g., routine
   /// directive) applies to.  Returns nullptr if this kind of directive doesn't
@@ -138,6 +156,13 @@ public:
   Decl *getDeclAppliesTo() const {
     assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().DeclAppliesTo;
+  }
+  const ArrayRef<ACCClause *> getClauses() const {
+    assert(!Stack.empty() && "expected non-empty directive stack");
+    auto I = Stack.rbegin();
+    while (I->RealDKind == ACCD_unknown)
+      ++I;
+    return I->Clauses;
   }
 
   /// Register break statement in current acc loop.
@@ -247,7 +272,7 @@ public:
         while (I->RealDKind == ACCD_unknown)
           I = std::next(I);
         ParentDir = I->RealDKind;
-        ParentLoc = I->DirectiveLoc;
+        ParentLoc = I->DirectiveStartLoc;
         return ParentKind;
       }
     }
@@ -435,7 +460,7 @@ public:
     for (auto I = Stack.rbegin(); I != Stack.rend(); ++I) {
       if (I->RealDKind == ACCD_routine)
         // Location is invalid if it's an implicit routine directive.
-        return I->DirectiveLoc;
+        return I->DirectiveStartLoc;
     }
     return SourceLocation();
   }
@@ -474,7 +499,7 @@ public:
       return ACCD_unknown;
     while (I->RealDKind == ACCD_unknown)
       I = std::next(I);
-    ParentLoc = I->DirectiveLoc;
+    ParentLoc = I->DirectiveStartLoc;
     return I->RealDKind;
   }
 
@@ -513,7 +538,27 @@ public:
     return Stack.empty() ? 0 : Stack.back().AssociatedLoopsParsed;
   }
 
-  SourceLocation getDirectiveLoc() { return Stack.back().DirectiveLoc; }
+  SourceLocation getDirectiveStartLoc() const {
+    assert(!Stack.empty() && "expected non-empty directive stack");
+    return Stack.back().DirectiveStartLoc;
+  }
+  SourceLocation getDirectiveEndLoc() const {
+    assert(!Stack.empty() && "expected non-empty directive stack");
+    return Stack.back().DirectiveEndLoc;
+  }
+  void setDirectiveEndLoc(SourceLocation Loc) {
+    assert(!Stack.empty() && "expected non-empty directive stack");
+    auto I = Stack.rbegin();
+    while (I->RealDKind == ACCD_unknown) {
+      assert(I->DirectiveEndLoc.isInvalid() &&
+             "expected directive end location to be set only once");
+      I->DirectiveEndLoc = Loc;
+      I = std::next(I);
+    }
+    assert(I->DirectiveEndLoc.isInvalid() &&
+           "expected directive end location to be set only once");
+    I->DirectiveEndLoc = Loc;
+  }
 };
 } // namespace
 
@@ -856,9 +901,6 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
   return false;
 }
 
-void Sema::StartOpenACCClause(OpenACCClauseKind K) {
-}
-
 ACCClause *Sema::ActOnOpenACCVarListClause(
     OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
     SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation ColonLoc,
@@ -937,7 +979,12 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
   return Res;
 }
 
-void Sema::EndOpenACCClause() {
+void Sema::AddOpenACCClause(ACCClause *Clause) {
+  OpenACCData->DirStack.addClause(Clause);
+}
+
+void Sema::EndOpenACCDirective(SourceLocation EndLoc) {
+  OpenACCData->DirStack.setDirectiveEndLoc(EndLoc);
 }
 
 void Sema::EndOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind) {
@@ -1585,7 +1632,7 @@ public:
                 << ACCReductionClause::printReductionOperatorToString(
                        EnclosingPrivate.ReductionClause->getNameInfo());
             if (EnclosingPrivate.ReductionClause->getBeginLoc().isInvalid())
-              DirStack.SemaRef.Diag(DirStack.getDirectiveLoc(),
+              DirStack.SemaRef.Diag(DirStack.getDirectiveStartLoc(),
                                     diag::note_acc_implied_as_gang_reduction);
           }
 
@@ -1630,9 +1677,10 @@ public:
 };
 } // namespace
 
-bool Sema::StartOpenACCAssociatedStatement(OpenACCDirectiveKind DKind,
-                                           ArrayRef<ACCClause *> Clauses,
-                                           SourceLocation StartLoc) {
+bool Sema::StartOpenACCAssociatedStatement() {
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  OpenACCDirectiveKind DKind = DirStack.getRealDirective();
+  SourceLocation StartLoc = DirStack.getDirectiveStartLoc();
   bool ErrorFound = false;
   if (isOpenACCLoopDirective(DKind)) {
     ACCPartitioningKind LoopKind;
@@ -1647,7 +1695,7 @@ bool Sema::StartOpenACCAssociatedStatement(OpenACCDirectiveKind DKind,
     LoopKind.setIndependentImplicit();
 
     // Set explicit clauses.
-    for (ACCClause *C : Clauses) {
+    for (ACCClause *C : OpenACCData->DirStack.getClauses()) {
       OpenACCClauseKind CKind = C->getClauseKind();
       if (CKind == ACCC_seq)
         LoopKind.setSeqExplicit();
@@ -1723,10 +1771,15 @@ bool Sema::StartOpenACCAssociatedStatement(OpenACCDirectiveKind DKind,
 
 bool Sema::EndOpenACCAssociatedStatement() { return false; }
 
+StmtResult Sema::ActOnOpenACCDirectiveStmt(Stmt *AStmt) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  return ActOnOpenACCDirectiveStmt(DirStack.getRealDirective(),
+                                   DirStack.getClauses(), AStmt);
+}
+
 StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
                                            ArrayRef<ACCClause *> Clauses,
-                                           Stmt *AStmt, SourceLocation StartLoc,
-                                           SourceLocation EndLoc) {
+                                           Stmt *AStmt) {
   DirStackTy &DirStack = OpenACCData->DirStack;
   StmtResult Res = StmtError();
 
@@ -1740,8 +1793,7 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
   if (isOpenACCCombinedDirective(DKind)) {
     switch (DKind) {
     case ACCD_parallel_loop:
-      return ActOnOpenACCParallelLoopDirective(Clauses, AStmt, StartLoc,
-                                               EndLoc);
+      return ActOnOpenACCParallelLoopDirective(Clauses, AStmt);
     case ACCD_update:
     case ACCD_enter_data:
     case ACCD_exit_data:
@@ -1907,25 +1959,23 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
   case ACCD_update:
     assert(!AStmt &&
            "expected no associated statement for 'acc update' directive");
-    Res = ActOnOpenACCUpdateDirective(ComputedClauses, StartLoc, EndLoc);
+    Res = ActOnOpenACCUpdateDirective(ComputedClauses);
     break;
   case ACCD_enter_data:
     assert(!AStmt &&
            "expected no associated statement for 'acc enter data' directive");
-    Res = ActOnOpenACCEnterDataDirective(ComputedClauses, StartLoc, EndLoc);
+    Res = ActOnOpenACCEnterDataDirective(ComputedClauses);
     break;
   case ACCD_exit_data:
     assert(!AStmt &&
            "expected no associated statement for 'acc exit data' directive");
-    Res = ActOnOpenACCExitDataDirective(ComputedClauses, StartLoc, EndLoc);
+    Res = ActOnOpenACCExitDataDirective(ComputedClauses);
     break;
   case ACCD_data:
-    Res = ActOnOpenACCDataDirective(ComputedClauses, AStmt, StartLoc, EndLoc);
+    Res = ActOnOpenACCDataDirective(ComputedClauses, AStmt);
     break;
   case ACCD_parallel:
-    Res =
-        ActOnOpenACCParallelDirective(ComputedClauses, AStmt, StartLoc, EndLoc,
-                                      DirStack.getNestedWorkerPartitioning());
+    Res = ActOnOpenACCParallelDirective(ComputedClauses, AStmt);
     if (!Res.isInvalid()) {
       NestedReductionChecker Checker(DirStack);
       Checker.Visit(Res.get());
@@ -1937,10 +1987,7 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
     SmallVector<VarDecl *, 5> LCVVars;
     for (std::pair<Expr *, VarDecl *> LCV : DirStack.getLoopControlVariables())
       LCVVars.push_back(LCV.second);
-    Res =
-        ActOnOpenACCLoopDirective(ComputedClauses, AStmt, StartLoc, EndLoc,
-                                  LCVVars, DirStack.getLoopPartitioning(),
-                                  DirStack.getNestedExplicitGangPartitioning());
+    Res = ActOnOpenACCLoopDirective(ComputedClauses, AStmt, LCVVars);
     break;
   }
   case ACCD_parallel_loop:
@@ -1956,9 +2003,11 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
   return Res;
 }
 
-StmtResult Sema::ActOnOpenACCUpdateDirective(ArrayRef<ACCClause *> Clauses,
-                                             SourceLocation StartLoc,
-                                             SourceLocation EndLoc) {
+StmtResult Sema::ActOnOpenACCUpdateDirective(ArrayRef<ACCClause *> Clauses) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  SourceLocation StartLoc = DirStack.getDirectiveStartLoc();
+  SourceLocation EndLoc = DirStack.getDirectiveEndLoc();
+
   // OpenACC 3.0 sec. 2.14.4 "Update Directive" L1117-1118:
   // "At least one self, host, or device clause must appear on an update
   // directive."
@@ -1985,9 +2034,11 @@ StmtResult Sema::ActOnOpenACCUpdateDirective(ArrayRef<ACCClause *> Clauses,
   return ACCUpdateDirective::Create(Context, StartLoc, EndLoc, Clauses);
 }
 
-StmtResult Sema::ActOnOpenACCEnterDataDirective(ArrayRef<ACCClause *> Clauses,
-                                                SourceLocation StartLoc,
-                                                SourceLocation EndLoc) {
+StmtResult Sema::ActOnOpenACCEnterDataDirective(ArrayRef<ACCClause *> Clauses) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  SourceLocation StartLoc = DirStack.getDirectiveStartLoc();
+  SourceLocation EndLoc = DirStack.getDirectiveEndLoc();
+
   // OpenACC 3.0 sec. 2.6.6 "Enter Data and Exit Data Directives" L1159-1160:
   // "At least one copyin, create, or attach clause must appear on an enter data
   // directive."
@@ -2017,9 +2068,11 @@ StmtResult Sema::ActOnOpenACCEnterDataDirective(ArrayRef<ACCClause *> Clauses,
   return ACCEnterDataDirective::Create(Context, StartLoc, EndLoc, Clauses);
 }
 
-StmtResult Sema::ActOnOpenACCExitDataDirective(ArrayRef<ACCClause *> Clauses,
-                                               SourceLocation StartLoc,
-                                               SourceLocation EndLoc) {
+StmtResult Sema::ActOnOpenACCExitDataDirective(ArrayRef<ACCClause *> Clauses) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  SourceLocation StartLoc = DirStack.getDirectiveStartLoc();
+  SourceLocation EndLoc = DirStack.getDirectiveEndLoc();
+
   // OpenACC 3.0 sec. 2.6.6 "Enter Data and Exit Data Directives" L1161-1162:
   // "At least one copyout, delete, or detach clause must appear on an exit data
   // direcive."
@@ -2048,11 +2101,13 @@ StmtResult Sema::ActOnOpenACCExitDataDirective(ArrayRef<ACCClause *> Clauses,
   return ACCExitDataDirective::Create(Context, StartLoc, EndLoc, Clauses);
 }
 
-StmtResult Sema::ActOnOpenACCDataDirective(
-    ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-    SourceLocation EndLoc) {
+StmtResult Sema::ActOnOpenACCDataDirective(ArrayRef<ACCClause *> Clauses,
+                                           Stmt *AStmt) {
   if (!AStmt)
     return StmtError();
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  SourceLocation StartLoc = DirStack.getDirectiveStartLoc();
+  SourceLocation EndLoc = DirStack.getDirectiveEndLoc();
 
   // OpenACC 3.0 sec. 2.6.5 "Data Construct" L1117-1118:
   // "At least one copy, copyin, copyout, create, no_create, present,
@@ -2090,16 +2145,15 @@ StmtResult Sema::ActOnOpenACCDataDirective(
   return ACCDataDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt);
 }
 
-StmtResult Sema::ActOnOpenACCParallelDirective(
-    ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-    SourceLocation EndLoc, bool NestedWorkerPartitioning) {
+StmtResult Sema::ActOnOpenACCParallelDirective(ArrayRef<ACCClause *> Clauses,
+                                               Stmt *AStmt) {
   if (!AStmt)
     return StmtError();
-
   getCurFunction()->setHasBranchProtectedScope();
-
-  return ACCParallelDirective::Create(Context, StartLoc, EndLoc, Clauses,
-                                      AStmt, NestedWorkerPartitioning);
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  return ACCParallelDirective::Create(
+      Context, DirStack.getDirectiveStartLoc(), DirStack.getDirectiveEndLoc(),
+      Clauses, AStmt, DirStack.getNestedWorkerPartitioning());
 }
 
 void Sema::ActOnOpenACCLoopInitialization(SourceLocation ForLoc, Stmt *Init) {
@@ -2200,26 +2254,25 @@ void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
   }
 }
 
-StmtResult Sema::ActOnOpenACCLoopDirective(
-    ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-    SourceLocation EndLoc, const ArrayRef<VarDecl *> &LCVs,
-    ACCPartitioningKind Partitioning, bool NestedExplicitGangPartitioning) {
+StmtResult Sema::ActOnOpenACCLoopDirective(ArrayRef<ACCClause *> Clauses,
+                                           Stmt *AStmt,
+                                           const ArrayRef<VarDecl *> &LCVs) {
   if (!AStmt)
     return StmtError();
+  DirStackTy &DirStack = OpenACCData->DirStack;
 
   // OpenACC 2.7 sec. 2.9.1, lines 1441-1442:
   // "The collapse clause is used to specify how many tightly nested loops are
   // associated with the loop construct."
   // Complain if there aren't enough.
   Stmt *LoopStmt = AStmt;
-  for (unsigned LoopI = 0,
-                LoopCount = OpenACCData->DirStack.getAssociatedLoops();
+  for (unsigned LoopI = 0, LoopCount = DirStack.getAssociatedLoops();
        LoopI < LoopCount; ++LoopI) {
     LoopStmt = LoopStmt->IgnoreContainers();
     auto *LoopFor = dyn_cast_or_null<ForStmt>(LoopStmt);
     if (!LoopFor) {
       Diag(LoopStmt->getBeginLoc(), diag::err_acc_not_for)
-          << getOpenACCName(OpenACCData->DirStack.getRealDirective());
+          << getOpenACCName(DirStack.getRealDirective());
       auto CollapseClauses =
           ACCDirectiveStmt::getClausesOfKind<ACCCollapseClause>(Clauses);
       if (CollapseClauses.begin() != CollapseClauses.end()) {
@@ -2240,14 +2293,16 @@ StmtResult Sema::ActOnOpenACCLoopDirective(
   // and it means any useful results of the analysis are not available to
   // OpenACC-level tools.
 
-  return ACCLoopDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt,
-                                  LCVs, Partitioning,
-                                  NestedExplicitGangPartitioning);
+  return ACCLoopDirective::Create(Context, DirStack.getDirectiveStartLoc(),
+                                  DirStack.getDirectiveEndLoc(), Clauses, AStmt,
+                                  LCVs, DirStack.getLoopPartitioning(),
+                                  DirStack.getNestedExplicitGangPartitioning());
 }
 
-StmtResult Sema::ActOnOpenACCParallelLoopDirective(
-    ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-    SourceLocation EndLoc) {
+StmtResult
+Sema::ActOnOpenACCParallelLoopDirective(ArrayRef<ACCClause *> Clauses,
+                                        Stmt *AStmt) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   // OpenACC 2.7 sec. 2.11, "Combined Constructs":
   // - Lines 1617-1618:
   //   "Any clause that is allowed on a parallel or loop construct is allowed
@@ -2273,24 +2328,31 @@ StmtResult Sema::ActOnOpenACCParallelLoopDirective(
   }
 
   // Build the effective loop directive.
-  StmtResult Res = ActOnOpenACCDirectiveStmt(ACCD_loop, LoopClauses, AStmt,
-                                             StartLoc, EndLoc);
+  StmtResult Res = ActOnOpenACCDirectiveStmt(ACCD_loop, LoopClauses, AStmt);
   // The second DirStack.pop() happens in EndOpenACCDirectiveAndAssociate.
-  OpenACCData->DirStack.pop(ACCD_loop);
+  DirStack.pop(ACCD_loop);
   if (Res.isInvalid())
     return StmtError();
   ACCLoopDirective *LoopDir = cast<ACCLoopDirective>(Res.get());
 
   // Build the effective parallel directive.
-  Res = ActOnOpenACCDirectiveStmt(ACCD_parallel, ParallelClauses, LoopDir,
-                                  StartLoc, EndLoc);
+  Res = ActOnOpenACCDirectiveStmt(ACCD_parallel, ParallelClauses, LoopDir);
   if (Res.isInvalid())
     return StmtError();
   ACCParallelDirective *ParallelDir = cast<ACCParallelDirective>(Res.get());
 
   // Build the real directive.
-  return ACCParallelLoopDirective::Create(Context, StartLoc, EndLoc, Clauses,
-                                          AStmt, ParallelDir);
+  return ACCParallelLoopDirective::Create(
+      Context, DirStack.getDirectiveStartLoc(), DirStack.getDirectiveEndLoc(),
+      Clauses, AStmt, ParallelDir);
+}
+
+void Sema::ActOnOpenACCRoutineDirective(OpenACCDetermination Determination,
+                                        DeclGroupRef TheDeclGroup) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  ActOnOpenACCRoutineDirective(DirStack.getClauses(), Determination,
+                               DirStack.getDirectiveStartLoc(),
+                               DirStack.getDirectiveEndLoc(), TheDeclGroup);
 }
 
 void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
@@ -2609,7 +2671,8 @@ ACCClause *Sema::ActOnOpenACCPresentClause(
     // size, we cannot know if it's fully present.  Besides, it translates to
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_present,
-                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               ELoc))
       continue;
 
     if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
@@ -2649,7 +2712,8 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, Determination, Kind,
-                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               ELoc))
       continue;
 
     if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_copy,
@@ -2688,7 +2752,8 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               ELoc))
       continue;
 
     if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
@@ -2727,7 +2792,8 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               ELoc))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
@@ -2778,7 +2844,8 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               ELoc))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const variable
@@ -2824,7 +2891,8 @@ ACCClause *Sema::ActOnOpenACCNoCreateClause(
     // size, we cannot know if it's fully present.  Besides, it translates to
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_no_create,
-                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               ELoc))
       continue;
 
     if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
@@ -2860,7 +2928,8 @@ ACCClause *Sema::ActOnOpenACCDeleteClause(ArrayRef<Expr *> VarList,
     // size, we cannot know if it's fully present.  Besides, it translates to
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_delete,
-                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               ELoc))
       continue;
 
     if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
@@ -2920,7 +2989,8 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_private,
-                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               ELoc))
       continue;
 
     // The OpenACC 2.5 spec doesn't say, as far as I know, that a const
@@ -2970,7 +3040,8 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_firstprivate,
-                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               ELoc))
       continue;
 
     if (!OpenACCData->DirStack.addDSA(VD, RefExpr->IgnoreParens(),
@@ -3124,7 +3195,8 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // variable must have a complete type.  However, you cannot copy data if
     // it doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_reduction,
-                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               ELoc))
       continue;
 
     // The OpenACC 2.6 spec doesn't say, as far as I know, that a const
@@ -3226,7 +3298,8 @@ ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
     // in a self clause must have a complete type.  However, it could not
     // have been allocated on the device copy if it didn't have a size.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               ELoc))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
@@ -3271,7 +3344,8 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
     // in a device clause must have a complete type.  However, it could not
     // have been allocated on the device copy if it didn't have a size.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_device,
-                               OpenACCData->DirStack.getDirectiveLoc(), ELoc))
+                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               ELoc))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const

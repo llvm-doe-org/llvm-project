@@ -3420,8 +3420,7 @@ public:
   /// Parses clauses for directive of kind \a Kind.
   ///
   /// \param DKind Kind of current directive.
-  void ParseOpenACCClauses(OpenACCDirectiveKind DKind,
-                           SmallVectorImpl<ACCClause *> &Clauses);
+  void ParseOpenACCClauses(OpenACCDirectiveKind DKind);
   /// Parses clause of kind \a CKind for directive of kind \a Kind.
   ///
   /// \param DKind Kind of current directive.

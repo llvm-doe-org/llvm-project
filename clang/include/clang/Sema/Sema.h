@@ -11471,17 +11471,16 @@ public:
   /// Called at start of an OpenACC directive before its clauses.  Returns true
   /// in the case of an error.
   bool StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
-                                         SourceLocation Loc,
+                                         SourceLocation StartLoc,
                                          Decl *DeclAppliesTo = nullptr);
-  /// Called at start of a clause.
-  void StartOpenACCClause(OpenACCClauseKind K);
-  /// Called at end of a clause.
-  void EndOpenACCClause();
+  /// Called after parsing each clause of an OpenACC directive.
+  void AddOpenACCClause(ACCClause *C);
+  /// Called after parsing the entire directive and before parsing any
+  /// associated statement or declaration.
+  void EndOpenACCDirective(SourceLocation EndLoc);
   /// Called at start of an OpenACC directive's associated statement.  Returns
   /// true in the case of an error.
-  bool StartOpenACCAssociatedStatement(OpenACCDirectiveKind DKind,
-                                       ArrayRef<ACCClause *> Clauses,
-                                       SourceLocation StartLoc);
+  bool StartOpenACCAssociatedStatement();
   /// Called at end of an OpenACC directive's associated statement and before
   /// the \c ActOn function for the directive.  Returns true in the case of an
   /// error.
@@ -11508,49 +11507,40 @@ public:
   /// Check that a given declaration is ok for any current OpenACC directives.
   void ActOnDeclStmtForOpenACC(DeclStmt *S);
 
+  StmtResult ActOnOpenACCDirectiveStmt(Stmt *AStmt);
   StmtResult ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind Kind,
                                        ArrayRef<ACCClause *> Clauses,
-                                       Stmt *AStmt, SourceLocation StartLoc,
-                                       SourceLocation EndLoc);
+                                       Stmt *AStmt);
   /// Called on well-formed '\#pragma acc update'.
-  StmtResult ActOnOpenACCUpdateDirective(ArrayRef<ACCClause *> Clauses,
-                                         SourceLocation StartLoc,
-                                         SourceLocation EndLoc);
+  StmtResult ActOnOpenACCUpdateDirective(ArrayRef<ACCClause *> Clauses);
   /// Called on well-formed '\#pragma acc enter data'.
-  StmtResult ActOnOpenACCEnterDataDirective(ArrayRef<ACCClause *> Clauses,
-                                            SourceLocation StartLoc,
-                                            SourceLocation EndLoc);
+  StmtResult ActOnOpenACCEnterDataDirective(ArrayRef<ACCClause *> Clauses);
   /// Called on well-formed '\#pragma acc exit data'.
-  StmtResult ActOnOpenACCExitDataDirective(ArrayRef<ACCClause *> Clauses,
-                                           SourceLocation StartLoc,
-                                           SourceLocation EndLoc);
+  StmtResult ActOnOpenACCExitDataDirective(ArrayRef<ACCClause *> Clauses);
   /// Called on well-formed '\#pragma acc data' after parsing of the associated
   /// statement.
-  StmtResult ActOnOpenACCDataDirective(
-      ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc);
+  StmtResult ActOnOpenACCDataDirective(ArrayRef<ACCClause *> Clauses,
+                                       Stmt *AStmt);
   /// Called on well-formed '\#pragma acc parallel' after parsing
   /// of the associated statement.
-  StmtResult ActOnOpenACCParallelDirective(
-      ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc, bool NestedWorkerPartitioning);
+  StmtResult ActOnOpenACCParallelDirective(ArrayRef<ACCClause *> Clauses,
+                                           Stmt *AStmt);
   /// Called on well-formed '\#pragma acc loop' after parsing
   /// of the associated statement.
-  StmtResult ActOnOpenACCLoopDirective(
-      ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc, const ArrayRef<VarDecl *> &LCVs,
-      ACCPartitioningKind Partitioning, bool NestedGangPartitioning);
+  StmtResult ActOnOpenACCLoopDirective(ArrayRef<ACCClause *> Clauses,
+                                       Stmt *AStmt,
+                                       const ArrayRef<VarDecl *> &LCVs);
   /// Called on well-formed '\#pragma acc parallel loop' after parsing
   /// of the associated statement.
-  StmtResult ActOnOpenACCParallelLoopDirective(
-      ArrayRef<ACCClause *> Clauses, Stmt *AStmt, SourceLocation StartLoc,
-      SourceLocation EndLoc);
+  StmtResult ActOnOpenACCParallelLoopDirective(ArrayRef<ACCClause *> Clauses,
+                                               Stmt *AStmt);
   /// Called on well-formed '\#pragma acc routine'.
+  void ActOnOpenACCRoutineDirective(OpenACCDetermination Determination,
+                                    DeclGroupRef Decl);
   void ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
                                     OpenACCDetermination Determination,
                                     SourceLocation StartLoc,
                                     SourceLocation EndLoc, DeclGroupRef Decl);
-
   ACCClause *ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
                                           Expr *Expr,
                                           SourceLocation StartLoc,

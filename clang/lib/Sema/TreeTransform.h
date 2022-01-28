@@ -2300,12 +2300,8 @@ public:
   ///
   /// By default, performs semantic analysis to build the new statement.
   /// Subclasses may override this routine to provide different behavior.
-  StmtResult RebuildACCDirectiveStmt(OpenACCDirectiveKind Kind,
-                                     ArrayRef<ACCClause *> Clauses, Stmt *AStmt,
-                                     SourceLocation StartLoc,
-                                     SourceLocation EndLoc) {
-    return getSema().ActOnOpenACCDirectiveStmt(Kind, Clauses, AStmt, StartLoc,
-                                               EndLoc);
+  StmtResult RebuildACCDirectiveStmt(Stmt *AStmt) {
+    return getSema().ActOnOpenACCDirectiveStmt(AStmt);
   }
 
   /// Build a new OpenACC 'num_gangs' clause.
@@ -10560,23 +10556,17 @@ template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCDirectiveStmt(ACCDirectiveStmt *D) {
   // Transform the clauses
-  llvm::SmallVector<ACCClause *, 16> TClauses;
   ArrayRef<ACCClause *> Clauses = D->clauses();
-  TClauses.reserve(Clauses.size());
   for (ArrayRef<ACCClause *>::iterator I = Clauses.begin(), E = Clauses.end();
        I != E; ++I) {
     if (*I) {
-      getDerived().getSema().StartOpenACCClause((*I)->getClauseKind());
       ACCClause *Clause = getDerived().TransformACCClause(*I);
-      getDerived().getSema().EndOpenACCClause();
       if (Clause)
-        TClauses.push_back(Clause);
-    } else {
-      TClauses.push_back(nullptr);
+        getDerived().getSema().AddOpenACCClause(Clause);
     }
   }
-  if (getDerived().getSema().StartOpenACCAssociatedStatement(
-          D->getDirectiveKind(), TClauses, D->getBeginLoc()))
+  getDerived().getSema().EndOpenACCDirective(D->getEndLoc());
+  if (getDerived().getSema().StartOpenACCAssociatedStatement())
     return StmtError();
   StmtResult AssociatedStmt;
   if (D->hasAssociatedStmt()) {
@@ -10588,12 +10578,7 @@ TreeTransform<Derived>::TransformACCDirectiveStmt(ACCDirectiveStmt *D) {
   }
   if (getDerived().getSema().EndOpenACCAssociatedStatement())
     return StmtError();
-  if (TClauses.size() != Clauses.size())
-    return StmtError();
-
-  return getDerived().RebuildACCDirectiveStmt(D->getDirectiveKind(), TClauses,
-                                              AssociatedStmt.get(),
-                                              D->getBeginLoc(), D->getEndLoc());
+  return getDerived().RebuildACCDirectiveStmt(AssociatedStmt.get());
 }
 
 template <typename Derived>

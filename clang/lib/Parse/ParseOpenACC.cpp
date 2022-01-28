@@ -78,23 +78,20 @@ OpenACCDirectiveKind parseOpenACCDirectiveKind(Parser &P) {
 }
 } // namespace
 
-void Parser::ParseOpenACCClauses(OpenACCDirectiveKind DKind,
-                                 SmallVectorImpl<ACCClause *> &Clauses) {
+void Parser::ParseOpenACCClauses(OpenACCDirectiveKind DKind) {
   SmallVector<bool, ACCC_unknown + 1> FirstClauses(ACCC_unknown + 1);
   ConsumeToken();
   while (Tok.isNot(tok::annot_pragma_openacc_end)) {
     OpenACCClauseKind CKind = Tok.isAnnotation()
                                   ? ACCC_unknown
                                   : getOpenACCClauseKind(PP.getSpelling(Tok));
-    Actions.StartOpenACCClause(CKind);
     ACCClause *Clause = ParseOpenACCClause(DKind, CKind, FirstClauses);
     FirstClauses[CKind] = true;
     if (Clause)
-      Clauses.push_back(Clause);
+      Actions.AddOpenACCClause(Clause);
     // Skip ',' if any.
     if (Tok.is(tok::comma))
       ConsumeToken();
-    Actions.EndOpenACCClause();
   }
 }
 
@@ -107,7 +104,7 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
   assert(Tok.is(tok::annot_pragma_openacc) && "Not an OpenACC directive!");
   ParenBraceBracketBalancer BalancerRAIIObj(*this);
   SmallVector<ACCClause *, 5> Clauses;
-  SourceLocation StartLoc = ConsumeAnnotationToken(), EndLoc;
+  SourceLocation StartLoc = ConsumeAnnotationToken();
   OpenACCDirectiveKind DKind = parseOpenACCDirectiveKind(*this);
   switch (DKind) {
   case ACCD_update:
@@ -130,17 +127,16 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
     }
     if (Actions.StartOpenACCDirectiveAndAssociate(DKind, StartLoc)) {
       SkipUntil(tok::annot_pragma_openacc_end);
+      Actions.EndOpenACCDirectiveAndAssociate(DKind);
       return nullptr;
     }
-    SmallVector<ACCClause *, 5> Clauses;
-    ParseOpenACCClauses(DKind, Clauses);
-    EndLoc = Tok.getLocation();
+    ParseOpenACCClauses(DKind);
+    Actions.EndOpenACCDirective(Tok.getLocation());
     // Consume final annot_pragma_openacc_end.
     ConsumeAnnotationToken();
     DeclGroupPtrTy Group;
     ParseTopLevelDecl(Group);
-    Actions.ActOnOpenACCRoutineDirective(Clauses, ACC_EXPLICIT, StartLoc,
-                                         EndLoc, Group.get());
+    Actions.ActOnOpenACCRoutineDirective(ACC_EXPLICIT, Group.get());
     Actions.EndOpenACCDirectiveAndAssociate(DKind);
     return Group;
   }
@@ -165,7 +161,7 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
   ParenBraceBracketBalancer BalancerRAIIObj(*this);
   unsigned ScopeFlags =
       Scope::FnScope | Scope::DeclScope | Scope::OpenACCDirectiveScope;
-  SourceLocation StartLoc = ConsumeAnnotationToken(), EndLoc;
+  SourceLocation StartLoc = ConsumeAnnotationToken();
   OpenACCDirectiveKind DKind = parseOpenACCDirectiveKind(*this);
   StmtResult Directive = StmtError();
   bool HasAssociatedStatement = true;
@@ -203,21 +199,17 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
     bool ErrorFound =
         Actions.StartOpenACCDirectiveAndAssociate(DKind, StartLoc);
 
-    SmallVector<ACCClause *, 5> Clauses;
-    ParseOpenACCClauses(DKind, Clauses);
-    // End location of the directive.
-    EndLoc = Tok.getLocation();
+    ParseOpenACCClauses(DKind);
+    Actions.EndOpenACCDirective(Tok.getLocation());
     // Consume final annot_pragma_openacc_end.
     ConsumeAnnotationToken();
 
-    ErrorFound |=
-        Actions.StartOpenACCAssociatedStatement(DKind, Clauses, StartLoc);
+    ErrorFound |= Actions.StartOpenACCAssociatedStatement();
     StmtResult AssociatedStmt;
     if (HasAssociatedStatement)
       AssociatedStmt = ParseStatement();
     ErrorFound |= Actions.EndOpenACCAssociatedStatement();
-    Directive = Actions.ActOnOpenACCDirectiveStmt(
-        DKind, Clauses, AssociatedStmt.get(), StartLoc, EndLoc);
+    Directive = Actions.ActOnOpenACCDirectiveStmt(AssociatedStmt.get());
 
     // Exit scope.
     Actions.EndOpenACCDirectiveAndAssociate(DKind);
@@ -250,7 +242,7 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
 ///  Parsing of OpenACC clauses.
 ///
 ///    clause:
-///       present | copy-clause | pcopy-clause | present_or_copy-clause
+///       present-clause | copy-clause | pcopy-clause | present_or_copy-clause
 ///       | copyin-clause | pcopyin-clause | present_or_copyin-clause
 ///       | copyout-clause | pcopyout-clause | present_or_copyout-clause
 ///       | create-clause | pcreate-clause | present_or_create-clause
