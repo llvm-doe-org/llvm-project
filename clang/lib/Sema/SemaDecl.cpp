@@ -14915,9 +14915,6 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
       DeclsToCheckForDeferredDiags.insert(FD);
   }
 
-  if (LangOpts.OpenACC)
-    ActOnFinishedFunctionBodyForOpenACC(FD);
-
   if (FD && !FD->isDeleted())
     checkTypeSupport(FD->getType(), FD->getLocation(), FD);
 

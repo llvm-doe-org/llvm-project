@@ -11468,11 +11468,10 @@ private:
   void DestroyOpenACCData();
 
 public:
-  /// Called at start of an OpenACC directive before its clauses.  Returns true
-  /// in the case of an error.
+  /// Called at start of an explicit OpenACC directive before its clauses.
+  /// Returns true in the case of an error.
   bool StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
-                                         SourceLocation StartLoc,
-                                         Decl *DeclAppliesTo = nullptr);
+                                         SourceLocation StartLoc);
   /// Called after parsing each clause of an OpenACC directive.
   void AddOpenACCClause(ACCClause *C);
   /// Called after parsing the entire directive and before parsing any
@@ -11496,12 +11495,9 @@ public:
   /// directive.
   void ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
                                       Scope *CurScope);
-  /// At the start of a function definition, push an applying routine directive
-  /// if necessary.
+  /// At the start of a function definition, create the \c ACCRoutineDeclAttr
+  /// for any routine directive lexically attached to the function definition.
   void ActOnStartOfFunctionDefForOpenACC(FunctionDecl *FD);
-  /// At the end of a function definition, pop an applying routine directive if
-  /// necessary.
-  void ActOnFinishedFunctionBodyForOpenACC(FunctionDecl *FD);
   /// Add implicit routine directive upon an offload device use of a function.
   void ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc);
   /// Check that a given declaration is ok for any current OpenACC directives.

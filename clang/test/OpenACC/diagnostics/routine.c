@@ -742,6 +742,37 @@ void chainedImpOffFnUseAfterDef_use_use() {
   chainedImpOffFnUseAfterDef_use();
 }
 
+// Does the definition check see the routine directive indirectly implied by a
+// use within the same definition?  Check errors before and after that use to be
+// sure the mid-stream addition of the routine directive doesn't break either.
+void indirectParUseInDef();
+void indirectParUseInDef_use() {
+  // expected-note@+1 5 {{'#pragma acc routine seq' implied for function 'indirectParUseInDef' by use in function 'indirectParUseInDef_use' here}}
+  indirectParUseInDef();
+}
+void indirectParUseInDef() {
+  // expected-error@+1 {{static local variable 'sBefore' is not permitted within function 'indirectParUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  static int sBefore;
+  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'indirectParUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc update device(i)
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'indirectParUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc parallel
+  // expected-note@+1 5 {{'#pragma acc routine seq' implied for function 'indirectParUseInDef_use' by use in construct '#pragma acc parallel' here}}
+  indirectParUseInDef_use(); // routine directive added to current function here
+  // expected-error@+1 {{static local variable 'sAfter' is not permitted within function 'indirectParUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  static int sAfter;
+  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'indirectParUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc update device(i)
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+
 //--------------------------------------------------
 // Missing declaration possibly within bad context.
 //--------------------------------------------------

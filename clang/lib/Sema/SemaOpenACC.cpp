@@ -24,13 +24,19 @@ using namespace clang;
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Stack for tracking OpenACC directives and their various properties, such
-/// as data attributes.
+/// Stack for tracking explicit OpenACC directives and their various properties,
+/// such as data attributes.
 ///
 /// In the case of a combined directive, we push two entries on the stack, one
 /// for each effective directive.  They are not popped at the same time, so
 /// outer effective directives are sometimes present when inner effective
 /// directives are not.
+///
+/// Implicit directives are not tracked here.  For example, to determine if a
+/// function \c FD has a routine directive regardless of whether it's implicit
+/// or explicit, call \c FD->hasAttr<ACCRoutineDeclAttr>() instead of checking
+/// this stack.  \c ImplicitRoutineDirInfoTy below stores additional info about
+/// implicit routine directives.
 class DirStackTy final {
 public:
   Sema &SemaRef;
@@ -93,7 +99,6 @@ private:
     /// of the real directive lives.
     SmallVector<ACCClause *, 5> Clauses;
     ACCPartitioningKind LoopDirectiveKind;
-    Decl *DeclAppliesTo;
     SourceLocation LoopBreakLoc; // invalid if no break statement or not loop
     unsigned AssociatedLoops = 1; // from collapse clause
     unsigned AssociatedLoopsParsed = 0; // how many have been parsed so far
@@ -110,9 +115,9 @@ private:
     bool NestedWorkerPartitioning = false;
     DirStackEntryTy(OpenACCDirectiveKind RealDKind,
                     OpenACCDirectiveKind EffectiveDKind,
-                    SourceLocation StartLoc, Decl *DeclAppliesTo)
+                    SourceLocation StartLoc)
         : RealDKind(RealDKind), EffectiveDKind(EffectiveDKind),
-          DirectiveStartLoc(StartLoc), DeclAppliesTo(DeclAppliesTo) {}
+          DirectiveStartLoc(StartLoc) {}
   };
 
   /// The underlying directive stack.
@@ -122,9 +127,8 @@ public:
   explicit DirStackTy(Sema &S) : SemaRef(S) {}
 
   void push(OpenACCDirectiveKind RealDKind, OpenACCDirectiveKind EffectiveDKind,
-            SourceLocation Loc, Decl *DeclAppliesTo) {
-    Stack.push_back(
-        DirStackEntryTy(RealDKind, EffectiveDKind, Loc, DeclAppliesTo));
+            SourceLocation Loc) {
+    Stack.push_back(DirStackEntryTy(RealDKind, EffectiveDKind, Loc));
   }
 
   void pop(OpenACCDirectiveKind EffectiveDKind) {
@@ -134,14 +138,6 @@ public:
     Stack.pop_back();
   }
 
-  /// Set the declaration (e.g., function) this directive (e.g., routine
-  /// directive) applies to.
-  void setDeclAppliesTo(Decl *DeclAppliesTo) {
-    assert(!Stack.empty() && "expected non-empty directive stack");
-    assert(Stack.back().DeclAppliesTo == nullptr &&
-           "expected declaration to which directive applies not to be set yet");
-    Stack.back().DeclAppliesTo = DeclAppliesTo;
-  }
   void addClause(ACCClause *C) {
     assert(!Stack.empty() && "expected non-empty directive stack");
     auto I = Stack.rbegin();
@@ -150,13 +146,6 @@ public:
     I->Clauses.push_back(C);
   }
 
-  /// Get the declaration (e.g., function) this directive (e.g., routine
-  /// directive) applies to.  Returns nullptr if this kind of directive doesn't
-  /// apply to a declaration or the declaration hasn't been set yet.
-  Decl *getDeclAppliesTo() const {
-    assert(!Stack.empty() && "expected non-empty directive stack");
-    return Stack.back().DeclAppliesTo;
-  }
   const ArrayRef<ACCClause *> getClauses() const {
     assert(!Stack.empty() && "expected non-empty directive stack");
     auto I = Stack.rbegin();
@@ -434,35 +423,12 @@ public:
   OpenACCDirectiveKind isInComputeRegion() const {
     for (auto I = Stack.rbegin(); I != Stack.rend(); ++I) {
       OpenACCDirectiveKind DKind = I->RealDKind;
-      if (DKind == ACCD_unknown)
-        continue;
-      if (isOpenACCComputeDirective(DKind) || DKind == ACCD_routine)
+      if (isOpenACCComputeDirective(DKind))
         return DKind;
     }
+    if (SemaRef.getCurFunctionDecl()->hasAttr<ACCRoutineDeclAttr>())
+      return ACCD_routine;
     return ACCD_unknown;
-  }
-
-  /// If the parser is currently somewhere in a function for which an applying
-  /// routine directive is already known, returns true.  Otherwise, returns
-  /// false even if a routine directive will be implied later.
-  bool hasRoutineDirective() const {
-    for (auto I = Stack.rbegin(); I != Stack.rend(); ++I) {
-      if (I->RealDKind == ACCD_routine)
-        return true;
-    }
-    return false;
-  }
-
-  /// If the parser is currently somewhere in a function for which an explicit
-  /// and applying routine directive is already known, returns its location.
-  /// Otherwise, returns an invalid location.
-  SourceLocation getExplicitRoutineDirectiveLoc() const {
-    for (auto I = Stack.rbegin(); I != Stack.rend(); ++I) {
-      if (I->RealDKind == ACCD_routine)
-        // Location is invalid if it's an implicit routine directive.
-        return I->DirectiveStartLoc;
-    }
-    return SourceLocation();
   }
 
   /// Returns currently analyzed directive.
@@ -661,7 +627,7 @@ bool DirStackTy::hasVisibleDMA(VarDecl *VD) {
 }
 
 //===----------------------------------------------------------------------===//
-// OpenACC host function info.
+// OpenACC implicit routine directive info.
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -670,7 +636,6 @@ namespace {
 class ImplicitRoutineDirInfoTy {
 private:
   Sema &SemaRef;
-  DirStackTy &DirStack;
   struct FunctionEntryTy {
     typedef std::pair<SourceLocation, PartialDiagnostic> DiagTy;
     /// Diagnostics to report if a routine seq directive is implied for this
@@ -698,8 +663,7 @@ private:
   llvm::DenseMap<FunctionDecl *, FunctionEntryTy> Map;
 
 public:
-  ImplicitRoutineDirInfoTy(Sema &SemaRef, DirStackTy &DirStack)
-      : SemaRef(SemaRef), DirStack(DirStack) {}
+  ImplicitRoutineDirInfoTy(Sema &SemaRef) : SemaRef(SemaRef) {}
   /// Record use of \a Usee at \a UseLoc within \a User such that the use does
   /// not appear in a compute construct and neither function is yet known to
   /// have a routine directive.
@@ -780,21 +744,16 @@ public:
   /// the use appears.
   ///
   /// All routine directives in that chain must already be attached to the
-  /// functions they apply to except that the routine directive of the function
-  /// currently being parsed might only be on the directive stack, and all that
-  /// are implicit must already be recorded in this \c ImplicitRoutineDirInfoTy.
+  /// functions to which they apply, and all that are implicit must already be
+  /// recorded in this \c ImplicitRoutineDirInfoTy.
   void emitNotesForRoutineDirChain(FunctionDecl *FD) {
-    // Handle explicit routine directive.
     SourceLocation Loc;
-    if (FD->getCanonicalDecl() ==
-        SemaRef.getCurFunctionDecl()->getCanonicalDecl())
-      Loc = DirStack.getExplicitRoutineDirectiveLoc();
-    else {
-      ACCRoutineDeclAttr *Attr =
-          FD->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
-      assert(Attr && "expected function to have routine directive");
-      Loc = Attr->getLoc();
-    }
+    ACCRoutineDeclAttr *Attr =
+        FD->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
+    assert(Attr && "expected function to have routine directive");
+    Loc = Attr->getLoc();
+
+    // Handle explicit routine directive.
     if (Loc.isValid()) {
       SemaRef.Diag(Loc, diag::note_acc_routine_explicit) << FD->getName();
       return;
@@ -825,7 +784,7 @@ struct Sema::OpenACCDataTy {
   DirStackTy DirStack;
   ImplicitRoutineDirInfoTy ImplicitRoutineDirInfo;
   OpenACCDataTy(Sema &SemaRef)
-      : DirStack(SemaRef), ImplicitRoutineDirInfo(SemaRef, DirStack) {}
+      : DirStack(SemaRef), ImplicitRoutineDirInfo(SemaRef) {}
 };
 
 //===----------------------------------------------------------------------===//
@@ -837,8 +796,7 @@ void Sema::InitOpenACCData() { OpenACCData = new OpenACCDataTy(*this); }
 void Sema::DestroyOpenACCData() { delete OpenACCData; }
 
 bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
-                                             SourceLocation StartLoc,
-                                             Decl *DeclAppliesTo) {
+                                             SourceLocation StartLoc) {
   DirStackTy &DirStack = OpenACCData->DirStack;
   // Push onto the directive stack.
   switch (RealDKind) {
@@ -849,11 +807,11 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
   case ACCD_parallel:
   case ACCD_loop:
   case ACCD_routine:
-    DirStack.push(RealDKind, RealDKind, StartLoc, DeclAppliesTo);
+    DirStack.push(RealDKind, RealDKind, StartLoc);
     break;
   case ACCD_parallel_loop:
-    DirStack.push(RealDKind, ACCD_parallel, StartLoc, DeclAppliesTo);
-    DirStack.push(ACCD_unknown, ACCD_loop, StartLoc, DeclAppliesTo);
+    DirStack.push(RealDKind, ACCD_parallel, StartLoc);
+    DirStack.push(ACCD_unknown, ACCD_loop, StartLoc);
     break;
   case ACCD_unknown:
     llvm_unreachable("expected OpenACC directive");
@@ -865,38 +823,49 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
   SourceLocation ParentLoc;
   OpenACCDirectiveKind ParentDKind = DirStack.getRealParentDirective(ParentLoc);
   FunctionDecl *CurFnDecl = getCurFunctionDecl();
-  if (!isAllowedParentForDirective(RealDKind, ParentDKind)) {
-    if ((ParentDKind == ACCD_unknown || ParentDKind == ACCD_routine) &&
-        RealDKind == ACCD_loop)
-      Diag(StartLoc, diag::err_acc_orphaned_loop_construct);
-    else if (ParentDKind == ACCD_routine && RealDKind != ACCD_routine) {
-      // Supporting a directive within a function attributed with a routine
-      // directive is like supporting it within a compute construct as the
-      // function is meant to be callable here.  We don't support any such
-      // cases.  TODO: Eventually we'll support orphaned loop constructs.
+  if (CurFnDecl &&
+      (ParentDKind == ACCD_unknown || ParentDKind == ACCD_routine)) {
+    ACCRoutineDeclAttr *Attr = CurFnDecl->getAttr<ACCRoutineDeclAttr>();
+    assert((ParentDKind != ACCD_routine ||
+            (Attr && ParentLoc == Attr->getLoc())) &&
+           "expected lexically attached routine directive to be attached as "
+           "ACCRoutineDeclAttr to FunctionDecl");
+    if (!isAllowedParentForDirective(RealDKind, ACCD_routine)) {
+      if (!isAllowedParentForDirective(RealDKind, ACCD_unknown)) {
+        assert(
+            RealDKind == ACCD_loop &&
+            "expected acc loop as only directive not permitted directly in a "
+            "function regardless of whether it has routine directive");
+        Diag(StartLoc, diag::err_acc_orphaned_loop_construct);
+        return true;
+      }
       StringRef FnName = CurFnDecl->getName();
-      Diag(StartLoc, diag::err_acc_routine_unexpected_directive)
+      if (Attr) {
+        Diag(StartLoc, diag::err_acc_routine_unexpected_directive)
+            << getOpenACCName(RealDKind) << FnName;
+        OpenACCData->ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(
+            CurFnDecl);
+        return true;
+      }
+      OpenACCData->ImplicitRoutineDirInfo.diagIfRoutineSeqDirLater(
+          CurFnDecl, StartLoc, diag::err_acc_routine_unexpected_directive)
           << getOpenACCName(RealDKind) << FnName;
-      OpenACCData->ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(
-          CurFnDecl);
-    } else {
-      assert(ParentDKind != ACCD_unknown &&
-             "expected only loop construct to require parent construct");
-      Diag(StartLoc, diag::err_acc_directive_bad_nesting)
-          << getOpenACCName(ParentDKind) << getOpenACCName(RealDKind);
-      Diag(ParentLoc, diag::note_acc_enclosing_directive)
-          << getOpenACCName(ParentDKind);
+      return false;
     }
-    return true;
+    // TODO: Eventually an orphaned loop will be permitted in this case.
+    assert(isAllowedParentForDirective(RealDKind, ACCD_unknown) &&
+           "expected that any directive permitted directly in a function with "
+           "a routine directive is permitted in a function without one");
+    return false;
   }
-  // Store any directive nesting diagnostic that should be emitted if a routine
-  // seq directive is later implied for this function.
-  if (ParentDKind == ACCD_unknown && RealDKind != ACCD_routine &&
-      !isAllowedParentForDirective(RealDKind, ACCD_routine)) {
-    StringRef FnName = CurFnDecl->getName();
-    OpenACCData->ImplicitRoutineDirInfo.diagIfRoutineSeqDirLater(
-        CurFnDecl, StartLoc, diag::err_acc_routine_unexpected_directive)
-        << getOpenACCName(RealDKind) << FnName;
+  if (!isAllowedParentForDirective(RealDKind, ParentDKind)) {
+    assert(ParentDKind != ACCD_unknown &&
+           "expected only loop construct to require parent construct");
+    Diag(StartLoc, diag::err_acc_directive_bad_nesting)
+        << getOpenACCName(ParentDKind) << getOpenACCName(RealDKind);
+    Diag(ParentLoc, diag::note_acc_enclosing_directive)
+        << getOpenACCName(ParentDKind);
+    return true;
   }
   return false;
 }
@@ -2185,38 +2154,11 @@ void Sema::ActOnOpenACCLoopBreakStatement(SourceLocation BreakLoc,
 }
 
 void Sema::ActOnStartOfFunctionDefForOpenACC(FunctionDecl *FD) {
-  DirStackTy &DirStack = OpenACCData->DirStack;
-  // If a routine directive was just pushed onto the directive stack without a
-  // declaration to which it applies, then that routine directive is lexically
-  // attached to (and applies to) FD, which we just started parsing after
-  // pushing.  Set the declaration now.
-  if (DirStack.getEffectiveDirective() == ACCD_routine &&
-      !DirStack.getDeclAppliesTo()) {
-    DirStack.setDeclAppliesTo(FD);
-    return;
-  }
-  // If there is any previous routine directive for FD, then there must also
-  // have been a previous declaration of FD.  Push that routine directive and
-  // associate it with the previous FD declaration instead of the current FD
-  // so that \c ActOnFinishedFunctionBodyForOpenACC knows it has the
-  // responsibility to pop it.
-  if (ACCRoutineDeclAttr *Attr = FD->getAttr<ACCRoutineDeclAttr>()) {
-    FunctionDecl *FDPrev = FD->getPreviousDecl();
-    assert(FDPrev &&
-           "expected previous declaration of function with routine directive");
-    StartOpenACCDirectiveAndAssociate(ACCD_routine, Attr->getLocation(),
-                                      FDPrev);
-  }
-}
-void Sema::ActOnFinishedFunctionBodyForOpenACC(FunctionDecl *FD) {
-  DirStackTy &DirStack = OpenACCData->DirStack;
-  if (DirStack.getEffectiveDirective() == ACCD_routine) {
-    Decl *DeclAppliesTo = DirStack.getDeclAppliesTo();
-    assert(DeclAppliesTo &&
-           "expected declaration to which routine directive applies to be set");
-    if (DeclAppliesTo == FD->getPreviousDecl())
-      EndOpenACCDirectiveAndAssociate(ACCD_routine);
-  }
+  // If a routine directive was just pushed onto the directive stack, then that
+  // routine directive is lexically attached to (and applies to) FD, which we
+  // just started parsing after pushing.  Attach the ACCDeclAttr to FD now.
+  if (OpenACCData->DirStack.getEffectiveDirective() == ACCD_routine)
+    ActOnOpenACCRoutineDirective(ACC_EXPLICIT, DeclGroupRef(FD));
 }
 void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc) {
   if (FD->hasAttr<ACCRoutineDeclAttr>())
@@ -2231,8 +2173,8 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc) {
                                                          FD, Loc);
 }
 void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
-  bool HasRoutineDirective = OpenACCData->DirStack.hasRoutineDirective();
   FunctionDecl *Fn = getCurFunctionDecl();
+  bool HasRoutineDirective = Fn->hasAttr<ACCRoutineDeclAttr>();
   StringRef FnName = getCurFunctionDecl()->getName();
   for (Decl *D : S->decls()) {
     if (VarDecl *VD = dyn_cast<VarDecl>(D)) {
@@ -2360,29 +2302,6 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
                                         SourceLocation StartLoc,
                                         SourceLocation EndLoc,
                                         DeclGroupRef TheDeclGroup) {
-  // OpenACC 3.1, sec. 2.15.1 "Routine Directive", L2790:
-  // "At least one of the (gang, worker, vector, or seq) clauses must appear on
-  // the construct."
-  bool Found = false;
-  for (ACCClause *C : Clauses) {
-    switch (C->getClauseKind()) {
-    case ACCC_gang:
-    case ACCC_worker:
-    case ACCC_vector:
-    case ACCC_seq:
-      Found = true;
-      break;
-    default:
-      break;
-    }
-    if (Found)
-      break;
-  }
-  if (!Found) {
-    Diag(StartLoc, diag::err_acc_no_gang_worker_vector_seq_clause);
-    return;
-  }
-
   // OpenACC 3.1, sec. 2.15.1 "Routine Directive", L2706-2708:
   // "In C and C++, the routine directive without a name may appear immediately
   // before a function definition, a C++ lambda, or just before a function
@@ -2418,6 +2337,35 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
   }
   FunctionDecl *FD = TheDecl->getAsFunction();
   ACCRoutineDeclAttr *ACCAttr = FD->getAttr<ACCRoutineDeclAttr>();
+
+  // ActOnStartOfFunctionDefForOpenACC calls ActOnOpenACCRoutineDirective in the
+  // case of a function definition, but ParseOpenACCDeclarativeDirective doesn't
+  // know and calls it again, so skip if this is the second time.
+  if (ACCAttr && !ACCAttr->isInherited())
+    return;
+
+  // OpenACC 3.1, sec. 2.15.1 "Routine Directive", L2790:
+  // "At least one of the (gang, worker, vector, or seq) clauses must appear on
+  // the construct."
+  bool Found = false;
+  for (ACCClause *C : Clauses) {
+    switch (C->getClauseKind()) {
+    case ACCC_gang:
+    case ACCC_worker:
+    case ACCC_vector:
+    case ACCC_seq:
+      Found = true;
+      break;
+    default:
+      break;
+    }
+    if (Found)
+      break;
+  }
+  if (!Found) {
+    Diag(StartLoc, diag::err_acc_no_gang_worker_vector_seq_clause);
+    return;
+  }
 
   // Proposed text for OpenACC after 3.2:
   // - "In C and C++, a routine directive's scope starts at the routine
