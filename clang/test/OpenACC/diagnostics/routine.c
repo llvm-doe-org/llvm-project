@@ -554,7 +554,28 @@ void accUseBefore_accUses2() {
     void (*p)() = accUseBefore;
   }
 }
-// expected-note@+1 4 {{'#pragma acc routine' for function 'accUseBefore' appears here}}
+void accUseBefore_accUses3() {
+  // Make sure the search for uses traverses into the child construct.
+  #pragma acc parallel loop
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+    accUseBefore();
+    // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+    void (*p)() = accUseBefore;
+  }
+}
+void accUseBefore_accUses4() {
+  // Make sure the search for uses traverses into the child construct.
+  #pragma acc parallel
+  #pragma acc loop
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+    accUseBefore();
+    // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+    void (*p)() = accUseBefore;
+  }
+}
+// expected-note@+1 8 {{'#pragma acc routine' for function 'accUseBefore' appears here}}
 #pragma acc routine seq
 void accUseBefore();
 #pragma acc routine seq // Should note only the first routine directive.
@@ -650,6 +671,64 @@ void useDefBetween() {} // def
 void useDefBetween();
 #pragma acc routine seq
 void useDefBetween();
+
+// If some uses appear within broken and discarded sections of the AST and some
+// don't, only the latter uses are reported even if one of the former is an
+// offload use for which Clang saved its location for the routine directive it
+// implies (see next example for how that might be reported instead).
+void someUsesInErrorBefore();
+void someUsesInErrorBefore_use() {
+  // This use isn't reported even though it implied a routine directive.
+  // expected-error@+2 {{statement after '#pragma acc parallel loop' must be a for loop}}
+  #pragma acc parallel loop
+  someUsesInErrorBefore();
+  // This use is reported.
+  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'someUsesInErrorBefore'}}
+  someUsesInErrorBefore();
+  // This use isn't reported.
+  // expected-error@+2 {{statement after '#pragma acc parallel loop' must be a for loop}}
+  #pragma acc parallel loop
+  someUsesInErrorBefore();
+}
+// expected-note@+1 {{'#pragma acc routine' for function 'someUsesInErrorBefore' appears here}}
+#pragma acc routine seq
+void someUsesInErrorBefore();
+
+// If all uses appear within broken and discarded sections of the AST but at
+// least one is an offload use, then the first offload use is reported because
+// Clang saved its location for the routine directive it implies.
+void accUseInErrorBefore();
+void accUseInErrorBefore_use() {
+  // expected-error@+3 {{statement after '#pragma acc parallel loop' must be a for loop}}
+  // expected-error@+2 {{'#pragma acc routine' is not in scope at use of associated function 'accUseInErrorBefore'}}
+  #pragma acc parallel loop
+  accUseInErrorBefore();
+  // expected-error@+2 {{statement after '#pragma acc parallel loop' must be a for loop}}
+  #pragma acc parallel loop
+  accUseInErrorBefore();
+}
+// expected-note@+1 {{'#pragma acc routine' for function 'accUseInErrorBefore' appears here}}
+#pragma acc routine seq
+void accUseInErrorBefore();
+
+// If all uses appear within broken and discarded sections of the AST and are
+// host-only uses, then Clang can report that there are uses but cannot report
+// any of their locations.
+void hostUseInErrorBefore();
+void hostUseInErrorBefore_use() {
+  // expected-error@+2 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+  #pragma acc loop
+  hostUseInErrorBefore();
+  // expected-error@+2 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+  #pragma acc loop
+  hostUseInErrorBefore();
+}
+// expected-error@+2 {{'#pragma acc routine' is not in scope at use of associated function 'hostUseInErrorBefore'}}
+// expected-note@+1 {{cannot report locations of uses of function 'hostUseInErrorBefore' due to previous errors}}
+#pragma acc routine seq
+void hostUseInErrorBefore();
 
 //--------------------------------------------------
 // Restrictions on the function definition body for explicit routine directives.

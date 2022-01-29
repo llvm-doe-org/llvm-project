@@ -773,6 +773,12 @@ public:
     if (UserIsFunction)
       emitNotesForRoutineDirChain(Entry.UserFn, /*PreviousDir=*/false);
   }
+  /// Return the location of the use of this function that originally implied a
+  /// routine seq directive for this function, or return an invalid location if
+  /// no routine seq directive has been implied for this function yet.
+  SourceLocation getUseLoc(FunctionDecl *FD) const {
+    return Map.lookup(FD->getCanonicalDecl()).UseLoc;
+  }
 
   /// A diagnostic for a function that is emitted either immediately if the
   /// function is already known to have a routine directive or later when a
@@ -2416,6 +2422,7 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
   // evaluated (e.g., a reference in sizeof is not a use).
   bool AfterUseErrorReported = false;
   if (Determination == ACC_EXPLICIT && (!ACCAttr || ACCAttr->isImplicit())) {
+    bool PreviousErrors = getDiagnostics().hasErrorOccurred();
     if (FunctionDecl *Def = FD->getDefinition()) {
       if (Def != FD) {
         Diag(Def->getBeginLoc(),
@@ -2428,7 +2435,30 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
       AfterUseErrorReported = true;
       RoutineUseReporter Reporter(*this, FD, StartLoc);
       Reporter.TraverseAST(Context);
-      assert(Reporter.foundUse() && "expected to find function use");
+      // If other errors discarded the parts of the AST with the uses, then we
+      // haven't yet reported the routine directive after the uses.  But we need
+      // to so that any later diagnostics about conflicts with the implicit
+      // directive don't distract from the real problem: the explicit routine
+      // directive should have appeared before the uses so they wouldn't have
+      // implied the conflicting routine directives.
+      if (!Reporter.foundUse()) {
+        assert(PreviousErrors &&
+               "expected to find and report function use if no previous errors "
+               "potentially discarded parts of the AST");
+        SourceLocation UseLoc =
+            OpenACCData->ImplicitRoutineDirInfo.getUseLoc(FD);
+        if (UseLoc.isValid()) {
+          // It's only one of potentially multiple uses, but that'll have to do.
+          Diag(UseLoc, diag::err_acc_routine_not_in_scope_at_function_use)
+              << FD->getName();
+          Diag(StartLoc, diag::note_acc_routine_explicit) << 0 << FD->getName();
+        } else {
+          // Must have been host uses, which don't imply routine directives.
+          Diag(StartLoc, diag::err_acc_routine_not_in_scope_at_function_use)
+              << FD->getName();
+          Diag(StartLoc, diag::note_acc_function_use_lost) << FD->getName();
+        }
+      }
     }
   }
 

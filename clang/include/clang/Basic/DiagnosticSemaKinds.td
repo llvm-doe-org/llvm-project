@@ -10996,6 +10996,8 @@ def err_acc_routine_not_in_scope_at_function_def : Error<
   "'%0'">;
 def err_acc_routine_not_in_scope_at_function_use : Error<
   "'#pragma acc routine' is not in scope at use of associated function '%0'">;
+def note_acc_function_use_lost : Note<
+  "cannot report locations of uses of function '%0' due to previous errors">;
 // "previous" is used to contrast with a more recent routine directive.
 def note_acc_routine_explicit : Note<
   "%select{|previous }0'#pragma acc routine' for function '%1' appears here">;
