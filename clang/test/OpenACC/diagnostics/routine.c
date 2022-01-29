@@ -546,6 +546,7 @@ void parUseBeforeDef() {
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
+  parUseBeforeDef();
 }
 
 // Does the definition check see the routine directive later implied by a use
@@ -559,11 +560,37 @@ void parUseAfterDef() {
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
+  parUseAfterDef();
 }
 void parUseAfterDef_use() {
   #pragma acc parallel
   // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'parUseAfterDef' by use in construct '#pragma acc parallel' here}}
   parUseAfterDef();
+}
+
+// Does the definition check see the routine directive implied by a use within a
+// parallel construct within the same definition?
+void parUseInDef() {
+  // expected-error@+1 {{static local variable 'sBefore' is not permitted within function 'parUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  static int sBefore;
+  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc update device(i)
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'parUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc parallel
+  // expected-note@+1 5 {{'#pragma acc routine seq' implied for function 'parUseInDef' by use in construct '#pragma acc parallel' here}}
+  parUseInDef();
+  // expected-error@+1 {{static local variable 'sAfter' is not permitted within function 'parUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  static int sAfter;
+  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc update device(i)
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
 }
 
 // Does the definition check see the routine directive previously implied by a
@@ -605,6 +632,31 @@ void parLoopUseAfterDef_use() {
     // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'parLoopUseAfterDef' by use in construct '#pragma acc parallel loop' here}}
     parLoopUseAfterDef();
   }
+}
+
+// Does the definition check see the routine directive implied by a use within a
+// parallel loop construct within the same definition?
+void parLoopUseInDef() {
+  // expected-error@+1 {{static local variable 'sBefore' is not permitted within function 'parLoopUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  static int sBefore;
+  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parLoopUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc update device(i)
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'parLoopUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc parallel
+  // expected-note@+1 5 {{'#pragma acc routine seq' implied for function 'parLoopUseInDef' by use in construct '#pragma acc parallel' here}}
+  parLoopUseInDef();
+  // expected-error@+1 {{static local variable 'sAfter' is not permitted within function 'parLoopUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  static int sAfter;
+  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parLoopUseInDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc update device(i)
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
 }
 
 // Does the definition check see the routine directive previously implied by a
