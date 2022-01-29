@@ -639,7 +639,7 @@ private:
   struct FunctionEntryTy {
     typedef std::pair<SourceLocation, PartialDiagnostic> DiagTy;
     /// Diagnostics to report if a routine seq directive is implied for this
-    /// function later.
+    /// function later.  Diagnostics are stored here by \c DiagIfRoutineDir.
     std::list<DiagTy> Diags;
     /// This function's uses of other functions such that, in each case, the use
     /// does not appear in a compute construct and neither function was known to
@@ -662,8 +662,55 @@ private:
   };
   llvm::DenseMap<FunctionDecl *, FunctionEntryTy> Map;
 
+  /// Emit notes identifying the origin of the routine directive for \a FD.
+  ///
+  /// If \a FD has an explicit routine directive, report it.  Otherwise, report
+  /// the first use of \a FD that implied its routine seq directive.  If that
+  /// use does not appear in a compute construct, recursively emit notes
+  /// identifying the origin of the routine directive for the function in which
+  /// the use appears.
+  ///
+  /// All routine directives in that chain must already be attached to the
+  /// functions to which they apply, and all that are implicit must already be
+  /// recorded in this \c ImplicitRoutineDirInfoTy.
+  void emitNotesForRoutineDirChain(FunctionDecl *FD) const {
+    SourceLocation Loc;
+    ACCRoutineDeclAttr *Attr =
+        FD->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
+    assert(Attr && "expected function to have routine directive");
+    Loc = Attr->getLoc();
+
+    // Handle explicit routine directive.
+    if (Loc.isValid()) {
+      SemaRef.Diag(Loc, diag::note_acc_routine_explicit) << FD->getName();
+      return;
+    }
+
+    // Handle implicit routine directive.
+    const FunctionEntryTy &Entry = Map.lookup(FD->getCanonicalDecl());
+    assert(Entry.UseLoc.isValid() && Entry.UserFn &&
+           Entry.UserComputeConstruct != ACCD_unknown &&
+           "expected function to have implicit seq routine directive");
+    bool UserIsFunction = Entry.UserComputeConstruct == ACCD_routine;
+    StringRef UserName = UserIsFunction
+                             ? Entry.UserFn->getName()
+                             : getOpenACCName(Entry.UserComputeConstruct);
+    SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
+        << FD->getName() << UserIsFunction << UserName;
+    if (UserIsFunction)
+      emitNotesForRoutineDirChain(Entry.UserFn);
+  }
+
+  /// Emit a diagnostic that is caused by a function's routine directive.
+  void emitRoutineDirDiag(FunctionDecl *FD, SourceLocation Loc,
+                          PartialDiagnostic Diag) const {
+    SemaRef.Diag(Loc, Diag);
+    emitNotesForRoutineDirChain(FD);
+  }
+
 public:
   ImplicitRoutineDirInfoTy(Sema &SemaRef) : SemaRef(SemaRef) {}
+
   /// Record use of \a Usee at \a UseLoc within \a User such that the use does
   /// not appear in a compute construct and neither function is yet known to
   /// have a routine directive.
@@ -674,24 +721,14 @@ public:
            "unexpected host function use after implicit routine directive");
     Entry.HostFunctionUses.try_emplace(Usee->getCanonicalDecl(), UseLoc);
   }
-  /// Record diagnostic to be emitted if a routine seq directive is implied for
-  /// \a FD later.
-  PartialDiagnostic &diagIfRoutineSeqDirLater(FunctionDecl *FD,
-                                              SourceLocation Loc,
-                                              unsigned DiagID) {
-    FunctionEntryTy &Entry = Map[FD->getCanonicalDecl()];
-    assert(Entry.UseLoc.isInvalid() &&
-           "unexpected diagnostic after implicit routine directive");
-    Entry.Diags.emplace_back(Loc, SemaRef.PDiag(DiagID));
-    return Entry.Diags.back().second;
-  }
+
   /// Add routine seq directive implied for \a FD by its use at \a UseLoc within
   /// \a UserFn and within a compute construct of kind \a UserComputeConstruct
   /// (must be \c ACCD_routine if the use is not within a compute construct).
   ///
   /// Emit diagnostics that were previously recorded for \a FD by
-  /// \c diagIfRoutineSeqDirLater.  \c emitNotesForRoutineDirChain is called for
-  /// \a FD, so its preconditions must be met.
+  /// \c DiagIfRoutineDir.  \c emitNotesForRoutineDirChain is called for \a FD,
+  /// so its preconditions must be met.
   ///
   /// Recursively add routine seq directives for all functions recorded by
   /// \c addHostFunctionUse as used by \a User.
@@ -720,10 +757,8 @@ public:
     Entry.UseLoc = UseLoc;
     Entry.UserFn = UserFn->getCanonicalDecl();
     Entry.UserComputeConstruct = UserComputeConstruct;
-    for (auto D : Entry.Diags) {
-      SemaRef.Diag(D.first, D.second);
-      emitNotesForRoutineDirChain(FD);
-    }
+    for (auto Diag : Entry.Diags)
+      emitRoutineDirDiag(FD, Diag.first, Diag.second);
     Entry.Diags.clear(); // don't need them anymore
     for (auto Use : Entry.HostFunctionUses) {
       FunctionDecl *Usee = Use.first;
@@ -735,46 +770,49 @@ public:
     }
     Entry.HostFunctionUses.clear(); // don't need them anymore
   }
-  /// Emit notes identifying the origin of the routine directive for \a FD.
-  ///
-  /// If \a FD has an explicit routine directive, report it.  Otherwise, report
-  /// the first use of \a FD that implied its routine seq directive.  If that
-  /// use does not appear in a compute construct, recursively emit notes
-  /// identifying the origin of the routine directive for the function in which
-  /// the use appears.
-  ///
-  /// All routine directives in that chain must already be attached to the
-  /// functions to which they apply, and all that are implicit must already be
-  /// recorded in this \c ImplicitRoutineDirInfoTy.
-  void emitNotesForRoutineDirChain(FunctionDecl *FD) {
-    SourceLocation Loc;
-    ACCRoutineDeclAttr *Attr =
-        FD->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
-    assert(Attr && "expected function to have routine directive");
-    Loc = Attr->getLoc();
 
-    // Handle explicit routine directive.
-    if (Loc.isValid()) {
-      SemaRef.Diag(Loc, diag::note_acc_routine_explicit) << FD->getName();
-      return;
+  /// A diagnostic for a function that is emitted either immediately if the
+  /// function is already known to have a routine directive or later when a
+  /// routine seq directive is implied for it, if ever.
+  ///
+  /// Instances cannot be copied.  Immediate emission or storage for later
+  /// emission occurs upon destruction.
+  class DiagIfRoutineDir : public PartialDiagnostic {
+  private:
+    ImplicitRoutineDirInfoTy &ImplicitRoutineDirInfo;
+    FunctionDecl *FD;
+    SourceLocation DiagLoc;
+    bool *Emitted;
+
+  public:
+    DiagIfRoutineDir(ImplicitRoutineDirInfoTy &ImplicitRoutineDirInfo,
+                     FunctionDecl *FD, SourceLocation DiagLoc, unsigned DiagID,
+                     bool *Emitted = nullptr)
+        : PartialDiagnostic(ImplicitRoutineDirInfo.SemaRef.PDiag(DiagID)),
+          ImplicitRoutineDirInfo(ImplicitRoutineDirInfo), FD(FD),
+          DiagLoc(DiagLoc), Emitted(Emitted) {}
+    DiagIfRoutineDir(const DiagIfRoutineDir &) = delete;
+    DiagIfRoutineDir &operator=(const DiagIfRoutineDir &) = delete;
+    ~DiagIfRoutineDir() {
+      if (FD->hasAttr<ACCRoutineDeclAttr>()) {
+        ImplicitRoutineDirInfo.emitRoutineDirDiag(FD, DiagLoc, *this);
+        if (Emitted)
+          *Emitted = true;
+        return;
+      }
+      if (Emitted)
+        *Emitted = false;
+      FunctionEntryTy &Entry =
+          ImplicitRoutineDirInfo.Map[FD->getCanonicalDecl()];
+      assert(Entry.UseLoc.isInvalid() &&
+             "unexpected diagnostic after implicit routine directive");
+      Entry.Diags.emplace_back(DiagLoc, *this);
     }
-
-    // Handle implicit routine directive.
-    FunctionEntryTy &Entry = Map[FD->getCanonicalDecl()];
-    assert(Entry.UseLoc.isValid() && Entry.UserFn &&
-           Entry.UserComputeConstruct != ACCD_unknown &&
-           "expected function to have implicit seq routine directive");
-    bool UserIsFunction = Entry.UserComputeConstruct == ACCD_routine;
-    StringRef UserName =
-      UserIsFunction ? Entry.UserFn->getName()
-                     : getOpenACCName(Entry.UserComputeConstruct);
-    SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
-      << FD->getName() << UserIsFunction << UserName;
-    if (UserIsFunction)
-      emitNotesForRoutineDirChain(Entry.UserFn);
-  }
+  };
 };
 } // namespace
+
+using DiagIfRoutineDir = ImplicitRoutineDirInfoTy::DiagIfRoutineDir;
 
 //===----------------------------------------------------------------------===//
 // Container for above OpenACC data.
@@ -840,17 +878,11 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
         return true;
       }
       StringRef FnName = CurFnDecl->getName();
-      if (Attr) {
-        Diag(StartLoc, diag::err_acc_routine_unexpected_directive)
-            << getOpenACCName(RealDKind) << FnName;
-        OpenACCData->ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(
-            CurFnDecl);
-        return true;
-      }
-      OpenACCData->ImplicitRoutineDirInfo.diagIfRoutineSeqDirLater(
-          CurFnDecl, StartLoc, diag::err_acc_routine_unexpected_directive)
+      bool Err;
+      DiagIfRoutineDir(OpenACCData->ImplicitRoutineDirInfo, CurFnDecl, StartLoc,
+                       diag::err_acc_routine_unexpected_directive, &Err)
           << getOpenACCName(RealDKind) << FnName;
-      return false;
+      return Err;
     }
     // TODO: Eventually an orphaned loop will be permitted in this case.
     assert(isAllowedParentForDirective(RealDKind, ACCD_unknown) &&
@@ -2174,7 +2206,6 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc) {
 }
 void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
   FunctionDecl *Fn = getCurFunctionDecl();
-  bool HasRoutineDirective = Fn->hasAttr<ACCRoutineDeclAttr>();
   StringRef FnName = getCurFunctionDecl()->getName();
   for (Decl *D : S->decls()) {
     if (VarDecl *VD = dyn_cast<VarDecl>(D)) {
@@ -2182,15 +2213,9 @@ void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
       // "In C and C++, function static variables are not supported in functions
       // to which a routine directive applies."
       if (VD->isStaticLocal()) {
-        if (HasRoutineDirective) {
-          Diag(VD->getLocation(), diag::err_acc_routine_static_local)
-              << VD->getName() << FnName;
-          OpenACCData->ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Fn);
-        } else {
-          OpenACCData->ImplicitRoutineDirInfo.diagIfRoutineSeqDirLater(
-              Fn, VD->getLocation(), diag::err_acc_routine_static_local)
-              << VD->getName() << FnName;
-        }
+        DiagIfRoutineDir(OpenACCData->ImplicitRoutineDirInfo, Fn,
+                         VD->getLocation(), diag::err_acc_routine_static_local)
+            << VD->getName() << FnName;
       }
     }
   }
