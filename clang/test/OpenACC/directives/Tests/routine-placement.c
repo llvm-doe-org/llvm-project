@@ -1,8 +1,7 @@
-// Check "acc routine".
+// Check that "acc routine seq" behaves correctly when placed on a function
+// prototype, definition, neither, or both and in different orders.
 //
-// This mostly checks explicit routine directives with a few basic checks of
-// implicit routine directives, which are more thoroughly checked in
-// routine-implicit.c.
+// Implicit "acc routine seq" is more thoroughly checked in routine-implicit.c.
 
 // RUN: %acc-check-dmp{                                                        \
 // RUN:   clang-args: ;                                                        \

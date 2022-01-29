@@ -3789,8 +3789,8 @@ def ACCRoutineDecl : ACCDeclAttr {
   let Subjects = SubjectList<[Function]>;
   let Args = [
     EnumArgument<"Partitioning", "PartitioningTy",
-                 [ "seq" ],
-                 [ "Seq" ]>
+                 [ "gang", "worker", "vector", "seq" ],
+                 [ "Gang", "Worker", "Vector", "Seq" ]>
   ];
   let Documentation = [Undocumented];
   let AdditionalMembers = [{

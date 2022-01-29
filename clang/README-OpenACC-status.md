@@ -322,8 +322,19 @@ Run-Time Environment Variables
 * Lexical context
     * Appearing at file scope is supported.
     * Appearing within a function definition is not yet supported.
-* Supported clauses
-    * `seq` (required)
+* Supported level-of-parallelism clauses
+    * `gang`
+    * `worker`
+    * `vector`
+    * `seq`
+    * Exactly one must appear, and it must be the same as on any other
+      `routine` directive applying to the same function within the
+      same compilation unit.  Otherwise, a compile-time error
+      diagnostic is produced.
+    * TODO: Currently, these clauses have no other effect and are not
+      checked for compatibility when one function calls another.
+* Other clauses
+    * No other clauses are supported yet.
     * Specifying a name is not yet supported, so an immediately
       following prototype or definition is required.
 * Immediately following declaration

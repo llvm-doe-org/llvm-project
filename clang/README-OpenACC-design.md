@@ -1970,9 +1970,13 @@ Routine Directive
 Clacc's current mapping of an `acc routine` directive and its clauses
 to OpenMP is as follows:
 
-* *exp* `acc routine seq` -> `omp declare target` plus an
-  `omp end declare target` following the associated function
-  declaration.
+* *exp* `acc routine` -> `omp declare target` plus an `omp end declare
+  target` following the associated function declaration.
+* The translation discards *exp* `gang`|`worker`|`vector`|`seq`.
+  Notes:
+    * These clauses appear to have no counterpart in OpenMP.
+    * OpenACC uses them to verify compatibility of a function with its
+      uses.
 * The translation discards *imp* `acc routine seq`.  Notes:
     * OpenACC and OpenMP rules for implicitly determining that a
       function must be compiled for offload appear to be the same

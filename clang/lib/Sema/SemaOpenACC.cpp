@@ -662,50 +662,11 @@ private:
   };
   llvm::DenseMap<FunctionDecl *, FunctionEntryTy> Map;
 
-  /// Emit notes identifying the origin of the routine directive for \a FD.
-  ///
-  /// If \a FD has an explicit routine directive, report it.  Otherwise, report
-  /// the first use of \a FD that implied its routine seq directive.  If that
-  /// use does not appear in a compute construct, recursively emit notes
-  /// identifying the origin of the routine directive for the function in which
-  /// the use appears.
-  ///
-  /// All routine directives in that chain must already be attached to the
-  /// functions to which they apply, and all that are implicit must already be
-  /// recorded in this \c ImplicitRoutineDirInfoTy.
-  void emitNotesForRoutineDirChain(FunctionDecl *FD) const {
-    SourceLocation Loc;
-    ACCRoutineDeclAttr *Attr =
-        FD->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
-    assert(Attr && "expected function to have routine directive");
-    Loc = Attr->getLoc();
-
-    // Handle explicit routine directive.
-    if (Loc.isValid()) {
-      SemaRef.Diag(Loc, diag::note_acc_routine_explicit) << FD->getName();
-      return;
-    }
-
-    // Handle implicit routine directive.
-    const FunctionEntryTy &Entry = Map.lookup(FD->getCanonicalDecl());
-    assert(Entry.UseLoc.isValid() && Entry.UserFn &&
-           Entry.UserComputeConstruct != ACCD_unknown &&
-           "expected function to have implicit seq routine directive");
-    bool UserIsFunction = Entry.UserComputeConstruct == ACCD_routine;
-    StringRef UserName = UserIsFunction
-                             ? Entry.UserFn->getName()
-                             : getOpenACCName(Entry.UserComputeConstruct);
-    SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
-        << FD->getName() << UserIsFunction << UserName;
-    if (UserIsFunction)
-      emitNotesForRoutineDirChain(Entry.UserFn);
-  }
-
   /// Emit a diagnostic that is caused by a function's routine directive.
   void emitRoutineDirDiag(FunctionDecl *FD, SourceLocation Loc,
                           PartialDiagnostic Diag) const {
     SemaRef.Diag(Loc, Diag);
-    emitNotesForRoutineDirChain(FD);
+    emitNotesForRoutineDirChain(FD, /*PreviousDir=*/false);
   }
 
 public:
@@ -769,6 +730,48 @@ public:
       addImplicitRoutineSeqDir(Usee, UseeUseLoc, FD, ACCD_routine);
     }
     Entry.HostFunctionUses.clear(); // don't need them anymore
+  }
+
+  /// Emit notes identifying the origin of the routine directive for \a FD.
+  /// If \a PreviousDir, then point out that it was a previous routine directive
+  /// to contrast with a new routine directive.
+  ///
+  /// If \a FD has an explicit routine directive, report it.  Otherwise, report
+  /// the first use of \a FD that implied its routine seq directive.  If that
+  /// use does not appear in a compute construct, recursively emit notes
+  /// identifying the origin of the routine directive for the function in which
+  /// the use appears.
+  ///
+  /// All routine directives in that chain must already be attached to the
+  /// functions to which they apply, and all that are implicit must already be
+  /// recorded in this \c ImplicitRoutineDirInfoTy.
+  void emitNotesForRoutineDirChain(FunctionDecl *FD, bool PreviousDir) const {
+    SourceLocation Loc;
+    ACCRoutineDeclAttr *Attr =
+        FD->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
+    assert(Attr && "expected function to have routine directive");
+    Loc = Attr->getLoc();
+
+    // Handle explicit routine directive.
+    if (Loc.isValid()) {
+      SemaRef.Diag(Loc, diag::note_acc_routine_explicit)
+          << PreviousDir << FD->getName();
+      return;
+    }
+
+    // Handle implicit routine directive.
+    const FunctionEntryTy &Entry = Map.lookup(FD->getCanonicalDecl());
+    assert(Entry.UseLoc.isValid() && Entry.UserFn &&
+           Entry.UserComputeConstruct != ACCD_unknown &&
+           "expected function to have implicit seq routine directive");
+    bool UserIsFunction = Entry.UserComputeConstruct == ACCD_routine;
+    StringRef UserName = UserIsFunction
+                             ? Entry.UserFn->getName()
+                             : getOpenACCName(Entry.UserComputeConstruct);
+    SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
+        << PreviousDir << FD->getName() << UserIsFunction << UserName;
+    if (UserIsFunction)
+      emitNotesForRoutineDirChain(Entry.UserFn, /*PreviousDir=*/false);
   }
 
   /// A diagnostic for a function that is emitted either immediately if the
@@ -1020,7 +1023,7 @@ public:
     S.Diag(Loc, diag::err_acc_routine_not_in_scope_at_function_use)
         << FD->getName();
     S.Diag(RoutineDirectiveLoc, diag::note_acc_routine_explicit)
-        << FD->getName();
+        << 0 << FD->getName();
   }
   RoutineUsedDeclVisitor(Sema &SemaRef, FunctionDecl *FD,
                          SourceLocation RoutineDirectiveLoc)
@@ -2369,26 +2372,37 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
   if (ACCAttr && !ACCAttr->isInherited())
     return;
 
-  // OpenACC 3.1, sec. 2.15.1 "Routine Directive", L2790:
+  // OpenACC 3.2, sec. 2.15.1 "Routine Directive", L2927:
   // "At least one of the (gang, worker, vector, or seq) clauses must appear on
   // the construct."
-  bool Found = false;
+  ACCClause *PartClause = nullptr;
+  ACCRoutineDeclAttr::PartitioningTy Part;
   for (ACCClause *C : Clauses) {
     switch (C->getClauseKind()) {
     case ACCC_gang:
+      PartClause = C;
+      Part = ACCRoutineDeclAttr::Gang;
+      break;
     case ACCC_worker:
+      PartClause = C;
+      Part = ACCRoutineDeclAttr::Worker;
+      break;
     case ACCC_vector:
+      PartClause = C;
+      Part = ACCRoutineDeclAttr::Vector;
+      break;
     case ACCC_seq:
-      Found = true;
+      PartClause = C;
+      Part = ACCRoutineDeclAttr::Seq;
       break;
     default:
       break;
     }
-    if (Found)
+    if (PartClause)
       break;
   }
-  if (!Found) {
-    Diag(StartLoc, diag::err_acc_no_gang_worker_vector_seq_clause);
+  if (!PartClause) {
+    Diag(StartLoc, diag::err_acc_routine_no_gang_worker_vector_seq_clause);
     return;
   }
 
@@ -2400,16 +2414,18 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
   //   appears in the same compilation unit."
   // Uses include host uses and offload device uses but only if they're
   // evaluated (e.g., a reference in sizeof is not a use).
+  bool AfterUseErrorReported = false;
   if (Determination == ACC_EXPLICIT && (!ACCAttr || ACCAttr->isImplicit())) {
     if (FunctionDecl *Def = FD->getDefinition()) {
       if (Def != FD) {
         Diag(Def->getBeginLoc(),
              diag::err_acc_routine_not_in_scope_at_function_def)
             << FD->getName();
-        Diag(StartLoc, diag::note_acc_routine_explicit) << FD->getName();
+        Diag(StartLoc, diag::note_acc_routine_explicit) << 0 << FD->getName();
       }
     }
     if (FD->isUsed()) {
+      AfterUseErrorReported = true;
       RoutineUseReporter Reporter(*this, FD, StartLoc);
       Reporter.TraverseAST(Context);
       assert(Reporter.foundUse() && "expected to find function use");
@@ -2420,12 +2436,12 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
   if (!ACCAttr) {
     switch (Determination) {
     case ACC_EXPLICIT:
-      ACCAttr = ACCRoutineDeclAttr::Create(Context, ACCRoutineDeclAttr::Seq,
+      ACCAttr = ACCRoutineDeclAttr::Create(Context, Part,
                                            SourceRange(StartLoc, EndLoc));
       break;
     case ACC_IMPLICIT:
       ACCAttr = ACCRoutineDeclAttr::CreateImplicit(
-          Context, ACCRoutineDeclAttr::Seq, SourceRange(StartLoc, EndLoc));
+          Context, Part, SourceRange(StartLoc, EndLoc));
       break;
     case ACC_PREDETERMINED:
     case ACC_UNDETERMINED:
@@ -2437,11 +2453,25 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
   } else {
     assert(Determination == ACC_EXPLICIT &&
            "expected new routine directive to be explicit if already have one");
-    // TODO: Eventually, we need an error diagnostic if the previous routine
-    // directive is at all different from this one, but for now only exactly
-    // "acc routine seq" is supported.
-    assert(ACCAttr->getPartitioning() == ACCRoutineDeclAttr::Seq &&
-           "expected acc routine to have seq");
+    ACCRoutineDeclAttr::PartitioningTy PartOld = ACCAttr->getPartitioning();
+    // Proposed text for OpenACC after 3.2:
+    //
+    // "If multiple routine directives that apply to the same procedure have
+    // overlapping scopes, then they must specify the same level of
+    // parallelism."
+    if (PartOld != Part) {
+      Diag(PartClause->getBeginLoc(), diag::err_acc_routine_inconsistent)
+          << FD->getName()
+          << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(Part)
+          << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(PartOld);
+      OpenACCData->ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(
+          FD, /*PreviousDir=*/true);
+      assert((ACCAttr->getLocation().isValid() || AfterUseErrorReported) &&
+             "expected explicit routine directive conflicting with an implicit "
+             "routine directive to produce a diagnostic about appearing after "
+             "a use of the function");
+      return;
+    }
     // The routine directive is explicit, so clear the inherited bit that was
     // set automatically due to the previous routine directive.  This is
     // important for source-to-source mode and AST printing.

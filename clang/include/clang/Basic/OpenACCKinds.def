@@ -415,6 +415,9 @@ OPENACC_PARALLEL_LOOP_CLAUSE(vector)
 OPENACC_PARALLEL_LOOP_CLAUSE(collapse)
 
 // Explicit clauses allowed for OpenACC directive 'routine'.
+OPENACC_ROUTINE_CLAUSE(gang)
+OPENACC_ROUTINE_CLAUSE(worker)
+OPENACC_ROUTINE_CLAUSE(vector)
 OPENACC_ROUTINE_CLAUSE(seq)
 
 // Parent directives allowed for 'update'.

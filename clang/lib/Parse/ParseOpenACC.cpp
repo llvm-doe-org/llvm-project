@@ -305,6 +305,10 @@ ACCClause *Parser::ParseOpenACCClause(
         }
       }
       if (DKind == ACCD_routine) {
+        // OpenACC 3.2, sec. 2.15.1 "Routine Directive", L2881, L2890-2891,
+        // L2901-2902, and L2906-2907:
+        // "Only one of the gang, worker, vector, and seq clauses may appear for
+        // each device type."
         OpenACCClauseKind CKindOther;
         if ((CKind == ACCC_gang || CKind == ACCC_worker ||
              CKind == ACCC_vector || CKind == ACCC_seq) &&

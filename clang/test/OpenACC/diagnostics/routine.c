@@ -15,19 +15,35 @@
 int i, jk;
 float f;
 
+// Generate unique function name based on the line number to make it easier to
+// avoid diagnostics about multiple routine directives for the same function.
+#define UNIQUE_NAME CONCAT2(unique_fn_, __LINE__)
+#define CONCAT2(X, Y) CONCAT(X, Y)
+#define CONCAT(X, Y) X##Y
+
 //--------------------------------------------------
 // Missing clauses
-//
-// TODO: So far, only seq is implemented.
 //--------------------------------------------------
 
-// expected-error@+1 {{expected 'seq' clause for '#pragma acc routine'}}
+// expected-error@+1 {{expected 'gang', 'worker', 'vector', or 'seq' clause for '#pragma acc routine'}}
 #pragma acc routine
-void foo();
+void UNIQUE_NAME();
+
+// Any one of those clauses is sufficient to suppress that diagnostic.
+#pragma acc routine gang
+void UNIQUE_NAME();
+
+// Any one of those clauses is sufficient to suppress that diagnostic.
+#pragma acc routine worker
+void UNIQUE_NAME();
+
+// Any one of those clauses is sufficient to suppress that diagnostic.
+#pragma acc routine vector
+void UNIQUE_NAME();
 
 // Any one of those clauses is sufficient to suppress that diagnostic.
 #pragma acc routine seq
-void foo();
+void UNIQUE_NAME();
 
 //--------------------------------------------------
 // Unrecognized clauses
@@ -36,12 +52,12 @@ void foo();
 // Bogus clauses.
 
 // expected-warning@+2 {{extra tokens at the end of '#pragma acc routine' are ignored}}
-// expected-error@+1 {{expected 'seq' clause for '#pragma acc routine'}}
-#pragma acc routine foo
-void foo();
+// expected-error@+1 {{expected 'gang', 'worker', 'vector', or 'seq' clause for '#pragma acc routine'}}
+#pragma acc routine bogusClause0
+void bogusClause0();
 // expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
-#pragma acc routine seq foo bar
-void foo();
+#pragma acc routine seq bogusClause1 bar
+void bogusClause1();
 
 // Well formed clauses not permitted here.  Make sure every one is an error.
 
@@ -53,127 +69,345 @@ void foo();
 // expected-error@+4 {{unexpected OpenACC clause 'create' in directive '#pragma acc routine'}}
 // expected-error@+3 {{unexpected OpenACC clause 'no_create' in directive '#pragma acc routine'}}
 // expected-error@+2 {{unexpected OpenACC clause 'delete' in directive '#pragma acc routine'}}
-// expected-error@+1 {{expected 'seq' clause for '#pragma acc routine'}}
+// expected-error@+1 {{expected 'gang', 'worker', 'vector', or 'seq' clause for '#pragma acc routine'}}
 #pragma acc routine nomap(i) present(i) copy(i) copyin(i) copyout(i) create(i) no_create(i) delete(i)
-void foo();
+void UNIQUE_NAME();
 // expected-error@+4 {{unexpected OpenACC clause 'pcopy' in directive '#pragma acc routine'}}
 // expected-error@+3 {{unexpected OpenACC clause 'pcopyin' in directive '#pragma acc routine'}}
 // expected-error@+2 {{unexpected OpenACC clause 'pcopyout' in directive '#pragma acc routine'}}
 // expected-error@+1 {{unexpected OpenACC clause 'pcreate' in directive '#pragma acc routine'}}
 #pragma acc routine seq pcopy(i) pcopyin(i) pcopyout(i) pcreate(i)
-void foo();
+void UNIQUE_NAME();
 // expected-error@+4 {{unexpected OpenACC clause 'present_or_copy' in directive '#pragma acc routine'}}
 // expected-error@+3 {{unexpected OpenACC clause 'present_or_copyin' in directive '#pragma acc routine'}}
 // expected-error@+2 {{unexpected OpenACC clause 'present_or_copyout' in directive '#pragma acc routine'}}
 // expected-error@+1 {{unexpected OpenACC clause 'present_or_create' in directive '#pragma acc routine'}}
 #pragma acc routine present_or_copy(i) present_or_copyin(i) present_or_copyout(i) present_or_create(i) seq
-void foo();
+void UNIQUE_NAME();
 // expected-error@+4 {{unexpected OpenACC clause 'shared' in directive '#pragma acc routine'}}
 // expected-error@+3 {{unexpected OpenACC clause 'reduction' in directive '#pragma acc routine'}}
 // expected-error@+2 {{unexpected OpenACC clause 'private' in directive '#pragma acc routine'}}
 // expected-error@+1 {{unexpected OpenACC clause 'firstprivate' in directive '#pragma acc routine'}}
 #pragma acc routine shared(i, jk) reduction(+:i,jk,f) seq private(i) firstprivate(i)
-void foo();
+void UNIQUE_NAME();
 // expected-error@+6 {{unexpected OpenACC clause 'if' in directive '#pragma acc routine'}}
 // expected-error@+5 {{unexpected OpenACC clause 'if_present' in directive '#pragma acc routine'}}
 // expected-error@+4 {{unexpected OpenACC clause 'self' in directive '#pragma acc routine'}}
 // expected-error@+3 {{unexpected OpenACC clause 'host' in directive '#pragma acc routine'}}
 // expected-error@+2 {{unexpected OpenACC clause 'device' in directive '#pragma acc routine'}}
-// expected-error@+1 {{expected 'seq' clause for '#pragma acc routine'}}
+// expected-error@+1 {{expected 'gang', 'worker', 'vector', or 'seq' clause for '#pragma acc routine'}}
 #pragma acc routine if(1) if_present self(i) host(jk) device(f)
-void foo();
+void UNIQUE_NAME();
 // expected-error@+3 {{unexpected OpenACC clause 'num_gangs' in directive '#pragma acc routine'}}
 // expected-error@+2 {{unexpected OpenACC clause 'num_workers' in directive '#pragma acc routine'}}
 // expected-error@+1 {{unexpected OpenACC clause 'vector_length' in directive '#pragma acc routine'}}
 #pragma acc routine seq num_gangs(1) num_workers(2) vector_length(3)
-void foo();
+void UNIQUE_NAME();
 // expected-error@+6 {{unexpected OpenACC clause 'independent' in directive '#pragma acc routine'}}
 // expected-error@+5 {{unexpected OpenACC clause 'auto' in directive '#pragma acc routine'}}
 // expected-error@+4 {{unexpected OpenACC clause 'auto', 'independent' is specified already}}
 // expected-error@+3 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc routine'}}
 // expected-error@+2 {{unexpected OpenACC clause 'seq', 'independent' is specified already}}
-// expected-error@+1 {{expected 'seq' clause for '#pragma acc routine'}}
+// expected-error@+1 {{expected 'gang', 'worker', 'vector', or 'seq' clause for '#pragma acc routine'}}
 #pragma acc routine independent auto collapse(1) seq
-void foo();
+void UNIQUE_NAME();
 
 // Malformed clauses not permitted here.
 
 // expected-error@+3 {{unexpected OpenACC clause 'shared' in directive '#pragma acc routine'}}
 // expected-error@+2 {{expected '(' after 'shared'}}
-// expected-error@+1 {{expected 'seq' clause for '#pragma acc routine'}}
+// expected-error@+1 {{expected 'gang', 'worker', 'vector', or 'seq' clause for '#pragma acc routine'}}
 #pragma acc routine shared
-void foo();
+void UNIQUE_NAME();
 // expected-error@+4 {{unexpected OpenACC clause 'shared' in directive '#pragma acc routine'}}
 // expected-error@+3 {{expected expression}}
 // expected-error@+2 {{expected ')'}}
 // expected-note@+1 {{to match this '('}}
 #pragma acc routine seq shared(
-void foo();
+void UNIQUE_NAME();
 // expected-error@+4 {{unexpected OpenACC clause 'shared' in directive '#pragma acc routine'}}
 // expected-error@+3 {{expected ')'}}
 // expected-note@+2 {{to match this '('}}
-// expected-error@+1 {{expected 'seq' clause for '#pragma acc routine'}}
+// expected-error@+1 {{expected 'gang', 'worker', 'vector', or 'seq' clause for '#pragma acc routine'}}
 #pragma acc routine shared(i
-void foo();
+void UNIQUE_NAME();
 
 //--------------------------------------------------
 // Partitioning clauses.
-//
-// TODO: So far, only seq is implemented, but we've already implemented the
-// restriction that only one of gang, worker, vector, and seq is permitted.
 //--------------------------------------------------
+
+// Parse errors.
+
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine gang(
+void UNIQUE_NAME();
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine gang()
+void UNIQUE_NAME();
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine gang(i
+void UNIQUE_NAME();
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine gang(i)
+void UNIQUE_NAME();
+
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine worker(
+void UNIQUE_NAME();
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine worker()
+void UNIQUE_NAME();
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine worker(i
+void UNIQUE_NAME();
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine worker(i)
+void UNIQUE_NAME();
+
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine vector(
+void UNIQUE_NAME();
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine vector()
+void UNIQUE_NAME();
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine vector(i
+void UNIQUE_NAME();
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine vector(i)
+void UNIQUE_NAME();
 
 // expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
 #pragma acc routine seq(
-void foo();
+void UNIQUE_NAME();
 // expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
 #pragma acc routine seq()
-void foo();
+void UNIQUE_NAME();
 // expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
 #pragma acc routine seq(i
-void foo();
+void UNIQUE_NAME();
 // expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
 #pragma acc routine seq(i)
-void foo();
+void UNIQUE_NAME();
 
-// expected-error@+7 {{unexpected OpenACC clause 'gang' in directive '#pragma acc routine'}}
-// expected-error@+6 {{unexpected OpenACC clause 'worker' in directive '#pragma acc routine'}}
+// Conflicting clauses on the same directive.
+
+// expected-error@+1 {{directive '#pragma acc routine' cannot contain more than one 'gang' clause}}
+#pragma acc routine gang gang
+void UNIQUE_NAME();
+
+// expected-error@+1 {{directive '#pragma acc routine' cannot contain more than one 'worker' clause}}
+#pragma acc routine worker worker
+void UNIQUE_NAME();
+
+// expected-error@+1 {{directive '#pragma acc routine' cannot contain more than one 'vector' clause}}
+#pragma acc routine vector vector
+void UNIQUE_NAME();
+
+// expected-error@+1 {{directive '#pragma acc routine' cannot contain more than one 'seq' clause}}
+#pragma acc routine seq seq
+void UNIQUE_NAME();
+
+// expected-error@+7 {{unexpected OpenACC clause 'worker', 'gang' is specified already}}
+// expected-error@+6 {{unexpected OpenACC clause 'vector', 'gang' is specified already}}
+// expected-error@+5 {{unexpected OpenACC clause 'seq', 'gang' is specified already}}
+// expected-error@+4 {{directive '#pragma acc routine' cannot contain more than one 'gang' clause}}
+// expected-error@+3 {{directive '#pragma acc routine' cannot contain more than one 'worker' clause}}
+// expected-error@+2 {{directive '#pragma acc routine' cannot contain more than one 'vector' clause}}
+// expected-error@+1 {{directive '#pragma acc routine' cannot contain more than one 'seq' clause}}
+#pragma acc routine gang worker vector seq gang worker vector seq
+void UNIQUE_NAME();
+
+// expected-error@+7 {{unexpected OpenACC clause 'vector', 'worker' is specified already}}
+// expected-error@+6 {{unexpected OpenACC clause 'seq', 'worker' is specified already}}
+// expected-error@+5 {{unexpected OpenACC clause 'gang', 'worker' is specified already}}
+// expected-error@+4 {{directive '#pragma acc routine' cannot contain more than one 'worker' clause}}
+// expected-error@+3 {{directive '#pragma acc routine' cannot contain more than one 'vector' clause}}
+// expected-error@+2 {{directive '#pragma acc routine' cannot contain more than one 'seq' clause}}
+// expected-error@+1 {{directive '#pragma acc routine' cannot contain more than one 'gang' clause}}
+#pragma acc routine worker vector seq gang worker vector seq gang
+void UNIQUE_NAME();
+
+// expected-error@+7 {{unexpected OpenACC clause 'seq', 'vector' is specified already}}
+// expected-error@+6 {{unexpected OpenACC clause 'gang', 'vector' is specified already}}
 // expected-error@+5 {{unexpected OpenACC clause 'worker', 'gang' is specified already}}
-// expected-error@+4 {{unexpected OpenACC clause 'vector' in directive '#pragma acc routine'}}
-// expected-error@+3 {{unexpected OpenACC clause 'vector', 'gang' is specified already}}
-// expected-error@+2 {{unexpected OpenACC clause 'seq', 'gang' is specified already}}
-// expected-error@+1 {{expected 'seq' clause for '#pragma acc routine'}}
-#pragma acc routine gang worker vector seq
-void foo();
+// expected-error@+4 {{directive '#pragma acc routine' cannot contain more than one 'vector' clause}}
+// expected-error@+3 {{directive '#pragma acc routine' cannot contain more than one 'seq' clause}}
+// expected-error@+2 {{directive '#pragma acc routine' cannot contain more than one 'gang' clause}}
+// expected-error@+1 {{directive '#pragma acc routine' cannot contain more than one 'worker' clause}}
+#pragma acc routine vector seq gang worker vector seq gang worker
+void UNIQUE_NAME();
 
-// expected-error@+7 {{unexpected OpenACC clause 'worker' in directive '#pragma acc routine'}}
-// expected-error@+6 {{unexpected OpenACC clause 'vector' in directive '#pragma acc routine'}}
-// expected-error@+5 {{unexpected OpenACC clause 'vector', 'worker' is specified already}}
-// expected-error@+4 {{unexpected OpenACC clause 'seq', 'worker' is specified already}}
-// expected-error@+3 {{unexpected OpenACC clause 'gang' in directive '#pragma acc routine'}}
-// expected-error@+2 {{unexpected OpenACC clause 'gang', 'worker' is specified already}}
-// expected-error@+1 {{expected 'seq' clause for '#pragma acc routine'}}
-#pragma acc routine worker vector seq gang
-void foo();
+// expected-error@+7 {{unexpected OpenACC clause 'gang', 'seq' is specified already}}
+// expected-error@+6 {{unexpected OpenACC clause 'worker', 'gang' is specified already}}
+// expected-error@+5 {{unexpected OpenACC clause 'vector', 'gang' is specified already}}
+// expected-error@+4 {{directive '#pragma acc routine' cannot contain more than one 'seq' clause}}
+// expected-error@+3 {{directive '#pragma acc routine' cannot contain more than one 'gang' clause}}
+// expected-error@+2 {{directive '#pragma acc routine' cannot contain more than one 'worker' clause}}
+// expected-error@+1 {{directive '#pragma acc routine' cannot contain more than one 'vector' clause}}
+#pragma acc routine seq gang worker vector seq gang worker vector
+void UNIQUE_NAME();
 
-// expected-error@+7 {{unexpected OpenACC clause 'vector' in directive '#pragma acc routine'}}
-// expected-error@+6 {{unexpected OpenACC clause 'seq', 'vector' is specified already}}
-// expected-error@+5 {{unexpected OpenACC clause 'gang' in directive '#pragma acc routine'}}
-// expected-error@+4 {{unexpected OpenACC clause 'gang', 'vector' is specified already}}
-// expected-error@+3 {{unexpected OpenACC clause 'worker' in directive '#pragma acc routine'}}
-// expected-error@+2 {{unexpected OpenACC clause 'worker', 'gang' is specified already}}
-// expected-error@+1 {{expected 'seq' clause for '#pragma acc routine'}}
-#pragma acc routine vector seq gang worker
-void foo();
+// Conflicting clauses on different explicit directives.
 
-// expected-error@+6 {{unexpected OpenACC clause 'gang' in directive '#pragma acc routine'}}
-// expected-error@+5 {{unexpected OpenACC clause 'gang', 'seq' is specified already}}
-// expected-error@+4 {{unexpected OpenACC clause 'worker' in directive '#pragma acc routine'}}
-// expected-error@+3 {{unexpected OpenACC clause 'worker', 'gang' is specified already}}
-// expected-error@+2 {{unexpected OpenACC clause 'vector' in directive '#pragma acc routine'}}
-// expected-error@+1 {{unexpected OpenACC clause 'vector', 'gang' is specified already}}
-#pragma acc routine seq gang worker vector
-void foo();
+#pragma acc routine gang
+void gangGang();
+#pragma acc routine gang
+void gangGang();
+
+// expected-note@+1 {{previous '#pragma acc routine' for function 'gangWorker' appears here}}
+#pragma acc routine gang
+void gangWorker();
+// expected-error@+1 {{for function 'gangWorker', 'worker' clause on '#pragma acc routine' conflicts with 'gang' clause on previous '#pragma acc routine'}}
+#pragma acc routine worker
+void gangWorker();
+
+// expected-note@+1 {{previous '#pragma acc routine' for function 'gangVector' appears here}}
+#pragma acc routine gang
+void gangVector();
+// expected-error@+1 {{for function 'gangVector', 'vector' clause on '#pragma acc routine' conflicts with 'gang' clause on previous '#pragma acc routine'}}
+#pragma acc routine vector
+void gangVector();
+
+// expected-note@+1 {{previous '#pragma acc routine' for function 'gangSeq' appears here}}
+#pragma acc routine gang
+void gangSeq();
+// expected-error@+1 {{for function 'gangSeq', 'seq' clause on '#pragma acc routine' conflicts with 'gang' clause on previous '#pragma acc routine'}}
+#pragma acc routine seq
+void gangSeq();
+
+// expected-note@+1 {{previous '#pragma acc routine' for function 'workerGang' appears here}}
+#pragma acc routine worker
+void workerGang();
+// expected-error@+1 {{for function 'workerGang', 'gang' clause on '#pragma acc routine' conflicts with 'worker' clause on previous '#pragma acc routine'}}
+#pragma acc routine gang
+void workerGang();
+
+#pragma acc routine worker
+void workerWorker();
+#pragma acc routine worker
+void workerWorker();
+
+// expected-note@+1 {{previous '#pragma acc routine' for function 'workerVector' appears here}}
+#pragma acc routine worker
+void workerVector();
+// expected-error@+1 {{for function 'workerVector', 'vector' clause on '#pragma acc routine' conflicts with 'worker' clause on previous '#pragma acc routine'}}
+#pragma acc routine vector
+void workerVector();
+
+// expected-note@+1 {{previous '#pragma acc routine' for function 'workerSeq' appears here}}
+#pragma acc routine worker
+void workerSeq();
+// expected-error@+1 {{for function 'workerSeq', 'seq' clause on '#pragma acc routine' conflicts with 'worker' clause on previous '#pragma acc routine'}}
+#pragma acc routine seq
+void workerSeq();
+
+// expected-note@+1 {{previous '#pragma acc routine' for function 'vectorGang' appears here}}
+#pragma acc routine vector
+void vectorGang();
+// expected-error@+1 {{for function 'vectorGang', 'gang' clause on '#pragma acc routine' conflicts with 'vector' clause on previous '#pragma acc routine'}}
+#pragma acc routine gang
+void vectorGang();
+
+// expected-note@+1 {{previous '#pragma acc routine' for function 'vectorWorker' appears here}}
+#pragma acc routine vector
+void vectorWorker();
+// expected-error@+1 {{for function 'vectorWorker', 'worker' clause on '#pragma acc routine' conflicts with 'vector' clause on previous '#pragma acc routine'}}
+#pragma acc routine worker
+void vectorWorker();
+
+#pragma acc routine vector
+void vectorVector();
+#pragma acc routine vector
+void vectorVector();
+
+// expected-note@+1 {{previous '#pragma acc routine' for function 'vectorSeq' appears here}}
+#pragma acc routine vector
+void vectorSeq();
+// expected-error@+1 {{for function 'vectorSeq', 'seq' clause on '#pragma acc routine' conflicts with 'vector' clause on previous '#pragma acc routine'}}
+#pragma acc routine seq
+void vectorSeq();
+
+// expected-note@+1 {{previous '#pragma acc routine' for function 'seqGang' appears here}}
+#pragma acc routine seq
+void seqGang();
+// expected-error@+1 {{for function 'seqGang', 'gang' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
+#pragma acc routine gang
+void seqGang();
+
+// expected-note@+1 {{previous '#pragma acc routine' for function 'seqWorker' appears here}}
+#pragma acc routine seq
+void seqWorker();
+// expected-error@+1 {{for function 'seqWorker', 'worker' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
+#pragma acc routine worker
+void seqWorker();
+
+// expected-note@+1 {{previous '#pragma acc routine' for function 'seqVector' appears here}}
+#pragma acc routine seq
+void seqVector();
+// expected-error@+1 {{for function 'seqVector', 'vector' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
+#pragma acc routine vector
+void seqVector();
+
+#pragma acc routine seq
+void seqSeq();
+#pragma acc routine seq
+void seqSeq();
+
+// Conflicting clauses between explicit directive and previously implied
+// directive.  These necessarily include errors that the explicit directives
+// appear after uses.  Those errors are more thoroughly tested separately later
+// in this file, but we do vary the way they happen some here to check for
+// undesirable interactions between the errors.
+
+void impSeqExpGang();
+void impSeqExpGang_use() {
+  #pragma acc parallel
+  // expected-error@+2 {{'#pragma acc routine' is not in scope at use of associated function 'impSeqExpGang'}}
+  // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'impSeqExpGang' by use in construct '#pragma acc parallel' here}}
+  impSeqExpGang();
+}
+// expected-note@+2 {{'#pragma acc routine' for function 'impSeqExpGang' appears here}}
+// expected-error@+1 {{for function 'impSeqExpGang', 'gang' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
+#pragma acc routine gang
+void impSeqExpGang();
+
+void impSeqExpWorker();
+void impSeqExpWorker_use() {
+  #pragma acc parallel loop
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+2 {{'#pragma acc routine' is not in scope at use of associated function 'impSeqExpWorker'}}
+    // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'impSeqExpWorker' by use in construct '#pragma acc parallel loop' here}}
+    impSeqExpWorker();
+  }
+}
+// expected-note@+2 {{'#pragma acc routine' for function 'impSeqExpWorker' appears here}}
+// expected-error@+1 {{for function 'impSeqExpWorker', 'worker' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
+#pragma acc routine worker
+void impSeqExpWorker();
+
+void impSeqExpVector();
+// expected-note@+1 {{'#pragma acc routine' for function 'impSeqExpVector_use' appears here}}
+#pragma acc routine seq
+void impSeqExpVector_use() {
+  // expected-error@+2 {{'#pragma acc routine' is not in scope at use of associated function 'impSeqExpVector'}}
+  // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'impSeqExpVector' by use in function 'impSeqExpVector_use' here}}
+  impSeqExpVector();
+}
+// expected-note@+2 {{'#pragma acc routine' for function 'impSeqExpVector' appears here}}
+// expected-error@+1 {{for function 'impSeqExpVector', 'vector' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
+#pragma acc routine vector
+void impSeqExpVector();
+
+void impSeqExpSeq();
+void impSeqExpSeq_use() {
+  #pragma acc parallel
+  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'impSeqExpSeq'}}
+  impSeqExpSeq();
+}
+// expected-note@+1 {{'#pragma acc routine' for function 'impSeqExpSeq' appears here}}
+#pragma acc routine seq
+void impSeqExpSeq();
 
 //--------------------------------------------------
 // Context not permitted.
@@ -255,7 +489,8 @@ struct WithinStruct {
 // Multiple functions in one declaration.
 // expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
 #pragma acc routine seq
-void foo(), bar();
+void UNIQUE_NAME(),
+     UNIQUE_NAME();
 
 // Function pointer.
 // expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}

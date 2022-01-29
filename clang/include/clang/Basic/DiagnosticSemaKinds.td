@@ -10976,11 +10976,12 @@ def note_acc_disable_diag : Note<
 def err_acc_no_self_host_device_clause : Error<
   "expected at least one 'self', 'host', or 'device' clause for '#pragma acc "
   "update'">;
-// TODO: Once the other clauses are supported, this should say:
-//   "expected at least one 'gang', 'worker', 'vector', or 'seq' clause for "
-//   "'#pragma acc routine'"
-def err_acc_no_gang_worker_vector_seq_clause : Error<
-  "expected 'seq' clause for '#pragma acc routine'">;
+def err_acc_routine_no_gang_worker_vector_seq_clause : Error<
+  "expected 'gang', 'worker', 'vector', or 'seq' clause for "
+  "'#pragma acc routine'">;
+def err_acc_routine_inconsistent : Error<
+  "for function '%0', '%1' clause on '#pragma acc routine' conflicts with "
+  "'%2' clause on previous '#pragma acc routine'">;
 def err_acc_expected_function_after_directive : Error<
   "'#pragma acc %0' must be followed by a lone function prototype or "
   "definition">;
@@ -10995,11 +10996,13 @@ def err_acc_routine_not_in_scope_at_function_def : Error<
   "'%0'">;
 def err_acc_routine_not_in_scope_at_function_use : Error<
   "'#pragma acc routine' is not in scope at use of associated function '%0'">;
+// "previous" is used to contrast with a more recent routine directive.
 def note_acc_routine_explicit : Note<
-  "'#pragma acc routine' for function '%0' appears here">;
+  "%select{|previous }0'#pragma acc routine' for function '%1' appears here">;
+// "previously" is used to contrast with a more recent routine directive.
 def note_acc_routine_seq_implicit : Note<
-  "'#pragma acc routine seq' implied for function '%0' by use in "
-  "%select{construct|function}1 '%select{#pragma acc |}1%2' here">;
+  "'#pragma acc routine seq'%select{| previously}0 implied for function '%1' "
+  "by use in %select{construct|function}2 '%select{#pragma acc |}2%3' here">;
 } // end of OpenACC category
 
 let CategoryName = "Related Result Type Issue" in {
