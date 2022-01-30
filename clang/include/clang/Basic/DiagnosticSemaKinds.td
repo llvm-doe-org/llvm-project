@@ -10980,8 +10980,8 @@ def err_acc_routine_no_gang_worker_vector_seq_clause : Error<
   "expected 'gang', 'worker', 'vector', or 'seq' clause for "
   "'#pragma acc routine'">;
 def err_acc_routine_inconsistent : Error<
-  "for function '%0', '%1' clause on '#pragma acc routine' conflicts with "
-  "'%2' clause on previous '#pragma acc routine'">;
+  "for function '%0', '#pragma acc routine %1' conflicts with previous "
+  "'#pragma acc routine %2'">;
 def err_acc_expected_function_after_directive : Error<
   "'#pragma acc %0' must be followed by a lone function prototype or "
   "definition">;

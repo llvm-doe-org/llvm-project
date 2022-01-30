@@ -258,28 +258,28 @@ void gangGang();
 // expected-note@+1 {{previous '#pragma acc routine' for function 'gangWorker' appears here}}
 #pragma acc routine gang
 void gangWorker();
-// expected-error@+1 {{for function 'gangWorker', 'worker' clause on '#pragma acc routine' conflicts with 'gang' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'gangWorker', '#pragma acc routine worker' conflicts with previous '#pragma acc routine gang'}}
 #pragma acc routine worker
 void gangWorker();
 
 // expected-note@+1 {{previous '#pragma acc routine' for function 'gangVector' appears here}}
 #pragma acc routine gang
 void gangVector();
-// expected-error@+1 {{for function 'gangVector', 'vector' clause on '#pragma acc routine' conflicts with 'gang' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'gangVector', '#pragma acc routine vector' conflicts with previous '#pragma acc routine gang'}}
 #pragma acc routine vector
 void gangVector();
 
 // expected-note@+1 {{previous '#pragma acc routine' for function 'gangSeq' appears here}}
 #pragma acc routine gang
 void gangSeq();
-// expected-error@+1 {{for function 'gangSeq', 'seq' clause on '#pragma acc routine' conflicts with 'gang' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'gangSeq', '#pragma acc routine seq' conflicts with previous '#pragma acc routine gang'}}
 #pragma acc routine seq
 void gangSeq();
 
 // expected-note@+1 {{previous '#pragma acc routine' for function 'workerGang' appears here}}
 #pragma acc routine worker
 void workerGang();
-// expected-error@+1 {{for function 'workerGang', 'gang' clause on '#pragma acc routine' conflicts with 'worker' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'workerGang', '#pragma acc routine gang' conflicts with previous '#pragma acc routine worker'}}
 #pragma acc routine gang
 void workerGang();
 
@@ -291,28 +291,28 @@ void workerWorker();
 // expected-note@+1 {{previous '#pragma acc routine' for function 'workerVector' appears here}}
 #pragma acc routine worker
 void workerVector();
-// expected-error@+1 {{for function 'workerVector', 'vector' clause on '#pragma acc routine' conflicts with 'worker' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'workerVector', '#pragma acc routine vector' conflicts with previous '#pragma acc routine worker'}}
 #pragma acc routine vector
 void workerVector();
 
 // expected-note@+1 {{previous '#pragma acc routine' for function 'workerSeq' appears here}}
 #pragma acc routine worker
 void workerSeq();
-// expected-error@+1 {{for function 'workerSeq', 'seq' clause on '#pragma acc routine' conflicts with 'worker' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'workerSeq', '#pragma acc routine seq' conflicts with previous '#pragma acc routine worker'}}
 #pragma acc routine seq
 void workerSeq();
 
 // expected-note@+1 {{previous '#pragma acc routine' for function 'vectorGang' appears here}}
 #pragma acc routine vector
 void vectorGang();
-// expected-error@+1 {{for function 'vectorGang', 'gang' clause on '#pragma acc routine' conflicts with 'vector' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'vectorGang', '#pragma acc routine gang' conflicts with previous '#pragma acc routine vector'}}
 #pragma acc routine gang
 void vectorGang();
 
 // expected-note@+1 {{previous '#pragma acc routine' for function 'vectorWorker' appears here}}
 #pragma acc routine vector
 void vectorWorker();
-// expected-error@+1 {{for function 'vectorWorker', 'worker' clause on '#pragma acc routine' conflicts with 'vector' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'vectorWorker', '#pragma acc routine worker' conflicts with previous '#pragma acc routine vector'}}
 #pragma acc routine worker
 void vectorWorker();
 
@@ -324,28 +324,28 @@ void vectorVector();
 // expected-note@+1 {{previous '#pragma acc routine' for function 'vectorSeq' appears here}}
 #pragma acc routine vector
 void vectorSeq();
-// expected-error@+1 {{for function 'vectorSeq', 'seq' clause on '#pragma acc routine' conflicts with 'vector' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'vectorSeq', '#pragma acc routine seq' conflicts with previous '#pragma acc routine vector'}}
 #pragma acc routine seq
 void vectorSeq();
 
 // expected-note@+1 {{previous '#pragma acc routine' for function 'seqGang' appears here}}
 #pragma acc routine seq
 void seqGang();
-// expected-error@+1 {{for function 'seqGang', 'gang' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'seqGang', '#pragma acc routine gang' conflicts with previous '#pragma acc routine seq'}}
 #pragma acc routine gang
 void seqGang();
 
 // expected-note@+1 {{previous '#pragma acc routine' for function 'seqWorker' appears here}}
 #pragma acc routine seq
 void seqWorker();
-// expected-error@+1 {{for function 'seqWorker', 'worker' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'seqWorker', '#pragma acc routine worker' conflicts with previous '#pragma acc routine seq'}}
 #pragma acc routine worker
 void seqWorker();
 
 // expected-note@+1 {{previous '#pragma acc routine' for function 'seqVector' appears here}}
 #pragma acc routine seq
 void seqVector();
-// expected-error@+1 {{for function 'seqVector', 'vector' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'seqVector', '#pragma acc routine vector' conflicts with previous '#pragma acc routine seq'}}
 #pragma acc routine vector
 void seqVector();
 
@@ -368,7 +368,7 @@ void impSeqExpGang_use() {
   impSeqExpGang();
 }
 // expected-error@+2 {{first '#pragma acc routine' for function 'impSeqExpGang' not in scope at some uses}}
-// expected-error@+1 {{for function 'impSeqExpGang', 'gang' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'impSeqExpGang', '#pragma acc routine gang' conflicts with previous '#pragma acc routine seq'}}
 #pragma acc routine gang
 void impSeqExpGang();
 
@@ -382,7 +382,7 @@ void impSeqExpWorker_use() {
   }
 }
 // expected-error@+2 {{first '#pragma acc routine' for function 'impSeqExpWorker' not in scope at some uses}}
-// expected-error@+1 {{for function 'impSeqExpWorker', 'worker' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'impSeqExpWorker', '#pragma acc routine worker' conflicts with previous '#pragma acc routine seq'}}
 #pragma acc routine worker
 void impSeqExpWorker();
 
@@ -395,7 +395,7 @@ void impSeqExpVector_use() {
   impSeqExpVector();
 }
 // expected-error@+2 {{first '#pragma acc routine' for function 'impSeqExpVector' not in scope at some uses}}
-// expected-error@+1 {{for function 'impSeqExpVector', 'vector' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
+// expected-error@+1 {{for function 'impSeqExpVector', '#pragma acc routine vector' conflicts with previous '#pragma acc routine seq'}}
 #pragma acc routine vector
 void impSeqExpVector();
 
