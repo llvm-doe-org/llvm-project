@@ -1337,7 +1337,10 @@ public:
 bool Sema::transformACCToOMP(ACCDirectiveStmt *D) {
   if (isInOpenACCDirective())
     return false;
-  return TransformACCToOMP(*this).TransformStmt(D).isInvalid();
+  StartOpenACCTransform();
+  bool Res = TransformACCToOMP(*this).TransformStmt(D).isInvalid();
+  EndOpenACCTransform();
+  return Res;
 }
 
 void Sema::transformACCToOMP(ACCDeclAttr *ACCAttr, FunctionDecl *FD) {

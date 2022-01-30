@@ -11486,6 +11486,10 @@ public:
   bool EndOpenACCAssociatedStatement();
   /// Called after the \c ActOn function for the directive.
   void EndOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind);
+  /// Called before transforming OpenACC to OpenMP to disable OpenACC actions.
+  void StartOpenACCTransform();
+  /// Called after transforming OpenACC to OpenMP to reenable OpenACC actions.
+  void EndOpenACCTransform();
 
   /// If the current region is an OpenACC loop region, record any loop control
   /// variables assigned but not declared in \p Init, the init of the attached

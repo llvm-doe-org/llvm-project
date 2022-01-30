@@ -1,10 +1,21 @@
 // Check diagnostics for "acc routine".
 
+// RUN: %data {
+// RUN:   (cflags=-DCASE=CASE_WITHOUT_TRANSFORM)
+// RUN:   (cflags=-DCASE=CASE_WITH_TRANSFORM_0)
+// RUN:   (cflags=-DCASE=CASE_WITH_TRANSFORM_1)
+// RUN: }
+
 // OpenACC disabled
-// RUN: %clang_cc1 -verify=noacc -Wno-gnu-alignof-expression %s
+// RUN: %for {
+// RUN:   %clang_cc1 -verify=noacc -Wno-gnu-alignof-expression %[cflags] %s
+// RUN: }
 
 // OpenACC enabled
-// RUN: %clang_cc1 -verify=expected -fopenacc -Wno-gnu-alignof-expression %s
+// RUN: %for {
+// RUN:   %clang_cc1 -verify=expected -fopenacc -Wno-gnu-alignof-expression \
+// RUN:     %[cflags] %s
+// RUN: }
 
 // END.
 
@@ -20,6 +31,17 @@ float f;
 #define UNIQUE_NAME CONCAT2(unique_fn_, __LINE__)
 #define CONCAT2(X, Y) CONCAT(X, Y)
 #define CONCAT(X, Y) X##Y
+
+#define CASE_WITHOUT_TRANSFORM 1
+#define CASE_WITH_TRANSFORM_0  2
+#define CASE_WITH_TRANSFORM_1  3
+
+//##################################################
+// Diagnostic checks where it's fine that other diagnostics suppress all
+// transformation of OpenACC to OpenMP.
+//##################################################
+
+#if CASE == CASE_WITHOUT_TRANSFORM
 
 //--------------------------------------------------
 // Missing clauses
@@ -529,6 +551,13 @@ void hostUseBefore_hostUses() {
   hostUseBefore();
   // expected-note@+1 {{use of function 'hostUseBefore' appears here}}
   void (*p)() = hostUseBefore;
+  #pragma acc data copy(i)
+  {
+    // expected-note@+1 {{use of function 'hostUseBefore' appears here}}
+    hostUseBefore();
+    // expected-note@+1 {{use of function 'hostUseBefore' appears here}}
+    void (*p)() = hostUseBefore;
+  }
 }
 // expected-error@+1 {{first '#pragma acc routine' for function 'hostUseBefore' not in scope at some uses}}
 #pragma acc routine seq
@@ -847,10 +876,13 @@ void onDefOnDecl();
 
 // Does the definition check see the routine directive previously implied by a
 // use within a parallel construct?
+//
+// Exhaustively test diagnostic kinds in this and the next case, but choose only
+// a single representative of each diagnostic kind afterward.
 void parUseBeforeDef();
 void parUseBeforeDef_use() {
   #pragma acc parallel
-  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'parUseBeforeDef' by use in construct '#pragma acc parallel' here}}
+  // expected-note@+1 11 {{'#pragma acc routine seq' implied for function 'parUseBeforeDef' by use in construct '#pragma acc parallel' here}}
   parUseBeforeDef();
 }
 void parUseBeforeDef() {
@@ -858,6 +890,34 @@ void parUseBeforeDef() {
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
+  // expected-error@+1 {{'#pragma acc enter data' is not permitted within function 'parUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc enter data copyin(i)
+  // expected-error@+1 {{'#pragma acc exit data' is not permitted within function 'parUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc exit data copyout(i)
+  // expected-error@+1 {{'#pragma acc data' is not permitted within function 'parUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc data copy(i)
+  {
+    // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
+    static int s;
+  }
+  // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'parUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc parallel
+  {
+    // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
+    static int s;
+  }
+  // expected-error@+1 {{'#pragma acc parallel loop' is not permitted within function 'parUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc parallel loop seq
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
+    static int s;
+  }
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
+    static int s;
+  }
   // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
@@ -867,11 +927,42 @@ void parUseBeforeDef() {
 
 // Does the definition check see the routine directive later implied by a use
 // within a parallel construct?
+//
+// Exhaustively test diagnostic kinds in this and the previous case, but choose
+// only a single representative of each diagnostic kind afterward.
 void parUseAfterDef() {
   // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
+  // expected-error@+1 {{'#pragma acc enter data' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc enter data copyin(i)
+  // expected-error@+1 {{'#pragma acc exit data' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc exit data copyout(i)
+  // expected-error@+1 {{'#pragma acc data' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc data copy(i)
+  {
+    // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+    static int s;
+  }
+  // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc parallel
+  {
+    // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+    static int s;
+  }
+  // expected-error@+1 {{'#pragma acc parallel loop' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc parallel loop seq
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+    static int s;
+  }
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
+    static int s;
+  }
   // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
@@ -880,7 +971,7 @@ void parUseAfterDef() {
 }
 void parUseAfterDef_use() {
   #pragma acc parallel
-  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'parUseAfterDef' by use in construct '#pragma acc parallel' here}}
+  // expected-note@+1 11 {{'#pragma acc routine seq' implied for function 'parUseAfterDef' by use in construct '#pragma acc parallel' here}}
   parUseAfterDef();
 }
 
@@ -1171,9 +1262,96 @@ struct MissingDeclarationWithinStructTwice {
   #pragma acc routine seq
 };
 
-// At end of file.
+// Check at end of file (after preprocessing).
 // expected-error@+4 {{'#pragma acc routine' cannot be nested within '#pragma acc routine'}}
 // expected-note@+2 {{enclosing '#pragma acc routine' here}}
 // expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
 #pragma acc routine seq
 #pragma acc routine seq
+
+//##################################################
+// Diagnostic checks that require some OpenACC to be transformed to OpenMP.
+//##################################################
+
+#elif CASE == CASE_WITH_TRANSFORM_0
+
+// Within each OpenACC construct below, diagnostics are recorded, and then the
+// construct is transformed to OpenMP.  During the transformation, SemaOpenACC
+// is careful to skip recording the diagnostics again.  Later, the routine
+// directive is implied, and all recorded diagnostics are then emitted.
+
+void dupStaticDiagBeforeRoutineDir() {
+  int i;
+  // expected-error@+1 {{'#pragma acc data' is not permitted within function 'dupStaticDiagBeforeRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc data copy(i)
+  {
+    // expected-error@+1 {{static local variable 'j' is not permitted within function 'dupStaticDiagBeforeRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+    static int j;
+  }
+  // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'dupStaticDiagBeforeRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc parallel
+  {
+    // expected-error@+1 {{static local variable 'j' is not permitted within function 'dupStaticDiagBeforeRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+    static int j;
+  }
+  // expected-error@+1 {{'#pragma acc parallel loop' is not permitted within function 'dupStaticDiagBeforeRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc parallel loop
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{static local variable 'j' is not permitted within function 'dupStaticDiagBeforeRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+    static int j;
+  }
+  // This diagnostic is emitted immediately, so keep it last so it doesn't
+  // suppress transformation of the other OpenACC constructs.
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{static local variable 'j' is not permitted within function 'dupStaticDiagBeforeRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+    static int j;
+  }
+}
+void dupStaticDiagBeforeRoutineDir_use() {
+  // expected-note@+2 7 {{'#pragma acc routine seq' implied for function 'dupStaticDiagBeforeRoutineDir' by use in construct '#pragma acc parallel' here}}
+  #pragma acc parallel
+  dupStaticDiagBeforeRoutineDir();
+}
+
+#elif CASE == CASE_WITH_TRANSFORM_1
+
+// Same as above except diagnostics are reported immediately, so transforming to
+// OpenMP should never happen, and neither should duplicate diagnostics.
+
+// expected-note@+1 7 {{'#pragma acc routine' for function 'dupStaticDiagAfterRoutineDir' appears here}}
+#pragma acc routine seq
+void dupStaticDiagAfterRoutineDir() {
+  int i;
+  // expected-error@+1 {{'#pragma acc data' is not permitted within function 'dupStaticDiagAfterRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc data copy(i)
+  {
+    // expected-error@+1 {{static local variable 'j' is not permitted within function 'dupStaticDiagAfterRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+    static int j;
+  }
+  // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'dupStaticDiagAfterRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc parallel
+  {
+    // expected-error@+1 {{static local variable 'j' is not permitted within function 'dupStaticDiagAfterRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+    static int j;
+  }
+  // expected-error@+1 {{'#pragma acc parallel loop' is not permitted within function 'dupStaticDiagAfterRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc parallel loop
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{static local variable 'j' is not permitted within function 'dupStaticDiagAfterRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+    static int j;
+  }
+  // This diagnostic is emitted immediately, so keep it last so it at least
+  // doesn't suppress transformation of the other OpenACC constructs.
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{static local variable 'j' is not permitted within function 'dupStaticDiagAfterRoutineDir' because the latter is attributed with '#pragma acc routine'}}
+    static int j;
+  }
+}
+
+#else
+# error undefined CASE
+#endif

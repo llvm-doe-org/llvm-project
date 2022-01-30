@@ -828,6 +828,8 @@ using DiagIfRoutineDir = ImplicitRoutineDirInfoTy::DiagIfRoutineDir;
 //===----------------------------------------------------------------------===//
 
 struct Sema::OpenACCDataTy {
+  /// Set to true to disable OpenACC actions while building OpenMP.
+  bool TransformingOpenACC = false;
   DirStackTy DirStack;
   ImplicitRoutineDirInfoTy ImplicitRoutineDirInfo;
   OpenACCDataTy(Sema &SemaRef)
@@ -1773,6 +1775,9 @@ bool Sema::StartOpenACCAssociatedStatement() {
 
 bool Sema::EndOpenACCAssociatedStatement() { return false; }
 
+void Sema::StartOpenACCTransform() { OpenACCData->TransformingOpenACC = true; }
+void Sema::EndOpenACCTransform() { OpenACCData->TransformingOpenACC = false; }
+
 StmtResult Sema::ActOnOpenACCDirectiveStmt(Stmt *AStmt) {
   DirStackTy &DirStack = OpenACCData->DirStack;
   return ActOnOpenACCDirectiveStmt(DirStack.getRealDirective(),
@@ -2194,6 +2199,8 @@ void Sema::ActOnStartOfFunctionDefForOpenACC(FunctionDecl *FD) {
     ActOnOpenACCRoutineDirective(ACC_EXPLICIT, DeclGroupRef(FD));
 }
 void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc) {
+  if (OpenACCData->TransformingOpenACC)
+    return;
   if (FD->hasAttr<ACCRoutineDeclAttr>())
     return;
   OpenACCDirectiveKind ComputeDKind = OpenACCData->DirStack.isInComputeRegion();
@@ -2206,6 +2213,8 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc) {
                                                          FD, Loc);
 }
 void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
+  if (OpenACCData->TransformingOpenACC)
+    return;
   FunctionDecl *Fn = getCurFunctionDecl();
   StringRef FnName = getCurFunctionDecl()->getName();
   for (Decl *D : S->decls()) {

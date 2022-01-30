@@ -106,9 +106,14 @@ void start() { printf("start\n"); }
 //      PRT: }{{$}}
 //
 // EXE-NEXT: hostUseBeforeDef: host=1, not_host=0
+// EXE-NEXT: hostUseBeforeDef: host=1, not_host=0
 void hostUseBeforeDef(Result *Res);
 void hostUseBeforeDef_run() {
   Result Res;
+  USE1(hostUseBeforeDef, &Res);
+  PRINT_RESULT(hostUseBeforeDef, Res);
+  int dummy;
+  #pragma acc data copy(dummy)
   USE1(hostUseBeforeDef, &Res);
   PRINT_RESULT(hostUseBeforeDef, Res);
 }
@@ -125,9 +130,14 @@ void hostUseBeforeDef(Result *Res) { WRITE_RESULT(Res); }
 //      PRT: }{{$}}
 //
 // EXE-NEXT: hostUseAfterDef: host=1, not_host=0
+// EXE-NEXT: hostUseAfterDef: host=1, not_host=0
 void hostUseAfterDef(Result *Res) { WRITE_RESULT(Res); }
 void hostUseAfterDef_run() {
   Result Res;
+  USE1(hostUseAfterDef, &Res);
+  PRINT_RESULT(hostUseAfterDef, Res);
+  int dummy;
+  #pragma acc data copy(dummy)
   USE1(hostUseAfterDef, &Res);
   PRINT_RESULT(hostUseAfterDef, Res);
 }
@@ -142,9 +152,14 @@ void hostUseAfterDef_run() {
 //      PRT: }{{$}}
 //
 // EXE-NEXT: hostUseNoDef: host=1, not_host=0
+// EXE-NEXT: hostUseNoDef: host=1, not_host=0
 void hostUseNoDef(Result *Res);
 void hostUseNoDef_run() {
   Result Res;
+  USE1(hostUseNoDef, &Res);
+  PRINT_RESULT(hostUseNoDef, Res);
+  int dummy;
+  #pragma acc data copy(dummy)
   USE1(hostUseNoDef, &Res);
   PRINT_RESULT(hostUseNoDef, Res);
 }
@@ -160,15 +175,23 @@ void hostUseNoDef_run() {
 //      PRT: }{{$}}
 //
 // EXE-NEXT: hostUseRecur: host=1, not_host=0
+// EXE-NEXT: hostUseRecur: host=1, not_host=0
 void hostUseRecur(Result *Res) {
   // Avoid infinite recursion during execution.
   if (!Res)
     return;
   WRITE_RESULT(Res);
   USE1(hostUseRecur, 0);
+  int dummy;
+  #pragma acc data copy(dummy)
+  USE1(hostUseRecur, 0);
 }
 void hostUseRecur_run() {
   Result Res;
+  USE1(hostUseRecur, &Res);
+  PRINT_RESULT(hostUseRecur, Res);
+  int dummy;
+  #pragma acc data copy(dummy)
   USE1(hostUseRecur, &Res);
   PRINT_RESULT(hostUseRecur, Res);
 }
