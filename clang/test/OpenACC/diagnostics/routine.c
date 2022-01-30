@@ -362,12 +362,12 @@ void seqSeq();
 
 void impSeqExpGang();
 void impSeqExpGang_use() {
+  // expected-note@+3 {{use of function 'impSeqExpGang' appears here}}
+  // expected-note@+2 {{'#pragma acc routine seq' previously implied for function 'impSeqExpGang' by use in construct '#pragma acc parallel' here}}
   #pragma acc parallel
-  // expected-error@+2 {{'#pragma acc routine' is not in scope at use of associated function 'impSeqExpGang'}}
-  // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'impSeqExpGang' by use in construct '#pragma acc parallel' here}}
   impSeqExpGang();
 }
-// expected-note@+2 {{'#pragma acc routine' for function 'impSeqExpGang' appears here}}
+// expected-error@+2 {{first '#pragma acc routine' for function 'impSeqExpGang' not in scope at some uses}}
 // expected-error@+1 {{for function 'impSeqExpGang', 'gang' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
 #pragma acc routine gang
 void impSeqExpGang();
@@ -376,12 +376,12 @@ void impSeqExpWorker();
 void impSeqExpWorker_use() {
   #pragma acc parallel loop
   for (int i = 0; i < 5; ++i) {
-    // expected-error@+2 {{'#pragma acc routine' is not in scope at use of associated function 'impSeqExpWorker'}}
+    // expected-note@+2 {{use of function 'impSeqExpWorker' appears here}}
     // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'impSeqExpWorker' by use in construct '#pragma acc parallel loop' here}}
     impSeqExpWorker();
   }
 }
-// expected-note@+2 {{'#pragma acc routine' for function 'impSeqExpWorker' appears here}}
+// expected-error@+2 {{first '#pragma acc routine' for function 'impSeqExpWorker' not in scope at some uses}}
 // expected-error@+1 {{for function 'impSeqExpWorker', 'worker' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
 #pragma acc routine worker
 void impSeqExpWorker();
@@ -390,22 +390,22 @@ void impSeqExpVector();
 // expected-note@+1 {{'#pragma acc routine' for function 'impSeqExpVector_use' appears here}}
 #pragma acc routine seq
 void impSeqExpVector_use() {
-  // expected-error@+2 {{'#pragma acc routine' is not in scope at use of associated function 'impSeqExpVector'}}
+  // expected-note@+2 {{use of function 'impSeqExpVector' appears here}}
   // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'impSeqExpVector' by use in function 'impSeqExpVector_use' here}}
   impSeqExpVector();
 }
-// expected-note@+2 {{'#pragma acc routine' for function 'impSeqExpVector' appears here}}
+// expected-error@+2 {{first '#pragma acc routine' for function 'impSeqExpVector' not in scope at some uses}}
 // expected-error@+1 {{for function 'impSeqExpVector', 'vector' clause on '#pragma acc routine' conflicts with 'seq' clause on previous '#pragma acc routine'}}
 #pragma acc routine vector
 void impSeqExpVector();
 
 void impSeqExpSeq();
 void impSeqExpSeq_use() {
+  // expected-note@+2 {{use of function 'impSeqExpSeq' appears here}}
   #pragma acc parallel
-  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'impSeqExpSeq'}}
   impSeqExpSeq();
 }
-// expected-note@+1 {{'#pragma acc routine' for function 'impSeqExpSeq' appears here}}
+// expected-error@+1 {{first '#pragma acc routine' for function 'impSeqExpSeq' not in scope at some uses}}
 #pragma acc routine seq
 void impSeqExpSeq();
 
@@ -525,12 +525,12 @@ struct AssociatedDeclIsType {
 // Evaluated host uses.
 void hostUseBefore();
 void hostUseBefore_hostUses() {
-  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'hostUseBefore'}}
+  // expected-note@+1 {{use of function 'hostUseBefore' appears here}}
   hostUseBefore();
-  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'hostUseBefore'}}
+  // expected-note@+1 {{use of function 'hostUseBefore' appears here}}
   void (*p)() = hostUseBefore;
 }
-// expected-note@+1 2 {{'#pragma acc routine' for function 'hostUseBefore' appears here}}
+// expected-error@+1 {{first '#pragma acc routine' for function 'hostUseBefore' not in scope at some uses}}
 #pragma acc routine seq
 void hostUseBefore();
 #pragma acc routine seq // Should note only the first routine directive.
@@ -540,17 +540,17 @@ void hostUseBefore();
 void accUseBefore();
 #pragma acc routine seq
 void accUseBefore_accUses() {
-  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+  // expected-note@+1 {{use of function 'accUseBefore' appears here}}
   accUseBefore();
-  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+  // expected-note@+1 {{use of function 'accUseBefore' appears here}}
   void (*p)() = accUseBefore;
 }
 void accUseBefore_accUses2() {
   #pragma acc parallel
   {
-    // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+    // expected-note@+1 {{use of function 'accUseBefore' appears here}}
     accUseBefore();
-    // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+    // expected-note@+1 {{use of function 'accUseBefore' appears here}}
     void (*p)() = accUseBefore;
   }
 }
@@ -558,9 +558,9 @@ void accUseBefore_accUses3() {
   // Make sure the search for uses traverses into the child construct.
   #pragma acc parallel loop
   for (int i = 0; i < 5; ++i) {
-    // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+    // expected-note@+1 {{use of function 'accUseBefore' appears here}}
     accUseBefore();
-    // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+    // expected-note@+1 {{use of function 'accUseBefore' appears here}}
     void (*p)() = accUseBefore;
   }
 }
@@ -569,13 +569,13 @@ void accUseBefore_accUses4() {
   #pragma acc parallel
   #pragma acc loop
   for (int i = 0; i < 5; ++i) {
-    // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+    // expected-note@+1 {{use of function 'accUseBefore' appears here}}
     accUseBefore();
-    // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'accUseBefore'}}
+    // expected-note@+1 {{use of function 'accUseBefore' appears here}}
     void (*p)() = accUseBefore;
   }
 }
-// expected-note@+1 8 {{'#pragma acc routine' for function 'accUseBefore' appears here}}
+// expected-error@+1 {{first '#pragma acc routine' for function 'accUseBefore' not in scope at some uses}}
 #pragma acc routine seq
 void accUseBefore();
 #pragma acc routine seq // Should note only the first routine directive.
@@ -584,12 +584,12 @@ void accUseBefore();
 // Make sure use checks aren't skipped at a routine directive on a definition as
 // opposed to a prototype.
 void useBeforeOnDef();
-// expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'useBeforeOnDef'}}
+// expected-note@+1 {{use of function 'useBeforeOnDef' appears here}}
 void useBeforeOnDef_hostUses() { useBeforeOnDef(); }
-// expected-error@+2 {{'#pragma acc routine' is not in scope at use of associated function 'useBeforeOnDef'}}
+// expected-note@+2 {{use of function 'useBeforeOnDef' appears here}}
 #pragma acc routine seq
 void useBeforeOnDef_accUses() { useBeforeOnDef(); }
-// expected-note@+1 2 {{'#pragma acc routine' for function 'useBeforeOnDef' appears here}}
+// expected-error@+1 {{first '#pragma acc routine' for function 'useBeforeOnDef' not in scope at some uses}}
 #pragma acc routine seq
 void useBeforeOnDef() {}
 
@@ -608,29 +608,29 @@ void unevaluatedUseBefore_accUses() {
 void unevaluatedUseBefore();
 
 // Unevaluated uses shouldn't be reported with evaluated uses.
-void notAllUseBefore();
-void notAllUseBefore_hostUses() {
-  size_t s = sizeof &notAllUseBefore;
-  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'notAllUseBefore'}}
-  notAllUseBefore();
-  size_t a = _Alignof(&notAllUseBefore);
+void notAllUsesBefore();
+void notAllUsesBefore_hostUses() {
+  size_t s = sizeof &notAllUsesBefore;
+  // expected-note@+1 {{use of function 'notAllUsesBefore' appears here}}
+  notAllUsesBefore();
+  size_t a = _Alignof(&notAllUsesBefore);
 }
 #pragma acc routine seq
-void notAllUseBefore_accUses() {
-  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'notAllUseBefore'}}
-  notAllUseBefore();
-  size_t a = _Alignof(&notAllUseBefore);
-  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'notAllUseBefore'}}
-  void (*p)() = notAllUseBefore;
+void notAllUsesBefore_accUses() {
+  // expected-note@+1 {{use of function 'notAllUsesBefore' appears here}}
+  notAllUsesBefore();
+  size_t a = _Alignof(&notAllUsesBefore);
+  // expected-note@+1 {{use of function 'notAllUsesBefore' appears here}}
+  void (*p)() = notAllUsesBefore;
 }
-// expected-note@+1 3 {{'#pragma acc routine' for function 'notAllUseBefore' appears here}}
+// expected-error@+1 {{first '#pragma acc routine' for function 'notAllUsesBefore' not in scope at some uses}}
 #pragma acc routine seq
-void notAllUseBefore();
+void notAllUsesBefore();
 
 // Definition.
-// expected-error@+1 {{'#pragma acc routine' is not in scope at definition of associated function 'defBefore'}}
+// expected-note@+1 {{definition of function 'defBefore' appears here}}
 void defBefore() {}
-// expected-note@+1 {{'#pragma acc routine' for function 'defBefore' appears here}}
+// expected-error@+1 {{first '#pragma acc routine' for function 'defBefore' not in scope at definition}}
 #pragma acc routine seq
 void defBefore();
 #pragma acc routine seq // Should note only the first routine directive.
@@ -638,22 +638,24 @@ void defBefore();
 
 // Use errors shouldn't suppress/break later definition errors.
 void useDefBefore();
-// expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'useDefBefore'}}
+// expected-note@+1 {{use of function 'useDefBefore' appears here}}
 void useDefBefore_uses() { useDefBefore(); }
-// expected-error@+1 {{'#pragma acc routine' is not in scope at definition of associated function 'useDefBefore'}}
+// expected-note@+1 {{definition of function 'useDefBefore' appears here}}
 void useDefBefore() {} // def
-// expected-note@+1 2 {{'#pragma acc routine' for function 'useDefBefore' appears here}}
+// expected-error@+2 {{first '#pragma acc routine' for function 'useDefBefore' not in scope at definition}}
+// expected-error@+1 {{first '#pragma acc routine' for function 'useDefBefore' not in scope at some uses}}
 #pragma acc routine seq
 void useDefBefore();
 #pragma acc routine seq // Should note only the first routine directive.
 void useDefBefore();
 
 // Definition errors shouldn't suppress/break later use errors.
-// expected-error@+1 {{'#pragma acc routine' is not in scope at definition of associated function 'defUseBefore'}}
+// expected-note@+1 {{definition of function 'defUseBefore' appears here}}
 void defUseBefore() {} // def
-// expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'defUseBefore'}}
+// expected-note@+1 {{use of function 'defUseBefore' appears here}}
 void defUseBefore_uses() { defUseBefore(); }
-// expected-note@+1 2 {{'#pragma acc routine' for function 'defUseBefore' appears here}}
+// expected-error@+2 {{first '#pragma acc routine' for function 'defUseBefore' not in scope at definition}}
+// expected-error@+1 {{first '#pragma acc routine' for function 'defUseBefore' not in scope at some uses}}
 #pragma acc routine seq
 void defUseBefore();
 #pragma acc routine seq // Should note only the first routine directive.
@@ -683,14 +685,14 @@ void someUsesInErrorBefore_use() {
   #pragma acc parallel loop
   someUsesInErrorBefore();
   // This use is reported.
-  // expected-error@+1 {{'#pragma acc routine' is not in scope at use of associated function 'someUsesInErrorBefore'}}
+  // expected-note@+1 {{use of function 'someUsesInErrorBefore' appears here}}
   someUsesInErrorBefore();
   // This use isn't reported.
   // expected-error@+2 {{statement after '#pragma acc parallel loop' must be a for loop}}
   #pragma acc parallel loop
   someUsesInErrorBefore();
 }
-// expected-note@+1 {{'#pragma acc routine' for function 'someUsesInErrorBefore' appears here}}
+// expected-error@+1 {{first '#pragma acc routine' for function 'someUsesInErrorBefore' not in scope at some uses}}
 #pragma acc routine seq
 void someUsesInErrorBefore();
 
@@ -700,14 +702,14 @@ void someUsesInErrorBefore();
 void accUseInErrorBefore();
 void accUseInErrorBefore_use() {
   // expected-error@+3 {{statement after '#pragma acc parallel loop' must be a for loop}}
-  // expected-error@+2 {{'#pragma acc routine' is not in scope at use of associated function 'accUseInErrorBefore'}}
+  // expected-note@+2 {{use of function 'accUseInErrorBefore' appears here}}
   #pragma acc parallel loop
   accUseInErrorBefore();
   // expected-error@+2 {{statement after '#pragma acc parallel loop' must be a for loop}}
   #pragma acc parallel loop
   accUseInErrorBefore();
 }
-// expected-note@+1 {{'#pragma acc routine' for function 'accUseInErrorBefore' appears here}}
+// expected-error@+1 {{first '#pragma acc routine' for function 'accUseInErrorBefore' not in scope at some uses}}
 #pragma acc routine seq
 void accUseInErrorBefore();
 
@@ -725,7 +727,7 @@ void hostUseInErrorBefore_use() {
   #pragma acc loop
   hostUseInErrorBefore();
 }
-// expected-error@+2 {{'#pragma acc routine' is not in scope at use of associated function 'hostUseInErrorBefore'}}
+// expected-error@+2 {{first '#pragma acc routine' for function 'hostUseInErrorBefore' not in scope at some uses}}
 // expected-note@+1 {{cannot report locations of uses of function 'hostUseInErrorBefore' due to previous errors}}
 #pragma acc routine seq
 void hostUseInErrorBefore();
@@ -794,7 +796,7 @@ void onDeclDef() {
 
 // Does the definition check see the routine directive on the following decl?
 // No, that's an error.
-// expected-error@+1 {{'#pragma acc routine' is not in scope at definition of associated function 'defOnDecl'}}
+// expected-note@+1 {{definition of function 'defOnDecl' appears here}}
 void defOnDecl() {
   static int s;
   #pragma acc update device(i)
@@ -803,7 +805,7 @@ void defOnDecl() {
   for (int i = 0; i < 5; ++i)
     ;
 }
-// expected-note@+1 {{'#pragma acc routine' for function 'defOnDecl' appears here}}
+// expected-error@+1 {{first '#pragma acc routine' for function 'defOnDecl' not in scope at definition}}
 #pragma acc routine seq
 void defOnDecl();
 

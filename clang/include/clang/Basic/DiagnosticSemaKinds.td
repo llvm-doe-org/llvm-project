@@ -10992,11 +10992,14 @@ def err_acc_routine_static_local : Error<
   "static local variable '%0' is not permitted within function '%1' because "
   "the latter is attributed with '#pragma acc routine'">;
 def err_acc_routine_not_in_scope_at_function_def : Error<
-  "'#pragma acc routine' is not in scope at definition of associated function "
-  "'%0'">;
+  "first '#pragma acc routine' for function '%0' not in scope at definition">;
 def err_acc_routine_not_in_scope_at_function_use : Error<
-  "'#pragma acc routine' is not in scope at use of associated function '%0'">;
-def note_acc_function_use_lost : Note<
+  "first '#pragma acc routine' for function '%0' not in scope at some uses">;
+def note_acc_routine_definition : Note<
+  "definition of function '%0' appears here">;
+def note_acc_routine_use : Note<
+  "use of function '%0' appears here">;
+def note_acc_routine_use_lost : Note<
   "cannot report locations of uses of function '%0' due to previous errors">;
 // "previous" is used to contrast with a more recent routine directive.
 def note_acc_routine_explicit : Note<

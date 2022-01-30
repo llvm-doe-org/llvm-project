@@ -1018,7 +1018,6 @@ namespace {
 class RoutineUsedDeclVisitor : public UsedDeclVisitor<RoutineUsedDeclVisitor> {
 private:
   FunctionDecl *FD;
-  SourceLocation RoutineDirectiveLoc;
   bool FoundUse;
 
 public:
@@ -1026,20 +1025,15 @@ public:
     if (D->getCanonicalDecl() != FD->getCanonicalDecl())
       return;
     FoundUse = true;
-    S.Diag(Loc, diag::err_acc_routine_not_in_scope_at_function_use)
-        << FD->getName();
-    S.Diag(RoutineDirectiveLoc, diag::note_acc_routine_explicit)
-        << 0 << FD->getName();
+    S.Diag(Loc, diag::note_acc_routine_use) << FD->getName();
   }
-  RoutineUsedDeclVisitor(Sema &SemaRef, FunctionDecl *FD,
-                         SourceLocation RoutineDirectiveLoc)
+  RoutineUsedDeclVisitor(Sema &SemaRef, FunctionDecl *FD)
       : UsedDeclVisitor<RoutineUsedDeclVisitor>(SemaRef), FD(FD),
-        RoutineDirectiveLoc(RoutineDirectiveLoc), FoundUse(false) {}
+        FoundUse(false) {}
   bool foundUse() const { return FoundUse; }
 };
 
-/// Reports existing uses of function just attributed with the OpenACC routine
-/// directive.
+/// Emits note diagnostics for previous uses of a function.
 class RoutineUseReporter : public RecursiveASTVisitor<RoutineUseReporter> {
 private:
   RoutineUsedDeclVisitor RUDV;
@@ -1050,9 +1044,7 @@ public:
       RUDV.Visit(S);
     return true;
   }
-  RoutineUseReporter(Sema &SemaRef, FunctionDecl *FD,
-                     SourceLocation RoutineDirectiveLoc)
-      : RUDV(SemaRef, FD, RoutineDirectiveLoc) {}
+  RoutineUseReporter(Sema &SemaRef, FunctionDecl *FD) : RUDV(SemaRef, FD) {}
   bool foundUse() const { return RUDV.foundUse(); }
 };
 
@@ -2425,22 +2417,25 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
     bool PreviousErrors = getDiagnostics().hasErrorOccurred();
     if (FunctionDecl *Def = FD->getDefinition()) {
       if (Def != FD) {
-        Diag(Def->getBeginLoc(),
-             diag::err_acc_routine_not_in_scope_at_function_def)
+        Diag(StartLoc, diag::err_acc_routine_not_in_scope_at_function_def)
             << FD->getName();
-        Diag(StartLoc, diag::note_acc_routine_explicit) << 0 << FD->getName();
+        Diag(Def->getBeginLoc(), diag::note_acc_routine_definition)
+            << FD->getName();
       }
     }
     if (FD->isUsed()) {
+      // We are careful to emit this diagnostic before any diagnostics about
+      // clauses that conflict with a previously implied routine directive
+      // because this not that is the real problem.  That is, the explicit
+      // routine directive should have appeared before the use that implied the
+      // conflicting routine directive, which then wouldn't have been implied.
+      // We emit conflicting clause diagnostics too to help explain the
+      // compiler's current analysis of any code in between.
       AfterUseErrorReported = true;
-      RoutineUseReporter Reporter(*this, FD, StartLoc);
+      Diag(StartLoc, diag::err_acc_routine_not_in_scope_at_function_use)
+          << FD->getName();
+      RoutineUseReporter Reporter(*this, FD);
       Reporter.TraverseAST(Context);
-      // If other errors discarded the parts of the AST with the uses, then we
-      // haven't yet reported the routine directive after the uses.  But we need
-      // to so that any later diagnostics about conflicts with the implicit
-      // directive don't distract from the real problem: the explicit routine
-      // directive should have appeared before the uses so they wouldn't have
-      // implied the conflicting routine directives.
       if (!Reporter.foundUse()) {
         assert(PreviousErrors &&
                "expected to find and report function use if no previous errors "
@@ -2449,14 +2444,10 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
             OpenACCData->ImplicitRoutineDirInfo.getUseLoc(FD);
         if (UseLoc.isValid()) {
           // It's only one of potentially multiple uses, but that'll have to do.
-          Diag(UseLoc, diag::err_acc_routine_not_in_scope_at_function_use)
-              << FD->getName();
-          Diag(StartLoc, diag::note_acc_routine_explicit) << 0 << FD->getName();
+          Diag(UseLoc, diag::note_acc_routine_use) << FD->getName();
         } else {
           // Must have been host uses, which don't imply routine directives.
-          Diag(StartLoc, diag::err_acc_routine_not_in_scope_at_function_use)
-              << FD->getName();
-          Diag(StartLoc, diag::note_acc_function_use_lost) << FD->getName();
+          Diag(StartLoc, diag::note_acc_routine_use_lost) << FD->getName();
         }
       }
     }
