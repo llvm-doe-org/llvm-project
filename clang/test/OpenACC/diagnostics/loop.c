@@ -3139,9 +3139,16 @@ void fn() {
   #pragma acc loop vector
   for (int i = 0; i < 5; ++i)
     ;
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
 
   //--------------------------------------------------
   // Bad parent.
+  //
+  // Some of these cases used to fail an unnecessary assert in an analysis
+  // required by the clauses.
   //--------------------------------------------------
 
   // expected-error@+3 {{'#pragma acc loop' cannot be nested within '#pragma acc data'}}
@@ -3159,6 +3166,66 @@ void fn() {
   for (int i = 0; i < 5; ++i)
     ;
 
+  // expected-error@+3 {{'#pragma acc loop' cannot be nested within '#pragma acc data'}}
+  // expected-note@+1 {{enclosing '#pragma acc data'}}
+  #pragma acc data DATA(i)
+  #pragma acc loop gang
+  for (int i = 0; i < 5; ++i)
+    ;
+
+  // expected-error@+4 {{'#pragma acc loop' cannot be nested within '#pragma acc data'}}
+  // expected-note@+2 {{enclosing '#pragma acc data'}}
+  #pragma acc data DATA(i)
+  #pragma acc data DATA(jk)
+  #pragma acc loop worker
+  for (int i = 0; i < 5; ++i)
+    ;
+
+  // expected-error@+3 {{'#pragma acc loop' cannot be nested within '#pragma acc data'}}
+  // expected-note@+1 {{enclosing '#pragma acc data'}}
+  #pragma acc data DATA(i)
+  #pragma acc loop vector
+  for (int i = 0; i < 5; ++i)
+    ;
+
+  // expected-error@+4 {{'#pragma acc loop' cannot be nested within '#pragma acc data'}}
+  // expected-note@+2 {{enclosing '#pragma acc data'}}
+  #pragma acc data DATA(i)
+  #pragma acc data DATA(jk)
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+
+//--------------------------------------------------
+// Orphaned acc loop with routine directive.
+//
+// Some of these cases used to fail an unnecessary assert in an analysis
+// required by the clauses.
+//--------------------------------------------------
+
+#pragma acc routine gang
+void routineFn() {
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop gang
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
 }
 
 // Complete to suppress an additional warning, but it's too late for pragmas.

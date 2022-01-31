@@ -218,17 +218,16 @@ public:
       assert(isOpenACCLoopDirective(getEffectiveDirective()) &&
              "expected gang/worker partitioning to be on a loop directive");
       for (auto I = std::next(Stack.rbegin()), E = Stack.rend(); I != E; ++I) {
-        assert((isOpenACCLoopDirective(I->EffectiveDKind) ||
-                isOpenACCComputeDirective(I->EffectiveDKind)) &&
-               "expected gang/worker partitioning to be nested in acc loop or"
-               " compute directive");
+        bool IsComputeConstruct = isOpenACCComputeDirective(I->EffectiveDKind);
+        if (!isOpenACCLoopDirective(I->EffectiveDKind) && !IsComputeConstruct)
+          break;
         if (Kind.hasGangPartitioning())
           I->NestedExplicitGangPartitioning = true;
         if (Kind.hasWorkerPartitioning())
           I->NestedWorkerPartitioning = true;
         // Outside a compute directive, we expect only data directives, which
         // need not be marked.
-        if (isOpenACCComputeDirective(I->EffectiveDKind))
+        if (IsComputeConstruct)
           break;
       }
     }
