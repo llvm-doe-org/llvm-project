@@ -331,8 +331,9 @@ Run-Time Environment Variables
       `routine` directive applying to the same function within the
       same compilation unit.  Otherwise, a compile-time error
       diagnostic is produced.
-    * TODO: Currently, these clauses have no other effect and are not
-      checked for compatibility when one function calls another.
+    * Compile-time error diagnostics are produced if a function's
+      level of parallelism is incompatible with any `loop` construct
+      or function enclosing a use.
 * Other clauses
     * No other clauses are supported yet.
     * Specifying a name is not yet supported, so an immediately

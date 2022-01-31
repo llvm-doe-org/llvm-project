@@ -3788,9 +3788,11 @@ def ACCRoutineDecl : ACCDeclAttr {
   let SemaHandler = 0;
   let Subjects = SubjectList<[Function]>;
   let Args = [
+    // Sorted in increasing order by level of parallelism so they can be
+    // compared by value later.
     EnumArgument<"Partitioning", "PartitioningTy",
-                 [ "gang", "worker", "vector", "seq" ],
-                 [ "Gang", "Worker", "Vector", "Seq" ]>
+                 [ "seq", "vector", "worker", "gang" ],
+                 [ "Seq", "Vector", "Worker", "Gang" ]>
   ];
   let Documentation = [Undocumented];
   let AdditionalMembers = [{

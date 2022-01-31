@@ -242,15 +242,19 @@ public:
     assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().LoopDirectiveKind;
   }
-  /// Iterate through the ancestor directives until finding either (1) an acc
-  /// loop directive or combined loop directive with gang, worker, or vector
-  /// clauses, (2) a compute directive, or (3) or the start of the stack.
-  /// If case 1, return that directive's loop partitioning kind, and record its
-  /// real directive kind and location.  Else if case 2 or 3, return no
-  /// partitioning, and don't record a directive kind or location.
-  ACCPartitioningKind getParentLoopPartitioning(
-      OpenACCDirectiveKind &ParentDir, SourceLocation &ParentLoc) const {
-    for (auto I = std::next(Stack.rbegin()), E = Stack.rend(); I != E; ++I) {
+  /// Iterate through the current directive and its ancestors until finding
+  /// either (1) an acc loop directive or combined loop directive with gang,
+  /// worker, or vector clauses, (2) a compute directive, or (3) or the start of
+  /// the stack.  If case 1, return that directive's loop partitioning kind, and
+  /// record its real directive kind and location.  Else if case 2 or 3, return
+  /// no partitioning, and don't record a directive kind or location.
+  ACCPartitioningKind getAncestorLoopPartitioning(
+      OpenACCDirectiveKind &ParentDir, SourceLocation &ParentLoc,
+      bool SkipCurrentDir) const {
+    auto I = Stack.rbegin();
+    if (SkipCurrentDir)
+      ++I;
+    for (auto E = Stack.rend(); I != E; ++I) {
       if (isOpenACCComputeDirective(I->EffectiveDKind))
         return ACCPartitioningKind();
       const ACCPartitioningKind &ParentKind = I->LoopDirectiveKind;
@@ -663,9 +667,10 @@ private:
 
   /// Emit a diagnostic that is caused by a function's routine directive.
   void emitRoutineDirDiag(FunctionDecl *FD, SourceLocation Loc,
-                          PartialDiagnostic Diag) const {
+                          PartialDiagnostic Diag) {
     SemaRef.Diag(Loc, Diag);
-    emitNotesForRoutineDirChain(FD, /*PreviousDir=*/false);
+    if (!DiagnosticIDs::isBuiltinNote(Diag.getDiagID()))
+      emitNotesForRoutineDirChain(FD);
   }
 
 public:
@@ -744,7 +749,17 @@ public:
   /// All routine directives in that chain must already be attached to the
   /// functions to which they apply, and all that are implicit must already be
   /// recorded in this \c ImplicitRoutineDirInfoTy.
-  void emitNotesForRoutineDirChain(FunctionDecl *FD, bool PreviousDir) const {
+  ///
+  /// If \a IfRoutineDirFor is not \c nullptr, then record all notes via
+  /// \c DiagIfRoutineDir with \a IfRoutineDirFor as the function that
+  /// determines when their actual emission occurs.  Because only notes are
+  /// recorded here, no additional notes are emitted to identify the origin
+  /// of the routine directive for \a IfRoutineDirFor.  It's assumed that will
+  /// happen with some previous non-note diagnostic recorded via
+  /// \a DiagIfRoutineDir for \a IfRoutineDirFor.
+  void emitNotesForRoutineDirChain(
+      FunctionDecl *FD, bool PreviousDir = false,
+      FunctionDecl *IfRoutineDirFor = nullptr) {
     SourceLocation Loc;
     ACCRoutineDeclAttr *Attr =
         FD->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
@@ -753,7 +768,8 @@ public:
 
     // Handle explicit routine directive.
     if (Loc.isValid()) {
-      SemaRef.Diag(Loc, diag::note_acc_routine_explicit)
+      DiagIfRoutineDir(*this, IfRoutineDirFor, Loc,
+                       diag::note_acc_routine_explicit)
           << PreviousDir << FD->getName();
       return;
     }
@@ -767,10 +783,12 @@ public:
     StringRef UserName = UserIsFunction
                              ? Entry.UserFn->getName()
                              : getOpenACCName(Entry.UserComputeConstruct);
-    SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
+    DiagIfRoutineDir(*this, IfRoutineDirFor, Entry.UseLoc,
+                     diag::note_acc_routine_seq_implicit)
         << PreviousDir << FD->getName() << UserIsFunction << UserName;
     if (UserIsFunction)
-      emitNotesForRoutineDirChain(Entry.UserFn, /*PreviousDir=*/false);
+      emitNotesForRoutineDirChain(Entry.UserFn, /*PreviousDir=*/false,
+                                  IfRoutineDirFor);
   }
   /// Return the location of the use of this function that originally implied a
   /// routine seq directive for this function, or return an invalid location if
@@ -781,7 +799,9 @@ public:
 
   /// A diagnostic for a function that is emitted either immediately if the
   /// function is already known to have a routine directive or later when a
-  /// routine seq directive is implied for it, if ever.
+  /// routine seq directive is implied for it, if ever.  In either case, notes
+  /// identifying the origin of the routine directive are emitted afterward
+  /// unless the diagnostic itself is a note.
   ///
   /// Instances cannot be copied.  Immediate emission or storage for later
   /// emission occurs upon destruction.
@@ -793,6 +813,15 @@ public:
     bool *Emitted;
 
   public:
+    /// The diagnostic to be emitted is \a DiagID at \a DiagLoc for function
+    /// \a FD.
+    ///
+    /// If \a Emitted is not \c nullptr, \a *Emitted is set to true or false
+    /// upon destruction to indicate whether the diagnostic was emitted
+    /// immediately.
+    ///
+    /// If \a FD is \c nullptr, the diagnostic is emitted immediately upon
+    /// destruction, and no notes are emitted to identify the origin of \a FD.
     DiagIfRoutineDir(ImplicitRoutineDirInfoTy &ImplicitRoutineDirInfo,
                      FunctionDecl *FD, SourceLocation DiagLoc, unsigned DiagID,
                      bool *Emitted = nullptr)
@@ -802,6 +831,12 @@ public:
     DiagIfRoutineDir(const DiagIfRoutineDir &) = delete;
     DiagIfRoutineDir &operator=(const DiagIfRoutineDir &) = delete;
     ~DiagIfRoutineDir() {
+      if (!FD) {
+        ImplicitRoutineDirInfo.SemaRef.Diag(DiagLoc, *this);
+        if (Emitted)
+          *Emitted = true;
+        return;
+      }
       if (FD->hasAttr<ACCRoutineDeclAttr>()) {
         ImplicitRoutineDirInfo.emitRoutineDirDiag(FD, DiagLoc, *this);
         if (Emitted)
@@ -1718,8 +1753,8 @@ bool Sema::StartOpenACCAssociatedStatement() {
     OpenACCDirectiveKind ParentDKind;
     SourceLocation ParentLoopLoc;
     ACCPartitioningKind ParentLoopKind =
-        OpenACCData->DirStack.getParentLoopPartitioning(ParentDKind,
-                                                        ParentLoopLoc);
+        OpenACCData->DirStack.getAncestorLoopPartitioning(
+            ParentDKind, ParentLoopLoc, /*SkipCurrentDir=*/true);
     if (ParentLoopKind.hasGangClause() && LoopKind.hasGangClause()) {
       // OpenACC 2.6, sec. 2.9.2:
       // "The region of a loop with the gang clause may not contain another
@@ -2197,19 +2232,103 @@ void Sema::ActOnStartOfFunctionDefForOpenACC(FunctionDecl *FD) {
   if (OpenACCData->DirStack.getEffectiveDirective() == ACCD_routine)
     ActOnOpenACCRoutineDirective(ACC_EXPLICIT, DeclGroupRef(FD));
 }
-void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc) {
+void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
+                                      SourceLocation UseLoc) {
   if (OpenACCData->TransformingOpenACC)
     return;
-  if (FD->hasAttr<ACCRoutineDeclAttr>())
-    return;
-  OpenACCDirectiveKind ComputeDKind = OpenACCData->DirStack.isInComputeRegion();
-  if (ComputeDKind != ACCD_unknown) {
-    OpenACCData->ImplicitRoutineDirInfo.addImplicitRoutineSeqDir(
-        FD, Loc, getCurFunctionDecl(), ComputeDKind);
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  ImplicitRoutineDirInfoTy &ImplicitRoutineDirInfo =
+      OpenACCData->ImplicitRoutineDirInfo;
+
+  // If Usee has no routine directive yet, then add an implicit routine seq
+  // directive if it's an accelerator use, and record as host use otherwise.
+  // Either way, seq is the highest level of parallelism Usee might eventually
+  // have, so any level of parallelism at the use site is compatible.
+  ACCRoutineDeclAttr *UseeAttr = Usee->getAttr<ACCRoutineDeclAttr>();
+  if (!UseeAttr) {
+    OpenACCDirectiveKind ComputeDKind = DirStack.isInComputeRegion();
+    if (ComputeDKind != ACCD_unknown) {
+      ImplicitRoutineDirInfo.addImplicitRoutineSeqDir(
+          Usee, UseLoc, getCurFunctionDecl(), ComputeDKind);
+      return;
+    }
+    ImplicitRoutineDirInfo.addHostFunctionUse(getCurFunctionDecl(), Usee,
+                                              UseLoc);
     return;
   }
-  OpenACCData->ImplicitRoutineDirInfo.addHostFunctionUse(getCurFunctionDecl(),
-                                                         FD, Loc);
+
+  // Usee has a routine directive.  If there's an enclosing loop construct,
+  // complain if it has a higher level of parallelism.
+  OpenACCDirectiveKind LoopDirKind;
+  SourceLocation LoopLoc;
+  ACCPartitioningKind LoopPartKind =
+    DirStack.getAncestorLoopPartitioning(LoopDirKind, LoopLoc,
+                                         /*SkipCurrentDir=*/false);
+  ACCRoutineDeclAttr::PartitioningTy UseePart = UseeAttr->getPartitioning();
+  ACCRoutineDeclAttr::PartitioningTy LoopPart;
+  if (LoopPartKind.hasVectorClause())
+    LoopPart = ACCRoutineDeclAttr::Vector;
+  else if (LoopPartKind.hasWorkerClause())
+    LoopPart = ACCRoutineDeclAttr::Worker;
+  else if (LoopPartKind.hasGangClause())
+    LoopPart = ACCRoutineDeclAttr::Gang;
+  else
+    LoopPart = ACCRoutineDeclAttr::Seq;
+  if (LoopPart != ACCRoutineDeclAttr::Seq) {
+    if (LoopPart <= UseePart) {
+      Diag(UseLoc, diag::err_acc_routine_loop_par_level)
+          << getOpenACCName(LoopDirKind)
+          << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(LoopPart)
+          << Usee->getName()
+          << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(UseePart);
+      Diag(LoopLoc, diag::note_acc_enclosing_directive)
+          << getOpenACCName(LoopDirKind);
+      ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Usee);
+    }
+    return;
+  }
+
+  // Usee has a routine directive, and there's no enclosing loop construct.  If
+  // there's an enclosing compute construct, any level of parallelism for Usee
+  // is compatible.
+  if (isOpenACCComputeDirective(DirStack.isInComputeRegion()))
+    return;
+
+  // Usee has a routine directive, and there's no enclosing loop or compute
+  // construct.  If User has no routine directive yet, record a diagnostic if
+  // User has a higher level of parallelism than seq, to be emitted if a routine
+  // seq directive is implied for User later.
+  FunctionDecl *User = getCurFunctionDecl();
+  assert(User && "expected function use to be in a function");
+  ACCRoutineDeclAttr *UserAttr = User->getAttr<ACCRoutineDeclAttr>();
+  if (!UserAttr) {
+    if (UseePart > ACCRoutineDeclAttr::Seq) {
+      DiagIfRoutineDir(ImplicitRoutineDirInfo, User, UseLoc,
+                       diag::err_acc_routine_func_par_level)
+          << User->getName()
+          << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(
+              ACCRoutineDeclAttr::Seq)
+          << Usee->getName()
+          << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(UseePart);
+      ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(
+          Usee, /*PreviousDir=*/false, /*IfRoutineDirFor=*/User);
+    }
+    return;
+  }
+
+  // Usee and User have routine directives, and there's no enclosing loop or
+  // compute construct.  Complain if User has a lower level of parallelism than
+  // Usee.
+  ACCRoutineDeclAttr::PartitioningTy UserPart = UserAttr->getPartitioning();
+  if (UserPart < UseePart) {
+    Diag(UseLoc, diag::err_acc_routine_func_par_level)
+        << User->getName()
+        << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(UserPart)
+        << Usee->getName()
+        << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(UseePart);
+    ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(User);
+    ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Usee);
+  }
 }
 void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
   if (OpenACCData->TransformingOpenACC)
