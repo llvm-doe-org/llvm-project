@@ -248,9 +248,10 @@ public:
   /// the stack.  If case 1, return that directive's loop partitioning kind, and
   /// record its real directive kind and location.  Else if case 2 or 3, return
   /// no partitioning, and don't record a directive kind or location.
-  ACCPartitioningKind getAncestorLoopPartitioning(
-      OpenACCDirectiveKind &ParentDir, SourceLocation &ParentLoc,
-      bool SkipCurrentDir) const {
+  ACCPartitioningKind
+  getAncestorLoopPartitioning(OpenACCDirectiveKind &ParentDir,
+                              SourceLocation &ParentLoc,
+                              bool SkipCurrentDir) const {
     auto I = Stack.rbegin();
     if (SkipCurrentDir)
       ++I;
@@ -757,9 +758,8 @@ public:
   /// of the routine directive for \a IfRoutineDirFor.  It's assumed that will
   /// happen with some previous non-note diagnostic recorded via
   /// \a DiagIfRoutineDir for \a IfRoutineDirFor.
-  void emitNotesForRoutineDirChain(
-      FunctionDecl *FD, bool PreviousDir = false,
-      FunctionDecl *IfRoutineDirFor = nullptr) {
+  void emitNotesForRoutineDirChain(FunctionDecl *FD, bool PreviousDir = false,
+                                   FunctionDecl *IfRoutineDirFor = nullptr) {
     SourceLocation Loc;
     ACCRoutineDeclAttr *Attr =
         FD->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
@@ -2262,8 +2262,8 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
   OpenACCDirectiveKind LoopDirKind;
   SourceLocation LoopLoc;
   ACCPartitioningKind LoopPartKind =
-    DirStack.getAncestorLoopPartitioning(LoopDirKind, LoopLoc,
-                                         /*SkipCurrentDir=*/false);
+      DirStack.getAncestorLoopPartitioning(LoopDirKind, LoopLoc,
+                                           /*SkipCurrentDir=*/false);
   ACCRoutineDeclAttr::PartitioningTy UseePart = UseeAttr->getPartitioning();
   ACCRoutineDeclAttr::PartitioningTy LoopPart;
   if (LoopPartKind.hasVectorClause())
@@ -2307,7 +2307,7 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
                        diag::err_acc_routine_func_par_level)
           << User->getName()
           << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(
-              ACCRoutineDeclAttr::Seq)
+                 ACCRoutineDeclAttr::Seq)
           << Usee->getName()
           << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(UseePart);
       ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(
