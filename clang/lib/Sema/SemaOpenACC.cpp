@@ -103,7 +103,8 @@ private:
     unsigned AssociatedLoops = 1; // from collapse clause
     unsigned AssociatedLoopsParsed = 0; // how many have been parsed so far
     // True if this is an effective compute or loop directive and has an
-    // effective nested loop directive with explicit gang partitioning.
+    // effective nested loop directive with explicit gang partitioning or
+    // encloses a function call with a routine gang directive.
     //
     // Implicit gang clauses are later added by ImplicitGangAdder after the
     // entire parallel construct is parsed and thus after this stack is popped
@@ -111,7 +112,8 @@ private:
     // this then.
     bool NestedExplicitGangPartitioning = false;
     // True if this is an effective compute or loop directive and has an
-    // effective nested loop directive with worker partitioning.
+    // effective nested loop directive with worker partitioning or encloses a
+    // function call with a routine worker directive.
     bool NestedWorkerPartitioning = false;
     DirStackEntryTy(OpenACCDirectiveKind RealDKind,
                     OpenACCDirectiveKind EffectiveDKind,
@@ -207,17 +209,21 @@ public:
     assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().LCVVec;
   }
-  /// Register the current directive's loop partitioning kind.
+  /// Register loop partitioning for the current loop directive if
+  /// \a ForCurrentDir or for a function call otherwise.
   ///
   /// As part of that, mark all effective ancestor compute or loop directives
   /// as containing any explicit gang or worker partitioning.
-  void setLoopPartitioning(ACCPartitioningKind Kind) {
-    assert(!Stack.empty() && "expected non-empty directive stack");
-    Stack.back().LoopDirectiveKind = Kind;
-    if (Kind.hasGangPartitioning() || Kind.hasWorkerPartitioning()) {
+  void setLoopPartitioning(ACCPartitioningKind Kind, bool ForCurrentDir) {
+    auto I = Stack.rbegin();
+    if (ForCurrentDir) {
       assert(isOpenACCLoopDirective(getEffectiveDirective()) &&
-             "expected gang/worker partitioning to be on a loop directive");
-      for (auto I = std::next(Stack.rbegin()), E = Stack.rend(); I != E; ++I) {
+             "expected to set partitioning for a loop directive");
+      I->LoopDirectiveKind = Kind;
+      ++I;
+    }
+    if (Kind.hasGangPartitioning() || Kind.hasWorkerPartitioning()) {
+      for (auto E = Stack.rend(); I != E; ++I) {
         bool IsComputeConstruct = isOpenACCComputeDirective(I->EffectiveDKind);
         if (!isOpenACCLoopDirective(I->EffectiveDKind) && !IsComputeConstruct)
           break;
@@ -271,8 +277,9 @@ public:
     }
     return ACCPartitioningKind();
   }
-  /// Is this an effective compute or loop directive with an effective nested
-  /// loop directive with explicit gang partitioning?
+  /// Is this an effective compute or loop directive with either (1) an
+  /// effective nested loop directive with explicit gang partitioning or (2) an
+  /// enclosed function call with a routine gang directive?
   ///
   /// Implicit gang clauses are later added by ImplicitGangAdder after the
   /// entire parallel construct is parsed and thus after this stack is popped
@@ -282,8 +289,9 @@ public:
     assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().NestedExplicitGangPartitioning;
   }
-  /// Is this an effective compute or loop directive with an effective nested
-  /// loop directive with worker partitioning?
+  /// Is this an effective compute or loop directive with either (1) an
+  /// effective nested loop directive with worker partitioning or (2) an
+  /// enclosed function call with a routine worker directive?
   bool getNestedWorkerPartitioning() const {
     assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().NestedWorkerPartitioning;
@@ -1098,11 +1106,11 @@ public:
       if (Part.hasGangPartitioning())
         return;
       // We haven't encountered any enclosing gang-partitioned loop.  If there's
-      // also no enclosed gang-partitioned loop and if this loop has been
-      // determined to be independent, then this is the outermost loop meeting
-      // all those conditions.  Thus, an implicit gang clause belongs here, and
-      // don't continue to descendants because they cannot then be
-      // gang-partitioned.
+      // also no enclosed gang-partitioned loop and no call to a function with a
+      // routine gang directive, and if this loop has been determined to be
+      // independent, then this is the outermost loop meeting all those
+      // conditions.  Thus, an implicit gang clause belongs here, and don't
+      // continue to descendants because they cannot then be gang-partitioned.
       if (!LD->getNestedGangPartitioning() && Part.hasIndependent()) {
         LD->addImplicitGangClause();
         return;
@@ -1802,7 +1810,8 @@ bool Sema::StartOpenACCAssociatedStatement() {
       LoopKind.setSeqComputed();
 
     // Record partitioning on stack.
-    OpenACCData->DirStack.setLoopPartitioning(LoopKind);
+    OpenACCData->DirStack.setLoopPartitioning(LoopKind,
+                                              /*ForCurrentDir=*/true);
   }
   return ErrorFound;
 }
@@ -2257,14 +2266,32 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
     return;
   }
 
-  // Usee has a routine directive.  If there's an enclosing loop construct,
-  // complain if it has a higher level of parallelism.
+  // Usee has a routine directive.  Record its level of parallelism on the
+  // directive stack.  If there's an enclosing loop construct, complain if the
+  // Usee doesn't have a lower level of parallelism.
+  ACCRoutineDeclAttr::PartitioningTy UseePart = UseeAttr->getPartitioning();
+  ACCPartitioningKind UseePartKind;
+  UseePartKind.setIndependentImplicit();
+  switch (UseePart) {
+  case ACCRoutineDeclAttr::Gang:
+    UseePartKind.setGang();
+    break;
+  case ACCRoutineDeclAttr::Worker:
+    UseePartKind.setWorker();
+    break;
+  case ACCRoutineDeclAttr::Vector:
+    UseePartKind.setVector();
+    break;
+  case ACCRoutineDeclAttr::Seq:
+    UseePartKind.setSeqExplicit();
+    break;
+  }
+  DirStack.setLoopPartitioning(UseePartKind, /*ForCurrentDir=*/false);
   OpenACCDirectiveKind LoopDirKind;
   SourceLocation LoopLoc;
   ACCPartitioningKind LoopPartKind =
       DirStack.getAncestorLoopPartitioning(LoopDirKind, LoopLoc,
                                            /*SkipCurrentDir=*/false);
-  ACCRoutineDeclAttr::PartitioningTy UseePart = UseeAttr->getPartitioning();
   ACCRoutineDeclAttr::PartitioningTy LoopPart;
   if (LoopPartKind.hasVectorClause())
     LoopPart = ACCRoutineDeclAttr::Vector;

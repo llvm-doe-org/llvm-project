@@ -269,11 +269,6 @@ Run-Time Environment Variables
     * For now, all three are ignored when combined with `auto` clause
       because, for now, `auto` produces a sequential loop.
     * Implicit `gang` clause
-        * This feature is not specified in OpenACC 2.7, but existing
-          OpenACC compilers implement it in some form.  Clacc attempts
-          to mimic their behavior, but some details might be
-          different.  See the "Semantic Clarifications" section in
-          `README-OpenACC-design.md` for details.
     * For now, if none of these clauses appear (explicitly or
       implicitly), then a sequential loop is produced.
 * The `collapse` clause is supported.

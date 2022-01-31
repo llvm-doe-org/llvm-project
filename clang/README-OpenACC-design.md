@@ -1224,18 +1224,16 @@ clarify these points in future versions of the OpenACC specification.
 
 ### Implicit Gang Clauses ###
 
-The OpenACC spec after 3.0 will introduce a specification of *imp*
-`gang` clauses to standardize a behavior of existing OpenACC
-implementations that is contrary to OpenACC 3.0 and earlier.  The
-relevant text was added by
-[PR#291](https://github.com/OpenACC/openacc-spec/pull/291).
+OpenACC 3.1 introduced a specification of *imp* `gang` clauses to
+standardize a behavior of existing OpenACC implementations that is
+contrary to OpenACC 3.0 and earlier.
 
 Like an *exp* `gang` clause, an *imp* `gang` clause converts a `loop`
 construct from gang-redundant mode to gang-partitioned mode.  Thus,
 the exact conditions for adding *imp* `gang` clauses are important for
 both performance portability and behavioral portability of OpenACC
-applications.  Below is a summary of the new specification plus notes
-on its rationale and on Clacc's implementation:
+applications.  Below is a summary of the specification plus notes on
+its rationale and on Clacc's implementation:
 
 * *imp* `gang` clauses are not yet specified for `acc kernels`
   constructs.  Notes:
@@ -1280,11 +1278,12 @@ on its rationale and on Clacc's implementation:
           remove this condition and state that the presence of both is
           the same as the presence of just one.
     * *exp* `gang` would be permitted.  Notes:
-        * Based on OpenACC 3.0, *exp* `gang` would not be permitted on
+        * Based on OpenACC 3.2, *exp* `gang` would not be permitted on
           any `acc loop` construct that has (a) an ancestor `acc loop`
           construct with *exp* `gang`, *exp* `worker`, or *exp*
-          `vector`, (b) *exp* `seq`, or (c) a nested `acc loop`
-          construct with *exp* `gang`.
+          `vector`, (b) *exp* `seq`, (c) a nested `acc loop` construct
+          with *exp* `gang`, or (d) an enclosed call to a function to
+          which an `acc routine gang` applies.
         * These restrictions are relaxed a bit for *imp* `gang`
           because `auto` conversions are performed first.  For
           example, an `acc loop auto gang` that becomes a sequential
@@ -1756,9 +1755,7 @@ following are true:
     * Actually, the placement of *imp* `gang` is already a step in
       this direction.  Unlike an *imp* `worker` or *imp* `vector`,
       it's necessitated due to the shift in semantics between
-      gang-redundant and gang-partitioned mode, and it is expected to
-      be specified more exactly by the OpenACC spec after 3.0.  See
-      "Implicit Gang Clauses" above for details.
+      gang-redundant and gang-partitioned mode.
 
 Clacc's current mapping of a sequential `acc loop` directive and its
 clauses to OpenMP is as follows:
