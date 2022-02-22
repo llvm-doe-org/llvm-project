@@ -2263,30 +2263,43 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
     }
     ImplicitRoutineDirInfo.addHostFunctionUse(getCurFunctionDecl(), Usee,
                                               UseLoc);
-    return;
   }
+}
+void Sema::ActOnCallExprForOpenACC(CallExpr *Call) {
+  if (OpenACCData->TransformingOpenACC)
+    return;
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  ImplicitRoutineDirInfoTy &ImplicitRoutineDirInfo =
+      OpenACCData->ImplicitRoutineDirInfo;
+  FunctionDecl *Callee = Call->getDirectCallee();
+  if (!Callee)
+    return;
+  ACCRoutineDeclAttr *CalleeAttr = Callee->getAttr<ACCRoutineDeclAttr>();
+  if (!CalleeAttr)
+    return;
+  SourceLocation CallLoc = Call->getExprLoc();
 
-  // Usee has a routine directive.  Record its level of parallelism on the
-  // directive stack.  If there's an enclosing loop construct, complain if the
-  // Usee doesn't have a lower level of parallelism.
-  ACCRoutineDeclAttr::PartitioningTy UseePart = UseeAttr->getPartitioning();
-  ACCPartitioningKind UseePartKind;
-  UseePartKind.setIndependentImplicit();
-  switch (UseePart) {
+  // Callee has a routine directive.  Record its level of parallelism on the
+  // directive stack.  If there's an enclosing loop construct, complain if
+  // Callee doesn't have a lower level of parallelism.
+  ACCRoutineDeclAttr::PartitioningTy CalleePart = CalleeAttr->getPartitioning();
+  ACCPartitioningKind CalleePartKind;
+  CalleePartKind.setIndependentImplicit();
+  switch (CalleePart) {
   case ACCRoutineDeclAttr::Gang:
-    UseePartKind.setGang();
+    CalleePartKind.setGang();
     break;
   case ACCRoutineDeclAttr::Worker:
-    UseePartKind.setWorker();
+    CalleePartKind.setWorker();
     break;
   case ACCRoutineDeclAttr::Vector:
-    UseePartKind.setVector();
+    CalleePartKind.setVector();
     break;
   case ACCRoutineDeclAttr::Seq:
-    UseePartKind.setSeqExplicit();
+    CalleePartKind.setSeqExplicit();
     break;
   }
-  DirStack.setLoopPartitioning(UseePartKind, /*ForCurrentDir=*/false);
+  DirStack.setLoopPartitioning(CalleePartKind, /*ForCurrentDir=*/false);
   OpenACCDirectiveKind LoopDirKind;
   SourceLocation LoopLoc;
   ACCPartitioningKind LoopPartKind =
@@ -2302,59 +2315,59 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
   else
     LoopPart = ACCRoutineDeclAttr::Seq;
   if (LoopPart != ACCRoutineDeclAttr::Seq) {
-    if (LoopPart <= UseePart) {
-      Diag(UseLoc, diag::err_acc_routine_loop_par_level)
+    if (LoopPart <= CalleePart) {
+      Diag(CallLoc, diag::err_acc_routine_loop_par_level)
           << getOpenACCName(LoopDirKind)
           << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(LoopPart)
-          << Usee->getName()
-          << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(UseePart);
+          << Callee->getName()
+          << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
       Diag(LoopLoc, diag::note_acc_enclosing_directive)
           << getOpenACCName(LoopDirKind);
-      ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Usee);
+      ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Callee);
     }
     return;
   }
 
-  // Usee has a routine directive, and there's no enclosing loop construct.  If
-  // there's an enclosing compute construct, any level of parallelism for Usee
-  // is compatible.
+  // Callee has a routine directive, and there's no enclosing loop construct.
+  // If there's an enclosing compute construct, any level of parallelism for
+  // Callee is compatible.
   if (isOpenACCComputeDirective(DirStack.isInComputeRegion()))
     return;
 
-  // Usee has a routine directive, and there's no enclosing loop or compute
-  // construct.  If User has no routine directive yet, record a diagnostic if
-  // User has a higher level of parallelism than seq, to be emitted if a routine
-  // seq directive is implied for User later.
-  FunctionDecl *User = getCurFunctionDecl();
-  assert(User && "expected function use to be in a function");
-  ACCRoutineDeclAttr *UserAttr = User->getAttr<ACCRoutineDeclAttr>();
-  if (!UserAttr) {
-    if (UseePart > ACCRoutineDeclAttr::Seq) {
-      DiagIfRoutineDir(ImplicitRoutineDirInfo, User, UseLoc,
+  // Callee has a routine directive, and there's no enclosing loop or compute
+  // construct.  If Caller has no routine directive yet, record a diagnostic if
+  // Callee has a higher level of parallelism than seq, to be emitted if a
+  // routine seq directive is implied for Caller later.
+  FunctionDecl *Caller = getCurFunctionDecl();
+  assert(Caller && "expected function use to be in a function");
+  ACCRoutineDeclAttr *CallerAttr = Caller->getAttr<ACCRoutineDeclAttr>();
+  if (!CallerAttr) {
+    if (CalleePart > ACCRoutineDeclAttr::Seq) {
+      DiagIfRoutineDir(ImplicitRoutineDirInfo, Caller, CallLoc,
                        diag::err_acc_routine_func_par_level)
-          << User->getName()
+          << Caller->getName()
           << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(
                  ACCRoutineDeclAttr::Seq)
-          << Usee->getName()
-          << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(UseePart);
+          << Callee->getName()
+          << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
       ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(
-          Usee, /*PreviousDir=*/false, /*IfRoutineDirFor=*/User);
+          Callee, /*PreviousDir=*/false, /*IfRoutineDirFor=*/Caller);
     }
     return;
   }
 
-  // Usee and User have routine directives, and there's no enclosing loop or
-  // compute construct.  Complain if User has a lower level of parallelism than
-  // Usee.
-  ACCRoutineDeclAttr::PartitioningTy UserPart = UserAttr->getPartitioning();
-  if (UserPart < UseePart) {
-    Diag(UseLoc, diag::err_acc_routine_func_par_level)
-        << User->getName()
-        << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(UserPart)
-        << Usee->getName()
-        << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(UseePart);
-    ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(User);
-    ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Usee);
+  // Callee and Caller have routine directives, and there's no enclosing loop or
+  // compute construct.  Complain if Caller has a lower level of parallelism
+  // than Callee.
+  ACCRoutineDeclAttr::PartitioningTy CallerPart = CallerAttr->getPartitioning();
+  if (CallerPart < CalleePart) {
+    Diag(CallLoc, diag::err_acc_routine_func_par_level)
+        << Caller->getName()
+        << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CallerPart)
+        << Callee->getName()
+        << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
+    ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Caller);
+    ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Callee);
   }
 }
 void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {

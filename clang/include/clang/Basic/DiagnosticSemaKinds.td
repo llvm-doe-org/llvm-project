@@ -11002,10 +11002,10 @@ def note_acc_routine_use : Note<
 def note_acc_routine_use_lost : Note<
   "cannot report locations of uses of function '%0' due to previous errors">;
 def err_acc_routine_loop_par_level : Error<
-  "'#pragma acc %0 %1' construct uses function '%2', which has '#pragma acc "
+  "'#pragma acc %0 %1' construct calls function '%2', which has '#pragma acc "
   "routine %3'">;
 def err_acc_routine_func_par_level : Error<
-  "function '%0' has '#pragma acc routine %1' but uses function '%2', which "
+  "function '%0' has '#pragma acc routine %1' but calls function '%2', which "
   "has '#pragma acc routine %3'">;
 // "previous" is used to contrast with a more recent routine directive.
 def note_acc_routine_explicit : Note<

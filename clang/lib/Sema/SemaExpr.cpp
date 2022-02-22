@@ -6419,6 +6419,11 @@ ExprResult Sema::ActOnCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
     Call = ActOnOpenMPCall(Call, Scope, LParenLoc, ArgExprs, RParenLoc,
                            ExecConfig);
 
+  if (LangOpts.OpenACC) {
+    if (CallExpr *CE = dyn_cast<CallExpr>(Call.get()))
+      ActOnCallExprForOpenACC(CE);
+  }
+
   return Call;
 }
 

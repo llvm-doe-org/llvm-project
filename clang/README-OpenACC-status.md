@@ -328,7 +328,8 @@ Run-Time Environment Variables
       diagnostic is produced.
     * Compile-time error diagnostics are produced if a function's
       level of parallelism is incompatible with any `loop` construct
-      or function enclosing a use.
+      or function enclosing a call.  An incompatible level of parallelism is not
+      diagnosed if a function's address is stored and called later.
 * Other clauses
     * No other clauses are supported yet.
     * Specifying a name is not yet supported, so an immediately
