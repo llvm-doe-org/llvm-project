@@ -106,8 +106,8 @@ $ make install
 ```
 $ cd $LLVM_GIT_DIR
 $ mkdir build && cd build
-$ module load cmake/3.19.2 gnu/9.2.0 nvhpc/21.2
-$ PATH=/opt/nvidia/hpc_sdk/Linux_ppc64le/21.2/cuda/11.0/bin:$PATH
+$ module load cmake/3.19.2 gnu/9.2.0 nvhpc/22.2
+$ PATH=/opt/nvidia/hpc_sdk/Linux_ppc64le/22.2/cuda/11.6/bin:$PATH
 $ cmake -DCMAKE_INSTALL_PREFIX=../install    \
         -DCMAKE_BUILD_TYPE=Release           \
         -DLLVM_ENABLE_PROJECTS=clang         \
