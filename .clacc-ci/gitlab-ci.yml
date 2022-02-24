@@ -110,6 +110,7 @@ stages:
     LIT_NPROC_DIVISOR: 1
     LIT_XFAIL:
       "
+      LLVM :: Bindings/Go/go.test
       libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
       libomptarget :: nvptx64-nvidia-cuda-newRTL :: offloading/bug49334.cpp
       "
