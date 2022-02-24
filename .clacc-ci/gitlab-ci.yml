@@ -170,8 +170,12 @@ stages:
     LLVM_ENABLE_RUNTIMES: "openmp"
     CPU_TRIPLE: "x86_64-pc-linux-gnu"
     CPU_COUNT:  4
-    LIT_XFAIL: ""
-    LIT_XFAIL_NOT: ""
+    LIT_XFAIL:
+      "
+      LLVM :: Bindings/Go/go.test
+      "
+    LIT_XFAIL_NOT:
+      ""
 
 .no-asserts:
   extends: [.kold]
@@ -180,6 +184,7 @@ stages:
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=False
     LIT_XFAIL:
       "
+      LLVM :: Bindings/Go/go.test
       Clang :: Headers/wasm.c
       LLVM :: Analysis/CostModel/X86/interleaved-store-accesses-with-gaps.ll
       "
@@ -193,6 +198,7 @@ stages:
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Debug
     LIT_XFAIL:
       "
+      LLVM :: Bindings/Go/go.test
       libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
