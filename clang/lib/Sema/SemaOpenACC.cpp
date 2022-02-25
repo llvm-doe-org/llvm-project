@@ -1757,50 +1757,30 @@ bool Sema::StartOpenACCAssociatedStatement() {
         LoopKind.setVector();
     }
 
-    // Validate partitioning level against parent.
-    OpenACCDirectiveKind ParentDKind;
-    SourceLocation ParentLoopLoc;
-    ACCPartitioningKind ParentLoopKind =
-        OpenACCData->DirStack.getAncestorLoopPartitioning(
-            ParentDKind, ParentLoopLoc, /*SkipCurrentDir=*/true);
-    if (ParentLoopKind.hasGangClause() && LoopKind.hasGangClause()) {
-      // OpenACC 2.6, sec. 2.9.2:
-      // "The region of a loop with the gang clause may not contain another
-      // loop with the gang clause unless within a nested compute region."
-      Diag(StartLoc, diag::err_acc_loop_bad_nested_partitioning)
-          << getOpenACCName(ParentDKind) << "gang"
-          << getOpenACCName(DKind) << "gang";
-      Diag(ParentLoopLoc, diag::note_acc_enclosing_directive)
-          << getOpenACCName(ParentDKind);
-      ErrorFound = true;
-    }
-    else if (ParentLoopKind.hasWorkerClause() &&
-             (LoopKind.hasGangClause() || LoopKind.hasWorkerClause())) {
-      // OpenACC 2.6, sec. 2.9.3:
-      // "The region of a loop with the worker clause may not contain a loop
-      // with a gang or worker clause unless within a nested compute region."
-      Diag(StartLoc, diag::err_acc_loop_bad_nested_partitioning)
-          << getOpenACCName(ParentDKind) << "worker" << getOpenACCName(DKind)
-          << (LoopKind.hasGangClause() ? "gang" : "worker");
-      Diag(ParentLoopLoc, diag::note_acc_enclosing_directive)
-          << getOpenACCName(ParentDKind);
-      ErrorFound = true;
-    }
-    else if (ParentLoopKind.hasVectorClause() &&
-             (LoopKind.hasGangClause() || LoopKind.hasWorkerClause() ||
-              LoopKind.hasVectorClause())) {
-      // OpenACC 2.6, sec. 2.9.4:
-      // "The region of a loop with the vector clause may not contain a loop
-      // with the gang, worker, or vector clause unless within a nested compute
-      // region."
-      Diag(StartLoc, diag::err_acc_loop_bad_nested_partitioning)
-          << getOpenACCName(ParentDKind) << "vector" << getOpenACCName(DKind)
-          << (LoopKind.hasGangClause()
-                  ? "gang"
-                  : LoopKind.hasWorkerClause() ? "worker" : "vector");
-      Diag(ParentLoopLoc, diag::note_acc_enclosing_directive)
-          << getOpenACCName(ParentDKind);
-      ErrorFound = true;
+    // Check any level-of-parallelism clause against any parent loop construct.
+    ACCRoutineDeclAttr::PartitioningTy LoopLevel =
+        LoopKind.getMaxParallelismLevel();
+    if (LoopLevel != ACCRoutineDeclAttr::Seq) {
+      OpenACCDirectiveKind ParentDKind;
+      SourceLocation ParentLoopLoc;
+      ACCRoutineDeclAttr::PartitioningTy ParentLoopLevel =
+          OpenACCData->DirStack.getAncestorLoopPartitioning(
+              ParentDKind, ParentLoopLoc, /*SkipCurrentDir=*/true)
+              .getMinParallelismLevel();
+      if (ParentLoopLevel != ACCRoutineDeclAttr::Seq) {
+        // There's a parent loop with a level-of-parallelism clause.  Complain
+        // if it's incompatible.
+        if (ParentLoopLevel <= LoopLevel) {
+          Diag(StartLoc, diag::err_acc_loop_loop_par_level)
+              << getOpenACCName(ParentDKind)
+              << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(ParentLoopLevel)
+              << getOpenACCName(DKind)
+              << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(LoopLevel);
+          Diag(ParentLoopLoc, diag::note_acc_enclosing_directive)
+              << getOpenACCName(ParentDKind);
+          ErrorFound = true;
+        }
+      }
     }
 
     // TODO: For now, we prescriptively map auto to sequential execution, but
@@ -2302,18 +2282,10 @@ void Sema::ActOnCallExprForOpenACC(CallExpr *Call) {
   DirStack.setLoopPartitioning(CalleePartKind, /*ForCurrentDir=*/false);
   OpenACCDirectiveKind LoopDirKind;
   SourceLocation LoopLoc;
-  ACCPartitioningKind LoopPartKind =
+  ACCRoutineDeclAttr::PartitioningTy LoopPart =
       DirStack.getAncestorLoopPartitioning(LoopDirKind, LoopLoc,
-                                           /*SkipCurrentDir=*/false);
-  ACCRoutineDeclAttr::PartitioningTy LoopPart;
-  if (LoopPartKind.hasVectorClause())
-    LoopPart = ACCRoutineDeclAttr::Vector;
-  else if (LoopPartKind.hasWorkerClause())
-    LoopPart = ACCRoutineDeclAttr::Worker;
-  else if (LoopPartKind.hasGangClause())
-    LoopPart = ACCRoutineDeclAttr::Gang;
-  else
-    LoopPart = ACCRoutineDeclAttr::Seq;
+                                           /*SkipCurrentDir=*/false)
+      .getMinParallelismLevel();
   if (LoopPart != ACCRoutineDeclAttr::Seq) {
     if (LoopPart <= CalleePart) {
       Diag(CallLoc, diag::err_acc_routine_loop_par_level)

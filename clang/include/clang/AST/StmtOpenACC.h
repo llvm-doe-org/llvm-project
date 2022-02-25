@@ -15,6 +15,7 @@
 #ifndef LLVM_CLANG_AST_STMTOPENACC_H
 #define LLVM_CLANG_AST_STMTOPENACC_H
 
+#include "clang/AST/Attr.h"
 #include "clang/AST/DirectiveStmt.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/OpenACCClause.h"
@@ -696,6 +697,30 @@ public:
   /// Does the loop have a vector clause?  True does not necessarily indicate
   /// vector-partitioning, depending on the determination of any auto clause.
   bool hasVectorClause() const { return Vector; }
+  /// Return either gang, worker, or vector (in that order of preference) if the
+  /// loop has that clause.  Otherwise, return seq (which does not indicate the
+  /// loop necessarily has a seq clause).
+  ACCRoutineDeclAttr::PartitioningTy getMaxParallelismLevel() const {
+    if (hasGangClause())
+      return ACCRoutineDeclAttr::Gang;
+    if (hasWorkerClause())
+      return ACCRoutineDeclAttr::Worker;
+    if (hasVectorClause())
+      return ACCRoutineDeclAttr::Vector;
+    return ACCRoutineDeclAttr::Seq;
+  }
+  /// Return either vector, worker, or gang (in that order of preference) if the
+  /// loop has that clause.  Otherwise, return seq (which does not indicate the
+  /// loop necessarily has a seq clause).
+  ACCRoutineDeclAttr::PartitioningTy getMinParallelismLevel() const {
+    if (hasVectorClause())
+      return ACCRoutineDeclAttr::Vector;
+    if (hasWorkerClause())
+      return ACCRoutineDeclAttr::Worker;
+    if (hasGangClause())
+      return ACCRoutineDeclAttr::Gang;
+    return ACCRoutineDeclAttr::Seq;
+  }
 
   /// Does the loop have gang partitioning?  Must not be called before
   /// converting any auto clause to seq or independent.
