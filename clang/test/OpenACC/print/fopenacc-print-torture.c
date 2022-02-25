@@ -1,7 +1,7 @@
 // This test checks -fopenacc-print output for no preprocessor expansion,
 // layout preservation, and exact formatting for many cases that are special
 // to -fopenacc-print but not so much to -fopenacc-ast-print.  Cases that cannot
-// be rewritten are checked in fopenacc-print-messages.c instead.
+// be rewritten are checked in diagnostics/fopenacc-print.c instead.
 
 // Strip comments and blank lines so checking -fopenacc-print output is easier.
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' > %t-acc.c
@@ -254,7 +254,7 @@ void dirOnlyRewriteDirDiscard() {
 // statement is actually for its last token or the token before that, whether
 // each of those tokens is represented by any descendant node, and whether
 // each of those tokens is part of a macro expansion.
-// fopenacc-print-messages.c covers macro expansion cases that cannot be
+// diagnostics/fopenacc-print.c covers macro expansion cases that cannot be
 // handled and so produce error diagnostics.
 //
 // FIXME: In the cases of macro expansions within associated statements, the

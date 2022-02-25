@@ -168,7 +168,7 @@ int main() {
   //--------------------------------------------------
   // Variable clauses: syntax
   //
-  // Parsing of variable clauses is checked thoroughly in parallel-messages.c
+  // Parsing of variable clauses is checked thoroughly in diagnostics/parallel.c
   // for data clauses, so just check a cross section of cases here to confirm it
   // works for the update directive's variable clauses.
   //--------------------------------------------------

@@ -2330,7 +2330,7 @@ void fn() {
 
   // Conflicting predetermined private (for loop control variables).
   //
-  // parallel-messages.c checks conflicts with explicit private.
+  // diagnostics/parallel.c checks conflicts with explicit private.
   //
   // Reductions for loop control variables are a separate restriction and are
   // checked above.

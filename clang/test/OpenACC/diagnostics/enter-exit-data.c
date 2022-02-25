@@ -240,7 +240,7 @@ int main() {
   //--------------------------------------------------
   // Data clauses: syntax
   //
-  // Parsing of data clauses is checked thoroughly in parallel-messages.c, so
+  // Parsing of data clauses is checked thoroughly in diagnostics/parallel.c, so
   // just check a cross section of cases here to confirm it works for the enter
   // data and exit data directives' data clauses.
   //--------------------------------------------------

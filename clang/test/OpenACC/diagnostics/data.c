@@ -139,8 +139,9 @@ int main() {
   //--------------------------------------------------
   // Data clauses: syntax
   //
-  // These clauses are checked thoroughly in parallel-messages.c, so just check
-  // a cross section of cases here to confirm it works for the data directive.
+  // These clauses are checked thoroughly in diagnostics/parallel.c, so just
+  // check a cross section of cases here to confirm it works for the data
+  // directive.
   //--------------------------------------------------
 
   // expected-error@+2 {{expected '(' after 'present'}}
@@ -201,8 +202,9 @@ int main() {
   //--------------------------------------------------
   // Data clauses: arg semantics
   //
-  // These clauses are checked thoroughly in parallel-messages.c, so just check
-  // a cross section of cases here to confirm it works for the data directive.
+  // These clauses are checked thoroughly in diagnostics/parallel.c, so just
+  // check a cross section of cases here to confirm it works for the data
+  // directive.
   //--------------------------------------------------
 
   // expected-error@+2 {{use of undeclared identifier 'foo'}}
