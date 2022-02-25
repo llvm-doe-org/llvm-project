@@ -1764,8 +1764,9 @@ bool Sema::StartOpenACCAssociatedStatement() {
       OpenACCDirectiveKind ParentDKind;
       SourceLocation ParentLoopLoc;
       ACCRoutineDeclAttr::PartitioningTy ParentLoopLevel =
-          OpenACCData->DirStack.getAncestorLoopPartitioning(
-              ParentDKind, ParentLoopLoc, /*SkipCurrentDir=*/true)
+          OpenACCData->DirStack
+              .getAncestorLoopPartitioning(ParentDKind, ParentLoopLoc,
+                                           /*SkipCurrentDir=*/true)
               .getMinParallelismLevel();
       if (ParentLoopLevel != ACCRoutineDeclAttr::Seq) {
         // There's a parent loop with a level-of-parallelism clause.  Complain
@@ -2283,9 +2284,10 @@ void Sema::ActOnCallExprForOpenACC(CallExpr *Call) {
   OpenACCDirectiveKind LoopDirKind;
   SourceLocation LoopLoc;
   ACCRoutineDeclAttr::PartitioningTy LoopPart =
-      DirStack.getAncestorLoopPartitioning(LoopDirKind, LoopLoc,
-                                           /*SkipCurrentDir=*/false)
-      .getMinParallelismLevel();
+      DirStack
+          .getAncestorLoopPartitioning(LoopDirKind, LoopLoc,
+                                       /*SkipCurrentDir=*/false)
+          .getMinParallelismLevel();
   if (LoopPart != ACCRoutineDeclAttr::Seq) {
     if (LoopPart <= CalleePart) {
       Diag(CallLoc, diag::err_acc_routine_loop_par_level)
