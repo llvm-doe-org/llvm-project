@@ -1,105 +1,20 @@
 // Check private clause on "acc loop" and on "acc parallel loop".
 //
-// Abbreviations:
-//   A      = OpenACC
-//   AO     = commented OpenMP is printed after OpenACC
-//   O      = OpenMP
-//   OA     = commented OpenACC is printed after OpenMP
-//   AIMP   = OpenACC implicit independent
-//   ASEQ   = OpenACC seq clause
-//   AG     = OpenACC gang clause
-//   AW     = OpenACC worker clause
-//   AV     = OpenACC vector clause
-//   OPRG   = OpenACC pragma translated to OpenMP pragma
-//   OPLC   = OPRG but any assigned loop control var becomes declared private
-//            in an enclosing compound statement
-//   OSEQ   = OpenACC loop seq discarded in translation to OpenMP
-//   GREDUN = gang redundancy
+// For each case, we check every possible loop partitioning:
+// - seq
+// - gang (explicit)
+// - gang (implicit), worker
+// - gang (implicit), vector
+// - gang (implicit), worker, vector
 //
-//   accc   = OpenACC clauses
-//   ompdd  = OpenMP directive dump
-//   ompdp  = OpenMP directive print
-//   ompdk  = OpenMP directive kind (OPRG, OPLC, or OSEQ)
-//   dmp    = additional FileCheck prefixes for dump
-//   exe    = additional FileCheck prefixes for execution
+// The choices of explicit vs. implicit gang clauses above seem reasonable to
+// check that the analyses see both while not requiring us to duplicate all
+// gang loop partitionings checks, which would nearly double the size of the
+// test file.
 
-// RUN: %data loop-clauses {
-// RUN:   (accc=seq
-// RUN:    ompdd=
-// RUN:    ompdp=
-// RUN:    ompdk=OSEQ
-// RUN:    dmp=ASEQ
-// RUN:    run-if-not-worker=
-// RUN:    exe=GREDUN)
-// RUN:   (accc=gang
-// RUN:    ompdd=OMPDistributeDirective
-// RUN:    ompdp=distribute
-// RUN:    ompdk=OPRG
-// RUN:    dmp=AIMP,AG
-// RUN:    run-if-not-worker=
-// RUN:    exe=)
-// RUN:   (accc=worker
-// RUN:    ompdd=OMPDistributeParallelForDirective
-// RUN:    ompdp='distribute parallel for'
-// RUN:    ompdk=OPRG
-// RUN:    dmp=AIMP,AGIMP,AW
-// RUN:    run-if-not-worker=': "Skipping worker loops:"'
-// RUN:    exe=)
-// RUN:   (accc=vector
-// RUN:    ompdd=OMPDistributeSimdDirective
-// RUN:    ompdp='distribute simd'
-// RUN:    ompdk=OPLC
-// RUN:    dmp=AIMP,AGIMP,AV
-// RUN:    run-if-not-worker=
-// RUN:    exe=)
-// RUN:   (accc='gang worker'
-// RUN:    ompdd=OMPDistributeParallelForDirective
-// RUN:    ompdp='distribute parallel for'
-// RUN:    ompdk=OPRG
-// RUN:    dmp=AIMP,AG,AW
-// RUN:    run-if-not-worker=': "Skipping worker loops:"'
-// RUN:    exe=)
-// RUN:   (accc='gang vector'
-// RUN:    ompdd=OMPDistributeSimdDirective
-// RUN:    ompdp='distribute simd'
-// RUN:    ompdk=OPLC
-// RUN:    dmp=AIMP,AG,AV
-// RUN:    run-if-not-worker=
-// RUN:    exe=)
-// RUN:   (accc='worker vector'
-// RUN:    ompdd=OMPDistributeParallelForSimdDirective
-// RUN:    ompdp='distribute parallel for simd'
-// RUN:    ompdk=OPLC
-// RUN:    dmp=AIMP,AGIMP,AW,AV
-// RUN:    run-if-not-worker=': "Skipping worker loops:"'
-// RUN:    exe=)
-// RUN:   (accc='gang worker vector'
-// RUN:    ompdd=OMPDistributeParallelForSimdDirective
-// RUN:    ompdp='distribute parallel for simd'
-// RUN:    ompdk=OPLC
-// RUN:    dmp=AIMP,AG,AW,AV
-// RUN:    run-if-not-worker=': "Skipping worker loops:"'
-// RUN:    exe=)
-// RUN: }
-
-// FIXME: amdgcn misbehaves with worker partitioning, so skip it there for now.
-//
-// RUN: %for loop-clauses {
-// RUN:   %acc-check-dmp{                                                      \
-// RUN:     clang-args: -DACCC=%'accc';                                        \
-// RUN:     fc-args:    -DOMPDD=%[ompdd];                                      \
-// RUN:     fc-pres:    %[ompdk],%[dmp]}
-// RUN:   %acc-check-prt{                                                      \
-// RUN:     clang-args: -DACCC=%'accc';                                        \
-// RUN:     fc-args:    -DACCC=' '%'accc' -DOMPDP=%'ompdp';                    \
-// RUN:     fc-pres:    %[ompdk]}
-// RUN:   %acc-check-exe{                                                      \
-// RUN:     clang-args: -DACCC=%'accc';                                        \
-// RUN:     exe-args:    ;                                                     \
-// RUN:     fc-args:     ;                                                     \
-// RUN:     fc-pres:     %[exe];                                               \
-// RUN:     cmd-start:   %if-tgt-amdgcn<%[run-if-not-worker]|>}
-// RUN: }
+// RUN: %acc-check-dmp{}
+// RUN: %acc-check-prt{}
+// RUN: %acc-check-exe{}
 
 // END.
 
@@ -125,228 +40,542 @@ int tentativeDef;
 
 // PRT-NEXT: int main() {
 int main() {
+  //----------------------------------------------------------------------------
+  // Check loop private for scalar that is local to enclosing "acc parallel".
+  //----------------------------------------------------------------------------
 
-  //--------------------------------------------------
-  // Check private for scalar that is local to enclosing "acc parallel".
-  //--------------------------------------------------
-
-  // PRT-NEXT: printf
-  // EXE: parallel-local loop-private scalar
+  // DMP-LABEL: StringLiteral {{.*}} "parallel-local loop-private scalar\n"
+  // PRT-LABEL: printf("parallel-local loop-private scalar\n");
+  // EXE-LABEL: parallel-local loop-private scalar
   printf("parallel-local loop-private scalar\n");
-  // PRT-A-NEXT:  #pragma acc parallel
+
+  //  PRT-A-NEXT: #pragma acc parallel
   // PRT-AO-NEXT: // #pragma omp target teams
-  // PRT-O-NEXT:  #pragma omp target teams
+  //  PRT-O-NEXT: #pragma omp target teams
   // PRT-OA-NEXT: // #pragma acc parallel
+  //    PRT-NEXT: {
   #pragma acc parallel num_gangs(2)
-  // PRT-NEXT: {
   {
-    // PRT: int i = 99;
+    // PRT-NEXT: int i = 99;
     int i = 99;
-    // DMP:           ACCLoopDirective
-    // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:      <implicit>
-    // DMP-AG-NEXT:     ACCGangClause
-    // DMP-AW-NEXT:     ACCWorkerClause
-    // DMP-AV-NEXT:     ACCVectorClause
-    // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-    // DMP-AGIMP-NEXT:  ACCGangClause {{.*}} <implicit>
-    // DMP-OPRG-NEXT:   impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:     OMPPrivateClause
-    // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPRG:          ForStmt
-    // DMP-OPLC-NEXT:   impl: [[OMPDD]]
-    // DMP-OPLC-NEXT:     OMPPrivateClause
-    // DMP-OPLC-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPLC:          ForStmt
-    // DMP-OSEQ-NEXT:   impl: CompoundStmt
-    // DMP-OSEQ-NEXT:     DeclStmt
-    // DMP-OSEQ-NEXT:       VarDecl {{.*}} i 'int'
-    // DMP-OSEQ-NEXT:     ForStmt
+
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCSeqClause
+    //  DMP-NOT:     <implicit>
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   impl: CompoundStmt
+    // DMP-NEXT:     DeclStmt
+    // DMP-NEXT:       VarDecl {{.*}} i 'int'
+    // DMP-NEXT:     ForStmt
     //
-    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
-    // PRT-A-AST-NEXT:   {{^ *}}#pragma acc loop[[ACCC]] private(i){{$}}
-    // PRT-A-SRC-NEXT:   {{^ *}}#pragma acc loop ACCC private(i){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-A-NEXT:       for (int j = 0; j < 2; ++j) {
-    // PRT-A-NEXT:         i = j;
-    // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
-    // PRT-A-NEXT:       }
-    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OSEQ-NEXT: // {
-    // PRT-AO-OSEQ-NEXT: //   int i;
-    // PRT-AO-OSEQ-NEXT: //   for (int j = 0; j < 2; ++j) {
-    // PRT-AO-OSEQ-NEXT: //     i = j;
-    // PRT-AO-OSEQ-NEXT: //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OSEQ-NEXT: //   }
-    // PRT-AO-OSEQ-NEXT: // }
-    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop seq private(i){{$}}
+    //  PRT-A-NEXT: for (int j = 0; j < 2; ++j) {
+    //  PRT-A-NEXT:   i = j;
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   for (int j = 0; j < 2; ++j) {
+    // PRT-AO-NEXT: //     i = j;
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
     //
-    // PRT-OA-OSEQ-NEXT:      // v----------OMP----------v
-    // PRT-O-OPRG-NEXT:       {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-O-OPLC-NEXT:       {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-OA-AST-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(i){{$}}
-    // PRT-OA-AST-OPLC-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OPRG-NEXT: {{^ *}}// #pragma acc loop ACCC private(i){{$}}
-    // PRT-OA-SRC-OPLC-NEXT: {{^ *}}// #pragma acc loop ACCC private(i){{$}}
-    // PRT-O-OSEQ-NEXT:      {
-    // PRT-O-OSEQ-NEXT:        int i;
-    // PRT-O-NEXT:             for (int j = 0; j < 2; ++j) {
-    // PRT-O-NEXT:               i = j;
-    // PRT-O-NEXT:               {{TGT_PRINTF|printf}}
-    // PRT-O-NEXT:             }
-    // PRT-O-OSEQ-NEXT:      }
-    // PRT-OA-OSEQ-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OSEQ-NEXT: // #pragma acc loop ACCC private(i){{$}}
-    // PRT-OA-OSEQ-NEXT:     // for (int j = 0; j < 2; ++j) {
-    // PRT-OA-OSEQ-NEXT:     //   i = j;
-    // PRT-OA-OSEQ-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OSEQ-NEXT:     // }
-    // PRT-OA-OSEQ-NEXT:     // ^----------ACC----------^
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   for (int j = 0; j < 2; ++j) {
+    //  PRT-O-NEXT:     i = j;
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc loop seq private(i){{$}}
+    // PRT-OA-NEXT: // for (int j = 0; j < 2; ++j) {
+    // PRT-OA-NEXT: //   i = j;
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
     //
-    // PRT-NOACC-NEXT:   for (int j = 0; j < 2; ++j) {
-    // PRT-NOACC-NEXT:     i = j;
-    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
-    // PRT-NOACC-NEXT:   }
-    #pragma acc loop ACCC private(i)
+    // PRT-NOACC-NEXT: for (int j = 0; j < 2; ++j) {
+    // PRT-NOACC-NEXT:   i = j;
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, seq: in loop: 1
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, seq: in loop: 1
+    #pragma acc loop seq private(i)
     for (int j = 0; j < 2; ++j) {
       i = j;
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 0
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 1
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 0
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 1
-      TGT_PRINTF("in loop: %d\n", i);
+      TGT_PRINTF("parallel-local loop-private scalar, seq: in loop: %d\n", i);
     }
-    // PRT-NEXT:      {{TGT_PRINTF|printf}}
-    // EXE-TGT-USE-STDIO-DAG: after loop: 99
-    // EXE-TGT-USE-STDIO-DAG: after loop: 99
-    TGT_PRINTF("after loop: %d\n", i);
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, seq: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, seq: after loop: 99
+    TGT_PRINTF("parallel-local loop-private scalar, seq: after loop: %d\n", i);
+
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCGangClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop gang private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang private(i){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   i = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, gang: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, gang: in loop: 1
+    #pragma acc loop gang private(i)
+    for (int j = 0; j < 2; ++j) {
+      i = j;
+      TGT_PRINTF("parallel-local loop-private scalar, gang: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, gang: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, gang: after loop: 99
+    TGT_PRINTF("parallel-local loop-private scalar, gang: after loop: %d\n", i);
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeParallelForDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker private(i){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   i = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, worker: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, worker: in loop: 1
+    #pragma acc loop worker private(i)
+    for (int j = 0; j < 2; ++j) {
+      i = j;
+      TGT_PRINTF("parallel-local loop-private scalar, worker: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, worker: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, worker: after loop: 99
+    TGT_PRINTF("parallel-local loop-private scalar, worker: after loop: %d\n", i);
+// PRT-SRC-NEXT: #endif
+#endif
+
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeSimdDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop vector private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute simd private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector private(i){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   i = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, vector: in loop: 1
+    #pragma acc loop vector private(i)
+    for (int j = 0; j < 2; ++j) {
+      i = j;
+      TGT_PRINTF("parallel-local loop-private scalar, vector: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, vector: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, vector: after loop: 99
+    TGT_PRINTF("parallel-local loop-private scalar, vector: after loop: %d\n", i);
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeParallelForSimdDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker vector private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector private(i){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   i = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, worker vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, worker vector: in loop: 1
+    #pragma acc loop worker vector private(i)
+    for (int j = 0; j < 2; ++j) {
+      i = j;
+      TGT_PRINTF("parallel-local loop-private scalar, worker vector: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, worker vector: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, worker vector: after loop: 99
+    TGT_PRINTF("parallel-local loop-private scalar, worker vector: after loop: %d\n", i);
+// PRT-SRC-NEXT: #endif
+#endif
   } // PRT-NEXT: }
 
-  // Repeat that but for "acc parallel loop", so scalar would be firstprivate
-  // instead of local for effective enclosing "acc parallel".  However, it's
-  // not firstprivate because the private clause means the original is never
-  // actually referenced.
+  //----------------------------------------------------------------------------
+  // Repeat that, but the scalar is local to an enclosing "acc parallel loop"
+  // instead.  The scalar would be firstprivate instead of local for the
+  // effective enclosing "acc parallel", but it's not firstprivate because the
+  // private clause means the original is never actually referenced.
+  //----------------------------------------------------------------------------
 
-  // PRT-NEXT: printf
-  // EXE-NEXT: parallel-would-be-firstprivate loop-private scalar
+  // DMP-LABEL: StringLiteral {{.*}} "parallel-would-be-firstprivate loop-private scalar\n"
+  // PRT-LABEL: printf("parallel-would-be-firstprivate loop-private scalar\n");
+  // EXE-LABEL: parallel-would-be-firstprivate loop-private scalar
   printf("parallel-would-be-firstprivate loop-private scalar\n");
+
   // PRT-NEXT: {
   {
     // PRT-NEXT: int i = 99;
     int i = 99;
-    // DMP:           ACCParallelLoopDirective
-    // DMP-NEXT:        ACCNumGangsClause
-    // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
-    // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:      <implicit>
-    // DMP-AG-NEXT:     ACCGangClause
-    // DMP-AW-NEXT:     ACCWorkerClause
-    // DMP-AV-NEXT:     ACCVectorClause
-    // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
-    // DMP:             effect: ACCParallelDirective
-    // DMP-NEXT:          ACCNumGangsClause
-    // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:          impl: OMPTargetTeamsDirective
-    // DMP-NEXT:            OMPNum_teamsClause
-    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 2
-    // DMP:               ACCLoopDirective
-    // DMP-ASEQ-NEXT:       ACCSeqClause
-    // DMP-ASEQ-NOT:          <implicit>
-    // DMP-AG-NEXT:         ACCGangClause
-    // DMP-AW-NEXT:         ACCWorkerClause
-    // DMP-AV-NEXT:         ACCVectorClause
-    // DMP-NEXT:            ACCPrivateClause
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-    // DMP-AGIMP-NEXT:      ACCGangClause {{.*}} <implicit>
-    // DMP-OPRG-NEXT:       impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:         OMPPrivateClause
-    // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPRG:              ForStmt
-    // DMP-OPLC-NEXT:       impl: [[OMPDD]]
-    // DMP-OPLC-NEXT:         OMPPrivateClause
-    // DMP-OPLC-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPLC:              ForStmt
-    // DMP-OSEQ-NEXT:       impl: CompoundStmt
-    // DMP-OSEQ-NEXT:         DeclStmt
-    // DMP-OSEQ-NEXT:           VarDecl {{.*}} i 'int'
-    // DMP-OSEQ-NEXT:         ForStmt
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCSeqClause
+    //  DMP-NOT:     <implicit>
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //  DMP-NOT:       OMPFirstprivateClause
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCSeqClause
+    //  DMP-NOT:         <implicit>
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       impl: CompoundStmt
+    // DMP-NEXT:         DeclStmt
+    // DMP-NEXT:           VarDecl {{.*}} i 'int'
+    // DMP-NEXT:         ForStmt
     //
-    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
-    // PRT-A-AST-NEXT:   {{^ *}}#pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
-    // PRT-A-SRC-NEXT:   {{^ *}}#pragma acc parallel loop num_gangs(2) ACCC private(i){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-A-NEXT:       for (int j = 0; j < 2; ++j) {
-    // PRT-A-NEXT:         i = j;
-    // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
-    // PRT-A-NEXT:       }
-    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OSEQ-NEXT: // #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OSEQ-NEXT: // {
-    // PRT-AO-OSEQ-NEXT: //   int i;
-    // PRT-AO-OSEQ-NEXT: //   for (int j = 0; j < 2; ++j) {
-    // PRT-AO-OSEQ-NEXT: //     i = j;
-    // PRT-AO-OSEQ-NEXT: //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OSEQ-NEXT: //   }
-    // PRT-AO-OSEQ-NEXT: // }
-    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) seq private(i){{$}}
+    //  PRT-A-NEXT: for (int j = 0; j < 2; ++j) {
+    //  PRT-A-NEXT:   i = j;
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   for (int j = 0; j < 2; ++j) {
+    // PRT-AO-NEXT: //     i = j;
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
     //
-    // PRT-OA-OSEQ-NEXT:     // v----------OMP----------v
-    // PRT-O-NEXT:           {{^ *}}#pragma omp target teams num_teams(2){{$}}
-    // PRT-O-OPRG-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-O-OPLC-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-OA-AST-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
-    // PRT-OA-AST-OPLC-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) ACCC private(i){{$}}
-    // PRT-OA-SRC-OPLC-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) ACCC private(i){{$}}
-    // PRT-O-OSEQ-NEXT:      {
-    // PRT-O-OSEQ-NEXT:        int i;
-    // PRT-O-NEXT:             for (int j = 0; j < 2; ++j) {
-    // PRT-O-NEXT:               i = j;
-    // PRT-O-NEXT:               {{TGT_PRINTF|printf}}
-    // PRT-O-NEXT:             }
-    // PRT-O-OSEQ-NEXT:      }
-    // PRT-OA-OSEQ-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2) ACCC private(i){{$}}
-    // PRT-OA-OSEQ-NEXT:     // for (int j = 0; j < 2; ++j) {
-    // PRT-OA-OSEQ-NEXT:     //   i = j;
-    // PRT-OA-OSEQ-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OSEQ-NEXT:     // }
-    // PRT-OA-OSEQ-NEXT:     // ^----------ACC----------^
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   for (int j = 0; j < 2; ++j) {
+    //  PRT-O-NEXT:     i = j;
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc parallel loop num_gangs(2) seq private(i){{$}}
+    // PRT-OA-NEXT: // for (int j = 0; j < 2; ++j) {
+    // PRT-OA-NEXT: //   i = j;
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
     //
-    // PRT-NOACC-NEXT:   for (int j = 0; j < 2; ++j) {
-    // PRT-NOACC-NEXT:     i = j;
-    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
-    // PRT-NOACC-NEXT:   }
-    #pragma acc parallel loop num_gangs(2) ACCC private(i)
+    // PRT-NOACC-NEXT: for (int j = 0; j < 2; ++j) {
+    // PRT-NOACC-NEXT:   i = j;
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-would-be-firstprivate loop-private scalar, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-would-be-firstprivate loop-private scalar, seq: in loop: 1
+    // EXE-TGT-USE-STDIO-DAG: parallel-would-be-firstprivate loop-private scalar, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-would-be-firstprivate loop-private scalar, seq: in loop: 1
+    #pragma acc parallel loop num_gangs(2) seq private(i)
     for (int j = 0; j < 2; ++j) {
       i = j;
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 0
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 1
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 0
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 1
-      TGT_PRINTF("in loop: %d\n", i);
+      TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, seq: in loop: %d\n", i);
     }
     // PRT-NEXT: {{TGT_PRINTF|printf}}
-    // EXE-TGT-USE-STDIO-NEXT: after loop: 99
-    TGT_PRINTF("after loop: %d\n", i);
+    // EXE-TGT-USE-STDIO-NEXT: parallel-would-be-firstprivate loop-private scalar, seq: after loop: 99
+    TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, seq: after loop: %d\n", i);
   } // PRT-NEXT: }
 
-  // Now have are declared private on the "acc loop" but are also implicitly
-  // firstprivate on the "acc parallel" due to references within the "acc
-  // parallel".
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int i = 99;
+    int i = 99;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCGangClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //  DMP-NOT:       OMPFirstprivateClause
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCGangClause
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeDirective
+    // DMP-NEXT:         OMPPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) gang private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) gang private(i){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   i = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-would-be-firstprivate loop-private scalar, gang: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-would-be-firstprivate loop-private scalar, gang: in loop: 1
+    #pragma acc parallel loop num_gangs(2) gang private(i)
+    for (int j = 0; j < 2; ++j) {
+      i = j;
+      TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, gang: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: parallel-would-be-firstprivate loop-private scalar, gang: after loop: 99
+    TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, gang: after loop: %d\n", i);
+  } // PRT-NEXT: }
 
-  // PRT-NEXT: printf
-  // EXE: parallel-firstprivate loop-private scalar
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int i = 99;
+    int i = 99;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //  DMP-NOT:       OMPFirstprivateClause
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCWorkerClause
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeParallelForDirective
+    // DMP-NEXT:         OMPPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) worker private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) worker private(i){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   i = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-would-be-firstprivate loop-private scalar, worker: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-would-be-firstprivate loop-private scalar, worker: in loop: 1
+    #pragma acc parallel loop num_gangs(2) worker private(i)
+    for (int j = 0; j < 2; ++j) {
+      i = j;
+      TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, worker: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: parallel-would-be-firstprivate loop-private scalar, worker: after loop: 99
+    TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, worker: after loop: %d\n", i);
+  } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int i = 99;
+    int i = 99;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //  DMP-NOT:       OMPFirstprivateClause
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCVectorClause
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeSimdDirective
+    // DMP-NEXT:         OMPPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) vector private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute simd private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) vector private(i){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   i = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-would-be-firstprivate loop-private scalar, vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-would-be-firstprivate loop-private scalar, vector: in loop: 1
+    #pragma acc parallel loop num_gangs(2) vector private(i)
+    for (int j = 0; j < 2; ++j) {
+      i = j;
+      TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, vector: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: parallel-would-be-firstprivate loop-private scalar, vector: after loop: 99
+    TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, vector: after loop: %d\n", i);
+  } // PRT-NEXT: }
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int i = 99;
+    int i = 99;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //  DMP-NOT:       OMPFirstprivateClause
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCWorkerClause
+    // DMP-NEXT:       ACCVectorClause
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeParallelForSimdDirective
+    // DMP-NEXT:         OMPPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) worker vector private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) worker vector private(i){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   i = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-would-be-firstprivate loop-private scalar, worker vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-would-be-firstprivate loop-private scalar, worker vector: in loop: 1
+    #pragma acc parallel loop num_gangs(2) worker vector private(i)
+    for (int j = 0; j < 2; ++j) {
+      i = j;
+      TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, worker vector: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: parallel-would-be-firstprivate loop-private scalar, worker vector: after loop: 99
+    TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, worker vector: after loop: %d\n", i);
+  } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
+
+  //--------------------------------------------------
+  // Now variables are declared private on the "acc loop" but are also
+  // implicitly firstprivate on the "acc parallel" due to references within the
+  // "acc parallel".
+  //--------------------------------------------------
+
+  // DMP-LABEL: StringLiteral {{.*}} "parallel-firstprivate loop-private scalar\n"
+  // PRT-LABEL: printf("parallel-firstprivate loop-private scalar\n");
+  // EXE-LABEL: parallel-firstprivate loop-private scalar
   printf("parallel-firstprivate loop-private scalar\n");
   // PRT-NEXT: {
   {
@@ -354,140 +583,304 @@ int main() {
     // PRT-NEXT: int j = 88;
     int i = 99;
     int j = 88;
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2){{$}}
+
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) firstprivate(i,j){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) firstprivate(i,j){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) firstprivate(i,j){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2){{$}}
     #pragma acc parallel num_gangs(2)
     // PRT-NEXT: {
     {
       // PRT-NEXT: ++i;
       ++i;
-      // DMP:           ACCLoopDirective
-      // DMP-ASEQ-NEXT:   ACCSeqClause
-      // DMP-ASEQ-NOT:      <implicit>
-      // DMP-AG-NEXT:     ACCGangClause
-      // DMP-AW-NEXT:     ACCWorkerClause
-      // DMP-AV-NEXT:     ACCVectorClause
-      // DMP-NEXT:        ACCPrivateClause
-      // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
-      // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-      // DMP-AGIMP-NEXT:  ACCGangClause {{.*}} <implicit>
-      // DMP-OPRG-NEXT:   impl: [[OMPDD]]
-      // DMP-OPRG-NEXT:     OMPPrivateClause
-      // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
-      // DMP-OPRG:          ForStmt
-      // DMP-OPLC-NEXT:   impl: CompoundStmt
-      // DMP-OPLC-NEXT:     DeclStmt
-      // DMP-OPLC-NEXT:       VarDecl {{.*}} j 'int'
-      // DMP-OPLC-NEXT:     [[OMPDD]]
-      // DMP-OPLC-NEXT:       OMPPrivateClause
-      // DMP-OPLC-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-OPLC:            ForStmt
-      // DMP-OSEQ-NEXT:   impl: CompoundStmt
-      // DMP-OSEQ-NEXT:     DeclStmt
-      // DMP-OSEQ-NEXT:       VarDecl {{.*}} i 'int'
-      // DMP-OSEQ-NEXT:     DeclStmt
-      // DMP-OSEQ-NEXT:       VarDecl {{.*}} j 'int'
-      // DMP-OSEQ-NEXT:     ForStmt
+
+      //      DMP: ACCLoopDirective
+      // DMP-NEXT:   ACCSeqClause
+      //  DMP-NOT:     <implicit>
+      // DMP-NEXT:   ACCPrivateClause
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-NEXT:   impl: CompoundStmt
+      // DMP-NEXT:     DeclStmt
+      // DMP-NEXT:       VarDecl {{.*}} i 'int'
+      // DMP-NEXT:     DeclStmt
+      // DMP-NEXT:       VarDecl {{.*}} j 'int'
+      // DMP-NEXT:     ForStmt
       //
-      // PRT-AO-OPLC-NEXT: // v----------ACC----------v
-      // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
-      // PRT-A-AST-NEXT:   {{^ *}}#pragma acc loop[[ACCC]] private(i,j){{$}}
-      // PRT-A-SRC-NEXT:   {{^ *}}#pragma acc loop ACCC private(i,j){{$}}
-      // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i,j){{$}}
-      // PRT-A-NEXT:       for (j = 0; j < 2; ++j) {
-      // PRT-A-NEXT:         i = j;
-      // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
-      // PRT-A-NEXT:       }
-      // PRT-AO-OPLC-NEXT: // ---------ACC->OMP--------
-      // PRT-AO-OPLC-NEXT: // {
-      // PRT-AO-OPLC-NEXT: //   int j;
-      // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]] private(i){{$}}
-      // PRT-AO-OPLC-NEXT: //   for (j = 0; j < 2; ++j) {
-      // PRT-AO-OPLC-NEXT: //     i = j;
-      // PRT-AO-OPLC-NEXT: //     {{TGT_PRINTF|printf}}
-      // PRT-AO-OPLC-NEXT: //   }
-      // PRT-AO-OPLC-NEXT: // }
-      // PRT-AO-OPLC-NEXT: // ^----------OMP----------^
-      // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
-      // PRT-AO-OSEQ-NEXT: // {
-      // PRT-AO-OSEQ-NEXT: //   int i;
-      // PRT-AO-OSEQ-NEXT: //   int j;
-      // PRT-AO-OSEQ-NEXT: //   for (j = 0; j < 2; ++j) {
-      // PRT-AO-OSEQ-NEXT: //     i = j;
-      // PRT-AO-OSEQ-NEXT: //     {{TGT_PRINTF|printf}}
-      // PRT-AO-OSEQ-NEXT: //   }
-      // PRT-AO-OSEQ-NEXT: // }
-      // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
+      // PRT-AO-NEXT: // v----------ACC----------v
+      //  PRT-A-NEXT: {{^ *}}#pragma acc loop seq private(i,j){{$}}
+      //  PRT-A-NEXT: for (j = 0; j < 2; ++j) {
+      //  PRT-A-NEXT:   i = j;
+      //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+      //  PRT-A-NEXT: }
+      // PRT-AO-NEXT: // ---------ACC->OMP--------
+      // PRT-AO-NEXT: // {
+      // PRT-AO-NEXT: //   int i;
+      // PRT-AO-NEXT: //   int j;
+      // PRT-AO-NEXT: //   for (j = 0; j < 2; ++j) {
+      // PRT-AO-NEXT: //     i = j;
+      // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+      // PRT-AO-NEXT: //   }
+      // PRT-AO-NEXT: // }
+      // PRT-AO-NEXT: // ^----------OMP----------^
       //
-      // PRT-O-OPRG-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(i,j){{$}}
-      // PRT-OA-AST-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(i,j){{$}}
-      // PRT-OA-SRC-OPRG-NEXT: {{^ *}}// #pragma acc loop ACCC private(i,j){{$}}
-      // PRT-O-OPRG-NEXT:      for (j = 0; j < 2; ++j) {
-      // PRT-O-OPRG-NEXT:        i = j;
-      // PRT-O-OPRG-NEXT:        {{TGT_PRINTF|printf}}
-      // PRT-O-OPRG-NEXT:      }
-      // PRT-OA-OPLC-NEXT:     // v----------OMP----------v
-      // PRT-O-OPLC-NEXT:      {
-      // PRT-O-OPLC-NEXT:        int j;
-      // PRT-O-OPLC-NEXT:        {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
-      // PRT-O-OPLC-NEXT:        for (j = 0; j < 2; ++j) {
-      // PRT-O-OPLC-NEXT:          i = j;
-      // PRT-O-OPLC-NEXT:          {{TGT_PRINTF|printf}}
-      // PRT-O-OPLC-NEXT:        }
-      // PRT-O-OPLC-NEXT:      }
-      // PRT-OA-OPLC-NEXT:     // ---------OMP<-ACC--------
-      // PRT-OA-AST-OPLC-NEXT: // #pragma acc loop[[ACCC]] private(i,j){{$}}
-      // PRT-OA-SRC-OPLC-NEXT: // #pragma acc loop ACCC private(i,j){{$}}
-      // PRT-OA-OPLC-NEXT:     // for (j = 0; j < 2; ++j) {
-      // PRT-OA-OPLC-NEXT:     //   i = j;
-      // PRT-OA-OPLC-NEXT:     //   {{TGT_PRINTF|printf}}
-      // PRT-OA-OPLC-NEXT:     // }
-      // PRT-OA-OPLC-NEXT:     // ^----------ACC----------^
-      // PRT-OA-OSEQ-NEXT:     // v----------OMP----------v
-      // PRT-O-OSEQ-NEXT:      {
-      // PRT-O-OSEQ-NEXT:        int i;
-      // PRT-O-OSEQ-NEXT:        int j;
-      // PRT-O-OSEQ-NEXT:        for (j = 0; j < 2; ++j) {
-      // PRT-O-OSEQ-NEXT:          i = j;
-      // PRT-O-OSEQ-NEXT:          {{TGT_PRINTF|printf}}
-      // PRT-O-OSEQ-NEXT:        }
-      // PRT-O-OSEQ-NEXT:      }
-      // PRT-OA-OSEQ-NEXT:     // ---------OMP<-ACC--------
-      // PRT-OA-AST-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(i,j){{$}}
-      // PRT-OA-SRC-OSEQ-NEXT: // #pragma acc loop ACCC private(i,j){{$}}
-      // PRT-OA-OSEQ-NEXT:     // for (j = 0; j < 2; ++j) {
-      // PRT-OA-OSEQ-NEXT:     //   i = j;
-      // PRT-OA-OSEQ-NEXT:     //   {{TGT_PRINTF|printf}}
-      // PRT-OA-OSEQ-NEXT:     // }
-      // PRT-OA-OSEQ-NEXT:     // ^----------ACC----------^
+      // PRT-OA-NEXT: // v----------OMP----------v
+      //  PRT-O-NEXT: {
+      //  PRT-O-NEXT:   int i;
+      //  PRT-O-NEXT:   int j;
+      //  PRT-O-NEXT:   for (j = 0; j < 2; ++j) {
+      //  PRT-O-NEXT:     i = j;
+      //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+      //  PRT-O-NEXT:   }
+      //  PRT-O-NEXT: }
+      // PRT-OA-NEXT: // ---------OMP<-ACC--------
+      // PRT-OA-NEXT: // #pragma acc loop seq private(i,j){{$}}
+      // PRT-OA-NEXT: // for (j = 0; j < 2; ++j) {
+      // PRT-OA-NEXT: //   i = j;
+      // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+      // PRT-OA-NEXT: // }
+      // PRT-OA-NEXT: // ^----------ACC----------^
+      //
+      // PRT-NOACC-NEXT: for (j = 0; j < 2; ++j) {
+      // PRT-NOACC-NEXT:   i = j;
+      // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+      // PRT-NOACC-NEXT: }
+      //
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, seq: in loop: 0, 0
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, seq: in loop: 1, 1
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, seq: in loop: 0, 0
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, seq: in loop: 1, 1
+      #pragma acc loop seq private(i,j)
+      for (j = 0; j < 2; ++j) {
+        i = j;
+        TGT_PRINTF("parallel-firstprivate loop-private scalar, seq: in loop: %d, %d\n", i, j);
+      }
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, seq: after loop: 100, 88
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, seq: after loop: 100, 88
+      TGT_PRINTF("parallel-firstprivate loop-private scalar, seq: after loop: %d, %d\n", i, j);
+
+      //      DMP: ACCLoopDirective
+      // DMP-NEXT:   ACCGangClause
+      // DMP-NEXT:   ACCPrivateClause
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:   impl: OMPDistributeDirective
+      // DMP-NEXT:     OMPPrivateClause
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
+      //      DMP:     ForStmt
+      //
+      //  PRT-A-NEXT: {{^ *}}#pragma acc loop gang private(i,j){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute private(i,j){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp distribute private(i,j){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang private(i,j){{$}}
+      //    PRT-NEXT: for (j = 0; j < 2; ++j) {
+      //    PRT-NEXT:   i = j;
+      //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+      //    PRT-NEXT: }
+      //
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, gang: in loop: 0, 0
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, gang: in loop: 1, 1
+      #pragma acc loop gang private(i,j)
+      for (j = 0; j < 2; ++j) {
+        i = j;
+        TGT_PRINTF("parallel-firstprivate loop-private scalar, gang: in loop: %d, %d\n", i, j);
+      }
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, gang: after loop: 100, 88
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, gang: after loop: 100, 88
+      TGT_PRINTF("parallel-firstprivate loop-private scalar, gang: after loop: %d, %d\n", i, j);
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+      //      DMP: ACCLoopDirective
+      // DMP-NEXT:   ACCWorkerClause
+      // DMP-NEXT:   ACCPrivateClause
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+      // DMP-NEXT:   impl: OMPDistributeParallelForDirective
+      // DMP-NEXT:     OMPPrivateClause
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
+      //      DMP:     ForStmt
+      //
+      //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker private(i,j){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for private(i,j){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for private(i,j){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker private(i,j){{$}}
+      //    PRT-NEXT: for (j = 0; j < 2; ++j) {
+      //    PRT-NEXT:   i = j;
+      //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+      //    PRT-NEXT: }
+      //
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, worker: in loop: 0, 0
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, worker: in loop: 1, 1
+      #pragma acc loop worker private(i,j)
+      for (j = 0; j < 2; ++j) {
+        i = j;
+        TGT_PRINTF("parallel-firstprivate loop-private scalar, worker: in loop: %d, %d\n", i, j);
+      }
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, worker: after loop: 100, 88
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, worker: after loop: 100, 88
+      TGT_PRINTF("parallel-firstprivate loop-private scalar, worker: after loop: %d, %d\n", i, j);
+// PRT-SRC-NEXT: #endif
+#endif
+
+      //      DMP: ACCLoopDirective
+      // DMP-NEXT:   ACCVectorClause
+      // DMP-NEXT:   ACCPrivateClause
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+      // DMP-NEXT:   impl: CompoundStmt
+      // DMP-NEXT:     DeclStmt
+      // DMP-NEXT:       VarDecl {{.*}} j 'int'
+      // DMP-NEXT:     OMPDistributeSimdDirective
+      // DMP-NEXT:       OMPPrivateClause
+      // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+      //      DMP:       ForStmt
+      //
+      // PRT-AO-NEXT: // v----------ACC----------v
+      //  PRT-A-NEXT: {{^ *}}#pragma acc loop vector private(i,j){{$}}
+      //  PRT-A-NEXT: for (j = 0; j < 2; ++j) {
+      //  PRT-A-NEXT:   i = j;
+      //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+      //  PRT-A-NEXT: }
+      // PRT-AO-NEXT: // ---------ACC->OMP--------
+      // PRT-AO-NEXT: // {
+      // PRT-AO-NEXT: //   int j;
+      // PRT-AO-NEXT: //   #pragma omp distribute simd private(i){{$}}
+      // PRT-AO-NEXT: //   for (j = 0; j < 2; ++j) {
+      // PRT-AO-NEXT: //     i = j;
+      // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+      // PRT-AO-NEXT: //   }
+      // PRT-AO-NEXT: // }
+      // PRT-AO-NEXT: // ^----------OMP----------^
+      //
+      // PRT-OA-NEXT: // v----------OMP----------v
+      //  PRT-O-NEXT: {
+      //  PRT-O-NEXT:   int j;
+      //  PRT-O-NEXT:   {{^ *}}#pragma omp distribute simd private(i){{$}}
+      //  PRT-O-NEXT:   for (j = 0; j < 2; ++j) {
+      //  PRT-O-NEXT:     i = j;
+      //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+      //  PRT-O-NEXT:   }
+      //  PRT-O-NEXT: }
+      // PRT-OA-NEXT: // ---------OMP<-ACC--------
+      // PRT-OA-NEXT: // #pragma acc loop vector private(i,j){{$}}
+      // PRT-OA-NEXT: // for (j = 0; j < 2; ++j) {
+      // PRT-OA-NEXT: //   i = j;
+      // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+      // PRT-OA-NEXT: // }
+      // PRT-OA-NEXT: // ^----------ACC----------^
+      //
+      // PRT-NOACC-NEXT: for (j = 0; j < 2; ++j) {
+      // PRT-NOACC-NEXT:   i = j;
+      // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+      // PRT-NOACC-NEXT: }
+      //
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, vector: in loop: 0, 0
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, vector: in loop: 1, 1
+      #pragma acc loop vector private(i,j)
+      for (j = 0; j < 2; ++j) {
+        i = j;
+        TGT_PRINTF("parallel-firstprivate loop-private scalar, vector: in loop: %d, %d\n", i, j);
+      }
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, vector: after loop: 100, 88
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, vector: after loop: 100, 88
+      TGT_PRINTF("parallel-firstprivate loop-private scalar, vector: after loop: %d, %d\n", i, j);
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+      //      DMP: ACCLoopDirective
+      // DMP-NEXT:   ACCWorkerClause
+      // DMP-NEXT:   ACCVectorClause
+      // DMP-NEXT:   ACCPrivateClause
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+      // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+      // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+      // DMP-NEXT:   impl: CompoundStmt
+      // DMP-NEXT:     DeclStmt
+      // DMP-NEXT:       VarDecl {{.*}} j 'int'
+      // DMP-NEXT:     OMPDistributeParallelForSimdDirective
+      // DMP-NEXT:       OMPPrivateClause
+      // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+      //      DMP:       ForStmt
+      //
+      // PRT-AO-NEXT: // v----------ACC----------v
+      //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker vector private(i,j){{$}}
+      //  PRT-A-NEXT: for (j = 0; j < 2; ++j) {
+      //  PRT-A-NEXT:   i = j;
+      //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+      //  PRT-A-NEXT: }
+      // PRT-AO-NEXT: // ---------ACC->OMP--------
+      // PRT-AO-NEXT: // {
+      // PRT-AO-NEXT: //   int j;
+      // PRT-AO-NEXT: //   #pragma omp distribute parallel for simd private(i){{$}}
+      // PRT-AO-NEXT: //   for (j = 0; j < 2; ++j) {
+      // PRT-AO-NEXT: //     i = j;
+      // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+      // PRT-AO-NEXT: //   }
+      // PRT-AO-NEXT: // }
+      // PRT-AO-NEXT: // ^----------OMP----------^
+      //
+      // PRT-OA-NEXT: // v----------OMP----------v
+      //  PRT-O-NEXT: {
+      //  PRT-O-NEXT:   int j;
+      //  PRT-O-NEXT:   {{^ *}}#pragma omp distribute parallel for simd private(i){{$}}
+      //  PRT-O-NEXT:   for (j = 0; j < 2; ++j) {
+      //  PRT-O-NEXT:     i = j;
+      //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+      //  PRT-O-NEXT:   }
+      //  PRT-O-NEXT: }
+      // PRT-OA-NEXT: // ---------OMP<-ACC--------
+      // PRT-OA-NEXT: // #pragma acc loop worker vector private(i,j){{$}}
+      // PRT-OA-NEXT: // for (j = 0; j < 2; ++j) {
+      // PRT-OA-NEXT: //   i = j;
+      // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+      // PRT-OA-NEXT: // }
+      // PRT-OA-NEXT: // ^----------ACC----------^
       //
       // PRT-NOACC-NEXT:   for (j = 0; j < 2; ++j) {
       // PRT-NOACC-NEXT:     i = j;
       // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
       // PRT-NOACC-NEXT:   }
-      #pragma acc loop ACCC private(i,j)
+      //
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, worker vector: in loop: 0, 0
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, worker vector: in loop: 1, 1
+      #pragma acc loop worker vector private(i,j)
       for (j = 0; j < 2; ++j) {
         i = j;
-        // EXE-TGT-USE-STDIO-DAG:        in loop: 0, 0
-        // EXE-TGT-USE-STDIO-DAG:        in loop: 1, 1
-        // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 0, 0
-        // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 1, 1
-        TGT_PRINTF("in loop: %d, %d\n", i, j);
+        TGT_PRINTF("parallel-firstprivate loop-private scalar, worker vector: in loop: %d, %d\n", i, j);
       }
+      // PRT-NEXT: {{TGT_PRINTF|printf}}
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, worker vector: after loop: 100, 88
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, worker vector: after loop: 100, 88
+      TGT_PRINTF("parallel-firstprivate loop-private scalar, worker vector: after loop: %d, %d\n", i, j);
+// PRT-SRC-NEXT: #endif
+#endif
+
       // PRT-NEXT: --j;
       --j;
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      // EXE-TGT-USE-STDIO-DAG: after loop: 100, 87
-      // EXE-TGT-USE-STDIO-DAG: after loop: 100, 87
-      TGT_PRINTF("after loop: %d, %d\n", i, j);
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar: after all loops: 100, 87
+      // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar: after all loops: 100, 87
+      TGT_PRINTF("parallel-firstprivate loop-private scalar: after all loops: %d, %d\n", i, j);
     } // PRT-NEXT: }
+
     // PRT-NEXT: printf
-    // EXE-NEXT: after parallel: 99, 88
-    printf("after parallel: %d, %d\n", i, j);
+    // EXE-NEXT: parallel-firstprivate loop-private scalar: after parallel: 99, 88
+    printf("parallel-firstprivate loop-private scalar: after parallel: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
   //--------------------------------------------------
@@ -498,661 +891,1613 @@ int main() {
   // returned nullptr for the tentative definition.
   //--------------------------------------------------
 
-  // PRT-NEXT: printf
-  // EXE-NEXT: tentatively defined loop-private scalar
+  // DMP-LABEL: StringLiteral {{.*}} "tentatively defined loop-private scalar\n"
+  // PRT-LABEL: printf("tentatively defined loop-private scalar\n");
+  // EXE-LABEL: tentatively defined loop-private scalar
   printf("tentatively defined loop-private scalar\n");
-  // PRT-A-NEXT:  #pragma acc parallel
+
+  //  PRT-A-NEXT: #pragma acc parallel
   // PRT-AO-NEXT: // #pragma omp target teams
-  // PRT-O-NEXT:  #pragma omp target teams
+  //  PRT-O-NEXT: #pragma omp target teams
   // PRT-OA-NEXT: // #pragma acc parallel
   #pragma acc parallel num_gangs(2)
   // PRT-NEXT: {
   {
-    // DMP:           ACCLoopDirective
-    // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:      <implicit>
-    // DMP-AG-NEXT:     ACCGangClause
-    // DMP-AW-NEXT:     ACCWorkerClause
-    // DMP-AV-NEXT:     ACCVectorClause
-    // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'tentativeDef' 'int'
-    // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-    // DMP-AGIMP-NEXT:  ACCGangClause {{.*}} <implicit>
-    // DMP-OPRG-NEXT:   impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:     OMPPrivateClause
-    // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'tentativeDef' 'int'
-    // DMP-OPRG:          ForStmt
-    // DMP-OPLC-NEXT:   impl: [[OMPDD]]
-    // DMP-OPLC-NEXT:     OMPPrivateClause
-    // DMP-OPLC-NEXT:       DeclRefExpr {{.*}} 'tentativeDef' 'int'
-    // DMP-OPLC:          ForStmt
-    // DMP-OSEQ-NEXT:   impl: CompoundStmt
-    // DMP-OSEQ-NEXT:     DeclStmt
-    // DMP-OSEQ-NEXT:       VarDecl {{.*}} tentativeDef 'int'
-    // DMP-OSEQ-NEXT:     ForStmt
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCSeqClause
+    //  DMP-NOT:     <implicit>
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-NEXT:   impl: CompoundStmt
+    // DMP-NEXT:     DeclStmt
+    // DMP-NEXT:       VarDecl {{.*}} tentativeDef 'int'
+    // DMP-NEXT:     ForStmt
     //
-    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
-    // PRT-A-AST-NEXT:   {{^ *}}#pragma acc loop[[ACCC]] private(tentativeDef){{$}}
-    // PRT-A-SRC-NEXT:   {{^ *}}#pragma acc loop ACCC private(tentativeDef){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
-    // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
-    // PRT-A-NEXT:       for (int j = 0; j < 2; ++j) {
-    // PRT-A-NEXT:         tentativeDef = j;
-    // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
-    // PRT-A-NEXT:       }
-    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OSEQ-NEXT: // {
-    // PRT-AO-OSEQ-NEXT: //   int tentativeDef;
-    // PRT-AO-OSEQ-NEXT: //   for (int j = 0; j < 2; ++j) {
-    // PRT-AO-OSEQ-NEXT: //     tentativeDef = j;
-    // PRT-AO-OSEQ-NEXT: //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OSEQ-NEXT: //   }
-    // PRT-AO-OSEQ-NEXT: // }
-    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop seq private(tentativeDef){{$}}
+    //  PRT-A-NEXT: for (int j = 0; j < 2; ++j) {
+    //  PRT-A-NEXT:   tentativeDef = j;
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int tentativeDef;
+    // PRT-AO-NEXT: //   for (int j = 0; j < 2; ++j) {
+    // PRT-AO-NEXT: //     tentativeDef = j;
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
     //
-    // PRT-OA-OSEQ-NEXT:     // v----------OMP----------v
-    // PRT-O-OPRG-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
-    // PRT-O-OPLC-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
-    // PRT-OA-AST-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(tentativeDef){{$}}
-    // PRT-OA-AST-OPLC-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(tentativeDef){{$}}
-    // PRT-OA-SRC-OPRG-NEXT: {{^ *}}// #pragma acc loop ACCC private(tentativeDef){{$}}
-    // PRT-OA-SRC-OPLC-NEXT: {{^ *}}// #pragma acc loop ACCC private(tentativeDef){{$}}
-    // PRT-O-OSEQ-NEXT:      {
-    // PRT-O-OSEQ-NEXT:        int tentativeDef;
-    // PRT-O-NEXT:             for (int j = 0; j < 2; ++j) {
-    // PRT-O-NEXT:               tentativeDef = j;
-    // PRT-O-NEXT:               {{TGT_PRINTF|printf}}
-    // PRT-O-NEXT:             }
-    // PRT-O-OSEQ-NEXT:      }
-    // PRT-OA-OSEQ-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(tentativeDef){{$}}
-    // PRT-OA-SRC-OSEQ-NEXT: // #pragma acc loop ACCC private(tentativeDef){{$}}
-    // PRT-OA-OSEQ-NEXT:     // for (int j = 0; j < 2; ++j) {
-    // PRT-OA-OSEQ-NEXT:     //   tentativeDef = j;
-    // PRT-OA-OSEQ-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OSEQ-NEXT:     // }
-    // PRT-OA-OSEQ-NEXT:     // ^----------ACC----------^
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int tentativeDef;
+    //  PRT-O-NEXT:   for (int j = 0; j < 2; ++j) {
+    //  PRT-O-NEXT:     tentativeDef = j;
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc loop seq private(tentativeDef){{$}}
+    // PRT-OA-NEXT: // for (int j = 0; j < 2; ++j) {
+    // PRT-OA-NEXT: //   tentativeDef = j;
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
     //
-    // PRT-NOACC-NEXT:   for (int j = 0; j < 2; ++j) {
-    // PRT-NOACC-NEXT:     tentativeDef = j;
-    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
-    // PRT-NOACC-NEXT:   }
-    #pragma acc loop ACCC private(tentativeDef)
+    // PRT-NOACC-NEXT: for (int j = 0; j < 2; ++j) {
+    // PRT-NOACC-NEXT:   tentativeDef = j;
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, seq: in loop: 1
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, seq: in loop: 1
+    #pragma acc loop seq private(tentativeDef)
     for (int j = 0; j < 2; ++j) {
       tentativeDef = j;
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 0
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 1
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 0
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 1
-      TGT_PRINTF("in loop: %d\n", tentativeDef);
-    }
-    // PRT-NEXT:      {{TGT_PRINTF|printf}}
-    // EXE-TGT-USE-STDIO-DAG: after loop: 99
-    // EXE-TGT-USE-STDIO-DAG: after loop: 99
-    TGT_PRINTF("after loop: %d\n", tentativeDef);
-  } // PRT-NEXT: }
-
-  // Repeat that but for "acc parallel loop".
-
-  // PRT-NEXT: printf
-  // EXE-NEXT: tentatively defined loop-private scalar (combined directive)
-  printf("tentatively defined loop-private scalar (combined directive)\n");
-  // PRT-NEXT: {
-  {
-    // DMP:           ACCParallelLoopDirective
-    // DMP-NEXT:        ACCNumGangsClause
-    // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
-    // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:      <implicit>
-    // DMP-AG-NEXT:     ACCGangClause
-    // DMP-AW-NEXT:     ACCWorkerClause
-    // DMP-AV-NEXT:     ACCVectorClause
-    // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'tentativeDef' 'int'
-    // DMP:             effect: ACCParallelDirective
-    // DMP-NEXT:          ACCNumGangsClause
-    // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:          impl: OMPTargetTeamsDirective
-    // DMP-NEXT:            OMPNum_teamsClause
-    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 2
-    // DMP:               ACCLoopDirective
-    // DMP-ASEQ-NEXT:       ACCSeqClause
-    // DMP-ASEQ-NOT:          <implicit>
-    // DMP-AG-NEXT:         ACCGangClause
-    // DMP-AW-NEXT:         ACCWorkerClause
-    // DMP-AV-NEXT:         ACCVectorClause
-    // DMP-NEXT:            ACCPrivateClause
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'tentativeDef' 'int'
-    // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-    // DMP-AGIMP-NEXT:      ACCGangClause {{.*}} <implicit>
-    // DMP-OPRG-NEXT:       impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:         OMPPrivateClause
-    // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'tentativeDef' 'int'
-    // DMP-OPRG:              ForStmt
-    // DMP-OPLC-NEXT:       impl: [[OMPDD]]
-    // DMP-OPLC-NEXT:         OMPPrivateClause
-    // DMP-OPLC-NEXT:           DeclRefExpr {{.*}} 'tentativeDef' 'int'
-    // DMP-OPLC:              ForStmt
-    // DMP-OSEQ-NEXT:       impl: CompoundStmt
-    // DMP-OSEQ-NEXT:         DeclStmt
-    // DMP-OSEQ-NEXT:           VarDecl {{.*}} tentativeDef 'int'
-    // DMP-OSEQ-NEXT:         ForStmt
-    //
-    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
-    // PRT-A-AST-NEXT:   {{^ *}}#pragma acc parallel loop num_gangs(2)[[ACCC]] private(tentativeDef){{$}}
-    // PRT-A-SRC-NEXT:   {{^ *}}#pragma acc parallel loop num_gangs(2) ACCC private(tentativeDef){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
-    // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(tentativeDef){{$}}
-    // PRT-A-NEXT:       for (int j = 0; j < 2; ++j) {
-    // PRT-A-NEXT:         tentativeDef = j;
-    // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
-    // PRT-A-NEXT:       }
-    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OSEQ-NEXT: // #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OSEQ-NEXT: // {
-    // PRT-AO-OSEQ-NEXT: //   int tentativeDef;
-    // PRT-AO-OSEQ-NEXT: //   for (int j = 0; j < 2; ++j) {
-    // PRT-AO-OSEQ-NEXT: //     tentativeDef = j;
-    // PRT-AO-OSEQ-NEXT: //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OSEQ-NEXT: //   }
-    // PRT-AO-OSEQ-NEXT: // }
-    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
-    //
-    // PRT-OA-OSEQ-NEXT:     // v----------OMP----------v
-    // PRT-O-NEXT:           {{^ *}}#pragma omp target teams num_teams(2){{$}}
-    // PRT-O-OPRG-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
-    // PRT-O-OPLC-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(tentativeDef){{$}}
-    // PRT-OA-AST-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(tentativeDef){{$}}
-    // PRT-OA-AST-OPLC-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(tentativeDef){{$}}
-    // PRT-OA-SRC-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) ACCC private(tentativeDef){{$}}
-    // PRT-OA-SRC-OPLC-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) ACCC private(tentativeDef){{$}}
-    // PRT-O-OSEQ-NEXT:      {
-    // PRT-O-OSEQ-NEXT:        int tentativeDef;
-    // PRT-O-NEXT:             for (int j = 0; j < 2; ++j) {
-    // PRT-O-NEXT:               tentativeDef = j;
-    // PRT-O-NEXT:               {{TGT_PRINTF|printf}}
-    // PRT-O-NEXT:             }
-    // PRT-O-OSEQ-NEXT:      }
-    // PRT-OA-OSEQ-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(tentativeDef){{$}}
-    // PRT-OA-SRC-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2) ACCC private(tentativeDef){{$}}
-    // PRT-OA-OSEQ-NEXT:     // for (int j = 0; j < 2; ++j) {
-    // PRT-OA-OSEQ-NEXT:     //   tentativeDef = j;
-    // PRT-OA-OSEQ-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OSEQ-NEXT:     // }
-    // PRT-OA-OSEQ-NEXT:     // ^----------ACC----------^
-    //
-    // PRT-NOACC-NEXT:   for (int j = 0; j < 2; ++j) {
-    // PRT-NOACC-NEXT:     tentativeDef = j;
-    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
-    // PRT-NOACC-NEXT:   }
-    #pragma acc parallel loop num_gangs(2) ACCC private(tentativeDef)
-    for (int j = 0; j < 2; ++j) {
-      tentativeDef = j;
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 0
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 1
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 0
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 1
-      TGT_PRINTF("in loop: %d\n", tentativeDef);
+      TGT_PRINTF("tentatively defined loop-private scalar, seq: in loop: %d\n", tentativeDef);
     }
     // PRT-NEXT: {{TGT_PRINTF|printf}}
-    // EXE-TGT-USE-STDIO-NEXT: after loop: 99
-    TGT_PRINTF("after loop: %d\n", tentativeDef);
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, seq: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, seq: after loop: 99
+    TGT_PRINTF("tentatively defined loop-private scalar, seq: after loop: %d\n", tentativeDef);
+
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCGangClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop gang private(tentativeDef){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute private(tentativeDef){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute private(tentativeDef){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang private(tentativeDef){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   tentativeDef = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, gang: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, gang: in loop: 1
+    #pragma acc loop gang private(tentativeDef)
+    for (int j = 0; j < 2; ++j) {
+      tentativeDef = j;
+      TGT_PRINTF("tentatively defined loop-private scalar, gang: in loop: %d\n", tentativeDef);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, gang: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, gang: after loop: 99
+    TGT_PRINTF("tentatively defined loop-private scalar, gang: after loop: %d\n", tentativeDef);
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeParallelForDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker private(tentativeDef){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for private(tentativeDef){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for private(tentativeDef){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker private(tentativeDef){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   tentativeDef = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, worker: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, worker: in loop: 1
+    #pragma acc loop worker private(tentativeDef)
+    for (int j = 0; j < 2; ++j) {
+      tentativeDef = j;
+      TGT_PRINTF("tentatively defined loop-private scalar, worker: in loop: %d\n", tentativeDef);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, worker: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, worker: after loop: 99
+    TGT_PRINTF("tentatively defined loop-private scalar, worker: after loop: %d\n", tentativeDef);
+// PRT-SRC-NEXT: #endif
+#endif
+
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeSimdDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop vector private(tentativeDef){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd private(tentativeDef){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute simd private(tentativeDef){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector private(tentativeDef){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   tentativeDef = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, vector: in loop: 1
+    #pragma acc loop vector private(tentativeDef)
+    for (int j = 0; j < 2; ++j) {
+      tentativeDef = j;
+      TGT_PRINTF("tentatively defined loop-private scalar, vector: in loop: %d\n", tentativeDef);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, vector: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, vector: after loop: 99
+    TGT_PRINTF("tentatively defined loop-private scalar, vector: after loop: %d\n", tentativeDef);
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeParallelForSimdDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker vector private(tentativeDef){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd private(tentativeDef){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd private(tentativeDef){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector private(tentativeDef){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   tentativeDef = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, worker vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, worker vector: in loop: 1
+    #pragma acc loop worker vector private(tentativeDef)
+    for (int j = 0; j < 2; ++j) {
+      tentativeDef = j;
+      TGT_PRINTF("tentatively defined loop-private scalar, worker vector: in loop: %d\n", tentativeDef);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, worker vector: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, worker vector: after loop: 99
+    TGT_PRINTF("tentatively defined loop-private scalar, worker vector: after loop: %d\n", tentativeDef);
+// PRT-SRC-NEXT: #endif
+#endif
   } // PRT-NEXT: }
+
+  //--------------------------------------------------
+  // Repeat that but for "acc parallel loop".
+  //--------------------------------------------------
+
+  // DMP-LABEL: StringLiteral {{.*}} "tentatively defined loop-private scalar (combined directive)\n"
+  // PRT-LABEL: printf("tentatively defined loop-private scalar (combined directive)\n");
+  // EXE-LABEL: tentatively defined loop-private scalar (combined directive)
+  printf("tentatively defined loop-private scalar (combined directive)\n");
+
+  // PRT-NEXT: {
+  {
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCSeqClause
+    //  DMP-NOT:     <implicit>
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //      DMP:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCSeqClause
+    //  DMP-NOT:         <implicit>
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    // DMP-NEXT:       impl: CompoundStmt
+    // DMP-NEXT:         DeclStmt
+    // DMP-NEXT:           VarDecl {{.*}} tentativeDef 'int'
+    // DMP-NEXT:         ForStmt
+    //
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) seq private(tentativeDef){{$}}
+    //  PRT-A-NEXT: for (int j = 0; j < 2; ++j) {
+    //  PRT-A-NEXT:   tentativeDef = j;
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int tentativeDef;
+    // PRT-AO-NEXT: //   for (int j = 0; j < 2; ++j) {
+    // PRT-AO-NEXT: //     tentativeDef = j;
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
+    //
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int tentativeDef;
+    //  PRT-O-NEXT:   for (int j = 0; j < 2; ++j) {
+    //  PRT-O-NEXT:     tentativeDef = j;
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc parallel loop num_gangs(2) seq private(tentativeDef){{$}}
+    // PRT-OA-NEXT: // for (int j = 0; j < 2; ++j) {
+    // PRT-OA-NEXT: //   tentativeDef = j;
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
+    //
+    // PRT-NOACC-NEXT: for (int j = 0; j < 2; ++j) {
+    // PRT-NOACC-NEXT:   tentativeDef = j;
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar (combined directive), seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar (combined directive), seq: in loop: 1
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar (combined directive), seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar (combined directive), seq: in loop: 1
+    #pragma acc parallel loop num_gangs(2) seq private(tentativeDef)
+    for (int j = 0; j < 2; ++j) {
+      tentativeDef = j;
+      TGT_PRINTF("tentatively defined loop-private scalar (combined directive), seq: in loop: %d\n", tentativeDef);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: tentatively defined loop-private scalar (combined directive), seq: after loop: 99
+    TGT_PRINTF("tentatively defined loop-private scalar (combined directive), seq: after loop: %d\n", tentativeDef);
+  } // PRT-NEXT: }
+
+  // PRT-NEXT: {
+  {
+    //       DMP: ACCParallelLoopDirective
+    //  DMP-NEXT:   ACCNumGangsClause
+    //  DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    //  DMP-NEXT:   ACCGangClause
+    //  DMP-NEXT:   ACCPrivateClause
+    //  DMP-NEXT:     DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //       DMP:   effect: ACCParallelDirective
+    //  DMP-NEXT:     ACCNumGangsClause
+    //  DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    //  DMP-NEXT:     impl: OMPTargetTeamsDirective
+    //  DMP-NEXT:       OMPNum_teamsClause
+    //  DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //       DMP:     ACCLoopDirective
+    //  DMP-NEXT:       ACCGangClause
+    //  DMP-NEXT:       ACCPrivateClause
+    //  DMP-NEXT:         DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //  DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    //  DMP-NEXT:       impl: OMPDistributeDirective
+    //  DMP-NEXT:         OMPPrivateClause
+    //  DMP-NEXT:           DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //       DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) gang private(tentativeDef){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute private(tentativeDef){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute private(tentativeDef){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) gang private(tentativeDef){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   tentativeDef = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar (combined directive), gang: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar (combined directive), gang: in loop: 1
+    #pragma acc parallel loop num_gangs(2) gang private(tentativeDef)
+    for (int j = 0; j < 2; ++j) {
+      tentativeDef = j;
+      TGT_PRINTF("tentatively defined loop-private scalar (combined directive), gang: in loop: %d\n", tentativeDef);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: tentatively defined loop-private scalar (combined directive), gang: after loop: 99
+    TGT_PRINTF("tentatively defined loop-private scalar (combined directive), gang: after loop: %d\n", tentativeDef);
+  } // PRT-NEXT: }
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+  // PRT-NEXT: {
+  {
+    //       DMP: ACCParallelLoopDirective
+    //  DMP-NEXT:   ACCNumGangsClause
+    //  DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    //  DMP-NEXT:   ACCWorkerClause
+    //  DMP-NEXT:   ACCPrivateClause
+    //  DMP-NEXT:     DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //       DMP:   effect: ACCParallelDirective
+    //  DMP-NEXT:     ACCNumGangsClause
+    //  DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    //  DMP-NEXT:     impl: OMPTargetTeamsDirective
+    //  DMP-NEXT:       OMPNum_teamsClause
+    //  DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //       DMP:     ACCLoopDirective
+    //  DMP-NEXT:       ACCWorkerClause
+    //  DMP-NEXT:       ACCPrivateClause
+    //  DMP-NEXT:         DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //  DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    //  DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+    //  DMP-NEXT:       impl: OMPDistributeParallelForDirective
+    //  DMP-NEXT:         OMPPrivateClause
+    //  DMP-NEXT:           DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //       DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) worker private(tentativeDef){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for private(tentativeDef){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for private(tentativeDef){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) worker private(tentativeDef){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   tentativeDef = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar (combined directive), worker: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar (combined directive), worker: in loop: 1
+    #pragma acc parallel loop num_gangs(2) worker private(tentativeDef)
+    for (int j = 0; j < 2; ++j) {
+      tentativeDef = j;
+      TGT_PRINTF("tentatively defined loop-private scalar (combined directive), worker: in loop: %d\n", tentativeDef);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: tentatively defined loop-private scalar (combined directive), worker: after loop: 99
+    TGT_PRINTF("tentatively defined loop-private scalar (combined directive), worker: after loop: %d\n", tentativeDef);
+  } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
+
+  // PRT-NEXT: {
+  {
+    //       DMP: ACCParallelLoopDirective
+    //  DMP-NEXT:   ACCNumGangsClause
+    //  DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    //  DMP-NEXT:   ACCVectorClause
+    //  DMP-NEXT:   ACCPrivateClause
+    //  DMP-NEXT:     DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //       DMP:   effect: ACCParallelDirective
+    //  DMP-NEXT:     ACCNumGangsClause
+    //  DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    //  DMP-NEXT:     impl: OMPTargetTeamsDirective
+    //  DMP-NEXT:       OMPNum_teamsClause
+    //  DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //       DMP:     ACCLoopDirective
+    //  DMP-NEXT:       ACCVectorClause
+    //  DMP-NEXT:       ACCPrivateClause
+    //  DMP-NEXT:         DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //  DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    //  DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+    //  DMP-NEXT:       impl: OMPDistributeSimdDirective
+    //  DMP-NEXT:         OMPPrivateClause
+    //  DMP-NEXT:           DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //       DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) vector private(tentativeDef){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd private(tentativeDef){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute simd private(tentativeDef){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) vector private(tentativeDef){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   tentativeDef = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar (combined directive), vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar (combined directive), vector: in loop: 1
+    #pragma acc parallel loop num_gangs(2) vector private(tentativeDef)
+    for (int j = 0; j < 2; ++j) {
+      tentativeDef = j;
+      TGT_PRINTF("tentatively defined loop-private scalar (combined directive), vector: in loop: %d\n", tentativeDef);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: tentatively defined loop-private scalar (combined directive), vector: after loop: 99
+    TGT_PRINTF("tentatively defined loop-private scalar (combined directive), vector: after loop: %d\n", tentativeDef);
+  } // PRT-NEXT: }
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+  // PRT-NEXT: {
+  {
+    //       DMP: ACCParallelLoopDirective
+    //  DMP-NEXT:   ACCNumGangsClause
+    //  DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    //  DMP-NEXT:   ACCWorkerClause
+    //  DMP-NEXT:   ACCVectorClause
+    //  DMP-NEXT:   ACCPrivateClause
+    //  DMP-NEXT:     DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //       DMP:   effect: ACCParallelDirective
+    //  DMP-NEXT:     ACCNumGangsClause
+    //  DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    //  DMP-NEXT:     impl: OMPTargetTeamsDirective
+    //  DMP-NEXT:       OMPNum_teamsClause
+    //  DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //       DMP:     ACCLoopDirective
+    //  DMP-NEXT:       ACCWorkerClause
+    //  DMP-NEXT:       ACCVectorClause
+    //  DMP-NEXT:       ACCPrivateClause
+    //  DMP-NEXT:         DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //  DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    //  DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+    //  DMP-NEXT:       impl: OMPDistributeParallelForSimdDirective
+    //  DMP-NEXT:         OMPPrivateClause
+    //  DMP-NEXT:           DeclRefExpr {{.*}} 'tentativeDef' 'int'
+    //       DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) worker vector private(tentativeDef){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd private(tentativeDef){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd private(tentativeDef){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) worker vector private(tentativeDef){{$}}
+    //    PRT-NEXT: for (int j = 0; j < 2; ++j) {
+    //    PRT-NEXT:   tentativeDef = j;
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar (combined directive), worker vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar (combined directive), worker vector: in loop: 1
+    #pragma acc parallel loop num_gangs(2) worker vector private(tentativeDef)
+    for (int j = 0; j < 2; ++j) {
+      tentativeDef = j;
+      TGT_PRINTF("tentatively defined loop-private scalar (combined directive), worker vector: in loop: %d\n", tentativeDef);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: tentatively defined loop-private scalar (combined directive), worker vector: after loop: 99
+    TGT_PRINTF("tentatively defined loop-private scalar (combined directive), worker vector: after loop: %d\n", tentativeDef);
+  } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   //--------------------------------------------------
   // Check private for loop control variable that is declared not assigned in
   // init of attached for loop.
   //--------------------------------------------------
 
-  // PRT-NEXT: printf
-  // EXE-NEXT: parallel-local loop-private declared loop control
+  // DMP-LABEL: StringLiteral {{.*}} "parallel-local loop-private declared loop control\n"
+  // PRT-LABEL: printf("parallel-local loop-private declared loop control\n");
+  // EXE-LABEL: parallel-local loop-private declared loop control
   printf("parallel-local loop-private declared loop control\n");
-  // PRT-A-NEXT:  #pragma acc parallel
+
+  //  PRT-A-NEXT: #pragma acc parallel
   // PRT-AO-NEXT: // #pragma omp target teams
-  // PRT-O-NEXT:  #pragma omp target teams
+  //  PRT-O-NEXT: #pragma omp target teams
   // PRT-OA-NEXT: // #pragma acc parallel
   #pragma acc parallel num_gangs(2)
   // PRT-NEXT: {
   {
     // PRT: int i = 99;
     int i = 99;
-    // DMP:           ACCLoopDirective
-    // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:      <implicit>
-    // DMP-AG-NEXT:     ACCGangClause
-    // DMP-AW-NEXT:     ACCWorkerClause
-    // DMP-AV-NEXT:     ACCVectorClause
-    // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-    // DMP-AGIMP-NEXT:  ACCGangClause {{.*}} <implicit>
-    // DMP-OPRG-NEXT:   impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:     OMPPrivateClause
-    // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPRG:          ForStmt
-    // DMP-OPLC-NEXT:   impl: [[OMPDD]]
-    // DMP-OPLC-NEXT:     OMPPrivateClause
-    // DMP-OPLC-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPLC:          ForStmt
-    // DMP-OSEQ-NEXT:   impl: CompoundStmt
-    // DMP-OSEQ-NEXT:     DeclStmt
-    // DMP-OSEQ-NEXT:       VarDecl {{.*}} i 'int'
-    // DMP-OSEQ-NEXT:     ForStmt
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCSeqClause
+    //  DMP-NOT:     <implicit>
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   impl: CompoundStmt
+    // DMP-NEXT:     DeclStmt
+    // DMP-NEXT:       VarDecl {{.*}} i 'int'
+    // DMP-NEXT:     ForStmt
     //
-    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
-    // PRT-A-AST-NEXT:   {{^ *}}#pragma acc loop[[ACCC]] private(i){{$}}
-    // PRT-A-SRC-NEXT:   {{^ *}}#pragma acc loop ACCC private(i){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-A-NEXT:       for (int i = 0; i < 2; ++i) {
-    // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
-    // PRT-A-NEXT:       }
-    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OSEQ-NEXT: // {
-    // PRT-AO-OSEQ-NEXT: //   int i;
-    // PRT-AO-OSEQ-NEXT: //   for (int i = 0; i < 2; ++i) {
-    // PRT-AO-OSEQ-NEXT: //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OSEQ-NEXT: //   }
-    // PRT-AO-OSEQ-NEXT: // }
-    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
+    // PRT-AO-NEXT: // v----------ACC----------v
+    // PRT-A-NEXT:  {{^ *}}#pragma acc loop seq private(i){{$}}
+    // PRT-A-NEXT:  for (int i = 0; i < 2; ++i) {
+    // PRT-A-NEXT:    {{TGT_PRINTF|printf}}
+    // PRT-A-NEXT:  }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   for (int i = 0; i < 2; ++i) {
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
     //
-    // PRT-OA-OSEQ-NEXT:     // v----------OMP----------v
-    // PRT-O-OPRG-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-O-OPLC-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-OA-AST-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(i){{$}}
-    // PRT-OA-AST-OPLC-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OPRG-NEXT: {{^ *}}// #pragma acc loop ACCC private(i){{$}}
-    // PRT-OA-SRC-OPLC-NEXT: {{^ *}}// #pragma acc loop ACCC private(i){{$}}
-    // PRT-O-OSEQ-NEXT:      {
-    // PRT-O-OSEQ-NEXT:        int i;
-    // PRT-O-NEXT:             for (int i = 0; i < 2; ++i) {
-    // PRT-O-NEXT:               {{TGT_PRINTF|printf}}
-    // PRT-O-NEXT:             }
-    // PRT-O-OSEQ-NEXT:      }
-    // PRT-OA-OSEQ-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OSEQ-NEXT: // #pragma acc loop ACCC private(i){{$}}
-    // PRT-OA-OSEQ-NEXT:     // for (int i = 0; i < 2; ++i) {
-    // PRT-OA-OSEQ-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OSEQ-NEXT:     // }
-    // PRT-OA-OSEQ-NEXT:     // ^----------ACC----------^
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   for (int i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc loop seq private(i){{$}}
+    // PRT-OA-NEXT: // for (int i = 0; i < 2; ++i) {
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
     //
-    // PRT-NOACC-NEXT:   for (int i = 0; i < 2; ++i) {
-    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
-    // PRT-NOACC-NEXT:   }
-    #pragma acc loop ACCC private(i)
+    // PRT-NOACC-NEXT:for (int i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:  {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT:}
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, seq: in loop: 1
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, seq: in loop: 1
+    #pragma acc loop seq private(i)
     for (int i = 0; i < 2; ++i) {
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 0
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 1
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 0
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 1
-      TGT_PRINTF("in loop: %d\n", i);
+      TGT_PRINTF("parallel-local loop-private declared loop control, seq: in loop: %d\n", i);
     }
     // PRT-NEXT: {{TGT_PRINTF|printf}}
-    // EXE-TGT-USE-STDIO-DAG: after loop: 99
-    // EXE-TGT-USE-STDIO-DAG: after loop: 99
-    TGT_PRINTF("after loop: %d\n", i);
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, seq: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, seq: after loop: 99
+    TGT_PRINTF("parallel-local loop-private declared loop control, seq: after loop: %d\n", i);
+
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCGangClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop gang private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang private(i){{$}}
+    //    PRT-NEXT: for (int i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, gang: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, gang: in loop: 1
+    #pragma acc loop gang private(i)
+    for (int i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-local loop-private declared loop control, gang: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, gang: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, gang: after loop: 99
+    TGT_PRINTF("parallel-local loop-private declared loop control, gang: after loop: %d\n", i);
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeParallelForDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker private(i){{$}}
+    //    PRT-NEXT: for (int i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, worker: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, worker: in loop: 1
+    #pragma acc loop worker private(i)
+    for (int i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-local loop-private declared loop control, worker: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, worker: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, worker: after loop: 99
+    TGT_PRINTF("parallel-local loop-private declared loop control, worker: after loop: %d\n", i);
+// PRT-SRC-NEXT: #endif
+#endif
+
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeSimdDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop vector private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute simd private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector private(i){{$}}
+    //    PRT-NEXT: for (int i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, vector: in loop: 1
+    #pragma acc loop vector private(i)
+    for (int i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-local loop-private declared loop control, vector: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, vector: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, vector: after loop: 99
+    TGT_PRINTF("parallel-local loop-private declared loop control, vector: after loop: %d\n", i);
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeParallelForSimdDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker vector private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector private(i){{$}}
+    //    PRT-NEXT: for (int i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, worker vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, worker vector: in loop: 1
+    #pragma acc loop worker vector private(i)
+    for (int i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-local loop-private declared loop control, worker vector: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, worker vector: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, worker vector: after loop: 99
+    TGT_PRINTF("parallel-local loop-private declared loop control, worker vector: after loop: %d\n", i);
+// PRT-SRC-NEXT: #endif
+#endif
   } // PRT-NEXT: }
 
+  //--------------------------------------------------
   // Repeat that but with "acc parallel loop".
+  //--------------------------------------------------
 
-  // PRT-NEXT: printf
-  // EXE-NEXT: parallel-firstprivate loop-private declared loop control
+  // DMP-LABEL: StringLiteral {{.*}} "parallel-firstprivate loop-private declared loop control\n"
+  // PRT-LABEL: printf("parallel-firstprivate loop-private declared loop control\n");
+  // EXE-LABEL: parallel-firstprivate loop-private declared loop control
   printf("parallel-firstprivate loop-private declared loop control\n");
+
   // PRT-NEXT: {
   {
     // PRT-NEXT: int i = 99;
     int i = 99;
-    // DMP:           ACCParallelLoopDirective
-    // DMP-NEXT:        ACCNumGangsClause
-    // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
-    // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:      <implicit>
-    // DMP-AG-NEXT:     ACCGangClause
-    // DMP-AW-NEXT:     ACCWorkerClause
-    // DMP-AV-NEXT:     ACCVectorClause
-    // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
-    // DMP:             effect: ACCParallelDirective
-    // DMP-NEXT:          ACCNumGangsClause
-    // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:          impl: OMPTargetTeamsDirective
-    // DMP-NEXT:            OMPNum_teamsClause
-    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 2
-    // DMP:               ACCLoopDirective
-    // DMP-ASEQ-NEXT:       ACCSeqClause
-    // DMP-ASEQ-NOT:          <implicit>
-    // DMP-AG-NEXT:         ACCGangClause
-    // DMP-AW-NEXT:         ACCWorkerClause
-    // DMP-AV-NEXT:         ACCVectorClause
-    // DMP-NEXT:            ACCPrivateClause
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-    // DMP-AGIMP-NEXT:      ACCGangClause {{.*}} <implicit>
-    // DMP-OPRG-NEXT:       impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:         OMPPrivateClause
-    // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPRG:              ForStmt
-    // DMP-OPLC-NEXT:       impl: [[OMPDD]]
-    // DMP-OPLC-NEXT:         OMPPrivateClause
-    // DMP-OPLC-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPLC:              ForStmt
-    // DMP-OSEQ-NEXT:       impl: CompoundStmt
-    // DMP-OSEQ-NEXT:         DeclStmt
-    // DMP-OSEQ-NEXT:           VarDecl {{.*}} i 'int'
-    // DMP-OSEQ-NEXT:         ForStmt
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCSeqClause
+    //  DMP-NOT:     <implicit>
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCSeqClause
+    //  DMP-NOT:         <implicit>
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       impl: CompoundStmt
+    // DMP-NEXT:         DeclStmt
+    // DMP-NEXT:           VarDecl {{.*}} i 'int'
+    // DMP-NEXT:         ForStmt
     //
-    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
-    // PRT-A-AST-NEXT:   {{^ *}}#pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
-    // PRT-A-SRC-NEXT:   {{^ *}}#pragma acc parallel loop num_gangs(2) ACCC private(i){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-AO-OPLC-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-A-NEXT:       for (int i = 0; i < 2; ++i) {
-    // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
-    // PRT-A-NEXT:       }
-    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OSEQ-NEXT: // #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OSEQ-NEXT: // {
-    // PRT-AO-OSEQ-NEXT: //   int i;
-    // PRT-AO-OSEQ-NEXT: //   for (int i = 0; i < 2; ++i) {
-    // PRT-AO-OSEQ-NEXT: //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OSEQ-NEXT: //   }
-    // PRT-AO-OSEQ-NEXT: // }
-    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) seq private(i){{$}}
+    //  PRT-A-NEXT: for (int i = 0; i < 2; ++i) {
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   for (int i = 0; i < 2; ++i) {
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
     //
-    // PRT-OA-OSEQ-NEXT:     // v----------OMP----------v
-    // PRT-O-NEXT:           {{^ *}}#pragma omp target teams num_teams(2){{$}}
-    // PRT-O-OPRG-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-O-OPLC-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-OA-AST-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
-    // PRT-OA-AST-OPLC-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) ACCC private(i){{$}}
-    // PRT-OA-SRC-OPLC-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) ACCC private(i){{$}}
-    // PRT-O-OSEQ-NEXT:      {
-    // PRT-O-OSEQ-NEXT:        int i;
-    // PRT-O-NEXT:             for (int i = 0; i < 2; ++i) {
-    // PRT-O-NEXT:               {{TGT_PRINTF|printf}}
-    // PRT-O-NEXT:             }
-    // PRT-O-OSEQ-NEXT:      }
-    // PRT-OA-OSEQ-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2) ACCC private(i){{$}}
-    // PRT-OA-OSEQ-NEXT:     // for (int i = 0; i < 2; ++i) {
-    // PRT-OA-OSEQ-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OSEQ-NEXT:     // }
-    // PRT-OA-OSEQ-NEXT:     // ^----------ACC----------^
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   for (int i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc parallel loop num_gangs(2) seq private(i){{$}}
+    // PRT-OA-NEXT: // for (int i = 0; i < 2; ++i) {
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
     //
-    // PRT-NOACC-NEXT:   for (int i = 0; i < 2; ++i) {
-    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
-    // PRT-NOACC-NEXT:   }
-    #pragma acc parallel loop num_gangs(2) ACCC private(i)
+    // PRT-NOACC-NEXT: for (int i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private declared loop control, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private declared loop control, seq: in loop: 1
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private declared loop control, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private declared loop control, seq: in loop: 1
+    #pragma acc parallel loop num_gangs(2) seq private(i)
     for (int i = 0; i < 2; ++i) {
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 0
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 1
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 0
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 1
-      TGT_PRINTF("in loop: %d\n", i);
+      TGT_PRINTF("parallel-firstprivate loop-private declared loop control, seq: in loop: %d\n", i);
     }
     // PRT-NEXT: {{TGT_PRINTF|printf}}
-    // EXE-TGT-USE-STDIO-NEXT: after loop: 99
-    TGT_PRINTF("after loop: %d\n", i);
+    // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private declared loop control, seq: after loop: 99
+    TGT_PRINTF("parallel-firstprivate loop-private declared loop control, seq: after loop: %d\n", i);
   } // PRT-NEXT: }
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int i = 99;
+    int i = 99;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCGangClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCGangClause
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeDirective
+    // DMP-NEXT:         OMPPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) gang private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) gang private(i){{$}}
+    //    PRT-NEXT: for (int i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private declared loop control, gang: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private declared loop control, gang: in loop: 1
+    #pragma acc parallel loop num_gangs(2) gang private(i)
+    for (int i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-firstprivate loop-private declared loop control, gang: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private declared loop control, gang: after loop: 99
+    TGT_PRINTF("parallel-firstprivate loop-private declared loop control, gang: after loop: %d\n", i);
+  } // PRT-NEXT: }
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int i = 99;
+    int i = 99;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCWorkerClause
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeParallelForDirective
+    // DMP-NEXT:         OMPPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) worker private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) worker private(i){{$}}
+    //    PRT-NEXT: for (int i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private declared loop control, worker: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private declared loop control, worker: in loop: 1
+    #pragma acc parallel loop num_gangs(2) worker private(i)
+    for (int i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-firstprivate loop-private declared loop control, worker: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private declared loop control, worker: after loop: 99
+    TGT_PRINTF("parallel-firstprivate loop-private declared loop control, worker: after loop: %d\n", i);
+  } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int i = 99;
+    int i = 99;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCVectorClause
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeSimdDirective
+    // DMP-NEXT:         OMPPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) vector private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute simd private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) vector private(i){{$}}
+    //    PRT-NEXT: for (int i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private declared loop control, vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private declared loop control, vector: in loop: 1
+    #pragma acc parallel loop num_gangs(2) vector private(i)
+    for (int i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-firstprivate loop-private declared loop control, vector: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private declared loop control, vector: after loop: 99
+    TGT_PRINTF("parallel-firstprivate loop-private declared loop control, vector: after loop: %d\n", i);
+  } // PRT-NEXT: }
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int i = 99;
+    int i = 99;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCWorkerClause
+    // DMP-NEXT:       ACCVectorClause
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeParallelForSimdDirective
+    // DMP-NEXT:         OMPPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) worker vector private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) worker vector private(i){{$}}
+    //    PRT-NEXT: for (int i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private declared loop control, worker vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private declared loop control, worker vector: in loop: 1
+    #pragma acc parallel loop num_gangs(2) worker vector private(i)
+    for (int i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-firstprivate loop-private declared loop control, worker vector: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private declared loop control, worker vector: after loop: 99
+    TGT_PRINTF("parallel-firstprivate loop-private declared loop control, worker vector: after loop: %d\n", i);
+  } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   //--------------------------------------------------
   // Check private for loop control variable that is assigned not declared in
   // init of attached for loop.
   //--------------------------------------------------
 
-  // PRT-NEXT: printf
-  // EXE-NEXT: parallel-local loop-private assigned loop control
+  // DMP-LABEL: StringLiteral {{.*}} "parallel-local loop-private assigned loop control\n"
+  // PRT-LABEL: printf("parallel-local loop-private assigned loop control\n");
+  // EXE-LABEL: parallel-local loop-private assigned loop control
   printf("parallel-local loop-private assigned loop control\n");
-  // PRT-A-NEXT:  #pragma acc parallel
+
+  //  PRT-A-NEXT: #pragma acc parallel
   // PRT-AO-NEXT: // #pragma omp target teams
-  // PRT-O-NEXT:  #pragma omp target teams
+  //  PRT-O-NEXT: #pragma omp target teams
   // PRT-OA-NEXT: // #pragma acc parallel
   #pragma acc parallel num_gangs(2)
   // PRT-NEXT: {
   {
     // PRT: int i = 99;
     int i = 99;
-    // DMP:           ACCLoopDirective
-    // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:      <implicit>
-    // DMP-AG-NEXT:     ACCGangClause
-    // DMP-AW-NEXT:     ACCWorkerClause
-    // DMP-AV-NEXT:     ACCVectorClause
-    // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-    // DMP-AGIMP-NEXT:  ACCGangClause {{.*}} <implicit>
-    // DMP-OPRG-NEXT:   impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:     OMPPrivateClause
-    // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPRG:          ForStmt
-    // DMP-OPLC-NEXT:   impl: CompoundStmt
-    // DMP-OPLC-NEXT:     DeclStmt
-    // DMP-OPLC-NEXT:       VarDecl {{.*}} i 'int'
-    // DMP-OPLC-NEXT:     [[OMPDD]]
-    // DMP-OPLC:            ForStmt
-    // DMP-OSEQ-NEXT:   impl: CompoundStmt
-    // DMP-OSEQ-NEXT:     DeclStmt
-    // DMP-OSEQ-NEXT:       VarDecl {{.*}} i 'int'
-    // DMP-OSEQ-NEXT:     ForStmt
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCSeqClause
+    //  DMP-NOT:     <implicit>
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   impl: CompoundStmt
+    // DMP-NEXT:     DeclStmt
+    // DMP-NEXT:       VarDecl {{.*}} i 'int'
+    // DMP-NEXT:     ForStmt
     //
-    // PRT-AO-OPLC-NEXT:     // v----------ACC----------v
-    // PRT-AO-OSEQ-NEXT:     // v----------ACC----------v
-    // PRT-A-AST-NEXT:       {{^ *}}#pragma acc loop[[ACCC]] private(i){{$}}
-    // PRT-A-SRC-NEXT:       {{^ *}}#pragma acc loop ACCC private(i){{$}}
-    // PRT-AO-OPRG-NEXT:     {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-A-NEXT:           for (i = 0; i < 2; ++i) {
-    // PRT-A-NEXT:             {{TGT_PRINTF|printf}}
-    // PRT-A-NEXT:           }
-    // PRT-AO-OPLC-NEXT:     // ---------ACC->OMP--------
-    // PRT-AO-OPLC-NEXT:     // {
-    // PRT-AO-OPLC-NEXT:     //   int i;
-    // PRT-AO-OPLC-NEXT:     //   #pragma omp [[OMPDP]]{{$}}
-    // PRT-AO-OPLC-NEXT:     //   for (i = 0; i < 2; ++i) {
-    // PRT-AO-OPLC-NEXT:     //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OPLC-NEXT:     //   }
-    // PRT-AO-OPLC-NEXT:     // }
-    // PRT-AO-OPLC-NEXT:     // ^----------OMP----------^
-    // PRT-AO-OSEQ-NEXT:     // ---------ACC->OMP--------
-    // PRT-AO-OSEQ-NEXT:     // {
-    // PRT-AO-OSEQ-NEXT:     //   int i;
-    // PRT-AO-OSEQ-NEXT:     //   for (i = 0; i < 2; ++i) {
-    // PRT-AO-OSEQ-NEXT:     //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OSEQ-NEXT:     //   }
-    // PRT-AO-OSEQ-NEXT:     // }
-    // PRT-AO-OSEQ-NEXT:     // ^----------OMP----------^
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop seq private(i){{$}}
+    //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   for (i = 0; i < 2; ++i) {
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
     //
-    // PRT-OA-OPLC-NEXT:     // v----------OMP----------v
-    // PRT-OA-OSEQ-NEXT:     // v----------OMP----------v
-    // PRT-O-OPRG-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-OA-AST-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OPRG-NEXT: {{^ *}}// #pragma acc loop ACCC private(i){{$}}
-    // PRT-O-OPRG-NEXT:      for (i = 0; i < 2; ++i) {
-    // PRT-O-OPRG-NEXT:        {{TGT_PRINTF|printf}}
-    // PRT-O-OPRG-NEXT:      }
-    // PRT-O-OPLC-NEXT:      {
-    // PRT-O-OPLC-NEXT:        int i;
-    // PRT-O-OPLC-NEXT:        {{^ *}}#pragma omp [[OMPDP]]{{$}}
-    // PRT-O-OPLC-NEXT:        for (i = 0; i < 2; ++i) {
-    // PRT-O-OPLC-NEXT:          {{TGT_PRINTF|printf}}
-    // PRT-O-OPLC-NEXT:        }
-    // PRT-O-OPLC-NEXT:      }
-    // PRT-O-OSEQ-NEXT:      {
-    // PRT-O-OSEQ-NEXT:        int i;
-    // PRT-O-OSEQ-NEXT:        for (i = 0; i < 2; ++i) {
-    // PRT-O-OSEQ-NEXT:          {{TGT_PRINTF|printf}}
-    // PRT-O-OSEQ-NEXT:        }
-    // PRT-O-OSEQ-NEXT:      }
-    // PRT-OA-OPLC-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OPLC-NEXT: // #pragma acc loop[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OPLC-NEXT: // #pragma acc loop ACCC private(i){{$}}
-    // PRT-OA-OPLC-NEXT:     // for (i = 0; i < 2; ++i) {
-    // PRT-OA-OPLC-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OPLC-NEXT:     // }
-    // PRT-OA-OPLC-NEXT:     // ^----------ACC----------^
-    // PRT-OA-OSEQ-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OSEQ-NEXT: // #pragma acc loop ACCC private(i){{$}}
-    // PRT-OA-OSEQ-NEXT:     // for (i = 0; i < 2; ++i) {
-    // PRT-OA-OSEQ-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OSEQ-NEXT:     // }
-    // PRT-OA-OSEQ-NEXT:     // ^----------ACC----------^
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   for (i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc loop seq private(i){{$}}
+    // PRT-OA-NEXT: // for (i = 0; i < 2; ++i) {
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
     //
-    // PRT-NOACC-NEXT:   for (i = 0; i < 2; ++i) {
-    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
-    // PRT-NOACC-NEXT:   }
-    #pragma acc loop ACCC private(i)
+    // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, seq: in loop: 1
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, seq: in loop: 1
+    #pragma acc loop seq private(i)
     for (i = 0; i < 2; ++i) {
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 0
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 1
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 0
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 1
-      TGT_PRINTF("in loop: %d\n", i);
+      TGT_PRINTF("parallel-local loop-private assigned loop control, seq: in loop: %d\n", i);
     }
     // PRT-NEXT: {{TGT_PRINTF|printf}}
-    // EXE-TGT-USE-STDIO-DAG: after loop: 99
-    // EXE-TGT-USE-STDIO-DAG: after loop: 99
-    TGT_PRINTF("after loop: %d\n", i);
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, seq: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, seq: after loop: 99
+    TGT_PRINTF("parallel-local loop-private assigned loop control, seq: after loop: %d\n", i);
+
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCGangClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop gang private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang private(i){{$}}
+    //    PRT-NEXT: for (i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, gang: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, gang: in loop: 1
+    #pragma acc loop gang private(i)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-local loop-private assigned loop control, gang: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, gang: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, gang: after loop: 99
+    TGT_PRINTF("parallel-local loop-private assigned loop control, gang: after loop: %d\n", i);
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeParallelForDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for private(i){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker private(i){{$}}
+    //    PRT-NEXT: for (i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, worker: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, worker: in loop: 1
+    #pragma acc loop worker private(i)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-local loop-private assigned loop control, worker: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, worker: after loop: 99
+    // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, worker: after loop: 99
+    TGT_PRINTF("parallel-local loop-private assigned loop control, worker: after loop: %d\n", i);
+// PRT-SRC-NEXT: #endif
+#endif
+
+     //      DMP: ACCLoopDirective
+     // DMP-NEXT:   ACCVectorClause
+     // DMP-NEXT:   ACCPrivateClause
+     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+     // DMP-NEXT:   impl: CompoundStmt
+     // DMP-NEXT:     DeclStmt
+     // DMP-NEXT:       VarDecl {{.*}} i 'int'
+     // DMP-NEXT:     OMPDistributeSimdDirective
+     //      DMP:       ForStmt
+     //
+     // PRT-AO-NEXT: // v----------ACC----------v
+     //  PRT-A-NEXT: {{^ *}}#pragma acc loop vector private(i){{$}}
+     //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+     //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+     //  PRT-A-NEXT: }
+     // PRT-AO-NEXT: // ---------ACC->OMP--------
+     // PRT-AO-NEXT: // {
+     // PRT-AO-NEXT: //   int i;
+     // PRT-AO-NEXT: //   #pragma omp distribute simd{{$}}
+     // PRT-AO-NEXT: //   for (i = 0; i < 2; ++i) {
+     // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+     // PRT-AO-NEXT: //   }
+     // PRT-AO-NEXT: // }
+     // PRT-AO-NEXT: // ^----------OMP----------^
+     //
+     // PRT-OA-NEXT: // v----------OMP----------v
+     //  PRT-O-NEXT: {
+     //  PRT-O-NEXT:   int i;
+     //  PRT-O-NEXT:   {{^ *}}#pragma omp distribute simd{{$}}
+     //  PRT-O-NEXT:   for (i = 0; i < 2; ++i) {
+     //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+     //  PRT-O-NEXT:   }
+     //  PRT-O-NEXT: }
+     // PRT-OA-NEXT: // ---------OMP<-ACC--------
+     // PRT-OA-NEXT: // #pragma acc loop vector private(i){{$}}
+     // PRT-OA-NEXT: // for (i = 0; i < 2; ++i) {
+     // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+     // PRT-OA-NEXT: // }
+     // PRT-OA-NEXT: // ^----------ACC----------^
+     //
+     // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+     // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+     // PRT-NOACC-NEXT: }
+     //
+     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, vector: in loop: 0
+     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, vector: in loop: 1
+     #pragma acc loop vector private(i)
+     for (i = 0; i < 2; ++i) {
+       TGT_PRINTF("parallel-local loop-private assigned loop control, vector: in loop: %d\n", i);
+     }
+     // PRT-NEXT: {{TGT_PRINTF|printf}}
+     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, vector: after loop: 99
+     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, vector: after loop: 99
+     TGT_PRINTF("parallel-local loop-private assigned loop control, vector: after loop: %d\n", i);
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+     //      DMP: ACCLoopDirective
+     // DMP-NEXT:   ACCWorkerClause
+     // DMP-NEXT:   ACCVectorClause
+     // DMP-NEXT:   ACCPrivateClause
+     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+     // DMP-NEXT:   impl: CompoundStmt
+     // DMP-NEXT:     DeclStmt
+     // DMP-NEXT:       VarDecl {{.*}} i 'int'
+     // DMP-NEXT:     OMPDistributeParallelForSimdDirective
+     //      DMP:       ForStmt
+     //
+     // PRT-AO-NEXT: // v----------ACC----------v
+     //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker vector private(i){{$}}
+     //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+     //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+     //  PRT-A-NEXT: }
+     // PRT-AO-NEXT: // ---------ACC->OMP--------
+     // PRT-AO-NEXT: // {
+     // PRT-AO-NEXT: //   int i;
+     // PRT-AO-NEXT: //   #pragma omp distribute parallel for simd{{$}}
+     // PRT-AO-NEXT: //   for (i = 0; i < 2; ++i) {
+     // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+     // PRT-AO-NEXT: //   }
+     // PRT-AO-NEXT: // }
+     // PRT-AO-NEXT: // ^----------OMP----------^
+     //
+     // PRT-OA-NEXT: // v----------OMP----------v
+     //  PRT-O-NEXT: {
+     //  PRT-O-NEXT:   int i;
+     //  PRT-O-NEXT:   {{^ *}}#pragma omp distribute parallel for simd{{$}}
+     //  PRT-O-NEXT:   for (i = 0; i < 2; ++i) {
+     //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+     //  PRT-O-NEXT:   }
+     //  PRT-O-NEXT: }
+     // PRT-OA-NEXT: // ---------OMP<-ACC--------
+     // PRT-OA-NEXT: // #pragma acc loop worker vector private(i){{$}}
+     // PRT-OA-NEXT: // for (i = 0; i < 2; ++i) {
+     // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+     // PRT-OA-NEXT: // }
+     // PRT-OA-NEXT: // ^----------ACC----------^
+     //
+     // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+     // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+     // PRT-NOACC-NEXT: }
+     //
+     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, worker vector: in loop: 0
+     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, worker vector: in loop: 1
+     #pragma acc loop worker vector private(i)
+     for (i = 0; i < 2; ++i) {
+       TGT_PRINTF("parallel-local loop-private assigned loop control, worker vector: in loop: %d\n", i);
+     }
+     // PRT-NEXT: {{TGT_PRINTF|printf}}
+     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, worker vector: after loop: 99
+     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, worker vector: after loop: 99
+     TGT_PRINTF("parallel-local loop-private assigned loop control, worker vector: after loop: %d\n", i);
+// PRT-SRC-NEXT: #endif
+#endif
   } // PRT-NEXT: }
 
+  //--------------------------------------------------
   // Repeat that but with "acc parallel loop".
+  //--------------------------------------------------
 
-  // PRT-NEXT: printf
-  // EXE-NEXT: parallel-firstprivate loop-private assigned loop control
+  // DMP-LABEL: StringLiteral {{.*}} "parallel-firstprivate loop-private assigned loop control\n"
+  // PRT-LABEL: printf("parallel-firstprivate loop-private assigned loop control\n");
+  // EXE-LABEL: parallel-firstprivate loop-private assigned loop control
   printf("parallel-firstprivate loop-private assigned loop control\n");
+
   // PRT-NEXT: {
   {
     // PRT-NEXT: int i = 99;
     int i = 99;
-    // DMP:           ACCParallelLoopDirective
-    // DMP-NEXT:        ACCNumGangsClause
-    // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
-    // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:      <implicit>
-    // DMP-AG-NEXT:     ACCGangClause
-    // DMP-AW-NEXT:     ACCWorkerClause
-    // DMP-AV-NEXT:     ACCVectorClause
-    // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NEXT:        effect: ACCParallelDirective
-    // DMP-NEXT:          ACCNumGangsClause
-    // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:          impl: OMPTargetTeamsDirective
-    // DMP-NEXT:            OMPNum_teamsClause
-    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 2
-    // DMP:               ACCLoopDirective
-    // DMP-ASEQ-NEXT:       ACCSeqClause
-    // DMP-ASEQ-NOT:          <implicit>
-    // DMP-AG-NEXT:         ACCGangClause
-    // DMP-AW-NEXT:         ACCWorkerClause
-    // DMP-AV-NEXT:         ACCVectorClause
-    // DMP-NEXT:            ACCPrivateClause
-    // DMP-NEXT:              DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-AIMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
-    // DMP-AGIMP-NEXT:      ACCGangClause {{.*}} <implicit>
-    // DMP-OPRG-NEXT:       impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:         OMPPrivateClause
-    // DMP-OPRG-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPRG:              ForStmt
-    // DMP-OPLC-NEXT:       impl: CompoundStmt
-    // DMP-OPLC-NEXT:         DeclStmt
-    // DMP-OPLC-NEXT:           VarDecl {{.*}} i 'int'
-    // DMP-OPLC-NEXT:         [[OMPDD]]
-    // DMP-OPLC:                ForStmt
-    // DMP-OSEQ-NEXT:       impl: CompoundStmt
-    // DMP-OSEQ-NEXT:         DeclStmt
-    // DMP-OSEQ-NEXT:           VarDecl {{.*}} i 'int'
-    // DMP-OSEQ-NEXT:         ForStmt
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCSeqClause
+    //  DMP-NOT:     <implicit>
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCSeqClause
+    //  DMP-NOT:         <implicit>
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       impl: CompoundStmt
+    // DMP-NEXT:         DeclStmt
+    // DMP-NEXT:           VarDecl {{.*}} i 'int'
+    // DMP-NEXT:         ForStmt
     //
-    // PRT-AO-OPLC-NEXT: // v----------ACC----------v
-    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
-    // PRT-A-AST-NEXT:   {{^ *}}#pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
-    // PRT-A-SRC-NEXT:   {{^ *}}#pragma acc parallel loop num_gangs(2) ACCC private(i){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-A-NEXT:       for (i = 0; i < 2; ++i) {
-    // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
-    // PRT-A-NEXT:       }
-    // PRT-AO-OPLC-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OPLC-NEXT: // #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OPLC-NEXT: // {
-    // PRT-AO-OPLC-NEXT: //   int i;
-    // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]]{{$}}
-    // PRT-AO-OPLC-NEXT: //   for (i = 0; i < 2; ++i) {
-    // PRT-AO-OPLC-NEXT: //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OPLC-NEXT: //   }
-    // PRT-AO-OPLC-NEXT: // }
-    // PRT-AO-OPLC-NEXT: // ^----------OMP----------^
-    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OSEQ-NEXT: // #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OSEQ-NEXT: // {
-    // PRT-AO-OSEQ-NEXT: //   int i;
-    // PRT-AO-OSEQ-NEXT: //   for (i = 0; i < 2; ++i) {
-    // PRT-AO-OSEQ-NEXT: //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OSEQ-NEXT: //   }
-    // PRT-AO-OSEQ-NEXT: // }
-    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) seq private(i){{$}}
+    //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   for (i = 0; i < 2; ++i) {
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
     //
-    // PRT-OA-OPLC-NEXT:     // v----------OMP----------v
-    // PRT-OA-OSEQ-NEXT:     // v----------OMP----------v
-    // PRT-O-NEXT:           {{^ *}}#pragma omp target teams num_teams(2){{$}}
-    // PRT-O-OPRG-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(i){{$}}
-    // PRT-OA-AST-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) ACCC private(i){{$}}
-    // PRT-O-OPRG-NEXT:      for (i = 0; i < 2; ++i) {
-    // PRT-O-OPRG-NEXT:        {{TGT_PRINTF|printf}}
-    // PRT-O-OPRG-NEXT:      }
-    // PRT-O-OPLC-NEXT:      {
-    // PRT-O-OPLC-NEXT:        int i;
-    // PRT-O-OPLC-NEXT:        {{^ *}}#pragma omp [[OMPDP]]{{$}}
-    // PRT-O-OPLC-NEXT:        for (i = 0; i < 2; ++i) {
-    // PRT-O-OPLC-NEXT:          {{TGT_PRINTF|printf}}
-    // PRT-O-OPLC-NEXT:        }
-    // PRT-O-OPLC-NEXT:      }
-    // PRT-O-OSEQ-NEXT:      {
-    // PRT-O-OSEQ-NEXT:        int i;
-    // PRT-O-OSEQ-NEXT:        for (i = 0; i < 2; ++i) {
-    // PRT-O-OSEQ-NEXT:          {{TGT_PRINTF|printf}}
-    // PRT-O-OSEQ-NEXT:        }
-    // PRT-O-OSEQ-NEXT:      }
-    // PRT-OA-OPLC-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OPLC-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OPLC-NEXT: // #pragma acc parallel loop num_gangs(2) ACCC private(i){{$}}
-    // PRT-OA-OPLC-NEXT:     // for (i = 0; i < 2; ++i) {
-    // PRT-OA-OPLC-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OPLC-NEXT:     // }
-    // PRT-OA-OPLC-NEXT:     // ^----------ACC----------^
-    // PRT-OA-OSEQ-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i){{$}}
-    // PRT-OA-SRC-OSEQ-NEXT: // #pragma acc parallel loop num_gangs(2) ACCC private(i){{$}}
-    // PRT-OA-OSEQ-NEXT:     // for (i = 0; i < 2; ++i) {
-    // PRT-OA-OSEQ-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OSEQ-NEXT:     // }
-    // PRT-OA-OSEQ-NEXT:     // ^----------ACC----------^
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   for (i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc parallel loop num_gangs(2) seq private(i){{$}}
+    // PRT-OA-NEXT: // for (i = 0; i < 2; ++i) {
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
     //
-    // PRT-NOACC-NEXT:   for (i = 0; i < 2; ++i) {
-    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
-    // PRT-NOACC-NEXT:   }
-    #pragma acc parallel loop num_gangs(2) ACCC private(i)
+    // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private assigned loop control, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private assigned loop control, seq: in loop: 1
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private assigned loop control, seq: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private assigned loop control, seq: in loop: 1
+    #pragma acc parallel loop num_gangs(2) seq private(i)
     for (i = 0; i < 2; ++i) {
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 0
-      // EXE-TGT-USE-STDIO-DAG:        in loop: 1
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 0
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: 1
-      TGT_PRINTF("in loop: %d\n", i);
+      TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, seq: in loop: %d\n", i);
     }
     // PRT-NEXT: {{TGT_PRINTF|printf}}
-    // EXE-TGT-USE-STDIO-NEXT: after loop: 99
-    TGT_PRINTF("after loop: %d\n", i);
+    // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private assigned loop control, seq: after loop: 99
+    TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, seq: after loop: %d\n", i);
   } // PRT-NEXT: }
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int i = 99;
+    int i = 99;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCGangClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCGangClause
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeDirective
+    // DMP-NEXT:         OMPPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) gang private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute private(i){{$}}
+    //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT: }
+    //
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) gang private(i){{$}}
+    //  PRT-O-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT: }
+    //
+    // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private assigned loop control, gang: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private assigned loop control, gang: in loop: 1
+    #pragma acc parallel loop num_gangs(2) gang private(i)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, gang: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private assigned loop control, gang: after loop: 99
+    TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, gang: after loop: %d\n", i);
+  } // PRT-NEXT: }
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int i = 99;
+    int i = 99;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCWorkerClause
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: OMPDistributeParallelForDirective
+    // DMP-NEXT:         OMPPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    //      DMP:         ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) worker private(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for private(i){{$}}
+    //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT: }
+    //
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for private(i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) worker private(i){{$}}
+    //  PRT-O-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT: }
+    //
+    // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private assigned loop control, worker: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private assigned loop control, worker: in loop: 1
+    #pragma acc parallel loop num_gangs(2) worker private(i)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, worker: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private assigned loop control, worker: after loop: 99
+    TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, worker: after loop: %d\n", i);
+  } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int i = 99;
+    int i = 99;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCVectorClause
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: CompoundStmt
+    // DMP-NEXT:         DeclStmt
+    // DMP-NEXT:           VarDecl {{.*}} i 'int'
+    // DMP-NEXT:         OMPDistributeSimdDirective
+    //      DMP:           ForStmt
+    //
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) vector private(i){{$}}
+    //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   #pragma omp distribute simd{{$}}
+    // PRT-AO-NEXT: //   for (i = 0; i < 2; ++i) {
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
+    //
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   {{^ *}}#pragma omp distribute simd{{$}}
+    //  PRT-O-NEXT:   for (i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc parallel loop num_gangs(2) vector private(i){{$}}
+    // PRT-OA-NEXT: // for (i = 0; i < 2; ++i) {
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
+    //
+    // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private assigned loop control, vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private assigned loop control, vector: in loop: 1
+    #pragma acc parallel loop num_gangs(2) vector private(i)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, vector: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private assigned loop control, vector: after loop: 99
+    TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, vector: after loop: %d\n", i);
+  } // PRT-NEXT: }
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: int i = 99;
+    int i = 99;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:     ACCLoopDirective
+    // DMP-NEXT:       ACCWorkerClause
+    // DMP-NEXT:       ACCVectorClause
+    // DMP-NEXT:       ACCPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:       impl: CompoundStmt
+    // DMP-NEXT:         DeclStmt
+    // DMP-NEXT:           VarDecl {{.*}} i 'int'
+    // DMP-NEXT:         OMPDistributeParallelForSimdDirective
+    //      DMP:           ForStmt
+    //
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) worker vector private(i){{$}}
+    //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   #pragma omp distribute parallel for simd{{$}}
+    // PRT-AO-NEXT: //   for (i = 0; i < 2; ++i) {
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
+    //
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   {{^ *}}#pragma omp distribute parallel for simd{{$}}
+    //  PRT-O-NEXT:   for (i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc parallel loop num_gangs(2) worker vector private(i){{$}}
+    // PRT-OA-NEXT: // for (i = 0; i < 2; ++i) {
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
+    //
+    // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private assigned loop control, worker vector: in loop: 0
+    // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private assigned loop control, worker vector: in loop: 1
+    #pragma acc parallel loop num_gangs(2) worker vector private(i)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, worker vector: in loop: %d\n", i);
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private assigned loop control, worker vector: after loop: 99
+    TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, worker vector: after loop: %d\n", i);
+  } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   //--------------------------------------------------
   // Check multiple privates in same clause and different clauses, including
@@ -1161,12 +2506,14 @@ int main() {
   // OpenMP.
   //--------------------------------------------------
 
-  // PRT-NEXT: printf
-  // EXE-NEXT: multiple privates on acc loop
+  // DMP-LABEL: StringLiteral {{.*}} "multiple privates on acc loop\n"
+  // PRT-LABEL: printf("multiple privates on acc loop\n");
+  // EXE-LABEL: multiple privates on acc loop
   printf("multiple privates on acc loop\n");
-  // PRT-A-NEXT:  #pragma acc parallel
+
+  //  PRT-A-NEXT: #pragma acc parallel
   // PRT-AO-NEXT: // #pragma omp target teams
-  // PRT-O-NEXT:  #pragma omp target teams
+  //  PRT-O-NEXT: #pragma omp target teams
   // PRT-OA-NEXT: // #pragma acc parallel
   #pragma acc parallel num_gangs(2)
   // PRT-NEXT: {
@@ -1177,142 +2524,314 @@ int main() {
     int i = 99;
     int j = 88;
     int k = 77;
-    // DMP:           ACCLoopDirective
-    // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:      <implicit>
-    // DMP-AG-NEXT:     ACCGangClause
-    // DMP-AW-NEXT:     ACCWorkerClause
-    // DMP-AV-NEXT:     ACCVectorClause
-    // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-AIMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
-    // DMP-AGIMP-NEXT:  ACCGangClause {{.*}} <implicit>
-    // DMP-OPRG-NEXT:   impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:     OMPPrivateClause
-    // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPRG-NEXT:     OMPPrivateClause
-    // DMP-OPRG-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-OPRG:          ForStmt
-    // DMP-OPLC-NEXT:   impl: CompoundStmt
-    // DMP-OPLC-NEXT:     DeclStmt
-    // DMP-OPLC-NEXT:       VarDecl {{.*}} i 'int'
-    // DMP-OPLC-NEXT:     [[OMPDD]]
-    // DMP-OPLC-NEXT:       OMPPrivateClause
-    // DMP-OPLC-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-OPLC-NEXT:       OMPPrivateClause
-    // DMP-OPLC-NEXT:         DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-OPLC:            ForStmt
-    // DMP-OSEQ-NEXT:   impl: CompoundStmt
-    // DMP-OSEQ-NEXT:     DeclStmt
-    // DMP-OSEQ-NEXT:       VarDecl {{.*}} j 'int'
-    // DMP-OSEQ-NEXT:     DeclStmt
-    // DMP-OSEQ-NEXT:       VarDecl {{.*}} i 'int'
-    // DMP-OSEQ-NEXT:     DeclStmt
-    // DMP-OSEQ-NEXT:       VarDecl {{.*}} k 'int'
-    // DMP-OSEQ-NEXT:     ForStmt
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCSeqClause
+    //  DMP-NOT:     <implicit>
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:   impl: CompoundStmt
+    // DMP-NEXT:     DeclStmt
+    // DMP-NEXT:       VarDecl {{.*}} j 'int'
+    // DMP-NEXT:     DeclStmt
+    // DMP-NEXT:       VarDecl {{.*}} i 'int'
+    // DMP-NEXT:     DeclStmt
+    // DMP-NEXT:       VarDecl {{.*}} k 'int'
+    // DMP-NEXT:     ForStmt
     //
-    // PRT-AO-OPLC-NEXT: // v----------ACC----------v
-    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
-    // PRT-A-AST-NEXT:   {{^ *}}#pragma acc loop[[ACCC]] private(j,i) private(k){{$}}
-    // PRT-A-SRC-NEXT:   {{^ *}}#pragma acc loop ACCC private(j,i) private(k){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(j,i) private(k){{$}}
-    // PRT-A-NEXT:       for (i = 0; i < 2; ++i) {
-    // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
-    // PRT-A-NEXT:         j = k = 55;
-    // PRT-A-NEXT:       }
-    // PRT-AO-OPLC-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OPLC-NEXT: // {
-    // PRT-AO-OPLC-NEXT: //   int i;
-    // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]] private(j) private(k){{$}}
-    // PRT-AO-OPLC-NEXT: //   for (i = 0; i < 2; ++i) {
-    // PRT-AO-OPLC-NEXT: //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OPLC-NEXT: //     j = k = 55;
-    // PRT-AO-OPLC-NEXT: //   }
-    // PRT-AO-OPLC-NEXT: // }
-    // PRT-AO-OPLC-NEXT: // ^----------OMP----------^
-    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OSEQ-NEXT: // {
-    // PRT-AO-OSEQ-NEXT: //   int j;
-    // PRT-AO-OSEQ-NEXT: //   int i;
-    // PRT-AO-OSEQ-NEXT: //   int k;
-    // PRT-AO-OSEQ-NEXT: //   for (i = 0; i < 2; ++i) {
-    // PRT-AO-OSEQ-NEXT: //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OSEQ-NEXT: //     j = k = 55;
-    // PRT-AO-OSEQ-NEXT: //   }
-    // PRT-AO-OSEQ-NEXT: // }
-    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop seq private(j,i) private(k){{$}}
+    //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT:   j = k = 55;
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int j;
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   int k;
+    // PRT-AO-NEXT: //   for (i = 0; i < 2; ++i) {
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //     j = k = 55;
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
     //
-    // PRT-OA-OPLC-NEXT:     // v----------OMP----------v
-    // PRT-OA-OSEQ-NEXT:     // v----------OMP----------v
-    // PRT-O-OPRG-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(j,i) private(k){{$}}
-    // PRT-OA-AST-OPRG-NEXT: {{^ *}}// #pragma acc loop[[ACCC]] private(j,i) private(k){{$}}
-    // PRT-OA-SRC-OPRG-NEXT: {{^ *}}// #pragma acc loop ACCC private(j,i) private(k){{$}}
-    // PRT-O-OPRG-NEXT:      for (i = 0; i < 2; ++i) {
-    // PRT-O-OPRG-NEXT:        {{TGT_PRINTF|printf}}
-    // PRT-O-OPRG-NEXT:        j = k = 55;
-    // PRT-O-OPRG-NEXT:      }
-    // PRT-O-OPLC-NEXT:      {
-    // PRT-O-OPLC-NEXT:        int i;
-    // PRT-O-OPLC-NEXT:        {{^ *}}#pragma omp [[OMPDP]] private(j) private(k){{$}}
-    // PRT-O-OPLC-NEXT:        for (i = 0; i < 2; ++i) {
-    // PRT-O-OPLC-NEXT:          {{TGT_PRINTF|printf}}
-    // PRT-O-OPLC-NEXT:          j = k = 55;
-    // PRT-O-OPLC-NEXT:        }
-    // PRT-O-OPLC-NEXT:      }
-    // PRT-O-OSEQ-NEXT:      {
-    // PRT-O-OSEQ-NEXT:        int j;
-    // PRT-O-OSEQ-NEXT:        int i;
-    // PRT-O-OSEQ-NEXT:        int k;
-    // PRT-O-OSEQ-NEXT:        for (i = 0; i < 2; ++i) {
-    // PRT-O-OSEQ-NEXT:          {{TGT_PRINTF|printf}}
-    // PRT-O-OSEQ-NEXT:          j = k = 55;
-    // PRT-O-OSEQ-NEXT:        }
-    // PRT-O-OSEQ-NEXT:      }
-    // PRT-OA-OPLC-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OPLC-NEXT: // #pragma acc loop[[ACCC]] private(j,i) private(k){{$}}
-    // PRT-OA-SRC-OPLC-NEXT: // #pragma acc loop ACCC private(j,i) private(k){{$}}
-    // PRT-OA-OPLC-NEXT:     // for (i = 0; i < 2; ++i) {
-    // PRT-OA-OPLC-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OPLC-NEXT:     //   j = k = 55;
-    // PRT-OA-OPLC-NEXT:     // }
-    // PRT-OA-OPLC-NEXT:     // ^----------ACC----------^
-    // PRT-OA-OSEQ-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OSEQ-NEXT: // #pragma acc loop[[ACCC]] private(j,i) private(k){{$}}
-    // PRT-OA-SRC-OSEQ-NEXT: // #pragma acc loop ACCC private(j,i) private(k){{$}}
-    // PRT-OA-OSEQ-NEXT:     // for (i = 0; i < 2; ++i) {
-    // PRT-OA-OSEQ-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OSEQ-NEXT:     //   j = k = 55;
-    // PRT-OA-OSEQ-NEXT:     // }
-    // PRT-OA-OSEQ-NEXT:     // ^----------ACC----------^
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int j;
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   int k;
+    //  PRT-O-NEXT:   for (i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:     j = k = 55;
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc loop seq private(j,i) private(k){{$}}
+    // PRT-OA-NEXT: // for (i = 0; i < 2; ++i) {
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: //   j = k = 55;
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
     //
-    // PRT-NOACC-NEXT:   for (i = 0; i < 2; ++i) {
-    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
-    // PRT-NOACC-NEXT:     j = k = 55;
-    // PRT-NOACC-NEXT:   }
-    #pragma acc loop ACCC private(j,i) private(k)
+    // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT:   j = k = 55;
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, seq: in loop: i=0
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, seq: in loop: i=1
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, seq: in loop: i=0
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, seq: in loop: i=1
+    #pragma acc loop seq private(j,i) private(k)
     for (i = 0; i < 2; ++i) {
-      // EXE-TGT-USE-STDIO-DAG:        in loop: i=0
-      // EXE-TGT-USE-STDIO-DAG:        in loop: i=1
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: i=0
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: i=1
-      TGT_PRINTF("in loop: i=%d\n", i);
+      TGT_PRINTF("multiple privates on acc loop, seq: in loop: i=%d\n", i);
       j = k = 55;
     }
     // PRT-NEXT: {{TGT_PRINTF|printf}}
-    // EXE-TGT-USE-STDIO-DAG: after loop: i=99, j=88, k=77
-    // EXE-TGT-USE-STDIO-DAG: after loop: i=99, j=88, k=77
-    TGT_PRINTF("after loop: i=%d, j=%d, k=%d\n", i, j, k);
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, seq: after loop: i=99, j=88, k=77
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, seq: after loop: i=99, j=88, k=77
+    TGT_PRINTF("multiple privates on acc loop, seq: after loop: i=%d, j=%d, k=%d\n", i, j, k);
+
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCGangClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop gang private(j,i) private(k){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute private(j,i) private(k){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute private(j,i) private(k){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang private(j,i) private(k){{$}}
+    //    PRT-NEXT: for (i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT:   j = k = 55;
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, gang: in loop: i=0
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, gang: in loop: i=1
+    #pragma acc loop gang private(j,i) private(k)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("multiple privates on acc loop, gang: in loop: i=%d\n", i);
+      j = k = 55;
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, gang: after loop: i=99, j=88, k=77
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, gang: after loop: i=99, j=88, k=77
+    TGT_PRINTF("multiple privates on acc loop, gang: after loop: i=%d, j=%d, k=%d\n", i, j, k);
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: OMPDistributeParallelForDirective
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:     OMPPrivateClause
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+    //      DMP:     ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker private(j,i) private(k){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for private(j,i) private(k){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for private(j,i) private(k){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker private(j,i) private(k){{$}}
+    //    PRT-NEXT: for (i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT:   j = k = 55;
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, worker: in loop: i=0
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, worker: in loop: i=1
+    #pragma acc loop worker private(j,i) private(k)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("multiple privates on acc loop, worker: in loop: i=%d\n", i);
+      j = k = 55;
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, worker: after loop: i=99, j=88, k=77
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, worker: after loop: i=99, j=88, k=77
+    TGT_PRINTF("multiple privates on acc loop, worker: after loop: i=%d, j=%d, k=%d\n", i, j, k);
+// PRT-SRC-NEXT: #endif
+#endif
+
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: CompoundStmt
+    // DMP-NEXT:     DeclStmt
+    // DMP-NEXT:       VarDecl {{.*}} i 'int'
+    // DMP-NEXT:     OMPDistributeSimdDirective
+    // DMP-NEXT:       OMPPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:       OMPPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'k' 'int'
+    //      DMP:       ForStmt
+    //
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop vector private(j,i) private(k){{$}}
+    //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT:   j = k = 55;
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   #pragma omp distribute simd private(j) private(k){{$}}
+    // PRT-AO-NEXT: //   for (i = 0; i < 2; ++i) {
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //     j = k = 55;
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
+    //
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   {{^ *}}#pragma omp distribute simd private(j) private(k){{$}}
+    //  PRT-O-NEXT:   for (i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:     j = k = 55;
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc loop vector private(j,i) private(k){{$}}
+    // PRT-OA-NEXT: // for (i = 0; i < 2; ++i) {
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: //   j = k = 55;
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
+    //
+    // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT:   j = k = 55;
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, vector: in loop: i=0
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, vector: in loop: i=1
+    #pragma acc loop vector private(j,i) private(k)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("multiple privates on acc loop, vector: in loop: i=%d\n", i);
+      j = k = 55;
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, vector: after loop: i=99, j=88, k=77
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, vector: after loop: i=99, j=88, k=77
+    TGT_PRINTF("multiple privates on acc loop, vector: after loop: i=%d, j=%d, k=%d\n", i, j, k);
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+    //      DMP: ACCLoopDirective
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:   impl: CompoundStmt
+    // DMP-NEXT:     DeclStmt
+    // DMP-NEXT:       VarDecl {{.*}} i 'int'
+    // DMP-NEXT:     OMPDistributeParallelForSimdDirective
+    // DMP-NEXT:       OMPPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:       OMPPrivateClause
+    // DMP-NEXT:         DeclRefExpr {{.*}} 'k' 'int'
+    //      DMP:       ForStmt
+    //
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker vector private(j,i) private(k){{$}}
+    //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT:   j = k = 55;
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   #pragma omp distribute parallel for simd private(j) private(k){{$}}
+    // PRT-AO-NEXT: //   for (i = 0; i < 2; ++i) {
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //     j = k = 55;
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
+    //
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   {{^ *}}#pragma omp distribute parallel for simd private(j) private(k){{$}}
+    //  PRT-O-NEXT:   for (i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:     j = k = 55;
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc loop worker vector private(j,i) private(k){{$}}
+    // PRT-OA-NEXT: // for (i = 0; i < 2; ++i) {
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: //   j = k = 55;
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
+    //
+    // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT:   j = k = 55;
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, worker vector: in loop: i=0
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, worker vector: in loop: i=1
+    #pragma acc loop worker vector private(j,i) private(k)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("multiple privates on acc loop, worker vector: in loop: i=%d\n", i);
+      j = k = 55;
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, worker vector: after loop: i=99, j=88, k=77
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, worker vector: after loop: i=99, j=88, k=77
+    TGT_PRINTF("multiple privates on acc loop, worker vector: after loop: i=%d, j=%d, k=%d\n", i, j, k);
+// PRT-SRC-NEXT: #endif
+#endif
   } // PRT-NEXT: }
 
+  //--------------------------------------------------
   // Repeat that but with "acc parallel loop".
+  //--------------------------------------------------
 
-  // PRT-NEXT: printf
-  // EXE-NEXT: multiple privates on acc parallel loop
+  // DMP-LABEL: StringLiteral {{.*}} "multiple privates on acc parallel loop\n"
+  // PRT-LABEL: printf("multiple privates on acc parallel loop\n");
+  // EXE-LABEL: multiple privates on acc parallel loop
   printf("multiple privates on acc parallel loop\n");
+
   // PRT-NEXT: {
   {
     // PRT: int i = 99;
@@ -1321,158 +2840,422 @@ int main() {
     int i = 99;
     int j = 88;
     int k = 77;
-    // DMP:           ACCParallelLoopDirective
-    // DMP-NEXT:        ACCNumGangsClause
-    // DMP-NEXT:          IntegerLiteral {{.*}} 'int' 2
-    // DMP-ASEQ-NEXT:   ACCSeqClause
-    // DMP-ASEQ-NOT:      <implicit>
-    // DMP-AG-NEXT:     ACCGangClause
-    // DMP-AW-NEXT:     ACCWorkerClause
-    // DMP-AV-NEXT:     ACCVectorClause
-    // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:        ACCPrivateClause
-    // DMP-NEXT:          DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-NEXT:        effect: ACCParallelDirective
-    // DMP-NEXT:          ACCNumGangsClause
-    // DMP-NEXT:            IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:          impl: OMPTargetTeamsDirective
-    // DMP-NEXT:            OMPNum_teamsClause
-    // DMP-NEXT:              IntegerLiteral {{.*}} 'int' 2
-    // DMP:                 ACCLoopDirective
-    // DMP-ASEQ-NEXT:         ACCSeqClause
-    // DMP-ASEQ-NOT:            <implicit>
-    // DMP-AG-NEXT:           ACCGangClause
-    // DMP-AW-NEXT:           ACCWorkerClause
-    // DMP-AV-NEXT:           ACCVectorClause
-    // DMP-NEXT:              ACCPrivateClause
-    // DMP-NEXT:                DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NEXT:                DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:              ACCPrivateClause
-    // DMP-NEXT:                DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-AIMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
-    // DMP-AGIMP-NEXT:        ACCGangClause {{.*}} <implicit>
-    // DMP-OPRG-NEXT:         impl: [[OMPDD]]
-    // DMP-OPRG-NEXT:           OMPPrivateClause
-    // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-OPRG-NEXT:           OMPPrivateClause
-    // DMP-OPRG-NEXT:             DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-OPRG:                ForStmt
-    // DMP-OPLC-NEXT:         impl: CompoundStmt
-    // DMP-OPLC-NEXT:           DeclStmt
-    // DMP-OPLC-NEXT:             VarDecl {{.*}} i 'int'
-    // DMP-OPLC-NEXT:           [[OMPDD]]
-    // DMP-OPLC-NEXT:             OMPPrivateClause
-    // DMP-OPLC-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-OPLC-NEXT:             OMPPrivateClause
-    // DMP-OPLC-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-OPLC:                  ForStmt
-    // DMP-OSEQ-NEXT:         impl: CompoundStmt
-    // DMP-OSEQ-NEXT:           DeclStmt
-    // DMP-OSEQ-NEXT:             VarDecl {{.*}} i 'int'
-    // DMP-OSEQ-NEXT:           DeclStmt
-    // DMP-OSEQ-NEXT:             VarDecl {{.*}} j 'int'
-    // DMP-OSEQ-NEXT:           DeclStmt
-    // DMP-OSEQ-NEXT:             VarDecl {{.*}} k 'int'
-    // DMP-OSEQ-NEXT:           ForStmt
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCSeqClause
+    //  DMP-NOT:     <implicit>
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:       ACCLoopDirective
+    // DMP-NEXT:         ACCSeqClause
+    //  DMP-NOT:           <implicit>
+    // DMP-NEXT:         ACCPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:         ACCPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:         impl: CompoundStmt
+    // DMP-NEXT:           DeclStmt
+    // DMP-NEXT:             VarDecl {{.*}} i 'int'
+    // DMP-NEXT:           DeclStmt
+    // DMP-NEXT:             VarDecl {{.*}} j 'int'
+    // DMP-NEXT:           DeclStmt
+    // DMP-NEXT:             VarDecl {{.*}} k 'int'
+    // DMP-NEXT:           ForStmt
     //
-    // PRT-AO-OPLC-NEXT: // v----------ACC----------v
-    // PRT-AO-OSEQ-NEXT: // v----------ACC----------v
-    // PRT-A-AST-NEXT:   {{^ *}}#pragma acc parallel loop num_gangs(2)[[ACCC]] private(i,j) private(k){{$}}
-    // PRT-A-SRC-NEXT:   {{^ *}}#pragma acc parallel loop num_gangs(2) ACCC private(i,j) private(k){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OPRG-NEXT: {{^ *}}// #pragma omp [[OMPDP]] private(i,j) private(k){{$}}
-    // PRT-A-NEXT:       for (i = 0; i < 2; ++i) {
-    // PRT-A-NEXT:         {{TGT_PRINTF|printf}}
-    // PRT-A-NEXT:         j = k = 55;
-    // PRT-A-NEXT:       }
-    // PRT-AO-OPLC-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OPLC-NEXT: // #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OPLC-NEXT: // {
-    // PRT-AO-OPLC-NEXT: //   int i;
-    // PRT-AO-OPLC-NEXT: //   #pragma omp [[OMPDP]] private(j) private(k){{$}}
-    // PRT-AO-OPLC-NEXT: //   for (i = 0; i < 2; ++i) {
-    // PRT-AO-OPLC-NEXT: //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OPLC-NEXT: //     j = k = 55;
-    // PRT-AO-OPLC-NEXT: //   }
-    // PRT-AO-OPLC-NEXT: // }
-    // PRT-AO-OPLC-NEXT: // ^----------OMP----------^
-    // PRT-AO-OSEQ-NEXT: // ---------ACC->OMP--------
-    // PRT-AO-OSEQ-NEXT: // #pragma omp target teams num_teams(2){{$}}
-    // PRT-AO-OSEQ-NEXT: // {
-    // PRT-AO-OSEQ-NEXT: //   int i;
-    // PRT-AO-OSEQ-NEXT: //   int j;
-    // PRT-AO-OSEQ-NEXT: //   int k;
-    // PRT-AO-OSEQ-NEXT: //   for (i = 0; i < 2; ++i) {
-    // PRT-AO-OSEQ-NEXT: //     {{TGT_PRINTF|printf}}
-    // PRT-AO-OSEQ-NEXT: //     j = k = 55;
-    // PRT-AO-OSEQ-NEXT: //   }
-    // PRT-AO-OSEQ-NEXT: // }
-    // PRT-AO-OSEQ-NEXT: // ^----------OMP----------^
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) seq private(i,j) private(k){{$}}
+    //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT:   j = k = 55;
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   int j;
+    // PRT-AO-NEXT: //   int k;
+    // PRT-AO-NEXT: //   for (i = 0; i < 2; ++i) {
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //     j = k = 55;
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
     //
-    // PRT-OA-OPLC-NEXT:     // v----------OMP----------v
-    // PRT-OA-OSEQ-NEXT:     // v----------OMP----------v
-    // PRT-O-NEXT:           {{^ *}}#pragma omp target teams num_teams(2){{$}}
-    // PRT-O-OPRG-NEXT:      {{^ *}}#pragma omp [[OMPDP]] private(i,j) private(k){{$}}
-    // PRT-OA-AST-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i,j) private(k){{$}}
-    // PRT-OA-SRC-OPRG-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) ACCC private(i,j) private(k){{$}}
-    // PRT-O-OPRG-NEXT:      for (i = 0; i < 2; ++i) {
-    // PRT-O-OPRG-NEXT:        {{TGT_PRINTF|printf}}
-    // PRT-O-OPRG-NEXT:        j = k = 55;
-    // PRT-O-OPRG-NEXT:      }
-    // PRT-O-OPLC-NEXT:      {
-    // PRT-O-OPLC-NEXT:        int i;
-    // PRT-O-OPLC-NEXT:        {{^ *}}#pragma omp [[OMPDP]] private(j) private(k){{$}}
-    // PRT-O-OPLC-NEXT:        for (i = 0; i < 2; ++i) {
-    // PRT-O-OPLC-NEXT:          {{TGT_PRINTF|printf}}
-    // PRT-O-OPLC-NEXT:          j = k = 55;
-    // PRT-O-OPLC-NEXT:        }
-    // PRT-O-OPLC-NEXT:      }
-    // PRT-O-OSEQ-NEXT:      {
-    // PRT-O-OSEQ-NEXT:        int i;
-    // PRT-O-OSEQ-NEXT:        int j;
-    // PRT-O-OSEQ-NEXT:        int k;
-    // PRT-O-OSEQ-NEXT:        for (i = 0; i < 2; ++i) {
-    // PRT-O-OSEQ-NEXT:          {{TGT_PRINTF|printf}}
-    // PRT-O-OSEQ-NEXT:          j = k = 55;
-    // PRT-O-OSEQ-NEXT:        }
-    // PRT-O-OSEQ-NEXT:      }
-    // PRT-OA-OPLC-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OPLC-NEXT: // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i,j) private(k){{$}}
-    // PRT-OA-SRC-OPLC-NEXT: // #pragma acc parallel loop num_gangs(2) ACCC private(i,j) private(k){{$}}
-    // PRT-OA-OPLC-NEXT:     // for (i = 0; i < 2; ++i) {
-    // PRT-OA-OPLC-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OPLC-NEXT:     //   j = k = 55;
-    // PRT-OA-OPLC-NEXT:     // }
-    // PRT-OA-OPLC-NEXT:     // ^----------ACC----------^
-    // PRT-OA-OSEQ-NEXT:     // ---------OMP<-ACC--------
-    // PRT-OA-AST-OSEQ-NEXT:     // #pragma acc parallel loop num_gangs(2)[[ACCC]] private(i,j) private(k){{$}}
-    // PRT-OA-SRC-OSEQ-NEXT:     // #pragma acc parallel loop num_gangs(2) ACCC private(i,j) private(k){{$}}
-    // PRT-OA-OSEQ-NEXT:     // for (i = 0; i < 2; ++i) {
-    // PRT-OA-OSEQ-NEXT:     //   {{TGT_PRINTF|printf}}
-    // PRT-OA-OSEQ-NEXT:     //   j = k = 55;
-    // PRT-OA-OSEQ-NEXT:     // }
-    // PRT-OA-OSEQ-NEXT:     // ^----------ACC----------^
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   int j;
+    //  PRT-O-NEXT:   int k;
+    //  PRT-O-NEXT:   for (i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:     j = k = 55;
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc parallel loop num_gangs(2) seq private(i,j) private(k){{$}}
+    // PRT-OA-NEXT: // for (i = 0; i < 2; ++i) {
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: //   j = k = 55;
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
     //
-    // PRT-NOACC-NEXT:   for (i = 0; i < 2; ++i) {
-    // PRT-NOACC-NEXT:     {{TGT_PRINTF|printf}}
-    // PRT-NOACC-NEXT:     j = k = 55;
-    // PRT-NOACC-NEXT:   }
-    #pragma acc parallel loop num_gangs(2) ACCC private(i,j) private(k)
+    // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT:   j = k = 55;
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc parallel loop, seq: in loop: i=0
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc parallel loop, seq: in loop: i=1
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc parallel loop, seq: in loop: i=0
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc parallel loop, seq: in loop: i=1
+    #pragma acc parallel loop num_gangs(2) seq private(i,j) private(k)
     for (i = 0; i < 2; ++i) {
-      // EXE-TGT-USE-STDIO-DAG:        in loop: i=0
-      // EXE-TGT-USE-STDIO-DAG:        in loop: i=1
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: i=0
-      // EXE-TGT-USE-STDIO-GREDUN-DAG: in loop: i=1
-      TGT_PRINTF("in loop: i=%d\n", i);
+      TGT_PRINTF("multiple privates on acc parallel loop, seq: in loop: i=%d\n", i);
       j = k = 55;
     }
     // PRT-NEXT: {{TGT_PRINTF|printf}}
-    // EXE-TGT-USE-STDIO-NEXT: after loop: i=99, j=88, k=77
-    TGT_PRINTF("after loop: i=%d, j=%d, k=%d\n", i, j, k);
+    // EXE-TGT-USE-STDIO-NEXT: multiple privates on acc parallel loop, seq: after loop: i=99, j=88, k=77
+    TGT_PRINTF("multiple privates on acc parallel loop, seq: after loop: i=%d, j=%d, k=%d\n", i, j, k);
   } // PRT-NEXT: }
+
+  // PRT-NEXT: {
+  {
+    // PRT: int i = 99;
+    // PRT: int j = 88;
+    // PRT: int k = 77;
+    int i = 99;
+    int j = 88;
+    int k = 77;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCGangClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:       ACCLoopDirective
+    // DMP-NEXT:         ACCGangClause
+    // DMP-NEXT:         ACCPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:         ACCPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:         impl: OMPDistributeDirective
+    // DMP-NEXT:           OMPPrivateClause
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:           OMPPrivateClause
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'k' 'int'
+    //      DMP:           ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) gang private(i,j) private(k){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute private(i,j) private(k){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute private(i,j) private(k){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) gang private(i,j) private(k){{$}}
+    //    PRT-NEXT: for (i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT:   j = k = 55;
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc parallel loop, gang: in loop: i=0
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc parallel loop, gang: in loop: i=1
+    #pragma acc parallel loop num_gangs(2) gang private(i,j) private(k)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("multiple privates on acc parallel loop, gang: in loop: i=%d\n", i);
+      j = k = 55;
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: multiple privates on acc parallel loop, gang: after loop: i=99, j=88, k=77
+    TGT_PRINTF("multiple privates on acc parallel loop, gang: after loop: i=%d, j=%d, k=%d\n", i, j, k);
+  } // PRT-NEXT: }
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+  // PRT-NEXT: {
+  {
+    // PRT: int i = 99;
+    // PRT: int j = 88;
+    // PRT: int k = 77;
+    int i = 99;
+    int j = 88;
+    int k = 77;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:       ACCLoopDirective
+    // DMP-NEXT:         ACCWorkerClause
+    // DMP-NEXT:         ACCPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:         ACCPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:         ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:         impl: OMPDistributeParallelForDirective
+    // DMP-NEXT:           OMPPrivateClause
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:           OMPPrivateClause
+    // DMP-NEXT:             DeclRefExpr {{.*}} 'k' 'int'
+    //      DMP:           ForStmt
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) worker private(i,j) private(k){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for private(i,j) private(k){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for private(i,j) private(k){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) worker private(i,j) private(k){{$}}
+    //    PRT-NEXT: for (i = 0; i < 2; ++i) {
+    //    PRT-NEXT:   {{TGT_PRINTF|printf}}
+    //    PRT-NEXT:   j = k = 55;
+    //    PRT-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc parallel loop, worker: in loop: i=0
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc parallel loop, worker: in loop: i=1
+    #pragma acc parallel loop num_gangs(2) worker private(i,j) private(k)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("multiple privates on acc parallel loop, worker: in loop: i=%d\n", i);
+      j = k = 55;
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: multiple privates on acc parallel loop, worker: after loop: i=99, j=88, k=77
+    TGT_PRINTF("multiple privates on acc parallel loop, worker: after loop: i=%d, j=%d, k=%d\n", i, j, k);
+  } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
+
+  // PRT-NEXT: {
+  {
+    // PRT: int i = 99;
+    // PRT: int j = 88;
+    // PRT: int k = 77;
+    int i = 99;
+    int j = 88;
+    int k = 77;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:       ACCLoopDirective
+    // DMP-NEXT:         ACCVectorClause
+    // DMP-NEXT:         ACCPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:         ACCPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:         ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:         impl: CompoundStmt
+    // DMP-NEXT:           DeclStmt
+    // DMP-NEXT:             VarDecl {{.*}} i 'int'
+    // DMP-NEXT:           OMPDistributeSimdDirective
+    // DMP-NEXT:             OMPPrivateClause
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:             OMPPrivateClause
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
+    //      DMP:             ForStmt
+    //
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) vector private(i,j) private(k){{$}}
+    //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT:   j = k = 55;
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   #pragma omp distribute simd private(j) private(k){{$}}
+    // PRT-AO-NEXT: //   for (i = 0; i < 2; ++i) {
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //     j = k = 55;
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
+    //
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   {{^ *}}#pragma omp distribute simd private(j) private(k){{$}}
+    //  PRT-O-NEXT:   for (i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:     j = k = 55;
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc parallel loop num_gangs(2) vector private(i,j) private(k){{$}}
+    // PRT-OA-NEXT: // for (i = 0; i < 2; ++i) {
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: //   j = k = 55;
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
+    //
+    // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT:   j = k = 55;
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc parallel loop, vector: in loop: i=0
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc parallel loop, vector: in loop: i=1
+    #pragma acc parallel loop num_gangs(2) vector private(i,j) private(k)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("multiple privates on acc parallel loop, vector: in loop: i=%d\n", i);
+      j = k = 55;
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: multiple privates on acc parallel loop, vector: after loop: i=99, j=88, k=77
+    TGT_PRINTF("multiple privates on acc parallel loop, vector: after loop: i=%d, j=%d, k=%d\n", i, j, k);
+  } // PRT-NEXT: }
+
+// FIXME: amdgcn misbehaves sometimes for worker loops.
+// PRT-SRC-NEXT: #if !TGT_AMDGCN
+#if !TGT_AMDGCN
+  // PRT-NEXT: {
+  {
+    // PRT: int i = 99;
+    // PRT: int j = 88;
+    // PRT: int k = 77;
+    int i = 99;
+    int j = 88;
+    int k = 77;
+    //      DMP: ACCParallelLoopDirective
+    // DMP-NEXT:   ACCNumGangsClause
+    // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:   ACCWorkerClause
+    // DMP-NEXT:   ACCVectorClause
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:   ACCPrivateClause
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:   effect: ACCParallelDirective
+    // DMP-NEXT:     ACCNumGangsClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     impl: OMPTargetTeamsDirective
+    // DMP-NEXT:       OMPNum_teamsClause
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+    //      DMP:       ACCLoopDirective
+    // DMP-NEXT:         ACCWorkerClause
+    // DMP-NEXT:         ACCVectorClause
+    // DMP-NEXT:         ACCPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:         ACCPrivateClause
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'k' 'int'
+    // DMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
+    // DMP-NEXT:         ACCGangClause {{.*}} <implicit>
+    // DMP-NEXT:         impl: CompoundStmt
+    // DMP-NEXT:           DeclStmt
+    // DMP-NEXT:             VarDecl {{.*}} i 'int'
+    // DMP-NEXT:           OMPDistributeParallelForSimdDirective
+    // DMP-NEXT:             OMPPrivateClause
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
+    // DMP-NEXT:             OMPPrivateClause
+    // DMP-NEXT:               DeclRefExpr {{.*}} 'k' 'int'
+    //      DMP:             ForStmt
+    //
+    // PRT-AO-NEXT: // v----------ACC----------v
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) worker vector private(i,j) private(k){{$}}
+    //  PRT-A-NEXT: for (i = 0; i < 2; ++i) {
+    //  PRT-A-NEXT:   {{TGT_PRINTF|printf}}
+    //  PRT-A-NEXT:   j = k = 55;
+    //  PRT-A-NEXT: }
+    // PRT-AO-NEXT: // ---------ACC->OMP--------
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: // {
+    // PRT-AO-NEXT: //   int i;
+    // PRT-AO-NEXT: //   #pragma omp distribute parallel for simd private(j) private(k){{$}}
+    // PRT-AO-NEXT: //   for (i = 0; i < 2; ++i) {
+    // PRT-AO-NEXT: //     {{TGT_PRINTF|printf}}
+    // PRT-AO-NEXT: //     j = k = 55;
+    // PRT-AO-NEXT: //   }
+    // PRT-AO-NEXT: // }
+    // PRT-AO-NEXT: // ^----------OMP----------^
+    //
+    // PRT-OA-NEXT: // v----------OMP----------v
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    //  PRT-O-NEXT: {
+    //  PRT-O-NEXT:   int i;
+    //  PRT-O-NEXT:   {{^ *}}#pragma omp distribute parallel for simd private(j) private(k){{$}}
+    //  PRT-O-NEXT:   for (i = 0; i < 2; ++i) {
+    //  PRT-O-NEXT:     {{TGT_PRINTF|printf}}
+    //  PRT-O-NEXT:     j = k = 55;
+    //  PRT-O-NEXT:   }
+    //  PRT-O-NEXT: }
+    // PRT-OA-NEXT: // ---------OMP<-ACC--------
+    // PRT-OA-NEXT: // #pragma acc parallel loop num_gangs(2) worker vector private(i,j) private(k){{$}}
+    // PRT-OA-NEXT: // for (i = 0; i < 2; ++i) {
+    // PRT-OA-NEXT: //   {{TGT_PRINTF|printf}}
+    // PRT-OA-NEXT: //   j = k = 55;
+    // PRT-OA-NEXT: // }
+    // PRT-OA-NEXT: // ^----------ACC----------^
+    //
+    // PRT-NOACC-NEXT: for (i = 0; i < 2; ++i) {
+    // PRT-NOACC-NEXT:   {{TGT_PRINTF|printf}}
+    // PRT-NOACC-NEXT:   j = k = 55;
+    // PRT-NOACC-NEXT: }
+    //
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc parallel loop, worker vector: in loop: i=0
+    // EXE-TGT-USE-STDIO-DAG: multiple privates on acc parallel loop, worker vector: in loop: i=1
+    #pragma acc parallel loop num_gangs(2) worker vector private(i,j) private(k)
+    for (i = 0; i < 2; ++i) {
+      TGT_PRINTF("multiple privates on acc parallel loop, worker vector: in loop: i=%d\n", i);
+      j = k = 55;
+    }
+    // PRT-NEXT: {{TGT_PRINTF|printf}}
+    // EXE-TGT-USE-STDIO-NEXT: multiple privates on acc parallel loop, worker vector: after loop: i=99, j=88, k=77
+    TGT_PRINTF("multiple privates on acc parallel loop, worker vector: after loop: i=%d, j=%d, k=%d\n", i, j, k);
+  } // PRT-NEXT: }
+// PRT-SRC-NEXT: #endif
+#endif
 
   // PRT-NEXT: return 0;
   return 0;
