@@ -1,6 +1,6 @@
 // Check correct usage of num_workers and vector_length on "acc parallel" and
 // "acc parallel loop".  Correct usage of num_gangs is checked in parallel.c
-// and loop.c.
+// and loop-part-imp-data.c.
 
 // RUN: %acc-check-dmp{}
 // RUN: %acc-check-prt{}
