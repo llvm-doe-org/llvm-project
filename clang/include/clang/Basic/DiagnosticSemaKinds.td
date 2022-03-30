@@ -10943,6 +10943,16 @@ def note_acc_implied_as_gang_reduction : Note<
   "implied as gang reduction here">;
 def err_acc_no_data_clause : Error<
   "expected at least one data clause for '#pragma acc %0'">;
+def err_acc_loop_reduction_needs_data_clause : Error<
+  "scalar loop reduction variable '%0' requires data clause visible at parent "
+  "'#pragma acc %1'">;
+def note_acc_parent_compute_construct : Note<
+  "parent '#pragma acc %0' appears here">;
+def note_acc_loop_reduction_suggest_copy : Note<
+  "suggest 'copy(%0)' because '%0' has gang reduction, specified here">;
+def note_acc_loop_reduction_suggest_firstprivate : Note<
+  "suggest 'firstprivate(%0)' because '%0' has no gang reduction in parent "
+  "'#pragma acc %1' construct">;
 def warn_acc_omp_update_present : Warning<
   "the OpenACC '%0' clause translation uses the 'present' motion modifier, "
   "which is an OpenMP TR8 feature that might not be supported yet by other "

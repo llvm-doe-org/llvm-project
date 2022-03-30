@@ -1265,6 +1265,9 @@ class ImplicitDAAdder : public StmtVisitor<ImplicitDAAdder> {
   DirStackTy &DirStack;
   ImplicitDATable &ImplicitDAs;
   llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
+  size_t ACCDirectiveStmtCount;
+  std::list<const DeclRefExpr *> ScalarReductionVarDiags;
+  llvm::DenseMap<const VarDecl *, SourceLocation> ScalarGangReductionVarDiags;
 
 public:
   void VisitDeclStmt(DeclStmt *S) {
@@ -1357,66 +1360,73 @@ public:
     Visit(E->getBase());
   }
   void VisitACCDirectiveStmt(ACCDirectiveStmt *D) {
+    ++ACCDirectiveStmtCount;
+
     // Push space for local definitions in this construct.  It's important to
     // force a copy construct call here so that, if the vector is resized, the
     // pass-by-reference parameter isn't invalidated before it's copied.
     LocalDefinitions.emplace_back(
         llvm::DenseSet<const Decl *>(LocalDefinitions.back()));
 
-    // Do reductions here imply copy clauses because we're computing implicit
-    // clauses for an acc parallel and this is a gang-partitioned acc loop?
-    bool ReductionsImplyCopy =
+    // OpenACC 3.2 sec. 2.6.2 "Variables with Implicitly Determined Data
+    // Attributes":
+    // - L1235-1239: "If a scalar variable appears in a reduction clause on a
+    //   loop construct that has a parent parallel or serial construct, and if
+    //   the reduction's access to the original variable is exposed to the
+    //   parent compute construct, the variable must appear either in an
+    //   explicit data clause visible at the compute construct or in a
+    //   firstprivate, private, or reduction clause on the compute construct."
+    // - L1213-1214: "On a compute or combined construct, if a variable appears
+    //   in a reduction clause but no other data clause, it is treated as if it
+    //   also appears in a copy clause."
+    //
+    // Here, we diagnose violations of the restriction from the first statement
+    // above.  However, we do not enforce it when the loop and compute construct
+    // are combined because that would make the second statement above useless
+    // for scalar variables in acc parallel/serial loop reductions.  TODO: The
+    // OpenACC spec should be clarified on that point.
+    bool ScalarReductionRequiresDataClause =
         isOpenACCComputeDirective(DirStack.getEffectiveDirective()) &&
         isOpenACCLoopDirective(D->getDirectiveKind()) &&
+        (!isOpenACCCombinedDirective(DirStack.getRealDirective()) ||
+         ACCDirectiveStmtCount > 1);
+    // Currently, Clang supports no compute construct but the parallel
+    // construct.  The serial construct is handled the same but the kernels
+    // construct is not.
+    assert((!ScalarReductionRequiresDataClause ||
+            DirStack.getEffectiveDirective() == ACCD_parallel) &&
+           "expected compute construct to be parallel construct");
+    bool IsGangReduction =
         cast<ACCLoopDirective>(D)->getPartitioning().hasGangPartitioning();
 
-    // Search this directive's clauses for reductions implying copy clauses and
+    // Search this directive's clauses for reductions requiring data clauses and
     // for privatizations.
     for (ACCClause *C : D->clauses()) {
       if (!C)
-        return;
+        continue;
 
-      // Add implicit copy to acc parallel for gang-partitioned loop reduction.
-      if (ReductionsImplyCopy && C->getClauseKind() == ACCC_reduction) {
+      // Record diagnostics for missing data clauses for scalar loop reductions.
+      if (ScalarReductionRequiresDataClause &&
+          C->getClauseKind() == ACCC_reduction) {
         for (Expr *VR : cast<ACCReductionClause>(C)->varlists()) {
           DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
           VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
           // Skip variable if it is locally declared or privatized by a clause.
           if (LocalDefinitions.back().count(VD))
             continue;
-          // Skip variable if there's a conflicting explicit DA or reduction
-          // already.  Generally, all DMAs conflict with each other.  There
-          // happens to exist no explicit DSA that doesn't conflict with copy
-          // except reduction, but that implies copy anyway.  (And there's no
-          // possible predetermined DA on a compute directive.)
+          // Currently, Clang supports only scalar variables in OpenACC
+          // reductions.
+          assert(VD->getType()->isScalarType() &&
+                 "expected reduction variable to be scalar");
+          // If there's a visible explicit DMA or if there's an explicit DSA on
+          // the compute construct, the restriction is satisfied.
           DirStackTy::DAVarData DVar = DirStack.getTopDA(VD);
-          if (DVar.DMAKind != ACC_DMA_unknown ||
-              DVar.DSAKind != ACC_DSA_unknown) {
-            assert((DVar.DSAKind == ACC_DSA_unknown ||
-                    DVar.DSAKind == ACC_DSA_reduction ||
-                    !isAllowedDSAForDMA(DVar.DSAKind, ACC_DMA_copy)) &&
-                   "expected explicit DSA to conflict with copy");
+          if (DirStack.hasVisibleDMA(VD) || DVar.DSAKind != ACC_DSA_unknown)
             continue;
-          }
-          // Skip variable if an implicit copy clause has already been
-          // computed.
-          ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(VD);
-          if (ImplicitDA.getDMAKind() == ACC_DMA_copy)
-            continue;
-          // Override any implicit firstprivate clause.
-          if (ImplicitDA.getDSAKind() == ACC_DSA_firstprivate) {
-            assert(ImplicitDA.getDMAKind() == ACC_DMA_nomap &&
-                   "expected acc parallel implicit DMA for firstprivate"
-                   " variable to be nomap");
-            ImplicitDA.unsetDMA();
-            ImplicitDA.unsetDSA();
-          } else
-            assert(ImplicitDA.getDMAKind() == ACC_DMA_unknown &&
-                   ImplicitDA.getDSAKind() == ACC_DSA_unknown &&
-                   "expected acc parallel implicit DA for child acc loop"
-                   " reduction variable to be copy, firstprivate, or none");
-          ImplicitDA.setDMA(ACC_DMA_copy, DRE);
-          ImplicitDA.setDSA(ACC_DSA_shared, DRE);
+          // Record diagnostic.
+          ScalarReductionVarDiags.push_back(DRE);
+          if (IsGangReduction)
+            ScalarGangReductionVarDiags.try_emplace(VD, DRE->getExprLoc());
         }
       }
 
@@ -1449,6 +1459,8 @@ public:
 
     // Pop local definitions in this construct.
     LocalDefinitions.pop_back();
+
+    --ACCDirectiveStmtCount;
   }
   void VisitStmt(Stmt *S) {
     for (Stmt *C : S->children()) {
@@ -1458,7 +1470,7 @@ public:
   }
 
   ImplicitDAAdder(DirStackTy &DirStack, ImplicitDATable &T)
-      : DirStack(DirStack), ImplicitDAs(T) {
+      : DirStack(DirStack), ImplicitDAs(T), ACCDirectiveStmtCount(0) {
     // OpenACC 3.0 sec. 2.5.13 "reduction clause" L984-985:
     //   "It implies a copy data clause for each reduction var, unless a data
     //   clause for that variable appears on the compute construct."
@@ -1490,6 +1502,32 @@ public:
       }
     }
     LocalDefinitions.emplace_back();
+  }
+  void reportDiags() const {
+    for (const DeclRefExpr *DRE : ScalarReductionVarDiags) {
+      const VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+      DirStack.SemaRef.Diag(DRE->getExprLoc(),
+                            diag::err_acc_loop_reduction_needs_data_clause)
+        << VD->getName() << getOpenACCName(DirStack.getRealDirective());
+      DirStack.SemaRef.Diag(DirStack.getDirectiveStartLoc(),
+                            diag::note_acc_parent_compute_construct)
+        << getOpenACCName(DirStack.getRealDirective());
+      SourceLocation GangRedLoc = ScalarGangReductionVarDiags.lookup(VD);
+      // OpenACC compilers typically implicitly determine copy clauses for gang
+      // reductions, which are not so useful otherwise, so suggest that if there
+      // is a gang reduction for this variable.  Otherwise, suggest
+      // firstprivate, which makes sense when it's not reduced across gangs.
+      if (GangRedLoc.isInvalid()) {
+        DirStack.SemaRef.Diag(
+            DirStack.getDirectiveStartLoc(),
+            diag::note_acc_loop_reduction_suggest_firstprivate)
+          << VD->getName() << getOpenACCName(DirStack.getRealDirective());
+        continue;
+      }
+      DirStack.SemaRef.Diag(GangRedLoc,
+                            diag::note_acc_loop_reduction_suggest_copy)
+        << VD->getName();
+    }
   }
 };
 
@@ -1586,7 +1624,7 @@ public:
     // nested directives.
     for (ACCClause *C : D->clauses()) {
       if (!C)
-        return;
+        continue;
       for (const Expr *VR : getPrivateVarsFromClause(C)) {
         const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
         const VarDecl *VD =
@@ -1646,7 +1684,7 @@ public:
     // reduction conflicting with its immediately enclosing reduction.
     for (ACCClause *C : D->clauses()) {
       if (!C)
-        return;
+        continue;
       if (C->getClauseKind() == ACCC_reduction) {
         ACCReductionClause *ReductionClause = cast<ACCReductionClause>(C);
         for (Expr *VR : ReductionClause->varlists()) {
@@ -1936,6 +1974,7 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
     ImplicitDATable ImplicitDAs;
     ImplicitDAAdder Adder(DirStack, ImplicitDAs);
     Adder.Visit(AStmt);
+    Adder.reportDiags();
 
     // Add implicit gang reductions, possibly due to any implicit copy clauses
     // added above.

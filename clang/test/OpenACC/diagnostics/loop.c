@@ -1790,7 +1790,7 @@ void fn() {
   //--------------------------------------------------
 
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(jk)
 #endif
   {
     #pragma acc CMB_PAR loop private // expected-error {{expected '(' after 'private'}}
@@ -1915,7 +1915,7 @@ void fn() {
       ;
   }
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(jk, i)
 #endif
   {
     // expected-error@+1 {{expected ',' or ')' in 'reduction' clause}}
@@ -1928,7 +1928,7 @@ void fn() {
       ;
   }
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(i)
 #endif
   {
     // expected-error@+1 {{expected expression}}
@@ -2122,7 +2122,7 @@ void fn() {
 
   // Reduction operator doesn't permit variable type.
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(b,e,i,jk,f,d,p)
 #endif
   {
     #pragma acc CMB_PAR loop gang reduction(max:b,e,i,jk,f,d,p)
@@ -2139,7 +2139,7 @@ void fn() {
       ;
   }
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(b,e,i,jk,f,d,p)
 #endif
   {
     #pragma acc CMB_PAR loop vector reduction(min:b,e,i,jk,f,d,p)
@@ -2156,7 +2156,7 @@ void fn() {
       ;
   }
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(b,e,i,jk,f,d,fc,dc)
 #endif
   {
     #pragma acc CMB_PAR loop vector gang reduction(+:b,e,i,jk,f,d,fc,dc)
@@ -2172,7 +2172,7 @@ void fn() {
       ;
   }
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(b,e,i,jk,f,d,fc,dc)
 #endif
   {
     #pragma acc CMB_PAR loop vector gang reduction(*:b,e,i,jk,f,d,fc,dc) worker
@@ -2188,7 +2188,7 @@ void fn() {
       ;
   }
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(b,e,i,jk,f,d,fc,dc)
 #endif
   {
     #pragma acc CMB_PAR loop reduction(&&:b,e,i,jk,f,d,fc,dc) gang
@@ -2204,7 +2204,7 @@ void fn() {
       ;
   }
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(b,e,i,jk,f,d,fc,dc)
 #endif
   {
     #pragma acc CMB_PAR loop reduction(||:b,e,i,jk,f,d,fc,dc) vector
@@ -2220,7 +2220,7 @@ void fn() {
       ;
   }
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(b,e,i,jk)
 #endif
   {
     #pragma acc CMB_PAR loop gang reduction(&:b,e,i,jk) vector
@@ -2240,7 +2240,7 @@ void fn() {
       ;
   }
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(b,e,i,jk)
 #endif
   {
     #pragma acc CMB_PAR loop reduction(|:b,e,i,jk)
@@ -2260,7 +2260,7 @@ void fn() {
       ;
   }
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(b,e,i,jk)
 #endif
   {
     #pragma acc CMB_PAR loop worker reduction(^:b,e,i,jk)
@@ -2282,7 +2282,7 @@ void fn() {
 
   // Redundant clauses.
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(i,jk,d)
 #endif
   {
     // expected-error@+6 {{private variable defined again as private variable}}
@@ -2311,7 +2311,7 @@ void fn() {
 
   // Conflicting clauses.
 #if !CMB
-  #pragma acc parallel
+  #pragma acc parallel DATA(i)
 #endif
   {
     // expected-error@+3 {{private variable cannot be reduction variable}}
@@ -2376,8 +2376,8 @@ void fn() {
   // Data clauses: reduction inter-directive conflicts
   //--------------------------------------------------
 
-  // Explicit reduction on acc parallel, non-conflicting reductions on acc
-  // loops.
+  // Explicit reduction on acc parallel (so another data clause there is not
+  // required but should be fine), and non-conflicting reductions on acc loops.
   #pragma acc parallel CMB_LOOP_SEQ reduction(+:i,jk) DATA(jk)
   CMB_FORLOOP_HEAD
   {
@@ -2453,9 +2453,9 @@ void fn() {
     }
   }
 
-  // Implicit reduction on acc parallel, non-conflicting reductions on acc
-  // loops.
-  #pragma acc parallel CMB_LOOP_SEQ DATA(b)
+  // Implicit reduction on acc parallel (so acc loop reduction requires acc
+  // parallel data clause), and non-conflicting reductions on acc loops.
+  #pragma acc parallel CMB_LOOP_SEQ DATA(p,b)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(max:p,b)
@@ -2487,7 +2487,7 @@ void fn() {
     }
   }
   // Again with no explicit gang loops.
-  #pragma acc parallel CMB_LOOP_SEQ DATA(p)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(p,b)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop worker reduction(max:p,b)
@@ -2507,7 +2507,7 @@ void fn() {
     }
   }
   // Again with no gang loops.
-  #pragma acc parallel CMB_LOOP_SEQ DATA(p)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(p) firstprivate(b)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop auto reduction(max:p,b)
@@ -2524,7 +2524,8 @@ void fn() {
     }
   }
 
-  // Explicit reduction on acc parallel, conflicting reductions on acc loops.
+  // Explicit reduction on acc parallel (so another data clause there is not
+  // required but should be fine), and conflicting reductions on acc loops.
   // expected-note@+1 14 {{enclosing '+' reduction here}}
   #pragma acc parallel CMB_LOOP_SEQ reduction(+:f,d) DATA(d)
   CMB_FORLOOP_HEAD
@@ -2654,9 +2655,10 @@ void fn() {
     }
   }
 
-  // Implicit reduction on acc parallel, conflicting reductions on acc loops.
+  // Implicit reduction on acc parallel (so acc loop reduction requires acc
+  // parallel data clause), and conflicting reductions on acc loops.
   // expected-note@+1 12 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ DATA(jk)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(d,jk)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 12 {{enclosing 'max' reduction here}}
@@ -2717,7 +2719,7 @@ void fn() {
   }
   // Again with no explicit gang loops and worker first.
   // expected-note@+1 8 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ DATA(jk)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(d,jk)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 8 {{enclosing 'max' reduction here}}
@@ -2756,7 +2758,7 @@ void fn() {
   }
   // Again with no explicit gang loops and vector first.
   // expected-note@+1 8 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ DATA(jk)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(d,jk)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 8 {{enclosing 'max' reduction here}}
@@ -2795,7 +2797,7 @@ void fn() {
   }
   // Again with no explicit gang loops and seq first.
   // expected-note@+1 8 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ DATA(f)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(d,f)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 8 {{enclosing 'min' reduction here}}
@@ -2834,7 +2836,7 @@ void fn() {
   }
   // Again with no gang loops.
   // expected-note@+1 3 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ DATA(jk)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(jk) firstprivate(d)
   CMB_FORLOOP_HEAD
   {
     // expected-note@+1 3 {{enclosing 'max' reduction here}}
@@ -2864,10 +2866,11 @@ void fn() {
     }
   }
 
-  // Implicit reduction on acc parallel, conflicting gang reductions on acc
-  // loops in sibling loop nests.
+  // Implicit reduction on acc parallel (so acc loop reduction requires acc
+  // parallel data clause), and conflicting gang reductions on acc loops in
+  // sibling loop nests.
   // expected-note@+1 2 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ DATA(e)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(b,e)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop
@@ -2909,7 +2912,7 @@ void fn() {
   // but merely nesting in an acc loop seq doesn't.
   // expected-note@+2 6 {{implied as gang reduction here}}
   // expected-note@+1 6 {{enclosing '^' reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ reduction(^:e,jk) DATA(jk,f)
+  #pragma acc parallel CMB_LOOP_SEQ reduction(^:e,jk) DATA(d,jk,f)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop
@@ -2967,9 +2970,10 @@ void fn() {
     }
   }
 
-  // Implicit gang clauses can produce implicit gang reductions.
+  // A lack of explicit gang clauses shouldn't suppress implicit gang
+  // reductions.
   // expected-note@+1 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ
+  #pragma acc parallel CMB_LOOP_SEQ DATA(jk)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop seq
@@ -2988,7 +2992,7 @@ void fn() {
     }
   }
   // expected-note@+1 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ
+  #pragma acc parallel CMB_LOOP_SEQ DATA(jk)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop seq
@@ -3007,7 +3011,7 @@ void fn() {
     }
   }
   // expected-note@+1 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ
+  #pragma acc parallel CMB_LOOP_SEQ DATA(jk)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop seq
@@ -3026,7 +3030,7 @@ void fn() {
     }
   }
   // expected-note@+1 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ
+  #pragma acc parallel CMB_LOOP_SEQ DATA(jk)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop seq
@@ -3045,7 +3049,7 @@ void fn() {
     }
   }
   // expected-note@+1 {{implied as gang reduction here}}
-  #pragma acc parallel CMB_LOOP_SEQ
+  #pragma acc parallel CMB_LOOP_SEQ DATA(jk)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop seq
@@ -3092,7 +3096,7 @@ void fn() {
 
   // acc loop reductions for acc loop private variables don't imply gang
   // reductions on acc parallel.
-  #pragma acc parallel CMB_LOOP_SEQ DATA(i,d)
+  #pragma acc parallel CMB_LOOP_SEQ DATA(i,jk,d)
   CMB_FORLOOP_HEAD
   {
     #pragma acc loop seq private(i,jk)
@@ -3107,7 +3111,7 @@ void fn() {
           ;
       }
     }
-    // No conflict because no implied enclosing gang reduction.
+    // No conflict because no other implied enclosing gang reduction.
     #pragma acc loop gang reduction(*:jk,d)
     for (int j = 0; j < 5; ++j)
       ;
@@ -3143,6 +3147,299 @@ void fn() {
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
+
+  //--------------------------------------------------
+  // Data clauses: data clauses required for scalar loop reduction vars
+  //
+  // Restriction applies only to non-orphaned loop construct that is not
+  // combined with its parent parallel construct.
+  //--------------------------------------------------
+
+  // Explicit gang, worker, and vector: suggest copy.
+#if !CMB
+  // sep-note@+1 {{parent '#pragma acc parallel' appears here}}
+  #pragma acc parallel
+#endif
+  {
+    // sep-error@+2 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    // sep-note@+1 {{suggest 'copy(jk)' because 'jk' has gang reduction, specified here}}
+    #pragma acc CMB_PAR loop gang worker vector reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+  }
+
+  // Implicit gang, but explicit worker and vector: suggest copy.
+#if !CMB
+  // sep-note@+1 {{parent '#pragma acc parallel' appears here}}
+  #pragma acc parallel
+#endif
+  {
+    // sep-error@+2 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    // sep-note@+1 {{suggest 'copy(jk)' because 'jk' has gang reduction, specified here}}
+    #pragma acc CMB_PAR loop worker vector reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+  }
+
+  // Implicit gang, and no worker or vector: suggest copy.
+#if !CMB
+  // sep-note@+1 {{parent '#pragma acc parallel' appears here}}
+  #pragma acc parallel
+#endif
+  {
+    // sep-error@+2 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    // sep-note@+1 {{suggest 'copy(jk)' because 'jk' has gang reduction, specified here}}
+    #pragma acc CMB_PAR loop reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+  }
+
+  // Many loops but no gang loop (so just seq and auto loops): suggest
+  // firstprivate.
+#if !CMB
+  // sep-note@+2 4 {{parent '#pragma acc parallel' appears here}}
+  // sep-note@+1 4 {{suggest 'firstprivate(jk)' because 'jk' has no gang reduction in parent '#pragma acc parallel' construct}}
+  #pragma acc parallel
+#endif
+  {
+    // sep-error@+1 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    #pragma acc CMB_PAR loop seq reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+    // sep-error@+1 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    #pragma acc CMB_PAR loop auto reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+    // sep-error@+1 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    #pragma acc CMB_PAR loop auto worker vector reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+    // sep-error@+1 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    #pragma acc CMB_PAR loop auto gang worker vector reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+  }
+
+  // Many loops including one gang loop: suggest copy.
+#if !CMB
+  // sep-note@+1 3 {{parent '#pragma acc parallel' appears here}}
+  #pragma acc parallel
+#endif
+  {
+    // sep-error@+1 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    #pragma acc CMB_PAR loop seq reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+    // sep-error@+2 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    // sep-note@+1 3 {{suggest 'copy(jk)' because 'jk' has gang reduction, specified here}}
+    #pragma acc CMB_PAR loop reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+    // sep-error@+1 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    #pragma acc CMB_PAR loop seq reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+  }
+
+  // Many loops including multiple gang loops: suggest copy, and note the first
+  // gang loop.
+#if !CMB
+  // sep-note@+1 4 {{parent '#pragma acc parallel' appears here}}
+  #pragma acc parallel
+#endif
+  {
+    // sep-error@+1 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    #pragma acc CMB_PAR loop seq reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+    // sep-error@+2 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    // sep-note@+1 4 {{suggest 'copy(jk)' because 'jk' has gang reduction, specified here}}
+    #pragma acc CMB_PAR loop reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+    // sep-error@+1 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    #pragma acc CMB_PAR loop seq reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+    // sep-error@+1 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    #pragma acc CMB_PAR loop gang reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+  }
+
+  // Outer seq loop has no reduction but inner gang loop does: suggest copy.
+  // Unlike many cases above, this case's combined form does not suppress the
+  // diagnostic because the loop with the reduction is not part of the combined
+  // directive.
+#if !CMB
+  // sep-note@+1 {{parent '#pragma acc parallel' appears here}}
+  #pragma acc parallel
+#endif
+  {
+    // cmb-note@+1 {{parent '#pragma acc parallel loop' appears here}}
+    #pragma acc CMB_PAR loop seq
+    for (int i = 0; i < 5; ++i) {
+      jk += i;
+      // sep-error@+4 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+      // cmb-error@+3 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel loop'}}
+      // sep-note@+2 {{suggest 'copy(jk)' because 'jk' has gang reduction, specified here}}
+      // cmb-note@+1 {{suggest 'copy(jk)' because 'jk' has gang reduction, specified here}}
+      #pragma acc loop gang reduction(+:jk)
+      for (int j = 0; j < 5; ++j)
+        jk += j;
+    }
+  }
+
+  // Outer gang loop has no reduction but inner loop does: suggest firstprivate.
+  // Unlike many cases above, this case's combined form does not suppress the
+  // diagnostic because the loop with the reduction is not part of the combined
+  // directive.
+#if !CMB
+  // sep-note@+2 {{parent '#pragma acc parallel' appears here}}
+  // sep-note@+1 {{suggest 'firstprivate(jk)' because 'jk' has no gang reduction in parent '#pragma acc parallel' construct}}
+  #pragma acc parallel
+#endif
+  {
+    // cmb-note@+2 {{parent '#pragma acc parallel loop' appears here}}
+    // cmb-note@+1 {{suggest 'firstprivate(jk)' because 'jk' has no gang reduction in parent '#pragma acc parallel loop' construct}}
+    #pragma acc CMB_PAR loop gang
+    for (int i = 0; i < 5; ++i) {
+      jk += i;
+      // sep-error@+2 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+      // cmb-error@+1 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel loop'}}
+      #pragma acc loop worker reduction(+:jk)
+      for (int j = 0; j < 5; ++j)
+        jk += j;
+    }
+  }
+
+  // Outer gang loop has no reduction but inner loop does and outer loop's
+  // sibling has gang reduction: suggest copy.
+  // sep-note@+2 2 {{parent '#pragma acc parallel' appears here}}
+  // cmb-note@+1 2 {{parent '#pragma acc parallel loop' appears here}}
+  #pragma acc parallel CMB_LOOP_SEQ
+  CMB_FORLOOP_HEAD
+  {
+    #pragma acc loop gang
+    for (int i = 0; i < 5; ++i) {
+      jk += i;
+      // sep-error@+2 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+      // cmb-error@+1 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel loop'}}
+      #pragma acc loop vector reduction(+:jk)
+      for (int j = 0; j < 5; ++j)
+        jk += j;
+    }
+    // sep-error@+3 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    // cmb-error@+2 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel loop'}}
+    // expected-note@+1 2 {{suggest 'copy(jk)' because 'jk' has gang reduction, specified here}}
+    #pragma acc loop gang reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+  }
+
+  // Nested reductions: diagnose only the outer reduction (because that makes it
+  // private within), and suggest copy.
+#if !CMB
+  // sep-note@+1 {{parent '#pragma acc parallel' appears here}}
+  #pragma acc parallel
+#endif
+  {
+    // sep-error@+2 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    // sep-note@+1 {{suggest 'copy(jk)' because 'jk' has gang reduction, specified here}}
+    #pragma acc CMB_PAR loop gang reduction(+:jk)
+    for (int i = 0; i < 5; ++i) {
+      #pragma acc loop worker reduction(+:jk)
+      for (int j = 0; j < 5; ++j) {
+        #pragma acc loop vector reduction(+:jk)
+        for (int k = 0; k < 5; ++k)
+          jk += i;
+      }
+    }
+  }
+
+  // Nested reductions: diagnose only the outer reduction (because that makes it
+  // private within), and suggest firstprivate.
+#if !CMB
+  // sep-note@+2 {{parent '#pragma acc parallel' appears here}}
+  // sep-note@+1 {{suggest 'firstprivate(jk)' because 'jk' has no gang reduction in parent '#pragma acc parallel' construct}}
+  #pragma acc parallel
+#endif
+  {
+    // sep-error@+1 {{scalar loop reduction variable 'jk' requires data clause visible at parent '#pragma acc parallel'}}
+    #pragma acc CMB_PAR loop seq reduction(+:jk)
+    for (int i = 0; i < 5; ++i) {
+      #pragma acc loop gang reduction(+:jk)
+      for (int j = 0; j < 5; ++j) {
+        #pragma acc loop worker vector reduction(+:jk)
+        for (int k = 0; k < 5; ++k)
+          jk += i;
+      }
+    }
+  }
+
+  // Local declaration or loop private clause suppresses diagnostic.
+  #pragma acc parallel CMB_LOOP_SEQ
+  CMB_FORLOOP_HEAD
+  {
+    int jk;
+    #pragma acc loop gang reduction(+:jk)
+    for (int i = 0; i < 5; ++i)
+      jk += i;
+  }
+  #pragma acc parallel CMB_LOOP_SEQ
+  CMB_FORLOOP_HEAD
+  #pragma acc loop gang private(jk)
+  for (int i = 0; i < 5; ++i) {
+    #pragma acc loop worker reduction(+:jk)
+    for (int j = 0; j < 5; ++j) {
+      #pragma acc loop vector reduction(+:jk)
+      for (int k = 0; k < 5; ++k)
+        jk += i;
+    }
+  }
+  #pragma acc parallel CMB_LOOP_SEQ
+  CMB_FORLOOP_HEAD
+  #pragma acc loop seq private(jk)
+  for (int i = 0; i < 5; ++i) {
+    #pragma acc loop gang worker reduction(+:jk)
+    for (int j = 0; j < 5; ++j) {
+      #pragma acc loop vector reduction(+:jk)
+      for (int k = 0; k < 5; ++k)
+        jk += i;
+    }
+  }
+
+  // firstprivate on acc parallel suppresses diagnostic.
+  #pragma acc parallel CMB_LOOP_SEQ firstprivate(jk)
+  CMB_FORLOOP_HEAD
+  #pragma acc loop gang reduction(+:jk)
+  for (int i = 0; i < 5; ++i)
+    jk += i;
+
+  // reduction on acc parallel suppresses diagnostic.
+  #pragma acc parallel CMB_LOOP_SEQ reduction(+:jk)
+  CMB_FORLOOP_HEAD
+  #pragma acc loop gang reduction(+:jk)
+  for (int i = 0; i < 5; ++i)
+    jk += i;
+
+  // DMA on acc parallel suppresses diagnostic.
+  #pragma acc parallel CMB_LOOP_SEQ DATA(jk)
+  CMB_FORLOOP_HEAD
+  #pragma acc loop gang reduction(+:jk)
+  for (int i = 0; i < 5; ++i)
+    jk += i;
+
+  // DMA on acc data suppresses diagnostic.
+  #pragma acc data DATA(d)
+  #pragma acc data DATA(jk)
+  #pragma acc parallel CMB_LOOP_SEQ
+  CMB_FORLOOP_HEAD
+  #pragma acc loop gang reduction(+:jk, d)
+  for (int i = 0; i < 5; ++i) {
+    jk += i;
+    d += i;
+  }
 
   //--------------------------------------------------
   // Bad parent.

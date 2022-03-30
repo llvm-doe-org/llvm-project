@@ -1100,30 +1100,6 @@ clarify these points in future versions of the OpenACC specification.
       the `acc parallel` has been proposed for inclusion in the
       OpenACC spec after 2.7.  In that case, either interpretation is
       conforming.
-* If *exp* `reduction(`*o*`:`*v*`)` on an `acc loop`, and if the loop
-  is gang-partitioned, then *imp* `copy(`*v*`)` on the parent `acc
-  parallel` overriding any *imp* `firstprivate(`*v*`)` as long as all
-  of the following conditions hold:
-    * There is no *exp* DA for that variable on that `acc parallel` or
-      on any `acc loop` nested between it and the gang-partitioned
-      `acc loop`.
-    * There is no local declaration of *v* nested between the `acc
-      parallel` and the gang-partitioned `acc loop`.
-    * Notes:
-        * By converting *v* from gang-private to gang-shared, this
-          rule can trigger the previous rule to convert a trivial gang
-          reduction to *imp* `reduction` on the `acc parallel`.
-        * This rule does not follow OpenACC 2.7.  However, in our
-          experiments so far, both gcc 7.3.0 and pgcc 18.10-0 appear
-          to perform gang reductions and copy the reduction variable's
-          values to and from the device as specified by this rule.
-          This is true even when, without this rule, the reduction
-          variable should be *imp* `firstprivate`.
-        * There is discussion among the OpenACC technical committee
-          about adding a rule like this one to the OpenACC spec after
-          2.7.  However, every proposal considered so far produces
-          surprising or non-portable behavior in some cases, so the
-          future of this behavior is unclear.
 * It is an error if, on a particular OpenACC directive, there exist
   multiple *imp|exp* `reduction` with different reduction operators
   for a single variable *v*.  Moreover, *imp* `reduction` is included

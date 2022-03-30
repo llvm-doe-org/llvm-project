@@ -283,6 +283,18 @@ Run-Time Environment Variables
     * `reduction` clause
         * See `reduction` clause for `parallel` directive for general
           details about operand types and limitations.
+        * OpenACC's restriction that a scalar loop reduction variable sometimes
+          requires an explicit data clause on the parent `parallel` construct
+          (see OpenACC 3.2, sec. 2.6.2, L1235-1239) is enforced with a
+          compile-time error diagnostic.  The diagnostic includes a suggestion
+          for a `copy` or `firstprivate` clause based on whether the `parallel`
+          construct contains a gang reduction for that variable.  The diagnostic
+          should aid the development of OpenACC applications that are portable
+          among existing OpenACC compilers, which do not always implicitly
+          determine the same data clause for this case.  The restriction is not
+          enforced if the `loop` and `parallel` construct are combined as our
+          expectation is that all compilers implicitly determine `copy` in this
+          case.
         * Various subtleties in the semantics of `reduction` clauses
           on `loop` directives are discussed in the "Semantic
           Clarifications" section in `README-OpenACC-design.md`.  For
