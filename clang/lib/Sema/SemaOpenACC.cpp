@@ -1508,10 +1508,10 @@ public:
       const VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
       DirStack.SemaRef.Diag(DRE->getExprLoc(),
                             diag::err_acc_loop_reduction_needs_data_clause)
-        << VD->getName() << getOpenACCName(DirStack.getRealDirective());
+          << VD->getName() << getOpenACCName(DirStack.getRealDirective());
       DirStack.SemaRef.Diag(DirStack.getDirectiveStartLoc(),
                             diag::note_acc_parent_compute_construct)
-        << getOpenACCName(DirStack.getRealDirective());
+          << getOpenACCName(DirStack.getRealDirective());
       SourceLocation GangRedLoc = ScalarGangReductionVarDiags.lookup(VD);
       // OpenACC compilers typically implicitly determine copy clauses for gang
       // reductions, which are not so useful otherwise, so suggest that if there
@@ -1521,12 +1521,12 @@ public:
         DirStack.SemaRef.Diag(
             DirStack.getDirectiveStartLoc(),
             diag::note_acc_loop_reduction_suggest_firstprivate)
-          << VD->getName() << getOpenACCName(DirStack.getRealDirective());
+            << VD->getName() << getOpenACCName(DirStack.getRealDirective());
         continue;
       }
       DirStack.SemaRef.Diag(GangRedLoc,
                             diag::note_acc_loop_reduction_suggest_copy)
-        << VD->getName();
+          << VD->getName();
     }
   }
 };
