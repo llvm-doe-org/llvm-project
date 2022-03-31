@@ -1061,14 +1061,19 @@ clarify these points in future versions of the OpenACC specification.
     * If the loop is gang-partitioned, the specified gang reduction is
       a trivial reduction per gang.
     * Notes:
-        * Text to clarify that such reductions are trivial has been
-          proposed for inclusion in the OpenACC spec after 2.7.
+        * This behavior is based on the second sentence of OpenACC 3.2, sec.
+          2.9.11, L2099-2101:
+
+            > If the original var is not private, this update occurs by the end
+            > of the compute region, and any access to the original var is
+            > undefined within the compute region.  Otherwise, the update occurs
+            > at the end of the loop.
+
         * In the case of a trivial gang reduction, there can still be
           a non-trivial worker or vector reduction if the loop is also
           worker-partitioned or vector-partitioned.
-        * A trivial reduction reduces across only one thread.  Thus,
-          the reduction specifies the creation of a single private
-          copy of *v* that is initialized and later merged back to the
+        * A trivial reduction specifies the creation of a single private copy of
+          *v* that is initialized and later merged back to the
           original *v* according *o*.  The only way that behavior
           appears to be different than just discarding the reduction
           is if either (1) the loop body performs an operation on *v*
@@ -1084,26 +1089,21 @@ clarify these points in future versions of the OpenACC specification.
   parallel`.  Notes:
     * Thus, Clacc handles a loop reduction for a gang-shared variable
       as a gang reduction even if the loop is not gang-partitioned and
-      even if the loop is sequential.  This subtle behavior comes from
-      a strict reading of the spec since OpenACC 1.0.  Text to make
-      this behavior clearer has been proposed for inclusion in the
-      OpenACC spec after 2.7.
+      even if the loop is sequential.  This behavior is based on the first
+      sentence from the above text quoted from the OpenACC specification.
     * Clacc interprets this gang reduction as an *imp* `reduction` on
       the `acc parallel` to facilitate the translation to OpenMP (for
       example, reductions cannot be specified on `omp distribute` but
-      can be specified on `omp target teams`).  All references to *v*
-      within the `acc parallel` then refer to gang-private copies of
-      *v*.  However, under OpenACC 2.7 (and earlier), all references
-      to *v* within the `acc parallel` should still refer to the
-      original gang-shared *v* instead.  Text to specify that accesses
-      to the original gang-shared variable are undefined throughout
-      the `acc parallel` has been proposed for inclusion in the
-      OpenACC spec after 2.7.  In that case, either interpretation is
-      conforming.
+      can be specified on `omp target teams`).
+    * Outside the `acc loop`, all references to *v* within the `acc parallel`
+      then refer to gang-private copies of *v*.  In this way, Clacc happens to
+      support use cases not supported by the OpenACC specification: the above
+      text quoted from the OpenACC specification says these references are
+      undefined instead.
 * It is an error if, on a particular OpenACC directive, there exist
   multiple *imp|exp* `reduction` with different reduction operators
   for a single variable *v*.  Moreover, *imp* `reduction` is included
-  when applying OpenACC 2.7 sec. 2.9.11 L1580-1581.  Notes:
+  when applying OpenACC 3.2 sec. 2.9.11 L2112-2113.  Notes:
     * That passage specifies this restriction for *exp* `reduction` on
       nested constructs, but it doesn't discuss the case where sibling
       `acc loop` constructs specify conflicting gang reductions or

@@ -201,28 +201,6 @@ Run-Time Environment Variables
           types and floating types except complex types) and pointer
           types.
         * `&`, `|`, and `^` support exactly C11's integer types.
-        * Deviations from OpenACC 2.6
-            * OpenACC 2.6 sec. 2.5.12p774 mistypes `^` as `%`.  The
-              latter would be nonsense as a reduction operator.
-            * OpenACC 2.6 specifies that reduction operators support
-              "the numerical data types in C", which is not
-              terminology used by the C11 standard, and then it lists
-              specific types.  We use this description only as a
-              guideline as some operators more reasonably support
-              different types than the types listed.  For example, all
-              operators can support `bool` and enumerated types, which
-              are not listed, and `max` and `min` cannot support
-              complex types, which are listed.
-            * Specifically, we have designed the operand type
-              constraints for reduction operators to match the operand
-              type constraints for C11's corresponding operators when
-              combined with the general reduction constraint that the
-              result type and both operand types must all be the same
-              type.
-            * All such support depends on Clang's corresponding
-              support for OpenMP reductions.  Some operand types might
-              not be supported when compiling the generated OpenMP
-              using a different compiler.
 * `num_gangs`, `num_workers`, `vector_length` clauses
     * The argument in all cases must be a positive integer expression.
     * The `vector_length` argument must also be a constant or Clacc
@@ -297,12 +275,7 @@ Run-Time Environment Variables
           case.
         * Various subtleties in the semantics of `reduction` clauses
           on `loop` directives are discussed in the "Semantic
-          Clarifications" section in `README-OpenACC-design.md`.  For
-          example, a reduction on a sequential loop specifies a
-          reduction across gangs if the reduction variable is
-          gang-shared.  Many of these subtleties are under discussion
-          among the OpenACC technical committee for clarification in
-          the OpenACC spec after 2.7.
+          Clarifications" section in `README-OpenACC-design.md`.
 * Detection of `break` statement for the associated loop
     * Compile error if implicit/explicit `independent`.
     * No error if `seq` or `auto`.
