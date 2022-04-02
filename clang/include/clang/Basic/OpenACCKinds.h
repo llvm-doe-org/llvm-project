@@ -106,6 +106,9 @@ bool isAllowedParentForDirective(OpenACCDirectiveKind DKind,
 /// for non-combined directive.
 int getOpenACCEffectiveDirectives(OpenACCDirectiveKind DKind);
 
+/// Is the specified directive a kind that forms a statement?
+bool isOpenACCDirectiveStmt(OpenACCDirectiveKind DKind);
+
 /// Is the specified directive an 'acc parallel' or 'acc parallel loop'
 /// directive?
 bool isOpenACCParallelDirective(OpenACCDirectiveKind DKind);

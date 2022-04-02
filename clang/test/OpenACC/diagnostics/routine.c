@@ -494,9 +494,6 @@ void withinFunction() {
 
 #pragma acc routine seq
 void withinOrphanedLoop() {
-  // TODO: Eventually orphaned loops will be permitted but not the routine
-  // directive within it.
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop seq
   for (int i = 0; i < 8; ++i) {
     // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
@@ -754,11 +751,11 @@ void accUseInErrorBefore();
 // any of their locations.
 void hostUseInErrorBefore();
 void hostUseInErrorBefore_use() {
-  // expected-error@+2 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+2 {{function 'hostUseInErrorBefore_use' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   // expected-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
   #pragma acc loop
   hostUseInErrorBefore();
-  // expected-error@+2 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+2 {{function 'hostUseInErrorBefore_use' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   // expected-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
   #pragma acc loop
   hostUseInErrorBefore();
@@ -807,7 +804,6 @@ void onDef() {
     // expected-error@+1 {{static local variable 's' is not permitted within function 'onDef' because the latter is attributed with '#pragma acc routine'}}
     static int s;
   }
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{static local variable 's' is not permitted within function 'onDef' because the latter is attributed with '#pragma acc routine'}}
@@ -824,7 +820,6 @@ void onDeclDef() {
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'onDeclDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -836,7 +831,7 @@ void onDeclDef() {
 void defOnDecl() {
   static int s;
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'defOnDecl' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -855,7 +850,6 @@ void onDeclOnDef() {
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'onDeclOnDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -869,7 +863,6 @@ void onDefOnDecl() {
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'onDefOnDecl' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -919,13 +912,13 @@ void parUseBeforeDef() {
     // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
     static int s;
   }
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'parUseBeforeDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
     static int s;
   }
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'parUseBeforeDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -964,13 +957,13 @@ void parUseAfterDef() {
     // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
     static int s;
   }
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'parUseAfterDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{static local variable 's' is not permitted within function 'parUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
     static int s;
   }
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'parUseAfterDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -989,7 +982,7 @@ void parUseInDef() {
   static int sBefore;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parUseInDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'parUseInDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1001,7 +994,7 @@ void parUseInDef() {
   static int sAfter;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parUseInDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'parUseInDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1022,7 +1015,7 @@ void parLoopUseBeforeDef() {
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parLoopUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'parLoopUseBeforeDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1035,7 +1028,7 @@ void parLoopUseAfterDef() {
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parLoopUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'parLoopUseAfterDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1055,7 +1048,7 @@ void parLoopUseInDef() {
   static int sBefore;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parLoopUseInDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'parLoopUseInDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1067,7 +1060,7 @@ void parLoopUseInDef() {
   static int sAfter;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'parLoopUseInDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'parLoopUseInDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1087,7 +1080,7 @@ void expOffFnUseBeforeDef() {
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'expOffFnUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'expOffFnUseBeforeDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1100,7 +1093,7 @@ void expOffFnUseAfterDef() {
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'expOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'expOffFnUseAfterDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1131,7 +1124,7 @@ void impOffFnUseBeforeDef() {
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'impOffFnUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'impOffFnUseBeforeDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1155,7 +1148,7 @@ void chainedImpOffFnUseBeforeDef() {
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'chainedImpOffFnUseBeforeDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'chainedImpOffFnUseBeforeDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1168,7 +1161,7 @@ void impOffFnUseAfterDef() {
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'impOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'impOffFnUseAfterDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1192,7 +1185,7 @@ void chainedImpOffFnUseAfterDef() {
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'chainedImpOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'chainedImpOffFnUseAfterDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1221,7 +1214,7 @@ void indirectParUseInDef() {
   static int sBefore;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'indirectParUseInDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'indirectParUseInDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1233,7 +1226,7 @@ void indirectParUseInDef() {
   static int sAfter;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'indirectParUseInDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'indirectParUseInDef' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;
@@ -1267,16 +1260,23 @@ void useeInPar();
 void useeInParGangLoop();
 void useeInParWorkerLoop();
 void useeInParVectorLoop();
-void useeInParGangWorkerVectorLoop();
 void useeInParGangWorkerLoop();
+void useeInParGangVectorLoop();
+void useeInParWorkerVectorLoop();
+void useeInParGangWorkerVectorLoop();
 void useeInParSeqLoop();
 void useeInParNakedLoop();
-void useeInGangWorkerVectorLoop();
+void useeInParAutoLoop();
 void useeInGangLoop();
 void useeInWorkerLoop();
 void useeInVectorLoop();
+void useeInGangWorkerLoop();
+void useeInGangVectorLoop();
+void useeInWorkerVectorLoop();
+void useeInGangWorkerVectorLoop();
 void useeInSeqLoop();
 void useeInNakedLoop();
+void useeInAutoLoop();
 
 void useeInAny_hostUser() {
   useeInGangFn();
@@ -1288,16 +1288,23 @@ void useeInAny_hostUser() {
   useeInParGangLoop();
   useeInParWorkerLoop();
   useeInParVectorLoop();
-  useeInParGangWorkerVectorLoop();
   useeInParGangWorkerLoop();
+  useeInParGangVectorLoop();
+  useeInParWorkerVectorLoop();
+  useeInParGangWorkerVectorLoop();
   useeInParSeqLoop();
   useeInParNakedLoop();
-  useeInGangWorkerVectorLoop();
+  useeInParAutoLoop();
   useeInGangLoop();
   useeInWorkerLoop();
   useeInVectorLoop();
+  useeInGangWorkerLoop();
+  useeInGangVectorLoop();
+  useeInWorkerVectorLoop();
+  useeInGangWorkerVectorLoop();
   useeInSeqLoop();
   useeInNakedLoop();
+  useeInAutoLoop();
 }
 
 #pragma acc routine gang
@@ -1325,67 +1332,96 @@ void useeInAnyConstruct_parUser() {
     #pragma acc loop vector
     for (int i = 0; i < 5; ++i)
       useeInParVectorLoop();
-    #pragma acc loop gang worker vector
-    for (int i = 0; i < 5; ++i)
-      useeInParGangWorkerVectorLoop();
     #pragma acc loop gang worker
     for (int i = 0; i < 5; ++i)
       useeInParGangWorkerLoop();
+    #pragma acc loop gang vector
+    for (int i = 0; i < 5; ++i)
+      useeInParGangVectorLoop();
+    #pragma acc loop worker vector
+    for (int i = 0; i < 5; ++i)
+      useeInParWorkerVectorLoop();
+    #pragma acc loop gang worker vector
+    for (int i = 0; i < 5; ++i)
+      useeInParGangWorkerVectorLoop();
     #pragma acc loop seq
     for (int i = 0; i < 5; ++i)
       useeInParSeqLoop();
     #pragma acc loop
     for (int i = 0; i < 5; ++i)
       useeInParNakedLoop();
+    #pragma acc loop auto
+    for (int i = 0; i < 5; ++i)
+      useeInParAutoLoop();
+    #pragma acc loop auto gang
+    for (int i = 0; i < 5; ++i)
+      useeInParAutoLoop();
+    #pragma acc loop auto worker
+    for (int i = 0; i < 5; ++i)
+      useeInParAutoLoop();
+    #pragma acc loop auto vector
+    for (int i = 0; i < 5; ++i)
+      useeInParAutoLoop();
   }
 }
 
 #pragma acc routine gang
 void useeInAnyConstruct_orphanedPartLoopUser() {
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
-    useeInParGangLoop();
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+    useeInGangLoop();
   #pragma acc loop worker
   for (int i = 0; i < 5; ++i)
-    useeInParWorkerLoop();
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+    useeInWorkerLoop();
   #pragma acc loop vector
   for (int i = 0; i < 5; ++i)
-    useeInParVectorLoop();
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
-  #pragma acc loop gang worker vector
-  for (int i = 0; i < 5; ++i)
-    useeInParGangWorkerVectorLoop();
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+    useeInVectorLoop();
   #pragma acc loop gang worker
   for (int i = 0; i < 5; ++i)
-    useeInParGangWorkerLoop();
+    useeInGangWorkerLoop();
+  #pragma acc loop gang vector
+  for (int i = 0; i < 5; ++i)
+    useeInGangVectorLoop();
+  #pragma acc loop worker vector
+  for (int i = 0; i < 5; ++i)
+    useeInWorkerVectorLoop();
+  #pragma acc loop gang worker vector
+  for (int i = 0; i < 5; ++i)
+    useeInGangWorkerVectorLoop();
+  #pragma acc loop auto gang
+  for (int i = 0; i < 5; ++i)
+    useeInAutoLoop();
+  #pragma acc loop auto worker
+  for (int i = 0; i < 5; ++i)
+    useeInAutoLoop();
+  #pragma acc loop auto vector
+  for (int i = 0; i < 5; ++i)
+    useeInAutoLoop();
 }
 
 #pragma acc routine seq
 void useeInAnyConstruct_orphanedUnpartLoopUser() {
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
-    useeInParSeqLoop();
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+    useeInSeqLoop();
   #pragma acc loop
   for (int i = 0; i < 5; ++i)
-    useeInParNakedLoop();
+    useeInNakedLoop();
+  #pragma acc loop auto
+  for (int i = 0; i < 5; ++i)
+    useeInAutoLoop();
 }
 
 //..................................................
 // Usee has routine directive already.
 
-// expected-note@+1 22 {{'#pragma acc routine' for function 'useeHasGang' appears here}}
+// expected-note@+1 44 {{'#pragma acc routine' for function 'useeHasGang' appears here}}
 #pragma acc routine gang
 void useeHasGang();
-// expected-note@+1 17 {{'#pragma acc routine' for function 'useeHasWorker' appears here}}
+// expected-note@+1 36 {{'#pragma acc routine' for function 'useeHasWorker' appears here}}
 #pragma acc routine worker
 void useeHasWorker();
-// expected-note@+1 10 {{'#pragma acc routine' for function 'useeHasVector' appears here}}
+// expected-note@+1 24 {{'#pragma acc routine' for function 'useeHasVector' appears here}}
 #pragma acc routine vector
 void useeHasVector();
 #pragma acc routine seq
@@ -1403,7 +1439,6 @@ void useeHasAny_gangFnUser() {
   useeHasWorker();
   useeHasVector();
   useeHasSeq();
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i) {
     useeHasGang();
@@ -1411,7 +1446,6 @@ void useeHasAny_gangFnUser() {
     useeHasVector();
     useeHasSeq();
   }
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop
   for (int i = 0; i < 5; ++i) {
     useeHasGang();
@@ -1419,8 +1453,15 @@ void useeHasAny_gangFnUser() {
     useeHasVector();
     useeHasSeq();
   }
+  #pragma acc loop auto
+  for (int i = 0; i < 5; ++i) {
+    useeHasGang();
+    useeHasWorker();
+    useeHasVector();
+    useeHasSeq();
+  }
 }
-// expected-note@+1 3 {{'#pragma acc routine' for function 'useeHasAny_workerFnUser' appears here}}
+// expected-note@+1 4 {{'#pragma acc routine' for function 'useeHasAny_workerFnUser' appears here}}
 #pragma acc routine worker
 void useeHasAny_workerFnUser() {
   // expected-error@+1 {{function 'useeHasAny_workerFnUser' has '#pragma acc routine worker' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
@@ -1428,7 +1469,6 @@ void useeHasAny_workerFnUser() {
   useeHasWorker();
   useeHasVector();
   useeHasSeq();
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{function 'useeHasAny_workerFnUser' has '#pragma acc routine worker' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
@@ -1437,7 +1477,6 @@ void useeHasAny_workerFnUser() {
     useeHasVector();
     useeHasSeq();
   }
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{function 'useeHasAny_workerFnUser' has '#pragma acc routine worker' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
@@ -1446,8 +1485,16 @@ void useeHasAny_workerFnUser() {
     useeHasVector();
     useeHasSeq();
   }
+  #pragma acc loop auto
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{function 'useeHasAny_workerFnUser' has '#pragma acc routine worker' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    useeHasWorker();
+    useeHasVector();
+    useeHasSeq();
+  }
 }
-// expected-note@+1 6 {{'#pragma acc routine' for function 'useeHasAny_vectorFnUser' appears here}}
+// expected-note@+1 8 {{'#pragma acc routine' for function 'useeHasAny_vectorFnUser' appears here}}
 #pragma acc routine vector
 void useeHasAny_vectorFnUser() {
   // expected-error@+1 {{function 'useeHasAny_vectorFnUser' has '#pragma acc routine vector' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
@@ -1456,7 +1503,6 @@ void useeHasAny_vectorFnUser() {
   useeHasWorker();
   useeHasVector();
   useeHasSeq();
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{function 'useeHasAny_vectorFnUser' has '#pragma acc routine vector' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
@@ -1466,7 +1512,6 @@ void useeHasAny_vectorFnUser() {
     useeHasVector();
     useeHasSeq();
   }
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{function 'useeHasAny_vectorFnUser' has '#pragma acc routine vector' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
@@ -1476,8 +1521,17 @@ void useeHasAny_vectorFnUser() {
     useeHasVector();
     useeHasSeq();
   }
+  #pragma acc loop auto
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{function 'useeHasAny_vectorFnUser' has '#pragma acc routine vector' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{function 'useeHasAny_vectorFnUser' has '#pragma acc routine vector' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    useeHasVector();
+    useeHasSeq();
+  }
 }
-// expected-note@+1 9 {{'#pragma acc routine' for function 'useeHasAny_seqFnUser' appears here}}
+// expected-note@+1 12 {{'#pragma acc routine' for function 'useeHasAny_seqFnUser' appears here}}
 #pragma acc routine seq
 void useeHasAny_seqFnUser() {
   // expected-error@+1 {{function 'useeHasAny_seqFnUser' has '#pragma acc routine seq' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
@@ -1487,7 +1541,6 @@ void useeHasAny_seqFnUser() {
   // expected-error@+1 {{function 'useeHasAny_seqFnUser' has '#pragma acc routine seq' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
   useeHasVector();
   useeHasSeq();
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{function 'useeHasAny_seqFnUser' has '#pragma acc routine seq' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
@@ -1498,8 +1551,17 @@ void useeHasAny_seqFnUser() {
     useeHasVector();
     useeHasSeq();
   }
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{function 'useeHasAny_seqFnUser' has '#pragma acc routine seq' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{function 'useeHasAny_seqFnUser' has '#pragma acc routine seq' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    // expected-error@+1 {{function 'useeHasAny_seqFnUser' has '#pragma acc routine seq' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+    useeHasVector();
+    useeHasSeq();
+  }
+  #pragma acc loop auto
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{function 'useeHasAny_seqFnUser' has '#pragma acc routine seq' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
     useeHasGang();
@@ -1518,7 +1580,7 @@ void useeHasAny_impLaterFnUser() {
   // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
   useeHasVector();
   useeHasSeq();
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
@@ -1529,7 +1591,7 @@ void useeHasAny_impLaterFnUser() {
     useeHasVector();
     useeHasSeq();
   }
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
@@ -1540,11 +1602,22 @@ void useeHasAny_impLaterFnUser() {
     useeHasVector();
     useeHasSeq();
   }
+  // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  #pragma acc loop auto
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+    useeHasVector();
+    useeHasSeq();
+  }
 }
-// expected-note@+1 9 {{'#pragma acc routine' for function 'useeHasAny_impLaterFnUser_user' appears here}}
+// expected-note@+1 12 {{'#pragma acc routine' for function 'useeHasAny_impLaterFnUser_user' appears here}}
 #pragma acc routine seq
 void useeHasAny_impLaterFnUser_user() {
-  // expected-note@+1 9 {{'#pragma acc routine seq' implied for function 'useeHasAny_impLaterFnUser' by use in function 'useeHasAny_impLaterFnUser_user' here}}
+  // expected-note@+1 12 {{'#pragma acc routine seq' implied for function 'useeHasAny_impLaterFnUser' by use in function 'useeHasAny_impLaterFnUser_user' here}}
   useeHasAny_impLaterFnUser();
 }
 
@@ -1585,8 +1658,18 @@ void useeHasAny_parUser() {
       useeHasVector();
       useeHasSeq();
     }
+    // expected-note@+1 2 {{enclosing '#pragma acc loop' here}}
+    #pragma acc loop gang worker
+    for (int i = 0; i < 5; ++i) {
+      // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+      useeHasGang();
+      // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+      useeHasWorker();
+      useeHasVector();
+      useeHasSeq();
+    }
     // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
-    #pragma acc loop gang worker vector
+    #pragma acc loop gang vector
     for (int i = 0; i < 5; ++i) {
       // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
       useeHasGang();
@@ -1596,13 +1679,25 @@ void useeHasAny_parUser() {
       useeHasVector();
       useeHasSeq();
     }
-    // expected-note@+1 2 {{enclosing '#pragma acc loop' here}}
-    #pragma acc loop gang worker
+    // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
+    #pragma acc loop worker vector
     for (int i = 0; i < 5; ++i) {
-      // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
       useeHasGang();
-      // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
       useeHasWorker();
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+      useeHasVector();
+      useeHasSeq();
+    }
+    // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
+    #pragma acc loop gang worker vector
+    for (int i = 0; i < 5; ++i) {
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+      useeHasGang();
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+      useeHasWorker();
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasVector', which has '#pragma acc routine vector'}}
       useeHasVector();
       useeHasSeq();
     }
@@ -1620,13 +1715,92 @@ void useeHasAny_parUser() {
       useeHasVector();
       useeHasSeq();
     }
+    #pragma acc loop auto
+    for (int i = 0; i < 5; ++i) {
+      useeHasGang();
+      useeHasWorker();
+      useeHasVector();
+      useeHasSeq();
+    }
+    // expected-note@+1 {{enclosing '#pragma acc loop' here}}
+    #pragma acc loop auto gang
+    for (int i = 0; i < 5; ++i) {
+      // expected-error@+1 {{'#pragma acc loop gang' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+      useeHasGang();
+      useeHasWorker();
+      useeHasVector();
+      useeHasSeq();
+    }
+    // expected-note@+1 2 {{enclosing '#pragma acc loop' here}}
+    #pragma acc loop auto worker
+    for (int i = 0; i < 5; ++i) {
+      // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+      useeHasGang();
+      // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+      useeHasWorker();
+      useeHasVector();
+      useeHasSeq();
+    }
+    // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
+    #pragma acc loop auto vector
+    for (int i = 0; i < 5; ++i) {
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+      useeHasGang();
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+      useeHasWorker();
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+      useeHasVector();
+      useeHasSeq();
+    }
+    // expected-note@+1 2 {{enclosing '#pragma acc loop' here}}
+    #pragma acc loop auto gang worker
+    for (int i = 0; i < 5; ++i) {
+      // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+      useeHasGang();
+      // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+      useeHasWorker();
+      useeHasVector();
+      useeHasSeq();
+    }
+    // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
+    #pragma acc loop auto gang vector
+    for (int i = 0; i < 5; ++i) {
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+      useeHasGang();
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+      useeHasWorker();
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+      useeHasVector();
+      useeHasSeq();
+    }
+    // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
+    #pragma acc loop auto worker vector
+    for (int i = 0; i < 5; ++i) {
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+      useeHasGang();
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+      useeHasWorker();
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+      useeHasVector();
+      useeHasSeq();
+    }
+    // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
+    #pragma acc loop auto gang worker vector
+    for (int i = 0; i < 5; ++i) {
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+      useeHasGang();
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+      useeHasWorker();
+      // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+      useeHasVector();
+      useeHasSeq();
+    }
   }
 }
 
 // Unpartitioned orphaned loops are checked in useeHasAny_*FnUser above.
 #pragma acc routine gang
 void useeHasAny_orphanedPartLoopUser() {
-  // expected-error@+2 {{orphaned '#pragma acc loop' is not supported}}
   // expected-note@+1 {{enclosing '#pragma acc loop' here}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i) {
@@ -1636,7 +1810,6 @@ void useeHasAny_orphanedPartLoopUser() {
     useeHasVector();
     useeHasSeq();
   }
-  // expected-error@+2 {{orphaned '#pragma acc loop' is not supported}}
   // expected-note@+1 2 {{enclosing '#pragma acc loop' here}}
   #pragma acc loop worker
   for (int i = 0; i < 5; ++i) {
@@ -1647,7 +1820,6 @@ void useeHasAny_orphanedPartLoopUser() {
     useeHasVector();
     useeHasSeq();
   }
-  // expected-error@+2 {{orphaned '#pragma acc loop' is not supported}}
   // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
   #pragma acc loop vector
   for (int i = 0; i < 5; ++i) {
@@ -1659,7 +1831,38 @@ void useeHasAny_orphanedPartLoopUser() {
     useeHasVector();
     useeHasSeq();
   }
-  // expected-error@+2 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-note@+1 2 {{enclosing '#pragma acc loop' here}}
+  #pragma acc loop gang worker
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    useeHasVector();
+    useeHasSeq();
+  }
+  // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
+  #pragma acc loop gang vector
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+    useeHasVector();
+    useeHasSeq();
+  }
+  // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
+  #pragma acc loop worker vector
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+    useeHasVector();
+    useeHasSeq();
+  }
   // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
   #pragma acc loop gang worker vector
   for (int i = 0; i < 5; ++i) {
@@ -1671,14 +1874,76 @@ void useeHasAny_orphanedPartLoopUser() {
     useeHasVector();
     useeHasSeq();
   }
-  // expected-error@+2 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-note@+1 {{enclosing '#pragma acc loop' here}}
+  #pragma acc loop auto gang
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc loop gang' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    useeHasWorker();
+    useeHasVector();
+    useeHasSeq();
+  }
   // expected-note@+1 2 {{enclosing '#pragma acc loop' here}}
-  #pragma acc loop gang worker
+  #pragma acc loop auto worker
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
     useeHasGang();
     // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
     useeHasWorker();
+    useeHasVector();
+    useeHasSeq();
+  }
+  // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
+  #pragma acc loop auto vector
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+    useeHasVector();
+    useeHasSeq();
+  }
+  // expected-note@+1 2 {{enclosing '#pragma acc loop' here}}
+  #pragma acc loop auto gang worker
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{'#pragma acc loop worker' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    useeHasVector();
+    useeHasSeq();
+  }
+  // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
+  #pragma acc loop auto gang vector
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+    useeHasVector();
+    useeHasSeq();
+  }
+  // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
+  #pragma acc loop auto worker vector
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+    useeHasVector();
+    useeHasSeq();
+  }
+  // expected-note@+1 3 {{enclosing '#pragma acc loop' here}}
+  #pragma acc loop auto gang worker vector
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    // expected-error@+1 {{'#pragma acc loop vector' construct calls function 'useeHasVector', which has '#pragma acc routine vector'}}
     useeHasVector();
     useeHasSeq();
   }
@@ -1716,6 +1981,266 @@ void useKindParLevel_loopUse() {
     useKindParLevel();
     void (*p)() = useKindParLevel;
   }
+}
+
+//..................................................
+// Usee is orphaned loop construct.
+
+#pragma acc routine gang
+void useeIsOrphanedLoop_gangUser() {
+  #pragma acc loop gang
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop gang worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop gang vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop gang worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto gang
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto gang worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto gang vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto gang worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+
+// expected-note@+1 8 {{'#pragma acc routine' for function 'useeIsOrphanedLoop_workerUser' appears here}}
+#pragma acc routine worker
+void useeIsOrphanedLoop_workerUser() {
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_workerUser' has '#pragma acc routine worker' but contains '#pragma acc loop gang'}}
+  #pragma acc loop gang
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_workerUser' has '#pragma acc routine worker' but contains '#pragma acc loop gang'}}
+  #pragma acc loop gang worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_workerUser' has '#pragma acc routine worker' but contains '#pragma acc loop gang'}}
+  #pragma acc loop gang vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_workerUser' has '#pragma acc routine worker' but contains '#pragma acc loop gang'}}
+  #pragma acc loop gang worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_workerUser' has '#pragma acc routine worker' but contains '#pragma acc loop gang'}}
+  #pragma acc loop auto gang
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_workerUser' has '#pragma acc routine worker' but contains '#pragma acc loop gang'}}
+  #pragma acc loop auto gang worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_workerUser' has '#pragma acc routine worker' but contains '#pragma acc loop gang'}}
+  #pragma acc loop auto gang vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_workerUser' has '#pragma acc routine worker' but contains '#pragma acc loop gang'}}
+  #pragma acc loop auto gang worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+
+// expected-note@+1 12 {{'#pragma acc routine' for function 'useeIsOrphanedLoop_vectorUser' appears here}}
+#pragma acc routine vector
+void useeIsOrphanedLoop_vectorUser() {
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_vectorUser' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
+  #pragma acc loop gang
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_vectorUser' has '#pragma acc routine vector' but contains '#pragma acc loop worker'}}
+  #pragma acc loop worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_vectorUser' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
+  #pragma acc loop gang worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_vectorUser' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
+  #pragma acc loop gang vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_vectorUser' has '#pragma acc routine vector' but contains '#pragma acc loop worker'}}
+  #pragma acc loop worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_vectorUser' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
+  #pragma acc loop gang worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_vectorUser' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
+  #pragma acc loop auto gang
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_vectorUser' has '#pragma acc routine vector' but contains '#pragma acc loop worker'}}
+  #pragma acc loop auto worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_vectorUser' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
+  #pragma acc loop auto gang worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_vectorUser' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
+  #pragma acc loop auto gang vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_vectorUser' has '#pragma acc routine vector' but contains '#pragma acc loop worker'}}
+  #pragma acc loop auto worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_vectorUser' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
+  #pragma acc loop auto gang worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+
+// expected-note@+1 14 {{'#pragma acc routine' for function 'useeIsOrphanedLoop_seqUser' appears here}}
+#pragma acc routine seq
+void useeIsOrphanedLoop_seqUser() {
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  #pragma acc loop gang
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop worker'}}
+  #pragma acc loop worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop vector'}}
+  #pragma acc loop vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  #pragma acc loop gang worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  #pragma acc loop gang vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop worker'}}
+  #pragma acc loop worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  #pragma acc loop gang worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop
+  for (int i = 0; i < 5; ++i)
+    ;
+  #pragma acc loop auto
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  #pragma acc loop auto gang
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop worker'}}
+  #pragma acc loop auto worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop vector'}}
+  #pragma acc loop auto vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  #pragma acc loop auto gang worker
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  #pragma acc loop auto gang vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop worker'}}
+  #pragma acc loop auto worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_seqUser' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  #pragma acc loop auto gang worker vector
+  for (int i = 0; i < 5; ++i)
+    ;
 }
 
 //--------------------------------------------------
@@ -1788,7 +2313,7 @@ void dupStaticDiagBeforeRoutineDir() {
   }
   // This diagnostic is emitted immediately, so keep it last so it doesn't
   // suppress transformation of the other OpenACC constructs.
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+1 {{function 'dupStaticDiagBeforeRoutineDir' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{static local variable 'j' is not permitted within function 'dupStaticDiagBeforeRoutineDir' because the latter is attributed with '#pragma acc routine'}}
@@ -1829,7 +2354,6 @@ void dupStaticDiagAfterRoutineDir() {
     // expected-error@+1 {{static local variable 'j' is not permitted within function 'dupStaticDiagAfterRoutineDir' because the latter is attributed with '#pragma acc routine'}}
     static int j;
   }
-  // expected-error@+1 {{orphaned '#pragma acc loop' is not supported}}
   #pragma acc loop
   for (int i = 0; i < 5; ++i) {
     // expected-error@+1 {{static local variable 'j' is not permitted within function 'dupStaticDiagAfterRoutineDir' because the latter is attributed with '#pragma acc routine'}}
@@ -1881,7 +2405,7 @@ void dupParLevelDiagBeforeRoutineDir_user() {
   }
   // This diagnostic is emitted immediately, so keep it last so it doesn't
   // suppress transformation of the other OpenACC constructs.
-  // expected-error@+2 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+2 {{function 'dupParLevelDiagBeforeRoutineDir_user' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   // expected-note@+1 {{enclosing '#pragma acc loop' here}}
   #pragma acc loop vector
   for (int i = 0; i < 5; ++i) {
@@ -1904,7 +2428,7 @@ void dupParLevelDiagBeforeRoutineDir_user_user() {
 // expected-note@+1 3 {{'#pragma acc routine' for function 'dupParLevelDiagBeforeRoutineDir_usee' appears here}}
 #pragma acc routine gang
 void dupParLevelDiagBeforeRoutineDir_usee();
-// expected-note@+1 5 {{'#pragma acc routine' for function 'dupParLevelDiagBeforeRoutineDir_user' appears here}}
+// expected-note@+1 6 {{'#pragma acc routine' for function 'dupParLevelDiagBeforeRoutineDir_user' appears here}}
 #pragma acc routine seq
 void dupParLevelDiagBeforeRoutineDir_user() {
   int i;
@@ -1931,7 +2455,7 @@ void dupParLevelDiagBeforeRoutineDir_user() {
     // expected-error@+1 {{'#pragma acc parallel loop vector' construct calls function 'dupParLevelDiagBeforeRoutineDir_usee', which has '#pragma acc routine gang'}}
     dupParLevelDiagBeforeRoutineDir_usee();
   }
-  // expected-error@+2 {{orphaned '#pragma acc loop' is not supported}}
+  // expected-error@+2 {{function 'dupParLevelDiagBeforeRoutineDir_user' has '#pragma acc routine seq' but contains '#pragma acc loop vector'}}
   // expected-note@+1 {{enclosing '#pragma acc loop' here}}
   #pragma acc loop vector
   for (int i = 0; i < 5; ++i) {

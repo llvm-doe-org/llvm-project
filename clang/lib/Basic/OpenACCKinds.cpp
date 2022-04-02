@@ -484,6 +484,23 @@ int clang::getOpenACCEffectiveDirectives(OpenACCDirectiveKind DKind) {
   }
 }
 
+bool clang::isOpenACCDirectiveStmt(OpenACCDirectiveKind DKind) {
+  switch (DKind) {
+  case ACCD_update:
+  case ACCD_enter_data:
+  case ACCD_exit_data:
+  case ACCD_data:
+  case ACCD_parallel:
+  case ACCD_loop:
+  case ACCD_parallel_loop:
+    return true;
+  case ACCD_routine:
+  case ACCD_unknown:
+    return false;
+  }
+  llvm_unreachable("expected valid OpenACC directive kind");
+}
+
 bool clang::isOpenACCParallelDirective(OpenACCDirectiveKind DKind) {
   return DKind == ACCD_parallel || DKind == ACCD_parallel_loop;
 }

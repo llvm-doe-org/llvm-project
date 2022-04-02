@@ -11674,8 +11674,8 @@ public:
                                         SourceLocation LParenLoc,
                                         SourceLocation EndLoc);
 
-  /// Is an OpenACC directive currently being analyzed?
-  bool isInOpenACCDirective();
+  /// Is an OpenACC directive that forms a statement currently being analyzed?
+  bool isInOpenACCDirectiveStmt();
 
   /// Transform OpenACC region to OpenMP, and return true if an error occurred.
   ///

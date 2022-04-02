@@ -445,9 +445,11 @@ OPENACC_PARALLEL_PARENT(unknown)
 OPENACC_PARALLEL_PARENT(data)
 
 // Parent directives allowed for 'loop'.
+OPENACC_LOOP_PARENT(unknown)
 OPENACC_LOOP_PARENT(parallel)
 OPENACC_LOOP_PARENT(loop)
 OPENACC_LOOP_PARENT(parallel_loop)
+OPENACC_LOOP_PARENT(routine)
 
 // Parent directives allowed for 'parallel_loop'.
 OPENACC_PARALLEL_LOOP_PARENT(unknown)

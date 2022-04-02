@@ -7,6 +7,11 @@
 // loop" directive in order to check the same cases but for combined "acc
 // parallel loop" directives.
 //
+// This file does not bother to repeat all that again for the case of orphaned
+// loops.  Many other loop test files necessarily check some nested loops cases,
+// and they repeat them for orphaned loops, which we then assume will work fine
+// for the additional cases in this test file.
+//
 // RUN: %data cmbs {
 // RUN:   (cmb-cflags=      cmb=SEP)
 // RUN:   (cmb-cflags=-DCMB cmb=CMB)

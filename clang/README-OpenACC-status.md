@@ -207,6 +207,8 @@ Run-Time Environment Variables
       does not use the clause and reports a warning diagnostic, which
       can be suppressed or converted to an error using the
       `-W{no-,error=}openacc-ignored-clause` command-line options.
+    * `num_workers` and `vector_length` currently do not affect
+      orphaned `loop` constructs.
     * Notes:
         * OpenACC 2.6 specifies only that the arguments must be
           integer expressions.  However, OpenMP specifies the stricter
@@ -228,10 +230,16 @@ Run-Time Environment Variables
 ----------------
 
 * Lexical context
-    * Appearing within a `parallel` construct and any number of levels
-      of nesting within other `loop` directives are supported.
-    * Appearing outside a `parallel` construct (that is, an orphaned
-      `loop` construct) is not yet supported.
+    * Appearing within a `parallel` construct is supported.
+    * Appearing outside any `parallel` construct and within a function with an
+      explicit `routine` directive is supported.  In this case, the `loop`
+      construct is said to be an orphaned `loop` construct.
+    * Appearing outside any `parallel` construct and within a function without
+      an explicit `routine` directive produces a compile-time error diagnostic.
+      OpenACC 3.2 does not specify this restriction, but we are preparing a
+      discussion for the OpenACC technical committee.
+    * Appearing within any number of levels of nesting within other `loop`
+      constructs is supported.
 * Use without clauses is supported.
 * Supported partitionability clauses
     * Implicit `independent`
@@ -273,6 +281,9 @@ Run-Time Environment Variables
           enforced if the `loop` and `parallel` construct are combined as our
           expectation is that all compilers implicitly determine `copy` in this
           case.
+        * OpenACC's restriction that an orphaned `loop` construct reduction's
+          variable must be (gang-)private is enforced with a compile-time error
+          diagnostic.
         * Various subtleties in the semantics of `reduction` clauses
           on `loop` directives are discussed in the "Semantic
           Clarifications" section in `README-OpenACC-design.md`.
@@ -339,9 +350,10 @@ Run-Time Environment Variables
       the OpenACC technical committee for inclusion in the OpenACC
       spec after 3.2.
 * Body of the associated function's definition
-    * Appearance of any OpenACC directive produces a compile-time
-      error diagnostic.  Thus, orphaned `loop` constructs are not yet
-      supported.
+    * Appearance of any OpenACC directive other than an orphaned `loop`
+      construct produces a compile-time error diagnostic.
+    * Appearance of an orphaned `loop` construct with an incompatible level of
+      parallelism produces a compile-time error diagnostic.
     * Declaration of a static local variable produces a compile-time
       error diagnostic.
 * Implicit `routine seq` directive

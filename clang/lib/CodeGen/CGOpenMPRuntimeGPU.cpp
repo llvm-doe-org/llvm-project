@@ -360,6 +360,9 @@ public:
       if (const auto *VD = dyn_cast_or_null<ValueDecl>(D))
         VisitValueDecl(VD);
   }
+  void VisitACCDirectiveStmt(const ACCDirectiveStmt *D) {
+    Visit(D->getOMPNode());
+  }
   void VisitOMPExecutableDirective(const OMPExecutableDirective *D) {
     if (!D)
       return;

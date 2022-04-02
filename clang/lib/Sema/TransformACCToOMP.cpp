@@ -58,12 +58,6 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     Expr *NumWorkersExpr = nullptr;
     Expr *VectorLengthExpr = nullptr;
     ///@}
-    /// Before translating the associated statement of an acc loop directive
-    /// that translates to an OpenMP loop-related directive (acc loop seq, for
-    /// example, does not), TransformACCLoopDirective sets the following
-    /// variable to the type of that OpenMP directive, and it is copied to
-    /// descendant stack entries as those entries are created.
-    OpenMPDirectiveKind LoopOMPKind = OMPD_unknown;
   };
   /// This stack is pushed and popped at each effective OpenACC directive.
   SmallVector<DirStackEntry, 4> DirStack;
@@ -138,7 +132,6 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       DirEntry.NumWorkersVarDecl = ParentDirEntry.NumWorkersVarDecl;
       DirEntry.NumWorkersExpr = ParentDirEntry.NumWorkersExpr;
       DirEntry.VectorLengthExpr = ParentDirEntry.VectorLengthExpr;
-      DirEntry.LoopOMPKind = ParentDirEntry.LoopOMPKind;
     }
     /// Pop top directive's data from Transform.DirStack.
     ~DirStackEntryRAII() { Transform.DirStack.pop_back(); }
@@ -683,7 +676,6 @@ public:
     // What kind of OpenMP directive should we build?
     // OMPD_unknown means none (so sequential).
     OpenMPDirectiveKind TDKind;
-    bool AddNumThreads1 = false;
     Expr *AddNumThreadsExpr = nullptr;
     Expr *AddSimdlenExpr = nullptr;
     bool AddScopeWithLCVPrivate = false;
@@ -718,17 +710,7 @@ public:
             TDKind = OMPD_unknown;
             AddScopeWithAllPrivates = true;
           } else { // hasVectorPartitioning
-            if (DirEntry.LoopOMPKind == OMPD_unknown) {
-              TDKind = OMPD_parallel_for_simd;
-              AddNumThreads1 = true;
-              // TODO: Gang-redundant, vector-partitioned mode isn't possible
-              // currently because of implicit gang clauses.  Support for
-              // orphaned loops or something like a gang(redundant) clause would
-              // make it possible again.
-              llvm_unreachable(
-                  "unexpected need for parallel for num_threads(1)");
-            } else
-              TDKind = OMPD_simd;
+            TDKind = OMPD_simd;
           }
         } else { // hasWorkerPartitioning
           if (!Partitioning.hasVectorPartitioning())
@@ -790,17 +772,8 @@ public:
 
     // Add num_threads and simdlen clauses, as needed.
     llvm::SmallVector<OMPClause *, 16> TClauses;
-    assert((!AddNumThreads1 || !AddNumThreadsExpr) &&
-           "did not expect to add conflicting num_threads clauses");
     size_t NumClausesAdded = 0;
-    if (AddNumThreads1) {
-      OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_num_threads);
-      ExprResult One = getSema().ActOnIntegerConstant(D->getEndLoc(), 1);
-      assert(!One.isInvalid());
-      TClauses.push_back(getDerived().RebuildOMPNumThreadsClause(
-          One.get(), D->getEndLoc(), D->getEndLoc(), D->getEndLoc()));
-      ++NumClausesAdded;
-    } else if (AddNumThreadsExpr) {
+    if (AddNumThreadsExpr) {
       OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_num_threads);
       TClauses.push_back(getDerived().RebuildOMPNumThreadsClause(
           AddNumThreadsExpr, AddNumThreadsExpr->getBeginLoc(),
@@ -821,8 +794,6 @@ public:
                         NumClausesAdded);
 
     // Transform associated statement.
-    if (isOpenMPLoopDirective(TDKind))
-      DirEntry.LoopOMPKind = TDKind;
     StmtResult AssociatedStmt = transformACCAssociatedStmt(D, TDKind, TClauses);
 
     // Build OpenMP directive and finalize enclosing compound statement, if
@@ -1335,7 +1306,7 @@ public:
 } // namespace
 
 bool Sema::transformACCToOMP(ACCDirectiveStmt *D) {
-  if (isInOpenACCDirective())
+  if (isInOpenACCDirectiveStmt())
     return false;
   StartOpenACCTransform();
   bool Res = TransformACCToOMP(*this).TransformStmt(D).isInvalid();

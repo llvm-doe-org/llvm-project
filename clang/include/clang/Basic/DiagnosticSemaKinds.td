@@ -10909,8 +10909,9 @@ def note_acc_enclosing_directive : Note<
   "enclosing '#pragma acc %0' here">;
 def err_acc_loop_loop_par_level : Error<
   "'#pragma acc %2 %3' cannot be nested within '#pragma acc %0 %1'">;
-def err_acc_orphaned_loop_construct : Error<
-  "orphaned '#pragma acc loop' is not supported">;
+def err_acc_loop_func_par_level : Error<
+  "function '%0' has '#pragma acc routine %1' but contains "
+  "'#pragma acc %2 %3'">;
 def err_acc_loop_cannot_use_stmt : Error<
   "'%0' statement cannot be used in partitionable OpenACC for loop">;
 def err_acc_not_for : Error<
@@ -10953,6 +10954,8 @@ def note_acc_loop_reduction_suggest_copy : Note<
 def note_acc_loop_reduction_suggest_firstprivate : Note<
   "suggest 'firstprivate(%0)' because '%0' has no gang reduction in parent "
   "'#pragma acc %1' construct">;
+def err_acc_orphaned_loop_reduction_var_not_gang_private : Error<
+  "orphaned loop reduction variable '%0' is not gang-private">;
 def warn_acc_omp_update_present : Warning<
   "the OpenACC '%0' clause translation uses the 'present' motion modifier, "
   "which is an OpenMP TR8 feature that might not be supported yet by other "
@@ -11023,6 +11026,9 @@ def note_acc_routine_explicit : Note<
 def note_acc_routine_seq_implicit : Note<
   "'#pragma acc routine seq'%select{| previously}0 implied for function '%1' "
   "by use in %select{construct|function}2 '%select{#pragma acc |}2%3' here">;
+def err_acc_routine_for_orphaned_loop : Error<
+  "function '%0' contains orphaned '#pragma acc loop' but has no explicit "
+  "'#pragma acc routine'">;
 } // end of OpenACC category
 
 let CategoryName = "Related Result Type Issue" in {

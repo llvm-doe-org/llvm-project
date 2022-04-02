@@ -443,15 +443,16 @@ hidden OpenMP child.  The most obvious points for this implementation
 are the OpenACC cases in the main switch on AST node types within
 Clang codegen's `CodeGenFunction::EmitStmt`.
 
-While necessary, those implementation points are insufficient for
-offloading support.  The trouble is that the OpenMP codegen
-implementation also has a hook into Clang's codegen framework outside
-that switch.  This hook calls
-`CGOpenMPRuntime::scanForTargetRegionsFunctions`, which recurses
-through AST nodes looking for OpenMP target regions to emit in
-separate device functions.  Thus, Clacc extends this scan to look for
-OpenACC AST nodes and, as before, to delegate the required codegen to
-their hidden OpenMP children.
+While necessary, those implementation points are insufficient for offloading
+support.  The issue is that the OpenMP codegen implementation also has a hook
+into Clang's codegen framework outside that switch.  This hook calls
+`CGOpenMPRuntime::scanForTargetRegionsFunctions`, which recurses through AST
+nodes looking for OpenMP target regions to emit in separate device functions.
+Thus, Clacc extends this scan to look for OpenACC AST nodes and, as before, to
+delegate the required codegen to their hidden OpenMP children.  Finally, Clacc
+extends the class `CheckVarsEscapingDeclContext` in `CGOpenMPRuntimeCPU.cpp`
+with a visit member function for `ACCDirectiveStmt` that delegates to the hidden
+OpenMP child.
 
 Clacc makes no changes to LLVM IR codegen for the sake of
 `ACCDeclAttr` nodes, which are thus ignored.  The corresponding
@@ -1805,30 +1806,10 @@ its clauses to OpenMP is as follows:
 * `acc loop` -> `omp`
 * *exp*|*imp* `gang` -> `distribute`
 * *exp* `worker` -> `parallel for`
-* If neither this nor any ancestor `acc loop` is gang-partitioned or
-  worker-partitioned, then -> `parallel for` and -> *exp*
-  `num_threads(1)`.  Notes:
-    * This case is gang-redundant, worker-single, vector-partitioned
-      mode because, if this loop were also vector-single, it would be
-      a sequential loop.
-    * We add `parallel for` for this case because OpenMP does not
-      permit `omp simd` directly inside `omp target teams`.
-    * An alternative might be to translate to `omp simd` directly
-      inside `omp parallel`, but OpenMP does not have a combined `omp
-      parallel simd` directive, leading us to question the semantics.
-    * Currently, this case is impossible in Clacc.  Previously, Clacc
-      never added an *imp* `gang` clause to an `acc loop` with an
-      *exp* `vector` clause, so this case was possible, but
-      standardization of *imp* `gang` clauses in the OpenACC
-      specification (see "Implicit Gang Clauses" above) changed that.
-      We maintain the implementation to translate this case because it
-      will become possible again when Clacc handles orphaned loops or
-      if something like a `gang(redundant)` clause is ever devised.
 * *exp* `vector` -> `simd`
 * The output `distribute`, `parallel for`, and `simd` OpenMP directive
-  components are sorted in the above order before all clauses,
-  including the above `num_threads(1)`, regardless of the input clause
-  order.
+  components are sorted in the above order before all clauses regardless of the
+  input clause order.
 * If *exp* `worker`, then *exp* `num_workers` from ancestor `acc
   parallel` -> *exp* `num_threads` where the argument is either (1)
   the original *exp* `num_workers` argument if it is a constant
@@ -1847,15 +1828,11 @@ its clauses to OpenMP is as follows:
   constant-expression argument from ancestor `acc parallel` -> *exp*
   `simdlen`.
 * `collapse` -> `collapse`
-* If *exp* `worker` or if this and every ancestor `acc loop` until the
-  ancestor `acc parallel` is not gang-partitioned and not
-  worker-partitioned, then *imp* `shared` -> *exp* `shared`.
+* If *exp* `worker`, then *imp* `shared` -> *exp* `shared`.
 * Else, *imp* `shared` -> *imp* `shared`.  Notes:
     * This case must map to *imp* `shared` because `omp distribute` or
-      `omp simd` without `parallel for` (which Clacc adds for `worker`
-      or to be able to nest `omp simd` directly within `omp target
-      teams`) does not support a `shared` clause, so we must rely on
-      OpenMP implicit data sharing rules then.
+      `omp simd` without `parallel for` does not support a `shared` clause, so
+      we must rely on OpenMP implicit data sharing rules then.
 * *pre* `private` for a loop control variable that is declared in the
   init of the attached `for` loop -> *pre* `private`.  Notes:
     * Mapping to *exp* `private` would be erroneous because it would
@@ -1992,13 +1969,6 @@ possible solutions:
   computed automatically.  If `acc loop vector` were mapped to `omp
   parallel for`, `vector_length` with a non-constant-expression
   argument would be possible.
-* A gang reduction specified on an orphaned `acc loop` directive
-  because the enclosing compute construct to which the reduction would
-  normally be applied during translation is not statically visible.  A
-  restriction against this case already appears in OpenACC 2.7 (and
-  earlier), but it does not include the case of a gang reduction for a
-  gang-shared variable on a non-gang loop.  Text has been proposed for
-  inclusion in the OpenACC spec after 2.7 to clarify.
 * Orphaned `acc loop` directive that observes `num_workers` and
   `vector_length` because the enclosing compute construct from which
   those clauses would normally be applied during translation is not

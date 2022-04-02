@@ -403,11 +403,25 @@ public:
   ///@}
 
   /// Returns data attributes from top of the stack for the specified
-  /// declaration.
+  /// declaration.  (Predetermined and implicitly determined data attributes
+  /// usually have not been computed yet.)
   DAVarData getTopDA(VarDecl *VD);
 
   /// Returns true if the declaration has a DMA anywhere on the stack.
+  /// (Predetermined and implicitly determined data attributes usually have not
+  /// been computed yet.)
   bool hasVisibleDMA(VarDecl *VD);
+
+  /// Returns true if the declaration has a privatizing DSA on any loop
+  /// construct on the stack beyond the current stack entry.
+  ///
+  /// Fails an assertion if encounters an ancestor stack entry that is not a
+  /// loop construct or a routine directive.
+  ///
+  /// Checks for explicit DSAs and predetermined DSAs except in the case of
+  /// local variable declarations, which must be checked separately.  Loop
+  /// constructs have no implicitly determined DSAs.
+  bool hasPrivatizingDSAOnAncestorOrphanedLoop(VarDecl *VD);
 
   /// Records a variable appearing in an update directive clause and returns
   /// false, or complains and returns true if it already appeared in one for
@@ -462,8 +476,8 @@ public:
   /// Returns the real directive for the construct enclosing the currently
   /// analyzed real directive, or returns ACCD_unknown if none.  In the former
   /// case only, set ParentLoc as the returned directive's location.  A routine
-  /// directive that applies to a function is modeled as enclosing it even if it
-  /// is not lexically attached to it.
+  /// directive that is lexically attached to a function is modeled as an
+  /// enclosing construct.
   OpenACCDirectiveKind getRealParentDirective(SourceLocation &ParentLoc) const {
     // Find real directive.
     auto I = Stack.rbegin();
@@ -483,8 +497,8 @@ public:
 
   /// Returns the effective directive for the construct enclosing the currently
   /// analyzed effective directive or returns ACCD_unknown if none.  A routine
-  /// directive that applies to a function is modeled as enclosing it even if it
-  /// is not lexically attached to it.
+  /// directive that is lexically attached to a function is modeled as an
+  /// enclosing construct.
   OpenACCDirectiveKind getEffectiveParentDirective() const {
     auto I = Stack.rbegin();
     if (I == Stack.rend())
@@ -633,6 +647,32 @@ bool DirStackTy::hasVisibleDMA(VarDecl *VD) {
   for (auto I = Stack.rbegin(), E = Stack.rend(); I != E; ++I) {
     auto DAItr = I->DAMap.find(VD);
     if (DAItr != I->DAMap.end() && DAItr->second.DMAKind != ACC_DMA_unknown)
+      return true;
+  }
+  return false;
+}
+
+bool DirStackTy::hasPrivatizingDSAOnAncestorOrphanedLoop(VarDecl *VD) {
+  VD = VD->getCanonicalDecl();
+  assert(!Stack.empty() && "expected non-empty directive stack");
+  for (auto I = std::next(Stack.rbegin()), E = Stack.rend(); I != E; ++I) {
+    assert(
+        (I->EffectiveDKind == ACCD_loop || I->EffectiveDKind == ACCD_routine) &&
+        "expected all ancestor constructs to be orphaned loop constructs");
+    auto DAItr = I->DAMap.find(VD);
+    if (DAItr != I->DAMap.end()) {
+      switch (DAItr->second.DSAKind) {
+      case clang::ACC_DSA_unknown:
+      case clang::ACC_DSA_shared:
+        break;
+      case clang::ACC_DSA_reduction:
+      case clang::ACC_DSA_private:
+        return true;
+      case clang::ACC_DSA_firstprivate:
+        llvm_unreachable("unexpected firstprivate on loop construct");
+      }
+    }
+    if (I->LCVSet.count(VD->getCanonicalDecl()))
       return true;
   }
   return false;
@@ -914,33 +954,35 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
   SourceLocation ParentLoc;
   OpenACCDirectiveKind ParentDKind = DirStack.getRealParentDirective(ParentLoc);
   FunctionDecl *CurFnDecl = getCurFunctionDecl();
-  if (CurFnDecl &&
-      (ParentDKind == ACCD_unknown || ParentDKind == ACCD_routine)) {
+  if (CurFnDecl && !isOpenACCDirectiveStmt(ParentDKind)) {
+    assert((ParentDKind == ACCD_unknown || ParentDKind == ACCD_routine) &&
+           "expected the only ACCDirectiveStmt to be the routine directive");
     ACCRoutineDeclAttr *Attr = CurFnDecl->getAttr<ACCRoutineDeclAttr>();
     assert((ParentDKind != ACCD_routine ||
             (Attr && ParentLoc == Attr->getLoc())) &&
            "expected lexically attached routine directive to be attached as "
            "ACCRoutineDeclAttr to FunctionDecl");
+    assert(isAllowedParentForDirective(RealDKind, ACCD_unknown) &&
+           "expected every OpenACC directive to be permitted without a "
+           "lexically enclosing OpenACC directive");
     if (!isAllowedParentForDirective(RealDKind, ACCD_routine)) {
-      if (!isAllowedParentForDirective(RealDKind, ACCD_unknown)) {
-        assert(
-            RealDKind == ACCD_loop &&
-            "expected acc loop as only directive not permitted directly in a "
-            "function regardless of whether it has routine directive");
-        Diag(StartLoc, diag::err_acc_orphaned_loop_construct);
-        return true;
-      }
-      StringRef FnName = CurFnDecl->getName();
       bool Err;
       DiagIfRoutineDir(OpenACCData->ImplicitRoutineDirInfo, CurFnDecl, StartLoc,
                        diag::err_acc_routine_unexpected_directive, &Err)
-          << getOpenACCName(RealDKind) << FnName;
+          << getOpenACCName(RealDKind) << CurFnDecl->getName();
       return Err;
     }
-    // TODO: Eventually an orphaned loop will be permitted in this case.
-    assert(isAllowedParentForDirective(RealDKind, ACCD_unknown) &&
-           "expected that any directive permitted directly in a function with "
-           "a routine directive is permitted in a function without one");
+    assert(RealDKind == ACCD_loop &&
+           "expected only orphaned loop to be permitted in function with "
+           "routine directive");
+    // Proposed text for OpenACC after 3.2:
+    // "A procedure definition containing an orphaned loop construct must be in
+    // the scope of an explicit and applying routine directive."
+    if (!Attr || !Attr->getLoc().isValid()) {
+      Diag(StartLoc, diag::err_acc_routine_for_orphaned_loop)
+          << CurFnDecl->getName();
+      return true;
+    }
     return false;
   }
   if (!isAllowedParentForDirective(RealDKind, ParentDKind)) {
@@ -1770,12 +1812,10 @@ bool Sema::StartOpenACCAssociatedStatement() {
     ACCPartitioningKind LoopKind;
     // Set implicit partitionability.
     //
-    // OpenACC 2.6, sec. 2.9.9:
-    // "When the parent compute construct is a parallel construct, the
-    // independent clause is implied on all loop constructs without a seq or
-    // auto clause."
-    // TODO: This will need to be adjusted when not enclosed in a parallel
-    // directive.
+    // OpenACC 3.2, sec. 2.9.6 "independent clause":
+    // "A loop construct with no auto or seq clause is treated as if it has the
+    // independent clause when it is an orphaned loop construct or its parent
+    // compute construct is a parallel construct."
     LoopKind.setIndependentImplicit();
 
     // Set explicit clauses.
@@ -1795,7 +1835,8 @@ bool Sema::StartOpenACCAssociatedStatement() {
         LoopKind.setVector();
     }
 
-    // Check any level-of-parallelism clause against any parent loop construct.
+    // Check any level-of-parallelism clause against any parent loop construct
+    // or the enclosing function.
     ACCRoutineDeclAttr::PartitioningTy LoopLevel =
         LoopKind.getMaxParallelismLevel();
     if (LoopLevel != ACCRoutineDeclAttr::Seq) {
@@ -1818,6 +1859,25 @@ bool Sema::StartOpenACCAssociatedStatement() {
           Diag(ParentLoopLoc, diag::note_acc_enclosing_directive)
               << getOpenACCName(ParentDKind);
           ErrorFound = true;
+        }
+      } else if (!isOpenACCComputeDirective(DirStack.isInComputeRegion())) {
+        // We have an orphaned loop construct.  If there's no routine directive
+        // for the enclosing function, we already complained about that.  If
+        // there is, complain if the level of parallelism is incompatible.
+        FunctionDecl *Fn = getCurFunctionDecl();
+        assert(Fn && "expected acc loop to be in a function");
+        ACCRoutineDeclAttr *FnAttr = Fn->getAttr<ACCRoutineDeclAttr>();
+        if (FnAttr) {
+          ACCRoutineDeclAttr::PartitioningTy FnLevel =
+              FnAttr->getPartitioning();
+          if (FnLevel < LoopLevel) {
+            Diag(StartLoc, diag::err_acc_loop_func_par_level)
+                << Fn->getName()
+                << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(FnLevel)
+                << getOpenACCName(DKind)
+                << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(LoopLevel);
+            OpenACCData->ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Fn);
+          }
         }
       }
     }
@@ -1899,8 +1959,8 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
     // case?
   }
 
-  // Compute implicit gang clauses, predetermined DAs, and implicit DAs.
-  // Complain about reductions for loop control variables.
+  // Compute implicit gang clauses within compute constructs, predetermined DAs,
+  // and implicit DAs.  Complain about reductions for loop control variables.
   if (AStmt && (isOpenACCParallelDirective(DKind) ||
                 isOpenACCLoopDirective(DKind))) {
     // Add implicit gang clauses to acc loops nested in the acc parallel.
@@ -2070,6 +2130,7 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
 
   if (ErrorFound)
     return StmtError();
+
   return Res;
 }
 
@@ -2441,10 +2502,29 @@ StmtResult Sema::ActOnOpenACCLoopDirective(ArrayRef<ACCClause *> Clauses,
   // and it means any useful results of the analysis are not available to
   // OpenACC-level tools.
 
-  return ACCLoopDirective::Create(Context, DirStack.getDirectiveStartLoc(),
-                                  DirStack.getDirectiveEndLoc(), Clauses, AStmt,
-                                  LCVs, DirStack.getLoopPartitioning(),
-                                  DirStack.getNestedExplicitGangPartitioning());
+  ACCLoopDirective *Res = ACCLoopDirective::Create(
+      Context, DirStack.getDirectiveStartLoc(), DirStack.getDirectiveEndLoc(),
+      Clauses, AStmt, LCVs, DirStack.getLoopPartitioning(),
+      DirStack.getNestedExplicitGangPartitioning());
+
+  // If this is an outermost orphaned loop construct, TransformACCToOMP is about
+  // to run on it, so run ImplicitGangAdder first.
+  if (!isOpenACCDirectiveStmt(DirStack.getEffectiveParentDirective())) {
+    // An orphaned loop construct must appear in a function with an explicit
+    // routine directive, which must appear before the function definition.
+    // Guard against violations of those rules just in case error recovery
+    // permitted the analysis to reach this point anyway.
+    FunctionDecl *CurFnDecl = getCurFunctionDecl();
+    if (CurFnDecl) {
+      ACCRoutineDeclAttr *FnAttr = CurFnDecl->getAttr<ACCRoutineDeclAttr>();
+      // Implicit gang clauses are not permitted if the routine directive
+      // doesn't specify gang.
+      if (FnAttr && FnAttr->getPartitioning() == ACCRoutineDeclAttr::Gang)
+        ImplicitGangAdder().Visit(Res);
+    }
+  }
+
+  return Res;
 }
 
 StmtResult
@@ -3264,6 +3344,7 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
     SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation ColonLoc,
     SourceLocation EndLoc, const DeclarationNameInfo &ReductionId) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   DeclarationName DN = ReductionId.getName();
   OverloadedOperatorKind OOK = DN.getCXXOverloadedOperator();
   SmallVector<Expr *, 8> Vars;
@@ -3399,8 +3480,7 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // variable must have a complete type.  However, you cannot copy data if
     // it doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_reduction,
-                               OpenACCData->DirStack.getDirectiveStartLoc(),
-                               ELoc))
+                               DirStack.getDirectiveStartLoc(), ELoc))
       continue;
 
     // The OpenACC 2.6 spec doesn't say, as far as I know, that a const
@@ -3453,10 +3533,19 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
       continue;
     }
 
+    // OpenACC 3.2, sec. 2.9.11 "reduction clause", L2114:
+    // "Every var in a reduction clause appearing on an orphaned loop construct
+    // must be private."
+    if (DirStack.getEffectiveDirective() == ACCD_loop &&
+        !isOpenACCComputeDirective(DirStack.isInComputeRegion()) &&
+        !DirStack.hasPrivatizingDSAOnAncestorOrphanedLoop(VD) &&
+        !VD->hasLocalStorage())
+      Diag(ELoc, diag::err_acc_orphaned_loop_reduction_var_not_gang_private)
+          << VD->getName();
+
     // Record reduction item.
-    if (!OpenACCData->DirStack.addDSA(VD, RefExpr->IgnoreParens(),
-                                      ACC_DSA_reduction, Determination,
-                                      ReductionId))
+    if (!DirStack.addDSA(VD, RefExpr->IgnoreParens(), ACC_DSA_reduction,
+                         Determination, ReductionId))
       Vars.push_back(RefExpr);
   }
   if (Vars.empty())
@@ -3771,6 +3860,6 @@ ACCClause *Sema::ActOnOpenACCCollapseClause(Expr *Collapse,
                                          EndLoc);
 }
 
-bool Sema::isInOpenACCDirective() {
-  return OpenACCData->DirStack.getRealDirective() != ACCD_unknown;
+bool Sema::isInOpenACCDirectiveStmt() {
+  return isOpenACCDirectiveStmt(OpenACCData->DirStack.getRealDirective());
 }
