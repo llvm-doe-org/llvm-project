@@ -98,7 +98,7 @@ private:
     unsigned SingleDeclIndex;
 
   public:
-    ShadowMapEntry() : DeclOrVector(), SingleDeclIndex(0) {}
+    ShadowMapEntry() : SingleDeclIndex(0) {}
     ShadowMapEntry(const ShadowMapEntry &) = delete;
     ShadowMapEntry(ShadowMapEntry &&Move) { *this = std::move(Move); }
     ShadowMapEntry &operator=(const ShadowMapEntry &) = delete;
@@ -569,7 +569,6 @@ void PreferredTypeBuilder::enterMemAccess(Sema &S, SourceLocation Tok,
     return;
   // Keep the expected type, only update the location.
   ExpectedLoc = Tok;
-  return;
 }
 
 void PreferredTypeBuilder::enterUnary(Sema &S, SourceLocation Tok,

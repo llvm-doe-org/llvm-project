@@ -13,8 +13,7 @@
 #include "PassDetail.h"
 #include "mlir/Analysis/SliceAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/Linalg/IR/LinalgOps.h"
-#include "mlir/Dialect/Linalg/IR/LinalgTypes.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
@@ -43,7 +42,7 @@ static SmallVector<int64_t> getTiledSliceDims(OpOperand *consumerOperand,
 
   // Search the slice dimensions tiled by a tile loop dimension.
   DenseSet<int64_t> tiledSliceDimIndices;
-  for (auto en : enumerate(indexingMap.getResults())) {
+  for (const auto &en : enumerate(indexingMap.getResults())) {
     for (auto tiledLoopDim : tiledLoopDims) {
       if (en.value().isFunctionOfDim(tiledLoopDim))
         tiledSliceDimIndices.insert(en.index());
@@ -305,7 +304,7 @@ LogicalResult TileLoopNest::tileRootOp(OpBuilder &b,
   // Update the root operation and append the loops and tile loop dimensions.
   rootOp = tiledRootOp->op;
   tileLoopOps.append(tiledRootOp->loops.begin(), tiledRootOp->loops.end());
-  for (auto en : enumerate(tileSizes)) {
+  for (const auto &en : enumerate(tileSizes)) {
     // Copy only the tiled loop dimensions with non-zero tile size.
     if (en.value() == 0)
       continue;

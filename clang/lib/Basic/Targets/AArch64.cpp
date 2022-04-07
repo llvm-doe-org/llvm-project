@@ -223,6 +223,12 @@ void AArch64TargetInfo::getTargetDefinesARMV87A(const LangOptions &Opts,
   getTargetDefinesARMV86A(Opts, Builder);
 }
 
+void AArch64TargetInfo::getTargetDefinesARMV88A(const LangOptions &Opts,
+                                                MacroBuilder &Builder) const {
+  // Also include the Armv8.7 defines
+  getTargetDefinesARMV87A(Opts, Builder);
+}
+
 void AArch64TargetInfo::getTargetDefinesARMV9A(const LangOptions &Opts,
                                                MacroBuilder &Builder) const {
   // Armv9-A maps to Armv8.5-A
@@ -306,6 +312,9 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
 
   if (FPU & SveMode)
     Builder.defineMacro("__ARM_FEATURE_SVE", "1");
+
+  if ((FPU & NeonMode) && (FPU & SveMode))
+    Builder.defineMacro("__ARM_NEON_SVE_BRIDGE", "1");
 
   if (HasSVE2)
     Builder.defineMacro("__ARM_FEATURE_SVE2", "1");
@@ -443,6 +452,9 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
   case llvm::AArch64::ArchKind::ARMV8_7A:
     getTargetDefinesARMV87A(Opts, Builder);
     break;
+  case llvm::AArch64::ArchKind::ARMV8_8A:
+    getTargetDefinesARMV88A(Opts, Builder);
+    break;
   case llvm::AArch64::ArchKind::ARMV9A:
     getTargetDefinesARMV9A(Opts, Builder);
     break;
@@ -474,10 +486,12 @@ ArrayRef<Builtin::Info> AArch64TargetInfo::getTargetBuiltins() const {
 Optional<std::pair<unsigned, unsigned>>
 AArch64TargetInfo::getVScaleRange(const LangOptions &LangOpts) const {
   if (LangOpts.VScaleMin || LangOpts.VScaleMax)
-    return std::pair<unsigned, unsigned>(LangOpts.VScaleMin,
-                                         LangOpts.VScaleMax);
+    return std::pair<unsigned, unsigned>(
+        LangOpts.VScaleMin ? LangOpts.VScaleMin : 1, LangOpts.VScaleMax);
+
   if (hasFeature("sve"))
-    return std::pair<unsigned, unsigned>(0, 16);
+    return std::pair<unsigned, unsigned>(1, 16);
+
   return None;
 }
 
@@ -598,6 +612,8 @@ bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       ArchKind = llvm::AArch64::ArchKind::ARMV8_6A;
     if (Feature == "+v8.7a")
       ArchKind = llvm::AArch64::ArchKind::ARMV8_7A;
+    if (Feature == "+v8.8a")
+      ArchKind = llvm::AArch64::ArchKind::ARMV8_8A;
     if (Feature == "+v9a")
       ArchKind = llvm::AArch64::ArchKind::ARMV9A;
     if (Feature == "+v9.1a")

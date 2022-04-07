@@ -40,6 +40,7 @@
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCInstBuilder.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/MC/MCRegisterInfo.h"
@@ -3485,9 +3486,9 @@ int HexagonInstrInfo::getDuplexOpcode(const MachineInstr &MI,
     if (Iter != DupMap.end())
       return Iter->second;
   } else { // Conversion to Tiny core.
-    for (auto Iter = DupMap.begin(), End = DupMap.end(); Iter != End; ++Iter)
-      if (Iter->second == OpNum)
-        return Iter->first;
+    for (const auto &Iter : DupMap)
+      if (Iter.second == OpNum)
+        return Iter.first;
   }
   return -1;
 }
@@ -4654,4 +4655,12 @@ short HexagonInstrInfo::changeAddrMode_rr_ur(short Opc) const {
 
 short HexagonInstrInfo::changeAddrMode_ur_rr(short Opc) const {
   return Opc >= 0 ? Hexagon::changeAddrMode_ur_rr(Opc) : Opc;
+}
+
+MCInst HexagonInstrInfo::getNop() const {
+  static const MCInst Nop = MCInstBuilder(Hexagon::A2_nop);
+
+  return MCInstBuilder(Hexagon::BUNDLE)
+    .addImm(0)
+    .addInst(&Nop);
 }

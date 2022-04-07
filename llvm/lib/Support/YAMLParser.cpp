@@ -1841,11 +1841,11 @@ bool Scanner::fetchMoreTokens() {
 
 Stream::Stream(StringRef Input, SourceMgr &SM, bool ShowColors,
                std::error_code *EC)
-    : scanner(new Scanner(Input, SM, ShowColors, EC)), CurrentDoc() {}
+    : scanner(new Scanner(Input, SM, ShowColors, EC)) {}
 
 Stream::Stream(MemoryBufferRef InputBuffer, SourceMgr &SM, bool ShowColors,
                std::error_code *EC)
-    : scanner(new Scanner(InputBuffer, SM, ShowColors, EC)), CurrentDoc() {}
+    : scanner(new Scanner(InputBuffer, SM, ShowColors, EC)) {}
 
 Stream::~Stream() = default;
 
@@ -1876,8 +1876,8 @@ document_iterator Stream::end() {
 }
 
 void Stream::skip() {
-  for (document_iterator i = begin(), e = end(); i != e; ++i)
-    i->skip();
+  for (Document &Doc : *this)
+    Doc.skip();
 }
 
 Node::Node(unsigned int Type, std::unique_ptr<Document> &D, StringRef A,

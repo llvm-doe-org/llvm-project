@@ -160,7 +160,7 @@ enum OpCode : ByteCodeField {
   /// Compare a range of types with a set of constants.
   SwitchTypes,
 };
-} // end anonymous namespace
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // ByteCode Generation
@@ -198,9 +198,9 @@ public:
         maxTypeRangeMemoryIndex(maxTypeRangeMemoryIndex),
         maxValueRangeMemoryIndex(maxValueRangeMemoryIndex),
         maxLoopLevel(maxLoopLevel) {
-    for (auto it : llvm::enumerate(constraintFns))
+    for (const auto &it : llvm::enumerate(constraintFns))
       constraintToMemIndex.try_emplace(it.value().first(), it.index());
-    for (auto it : llvm::enumerate(rewriteFns))
+    for (const auto &it : llvm::enumerate(rewriteFns))
       externalRewriterToMemIndex.try_emplace(it.value().first(), it.index());
   }
 
@@ -479,7 +479,7 @@ struct ByteCodeLiveRange {
   /// The value range storage index for this range.
   Optional<unsigned> valueRangeIndex;
 };
-} // end anonymous namespace
+} // namespace
 
 void Generator::generate(ModuleOp module) {
   FuncOp matcherFunc = module.lookupSymbol<FuncOp>(
@@ -631,7 +631,7 @@ void Generator::allocateMemoryIndices(FuncOp matcherFunc,
     ByteCodeLiveRange &defRange = defIt.second;
 
     // Try to allocate to an existing index.
-    for (auto existingIndexIt : llvm::enumerate(allocatedIndices)) {
+    for (const auto &existingIndexIt : llvm::enumerate(allocatedIndices)) {
       ByteCodeLiveRange &existingRange = existingIndexIt.value();
       if (!defRange.overlaps(existingRange)) {
         existingRange.unionWith(defRange);
@@ -1313,7 +1313,7 @@ public:
     return allocatedValueRanges;
   }
 };
-} // end anonymous namespace
+} // namespace
 
 void ByteCodeExecutor::executeApplyConstraint(PatternRewriter &rewriter) {
   LLVM_DEBUG(llvm::dbgs() << "Executing ApplyConstraint:\n");

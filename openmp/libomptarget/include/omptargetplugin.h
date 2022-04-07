@@ -16,7 +16,7 @@
 
 #include <omptarget.h>
 
-#include "../src/ompt-target.h"
+#include "ompt-target.h"
 
 #ifdef __cplusplus
 extern "C" {

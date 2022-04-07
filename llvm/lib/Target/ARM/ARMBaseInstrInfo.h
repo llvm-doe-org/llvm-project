@@ -377,31 +377,26 @@ private:
   /// constructing an outlined call if one exists. Returns 0 otherwise.
   unsigned findRegisterToSaveLRTo(const outliner::Candidate &C) const;
 
-  // Adds an instruction which saves the link register on top of the stack into
-  /// the MachineBasicBlock \p MBB at position \p It.
-  void saveLROnStack(MachineBasicBlock &MBB,
-                     MachineBasicBlock::iterator It) const;
+  /// Adds an instruction which saves the link register on top of the stack into
+  /// the MachineBasicBlock \p MBB at position \p It. If \p Auth is true,
+  /// compute and store an authentication code alongiside the link register.
+  /// If \p CFI is true, emit CFI instructions.
+  void saveLROnStack(MachineBasicBlock &MBB, MachineBasicBlock::iterator It,
+                     bool CFI, bool Auth) const;
 
   /// Adds an instruction which restores the link register from the top the
-  /// stack into the MachineBasicBlock \p MBB at position \p It.
+  /// stack into the MachineBasicBlock \p MBB at position \p It. If \p Auth is
+  /// true, restore an authentication code and authenticate LR.
+  /// If \p CFI is true, emit CFI instructions.
   void restoreLRFromStack(MachineBasicBlock &MBB,
-                          MachineBasicBlock::iterator It) const;
-
-  /// Emit CFI instructions into the MachineBasicBlock \p MBB at position \p It,
-  /// for the case when the LR is saved on the stack.
-  void emitCFIForLRSaveOnStack(MachineBasicBlock &MBB,
-                               MachineBasicBlock::iterator It) const;
+                          MachineBasicBlock::iterator It, bool CFI,
+                          bool Auth) const;
 
   /// Emit CFI instructions into the MachineBasicBlock \p MBB at position \p It,
   /// for the case when the LR is saved in the register \p Reg.
   void emitCFIForLRSaveToReg(MachineBasicBlock &MBB,
                              MachineBasicBlock::iterator It,
                              Register Reg) const;
-
-  /// Emit CFI instructions into the MachineBasicBlock \p MBB at position \p It,
-  /// after the LR is was restored from the stack.
-  void emitCFIForLRRestoreFromStack(MachineBasicBlock &MBB,
-                                    MachineBasicBlock::iterator It) const;
 
   /// Emit CFI instructions into the MachineBasicBlock \p MBB at position \p It,
   /// after the LR is was restored from a register.
@@ -886,6 +881,10 @@ inline bool isLegalAddressImm(unsigned Opcode, int Imm,
     return std::abs(Imm) < ((1 << 7) * 4) && Imm % 4 == 0;
   case ARMII::AddrModeT2_i8:
     return std::abs(Imm) < ((1 << 8) * 1);
+  case ARMII::AddrModeT2_i8pos:
+    return Imm >= 0 && Imm < ((1 << 8) * 1);
+  case ARMII::AddrModeT2_i8neg:
+    return Imm < 0 && -Imm < ((1 << 8) * 1);
   case ARMII::AddrModeT2_i8s4:
     return std::abs(Imm) < ((1 << 8) * 4) && Imm % 4 == 0;
   case ARMII::AddrModeT2_i12:

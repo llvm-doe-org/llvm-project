@@ -1277,8 +1277,7 @@ SDValue DAGTypeLegalizer::PromoteIntRes_SRL(SDNode *N, bool IsVP) {
 
 SDValue DAGTypeLegalizer::PromoteIntRes_Rotate(SDNode *N) {
   // Lower the rotate to shifts and ORs which can be promoted.
-  SDValue Res;
-  TLI.expandROT(N, true /*AllowVectorOps*/, Res, DAG);
+  SDValue Res = TLI.expandROT(N, true /*AllowVectorOps*/, DAG);
   ReplaceValueWith(SDValue(N, 0), Res);
   return SDValue();
 }
@@ -1286,7 +1285,7 @@ SDValue DAGTypeLegalizer::PromoteIntRes_Rotate(SDNode *N) {
 SDValue DAGTypeLegalizer::PromoteIntRes_FunnelShift(SDNode *N) {
   SDValue Hi = GetPromotedInteger(N->getOperand(0));
   SDValue Lo = GetPromotedInteger(N->getOperand(1));
-  SDValue Amount = GetPromotedInteger(N->getOperand(2));
+  SDValue Amt = GetPromotedInteger(N->getOperand(2));
 
   SDLoc DL(N);
   EVT OldVT = N->getOperand(0).getValueType();
@@ -1297,21 +1296,20 @@ SDValue DAGTypeLegalizer::PromoteIntRes_FunnelShift(SDNode *N) {
   unsigned NewBits = VT.getScalarSizeInBits();
 
   // Amount has to be interpreted modulo the old bit width.
-  Amount =
-      DAG.getNode(ISD::UREM, DL, VT, Amount, DAG.getConstant(OldBits, DL, VT));
+  Amt = DAG.getNode(ISD::UREM, DL, VT, Amt, DAG.getConstant(OldBits, DL, VT));
 
   // If the promoted type is twice the size (or more), then we use the
   // traditional funnel 'double' shift codegen. This isn't necessary if the
   // shift amount is constant.
   // fshl(x,y,z) -> (((aext(x) << bw) | zext(y)) << (z % bw)) >> bw.
   // fshr(x,y,z) -> (((aext(x) << bw) | zext(y)) >> (z % bw)).
-  if (NewBits >= (2 * OldBits) && !isa<ConstantSDNode>(Amount) &&
+  if (NewBits >= (2 * OldBits) && !isa<ConstantSDNode>(Amt) &&
       !TLI.isOperationLegalOrCustom(Opcode, VT)) {
     SDValue HiShift = DAG.getConstant(OldBits, DL, VT);
     Hi = DAG.getNode(ISD::SHL, DL, VT, Hi, HiShift);
     Lo = DAG.getZeroExtendInReg(Lo, DL, OldVT);
     SDValue Res = DAG.getNode(ISD::OR, DL, VT, Hi, Lo);
-    Res = DAG.getNode(IsFSHR ? ISD::SRL : ISD::SHL, DL, VT, Res, Amount);
+    Res = DAG.getNode(IsFSHR ? ISD::SRL : ISD::SHL, DL, VT, Res, Amt);
     if (!IsFSHR)
       Res = DAG.getNode(ISD::SRL, DL, VT, Res, HiShift);
     return Res;
@@ -1324,9 +1322,9 @@ SDValue DAGTypeLegalizer::PromoteIntRes_FunnelShift(SDNode *N) {
   // Increase Amount to shift the result into the lower bits of the promoted
   // type.
   if (IsFSHR)
-    Amount = DAG.getNode(ISD::ADD, DL, VT, Amount, ShiftOffset);
+    Amt = DAG.getNode(ISD::ADD, DL, VT, Amt, ShiftOffset);
 
-  return DAG.getNode(Opcode, DL, VT, Hi, Lo, Amount);
+  return DAG.getNode(Opcode, DL, VT, Hi, Lo, Amt);
 }
 
 SDValue DAGTypeLegalizer::PromoteIntRes_TRUNCATE(SDNode *N) {
@@ -1655,7 +1653,8 @@ bool DAGTypeLegalizer::PromoteIntegerOperand(SDNode *N, unsigned OpNo) {
   case ISD::UDIVFIX:
   case ISD::UDIVFIXSAT: Res = PromoteIntOp_FIX(N); break;
 
-  case ISD::FPOWI: Res = PromoteIntOp_FPOWI(N); break;
+  case ISD::FPOWI:
+  case ISD::STRICT_FPOWI: Res = PromoteIntOp_FPOWI(N); break;
 
   case ISD::VECREDUCE_ADD:
   case ISD::VECREDUCE_MUL:
@@ -1705,50 +1704,66 @@ bool DAGTypeLegalizer::PromoteIntegerOperand(SDNode *N, unsigned OpNo) {
 
 /// PromoteSetCCOperands - Promote the operands of a comparison.  This code is
 /// shared among BR_CC, SELECT_CC, and SETCC handlers.
-void DAGTypeLegalizer::PromoteSetCCOperands(SDValue &NewLHS,SDValue &NewRHS,
+void DAGTypeLegalizer::PromoteSetCCOperands(SDValue &LHS, SDValue &RHS,
                                             ISD::CondCode CCCode) {
   // We have to insert explicit sign or zero extends. Note that we could
   // insert sign extends for ALL conditions. For those operations where either
-  // zero or sign extension would be valid, use SExtOrZExtPromotedInteger
-  // which will choose the cheapest for the target.
-  switch (CCCode) {
-  default: llvm_unreachable("Unknown integer comparison!");
-  case ISD::SETEQ:
-  case ISD::SETNE: {
-    SDValue OpL = GetPromotedInteger(NewLHS);
-    SDValue OpR = GetPromotedInteger(NewRHS);
+  // zero or sign extension would be valid, we ask the target which extension
+  // it would prefer.
 
-    // We would prefer to promote the comparison operand with sign extension.
-    // If the width of OpL/OpR excluding the duplicated sign bits is no greater
-    // than the width of NewLHS/NewRH, we can avoid inserting real truncate
-    // instruction, which is redundant eventually.
+  // Signed comparisons always require sign extension.
+  if (ISD::isSignedIntSetCC(CCCode)) {
+    LHS = SExtPromotedInteger(LHS);
+    RHS = SExtPromotedInteger(RHS);
+    return;
+  }
+
+  assert((ISD::isUnsignedIntSetCC(CCCode) || ISD::isIntEqualitySetCC(CCCode)) &&
+         "Unknown integer comparison!");
+
+  SDValue OpL = GetPromotedInteger(LHS);
+  SDValue OpR = GetPromotedInteger(RHS);
+
+  if (TLI.isSExtCheaperThanZExt(LHS.getValueType(), OpL.getValueType())) {
+    // The target would prefer to promote the comparison operand with sign
+    // extension. Honor that unless the promoted values are already zero
+    // extended.
+    unsigned OpLEffectiveBits =
+        DAG.computeKnownBits(OpL).countMaxActiveBits();
+    unsigned OpREffectiveBits =
+        DAG.computeKnownBits(OpR).countMaxActiveBits();
+    if (OpLEffectiveBits <= LHS.getScalarValueSizeInBits() &&
+        OpREffectiveBits <= RHS.getScalarValueSizeInBits()) {
+      LHS = OpL;
+      RHS = OpR;
+      return;
+    }
+
+    // The promoted values aren't zero extended, use a sext_inreg.
+    LHS = SExtPromotedInteger(LHS);
+    RHS = SExtPromotedInteger(RHS);
+    return;
+  }
+
+  // Prefer to promote the comparison operand with zero extension.
+
+  // If this is an equality comparison and the width of OpL/OpR excluding the
+  // duplicated sign bits is no greater than the width of LHS/RHS, we can avoid
+  // inserting a zext_inreg operation that we might not be able to remove.
+  if (ISD::isIntEqualitySetCC(CCCode)) {
     unsigned OpLEffectiveBits = DAG.ComputeMinSignedBits(OpL);
     unsigned OpREffectiveBits = DAG.ComputeMinSignedBits(OpR);
-    if (OpLEffectiveBits <= NewLHS.getScalarValueSizeInBits() &&
-        OpREffectiveBits <= NewRHS.getScalarValueSizeInBits()) {
-      NewLHS = OpL;
-      NewRHS = OpR;
-    } else {
-      NewLHS = SExtOrZExtPromotedInteger(NewLHS);
-      NewRHS = SExtOrZExtPromotedInteger(NewRHS);
+    if (OpLEffectiveBits <= LHS.getScalarValueSizeInBits() &&
+        OpREffectiveBits <= RHS.getScalarValueSizeInBits()) {
+      LHS = OpL;
+      RHS = OpR;
+      return;
     }
-    break;
   }
-  case ISD::SETUGE:
-  case ISD::SETUGT:
-  case ISD::SETULE:
-  case ISD::SETULT:
-    NewLHS = SExtOrZExtPromotedInteger(NewLHS);
-    NewRHS = SExtOrZExtPromotedInteger(NewRHS);
-    break;
-  case ISD::SETGE:
-  case ISD::SETGT:
-  case ISD::SETLT:
-  case ISD::SETLE:
-    NewLHS = SExtPromotedInteger(NewLHS);
-    NewRHS = SExtPromotedInteger(NewRHS);
-    break;
-  }
+
+  // Otherwise, use zext_inreg.
+  LHS = ZExtPromotedInteger(LHS);
+  RHS = ZExtPromotedInteger(RHS);
 }
 
 SDValue DAGTypeLegalizer::PromoteIntOp_ANY_EXTEND(SDNode *N) {
@@ -2101,8 +2116,8 @@ SDValue DAGTypeLegalizer::PromoteIntOp_PREFETCH(SDNode *N, unsigned OpNo) {
 }
 
 SDValue DAGTypeLegalizer::PromoteIntOp_FPOWI(SDNode *N) {
-  // FIXME: Support for promotion of STRICT_FPOWI is not implemented yet.
-  assert(N->getOpcode() == ISD::FPOWI && "No STRICT_FPOWI support here yet.");
+  bool IsStrict = N->isStrictFPOpcode();
+  SDValue Chain = IsStrict ? N->getOperand(0) : SDValue();
 
   // The integer operand is the last operand in FPOWI (so the result and
   // floating point operand is already type legalized).
@@ -2120,17 +2135,19 @@ SDValue DAGTypeLegalizer::PromoteIntOp_FPOWI(SDNode *N) {
     DAG.getContext()->emitError("Don't know how to promote fpowi to fpow");
     return DAG.getUNDEF(N->getValueType(0));
   }
+  unsigned OpOffset = IsStrict ? 1 : 0;
   // The exponent should fit in a sizeof(int) type for the libcall to be valid.
   assert(DAG.getLibInfo().getIntSize() ==
-         N->getOperand(1).getValueType().getSizeInBits() &&
+             N->getOperand(1 + OpOffset).getValueType().getSizeInBits() &&
          "POWI exponent should match with sizeof(int) when doing the libcall.");
   TargetLowering::MakeLibCallOptions CallOptions;
   CallOptions.setSExt(true);
-  SDValue Ops[2] = { N->getOperand(0), N->getOperand(1) };
-  std::pair<SDValue, SDValue> Tmp =
-      TLI.makeLibCall(DAG, LC, N->getValueType(0), Ops,
-                      CallOptions, SDLoc(N), SDValue());
+  SDValue Ops[2] = {N->getOperand(0 + OpOffset), N->getOperand(1 + OpOffset)};
+  std::pair<SDValue, SDValue> Tmp = TLI.makeLibCall(
+      DAG, LC, N->getValueType(0), Ops, CallOptions, SDLoc(N), Chain);
   ReplaceValueWith(SDValue(N, 0), Tmp.first);
+  if (IsStrict)
+    ReplaceValueWith(SDValue(N, 1), Tmp.second);
   return SDValue();
 }
 

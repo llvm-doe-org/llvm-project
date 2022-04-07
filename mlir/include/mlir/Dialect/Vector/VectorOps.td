@@ -675,7 +675,7 @@ def Vector_InsertElementOp :
     position and inserts the source into the destination at the proper position.
 
     Note that this instruction resembles vector.insert, but is restricted to 0-D
-    and 1-D vectors and relaxed to dynamic indices. 
+    and 1-D vectors and relaxed to dynamic indices.
 
     It is meant to be closer to LLVM's version:
     https://llvm.org/docs/LangRef.html#insertelement-instruction
@@ -2025,13 +2025,14 @@ def Vector_ShapeCastOp :
 
 def Vector_BitCastOp :
   Vector_Op<"bitcast", [NoSideEffect, AllRanksMatch<["source", "result"]>]>,
-    Arguments<(ins AnyVector:$source)>,
-    Results<(outs AnyVector:$result)>{
+    Arguments<(ins AnyVectorOfAnyRank:$source)>,
+    Results<(outs AnyVectorOfAnyRank:$result)>{
   let summary = "bitcast casts between vectors";
   let description = [{
     The bitcast operation casts between vectors of the same rank, the minor 1-D
     vector size is casted to a vector with a different element type but same
-    bitwidth.
+    bitwidth. In case of 0-D vectors, the bitwidth of element types must be
+    equal.
 
     Example:
 
@@ -2044,6 +2045,9 @@ def Vector_BitCastOp :
 
     // Example casting to an element type of the same size.
     %5 = vector.bitcast %4 : vector<5x1x4x3xf32> to vector<5x1x4x3xi32>
+
+    // Example casting of 0-D vectors.
+    %7 = vector.bitcast %6 : vector<f32> to vector<i32>
     ```
   }];
   let extraClassDeclaration = [{
@@ -2107,7 +2111,7 @@ def Vector_TypeCastOp :
 def Vector_ConstantMaskOp :
   Vector_Op<"constant_mask", [NoSideEffect]>,
     Arguments<(ins I64ArrayAttr:$mask_dim_sizes)>,
-    Results<(outs VectorOf<[I1]>)> {
+    Results<(outs VectorOfAnyRankOf<[I1]>)> {
   let summary = "creates a constant vector mask";
   let description = [{
     Creates and returns a vector mask where elements of the result vector
@@ -2145,7 +2149,8 @@ def Vector_ConstantMaskOp :
 
 def Vector_CreateMaskOp :
   Vector_Op<"create_mask", [NoSideEffect]>,
-    Arguments<(ins Variadic<Index>:$operands)>, Results<(outs VectorOf<[I1]>)> {
+    Arguments<(ins Variadic<Index>:$operands)>,
+    Results<(outs VectorOfAnyRankOf<[I1]>)> {
   let summary = "creates a vector mask";
   let description = [{
     Creates and returns a vector mask where elements of the result vector
@@ -2376,6 +2381,38 @@ def Vector_FlatTransposeOp : Vector_Op<"flat_transpose", [NoSideEffect,
   }];
   let verifier = ?;
   let assemblyFormat = "$matrix attr-dict `:` type($matrix) `->` type($res)";
+}
+
+//===----------------------------------------------------------------------===//
+// VectorScaleOp
+//===----------------------------------------------------------------------===//
+
+// TODO: In the future, we might want to have scalable vectors with different
+//       scales for different dimensions. E.g.: vector<[16]x[16]xf32>, in
+//       which case we might need to add an index to 'vscale' to select one
+//       of them. In order to support GPUs, we might also want to differentiate
+//       between a 'global' scale, a scale that's fixed throughout the
+//       execution, and a 'local' scale that is fixed but might vary with each
+//       call to the function. For that, it might be useful to have a
+//       'vector.scale.global' and a 'vector.scale.local' operation.
+def VectorScaleOp : Vector_Op<"vscale",
+                 [NoSideEffect]> {
+  let summary = "Load vector scale size";
+  let description = [{
+    The `vscale` op returns the scale of the scalable vectors, a positive
+    integer value that is constant at runtime but unknown at compile-time.
+    The scale of the vector indicates the multiplicity of the vectors and
+    vector operations. For example, a `vector<[4]xi32>` is equivalent to
+    `vscale` consecutive `vector<4xi32>`; and an operation on a
+    `vector<[4]xi32>` is equivalent to performing that operation `vscale`
+    times, once on each `<4xi32>` segment of the scalable vector. The `vscale`
+    op can be used to calculate the step in vector-length agnostic (VLA) loops.
+    Right now we only support one contiguous set of scalable dimensions, all of
+    them grouped and scaled with the value returned by 'vscale'.
+  }];
+  let results = (outs Index:$res);
+  let assemblyFormat = "attr-dict";
+  let verifier = ?;
 }
 
 #endif // VECTOR_OPS

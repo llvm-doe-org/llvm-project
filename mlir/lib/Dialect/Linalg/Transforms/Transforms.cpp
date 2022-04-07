@@ -15,7 +15,7 @@
 #include "mlir/Dialect/Affine/Utils.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Linalg/Analysis/DependenceAnalysis.h"
-#include "mlir/Dialect/Linalg/IR/LinalgOps.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Transforms/HoistPadding.h"
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
 #include "mlir/Dialect/SCF/Transforms.h"
@@ -33,6 +33,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include <type_traits>
+#include <utility>
 
 #define DEBUG_TYPE "linalg-transforms"
 
@@ -54,7 +55,7 @@ mlir::linalg::LinalgTransformationFilter::LinalgTransformationFilter(
       replacement(replacement), matchByDefault(false) {}
 
 mlir::linalg::LinalgTransformationFilter::LinalgTransformationFilter(
-    FilterFunction f, ArrayRef<StringAttr> matchDisjunction,
+    const FilterFunction &f, ArrayRef<StringAttr> matchDisjunction,
     Optional<StringAttr> replacement)
     : filters(),
       matchDisjunction(matchDisjunction.begin(), matchDisjunction.end()),
@@ -186,26 +187,34 @@ static LogicalResult padOperandToSmallestStaticBoundingBox(
   if (!sliceOp)
     return failure(hasDynamicShape);
 
+  // Compute the dropped dimensions if `sliceOp` is ranke-reducing.
+  llvm::SmallDenseSet<unsigned> droppedDims = sliceOp.getDroppedDims();
+
   // Upper bound the `sliceOp` sizes to obtain a static bounding box.
   SmallVector<int64_t> staticSizes;
-  staticSizes.reserve(opToPad.getRank(opOperand));
+  staticSizes.reserve(shape.size());
   auto shapedOp = cast<OffsetSizeAndStrideOpInterface>(sliceOp.getOperation());
-  for (auto size : shapedOp.getMixedSizes()) {
+  for (const auto &en : enumerate(shapedOp.getMixedSizes())) {
+    // Skip dropped dimensions.
+    if (droppedDims.contains(en.index()))
+      continue;
     // If the size is an attribute add it directly to `staticSizes`.
-    if (size.is<Attribute>()) {
+    if (en.value().is<Attribute>()) {
       staticSizes.push_back(
-          size.get<Attribute>().dyn_cast<IntegerAttr>().getInt());
+          en.value().get<Attribute>().dyn_cast<IntegerAttr>().getInt());
       continue;
     }
     // Otherwise, try to compute a constant upper bound for the size value.
     FailureOr<int64_t> upperBound =
-        getConstantUpperBoundForIndex(size.get<Value>());
+        getConstantUpperBoundForIndex(en.value().get<Value>());
     if (failed(upperBound)) {
       LLVM_DEBUG(DBGS() << "No constant bounding box can be found for padding");
       return failure();
     }
     staticSizes.push_back(upperBound.getValue());
   }
+  assert(staticSizes.size() == shape.size() &&
+         "expect the dynamic and static ranks to match");
 
   // Pad the operand to the bounding box defined by `staticSizes`.
   auto staticTensorType = RankedTensorType::get(
@@ -260,7 +269,7 @@ linalg::rewriteAsPaddedOp(OpBuilder &b, LinalgOp opToPad,
   // linalg op around because it uses the dims of the original results.
   SmallVector<Value> paddedSubviewResults;
   paddedSubviewResults.reserve(opToPad->getNumResults());
-  for (auto en : llvm::enumerate(paddedOp->getResults())) {
+  for (const auto &en : llvm::enumerate(paddedOp->getResults())) {
     Value paddedResult = en.value();
     int64_t resultNumber = en.index();
     int64_t rank = paddedResult.getType().cast<RankedTensorType>().getRank();
@@ -279,14 +288,14 @@ linalg::rewriteAsPaddedOp(OpBuilder &b, LinalgOp opToPad,
 mlir::linalg::LinalgBaseTilingPattern::LinalgBaseTilingPattern(
     StringRef opName, MLIRContext *context, LinalgTilingOptions options,
     LinalgTransformationFilter filter, PatternBenefit benefit)
-    : RewritePattern(opName, benefit, context), filter(filter),
-      options(options) {}
+    : RewritePattern(opName, benefit, context), filter(std::move(filter)),
+      options(std::move(options)) {}
 
 mlir::linalg::LinalgBaseTilingPattern::LinalgBaseTilingPattern(
     MLIRContext *context, LinalgTilingOptions options,
     LinalgTransformationFilter filter, PatternBenefit benefit)
-    : RewritePattern(MatchAnyOpTypeTag(), benefit, context), filter(filter),
-      options(options) {}
+    : RewritePattern(MatchAnyOpTypeTag(), benefit, context),
+      filter(std::move(filter)), options(std::move(options)) {}
 
 /// Try to peel a loop `op` and return the new result.
 // TODO: Add support for scf.parallel and affine.for loops.
@@ -385,9 +394,10 @@ mlir::linalg::LinalgBaseTileAndFusePattern::LinalgBaseTileAndFusePattern(
     LinalgTransformationFilter filter, LinalgTransformationFilter fusedOpMarker,
     LinalgTransformationFilter originalOpMarker, PatternBenefit benefit)
     : RewritePattern(opName, benefit, context, {}),
-      dependenceGraph(dependenceGraph), tilingOptions(tilingOptions),
-      fusionOptions(fusionOptions), filter(filter),
-      fusedOpMarker(fusedOpMarker), originalOpMarker(originalOpMarker) {}
+      dependenceGraph(dependenceGraph), tilingOptions(std::move(tilingOptions)),
+      fusionOptions(std::move(fusionOptions)), filter(std::move(filter)),
+      fusedOpMarker(std::move(fusedOpMarker)),
+      originalOpMarker(std::move(originalOpMarker)) {}
 
 LogicalResult mlir::linalg::LinalgBaseTileAndFusePattern::matchAndRewrite(
     Operation *op, PatternRewriter &rewriter) const {
@@ -433,7 +443,7 @@ LogicalResult mlir::linalg::LinalgBaseTileAndFusePattern::matchAndRewrite(
   // Tile the unfused loops;
   SmallVector<Value, 4> unfusedLoopTileSizes;
   Value zero = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 0);
-  for (auto tileSize : enumerate(tileSizes)) {
+  for (const auto &tileSize : enumerate(tileSizes)) {
     if (tiledAndFusedOps->fusedLoopDims.count(tileSize.index()))
       unfusedLoopTileSizes.push_back(zero);
     else
@@ -479,14 +489,14 @@ LogicalResult mlir::linalg::LinalgBaseTileAndFusePattern::matchAndRewrite(
 mlir::linalg::LinalgPaddingPattern::LinalgPaddingPattern(
     MLIRContext *context, LinalgPaddingOptions options,
     LinalgTransformationFilter filter, PatternBenefit benefit)
-    : RewritePattern(MatchAnyOpTypeTag(), benefit, context), filter(filter),
-      options(options) {}
+    : RewritePattern(MatchAnyOpTypeTag(), benefit, context),
+      filter(std::move(filter)), options(std::move(options)) {}
 
 mlir::linalg::LinalgPaddingPattern::LinalgPaddingPattern(
     StringRef opName, MLIRContext *context, LinalgPaddingOptions options,
     LinalgTransformationFilter filter, PatternBenefit benefit)
-    : RewritePattern(opName, benefit, context, {}), filter(filter),
-      options(options) {}
+    : RewritePattern(opName, benefit, context, {}), filter(std::move(filter)),
+      options(std::move(options)) {}
 
 LogicalResult mlir::linalg::LinalgPaddingPattern::matchAndRewrite(
     Operation *op, PatternRewriter &rewriter) const {
@@ -503,10 +513,8 @@ LogicalResult mlir::linalg::LinalgPaddingPattern::matchAndRewrite(
   FailureOr<SmallVector<Value>> newResults = rewriteAsPaddedOp(
       rewriter, linalgOp, options.paddingValueComputationFunction,
       options.paddingNoFoldComputationFunction, paddedOp);
-  if (failed(newResults)) {
-    filter.replaceLinalgTransformationFilter(rewriter, linalgOp);
+  if (failed(newResults))
     return failure();
-  }
 
   // Compute the desired hoisting depths.
   SmallVector<int64_t> depths;
@@ -516,7 +524,7 @@ LogicalResult mlir::linalg::LinalgPaddingPattern::matchAndRewrite(
   }
 
   // Hoist the padding.
-  for (auto en : enumerate(depths)) {
+  for (const auto &en : enumerate(depths)) {
     OpOperand &opOperand = paddedOp->getOpOperand(en.index());
     auto padTensorOp = opOperand.get().getDefiningOp<PadTensorOp>();
     if (!padTensorOp || en.value() == 0)
@@ -541,16 +549,16 @@ mlir::linalg::LinalgTileAndFuseTensorOpsPattern::
                                       LinalgTilingAndFusionOptions options,
                                       LinalgTransformationFilter filter,
                                       PatternBenefit benefit)
-    : RewritePattern(MatchAnyOpTypeTag(), benefit, context), filter(filter),
-      options(options) {}
+    : RewritePattern(MatchAnyOpTypeTag(), benefit, context),
+      filter(std::move(filter)), options(std::move(options)) {}
 
 mlir::linalg::LinalgTileAndFuseTensorOpsPattern::
     LinalgTileAndFuseTensorOpsPattern(StringRef opName, MLIRContext *context,
                                       LinalgTilingAndFusionOptions options,
                                       LinalgTransformationFilter filter,
                                       PatternBenefit benefit)
-    : RewritePattern(opName, benefit, context), filter(filter),
-      options(options) {}
+    : RewritePattern(opName, benefit, context), filter(std::move(filter)),
+      options(std::move(options)) {}
 
 LogicalResult mlir::linalg::LinalgTileAndFuseTensorOpsPattern::matchAndRewrite(
     Operation *op, PatternRewriter &rewriter) const {
@@ -608,7 +616,7 @@ LogicalResult mlir::linalg::LinalgTileAndFuseTensorOpsPattern::matchAndRewrite(
 mlir::linalg::GenericOpInterchangePattern::GenericOpInterchangePattern(
     MLIRContext *context, ArrayRef<unsigned> interchangeVector,
     LinalgTransformationFilter filter, PatternBenefit benefit)
-    : OpRewritePattern(context, benefit), filter(filter),
+    : OpRewritePattern(context, benefit), filter(std::move(filter)),
       interchangeVector(interchangeVector.begin(), interchangeVector.end()) {}
 
 LogicalResult mlir::linalg::GenericOpInterchangePattern::matchAndRewrite(
@@ -632,12 +640,13 @@ LogicalResult mlir::linalg::GenericOpInterchangePattern::matchAndRewrite(
 mlir::linalg::LinalgGeneralizationPattern::LinalgGeneralizationPattern(
     MLIRContext *context, LinalgTransformationFilter filter,
     PatternBenefit benefit)
-    : RewritePattern(MatchAnyOpTypeTag(), benefit, context), filter(filter) {}
+    : RewritePattern(MatchAnyOpTypeTag(), benefit, context),
+      filter(std::move(filter)) {}
 
 mlir::linalg::LinalgGeneralizationPattern::LinalgGeneralizationPattern(
     StringRef opName, MLIRContext *context, LinalgTransformationFilter filter,
     PatternBenefit benefit)
-    : RewritePattern(opName, benefit, context, {}), filter(filter) {}
+    : RewritePattern(opName, benefit, context, {}), filter(std::move(filter)) {}
 
 LogicalResult mlir::linalg::LinalgGeneralizationPattern::matchAndRewrite(
     Operation *op, PatternRewriter &rewriter) const {
@@ -655,14 +664,14 @@ LogicalResult mlir::linalg::LinalgGeneralizationPattern::matchAndRewrite(
 mlir::linalg::LinalgBasePromotionPattern::LinalgBasePromotionPattern(
     MLIRContext *context, LinalgTransformationFilter filter,
     LinalgPromotionOptions options, PatternBenefit benefit)
-    : RewritePattern(MatchAnyOpTypeTag(), benefit, context), filter(filter),
-      options(options) {}
+    : RewritePattern(MatchAnyOpTypeTag(), benefit, context),
+      filter(std::move(filter)), options(std::move(options)) {}
 
 mlir::linalg::LinalgBasePromotionPattern::LinalgBasePromotionPattern(
     StringRef opName, MLIRContext *context, LinalgPromotionOptions options,
     LinalgTransformationFilter filter, PatternBenefit benefit)
-    : RewritePattern(opName, benefit, context, {}), filter(filter),
-      options(options) {}
+    : RewritePattern(opName, benefit, context, {}), filter(std::move(filter)),
+      options(std::move(options)) {}
 
 LogicalResult mlir::linalg::LinalgBasePromotionPattern::matchAndRewrite(
     Operation *op, PatternRewriter &rewriter) const {
@@ -689,12 +698,13 @@ LogicalResult mlir::linalg::LinalgBasePromotionPattern::matchAndRewrite(
 mlir::linalg::LinalgBaseVectorizationPattern::LinalgBaseVectorizationPattern(
     MLIRContext *context, LinalgTransformationFilter filter,
     PatternBenefit benefit)
-    : RewritePattern(MatchAnyOpTypeTag(), benefit, context), filter(filter) {}
+    : RewritePattern(MatchAnyOpTypeTag(), benefit, context),
+      filter(std::move(filter)) {}
 
 mlir::linalg::LinalgBaseVectorizationPattern::LinalgBaseVectorizationPattern(
     StringRef opName, MLIRContext *context, LinalgTransformationFilter filter,
     PatternBenefit benefit)
-    : RewritePattern(opName, benefit, context, {}), filter(filter) {}
+    : RewritePattern(opName, benefit, context, {}), filter(std::move(filter)) {}
 
 LogicalResult mlir::linalg::LinalgBaseVectorizationPattern::matchAndRewrite(
     Operation *op, PatternRewriter &rewriter) const {
@@ -907,9 +917,12 @@ LogicalResult ExtractSliceOfPadTensorSwapPattern::matchAndRewrite(
   if (!sliceOp.hasUnitStride())
     return failure();
 
-  Operation *tiledPadOp = padOp.getTiledImplementation(
-      rewriter, /*dest=*/ValueRange{}, sliceOp.getMixedOffsets(),
-      sliceOp.getMixedSizes());
+  Operation *tiledPadOp =
+      padOp
+          .getTiledImplementation(
+              rewriter, /*dest=*/ValueRange{}, sliceOp.getMixedOffsets(),
+              sliceOp.getMixedSizes(), /*tileDestOperands=*/false)
+          .front();
   // All shapes are static and the data source is actually used. Rewrite into
   // pad_tensor(subtensor(x)).
   rewriter.replaceOp(sliceOp, tiledPadOp->getResults());
@@ -933,7 +946,8 @@ struct DownscaleSizeOneWindowed2DConvolution final
       MLIRContext *context,
       LinalgTransformationFilter filter = LinalgTransformationFilter(),
       PatternBenefit benefit = 1)
-      : OpRewritePattern<Conv2DNhwcHwcfOp>(context, benefit), filter(filter) {}
+      : OpRewritePattern<Conv2DNhwcHwcfOp>(context, benefit),
+        filter(std::move(filter)) {}
 
   LogicalResult matchAndRewrite(linalg::Conv2DNhwcHwcfOp convOp,
                                 PatternRewriter &rewriter) const override {
@@ -1019,7 +1033,7 @@ struct DownscaleDepthwiseConv2DNhwcHwcOp final
       LinalgTransformationFilter filter = LinalgTransformationFilter(),
       PatternBenefit benefit = 1)
       : OpRewritePattern<DepthwiseConv2DNhwcHwcOp>(context, benefit),
-        filter(filter) {}
+        filter(std::move(filter)) {}
 
   LogicalResult matchAndRewrite(DepthwiseConv2DNhwcHwcOp convOp,
                                 PatternRewriter &rewriter) const override {
@@ -1099,7 +1113,7 @@ private:
 } // namespace
 
 void linalg::populateDecomposeConvolutionPatterns(
-    RewritePatternSet &patterns, LinalgTransformationFilter filter,
+    RewritePatternSet &patterns, const LinalgTransformationFilter &filter,
     PatternBenefit benefit) {
   patterns.add<DownscaleSizeOneWindowed2DConvolution,
                DownscaleDepthwiseConv2DNhwcHwcOp>(patterns.getContext(), filter,

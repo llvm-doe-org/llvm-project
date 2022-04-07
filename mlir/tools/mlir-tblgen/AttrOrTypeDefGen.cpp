@@ -43,9 +43,15 @@ std::string mlir::tblgen::getParameterAccessorName(StringRef name) {
 static void collectAllDefs(StringRef selectedDialect,
                            std::vector<llvm::Record *> records,
                            SmallVectorImpl<AttrOrTypeDef> &resultDefs) {
+  // Nothing to do if no defs were found.
+  if (records.empty())
+    return;
+
   auto defs = llvm::map_range(
       records, [&](const llvm::Record *rec) { return AttrOrTypeDef(rec); });
   if (selectedDialect.empty()) {
+    // If a dialect was not specified, ensure that all found defs belong to the
+    // same dialect.
     if (!llvm::is_splat(
             llvm::map_range(defs, [](auto def) { return def.getDialect(); }))) {
       llvm::PrintFatalError("defs belonging to more than one dialect. Must "
@@ -53,6 +59,7 @@ static void collectAllDefs(StringRef selectedDialect,
     }
     resultDefs.assign(defs.begin(), defs.end());
   } else {
+    // Otherwise, generate the defs that belong to the selected dialect.
     auto dialectDefs = llvm::make_filter_range(defs, [&](auto def) {
       return def.getDialect().getName().equals(selectedDialect);
     });
@@ -166,7 +173,7 @@ private:
   /// The prefix/suffix of the TableGen def name, either "Attr" or "Type".
   StringRef defType;
 };
-} // end anonymous namespace
+} // namespace
 
 DefGen::DefGen(const AttrOrTypeDef &def)
     : def(def), params(def.getParameters()), defCls(def.getCppClassName()),
@@ -554,7 +561,7 @@ void DefGen::emitConstruct() {
       MethodParameter("const KeyTy &", "tblgenKey"));
   if (!def.hasStorageCustomConstructor()) {
     auto &body = construct->body().indent();
-    for (auto it : llvm::enumerate(params)) {
+    for (const auto &it : llvm::enumerate(params)) {
       body << formatv("auto {0} = std::get<{1}>(tblgenKey);\n",
                       it.value().getName(), it.index());
     }
@@ -644,7 +651,7 @@ struct TypeDefGenerator : public DefGenerator {
       : DefGenerator(records.getAllDerivedDefinitions("TypeDef"), os, "Type",
                      "Type", /*isAttrGenerator=*/false) {}
 };
-} // end anonymous namespace
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // GEN: Declarations
@@ -656,7 +663,7 @@ static const char *const typeDefDeclHeader = R"(
 namespace mlir {
 class AsmParser;
 class AsmPrinter;
-} // end namespace mlir
+} // namespace mlir
 )";
 
 bool DefGenerator::emitDecls(StringRef selectedDialect) {

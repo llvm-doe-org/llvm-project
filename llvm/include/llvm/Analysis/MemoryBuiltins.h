@@ -30,7 +30,6 @@ namespace llvm {
 class AllocaInst;
 class Argument;
 class CallInst;
-class ConstantInt;
 class ConstantPointerNull;
 class DataLayout;
 class ExtractElementInst;
@@ -241,7 +240,7 @@ class ObjectSizeOffsetVisitor
   APInt Zero;
   SmallPtrSet<Instruction *, 8> SeenInsts;
 
-  APInt align(APInt Size, uint64_t Align);
+  APInt align(APInt Size, MaybeAlign Align);
 
   SizeOffsetType unknown() {
     return std::make_pair(APInt(), APInt());

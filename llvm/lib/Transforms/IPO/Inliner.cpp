@@ -856,6 +856,8 @@ PreservedAnalyses InlinerPass::run(LazyCallGraph::SCC &InitialC,
 
       if (InlineHistoryID != -1 &&
           inlineHistoryIncludes(&Callee, InlineHistoryID, InlineHistory)) {
+        LLVM_DEBUG(dbgs() << "Skipping inlining due to history: "
+                          << F.getName() << " -> " << Callee.getName() << "\n");
         setInlineRemark(*CB, "recursive");
         continue;
       }
@@ -1071,8 +1073,7 @@ ModuleInlinerWrapperPass::ModuleInlinerWrapperPass(InlineParams Params,
                                                    bool MandatoryFirst,
                                                    InliningAdvisorMode Mode,
                                                    unsigned MaxDevirtIterations)
-    : Params(Params), Mode(Mode), MaxDevirtIterations(MaxDevirtIterations),
-      PM(), MPM() {
+    : Params(Params), Mode(Mode), MaxDevirtIterations(MaxDevirtIterations) {
   // Run the inliner first. The theory is that we are walking bottom-up and so
   // the callees have already been fully optimized, and we want to inline them
   // into the callers so that our optimizations can reflect that.

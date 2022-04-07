@@ -33,7 +33,6 @@ class APInt;
 class AssumptionCache;
 class DominatorTree;
 class GEPOperator;
-class IntrinsicInst;
 class LoadInst;
 class WithOverflowInst;
 struct KnownBits;
@@ -555,7 +554,8 @@ constexpr unsigned MaxAnalysisRecursionDepth = 6;
 
   /// Determine the possible constant range of an integer or vector of integer
   /// value. This is intended as a cheap, non-recursive check.
-  ConstantRange computeConstantRange(const Value *V, bool UseInstrInfo = true,
+  ConstantRange computeConstantRange(const Value *V, bool ForSigned,
+                                     bool UseInstrInfo = true,
                                      AssumptionCache *AC = nullptr,
                                      const Instruction *CtxI = nullptr,
                                      const DominatorTree *DT = nullptr,

@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
-#include "mlir/Dialect/Linalg/IR/LinalgOps.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/IR/AffineMap.h"
@@ -78,7 +78,7 @@ void LinalgGeneralizationPass::runOnFunction() {
 }
 
 void mlir::linalg::populateLinalgNamedOpsGeneralizationPatterns(
-    RewritePatternSet &patterns, LinalgTransformationFilter marker) {
+    RewritePatternSet &patterns, const LinalgTransformationFilter &marker) {
   patterns.add<LinalgGeneralizationPattern>(patterns.getContext(), marker);
 }
 

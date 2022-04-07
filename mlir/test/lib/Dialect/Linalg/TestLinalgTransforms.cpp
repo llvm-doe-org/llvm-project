@@ -13,7 +13,7 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/GPU/GPUDialect.h"
-#include "mlir/Dialect/Linalg/IR/LinalgOps.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Linalg/Transforms/HoistPadding.h"
 #include "mlir/Dialect/Linalg/Transforms/Hoisting.h"
@@ -34,7 +34,7 @@ namespace {
 struct TestLinalgTransforms
     : public PassWrapper<TestLinalgTransforms, FunctionPass> {
   TestLinalgTransforms() = default;
-  TestLinalgTransforms(const TestLinalgTransforms &pass) {}
+  TestLinalgTransforms(const TestLinalgTransforms &pass) : PassWrapper(pass) {}
 
   void getDependentDialects(DialectRegistry &registry) const override {
     // clang-format off
@@ -129,7 +129,7 @@ struct TestLinalgTransforms
                      "tiled_loop"),
       llvm::cl::init("for")};
 };
-} // end anonymous namespace
+} // namespace
 
 static void applyPatterns(FuncOp funcOp) {
   MLIRContext *ctx = funcOp.getContext();
@@ -528,8 +528,7 @@ applyMatmulToVectorPatterns(FuncOp funcOp,
   llvm::move(stage1Patterns, std::back_inserter(frozenStage1Patterns));
   FrozenRewritePatternSet stage2Patterns =
       getLinalgTilingCanonicalizationPatterns(ctx);
-  (void)applyStagedPatterns(funcOp, frozenStage1Patterns,
-                            std::move(stage2Patterns));
+  (void)applyStagedPatterns(funcOp, frozenStage1Patterns, stage2Patterns);
 }
 
 static void applyVectorTransferForwardingPatterns(FuncOp funcOp) {
@@ -568,7 +567,7 @@ static void applyExtractSliceOfPadTensorSwapPattern(FuncOp funcOp) {
   (void)applyPatternsAndFoldGreedily(funcOp, std::move(patterns));
 }
 
-static void applyTilePattern(FuncOp funcOp, std::string loopType,
+static void applyTilePattern(FuncOp funcOp, const std::string &loopType,
                              ArrayRef<int64_t> tileSizes,
                              ArrayRef<int64_t> peeledLoops,
                              bool scalarizeDynamicDims) {

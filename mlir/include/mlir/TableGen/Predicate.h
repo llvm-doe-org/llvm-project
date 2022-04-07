@@ -24,7 +24,7 @@ class Init;
 class ListInit;
 class Record;
 class SMLoc;
-} // end namespace llvm
+} // namespace llvm
 
 namespace mlir {
 namespace tblgen {
@@ -101,7 +101,7 @@ public:
   const llvm::Record *getCombinerDef() const;
 
   // Get the predicates that are combined by this predicate.
-  const std::vector<llvm::Record *> getChildren() const;
+  std::vector<llvm::Record *> getChildren() const;
 };
 
 // A combined predicate that requires all child predicates of 'CPred' type to
@@ -122,7 +122,7 @@ public:
   StringRef getSuffix() const;
 };
 
-} // end namespace tblgen
-} // end namespace mlir
+} // namespace tblgen
+} // namespace mlir
 
 #endif // MLIR_TABLEGEN_PREDICATE_H_

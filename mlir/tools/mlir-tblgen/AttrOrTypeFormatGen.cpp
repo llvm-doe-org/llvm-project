@@ -152,7 +152,7 @@ public:
   using Base::Base;
 };
 
-} // end anonymous namespace
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Format Strings
@@ -163,7 +163,8 @@ static const char *const defaultParameterParser =
     "::mlir::FieldParser<$0>::parse($_parser)";
 
 /// Default printer for attribute or type parameters.
-static const char *const defaultParameterPrinter = "$_printer << $_self";
+static const char *const defaultParameterPrinter =
+    "$_printer.printStrippedAttrOrType($_self)";
 
 /// Print an error when failing to parse an element.
 ///
@@ -264,10 +265,10 @@ private:
   std::vector<std::unique_ptr<Element>> elements;
 
   /// Flags for printing spaces.
-  bool shouldEmitSpace;
-  bool lastWasPunctuation;
+  bool shouldEmitSpace = false;
+  bool lastWasPunctuation = false;
 };
-} // end anonymous namespace
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // ParserGen
@@ -558,7 +559,7 @@ private:
   /// Seen attribute or type parameters.
   llvm::BitVector seenParams;
 };
-} // end anonymous namespace
+} // namespace
 
 FailureOr<AttrOrTypeFormat> FormatParser::parse() {
   std::vector<std::unique_ptr<Element>> elements;
@@ -606,8 +607,11 @@ FormatParser::parseLiteral(ParserContext ctx) {
 
   /// Get the literal spelling without the surrounding "`".
   auto value = curToken.getSpelling().drop_front().drop_back();
-  if (!isValidLiteral(value))
-    return emitError("literal '" + value + "' is not valid");
+  if (!isValidLiteral(value, [&](Twine diag) {
+        (void)emitError("expected valid literal but got '" + value +
+                        "': " + diag);
+      }))
+    return failure();
 
   consumeToken();
   return {std::make_unique<LiteralElement>(value)};
@@ -657,7 +661,7 @@ FailureOr<std::unique_ptr<Element>> FormatParser::parseParamsDirective() {
   /// Collect all of the attribute's or type's parameters.
   SmallVector<std::unique_ptr<Element>> vars;
   /// Ensure that none of the parameters have already been captured.
-  for (auto it : llvm::enumerate(def.getParameters())) {
+  for (const auto &it : llvm::enumerate(def.getParameters())) {
     if (seenParams.test(it.index())) {
       return emitError("`params` captures duplicate parameter: " +
                        it.value().getName());
