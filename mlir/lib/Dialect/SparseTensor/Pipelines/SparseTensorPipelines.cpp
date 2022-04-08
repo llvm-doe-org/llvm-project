@@ -11,11 +11,12 @@
 #include "mlir/Conversion/Passes.h"
 #include "mlir/Dialect/Arithmetic/Transforms/Passes.h"
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
+#include "mlir/Dialect/Func/Transforms/Passes.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
 #include "mlir/Dialect/SparseTensor/Transforms/Passes.h"
-#include "mlir/Dialect/StandardOps/Transforms/Passes.h"
 #include "mlir/Dialect/Tensor/Transforms/Passes.h"
+#include "mlir/Dialect/Vector/Transforms/Passes.h"
 #include "mlir/Pass/PassManager.h"
 
 using namespace mlir;
@@ -28,13 +29,16 @@ using namespace mlir::sparse_tensor;
 void mlir::sparse_tensor::buildSparseCompiler(
     OpPassManager &pm, const SparseCompilerOptions &options) {
   // TODO(wrengr): ensure the original `pm` is for ModuleOp
+  pm.addNestedPass<FuncOp>(createLinalgGeneralizationPass());
+  pm.addPass(createLinalgElementwiseOpFusionPass());
   pm.addPass(createSparsificationPass(options.sparsificationOptions()));
   pm.addPass(createSparseTensorConversionPass());
   pm.addNestedPass<FuncOp>(createLinalgBufferizePass());
+  pm.addNestedPass<FuncOp>(vector::createVectorBufferizePass());
   pm.addNestedPass<FuncOp>(createConvertLinalgToLoopsPass());
   pm.addNestedPass<FuncOp>(createConvertVectorToSCFPass());
-  pm.addPass(createLowerToCFGPass()); // --convert-scf-to-std
-  pm.addPass(createFuncBufferizePass());
+  pm.addNestedPass<FuncOp>(createConvertSCFToCFPass());
+  pm.addPass(func::createFuncBufferizePass());
   pm.addPass(arith::createConstantBufferizePass());
   pm.addNestedPass<FuncOp>(createTensorBufferizePass());
   pm.addNestedPass<FuncOp>(

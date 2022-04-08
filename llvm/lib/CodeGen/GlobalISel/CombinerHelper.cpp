@@ -16,7 +16,6 @@
 #include "llvm/CodeGen/GlobalISel/LegalizerInfo.h"
 #include "llvm/CodeGen/GlobalISel/MIPatternMatch.h"
 #include "llvm/CodeGen/GlobalISel/MachineIRBuilder.h"
-#include "llvm/CodeGen/GlobalISel/RegisterBankInfo.h"
 #include "llvm/CodeGen/GlobalISel/Utils.h"
 #include "llvm/CodeGen/LowLevelType.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -25,14 +24,15 @@
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/RegisterBankInfo.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetLowering.h"
-#include "llvm/Target/TargetMachine.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/DivisionByConstantInfo.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Target/TargetMachine.h"
 #include <tuple>
 
 #define DEBUG_TYPE "gi-combiner"
@@ -3080,6 +3080,102 @@ void CombinerHelper::applySimplifyURemByPow2(MachineInstr &MI) {
   MI.eraseFromParent();
 }
 
+bool CombinerHelper::matchFoldBinOpIntoSelect(MachineInstr &MI,
+                                              unsigned &SelectOpNo) {
+  Register LHS = MI.getOperand(1).getReg();
+  Register RHS = MI.getOperand(2).getReg();
+
+  Register OtherOperandReg = RHS;
+  SelectOpNo = 1;
+  MachineInstr *Select = MRI.getVRegDef(LHS);
+
+  // Don't do this unless the old select is going away. We want to eliminate the
+  // binary operator, not replace a binop with a select.
+  if (Select->getOpcode() != TargetOpcode::G_SELECT ||
+      !MRI.hasOneNonDBGUse(LHS)) {
+    OtherOperandReg = LHS;
+    SelectOpNo = 2;
+    Select = MRI.getVRegDef(RHS);
+    if (Select->getOpcode() != TargetOpcode::G_SELECT ||
+        !MRI.hasOneNonDBGUse(RHS))
+      return false;
+  }
+
+  MachineInstr *SelectLHS = MRI.getVRegDef(Select->getOperand(2).getReg());
+  MachineInstr *SelectRHS = MRI.getVRegDef(Select->getOperand(3).getReg());
+
+  if (!isConstantOrConstantVector(*SelectLHS, MRI,
+                                  /*AllowFP*/ true,
+                                  /*AllowOpaqueConstants*/ false))
+    return false;
+  if (!isConstantOrConstantVector(*SelectRHS, MRI,
+                                  /*AllowFP*/ true,
+                                  /*AllowOpaqueConstants*/ false))
+    return false;
+
+  unsigned BinOpcode = MI.getOpcode();
+
+  // We know know one of the operands is a select of constants. Now verify that
+  // the other binary operator operand is either a constant, or we can handle a
+  // variable.
+  bool CanFoldNonConst =
+      (BinOpcode == TargetOpcode::G_AND || BinOpcode == TargetOpcode::G_OR) &&
+      (isNullOrNullSplat(*SelectLHS, MRI) ||
+       isAllOnesOrAllOnesSplat(*SelectLHS, MRI)) &&
+      (isNullOrNullSplat(*SelectRHS, MRI) ||
+       isAllOnesOrAllOnesSplat(*SelectRHS, MRI));
+  if (CanFoldNonConst)
+    return true;
+
+  return isConstantOrConstantVector(*MRI.getVRegDef(OtherOperandReg), MRI,
+                                    /*AllowFP*/ true,
+                                    /*AllowOpaqueConstants*/ false);
+}
+
+/// \p SelectOperand is the operand in binary operator \p MI that is the select
+/// to fold.
+bool CombinerHelper::applyFoldBinOpIntoSelect(MachineInstr &MI,
+                                              const unsigned &SelectOperand) {
+  Builder.setInstrAndDebugLoc(MI);
+
+  Register Dst = MI.getOperand(0).getReg();
+  Register LHS = MI.getOperand(1).getReg();
+  Register RHS = MI.getOperand(2).getReg();
+  MachineInstr *Select = MRI.getVRegDef(MI.getOperand(SelectOperand).getReg());
+
+  Register SelectCond = Select->getOperand(1).getReg();
+  Register SelectTrue = Select->getOperand(2).getReg();
+  Register SelectFalse = Select->getOperand(3).getReg();
+
+  LLT Ty = MRI.getType(Dst);
+  unsigned BinOpcode = MI.getOpcode();
+
+  Register FoldTrue, FoldFalse;
+
+  // We have a select-of-constants followed by a binary operator with a
+  // constant. Eliminate the binop by pulling the constant math into the select.
+  // Example: add (select Cond, CT, CF), CBO --> select Cond, CT + CBO, CF + CBO
+  if (SelectOperand == 1) {
+    // TODO: SelectionDAG verifies this actually constant folds before
+    // committing to the combine.
+
+    FoldTrue = Builder.buildInstr(BinOpcode, {Ty}, {SelectTrue, RHS}).getReg(0);
+    FoldFalse =
+        Builder.buildInstr(BinOpcode, {Ty}, {SelectFalse, RHS}).getReg(0);
+  } else {
+    FoldTrue = Builder.buildInstr(BinOpcode, {Ty}, {LHS, SelectTrue}).getReg(0);
+    FoldFalse =
+        Builder.buildInstr(BinOpcode, {Ty}, {LHS, SelectFalse}).getReg(0);
+  }
+
+  Builder.buildSelect(Dst, SelectCond, FoldTrue, FoldFalse, MI.getFlags());
+  Observer.erasingInstr(*Select);
+  Select->eraseFromParent();
+  MI.eraseFromParent();
+
+  return true;
+}
+
 Optional<SmallVector<Register, 8>>
 CombinerHelper::findCandidatesForLoadOrCombine(const MachineInstr *Root) const {
   assert(Root->getOpcode() == TargetOpcode::G_OR && "Expected G_OR only!");
@@ -4618,8 +4714,8 @@ bool CombinerHelper::matchMulOBy2(MachineInstr &MI, BuildFnTy &MatchInfo) {
 
 bool CombinerHelper::matchMulOBy0(MachineInstr &MI, BuildFnTy &MatchInfo) {
   // (G_*MULO x, 0) -> 0 + no carry out
-  unsigned Opc = MI.getOpcode();
-  assert(Opc == TargetOpcode::G_UMULO || Opc == TargetOpcode::G_SMULO);
+  assert(MI.getOpcode() == TargetOpcode::G_UMULO ||
+         MI.getOpcode() == TargetOpcode::G_SMULO);
   if (!mi_match(MI.getOperand(3).getReg(), MRI, m_SpecificICstOrSplat(0)))
     return false;
   Register Dst = MI.getOperand(0).getReg();
@@ -4636,8 +4732,8 @@ bool CombinerHelper::matchMulOBy0(MachineInstr &MI, BuildFnTy &MatchInfo) {
 
 bool CombinerHelper::matchAddOBy0(MachineInstr &MI, BuildFnTy &MatchInfo) {
   // (G_*ADDO x, 0) -> x + no carry out
-  unsigned Opc = MI.getOpcode();
-  assert(Opc == TargetOpcode::G_UADDO || Opc == TargetOpcode::G_SADDO);
+  assert(MI.getOpcode() == TargetOpcode::G_UADDO ||
+         MI.getOpcode() == TargetOpcode::G_SADDO);
   if (!mi_match(MI.getOperand(3).getReg(), MRI, m_SpecificICstOrSplat(0)))
     return false;
   Register Carry = MI.getOperand(1).getReg();
@@ -5442,6 +5538,63 @@ bool CombinerHelper::matchCombineFSubFpExtFNegFMulToFMadOrFMA(
 
   return false;
 }
+
+bool CombinerHelper::matchSelectToLogical(MachineInstr &MI,
+                                          BuildFnTy &MatchInfo) {
+  GSelect &Sel = cast<GSelect>(MI);
+  Register DstReg = Sel.getReg(0);
+  Register Cond = Sel.getCondReg();
+  Register TrueReg = Sel.getTrueReg();
+  Register FalseReg = Sel.getFalseReg();
+
+  auto *TrueDef = getDefIgnoringCopies(TrueReg, MRI);
+  auto *FalseDef = getDefIgnoringCopies(FalseReg, MRI);
+
+  const LLT CondTy = MRI.getType(Cond);
+  const LLT OpTy = MRI.getType(TrueReg);
+  if (CondTy != OpTy || OpTy.getScalarSizeInBits() != 1)
+    return false;
+
+  // We have a boolean select.
+
+  // select Cond, Cond, F --> or Cond, F
+  // select Cond, 1, F    --> or Cond, F
+  auto MaybeCstTrue = isConstantOrConstantSplatVector(*TrueDef, MRI);
+  if (Cond == TrueReg || (MaybeCstTrue && MaybeCstTrue->isOne())) {
+    MatchInfo = [=](MachineIRBuilder &MIB) {
+      MIB.buildOr(DstReg, Cond, FalseReg);
+    };
+    return true;
+  }
+
+  // select Cond, T, Cond --> and Cond, T
+  // select Cond, T, 0    --> and Cond, T
+  auto MaybeCstFalse = isConstantOrConstantSplatVector(*FalseDef, MRI);
+  if (Cond == FalseReg || (MaybeCstFalse && MaybeCstFalse->isZero())) {
+    MatchInfo = [=](MachineIRBuilder &MIB) {
+      MIB.buildAnd(DstReg, Cond, TrueReg);
+    };
+    return true;
+  }
+
+ // select Cond, T, 1 --> or (not Cond), T
+  if (MaybeCstFalse && MaybeCstFalse->isOne()) {
+    MatchInfo = [=](MachineIRBuilder &MIB) {
+      MIB.buildOr(DstReg, MIB.buildNot(OpTy, Cond), TrueReg);
+    };
+    return true;
+  }
+
+  // select Cond, 0, F --> and (not Cond), F
+  if (MaybeCstTrue && MaybeCstTrue->isZero()) {
+    MatchInfo = [=](MachineIRBuilder &MIB) {
+      MIB.buildAnd(DstReg, MIB.buildNot(OpTy, Cond), FalseReg);
+    };
+    return true;
+  }
+  return false;
+}
+
 
 bool CombinerHelper::tryCombine(MachineInstr &MI) {
   if (tryCombineCopy(MI))

@@ -75,6 +75,10 @@
 ; CHECK-NEXT:        .offset:         112
 ; CHECK-NEXT:        .size:           8
 ; CHECK-NEXT:        .value_kind:     hidden_multigrid_sync_arg
+; CHECK-NEXT:	    - .address_space:  global
+; CHECK-NEXT:        .offset:         120
+; CHECK-NEXT:        .size:           8
+; CHECK-NEXT:        .value_kind:     hidden_heap_v1
 ; CHECK-NEXT:      - .address_space:  global
 ; CHECK-NEXT:        .offset:         128
 ; CHECK-NEXT:        .size:           8
@@ -112,10 +116,8 @@ entry:
   ret void
 }
 
-!llvm.module.flags = !{!0}
 !llvm.printf.fmts = !{!1, !2}
 
-!0 = !{i32 1, !"amdgpu_hostcall", i32 1}
 !1 = !{!"1:1:4:%d\5Cn"}
 !2 = !{!"2:1:8:%g\5Cn"}
 

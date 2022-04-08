@@ -2458,6 +2458,9 @@ QualType Sema::BuildArrayType(QualType T, ArrayType::ArraySizeModifier ASM,
   } else if (isSFINAEContext()) {
     VLADiag = diag::err_vla_in_sfinae;
     VLAIsError = true;
+  } else if (getLangOpts().OpenMP && isInOpenMPTaskUntiedContext()) {
+    VLADiag = diag::err_openmp_vla_in_task_untied;
+    VLAIsError = true;
   } else {
     VLADiag = diag::ext_vla;
     VLAIsError = false;
@@ -3506,6 +3509,9 @@ static QualType GetDeclSpecTypeForDeclarator(TypeProcessingState &state,
     case DeclaratorContext::FunctionalCast:
       if (isa<DeducedTemplateSpecializationType>(Deduced))
         break;
+      if (SemaRef.getLangOpts().CPlusPlus2b && IsCXXAutoType &&
+          !Auto->isDecltypeAuto())
+        break; // auto(x)
       LLVM_FALLTHROUGH;
     case DeclaratorContext::TypeName:
       Error = 15; // Generic
@@ -5237,7 +5243,9 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
         // function is marked with the "overloadable" attribute. Scan
         // for this attribute now.
         if (!FTI.NumParams && FTI.isVariadic && !LangOpts.CPlusPlus)
-          if (!D.getAttributes().hasAttribute(ParsedAttr::AT_Overloadable))
+          if (!D.getAttributes().hasAttribute(ParsedAttr::AT_Overloadable) &&
+              !D.getDeclSpec().getAttributes().hasAttribute(
+                  ParsedAttr::AT_Overloadable))
             S.Diag(FTI.getEllipsisLoc(), diag::err_ellipsis_first_param);
 
         if (FTI.NumParams && FTI.Params[0].Param == nullptr) {

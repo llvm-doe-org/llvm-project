@@ -1119,6 +1119,79 @@ func @combineIfs4(%arg0 : i1, %arg2: i64) {
 // CHECK-NEXT:       "test.secondCodeTrue"() : () -> ()
 // CHECK-NEXT:     }
 
+// CHECK-LABEL: @combineIfsUsed
+// CHECK-SAME: %[[arg0:.+]]: i1
+func @combineIfsUsed(%arg0 : i1, %arg2: i64) -> (i32, i32) {
+  %res = scf.if %arg0 -> i32 {
+    %v = "test.firstCodeTrue"() : () -> i32
+    scf.yield %v : i32
+  } else {
+    %v2 = "test.firstCodeFalse"() : () -> i32
+    scf.yield %v2 : i32
+  }
+  %res2 = scf.if %arg0 -> i32 {
+    %v = "test.secondCodeTrue"(%res) : (i32) -> i32
+    scf.yield %v : i32
+  } else {
+    %v2 = "test.secondCodeFalse"(%res) : (i32) -> i32
+    scf.yield %v2 : i32
+  }
+  return %res, %res2 : i32, i32
+}
+// CHECK-NEXT:     %[[res:.+]]:2 = scf.if %[[arg0]] -> (i32, i32) {
+// CHECK-NEXT:       %[[tval0:.+]] = "test.firstCodeTrue"() : () -> i32
+// CHECK-NEXT:       %[[tval:.+]] = "test.secondCodeTrue"(%[[tval0]]) : (i32) -> i32
+// CHECK-NEXT:       scf.yield %[[tval0]], %[[tval]] : i32, i32
+// CHECK-NEXT:     } else {
+// CHECK-NEXT:       %[[fval0:.+]] = "test.firstCodeFalse"() : () -> i32
+// CHECK-NEXT:       %[[fval:.+]] = "test.secondCodeFalse"(%[[fval0]]) : (i32) -> i32
+// CHECK-NEXT:       scf.yield %[[fval0]], %[[fval]] : i32, i32
+// CHECK-NEXT:     }
+// CHECK-NEXT:     return %[[res]]#0, %[[res]]#1 : i32, i32
+
+// CHECK-LABEL: @combineIfsNot
+// CHECK-SAME: %[[arg0:.+]]: i1
+func @combineIfsNot(%arg0 : i1, %arg2: i64) {
+  %true = arith.constant true
+  %not = arith.xori %arg0, %true : i1
+  scf.if %arg0 {
+    "test.firstCodeTrue"() : () -> ()
+    scf.yield
+  }
+  scf.if %not {
+    "test.secondCodeTrue"() : () -> ()
+    scf.yield
+  }
+  return
+}
+
+// CHECK-NEXT:     scf.if %[[arg0]] {
+// CHECK-NEXT:       "test.firstCodeTrue"() : () -> ()
+// CHECK-NEXT:     } else {
+// CHECK-NEXT:       "test.secondCodeTrue"() : () -> ()
+// CHECK-NEXT:     }
+
+// CHECK-LABEL: @combineIfsNot2
+// CHECK-SAME: %[[arg0:.+]]: i1
+func @combineIfsNot2(%arg0 : i1, %arg2: i64) {
+  %true = arith.constant true
+  %not = arith.xori %arg0, %true : i1
+  scf.if %not {
+    "test.firstCodeTrue"() : () -> ()
+    scf.yield
+  }
+  scf.if %arg0 {
+    "test.secondCodeTrue"() : () -> ()
+    scf.yield
+  }
+  return
+}
+
+// CHECK-NEXT:     scf.if %[[arg0]] {
+// CHECK-NEXT:       "test.secondCodeTrue"() : () -> ()
+// CHECK-NEXT:     } else {
+// CHECK-NEXT:       "test.firstCodeTrue"() : () -> ()
+// CHECK-NEXT:     }
 // -----
 
 // CHECK-LABEL: func @propagate_into_execute_region
@@ -1127,15 +1200,15 @@ func @propagate_into_execute_region() {
   affine.for %i = 0 to 100 {
     "test.foo"() : () -> ()
     %v = scf.execute_region -> i64 {
-      cond_br %cond, ^bb1, ^bb2
+      cf.cond_br %cond, ^bb1, ^bb2
 
     ^bb1:
       %c1 = arith.constant 1 : i64
-      br ^bb3(%c1 : i64)
+      cf.br ^bb3(%c1 : i64)
 
     ^bb2:
       %c2 = arith.constant 2 : i64
-      br ^bb3(%c2 : i64)
+      cf.br ^bb3(%c2 : i64)
 
     ^bb3(%x : i64):
       scf.yield %x : i64
@@ -1177,13 +1250,13 @@ func @func_execute_region_elim() {
     "test.foo"() : () -> ()
     %v = scf.execute_region -> i64 {
       %c = "test.cmp"() : () -> i1
-      cond_br %c, ^bb2, ^bb3
+      cf.cond_br %c, ^bb2, ^bb3
     ^bb2:
       %x = "test.val1"() : () -> i64
-      br ^bb4(%x : i64)
+      cf.br ^bb4(%x : i64)
     ^bb3:
       %y = "test.val2"() : () -> i64
-      br ^bb4(%y : i64)
+      cf.br ^bb4(%y : i64)
     ^bb4(%z : i64):
       scf.yield %z : i64
     }
@@ -1194,13 +1267,13 @@ func @func_execute_region_elim() {
 // CHECK-NOT: execute_region
 // CHECK:     "test.foo"
 // CHECK:     %[[cmp:.+]] = "test.cmp"
-// CHECK:     cond_br %[[cmp]], ^[[bb1:.+]], ^[[bb2:.+]]
+// CHECK:     cf.cond_br %[[cmp]], ^[[bb1:.+]], ^[[bb2:.+]]
 // CHECK:   ^[[bb1]]:
 // CHECK:     %[[x:.+]] = "test.val1"
-// CHECK:     br ^[[bb3:.+]](%[[x]] : i64)
+// CHECK:     cf.br ^[[bb3:.+]](%[[x]] : i64)
 // CHECK:   ^[[bb2]]:
 // CHECK:     %[[y:.+]] = "test.val2"
-// CHECK:     br ^[[bb3]](%[[y:.+]] : i64)
+// CHECK:     cf.br ^[[bb3]](%[[y:.+]] : i64)
 // CHECK:   ^[[bb3]](%[[z:.+]]: i64):
 // CHECK:     "test.bar"(%[[z]])
 // CHECK:     return
@@ -1213,7 +1286,7 @@ func @func_execute_region_elim_multi_yield() {
     "test.foo"() : () -> ()
     %v = scf.execute_region -> i64 {
       %c = "test.cmp"() : () -> i1
-      cond_br %c, ^bb2, ^bb3
+      cf.cond_br %c, ^bb2, ^bb3
     ^bb2:
       %x = "test.val1"() : () -> i64
       scf.yield %x : i64
@@ -1228,13 +1301,13 @@ func @func_execute_region_elim_multi_yield() {
 // CHECK-NOT: execute_region
 // CHECK:     "test.foo"
 // CHECK:     %[[cmp:.+]] = "test.cmp"
-// CHECK:     cond_br %[[cmp]], ^[[bb1:.+]], ^[[bb2:.+]]
+// CHECK:     cf.cond_br %[[cmp]], ^[[bb1:.+]], ^[[bb2:.+]]
 // CHECK:   ^[[bb1]]:
 // CHECK:     %[[x:.+]] = "test.val1"
-// CHECK:     br ^[[bb3:.+]](%[[x]] : i64)
+// CHECK:     cf.br ^[[bb3:.+]](%[[x]] : i64)
 // CHECK:   ^[[bb2]]:
 // CHECK:     %[[y:.+]] = "test.val2"
-// CHECK:     br ^[[bb3]](%[[y:.+]] : i64)
+// CHECK:     cf.br ^[[bb3]](%[[y:.+]] : i64)
 // CHECK:   ^[[bb3]](%[[z:.+]]: i64):
 // CHECK:     "test.bar"(%[[z]])
 // CHECK:     return

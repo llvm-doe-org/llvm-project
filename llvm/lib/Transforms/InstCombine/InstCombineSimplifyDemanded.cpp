@@ -12,8 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "InstCombineInternal.h"
-#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
+#include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/Support/KnownBits.h"
@@ -153,6 +153,29 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
   // operand of a trunc without duplicating all the logic below.
   if (Depth == 0 && !V->hasOneUse())
     DemandedMask.setAllBits();
+
+  // If the high-bits of an ADD/SUB/MUL are not demanded, then we do not care
+  // about the high bits of the operands.
+  auto simplifyOperandsBasedOnUnusedHighBits = [&](APInt &DemandedFromOps) {
+    unsigned NLZ = DemandedMask.countLeadingZeros();
+    // Right fill the mask of bits for the operands to demand the most
+    // significant bit and all those below it.
+    DemandedFromOps = APInt::getLowBitsSet(BitWidth, BitWidth - NLZ);
+    if (ShrinkDemandedConstant(I, 0, DemandedFromOps) ||
+        SimplifyDemandedBits(I, 0, DemandedFromOps, LHSKnown, Depth + 1) ||
+        ShrinkDemandedConstant(I, 1, DemandedFromOps) ||
+        SimplifyDemandedBits(I, 1, DemandedFromOps, RHSKnown, Depth + 1)) {
+      if (NLZ > 0) {
+        // Disable the nsw and nuw flags here: We can no longer guarantee that
+        // we won't wrap after simplification. Removing the nsw/nuw flags is
+        // legal here because the top bit is not demanded.
+        I->setHasNoSignedWrap(false);
+        I->setHasNoUnsignedWrap(false);
+      }
+      return true;
+    }
+    return false;
+  };
 
   switch (I->getOpcode()) {
   default:
@@ -311,33 +334,6 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
     break;
   }
   case Instruction::Select: {
-    Value *LHS, *RHS;
-    SelectPatternFlavor SPF = matchSelectPattern(I, LHS, RHS).Flavor;
-    if (SPF == SPF_UMAX) {
-      // UMax(A, C) == A if ...
-      // The lowest non-zero bit of DemandMask is higher than the highest
-      // non-zero bit of C.
-      const APInt *C;
-      unsigned CTZ = DemandedMask.countTrailingZeros();
-      if (match(RHS, m_APInt(C)) && CTZ >= C->getActiveBits())
-        return LHS;
-    } else if (SPF == SPF_UMIN) {
-      // UMin(A, C) == A if ...
-      // The lowest non-zero bit of DemandMask is higher than the highest
-      // non-one bit of C.
-      // This comes from using DeMorgans on the above umax example.
-      const APInt *C;
-      unsigned CTZ = DemandedMask.countTrailingZeros();
-      if (match(RHS, m_APInt(C)) &&
-          CTZ >= C->getBitWidth() - C->countLeadingOnes())
-        return LHS;
-    }
-
-    // If this is a select as part of any other min/max pattern, don't simplify
-    // any further in case we break the structure.
-    if (SPF != SPF_UNKNOWN)
-      return nullptr;
-
     if (SimplifyDemandedBits(I, 2, DemandedMask, RHSKnown, Depth + 1) ||
         SimplifyDemandedBits(I, 1, DemandedMask, LHSKnown, Depth + 1))
       return I;
@@ -507,26 +503,9 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
     }
     LLVM_FALLTHROUGH;
   case Instruction::Sub: {
-    /// If the high-bits of an ADD/SUB are not demanded, then we do not care
-    /// about the high bits of the operands.
-    unsigned NLZ = DemandedMask.countLeadingZeros();
-    // Right fill the mask of bits for this ADD/SUB to demand the most
-    // significant bit and all those below it.
-    APInt DemandedFromOps(APInt::getLowBitsSet(BitWidth, BitWidth-NLZ));
-    if (ShrinkDemandedConstant(I, 0, DemandedFromOps) ||
-        SimplifyDemandedBits(I, 0, DemandedFromOps, LHSKnown, Depth + 1) ||
-        ShrinkDemandedConstant(I, 1, DemandedFromOps) ||
-        SimplifyDemandedBits(I, 1, DemandedFromOps, RHSKnown, Depth + 1)) {
-      if (NLZ > 0) {
-        // Disable the nsw and nuw flags here: We can no longer guarantee that
-        // we won't wrap after simplification. Removing the nsw/nuw flags is
-        // legal here because the top bit is not demanded.
-        BinaryOperator &BinOP = *cast<BinaryOperator>(I);
-        BinOP.setHasNoSignedWrap(false);
-        BinOP.setHasNoUnsignedWrap(false);
-      }
+    APInt DemandedFromOps;
+    if (simplifyOperandsBasedOnUnusedHighBits(DemandedFromOps))
       return I;
-    }
 
     // If we are known to be adding/subtracting zeros to every bit below
     // the highest demanded bit, we just return the other side.
@@ -545,10 +524,14 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
     break;
   }
   case Instruction::Mul: {
-    // The LSB of X*Y is set only if (X & 1) == 1 and (Y & 1) == 1.
-    // If we demand exactly one bit N and we have "X * (C' << N)" where C' is
-    // odd (has LSB set), then the left-shifted low bit of X is the answer.
+    APInt DemandedFromOps;
+    if (simplifyOperandsBasedOnUnusedHighBits(DemandedFromOps))
+      return I;
+
     if (DemandedMask.isPowerOf2()) {
+      // The LSB of X*Y is set only if (X & 1) == 1 and (Y & 1) == 1.
+      // If we demand exactly one bit N and we have "X * (C' << N)" where C' is
+      // odd (has LSB set), then the left-shifted low bit of X is the answer.
       unsigned CTZ = DemandedMask.countTrailingZeros();
       const APInt *C;
       if (match(I->getOperand(1), m_APInt(C)) &&
@@ -558,6 +541,15 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
         return InsertNewInstWith(Shl, *I);
       }
     }
+    // For a squared value "X * X", the bottom 2 bits are 0 and X[0] because:
+    // X * X is odd iff X is odd.
+    // 'Quadratic Reciprocity': X * X -> 0 for bit[1]
+    if (I->getOperand(0) == I->getOperand(1) && DemandedMask.ult(4)) {
+      Constant *One = ConstantInt::get(VTy, 1);
+      Instruction *And1 = BinaryOperator::CreateAnd(I->getOperand(0), One);
+      return InsertNewInstWith(And1, *I);
+    }
+
     computeKnownBits(I, Known, Depth, CxtI);
     break;
   }

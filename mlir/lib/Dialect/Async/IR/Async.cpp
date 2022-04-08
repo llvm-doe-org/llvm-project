@@ -50,7 +50,6 @@ LogicalResult YieldOp::verify() {
 
 MutableOperandRange
 YieldOp::getMutableSuccessorOperands(Optional<unsigned> index) {
-  assert(!index.hasValue());
   return operandsMutable();
 }
 
@@ -63,6 +62,15 @@ constexpr char kOperandSegmentSizesAttr[] = "operand_segment_sizes";
 OperandRange ExecuteOp::getSuccessorEntryOperands(unsigned index) {
   assert(index == 0 && "invalid region index");
   return operands();
+}
+
+bool ExecuteOp::areTypesCompatible(Type lhs, Type rhs) {
+  const auto getValueOrTokenType = [](Type type) {
+    if (auto value = type.dyn_cast<ValueType>())
+      return value.getValueType();
+    return type;
+  };
+  return getValueOrTokenType(lhs) == getValueOrTokenType(rhs);
 }
 
 void ExecuteOp::getSuccessorRegions(Optional<unsigned> index,
@@ -125,16 +133,16 @@ void ExecuteOp::build(OpBuilder &builder, OperationState &result,
   }
 }
 
-static void print(OpAsmPrinter &p, ExecuteOp op) {
+void ExecuteOp::print(OpAsmPrinter &p) {
   // [%tokens,...]
-  if (!op.dependencies().empty())
-    p << " [" << op.dependencies() << "]";
+  if (!dependencies().empty())
+    p << " [" << dependencies() << "]";
 
   // (%value as %unwrapped: !async.value<!arg.type>, ...)
-  if (!op.operands().empty()) {
+  if (!operands().empty()) {
     p << " (";
-    Block *entry = op.body().empty() ? nullptr : &op.body().front();
-    llvm::interleaveComma(op.operands(), p, [&, n = 0](Value operand) mutable {
+    Block *entry = body().empty() ? nullptr : &body().front();
+    llvm::interleaveComma(operands(), p, [&, n = 0](Value operand) mutable {
       Value argument = entry ? entry->getArgument(n++) : Value();
       p << operand << " as " << argument << ": " << operand.getType();
     });
@@ -142,14 +150,14 @@ static void print(OpAsmPrinter &p, ExecuteOp op) {
   }
 
   // -> (!async.value<!return.type>, ...)
-  p.printOptionalArrowTypeList(llvm::drop_begin(op.getResultTypes()));
-  p.printOptionalAttrDictWithKeyword(op->getAttrs(),
+  p.printOptionalArrowTypeList(llvm::drop_begin(getResultTypes()));
+  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(),
                                      {kOperandSegmentSizesAttr});
   p << ' ';
-  p.printRegion(op.body(), /*printEntryBlockArgs=*/false);
+  p.printRegion(body(), /*printEntryBlockArgs=*/false);
 }
 
-static ParseResult parseExecuteOp(OpAsmParser &parser, OperationState &result) {
+ParseResult ExecuteOp::parse(OpAsmParser &parser, OperationState &result) {
   MLIRContext *ctx = result.getContext();
 
   // Sizes of parsed variadic operands, will be updated below after parsing.

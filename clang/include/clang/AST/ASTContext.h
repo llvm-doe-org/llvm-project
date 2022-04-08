@@ -211,7 +211,7 @@ class ASTContext : public RefCountedBase<ASTContext> {
   mutable SmallVector<Type *, 0> Types;
   mutable llvm::FoldingSet<ExtQuals> ExtQualNodes;
   mutable llvm::FoldingSet<ComplexType> ComplexTypes;
-  mutable llvm::FoldingSet<PointerType> PointerTypes;
+  mutable llvm::FoldingSet<PointerType> PointerTypes{GeneralTypesLog2InitSize};
   mutable llvm::FoldingSet<AdjustedType> AdjustedTypes;
   mutable llvm::FoldingSet<BlockPointerType> BlockPointerTypes;
   mutable llvm::FoldingSet<LValueReferenceType> LValueReferenceTypes;
@@ -243,9 +243,10 @@ class ASTContext : public RefCountedBase<ASTContext> {
     SubstTemplateTypeParmPackTypes;
   mutable llvm::ContextualFoldingSet<TemplateSpecializationType, ASTContext&>
     TemplateSpecializationTypes;
-  mutable llvm::FoldingSet<ParenType> ParenTypes;
+  mutable llvm::FoldingSet<ParenType> ParenTypes{GeneralTypesLog2InitSize};
   mutable llvm::FoldingSet<UsingType> UsingTypes;
-  mutable llvm::FoldingSet<ElaboratedType> ElaboratedTypes;
+  mutable llvm::FoldingSet<ElaboratedType> ElaboratedTypes{
+      GeneralTypesLog2InitSize};
   mutable llvm::FoldingSet<DependentNameType> DependentNameTypes;
   mutable llvm::ContextualFoldingSet<DependentTemplateSpecializationType,
                                      ASTContext&>
@@ -465,6 +466,10 @@ class ASTContext : public RefCountedBase<ASTContext> {
     void resolve(ASTContext &Ctx);
   };
   llvm::DenseMap<Module*, PerModuleInitializers*> ModuleInitializers;
+
+  static constexpr unsigned ConstantArrayTypesLog2InitSize = 8;
+  static constexpr unsigned GeneralTypesLog2InitSize = 9;
+  static constexpr unsigned FunctionProtoTypesLog2InitSize = 12;
 
   ASTContext &this_() { return *this; }
 
@@ -2755,14 +2760,6 @@ public:
   /// if both types have the same floating-point semantics on the target (i.e.
   /// long double and double on AArch64 will return 0).
   int getFloatingTypeSemanticOrder(QualType LHS, QualType RHS) const;
-
-  /// Return a real floating point or a complex type (based on
-  /// \p typeDomain/\p typeSize).
-  ///
-  /// \param typeDomain a real floating point or complex type.
-  /// \param typeSize a real floating point or complex type.
-  QualType getFloatingTypeOfSizeWithinDomain(QualType typeSize,
-                                             QualType typeDomain) const;
 
   unsigned getTargetAddressSpace(QualType T) const;
 

@@ -23,7 +23,6 @@
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
 #include "mlir/Dialect/SparseTensor/Transforms/Passes.h"
 #include "mlir/Dialect/SparseTensor/Utils/Merger.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/TensorEncoding.h"
@@ -354,21 +353,21 @@ static bool isAdmissableTensorExp(Merger &merger, linalg::GenericOp op,
 // Sparse compiler synthesis methods (reductions).
 //===----------------------------------------------------------------------===//
 
-/// Maps reduction kind to name encoding.
-static StringRef getReductionName(Reduction kind) {
+/// Maps reduction kind to vector::CombiningKind.
+static vector::CombiningKind getCombiningKind(Reduction kind) {
   switch (kind) {
   case kNoReduc:
     break;
   case kSum:
-    return "add";
+    return vector::CombiningKind::ADD;
   case kProduct:
-    return "mul";
+    return vector::CombiningKind::MUL;
   case kAnd:
-    return "and";
+    return vector::CombiningKind::AND;
   case kOr:
-    return "or";
+    return vector::CombiningKind::OR;
   case kXor:
-    return "xor";
+    return vector::CombiningKind::XOR;
   }
   llvm_unreachable("unknown reduction kind");
 }
@@ -427,10 +426,8 @@ static Value genVectorReducInit(CodeGen &codegen, PatternRewriter &rewriter,
 /// Generates final value for a vector reduction.
 static Value genVectorReducEnd(CodeGen &codegen, PatternRewriter &rewriter,
                                Location loc, VectorType vtp) {
-  StringRef name = getReductionName(codegen.redKind);
-  StringAttr kind = rewriter.getStringAttr(name);
-  return rewriter.create<vector::ReductionOp>(loc, vtp.getElementType(), kind,
-                                              codegen.redVal, ValueRange{});
+  vector::CombiningKind kind = getCombiningKind(codegen.redKind);
+  return rewriter.create<vector::ReductionOp>(loc, kind, codegen.redVal);
 }
 
 /// Updates scalarized reduction value.
@@ -466,15 +463,15 @@ static Value genOutputBuffer(CodeGen &codegen, PatternRewriter &rewriter,
   // impact the running complexity of the sparse kernel. If the tensor
   // materializes into the computation, we need to preserve the zero
   // initialization assumption of all sparse output buffers.
+  Value alloc = rewriter.create<memref::AllocOp>(loc, denseTp, args);
   if (isMaterializing(tensor)) {
-    Value alloc = rewriter.create<memref::AllocOp>(loc, denseTp, args);
     Value zero = constantZero(rewriter, loc, denseTp.getElementType());
     rewriter.create<linalg::FillOp>(loc, zero, alloc);
-    return alloc;
+  } else {
+    Value init =
+        rewriter.create<bufferization::ToMemrefOp>(loc, denseTp, tensor);
+    rewriter.create<memref::CopyOp>(loc, init, alloc);
   }
-  Value init = rewriter.create<bufferization::ToMemrefOp>(loc, denseTp, tensor);
-  Value alloc = rewriter.create<memref::AllocOp>(loc, denseTp, args);
-  rewriter.create<memref::CopyOp>(loc, init, alloc);
   return alloc;
 }
 
@@ -831,11 +828,11 @@ static Value genLoad(CodeGen &codegen, PatternRewriter &rewriter, Location loc,
     if (!etp.isa<IndexType>()) {
       if (etp.getIntOrFloatBitWidth() < 32)
         vload = rewriter.create<arith::ExtUIOp>(
-            loc, vload, vectorType(codegen, rewriter.getI32Type()));
+            loc, vectorType(codegen, rewriter.getI32Type()), vload);
       else if (etp.getIntOrFloatBitWidth() < 64 &&
                !codegen.options.enableSIMDIndex32)
         vload = rewriter.create<arith::ExtUIOp>(
-            loc, vload, vectorType(codegen, rewriter.getI64Type()));
+            loc, vectorType(codegen, rewriter.getI64Type()), vload);
     }
     return vload;
   }
@@ -846,9 +843,9 @@ static Value genLoad(CodeGen &codegen, PatternRewriter &rewriter, Location loc,
   Value load = rewriter.create<memref::LoadOp>(loc, ptr, s);
   if (!load.getType().isa<IndexType>()) {
     if (load.getType().getIntOrFloatBitWidth() < 64)
-      load = rewriter.create<arith::ExtUIOp>(loc, load, rewriter.getI64Type());
+      load = rewriter.create<arith::ExtUIOp>(loc, rewriter.getI64Type(), load);
     load =
-        rewriter.create<arith::IndexCastOp>(loc, load, rewriter.getIndexType());
+        rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), load);
   }
   return load;
 }
@@ -868,7 +865,7 @@ static Value genAddress(CodeGen &codegen, PatternRewriter &rewriter,
   Value mul = rewriter.create<arith::MulIOp>(loc, size, p);
   if (auto vtp = i.getType().dyn_cast<VectorType>()) {
     Value inv =
-        rewriter.create<arith::IndexCastOp>(loc, mul, vtp.getElementType());
+        rewriter.create<arith::IndexCastOp>(loc, vtp.getElementType(), mul);
     mul = genVectorInvariantValue(codegen, rewriter, inv);
   }
   return rewriter.create<arith::AddIOp>(loc, mul, i);

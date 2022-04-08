@@ -538,6 +538,9 @@ static void InitializeStandardPredefinedMacros(const TargetInfo &TI,
     Builder.defineMacro("__HIP_MEMORY_SCOPE_SYSTEM", "5");
     if (LangOpts.CUDAIsDevice)
       Builder.defineMacro("__HIP_DEVICE_COMPILE__");
+    if (LangOpts.GPUDefaultStream ==
+        LangOptions::GPUDefaultStreamKind::PerThread)
+      Builder.defineMacro("HIP_API_PER_THREAD_DEFAULT_STREAM");
   }
 }
 
@@ -642,6 +645,7 @@ static void InitializeCPlusPlusFeatureTestMacros(const LangOptions &LangOpts,
     Builder.defineMacro("__cpp_implicit_move", "202011L");
     Builder.defineMacro("__cpp_size_t_suffix", "202011L");
     Builder.defineMacro("__cpp_if_consteval", "202106L");
+    Builder.defineMacro("__cpp_­multidimensional_­subscript", "202110L");
   }
   if (LangOpts.Char8)
     Builder.defineMacro("__cpp_char8_t", "201811L");
@@ -1135,7 +1139,6 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
   }
 
   // Macros to control C99 numerics and <float.h>
-  Builder.defineMacro("__FLT_EVAL_METHOD__", Twine(TI.getFloatEvalMethod()));
   Builder.defineMacro("__FLT_RADIX__", "2");
   Builder.defineMacro("__DECIMAL_DIG__", "__LDBL_DECIMAL_DIG__");
 

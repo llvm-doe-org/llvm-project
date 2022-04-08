@@ -14,17 +14,12 @@
 namespace mlir {
 class DialectRegistry;
 
-namespace scf {
-/// Assert that yielded values of an scf.for op are aliasing their corresponding
-/// bbArgs. This is required because the i-th OpResult of an scf.for op is
-/// currently assumed to alias with the i-th iter_arg (in the absence of
-/// conflicts).
-struct AssertScfForAliasingProperties : public bufferization::PostAnalysisStep {
-  LogicalResult run(Operation *op, bufferization::BufferizationState &state,
-                    bufferization::BufferizationAliasInfo &aliasInfo,
-                    SmallVector<Operation *> &newOps) override;
-};
+namespace bufferization {
+class BufferizationState;
+class BufferizationAliasInfo;
+} // namespace bufferization
 
+namespace scf {
 void registerBufferizableOpInterfaceExternalModels(DialectRegistry &registry);
 } // namespace scf
 } // namespace mlir

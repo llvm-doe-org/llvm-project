@@ -47,7 +47,20 @@ sections with improvements to Clang's support for those languages.
 Major New Features
 ------------------
 
--  ...
+- Clang now supports the ``-fzero-call-used-regs`` feature for x86. The purpose
+  of this feature is to limit Return-Oriented Programming (ROP) exploits and
+  information leakage. It works by zeroing out a selected class of registers
+  before function return --- e.g., all GPRs that are used within the function.
+  There is an analogous ``zero_call_used_regs`` attribute to allow for finer
+  control of this feature.
+
+Bug Fixes
+------------------
+- ``CXXNewExpr::getArraySize()`` previously returned a ``llvm::Optional``
+  wrapping a ``nullptr`` when the ``CXXNewExpr`` did not have an array
+  size expression. This was fixed and ``::getArraySize()`` will now always
+  either return ``None`` or a ``llvm::Optional`` wrapping a valid ``Expr*``.
+  This fixes `Issue 53742 <https://github.com/llvm/llvm-project/issues/53742>`_.
 
 Improvements to Clang's diagnostics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -67,9 +80,6 @@ Modified Compiler Flags
 Removed Compiler Flags
 -------------------------
 
-- -Wweak-template-vtables, which was deprecated in the previous release and no
-  longer had any effect, has been removed.
-
 New Pragmas in Clang
 --------------------
 
@@ -78,11 +88,28 @@ New Pragmas in Clang
 Attribute Changes in Clang
 --------------------------
 
+- Added support for parameter pack expansion in `clang::annotate`.
+
+- The ``overloadable`` attribute can now be written in all of the syntactic
+  locations a declaration attribute may appear.
+  This fixes `Issue 53805 <https://github.com/llvm/llvm-project/issues/53805>`_.
+
 Windows Support
 ---------------
 
+- Add support for MSVC-compatible ``/JMC``/``/JMC-`` flag in clang-cl (supports
+  X86/X64/ARM/ARM64). ``/JMC`` could only be used when ``/Zi`` or ``/Z7`` is
+  turned on. With this addition, clang-cl can be used in Visual Studio for the
+  JustMyCode feature. Note, you may need to manually add ``/JMC`` as additional
+  compile options in the Visual Studio since it currently assumes clang-cl does not support ``/JMC``.
+
 C Language Changes in Clang
 ---------------------------
+
+C2x Feature Support
+-------------------
+
+- Implemented `WG14 N2674 The noreturn attribute <http://www.open-std.org/jtc1/sc22/wg14/www/docs/n2764.pdf>`_.
 
 C++ Language Changes in Clang
 -----------------------------
@@ -94,6 +121,9 @@ C++20 Feature Support
 
 C++2b Feature Support
 ^^^^^^^^^^^^^^^^^^^^^
+
+- Implemented `P2128R6: Multidimensional subscript operator <https://wg21.link/P2128R6>`_.
+- Implemented `P0849R8: auto(x): decay-copy in the language <https://wg21.link/P0849R8>`_.
 
 CUDA Language Changes in Clang
 ------------------------------
@@ -145,14 +175,33 @@ Floating Point Support in Clang
 Internal API Changes
 --------------------
 
+- Added a new attribute flag `AcceptsExprPack` that when set allows expression
+  pack expansions in the parsed arguments of the corresponding attribute.
+  Additionally it introduces delaying of attribute arguments, adding common
+  handling for creating attributes that cannot be fully initialized prior to
+  template instantiation.
+
 Build System Changes
 --------------------
 
 AST Matchers
 ------------
 
+- Expanded ``isInline`` narrowing matcher to support c++17 inline variables.
+
 clang-format
 ------------
+
+- **Important change**: Renamed ``IndentRequires`` to ``IndentRequiresClause``
+  and changed the default for all styles from ``false`` to ``true``.
+
+- Reworked and improved handling of concepts and requires. Added the
+  ``RequiresClausePosition`` option as part of that.
+
+- Changed ``BreakBeforeConceptDeclarations`` from ``Boolean`` to an enum.
+
+- Option ``InsertBraces`` has been added to insert optional braces after control
+  statements.
 
 libclang
 --------

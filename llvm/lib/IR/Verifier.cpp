@@ -521,6 +521,7 @@ private:
   void visitUserOp2(Instruction &I) { visitUserOp1(I); }
   void visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call);
   void visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI);
+  void visitVPIntrinsic(VPIntrinsic &VPI);
   void visitDbgIntrinsic(StringRef Kind, DbgVariableIntrinsic &DII);
   void visitDbgLabelIntrinsic(StringRef Kind, DbgLabelInst &DLI);
   void visitAtomicCmpXchgInst(AtomicCmpXchgInst &CXI);
@@ -835,13 +836,19 @@ void Verifier::visitGlobalAlias(const GlobalAlias &GA) {
 }
 
 void Verifier::visitGlobalIFunc(const GlobalIFunc &GI) {
+  Assert(GlobalIFunc::isValidLinkage(GI.getLinkage()),
+         "IFunc should have private, internal, linkonce, weak, linkonce_odr, "
+         "weak_odr, or external linkage!",
+         &GI);
   // Pierce through ConstantExprs and GlobalAliases and check that the resolver
-  // has a Function 
+  // is a Function definition.
   const Function *Resolver = GI.getResolverFunction();
   Assert(Resolver, "IFunc must have a Function resolver", &GI);
+  Assert(!Resolver->isDeclarationForLinker(),
+         "IFunc resolver must be a definition", &GI);
 
   // Check that the immediate resolver operand (prior to any bitcasts) has the
-  // correct type
+  // correct type.
   const Type *ResolverTy = GI.getResolver()->getType();
   const Type *ResolverFuncTy =
       GlobalIFunc::getResolverFunctionType(GI.getValueType());
@@ -2159,7 +2166,7 @@ void Verifier::verifyInlineAsmCall(const CallBase &Call) {
              "Operand for indirect constraint must have pointer type",
              &Call);
 
-      Assert(Call.getAttributes().getParamElementType(ArgNo),
+      Assert(Call.getParamElementType(ArgNo),
              "Operand for indirect constraint must have elementtype attribute",
              &Call);
     } else {
@@ -2192,7 +2199,7 @@ void Verifier::verifyStatepoint(const CallBase &Call) {
          "positive",
          Call);
 
-  Type *TargetElemType = Call.getAttributes().getParamElementType(2);
+  Type *TargetElemType = Call.getParamElementType(2);
   Assert(TargetElemType,
          "gc.statepoint callee argument must have elementtype attribute", Call);
   FunctionType *TargetFuncType = dyn_cast<FunctionType>(TargetElemType);
@@ -3285,11 +3292,12 @@ void Verifier::visitCallBase(CallBase &Call) {
       visitIntrinsicCall(ID, Call);
 
   // Verify that a callsite has at most one "deopt", at most one "funclet", at
-  // most one "gc-transition", at most one "cfguardtarget",
-  // and at most one "preallocated" operand bundle.
+  // most one "gc-transition", at most one "cfguardtarget", at most one
+  // "preallocated" operand bundle, and at most one "ptrauth" operand bundle.
   bool FoundDeoptBundle = false, FoundFuncletBundle = false,
        FoundGCTransitionBundle = false, FoundCFGuardTargetBundle = false,
        FoundPreallocatedBundle = false, FoundGCLiveBundle = false,
+       FoundPtrauthBundle = false,
        FoundAttachedCallBundle = false;
   for (unsigned i = 0, e = Call.getNumOperandBundles(); i < e; ++i) {
     OperandBundleUse BU = Call.getOperandBundleAt(i);
@@ -3315,6 +3323,16 @@ void Verifier::visitCallBase(CallBase &Call) {
       FoundCFGuardTargetBundle = true;
       Assert(BU.Inputs.size() == 1,
              "Expected exactly one cfguardtarget bundle operand", Call);
+    } else if (Tag == LLVMContext::OB_ptrauth) {
+      Assert(!FoundPtrauthBundle, "Multiple ptrauth operand bundles", Call);
+      FoundPtrauthBundle = true;
+      Assert(BU.Inputs.size() == 2,
+             "Expected exactly two ptrauth bundle operands", Call);
+      Assert(isa<ConstantInt>(BU.Inputs[0]) &&
+             BU.Inputs[0]->getType()->isIntegerTy(32),
+             "Ptrauth bundle key operand must be an i32 constant", Call);
+      Assert(BU.Inputs[1]->getType()->isIntegerTy(64),
+             "Ptrauth bundle discriminator operand must be an i64", Call);
     } else if (Tag == LLVMContext::OB_preallocated) {
       Assert(!FoundPreallocatedBundle, "Multiple preallocated operand bundles",
              Call);
@@ -3338,6 +3356,10 @@ void Verifier::visitCallBase(CallBase &Call) {
       verifyAttachedCallBundle(Call, BU);
     }
   }
+
+  // Verify that callee and callsite agree on whether to use pointer auth.
+  Assert(!(Call.getCalledFunction() && FoundPtrauthBundle),
+         "Direct call cannot have a ptrauth bundle", Call);
 
   // Verify that each inlinable callsite of a debug-info-bearing function in a
   // debug-info-bearing function has a debug location attached to it. Failure to
@@ -4772,6 +4794,31 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
            "an array");
     break;
   }
+  case Intrinsic::fptrunc_round: {
+    // Check the rounding mode
+    Metadata *MD = nullptr;
+    auto *MAV = dyn_cast<MetadataAsValue>(Call.getOperand(1));
+    if (MAV)
+      MD = MAV->getMetadata();
+
+    Assert(MD != nullptr, "missing rounding mode argument", Call);
+
+    Assert(isa<MDString>(MD),
+           ("invalid value for llvm.fptrunc.round metadata operand"
+            " (the operand should be a string)"),
+           MD);
+
+    Optional<RoundingMode> RoundMode =
+        convertStrToRoundingMode(cast<MDString>(MD)->getString());
+    Assert(RoundMode.hasValue() &&
+               RoundMode.getValue() != RoundingMode::Dynamic,
+           "unsupported rounding mode argument", Call);
+    break;
+  }
+#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
+#include "llvm/IR/VPIntrinsics.def"
+    visitVPIntrinsic(cast<VPIntrinsic>(Call));
+    break;
 #define INSTRUCTION(NAME, NARGS, ROUND_MODE, INTRINSIC)                        \
   case Intrinsic::INTRINSIC:
 #include "llvm/IR/ConstrainedOps.def"
@@ -5003,8 +5050,8 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
            Call.getArgOperand(0));
 
     // Assert that result type matches wrapped callee.
-    auto *TargetFuncType = cast<FunctionType>(
-        StatepointCall->getAttributes().getParamElementType(2));
+    auto *TargetFuncType =
+        cast<FunctionType>(StatepointCall->getParamElementType(2));
     Assert(Call.getType() == TargetFuncType->getReturnType(),
            "gc.result result type does not match wrapped callee", Call);
     break;
@@ -5449,7 +5496,7 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
   }
   case Intrinsic::preserve_array_access_index:
   case Intrinsic::preserve_struct_access_index: {
-    Type *ElemTy = Call.getAttributes().getParamElementType(0);
+    Type *ElemTy = Call.getParamElementType(0);
     Assert(ElemTy,
            "Intrinsic requires elementtype attribute on first argument.",
            &Call);
@@ -5475,6 +5522,17 @@ static DISubprogram *getSubprogram(Metadata *LocalScope) {
   // Just return null; broken scope chains are checked elsewhere.
   assert(!isa<DILocalScope>(LocalScope) && "Unknown type of local scope");
   return nullptr;
+}
+
+void Verifier::visitVPIntrinsic(VPIntrinsic &VPI) {
+  if (auto *VPCast = dyn_cast<VPCastIntrinsic>(&VPI)) {
+    auto *RetTy = cast<VectorType>(VPCast->getType());
+    auto *ValTy = cast<VectorType>(VPCast->getOperand(0)->getType());
+    Assert(RetTy->getElementCount() == ValTy->getElementCount(),
+           "VP cast intrinsic first argument and result vector lengths must be "
+           "equal",
+           *VPCast);
+  }
 }
 
 void Verifier::visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI) {

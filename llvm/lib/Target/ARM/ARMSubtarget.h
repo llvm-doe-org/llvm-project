@@ -25,8 +25,8 @@
 #include "llvm/CodeGen/GlobalISel/CallLowering.h"
 #include "llvm/CodeGen/GlobalISel/InstructionSelector.h"
 #include "llvm/CodeGen/GlobalISel/LegalizerInfo.h"
-#include "llvm/CodeGen/GlobalISel/RegisterBankInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/RegisterBankInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/MC/MCSchedule.h"
@@ -453,8 +453,8 @@ protected:
   /// ARMTargetLowering::allowsMisalignedMemoryAccesses().
   bool StrictAlign = false;
 
-  /// RestrictIT - If true, the subtarget disallows generation of deprecated IT
-  ///  blocks to conform to ARMv8 rule.
+  /// RestrictIT - If true, the subtarget disallows generation of complex IT
+  ///  blocks.
   bool RestrictIT = false;
 
   /// HasDSP - If true, the subtarget supports the DSP (saturating arith
@@ -773,6 +773,7 @@ public:
   bool isTargetIOS() const { return TargetTriple.isiOS(); }
   bool isTargetWatchOS() const { return TargetTriple.isWatchOS(); }
   bool isTargetWatchABI() const { return TargetTriple.isWatchABI(); }
+  bool isTargetDriverKit() const { return TargetTriple.isDriverKit(); }
   bool isTargetLinux() const { return TargetTriple.isOSLinux(); }
   bool isTargetNaCl() const { return TargetTriple.isOSNaCl(); }
   bool isTargetNetBSD() const { return TargetTriple.isOSNetBSD(); }

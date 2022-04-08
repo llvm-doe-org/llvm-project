@@ -2429,6 +2429,39 @@ void Process::LoadOperatingSystemPlugin(bool flush) {
 }
 
 Status Process::Launch(ProcessLaunchInfo &launch_info) {
+  StateType state_after_launch = eStateInvalid;
+  EventSP first_stop_event_sp;
+  Status status =
+      LaunchPrivate(launch_info, state_after_launch, first_stop_event_sp);
+  if (status.Fail())
+    return status;
+
+  if (state_after_launch != eStateStopped &&
+      state_after_launch != eStateCrashed)
+    return Status();
+
+  // Note, the stop event was consumed above, but not handled. This
+  // was done to give DidLaunch a chance to run. The target is either
+  // stopped or crashed. Directly set the state.  This is done to
+  // prevent a stop message with a bunch of spurious output on thread
+  // status, as well as not pop a ProcessIOHandler.
+  SetPublicState(state_after_launch, false);
+
+  if (PrivateStateThreadIsValid())
+    ResumePrivateStateThread();
+  else
+    StartPrivateStateThread();
+
+  // Target was stopped at entry as was intended. Need to notify the
+  // listeners about it.
+  if (launch_info.GetFlags().Test(eLaunchFlagStopAtEntry))
+    HandlePrivateEvent(first_stop_event_sp);
+
+  return Status();
+}
+
+Status Process::LaunchPrivate(ProcessLaunchInfo &launch_info, StateType &state,
+                              EventSP &event_sp) {
   Status error;
   m_abi_sp.reset();
   m_dyld_up.reset();
@@ -2445,7 +2478,7 @@ Status Process::Launch(ProcessLaunchInfo &launch_info) {
   // be a way to express this path, without actually having a module.
   // The way to do that is to set the ExecutableFile in the LaunchInfo.
   // Figure that out here:
-  
+
   FileSpec exe_spec_to_use;
   if (!exe_module) {
     if (!launch_info.GetExecutableFile()) {
@@ -2455,7 +2488,7 @@ Status Process::Launch(ProcessLaunchInfo &launch_info) {
     exe_spec_to_use = launch_info.GetExecutableFile();
   } else
     exe_spec_to_use = exe_module->GetFileSpec();
-  
+
   if (exe_module && FileSystem::Instance().Exists(exe_module->GetFileSpec())) {
     // Install anything that might need to be installed prior to launching.
     // For host systems, this will do nothing, but if we are connected to a
@@ -2464,6 +2497,7 @@ Status Process::Launch(ProcessLaunchInfo &launch_info) {
     if (error.Fail())
       return error;
   }
+
   // Listen and queue events that are broadcasted during the process launch.
   ListenerSP listener_sp(Listener::MakeListener("LaunchEventHijack"));
   HijackProcessEvents(listener_sp);
@@ -2473,93 +2507,81 @@ Status Process::Launch(ProcessLaunchInfo &launch_info) {
     PausePrivateStateThread();
 
   error = WillLaunch(exe_module);
-  if (error.Success()) {
-    const bool restarted = false;
-    SetPublicState(eStateLaunching, restarted);
-    m_should_detach = false;
-
-    if (m_public_run_lock.TrySetRunning()) {
-      // Now launch using these arguments.
-      error = DoLaunch(exe_module, launch_info);
-    } else {
-      // This shouldn't happen
-      error.SetErrorString("failed to acquire process run lock");
-    }
-
-    if (error.Fail()) {
-      if (GetID() != LLDB_INVALID_PROCESS_ID) {
-        SetID(LLDB_INVALID_PROCESS_ID);
-        const char *error_string = error.AsCString();
-        if (error_string == nullptr)
-          error_string = "launch failed";
-        SetExitStatus(-1, error_string);
-      }
-    } else {
-      EventSP event_sp;
-
-      // Now wait for the process to launch and return control to us, and then
-      // call DidLaunch:
-      StateType state = WaitForProcessStopPrivate(event_sp, seconds(10));
-
-      if (state == eStateInvalid || !event_sp) {
-        // We were able to launch the process, but we failed to catch the
-        // initial stop.
-        error.SetErrorString("failed to catch stop after launch");
-        SetExitStatus(0, "failed to catch stop after launch");
-        Destroy(false);
-      } else if (state == eStateStopped || state == eStateCrashed) {
-        DidLaunch();
-
-        DynamicLoader *dyld = GetDynamicLoader();
-        if (dyld)
-          dyld->DidLaunch();
-
-        GetJITLoaders().DidLaunch();
-
-        SystemRuntime *system_runtime = GetSystemRuntime();
-        if (system_runtime)
-          system_runtime->DidLaunch();
-
-        if (!m_os_up)
-          LoadOperatingSystemPlugin(false);
-
-        // We successfully launched the process and stopped, now it the
-        // right time to set up signal filters before resuming.
-        UpdateAutomaticSignalFiltering();
-
-        // Note, the stop event was consumed above, but not handled. This
-        // was done to give DidLaunch a chance to run. The target is either
-        // stopped or crashed. Directly set the state.  This is done to
-        // prevent a stop message with a bunch of spurious output on thread
-        // status, as well as not pop a ProcessIOHandler.
-        // We are done with the launch hijack listener, and this stop should
-        // go to the public state listener:
-        RestoreProcessEvents();
-        SetPublicState(state, false);
-
-        if (PrivateStateThreadIsValid())
-          ResumePrivateStateThread();
-        else
-          StartPrivateStateThread();
-
-        // Target was stopped at entry as was intended. Need to notify the
-        // listeners about it.
-        if (state == eStateStopped &&
-            launch_info.GetFlags().Test(eLaunchFlagStopAtEntry))
-          HandlePrivateEvent(event_sp);
-      } else if (state == eStateExited) {
-        // We exited while trying to launch somehow.  Don't call DidLaunch
-        // as that's not likely to work, and return an invalid pid.
-        HandlePrivateEvent(event_sp);
-      }
-    }
-  } else {
+  if (error.Fail()) {
     std::string local_exec_file_path = exe_spec_to_use.GetPath();
-    error.SetErrorStringWithFormat("file doesn't exist: '%s'",
-                                   local_exec_file_path.c_str());
+    return Status("file doesn't exist: '%s'", local_exec_file_path.c_str());
   }
 
-  return error;
+  const bool restarted = false;
+  SetPublicState(eStateLaunching, restarted);
+  m_should_detach = false;
+
+  if (m_public_run_lock.TrySetRunning()) {
+    // Now launch using these arguments.
+    error = DoLaunch(exe_module, launch_info);
+  } else {
+    // This shouldn't happen
+    error.SetErrorString("failed to acquire process run lock");
+  }
+
+  if (error.Fail()) {
+    if (GetID() != LLDB_INVALID_PROCESS_ID) {
+      SetID(LLDB_INVALID_PROCESS_ID);
+      const char *error_string = error.AsCString();
+      if (error_string == nullptr)
+        error_string = "launch failed";
+      SetExitStatus(-1, error_string);
+    }
+    return error;
+  }
+
+  // Now wait for the process to launch and return control to us, and then
+  // call DidLaunch:
+  state = WaitForProcessStopPrivate(event_sp, seconds(10));
+
+  if (state == eStateInvalid || !event_sp) {
+    // We were able to launch the process, but we failed to catch the
+    // initial stop.
+    error.SetErrorString("failed to catch stop after launch");
+    SetExitStatus(0, error.AsCString());
+    Destroy(false);
+    return error;
+  }
+
+  if (state == eStateExited) {
+    // We exited while trying to launch somehow.  Don't call DidLaunch
+    // as that's not likely to work, and return an invalid pid.
+    HandlePrivateEvent(event_sp);
+    return Status();
+  }
+
+  if (state == eStateStopped || state == eStateCrashed) {
+    DidLaunch();
+
+    DynamicLoader *dyld = GetDynamicLoader();
+    if (dyld)
+      dyld->DidLaunch();
+
+    GetJITLoaders().DidLaunch();
+
+    SystemRuntime *system_runtime = GetSystemRuntime();
+    if (system_runtime)
+      system_runtime->DidLaunch();
+
+    if (!m_os_up)
+      LoadOperatingSystemPlugin(false);
+
+    // We successfully launched the process and stopped, now it the
+    // right time to set up signal filters before resuming.
+    UpdateAutomaticSignalFiltering();
+    return Status();
+  }
+
+  return Status("Unexpected process state after the launch: %s, expected %s, "
+                "%s, %s or %s",
+                StateAsCString(state), StateAsCString(eStateInvalid),
+                StateAsCString(eStateExited), StateAsCString(eStateStopped),
+                StateAsCString(eStateCrashed));
 }
 
 Status Process::LoadCore() {
@@ -2873,11 +2895,10 @@ void Process::CompleteAttach() {
       if (platform_sp) {
         GetTarget().SetPlatform(platform_sp);
         GetTarget().SetArchitecture(platform_arch);
-        LLDB_LOGF(log,
-                  "Process::%s switching platform to %s and architecture "
-                  "to %s based on info from attach",
-                  __FUNCTION__, platform_sp->GetName().AsCString(""),
-                  platform_arch.GetTriple().getTriple().c_str());
+        LLDB_LOG(log,
+                 "switching platform to {0} and architecture to {1} based on "
+                 "info from attach",
+                 platform_sp->GetName(), platform_arch.GetTriple().getTriple());
       }
     } else if (!process_arch.IsValid()) {
       ProcessInstanceInfo process_info;
@@ -3487,12 +3508,13 @@ bool Process::StartPrivateStateThread(bool is_secondary_thread) {
                "<lldb.process.internal-state(pid=%" PRIu64 ")>", GetID());
   }
 
-  // Create the private state thread, and start it running.
-  PrivateStateThreadArgs *args_ptr =
-      new PrivateStateThreadArgs(this, is_secondary_thread);
   llvm::Expected<HostThread> private_state_thread =
-      ThreadLauncher::LaunchThread(thread_name, Process::PrivateStateThread,
-                                   (void *)args_ptr, 8 * 1024 * 1024);
+      ThreadLauncher::LaunchThread(
+          thread_name,
+          [this, is_secondary_thread] {
+            return RunPrivateStateThread(is_secondary_thread);
+          },
+          8 * 1024 * 1024);
   if (!private_state_thread) {
     LLDB_LOG(GetLog(LLDBLog::Host), "failed to launch host thread: {}",
              llvm::toString(private_state_thread.takeError()));
@@ -3705,14 +3727,6 @@ Status Process::HaltPrivate() {
 
   DidHalt();
   return error;
-}
-
-thread_result_t Process::PrivateStateThread(void *arg) {
-  std::unique_ptr<PrivateStateThreadArgs> args_up(
-      static_cast<PrivateStateThreadArgs *>(arg));
-  thread_result_t result =
-      args_up->process->RunPrivateStateThread(args_up->is_secondary_thread);
-  return result;
 }
 
 thread_result_t Process::RunPrivateStateThread(bool is_secondary_thread) {
@@ -4296,6 +4310,12 @@ public:
 
   ~IOHandlerProcessSTDIO() override = default;
 
+  void SetIsRunning(bool running) {
+    std::lock_guard<std::mutex> guard(m_mutex);
+    SetIsDone(!running);
+    m_is_running = running;
+  }
+
   // Each IOHandler gets to run until it is done. It should read data from the
   // "in" and place output into "out" and "err and return when done.
   void Run() override {
@@ -4315,49 +4335,52 @@ public:
 // FD_ZERO, FD_SET are not supported on windows
 #ifndef _WIN32
     const int pipe_read_fd = m_pipe.GetReadFileDescriptor();
-    m_is_running = true;
-    while (!GetIsDone()) {
+    SetIsRunning(true);
+    while (true) {
+      {
+        std::lock_guard<std::mutex> guard(m_mutex);
+        if (GetIsDone())
+          break;
+      }
+
       SelectHelper select_helper;
       select_helper.FDSetRead(read_fd);
       select_helper.FDSetRead(pipe_read_fd);
       Status error = select_helper.Select();
 
-      if (error.Fail()) {
-        SetIsDone(true);
-      } else {
-        char ch = 0;
-        size_t n;
-        if (select_helper.FDIsSetRead(read_fd)) {
-          n = 1;
-          if (m_read_file.Read(&ch, n).Success() && n == 1) {
-            if (m_write_file.Write(&ch, n).Fail() || n != 1)
-              SetIsDone(true);
-          } else
-            SetIsDone(true);
-        }
+      if (error.Fail())
+        break;
+
+      char ch = 0;
+      size_t n;
+      if (select_helper.FDIsSetRead(read_fd)) {
+        n = 1;
+        if (m_read_file.Read(&ch, n).Success() && n == 1) {
+          if (m_write_file.Write(&ch, n).Fail() || n != 1)
+            break;
+        } else
+          break;
+
         if (select_helper.FDIsSetRead(pipe_read_fd)) {
           size_t bytes_read;
           // Consume the interrupt byte
           Status error = m_pipe.Read(&ch, 1, bytes_read);
           if (error.Success()) {
-            switch (ch) {
-            case 'q':
-              SetIsDone(true);
+            if (ch == 'q')
               break;
-            case 'i':
+            if (ch == 'i')
               if (StateIsRunningState(m_process->GetState()))
                 m_process->SendAsyncInterrupt();
-              break;
-            }
           }
         }
       }
     }
-    m_is_running = false;
+    SetIsRunning(false);
 #endif
   }
 
   void Cancel() override {
+    std::lock_guard<std::mutex> guard(m_mutex);
     SetIsDone(true);
     // Only write to our pipe to cancel if we are in
     // IOHandlerProcessSTDIO::Run(). We can end up with a python command that
@@ -4414,7 +4437,8 @@ protected:
   NativeFile m_write_file; // Write to this file (usually the primary pty for
                            // getting io to debuggee)
   Pipe m_pipe;
-  std::atomic<bool> m_is_running{false};
+  std::mutex m_mutex;
+  bool m_is_running = false;
 };
 
 void Process::SetSTDIOFileDescriptor(int fd) {
@@ -5842,12 +5866,18 @@ Process::AdvanceAddressToNextBranchInstruction(Address default_stop_addr,
   return retval;
 }
 
-Status
-Process::GetMemoryRegions(lldb_private::MemoryRegionInfos &region_list) {
+Status Process::GetMemoryRegionInfo(lldb::addr_t load_addr,
+                                    MemoryRegionInfo &range_info) {
+  if (const lldb::ABISP &abi = GetABI())
+    load_addr = abi->FixDataAddress(load_addr);
+  return DoGetMemoryRegionInfo(load_addr, range_info);
+}
 
+Status Process::GetMemoryRegions(lldb_private::MemoryRegionInfos &region_list) {
   Status error;
 
   lldb::addr_t range_end = 0;
+  const lldb::ABISP &abi = GetABI();
 
   region_list.clear();
   do {
@@ -5859,11 +5889,22 @@ Process::GetMemoryRegions(lldb_private::MemoryRegionInfos &region_list) {
       break;
     }
 
+    // We only check the end address, not start and end, because we assume that
+    // the start will not have non-address bits until the first unmappable
+    // region. We will have exited the loop by that point because the previous
+    // region, the last mappable region, will have non-address bits in its end
+    // address.
     range_end = region_info.GetRange().GetRangeEnd();
     if (region_info.GetMapped() == MemoryRegionInfo::eYes) {
       region_list.push_back(std::move(region_info));
     }
-  } while (range_end != LLDB_INVALID_ADDRESS);
+  } while (
+      // For a process with no non-address bits, all address bits
+      // set means the end of memory.
+      range_end != LLDB_INVALID_ADDRESS &&
+      // If we have non-address bits and some are set then the end
+      // is at or beyond the end of mappable memory.
+      !(abi && (abi->FixDataAddress(range_end) != range_end)));
 
   return error;
 }

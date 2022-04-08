@@ -234,6 +234,7 @@
 #include "llvm/Transforms/Utils/Mem2Reg.h"
 #include "llvm/Transforms/Utils/MetaRenamer.h"
 #include "llvm/Transforms/Utils/NameAnonGlobals.h"
+#include "llvm/Transforms/Utils/PredicateInfo.h"
 #include "llvm/Transforms/Utils/RelLookupTableConverter.h"
 #include "llvm/Transforms/Utils/StripGCRelocates.h"
 #include "llvm/Transforms/Utils/StripNonLineTableDebugInfo.h"
@@ -679,6 +680,8 @@ Expected<SimplifyCFGOptions> parseSimplifyCFGOptions(StringRef Params) {
     bool Enable = !ParamName.consume_front("no-");
     if (ParamName == "forward-switch-cond") {
       Result.forwardSwitchCondToPhi(Enable);
+    } else if (ParamName == "switch-range-to-icmp") {
+      Result.convertSwitchRangeToICmp(Enable);
     } else if (ParamName == "switch-to-lookup") {
       Result.convertSwitchToLookupTable(Enable);
     } else if (ParamName == "keep-loops") {

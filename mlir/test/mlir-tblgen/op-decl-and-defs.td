@@ -38,8 +38,7 @@ def NS_AOp : NS_Op<"a_op", [IsolatedFromAbove, IsolatedFromAbove]> {
   );
   let builders = [OpBuilder<(ins "Value":$val)>,
                   OpBuilder<(ins CArg<"int", "0">:$integer)>];
-  let parser = [{ foo }];
-  let printer = [{ bar }];
+  let hasCustomAssemblyFormat = 1;
 
   let hasCanonicalizer = 1;
   let hasFolder = 1;
@@ -69,7 +68,7 @@ def NS_AOp : NS_Op<"a_op", [IsolatedFromAbove, IsolatedFromAbove]> {
 // CHECK:   ::mlir::ValueRange odsOperands;
 // CHECK: };
 
-// CHECK: class AOp : public ::mlir::Op<AOp, ::mlir::OpTrait::AtLeastNRegions<1>::Impl, ::mlir::OpTrait::AtLeastNResults<1>::Impl, ::mlir::OpTrait::ZeroSuccessor, ::mlir::OpTrait::AtLeastNOperands<1>::Impl, ::mlir::OpTrait::IsIsolatedFromAbove
+// CHECK: class AOp : public ::mlir::Op<AOp, ::mlir::OpTrait::AtLeastNRegions<1>::Impl, ::mlir::OpTrait::AtLeastNResults<1>::Impl, ::mlir::OpTrait::ZeroSuccessor, ::mlir::OpTrait::AtLeastNOperands<1>::Impl, ::mlir::OpTrait::OpInvariants, ::mlir::OpTrait::IsIsolatedFromAbove
 // CHECK-NOT: ::mlir::OpTrait::IsIsolatedFromAbove
 // CHECK: public:
 // CHECK:   using Op::Op;

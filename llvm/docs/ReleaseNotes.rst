@@ -67,43 +67,57 @@ Changes to TableGen
 Changes to the AArch64 Backend
 ------------------------------
 
-Changes to the ARM Backend
---------------------------
-
-Changes to the MIPS Target
---------------------------
-
-During this release ...
-
-Changes to the Hexagon Target
+Changes to the AMDGPU Backend
 -----------------------------
 
 * ...
 
-Changes to the PowerPC Target
+Changes to the ARM Backend
+--------------------------
+
+* Added support for the Armv9-A, Armv9.1-A and Armv9.2-A architectures.
+* Added support for the Armv8.1-M PACBTI-M extension.
+* Added support for the Armv9-A, Armv9.1-A and Armv9.2-A architectures.
+* Added support for the Armv8.1-M PACBTI-M extension.
+* Removed the deprecation of ARMv8-A T32 Complex IT blocks. No deprecation
+  warnings will be generated and -mrestrict-it is now always off by default.
+  Previously it was on by default for Armv8 and off for all other architecture
+  versions.
+
+Changes to the AVR Backend
+--------------------------
+
+* ...
+
+Changes to the Hexagon Backend
+------------------------------
+
+* ...
+
+Changes to the MIPS Backend
+---------------------------
+
+* ...
+
+Changes to the PowerPC Backend
+------------------------------
+
+* ...
+
+Changes to the RISC-V Backend
 -----------------------------
 
-During this release ...
+* ...
 
-Changes to the X86 Target
--------------------------
+Changes to the WebAssembly Backend
+----------------------------------
 
-During this release ...
+* ...
 
-Changes to the AMDGPU Target
------------------------------
+Changes to the X86 Backend
+--------------------------
 
-During this release ...
-
-Changes to the AVR Target
------------------------------
-
-During this release ...
-
-Changes to the WebAssembly Target
----------------------------------
-
-During this release ...
+* ...
 
 Changes to the OCaml bindings
 -----------------------------

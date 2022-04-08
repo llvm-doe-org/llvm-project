@@ -37,7 +37,7 @@ QualifierAlignmentFixer::QualifierAlignmentFixer(
   PrepareLeftRightOrdering(Style.QualifierOrder, LeftOrder, RightOrder,
                            ConfiguredQualifierTokens);
 
-  // Handle the left and right Alignment Seperately
+  // Handle the left and right alignment separately.
   for (const auto &Qualifier : LeftOrder) {
     Passes.emplace_back(
         [&, Qualifier, ConfiguredQualifierTokens](const Environment &Env) {
@@ -59,8 +59,9 @@ QualifierAlignmentFixer::QualifierAlignmentFixer(
 }
 
 std::pair<tooling::Replacements, unsigned> QualifierAlignmentFixer::analyze(
-    TokenAnnotator &Annotator, SmallVectorImpl<AnnotatedLine *> &AnnotatedLines,
-    FormatTokenLexer &Tokens) {
+    TokenAnnotator & /*Annotator*/,
+    SmallVectorImpl<AnnotatedLine *> & /*AnnotatedLines*/,
+    FormatTokenLexer & /*Tokens*/) {
   auto Env = Environment::make(Code, FileName, Ranges, FirstStartColumn,
                                NextStartColumn, LastStartColumn);
   if (!Env)
@@ -327,14 +328,17 @@ const FormatToken *LeftRightQualifierAlignmentFixer::analyzeLeft(
       if (Next->is(tok::comment) && Next->getNextNonComment())
         Next = Next->getNextNonComment();
       assert(Next->MatchingParen && "Missing template closer");
-      Next = Next->MatchingParen->Next;
+      Next = Next->MatchingParen;
+      if (Next->ClosesRequiresClause)
+        return Next;
+      Next = Next->Next;
 
       // Move to the end of any template class members e.g.
       // `Foo<int>::iterator`.
       if (Next && Next->startsSequence(tok::coloncolon, tok::identifier))
         Next = Next->Next->Next;
       if (Next && Next->is(QualifierType)) {
-        // Remove the const.
+        // Move the qualifier.
         insertQualifierBefore(SourceMgr, Fixes, Tok, Qualifier);
         removeToken(SourceMgr, Fixes, Next);
         return Next;
@@ -343,7 +347,7 @@ const FormatToken *LeftRightQualifierAlignmentFixer::analyzeLeft(
     if (Next && Next->Next &&
         Next->Next->isOneOf(tok::amp, tok::ampamp, tok::star)) {
       if (Next->is(QualifierType)) {
-        // Remove the qualifier.
+        // Move the qualifier.
         insertQualifierBefore(SourceMgr, Fixes, Tok, Qualifier);
         removeToken(SourceMgr, Fixes, Next);
         return Next;
@@ -376,7 +380,8 @@ LeftRightQualifierAlignmentFixer::LeftRightQualifierAlignmentFixer(
 
 std::pair<tooling::Replacements, unsigned>
 LeftRightQualifierAlignmentFixer::analyze(
-    TokenAnnotator &Annotator, SmallVectorImpl<AnnotatedLine *> &AnnotatedLines,
+    TokenAnnotator & /*Annotator*/,
+    SmallVectorImpl<AnnotatedLine *> &AnnotatedLines,
     FormatTokenLexer &Tokens) {
   tooling::Replacements Fixes;
   const AdditionalKeywords &Keywords = Tokens.getKeywords();
@@ -388,6 +393,10 @@ LeftRightQualifierAlignmentFixer::analyze(
 
   for (AnnotatedLine *Line : AnnotatedLines) {
     FormatToken *First = Line->First;
+    assert(First);
+    if (First->Finalized)
+      continue;
+
     const auto *Last = Line->Last;
 
     for (const auto *Tok = First; Tok && Tok != Last && Tok->Next;

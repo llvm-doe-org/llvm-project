@@ -281,10 +281,10 @@ Status PlatformRemoteGDBServer::DisconnectRemote() {
 
 const char *PlatformRemoteGDBServer::GetHostname() {
   if (m_gdb_client_up)
-    m_gdb_client_up->GetHostname(m_name);
-  if (m_name.empty())
+    m_gdb_client_up->GetHostname(m_hostname);
+  if (m_hostname.empty())
     return nullptr;
-  return m_name.c_str();
+  return m_hostname.c_str();
 }
 
 llvm::Optional<std::string>
@@ -428,6 +428,8 @@ PlatformRemoteGDBServer::DebugProcess(ProcessLaunchInfo &launch_info,
                                           "gdb-remote", nullptr, true);
 
         if (process_sp) {
+          process_sp->HijackProcessEvents(launch_info.GetHijackListener());
+
           error = process_sp->ConnectRemote(connect_url.c_str());
           // Retry the connect remote one time...
           if (error.Fail())

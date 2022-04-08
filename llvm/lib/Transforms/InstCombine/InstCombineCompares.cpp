@@ -17,13 +17,11 @@
 #include "llvm/Analysis/CmpInstAnalysis.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/InstructionSimplify.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/PatternMatch.h"
-#include "llvm/Support/Debug.h"
 #include "llvm/Support/KnownBits.h"
 #include "llvm/Transforms/InstCombine/InstCombiner.h"
 
@@ -105,10 +103,14 @@ static bool isSignTest(ICmpInst::Predicate &Pred, const APInt &C) {
 ///
 /// If AndCst is non-null, then the loaded value is masked with that constant
 /// before doing the comparison. This handles cases like "A[i]&4 == 0".
-Instruction *
-InstCombinerImpl::foldCmpLoadFromIndexedGlobal(GetElementPtrInst *GEP,
-                                               GlobalVariable *GV, CmpInst &ICI,
-                                               ConstantInt *AndCst) {
+Instruction *InstCombinerImpl::foldCmpLoadFromIndexedGlobal(
+    LoadInst *LI, GetElementPtrInst *GEP, GlobalVariable *GV, CmpInst &ICI,
+    ConstantInt *AndCst) {
+  if (LI->isVolatile() || LI->getType() != GEP->getResultElementType() ||
+      GV->getValueType() != GEP->getSourceElementType() ||
+      !GV->isConstant() || !GV->hasDefinitiveInitializer())
+    return nullptr;
+
   Constant *Init = GV->getInitializer();
   if (!isa<ConstantArray>(Init) && !isa<ConstantDataArray>(Init))
     return nullptr;
@@ -950,7 +952,8 @@ Instruction *InstCombinerImpl::foldGEPICmp(GEPOperator *GEPLHS, Value *RHS,
       return foldGEPICmp(GEPLHS, GEPRHS->getOperand(0), Cond, I);
 
     bool GEPsInBounds = GEPLHS->isInBounds() && GEPRHS->isInBounds();
-    if (GEPLHS->getNumOperands() == GEPRHS->getNumOperands()) {
+    if (GEPLHS->getNumOperands() == GEPRHS->getNumOperands() &&
+        GEPLHS->getSourceElementType() == GEPRHS->getSourceElementType()) {
       // If the GEPs only differ by one index, compare it.
       unsigned NumDifferences = 0;  // Keep track of # differences.
       unsigned DiffOperand = 0;     // The operand that differs.
@@ -1001,8 +1004,7 @@ Instruction *InstCombinerImpl::foldGEPICmp(GEPOperator *GEPLHS, Value *RHS,
 }
 
 Instruction *InstCombinerImpl::foldAllocaCmp(ICmpInst &ICI,
-                                             const AllocaInst *Alloca,
-                                             const Value *Other) {
+                                             const AllocaInst *Alloca) {
   assert(ICI.isEquality() && "Cannot fold non-equality comparison.");
 
   // It would be tempting to fold away comparisons between allocas and any
@@ -1071,10 +1073,9 @@ Instruction *InstCombinerImpl::foldAllocaCmp(ICmpInst &ICI,
     }
   }
 
-  Type *CmpTy = CmpInst::makeCmpResultType(Other->getType());
-  return replaceInstUsesWith(
-      ICI,
-      ConstantInt::get(CmpTy, !CmpInst::isTrueWhenEqual(ICI.getPredicate())));
+  auto *Res = ConstantInt::get(ICI.getType(),
+                               !CmpInst::isTrueWhenEqual(ICI.getPredicate()));
+  return replaceInstUsesWith(ICI, Res);
 }
 
 /// Fold "icmp pred (X+C), X".
@@ -1376,8 +1377,7 @@ Instruction *InstCombinerImpl::foldICmpWithZero(ICmpInst &Cmp) {
   // (icmp sgt smin(PosA, B) 0) -> (icmp sgt B 0)
   if (Pred == ICmpInst::ICMP_SGT) {
     Value *A, *B;
-    SelectPatternResult SPR = matchSelectPattern(Cmp.getOperand(0), A, B);
-    if (SPR.Flavor == SPF_SMIN) {
+    if (match(Cmp.getOperand(0), m_SMin(m_Value(A), m_Value(B)))) {
       if (isKnownPositive(A, DL, 0, &AC, &Cmp, &DT))
         return new ICmpInst(Pred, B, Cmp.getOperand(1));
       if (isKnownPositive(B, DL, 0, &AC, &Cmp, &DT))
@@ -1865,15 +1865,13 @@ Instruction *InstCombinerImpl::foldICmpAndConstant(ICmpInst &Cmp,
   // Try to optimize things like "A[i] & 42 == 0" to index computations.
   Value *X = And->getOperand(0);
   Value *Y = And->getOperand(1);
-  if (auto *LI = dyn_cast<LoadInst>(X))
-    if (auto *GEP = dyn_cast<GetElementPtrInst>(LI->getOperand(0)))
-      if (auto *GV = dyn_cast<GlobalVariable>(GEP->getOperand(0)))
-        if (GV->isConstant() && GV->hasDefinitiveInitializer() &&
-            !LI->isVolatile() && isa<ConstantInt>(Y)) {
-          ConstantInt *C2 = cast<ConstantInt>(Y);
-          if (Instruction *Res = foldCmpLoadFromIndexedGlobal(GEP, GV, Cmp, C2))
+  if (auto *C2 = dyn_cast<ConstantInt>(Y))
+    if (auto *LI = dyn_cast<LoadInst>(X))
+      if (auto *GEP = dyn_cast<GetElementPtrInst>(LI->getOperand(0)))
+        if (auto *GV = dyn_cast<GlobalVariable>(GEP->getOperand(0)))
+          if (Instruction *Res =
+                  foldCmpLoadFromIndexedGlobal(LI, GEP, GV, Cmp, C2))
             return Res;
-        }
 
   if (!Cmp.isEquality())
     return nullptr;
@@ -2593,17 +2591,17 @@ Instruction *InstCombinerImpl::foldICmpSubConstant(ICmpInst &Cmp,
       !subWithOverflow(SubResult, *C2, C, Cmp.isSigned()))
     return new ICmpInst(SwappedPred, Y, ConstantInt::get(Ty, SubResult));
 
+  // X - Y == 0 --> X == Y.
+  // X - Y != 0 --> X != Y.
+  if (Cmp.isEquality() && C.isZero())
+    return new ICmpInst(Pred, X, Y);
+
   // The following transforms are only worth it if the only user of the subtract
   // is the icmp.
   // TODO: This is an artificial restriction for all of the transforms below
   //       that only need a single replacement icmp.
   if (!Sub->hasOneUse())
     return nullptr;
-
-  // X - Y == 0 --> X == Y.
-  // X - Y != 0 --> X != Y.
-  if (Cmp.isEquality() && C.isZero())
-    return new ICmpInst(Pred, X, Y);
 
   if (Sub->hasNoSignedWrap()) {
     // (icmp sgt (sub nsw X, Y), -1) -> (icmp sge X, Y)
@@ -3476,13 +3474,11 @@ Instruction *InstCombinerImpl::foldICmpInstWithConstantNotInt(ICmpInst &I) {
   case Instruction::Load:
     // Try to optimize things like "A[i] > 4" to index computations.
     if (GetElementPtrInst *GEP =
-            dyn_cast<GetElementPtrInst>(LHSI->getOperand(0))) {
+            dyn_cast<GetElementPtrInst>(LHSI->getOperand(0)))
       if (GlobalVariable *GV = dyn_cast<GlobalVariable>(GEP->getOperand(0)))
-        if (GV->isConstant() && GV->hasDefinitiveInitializer() &&
-            !cast<LoadInst>(LHSI)->isVolatile())
-          if (Instruction *Res = foldCmpLoadFromIndexedGlobal(GEP, GV, I))
-            return Res;
-    }
+        if (Instruction *Res =
+                foldCmpLoadFromIndexedGlobal(cast<LoadInst>(LHSI), GEP, GV, I))
+          return Res;
     break;
   }
 
@@ -6061,10 +6057,10 @@ Instruction *InstCombinerImpl::visitICmpInst(ICmpInst &I) {
   if (Op0->getType()->isPointerTy() && I.isEquality()) {
     assert(Op1->getType()->isPointerTy() && "Comparing pointer with non-pointer?");
     if (auto *Alloca = dyn_cast<AllocaInst>(getUnderlyingObject(Op0)))
-      if (Instruction *New = foldAllocaCmp(I, Alloca, Op1))
+      if (Instruction *New = foldAllocaCmp(I, Alloca))
         return New;
     if (auto *Alloca = dyn_cast<AllocaInst>(getUnderlyingObject(Op1)))
-      if (Instruction *New = foldAllocaCmp(I, Alloca, Op0))
+      if (Instruction *New = foldAllocaCmp(I, Alloca))
         return New;
   }
 
@@ -6632,10 +6628,9 @@ Instruction *InstCombinerImpl::visitFCmpInst(FCmpInst &I) {
     case Instruction::Load:
       if (auto *GEP = dyn_cast<GetElementPtrInst>(LHSI->getOperand(0)))
         if (auto *GV = dyn_cast<GlobalVariable>(GEP->getOperand(0)))
-          if (GV->isConstant() && GV->hasDefinitiveInitializer() &&
-              !cast<LoadInst>(LHSI)->isVolatile())
-            if (Instruction *Res = foldCmpLoadFromIndexedGlobal(GEP, GV, I))
-              return Res;
+          if (Instruction *Res = foldCmpLoadFromIndexedGlobal(
+                  cast<LoadInst>(LHSI), GEP, GV, I))
+            return Res;
       break;
   }
   }

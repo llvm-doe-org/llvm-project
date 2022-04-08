@@ -281,7 +281,7 @@ static bool asanUseGlobalsGC(const Triple &T, const CodeGenOptions &CGOpts) {
   case Triple::COFF:
     return true;
   case Triple::ELF:
-    return CGOpts.DataSections && !CGOpts.DisableIntegratedAS;
+    return !CGOpts.DisableIntegratedAS;
   case Triple::GOFF:
     llvm::report_fatal_error("ASan not implemented for GOFF");
   case Triple::XCOFF:
@@ -606,6 +606,10 @@ static bool initTargetOptions(DiagnosticsEngine &Diags,
   Options.EnableAIXExtendedAltivecABI = CodeGenOpts.EnableAIXExtendedAltivecABI;
   Options.XRayOmitFunctionIndex = CodeGenOpts.XRayOmitFunctionIndex;
   Options.LoopAlignment = CodeGenOpts.LoopAlignment;
+  Options.DebugStrictDwarf = CodeGenOpts.DebugStrictDwarf;
+  Options.ObjectFilenameForDebug = CodeGenOpts.ObjectFilenameForDebug;
+  Options.Hotpatch = CodeGenOpts.HotPatch;
+  Options.JMCInstrument = CodeGenOpts.JMCInstrument;
 
   switch (CodeGenOpts.getSwiftAsyncFramePointer()) {
   case CodeGenOptions::SwiftAsyncFramePointerKind::Auto:
@@ -644,9 +648,6 @@ static bool initTargetOptions(DiagnosticsEngine &Diags,
           Entry.IgnoreSysRoot ? Entry.Path : HSOpts.Sysroot + Entry.Path);
   Options.MCOptions.Argv0 = CodeGenOpts.Argv0;
   Options.MCOptions.CommandLineArgs = CodeGenOpts.CommandLineArgs;
-  Options.DebugStrictDwarf = CodeGenOpts.DebugStrictDwarf;
-  Options.ObjectFilenameForDebug = CodeGenOpts.ObjectFilenameForDebug;
-  Options.Hotpatch = CodeGenOpts.HotPatch;
 
   return true;
 }
@@ -1758,24 +1759,22 @@ void clang::EmbedObject(llvm::Module *M, const CodeGenOptions &CGOpts,
     return;
 
   for (StringRef OffloadObject : CGOpts.OffloadObjects) {
-    if (OffloadObject.count(',') != 1) {
+    if (OffloadObject.count(',') != 1)
       Diags.Report(Diags.getCustomDiagID(
           DiagnosticsEngine::Error, "Invalid string pair for embedding '%0'"))
           << OffloadObject;
-      return;
-    }
     auto FilenameAndSection = OffloadObject.split(',');
     llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> ObjectOrErr =
-        llvm::MemoryBuffer::getFileOrSTDIN(std::get<0>(FilenameAndSection));
+        llvm::MemoryBuffer::getFileOrSTDIN(FilenameAndSection.first);
     if (std::error_code EC = ObjectOrErr.getError()) {
       auto DiagID = Diags.getCustomDiagID(DiagnosticsEngine::Error,
                                           "could not open '%0' for embedding");
-      Diags.Report(DiagID) << std::get<0>(FilenameAndSection);
+      Diags.Report(DiagID) << FilenameAndSection.first;
       return;
     }
 
     SmallString<128> SectionName(
-        {".llvm.offloading.", std::get<1>(FilenameAndSection)});
+        {".llvm.offloading.", FilenameAndSection.second});
     llvm::embedBufferInModule(*M, **ObjectOrErr, SectionName);
   }
 }

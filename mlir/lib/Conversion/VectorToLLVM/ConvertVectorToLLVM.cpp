@@ -13,7 +13,6 @@
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/Vector/Transforms/VectorTransforms.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Support/MathExtras.h"
@@ -380,31 +379,31 @@ public:
     Value operand = adaptor.getOperands()[0];
     if (eltType.isIntOrIndex()) {
       // Integer reductions: add/mul/min/max/and/or/xor.
-      if (kind == "add")
+      if (kind == vector::CombiningKind::ADD)
         rewriter.replaceOpWithNewOp<LLVM::vector_reduce_add>(reductionOp,
                                                              llvmType, operand);
-      else if (kind == "mul")
+      else if (kind == vector::CombiningKind::MUL)
         rewriter.replaceOpWithNewOp<LLVM::vector_reduce_mul>(reductionOp,
                                                              llvmType, operand);
-      else if (kind == "minui")
+      else if (kind == vector::CombiningKind::MINUI)
         rewriter.replaceOpWithNewOp<LLVM::vector_reduce_umin>(
             reductionOp, llvmType, operand);
-      else if (kind == "minsi")
+      else if (kind == vector::CombiningKind::MINSI)
         rewriter.replaceOpWithNewOp<LLVM::vector_reduce_smin>(
             reductionOp, llvmType, operand);
-      else if (kind == "maxui")
+      else if (kind == vector::CombiningKind::MAXUI)
         rewriter.replaceOpWithNewOp<LLVM::vector_reduce_umax>(
             reductionOp, llvmType, operand);
-      else if (kind == "maxsi")
+      else if (kind == vector::CombiningKind::MAXSI)
         rewriter.replaceOpWithNewOp<LLVM::vector_reduce_smax>(
             reductionOp, llvmType, operand);
-      else if (kind == "and")
+      else if (kind == vector::CombiningKind::AND)
         rewriter.replaceOpWithNewOp<LLVM::vector_reduce_and>(reductionOp,
                                                              llvmType, operand);
-      else if (kind == "or")
+      else if (kind == vector::CombiningKind::OR)
         rewriter.replaceOpWithNewOp<LLVM::vector_reduce_or>(reductionOp,
                                                             llvmType, operand);
-      else if (kind == "xor")
+      else if (kind == vector::CombiningKind::XOR)
         rewriter.replaceOpWithNewOp<LLVM::vector_reduce_xor>(reductionOp,
                                                              llvmType, operand);
       else
@@ -416,7 +415,7 @@ public:
       return failure();
 
     // Floating-point reductions: add/mul/min/max
-    if (kind == "add") {
+    if (kind == vector::CombiningKind::ADD) {
       // Optional accumulator (or zero).
       Value acc = adaptor.getOperands().size() > 1
                       ? adaptor.getOperands()[1]
@@ -426,7 +425,7 @@ public:
       rewriter.replaceOpWithNewOp<LLVM::vector_reduce_fadd>(
           reductionOp, llvmType, acc, operand,
           rewriter.getBoolAttr(reassociateFPReductions));
-    } else if (kind == "mul") {
+    } else if (kind == vector::CombiningKind::MUL) {
       // Optional accumulator (or one).
       Value acc = adaptor.getOperands().size() > 1
                       ? adaptor.getOperands()[1]
@@ -436,12 +435,12 @@ public:
       rewriter.replaceOpWithNewOp<LLVM::vector_reduce_fmul>(
           reductionOp, llvmType, acc, operand,
           rewriter.getBoolAttr(reassociateFPReductions));
-    } else if (kind == "minf")
+    } else if (kind == vector::CombiningKind::MINF)
       // FIXME: MLIR's 'minf' and LLVM's 'vector_reduce_fmin' do not handle
       // NaNs/-0.0/+0.0 in the same way.
       rewriter.replaceOpWithNewOp<LLVM::vector_reduce_fmin>(reductionOp,
                                                             llvmType, operand);
-    else if (kind == "maxf")
+    else if (kind == vector::CombiningKind::MAXF)
       // FIXME: MLIR's 'maxf' and LLVM's 'vector_reduce_fmax' do not handle
       // NaNs/-0.0/+0.0 in the same way.
       rewriter.replaceOpWithNewOp<LLVM::vector_reduce_fmax>(reductionOp,
@@ -1003,11 +1002,11 @@ private:
       switch (conversion) {
       case PrintConversion::ZeroExt64:
         value = rewriter.create<arith::ExtUIOp>(
-            loc, value, IntegerType::get(rewriter.getContext(), 64));
+            loc, IntegerType::get(rewriter.getContext(), 64), value);
         break;
       case PrintConversion::SignExt64:
         value = rewriter.create<arith::ExtSIOp>(
-            loc, value, IntegerType::get(rewriter.getContext(), 64));
+            loc, IntegerType::get(rewriter.getContext(), 64), value);
         break;
       case PrintConversion::None:
         break;

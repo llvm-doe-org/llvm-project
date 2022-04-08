@@ -9,5 +9,11 @@ static_library("Pseudo") {
   sources = [
     "Grammar.cpp",
     "GrammarBNF.cpp",
+    "LRGraph.cpp",
+    "LRTable.cpp",
+    "LRTableBuild.cpp",
+    "Lex.cpp",
+    "Preprocess.cpp",
+    "Token.cpp",
   ]
 }

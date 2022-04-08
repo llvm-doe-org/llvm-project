@@ -1,5 +1,5 @@
-; RUN: opt < %s -mtriple=aarch64--linux-gnu -cost-model -analyze | FileCheck %s --check-prefixes=COST,COST-NOFP16
-; RUN: opt < %s -mtriple=aarch64--linux-gnu -cost-model -analyze -mattr=+fullfp16 | FileCheck %s --check-prefixes=COST,COST-FULLFP16
+; RUN: opt < %s -mtriple=aarch64--linux-gnu -passes='print<cost-model>' 2>&1 -disable-output | FileCheck %s --check-prefixes=COST,COST-NOFP16
+; RUN: opt < %s -mtriple=aarch64--linux-gnu -passes='print<cost-model>' 2>&1 -disable-output -mattr=+fullfp16 | FileCheck %s --check-prefixes=COST,COST-FULLFP16
 ; RUN: llc < %s -mtriple=aarch64--linux-gnu -mattr=+fullfp16 | FileCheck %s --check-prefix=CODE
 
 ; COST-LABEL: v8i8_select_eq
@@ -121,11 +121,11 @@ define <2 x i64> @v2i64_select_sle(<2 x i64> %a, <2 x i64> %b, <2 x i64> %c) {
 ; CODE-LABEL: v3i64_select_sle
 ; CODE:       bb.0
 ; CODE:    mov
+; CODE:    mov
+; CODE:    mov
+; CODE:    cmge
+; CODE:    cmge
 ; CODE:    ldr
-; CODE:    mov
-; CODE:    mov
-; CODE:    cmge
-; CODE:    cmge
 ; CODE:    bif
 ; CODE:    bif
 ; CODE:    ext

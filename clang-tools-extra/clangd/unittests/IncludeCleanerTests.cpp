@@ -86,6 +86,19 @@ TEST(IncludeCleaner, ReferencedLocations) {
           "X<Y> x;",
       },
       {
+          // https://github.com/clangd/clangd/issues/1036
+          R"cpp(
+            struct ^Base { void ^base(); };
+            template <int> struct ^Derived : Base {};
+          )cpp",
+          R"cpp(
+            class Holder {
+              void foo() { Member.base(); }
+              Derived<0> Member;
+            };
+          )cpp",
+      },
+      {
           "struct Foo; struct ^Foo{}; typedef Foo ^Bar;",
           "Bar b;",
       },
@@ -206,7 +219,8 @@ TEST(IncludeCleaner, ReferencedLocations) {
       {
           "enum class ^Color : char {};",
           "Color *c;",
-      }};
+      },
+  };
   for (const TestCase &T : Cases) {
     TestTU TU;
     TU.Code = T.MainCode;
@@ -250,16 +264,16 @@ TEST(IncludeCleaner, Stdlib) {
   for (const auto &Test : Tests) {
     TU.Code = Test.Code.str();
     ParsedAST AST = TU.build();
-    std::vector<stdlib::Symbol> WantSyms;
+    std::vector<tooling::stdlib::Symbol> WantSyms;
     for (const auto &SymName : Test.Symbols) {
       auto QName = splitQualifiedName(SymName);
-      auto Sym = stdlib::Symbol::named(QName.first, QName.second);
+      auto Sym = tooling::stdlib::Symbol::named(QName.first, QName.second);
       EXPECT_TRUE(Sym) << SymName;
       WantSyms.push_back(*Sym);
     }
-    std::vector<stdlib::Header> WantHeaders;
+    std::vector<tooling::stdlib::Header> WantHeaders;
     for (const auto &HeaderName : Test.Headers) {
-      auto Header = stdlib::Header::named(HeaderName);
+      auto Header = tooling::stdlib::Header::named(HeaderName);
       EXPECT_TRUE(Header) << HeaderName;
       WantHeaders.push_back(*Header);
     }

@@ -18,10 +18,7 @@ include "mlir/Interfaces/TilingInterface.td"
 include "mlir/Interfaces/ViewLikeInterface.td"
 
 class Tensor_Op<string mnemonic, list<Trait> traits = []>
-    : Op<Tensor_Dialect, mnemonic, traits> {
-  let printer = [{ return ::print(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-}
+    : Op<Tensor_Dialect, mnemonic, traits>;
 
 // Base class for ops with static/dynamic offset, sizes and strides
 // attributes/arguments.
@@ -316,8 +313,7 @@ def Tensor_ExtractSliceOp : Tensor_OpWithOffsetSizesAndStrides<"extract_slice", 
 
     /// Return the dimensions of the source that are dropped in the
     /// result when the result is rank-reduced.
-    llvm::SmallDenseSet<unsigned> getDroppedDims();
-
+    llvm::SmallBitVector getDroppedDims();
   }];
 
   let hasCanonicalizer = 1;
@@ -736,11 +732,13 @@ class Tensor_ReassociativeReshapeOp<string mnemonic, list<Trait> traits = []> :
     }
   }];
 
+  let assemblyFormat = [{
+    $src $reassociation attr-dict `:` type($src) `into` type($result)
+  }];
+
   let hasFolder = 1;
   let hasCanonicalizer = 1;
   let hasVerifier = 1;
-  let printer = [{ return ::print(p, *this); }];
-  let parser = [{ return ::parseReshapeLikeOp(parser, result); }];
 }
 
 def Tensor_ExpandShapeOp : Tensor_ReassociativeReshapeOp<"expand_shape"> {

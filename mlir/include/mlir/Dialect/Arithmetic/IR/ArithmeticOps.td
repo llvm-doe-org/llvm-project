@@ -73,12 +73,6 @@ class Arith_CastOp<string mnemonic, TypeConstraint From, TypeConstraint To,
     DeclareOpInterfaceMethods<CastOpInterface>]>,
     Arguments<(ins From:$in)>,
     Results<(outs To:$out)> {
-  let builders = [
-    OpBuilder<(ins "Value":$source, "Type":$destType), [{
-      impl::buildCastOp($_builder, $_state, source, destType);
-    }]>
-  ];
-
   let assemblyFormat = "$in attr-dict `:` type($in) `to` type($out)";
 }
 
@@ -516,6 +510,7 @@ def Arith_ShLIOp : Arith_IntBinaryOp<"shli"> {
     %3 = arith.shli %1, %2 : (i8, i8) -> i8    // %3 is 0b00101000
     ```
   }];
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1109,6 +1104,7 @@ def Arith_CmpIOp : Arith_CompareOpOfAnyRank<"cmpi"> {
   }];
 
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1159,6 +1155,7 @@ def Arith_CmpFOp : Arith_CompareOp<"cmpf"> {
   }];
 
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1208,8 +1205,7 @@ def SelectOp : Arith_Op<"select", [
   let hasVerifier = 1;
   
   // FIXME: Switch this to use the declarative assembly format.
-  let printer = [{ return ::print(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
+  let hasCustomAssemblyFormat = 1;
 }
 
 #endif // ARITHMETIC_OPS

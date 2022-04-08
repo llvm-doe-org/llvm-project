@@ -112,9 +112,8 @@ public:
   void print(raw_ostream &os, OpPrintingFlags flags = llvm::None) {
     state->print(os, flags);
   }
-  void print(raw_ostream &os, AsmState &asmState,
-             OpPrintingFlags flags = llvm::None) {
-    state->print(os, asmState, flags);
+  void print(raw_ostream &os, AsmState &asmState) {
+    state->print(os, asmState);
   }
 
   /// Dump this operation.
@@ -201,7 +200,8 @@ public:
 protected:
   /// If the concrete type didn't implement a custom verifier hook, just fall
   /// back to this one which accepts everything.
-  LogicalResult verifyInvariants() { return success(); }
+  LogicalResult verify() { return success(); }
+  LogicalResult verifyRegions() { return success(); }
 
   /// Parse the custom form of an operation. Unless overridden, this method will
   /// first try to get an operation parser from the op's dialect. Otherwise the
@@ -376,6 +376,18 @@ struct MultiOperandTraitBase : public TraitBase<ConcreteType, TraitType> {
   }
 };
 } // namespace detail
+
+/// `verifyInvariantsImpl` verifies the invariants like the types, attrs, .etc.
+/// It should be run after core traits and before any other user defined traits.
+/// In order to run it in the correct order, wrap it with OpInvariants trait so
+/// that tblgen will be able to put it in the right order.
+template <typename ConcreteType>
+class OpInvariants : public TraitBase<ConcreteType, OpInvariants> {
+public:
+  static LogicalResult verifyTrait(Operation *op) {
+    return cast<ConcreteType>(op).verifyInvariantsImpl();
+  }
+};
 
 /// This class provides the API for ops that are known to have no
 /// SSA operand.
@@ -1573,6 +1585,14 @@ using has_verify_trait = decltype(T::verifyTrait(std::declval<Operation *>()));
 template <typename T>
 using detect_has_verify_trait = llvm::is_detected<has_verify_trait, T>;
 
+/// Trait to check if T provides a `verifyTrait` method.
+template <typename T, typename... Args>
+using has_verify_region_trait =
+    decltype(T::verifyRegionTrait(std::declval<Operation *>()));
+template <typename T>
+using detect_has_verify_region_trait =
+    llvm::is_detected<has_verify_region_trait, T>;
+
 /// The internal implementation of `verifyTraits` below that returns the result
 /// of verifying the current operation with all of the provided trait types
 /// `Ts`.
@@ -1590,6 +1610,26 @@ template <typename TraitTupleT>
 static LogicalResult verifyTraits(Operation *op) {
   return verifyTraitsImpl(op, (TraitTupleT *)nullptr);
 }
+
+/// The internal implementation of `verifyRegionTraits` below that returns the
+/// result of verifying the current operation with all of the provided trait
+/// types `Ts`.
+template <typename... Ts>
+static LogicalResult verifyRegionTraitsImpl(Operation *op,
+                                            std::tuple<Ts...> *) {
+  LogicalResult result = success();
+  (void)std::initializer_list<int>{
+      (result = succeeded(result) ? Ts::verifyRegionTrait(op) : failure(),
+       0)...};
+  return result;
+}
+
+/// Given a tuple type containing a set of traits that contain a
+/// `verifyTrait` method, return the result of verifying the given operation.
+template <typename TraitTupleT>
+static LogicalResult verifyRegionTraits(Operation *op) {
+  return verifyRegionTraitsImpl(op, (TraitTupleT *)nullptr);
+}
 } // namespace op_definition_impl
 
 //===----------------------------------------------------------------------===//
@@ -1604,7 +1644,8 @@ class Op : public OpState, public Traits<ConcreteType>... {
 public:
   /// Inherit getOperation from `OpState`.
   using OpState::getOperation;
-  using OpState::verifyInvariants;
+  using OpState::verify;
+  using OpState::verifyRegions;
 
   /// Return if this operation contains the provided trait.
   template <template <typename T> class Trait>
@@ -1705,6 +1746,10 @@ private:
   using VerifiableTraitsTupleT =
       typename detail::FilterTypes<op_definition_impl::detect_has_verify_trait,
                                    Traits<ConcreteType>...>::type;
+  /// A tuple type containing the region traits that have a verify function.
+  using VerifiableRegionTraitsTupleT = typename detail::FilterTypes<
+      op_definition_impl::detect_has_verify_region_trait,
+      Traits<ConcreteType>...>::type;
 
   /// Returns an interface map containing the interfaces registered to this
   /// operation.
@@ -1840,10 +1885,21 @@ private:
                   "Op class shouldn't define new data members");
     return failure(
         failed(op_definition_impl::verifyTraits<VerifiableTraitsTupleT>(op)) ||
-        failed(cast<ConcreteType>(op).verifyInvariants()));
+        failed(cast<ConcreteType>(op).verify()));
   }
   static OperationName::VerifyInvariantsFn getVerifyInvariantsFn() {
     return static_cast<LogicalResult (*)(Operation *)>(&verifyInvariants);
+  }
+  /// Implementation of `VerifyRegionInvariantsFn` OperationName hook.
+  static LogicalResult verifyRegionInvariants(Operation *op) {
+    static_assert(hasNoDataMembers(),
+                  "Op class shouldn't define new data members");
+    return failure(failed(op_definition_impl::verifyRegionTraits<
+                          VerifiableRegionTraitsTupleT>(op)) ||
+                   failed(cast<ConcreteType>(op).verifyRegions()));
+  }
+  static OperationName::VerifyRegionInvariantsFn getVerifyRegionInvariantsFn() {
+    return static_cast<LogicalResult (*)(Operation *)>(&verifyRegionInvariants);
   }
 
   static constexpr bool hasNoDataMembers() {
@@ -1897,25 +1953,8 @@ protected:
 };
 
 //===----------------------------------------------------------------------===//
-// Common Operation Folders/Parsers/Printers
+// CastOpInterface utilities
 //===----------------------------------------------------------------------===//
-
-// These functions are out-of-line implementations of the methods in UnaryOp and
-// BinaryOp, which avoids them being template instantiated/duplicated.
-namespace impl {
-ParseResult parseOneResultOneOperandTypeOp(OpAsmParser &parser,
-                                           OperationState &result);
-
-void buildBinaryOp(OpBuilder &builder, OperationState &result, Value lhs,
-                   Value rhs);
-ParseResult parseOneResultSameOperandTypeOp(OpAsmParser &parser,
-                                            OperationState &result);
-
-// Prints the given binary `op` in custom assembly form if both the two operands
-// and the result have the same time. Otherwise, prints the generic assembly
-// form.
-void printOneResultOp(Operation *op, OpAsmPrinter &p);
-} // namespace impl
 
 // These functions are out-of-line implementations of the methods in
 // CastOpInterface, which avoids them being template instantiated/duplicated.
@@ -1927,20 +1966,6 @@ LogicalResult foldCastInterfaceOp(Operation *op,
 /// Attempt to verify the given cast operation.
 LogicalResult verifyCastInterfaceOp(
     Operation *op, function_ref<bool(TypeRange, TypeRange)> areCastCompatible);
-
-// TODO: Remove the parse/print/build here (new ODS functionality obsoletes the
-// need for them, but some older ODS code in `std` still depends on them).
-void buildCastOp(OpBuilder &builder, OperationState &result, Value source,
-                 Type destType);
-ParseResult parseCastOp(OpAsmParser &parser, OperationState &result);
-void printCastOp(Operation *op, OpAsmPrinter &p);
-// TODO: These methods are deprecated in favor of CastOpInterface. Remove them
-// when all uses have been updated. Also, consider adding functionality to
-// CastOpInterface to be able to perform the ChainedTensorCast canonicalization
-// generically.
-Value foldCastOp(Operation *op);
-LogicalResult verifyCastOp(Operation *op,
-                           function_ref<bool(Type, Type)> areCastCompatible);
 } // namespace impl
 } // namespace mlir
 

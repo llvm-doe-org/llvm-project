@@ -278,12 +278,13 @@ struct ForOpInterface
     return true;
   }
 
-  OpResult getAliasingOpResult(Operation *op, OpOperand &opOperand,
-                               const BufferizationState &state) const {
+  SmallVector<OpResult>
+  getAliasingOpResult(Operation *op, OpOperand &opOperand,
+                      const BufferizationState &state) const {
     auto forOp = cast<scf::ForOp>(op);
     if (!opOperand.get().getType().isa<RankedTensorType>())
-      return OpResult();
-    return forOp.getResultForOpOperand(opOperand);
+      return {};
+    return {forOp.getResultForOpOperand(opOperand)};
   }
 
   BufferRelation bufferRelation(Operation *op, OpResult opResult,
@@ -384,6 +385,37 @@ struct ForOpInterface
 
     return success();
   }
+
+  /// Assert that yielded values of an scf.for op are aliasing with their
+  /// corresponding bbArgs. This is required because the i-th OpResult of an
+  /// scf.for op is currently assumed to alias with the i-th iter_arg (in the
+  /// absence of conflicts).
+  LogicalResult verifyAnalysis(Operation *op,
+                               const BufferizationState &state) const {
+    auto forOp = cast<scf::ForOp>(op);
+    auto yieldOp =
+        cast<scf::YieldOp>(forOp.getLoopBody().front().getTerminator());
+    for (OpOperand &operand : yieldOp->getOpOperands()) {
+      auto tensorType = operand.get().getType().dyn_cast<TensorType>();
+      if (!tensorType)
+        continue;
+
+      OpOperand &forOperand = forOp.getOpOperandForResult(
+          forOp->getResult(operand.getOperandNumber()));
+      auto bbArg = forOp.getRegionIterArgForOpOperand(forOperand);
+      // Note: This is overly strict. We should check for aliasing bufferized
+      // values. But we don't have a "must-alias" analysis yet.
+      if (!state.areEquivalentBufferizedValues(operand.get(), bbArg))
+        // TODO: this could get resolved with copies but it can also turn into
+        // swaps so we need to be careful about order of copies.
+        return yieldOp->emitError()
+               << "Yield operand #" << operand.getOperandNumber()
+               << " does not bufferize to a buffer that is aliasing the "
+                  "matching"
+               << " enclosing scf::for operand";
+    }
+    return success();
+  }
 };
 
 /// Bufferization of scf.yield. Bufferized as part of their enclosing ops, so
@@ -401,13 +433,14 @@ struct YieldOpInterface
     return false;
   }
 
-  OpResult getAliasingOpResult(Operation *op, OpOperand &opOperand,
-                               const BufferizationState &state) const {
+  SmallVector<OpResult>
+  getAliasingOpResult(Operation *op, OpOperand &opOperand,
+                      const BufferizationState &state) const {
     if (isa<scf::IfOp>(op->getParentOp()))
-      return op->getParentOp()->getResult(opOperand.getOperandNumber());
+      return {op->getParentOp()->getResult(opOperand.getOperandNumber())};
     if (isa<scf::ExecuteRegionOp>(op->getParentOp()))
-      return op->getParentOp()->getResult(opOperand.getOperandNumber());
-    return OpResult();
+      return {op->getParentOp()->getResult(opOperand.getOperandNumber())};
+    return {};
   }
 
   bool mustBufferizeInPlace(Operation *op, OpOperand &opOperand,
@@ -431,41 +464,6 @@ struct YieldOpInterface
 } // namespace
 } // namespace scf
 } // namespace mlir
-
-LogicalResult mlir::scf::AssertScfForAliasingProperties::run(
-    Operation *op, BufferizationState &state, BufferizationAliasInfo &aliasInfo,
-    SmallVector<Operation *> &newOps) {
-  LogicalResult status = success();
-
-  op->walk([&](scf::ForOp forOp) {
-    auto yieldOp =
-        cast<scf::YieldOp>(forOp.getLoopBody().front().getTerminator());
-    for (OpOperand &operand : yieldOp->getOpOperands()) {
-      auto tensorType = operand.get().getType().dyn_cast<TensorType>();
-      if (!tensorType)
-        continue;
-
-      OpOperand &forOperand = forOp.getOpOperandForResult(
-          forOp->getResult(operand.getOperandNumber()));
-      auto bbArg = forOp.getRegionIterArgForOpOperand(forOperand);
-      // Note: This is overly strict. We should check for aliasing bufferized
-      // values. But we don't have a "must-alias" analysis yet.
-      if (!aliasInfo.areEquivalentBufferizedValues(operand.get(), bbArg)) {
-        // TODO: this could get resolved with copies but it can also turn into
-        // swaps so we need to be careful about order of copies.
-        status =
-            yieldOp->emitError()
-            << "Yield operand #" << operand.getOperandNumber()
-            << " does not bufferize to a buffer that is aliasing the matching"
-            << " enclosing scf::for operand";
-        return WalkResult::interrupt();
-      }
-    }
-    return WalkResult::advance();
-  });
-
-  return status;
-}
 
 void mlir::scf::registerBufferizableOpInterfaceExternalModels(
     DialectRegistry &registry) {

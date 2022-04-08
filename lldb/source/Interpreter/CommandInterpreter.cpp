@@ -84,6 +84,10 @@
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/ScopedPrinter.h"
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
 using namespace lldb;
 using namespace lldb_private;
 
@@ -434,7 +438,7 @@ void CommandInterpreter::Initialize() {
   if (cmd_obj_sp) {
     alias_arguments_vector_sp = std::make_shared<OptionArgVector>();
 #if defined(__APPLE__)
-#if defined(TARGET_OS_IPHONE)
+#if TARGET_OS_IPHONE
     AddAlias("r", cmd_obj_sp, "--");
     AddAlias("run", cmd_obj_sp, "--");
 #else
@@ -1944,16 +1948,21 @@ bool CommandInterpreter::HandleCommand(const char *command_line,
   // arguments.
 
   if (cmd_obj != nullptr) {
-    if (add_to_history) {
+    // If we got here when empty_command was true, then this command is a
+    // stored "repeat command" which we should give a chance to produce it's
+    // repeat command, even though we don't add repeat commands to the history.
+    if (add_to_history || empty_command) {
       Args command_args(command_string);
-      const char *repeat_command = cmd_obj->GetRepeatCommand(command_args, 0);
-      if (repeat_command != nullptr)
-        m_repeat_command.assign(repeat_command);
+      llvm::Optional<std::string> repeat_command =
+          cmd_obj->GetRepeatCommand(command_args, 0);
+      if (repeat_command)
+        m_repeat_command.assign(*repeat_command);
       else
         m_repeat_command.assign(original_command_string);
-
-      m_command_history.AppendString(original_command_string);
     }
+
+    if (add_to_history)
+      m_command_history.AppendString(original_command_string);
 
     std::string remainder;
     const std::size_t actual_cmd_name_len = cmd_obj->GetCommandName().size();
@@ -2373,6 +2382,21 @@ void CommandInterpreter::SourceInitFileHome(CommandReturnObject &result,
   }
 
   SourceInitFile(FileSpec(init_file.str()), result);
+}
+
+void CommandInterpreter::SourceInitFileGlobal(CommandReturnObject &result) {
+#ifdef LLDB_GLOBAL_INIT_DIRECTORY
+  if (!m_skip_lldbinit_files) {
+    FileSpec init_file(LLDB_GLOBAL_INIT_DIRECTORY);
+    if (init_file)
+      init_file.MakeAbsolute(HostInfo::GetShlibDir());
+
+    init_file.AppendPathComponent("lldbinit");
+    SourceInitFile(init_file, result);
+    return;
+  }
+#endif
+  result.SetStatus(eReturnStatusSuccessFinishNoResult);
 }
 
 const char *CommandInterpreter::GetCommandPrefix() {
@@ -2973,6 +2997,7 @@ void CommandInterpreter::PrintCommandOutput(Stream &stream,
   if (size > 0) {
     stream.Printf("\n... Interrupted.\n");
   }
+  stream.Flush();
 }
 
 bool CommandInterpreter::EchoCommandNonInteractive(
@@ -3155,6 +3180,10 @@ bool CommandInterpreter::SaveTranscript(
                                  output_file->c_str());
 
   return true;
+}
+
+bool CommandInterpreter::IsInteractive() {
+  return (GetIOHandler() ? GetIOHandler()->GetIsInteractive() : false);
 }
 
 FileSpec CommandInterpreter::GetCurrentSourceDir() {

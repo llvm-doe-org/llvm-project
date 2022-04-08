@@ -762,7 +762,7 @@ static bool addSanitizerDynamicList(const ToolChain &TC, const ArgList &Args,
   return false;
 }
 
-static const char *getAsNeededOption(const ToolChain &TC, bool as_needed) {
+const char *tools::getAsNeededOption(const ToolChain &TC, bool as_needed) {
   assert(!TC.getTriple().isOSAIX() &&
          "AIX linker does not support any form of --as-needed option yet.");
 
@@ -777,11 +777,6 @@ static const char *getAsNeededOption(const ToolChain &TC, bool as_needed) {
 
 void tools::linkSanitizerRuntimeDeps(const ToolChain &TC,
                                      ArgStringList &CmdArgs) {
-  // Fuchsia never needs these.  Any sanitizer runtimes with system
-  // dependencies use the `.deplibs` feature instead.
-  if (TC.getTriple().isOSFuchsia())
-    return;
-
   // Force linking against the system libraries sanitizers depends on
   // (see PR15823 why this is necessary).
   CmdArgs.push_back(getAsNeededOption(TC, false));
@@ -1241,7 +1236,7 @@ tools::ParsePICArgs(const ToolChain &ToolChain, const ArgList &Args) {
             O.matches(options::OPT_fPIE) || O.matches(options::OPT_fPIC);
       } else {
         PIE = PIC = false;
-        if (EffectiveTriple.isPS4CPU()) {
+        if (EffectiveTriple.isPS4()) {
           Arg *ModelArg = Args.getLastArg(options::OPT_mcmodel_EQ);
           StringRef Model = ModelArg ? ModelArg->getValue() : "";
           if (Model != "kernel") {
@@ -1257,7 +1252,7 @@ tools::ParsePICArgs(const ToolChain &ToolChain, const ArgList &Args) {
   // Introduce a Darwin and PS4-specific hack. If the default is PIC, but the
   // PIC level would've been set to level 1, force it back to level 2 PIC
   // instead.
-  if (PIC && (Triple.isOSDarwin() || EffectiveTriple.isPS4CPU()))
+  if (PIC && (Triple.isOSDarwin() || EffectiveTriple.isPS4()))
     IsPICLevelTwo |= ToolChain.isPICDefault();
 
   // This kernel flags are a trump-card: they will disable PIC/PIE
@@ -1788,6 +1783,12 @@ bool tools::GetSDLFromOffloadArchive(
     std::string AdditionalArgs("-allow-missing-bundles");
     UBArgs.push_back(C.getArgs().MakeArgString(AdditionalArgs));
 
+    // Add this flag to treat hip and hipv4 offload kinds as compatible with
+    // openmp offload kind while extracting code objects from a heterogenous
+    // archive library. Vice versa is also considered compatible.
+    std::string HipCompatibleArgs("-hip-openmp-compatible");
+    UBArgs.push_back(C.getArgs().MakeArgString(HipCompatibleArgs));
+
     C.addCommand(std::make_unique<Command>(
         JA, T, ResponseFileSupport::AtFileCurCP(), UBProgram, UBArgs, Inputs,
         InputInfo(&JA, C.getArgs().MakeArgString(OutputLib))));
@@ -2022,8 +2023,9 @@ void tools::addOpenMPDeviceRTL(const Driver &D,
       Triple.isAMDGCN() ? options::OPT_libomptarget_amdgpu_bc_path_EQ
                         : options::OPT_libomptarget_nvptx_bc_path_EQ;
 
-  StringRef ArchPrefix = Triple.isAMDGCN() ? "amdgcn" : "nvptx";
-  std::string LibOmpTargetName = "libomptarget-" + BitcodeSuffix.str() + ".bc";
+  StringRef ArchPrefix = Triple.isAMDGCN() ? "amdgpu" : "nvptx";
+  std::string LibOmpTargetName =
+      ("libomptarget-" + ArchPrefix + "-" + BitcodeSuffix + ".bc").str();
 
   // First check whether user specifies bc library
   if (const Arg *A = DriverArgs.getLastArg(LibomptargetBCPathOpt)) {

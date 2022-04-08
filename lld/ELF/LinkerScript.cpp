@@ -12,6 +12,7 @@
 
 #include "LinkerScript.h"
 #include "Config.h"
+#include "InputFiles.h"
 #include "InputSection.h"
 #include "OutputSections.h"
 #include "SymbolTable.h"
@@ -27,15 +28,11 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Parallel.h"
-#include "llvm/Support/Path.h"
 #include "llvm/Support/TimeProfiler.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <limits>
 #include <string>
 #include <vector>
@@ -207,7 +204,7 @@ static bool shouldDefineSym(SymbolAssignment *cmd) {
   // If a symbol was in PROVIDE(), we need to define it only
   // when it is a referenced undefined symbol.
   Symbol *b = symtab->find(cmd->name);
-  if (b && !b->isDefined())
+  if (b && !b->isDefined() && !b->isCommon())
     return true;
   return false;
 }
@@ -242,6 +239,7 @@ void LinkerScript::addSymbol(SymbolAssignment *cmd) {
   Symbol *sym = symtab->insert(cmd->name);
   sym->mergeProperties(newSym);
   sym->replace(newSym);
+  sym->isUsedInRegularObj = true;
   cmd->sym = cast<Defined>(sym);
 }
 
@@ -262,6 +260,7 @@ static void declareSymbol(SymbolAssignment *cmd) {
 
   cmd->sym = cast<Defined>(sym);
   cmd->provide = false;
+  sym->isUsedInRegularObj = true;
   sym->scriptDefined = true;
 }
 

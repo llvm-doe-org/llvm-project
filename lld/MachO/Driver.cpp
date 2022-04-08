@@ -460,20 +460,6 @@ static void addFileList(StringRef path, bool isLazy) {
     addFile(rerootPath(path), ForceLoad::Default, isLazy);
 }
 
-// An order file has one entry per line, in the following format:
-//
-//   <cpu>:<object file>:<symbol name>
-//
-// <cpu> and <object file> are optional. If not specified, then that entry
-// matches any symbol of that name. Parsing this format is not quite
-// straightforward because the symbol name itself can contain colons, so when
-// encountering a colon, we consider the preceding characters to decide if it
-// can be a valid CPU type or file path.
-//
-// If a symbol is matched by multiple entries, then it takes the lowest-ordered
-// entry (the one nearest to the front of the list.)
-//
-// The file can also have line comments that start with '#'.
 // We expect sub-library names of the form "libfoo", which will match a dylib
 // with a path of .*/libfoo.{dylib, tbd}.
 // XXX ld64 seems to ignore the extension entirely when matching sub-libraries;
@@ -505,14 +491,6 @@ static void initLLVM() {
 }
 
 static void compileBitcodeFiles() {
-  // FIXME: Remove this once LTO.cpp honors config->exportDynamic.
-  if (config->exportDynamic)
-    for (InputFile *file : inputFiles)
-      if (isa<BitcodeFile>(file)) {
-        warn("the effect of -export_dynamic on LTO is not yet implemented");
-        break;
-      }
-
   TimeTraceScope timeScope("LTO");
   auto *lto = make<BitcodeCompiler>();
   for (InputFile *file : inputFiles)
@@ -1129,6 +1107,27 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
   if (errorCount())
     return false;
 
+  if (args.hasArg(OPT_pagezero_size)) {
+    uint64_t pagezeroSize = args::getHex(args, OPT_pagezero_size, 0);
+
+    // ld64 does something really weird. It attempts to realign the value to the
+    // page size, but assumes the the page size is 4K. This doesn't work with
+    // most of Apple's ARM64 devices, which use a page size of 16K. This means
+    // that it will first 4K align it by rounding down, then round up to 16K.
+    // This probably only happened because no one using this arg with anything
+    // other then 0, so no one checked if it did what is what it says it does.
+
+    // So we are not copying this weird behavior and doing the it in a logical
+    // way, by always rounding down to page size.
+    if (!isAligned(Align(target->getPageSize()), pagezeroSize)) {
+      pagezeroSize -= pagezeroSize % target->getPageSize();
+      warn("__PAGEZERO size is not page aligned, rounding down to 0x" +
+           Twine::utohexstr(pagezeroSize));
+    }
+
+    target->pageZeroSize = pagezeroSize;
+  }
+
   config->osoPrefix = args.getLastArgValue(OPT_oso_prefix);
   if (!config->osoPrefix.empty()) {
     // Expand special characters, such as ".", "..", or  "~", if present.
@@ -1371,6 +1370,11 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
     symtab->addUndefined(cachedName.val(), /*file=*/nullptr,
                          /*isWeakRef=*/false);
 
+  for (const Arg *arg : args.filtered(OPT_why_live))
+    config->whyLive.insert(arg->getValue());
+  if (!config->whyLive.empty() && !config->deadStrip)
+    warn("-why_live has no effect without -dead_strip, ignoring");
+
   config->saveTemps = args.hasArg(OPT_save_temps);
 
   config->adhocCodesign = args.hasFlag(
@@ -1448,10 +1452,8 @@ bool macho::link(ArrayRef<const char *> argsArr, llvm::raw_ostream &stdoutOS,
     replaceCommonSymbols();
 
     StringRef orderFile = args.getLastArgValue(OPT_order_file);
-    if (!orderFile.empty()) {
+    if (!orderFile.empty())
       parseOrderFile(orderFile);
-      config->callGraphProfileSort = false;
-    }
 
     referenceStubBinder();
 

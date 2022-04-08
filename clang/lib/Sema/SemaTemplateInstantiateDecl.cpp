@@ -188,15 +188,37 @@ static void instantiateDependentAnnotationAttr(
     const AnnotateAttr *Attr, Decl *New) {
   EnterExpressionEvaluationContext Unevaluated(
       S, Sema::ExpressionEvaluationContext::ConstantEvaluated);
+
+  // If the attribute has delayed arguments it will have to instantiate those
+  // and handle them as new arguments for the attribute.
+  bool HasDelayedArgs = Attr->delayedArgs_size();
+
+  ArrayRef<Expr *> ArgsToInstantiate =
+      HasDelayedArgs
+          ? ArrayRef<Expr *>{Attr->delayedArgs_begin(), Attr->delayedArgs_end()}
+          : ArrayRef<Expr *>{Attr->args_begin(), Attr->args_end()};
+
   SmallVector<Expr *, 4> Args;
-  Args.reserve(Attr->args_size());
-  for (auto *E : Attr->args()) {
-    ExprResult Result = S.SubstExpr(E, TemplateArgs);
-    if (!Result.isUsable())
+  if (S.SubstExprs(ArgsToInstantiate,
+                   /*IsCall=*/false, TemplateArgs, Args))
+    return;
+
+  StringRef Str = Attr->getAnnotation();
+  if (HasDelayedArgs) {
+    if (Args.size() < 1) {
+      S.Diag(Attr->getLoc(), diag::err_attribute_too_few_arguments)
+          << Attr << 1;
       return;
-    Args.push_back(Result.get());
+    }
+
+    if (!S.checkStringLiteralArgumentAttr(*Attr, Args[0], Str))
+      return;
+
+    llvm::SmallVector<Expr *, 4> ActualArgs;
+    ActualArgs.insert(ActualArgs.begin(), Args.begin() + 1, Args.end());
+    std::swap(Args, ActualArgs);
   }
-  S.AddAnnotationAttr(New, *Attr, Attr->getAnnotation(), Args);
+  S.AddAnnotationAttr(New, *Attr, Str, Args);
 }
 
 static Expr *instantiateDependentFunctionAttrCondition(
@@ -4355,10 +4377,10 @@ TemplateDeclInstantiator::SubstFunctionType(FunctionDecl *D,
 /// Introduce the instantiated function parameters into the local
 /// instantiation scope, and set the parameter names to those used
 /// in the template.
-static bool addInstantiatedParametersToScope(Sema &S, FunctionDecl *Function,
-                                             const FunctionDecl *PatternDecl,
-                                             LocalInstantiationScope &Scope,
-                           const MultiLevelTemplateArgumentList &TemplateArgs) {
+bool Sema::addInstantiatedParametersToScope(
+    FunctionDecl *Function, const FunctionDecl *PatternDecl,
+    LocalInstantiationScope &Scope,
+    const MultiLevelTemplateArgumentList &TemplateArgs) {
   unsigned FParamIdx = 0;
   for (unsigned I = 0, N = PatternDecl->getNumParams(); I != N; ++I) {
     const ParmVarDecl *PatternParam = PatternDecl->getParamDecl(I);
@@ -4374,9 +4396,9 @@ static bool addInstantiatedParametersToScope(Sema &S, FunctionDecl *Function,
       // it's instantiation-dependent.
       // FIXME: Updating the type to work around this is at best fragile.
       if (!PatternDecl->getType()->isDependentType()) {
-        QualType T = S.SubstType(PatternParam->getType(), TemplateArgs,
-                                 FunctionParam->getLocation(),
-                                 FunctionParam->getDeclName());
+        QualType T = SubstType(PatternParam->getType(), TemplateArgs,
+                               FunctionParam->getLocation(),
+                               FunctionParam->getDeclName());
         if (T.isNull())
           return true;
         FunctionParam->setType(T);
@@ -4389,8 +4411,8 @@ static bool addInstantiatedParametersToScope(Sema &S, FunctionDecl *Function,
 
     // Expand the parameter pack.
     Scope.MakeInstantiatedLocalArgPack(PatternParam);
-    Optional<unsigned> NumArgumentsInExpansion
-      = S.getNumArgumentsInExpansion(PatternParam->getType(), TemplateArgs);
+    Optional<unsigned> NumArgumentsInExpansion =
+        getNumArgumentsInExpansion(PatternParam->getType(), TemplateArgs);
     if (NumArgumentsInExpansion) {
       QualType PatternType =
           PatternParam->getType()->castAs<PackExpansionType>()->getPattern();
@@ -4398,10 +4420,10 @@ static bool addInstantiatedParametersToScope(Sema &S, FunctionDecl *Function,
         ParmVarDecl *FunctionParam = Function->getParamDecl(FParamIdx);
         FunctionParam->setDeclName(PatternParam->getDeclName());
         if (!PatternDecl->getType()->isDependentType()) {
-          Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(S, Arg);
-          QualType T = S.SubstType(PatternType, TemplateArgs,
-                                   FunctionParam->getLocation(),
-                                   FunctionParam->getDeclName());
+          Sema::ArgumentPackSubstitutionIndexRAII SubstIndex(*this, Arg);
+          QualType T =
+              SubstType(PatternType, TemplateArgs, FunctionParam->getLocation(),
+                        FunctionParam->getDeclName());
           if (T.isNull())
             return true;
           FunctionParam->setType(T);
@@ -4465,8 +4487,7 @@ bool Sema::InstantiateDefaultArgument(SourceLocation CallLoc, FunctionDecl *FD,
 
     FunctionDecl *Pattern = FD->getTemplateInstantiationPattern(
         /*ForDefinition*/ false);
-    if (addInstantiatedParametersToScope(*this, FD, Pattern, Local,
-                                         TemplateArgs))
+    if (addInstantiatedParametersToScope(FD, Pattern, Local, TemplateArgs))
       return true;
 
     runWithSufficientStackSpace(CallLoc, [&] {
@@ -4539,61 +4560,13 @@ void Sema::InstantiateExceptionSpec(SourceLocation PointOfInstantiation,
   // we don't store enough information to map back to the friend declaration in
   // the template.
   FunctionDecl *Template = Proto->getExceptionSpecTemplate();
-  if (addInstantiatedParametersToScope(*this, Decl, Template, Scope,
-                                       TemplateArgs)) {
+  if (addInstantiatedParametersToScope(Decl, Template, Scope, TemplateArgs)) {
     UpdateExceptionSpec(Decl, EST_None);
     return;
   }
 
   SubstExceptionSpec(Decl, Template->getType()->castAs<FunctionProtoType>(),
                      TemplateArgs);
-}
-
-bool Sema::CheckInstantiatedFunctionTemplateConstraints(
-    SourceLocation PointOfInstantiation, FunctionDecl *Decl,
-    ArrayRef<TemplateArgument> TemplateArgs,
-    ConstraintSatisfaction &Satisfaction) {
-  // In most cases we're not going to have constraints, so check for that first.
-  FunctionTemplateDecl *Template = Decl->getPrimaryTemplate();
-  // Note - code synthesis context for the constraints check is created
-  // inside CheckConstraintsSatisfaction.
-  SmallVector<const Expr *, 3> TemplateAC;
-  Template->getAssociatedConstraints(TemplateAC);
-  if (TemplateAC.empty()) {
-    Satisfaction.IsSatisfied = true;
-    return false;
-  }
-
-  // Enter the scope of this instantiation. We don't use
-  // PushDeclContext because we don't have a scope.
-  Sema::ContextRAII savedContext(*this, Decl);
-  LocalInstantiationScope Scope(*this);
-
-  // If this is not an explicit specialization - we need to get the instantiated
-  // version of the template arguments and add them to scope for the
-  // substitution.
-  if (Decl->isTemplateInstantiation()) {
-    InstantiatingTemplate Inst(*this, Decl->getPointOfInstantiation(),
-        InstantiatingTemplate::ConstraintsCheck{}, Decl->getPrimaryTemplate(),
-        TemplateArgs, SourceRange());
-    if (Inst.isInvalid())
-      return true;
-    MultiLevelTemplateArgumentList MLTAL(
-        *Decl->getTemplateSpecializationArgs());
-    if (addInstantiatedParametersToScope(
-            *this, Decl, Decl->getPrimaryTemplate()->getTemplatedDecl(),
-            Scope, MLTAL))
-      return true;
-  }
-  Qualifiers ThisQuals;
-  CXXRecordDecl *Record = nullptr;
-  if (auto *Method = dyn_cast<CXXMethodDecl>(Decl)) {
-    ThisQuals = Method->getMethodQualifiers();
-    Record = Method->getParent();
-  }
-  CXXThisScopeRAII ThisScope(*this, Record, ThisQuals, Record != nullptr);
-  return CheckConstraintSatisfaction(Template, TemplateAC, TemplateArgs,
-                                     PointOfInstantiation, Satisfaction);
 }
 
 /// Initializes the common fields of an instantiation function
@@ -5028,7 +5001,7 @@ void Sema::InstantiateFunctionDefinition(SourceLocation PointOfInstantiation,
     // PushDeclContext because we don't have a scope.
     Sema::ContextRAII savedContext(*this, Function);
 
-    if (addInstantiatedParametersToScope(*this, Function, PatternDecl, Scope,
+    if (addInstantiatedParametersToScope(Function, PatternDecl, Scope,
                                          TemplateArgs))
       return;
 
@@ -6012,7 +5985,9 @@ NamedDecl *Sema::FindInstantiatedDecl(SourceLocation Loc, NamedDecl *D,
       (ParentDependsOnArgs && (ParentDC->isFunctionOrMethod() ||
                                isa<OMPDeclareReductionDecl>(ParentDC) ||
                                isa<OMPDeclareMapperDecl>(ParentDC))) ||
-      (isa<CXXRecordDecl>(D) && cast<CXXRecordDecl>(D)->isLambda())) {
+      (isa<CXXRecordDecl>(D) && cast<CXXRecordDecl>(D)->isLambda() &&
+       cast<CXXRecordDecl>(D)->getTemplateDepth() >
+           TemplateArgs.getNumRetainedOuterLevels())) {
     // D is a local of some kind. Look into the map of local
     // declarations to their instantiations.
     if (CurrentInstantiationScope) {

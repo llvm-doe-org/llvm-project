@@ -30,7 +30,8 @@ class Async_Op<string mnemonic, list<Trait> traits = []> :
 def Async_ExecuteOp :
   Async_Op<"execute", [SingleBlockImplicitTerminator<"YieldOp">,
                        DeclareOpInterfaceMethods<RegionBranchOpInterface,
-                                                 ["getSuccessorEntryOperands"]>,
+                                                 ["getSuccessorEntryOperands",
+                                                  "areTypesCompatible"]>,
                        AttrSizedOperandSegments,
                        AutomaticAllocationScope]> {
   let summary = "Asynchronous execute operation";
@@ -81,9 +82,7 @@ def Async_ExecuteOp :
                       Variadic<Async_ValueType>:$results);
   let regions = (region SizedRegion<1>:$body);
 
-  let printer = [{ return ::print(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-
+  let hasCustomAssemblyFormat = 1;
   let skipDefaultBuilders = 1;
   let hasVerifier = 1;
   let builders = [

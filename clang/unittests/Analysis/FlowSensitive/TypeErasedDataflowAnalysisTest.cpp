@@ -18,6 +18,7 @@
 #include "clang/Analysis/FlowSensitive/DataflowEnvironment.h"
 #include "clang/Analysis/FlowSensitive/DataflowLattice.h"
 #include "clang/Analysis/FlowSensitive/Value.h"
+#include "clang/Analysis/FlowSensitive/WatchedLiteralsSolver.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
@@ -68,7 +69,7 @@ runAnalysis(llvm::StringRef Code, AnalysisT (*MakeAnalysis)(ASTContext &)) {
       ControlFlowContext::build(nullptr, Body, &AST->getASTContext()));
 
   AnalysisT Analysis = MakeAnalysis(AST->getASTContext());
-  DataflowAnalysisContext DACtx;
+  DataflowAnalysisContext DACtx(std::make_unique<WatchedLiteralsSolver>());
   Environment Env(DACtx);
 
   return runDataflowAnalysis(CFCtx, Analysis, Env);
@@ -387,7 +388,8 @@ protected:
             Code, "target",
             [this](ASTContext &Context, Environment &Env) {
               assert(HasValueTop == nullptr);
-              HasValueTop = &Env.takeOwnership(std::make_unique<BoolValue>());
+              HasValueTop =
+                  &Env.takeOwnership(std::make_unique<AtomicBoolValue>());
               return OptionalIntAnalysis(Context, *HasValueTop);
             },
             [&Match](

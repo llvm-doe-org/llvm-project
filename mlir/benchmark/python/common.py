@@ -6,9 +6,9 @@ import mlir.all_passes_registration
 from mlir import ir
 from mlir.dialects import arith
 from mlir.dialects import builtin
+from mlir.dialects import func
 from mlir.dialects import memref
 from mlir.dialects import scf
-from mlir.dialects import std
 from mlir.passmanager import PassManager
 
 
@@ -19,24 +19,7 @@ def setup_passes(mlir_module):
         "parallelization-strategy=0"
         " vectorization-strategy=0 vl=1 enable-simd-index32=False"
     )
-    pipeline = (
-        f"builtin.func"
-        f"(linalg-generalize-named-ops,linalg-fuse-elementwise-ops),"
-        f"sparsification{{{opt}}},"
-        f"sparse-tensor-conversion,"
-        f"builtin.func"
-        f"(linalg-bufferize,convert-linalg-to-loops,convert-vector-to-scf),"
-        f"convert-scf-to-std,"
-        f"func-bufferize,"
-        f"arith-bufferize,"
-        f"builtin.func(tensor-bufferize,finalizing-bufferize),"
-        f"convert-vector-to-llvm"
-        f"{{reassociate-fp-reductions=1 enable-index-optimizations=1}},"
-        f"lower-affine,"
-        f"convert-memref-to-llvm,"
-        f"convert-std-to-llvm,"
-        f"reconcile-unrealized-casts"
-    )
+    pipeline = f"sparse-compiler{{{opt}}}"
     PassManager.parse(pipeline).run(mlir_module)
 
 
@@ -110,15 +93,15 @@ def emit_benchmark_wrapped_main_func(func, timer_func):
         iter_args = list(wrapped_func.arguments[-num_results - 1:-1])
         loop = scf.ForOp(zero, n_iterations, one, iter_args)
         with ir.InsertionPoint(loop.body):
-            start = std.CallOp(timer_func, [])
-            call = std.CallOp(
+            start = func.CallOp(timer_func, [])
+            call = func.CallOp(
                 func,
                 wrapped_func.arguments[:-num_results - 1] + loop.inner_iter_args
             )
-            end = std.CallOp(timer_func, [])
+            end = func.CallOp(timer_func, [])
             time_taken = arith.SubIOp(end, start)
             memref.StoreOp(time_taken, timer_buffer, [loop.induction_variable])
             scf.YieldOp(list(call.results))
-        std.ReturnOp(loop)
+        func.ReturnOp(loop)
 
     return wrapped_func

@@ -126,6 +126,11 @@ static cl::opt<bool> EnableQuadwordAtomics(
     cl::desc("enable quadword lock-free atomic operations"), cl::init(false),
     cl::Hidden);
 
+static cl::opt<bool>
+    DisablePerfectShuffle("ppc-disable-perfect-shuffle",
+                          cl::desc("disable vector permute decomposition"),
+                          cl::init(false), cl::Hidden);
+
 STATISTIC(NumTailCalls, "Number of tail calls");
 STATISTIC(NumSiblingCalls, "Number of sibling calls");
 STATISTIC(ShufflesHandledWithVPERM, "Number of shuffles lowered to a VPERM");
@@ -1283,6 +1288,10 @@ PPCTargetLowering::PPCTargetLowering(const PPCTargetMachine &TM,
       setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v2i32, Legal);
       setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v2i64, Legal);
     }
+
+    if (Subtarget.hasP10Vector()) {
+      setOperationAction(ISD::SELECT_CC, MVT::f128, Custom);
+    }
   }
 
   if (Subtarget.pairedVectorMemops()) {
@@ -1605,8 +1614,8 @@ const char *PPCTargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch ((PPCISD::NodeType)Opcode) {
   case PPCISD::FIRST_NUMBER:    break;
   case PPCISD::FSEL:            return "PPCISD::FSEL";
-  case PPCISD::XSMAXCDP:        return "PPCISD::XSMAXCDP";
-  case PPCISD::XSMINCDP:        return "PPCISD::XSMINCDP";
+  case PPCISD::XSMAXC:          return "PPCISD::XSMAXC";
+  case PPCISD::XSMINC:          return "PPCISD::XSMINC";
   case PPCISD::FCFID:           return "PPCISD::FCFID";
   case PPCISD::FCFIDU:          return "PPCISD::FCFIDU";
   case PPCISD::FCFIDS:          return "PPCISD::FCFIDS";
@@ -7898,7 +7907,7 @@ SDValue PPCTargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const {
 
   SDNodeFlags Flags = Op.getNode()->getFlags();
 
-  // We have xsmaxcdp/xsmincdp which are OK to emit even in the
+  // We have xsmaxc[dq]p/xsminc[dq]p which are OK to emit even in the
   // presence of infinities.
   if (Subtarget.hasP9Vector() && LHS == TV && RHS == FV) {
     switch (CC) {
@@ -7906,10 +7915,10 @@ SDValue PPCTargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const {
       break;
     case ISD::SETOGT:
     case ISD::SETGT:
-      return DAG.getNode(PPCISD::XSMAXCDP, dl, Op.getValueType(), LHS, RHS);
+      return DAG.getNode(PPCISD::XSMAXC, dl, Op.getValueType(), LHS, RHS);
     case ISD::SETOLT:
     case ISD::SETLT:
-      return DAG.getNode(PPCISD::XSMINCDP, dl, Op.getValueType(), LHS, RHS);
+      return DAG.getNode(PPCISD::XSMINC, dl, Op.getValueType(), LHS, RHS);
     }
   }
 
@@ -10067,56 +10076,59 @@ SDValue PPCTargetLowering::LowerVECTOR_SHUFFLE(SDValue Op,
   // perfect shuffle table to emit an optimal matching sequence.
   ArrayRef<int> PermMask = SVOp->getMask();
 
-  unsigned PFIndexes[4];
-  bool isFourElementShuffle = true;
-  for (unsigned i = 0; i != 4 && isFourElementShuffle; ++i) { // Element number
-    unsigned EltNo = 8;   // Start out undef.
-    for (unsigned j = 0; j != 4; ++j) {  // Intra-element byte.
-      if (PermMask[i*4+j] < 0)
-        continue;   // Undef, ignore it.
+  if (!DisablePerfectShuffle && !isLittleEndian) {
+    unsigned PFIndexes[4];
+    bool isFourElementShuffle = true;
+    for (unsigned i = 0; i != 4 && isFourElementShuffle;
+         ++i) {                           // Element number
+      unsigned EltNo = 8;                 // Start out undef.
+      for (unsigned j = 0; j != 4; ++j) { // Intra-element byte.
+        if (PermMask[i * 4 + j] < 0)
+          continue; // Undef, ignore it.
 
-      unsigned ByteSource = PermMask[i*4+j];
-      if ((ByteSource & 3) != j) {
-        isFourElementShuffle = false;
-        break;
-      }
+        unsigned ByteSource = PermMask[i * 4 + j];
+        if ((ByteSource & 3) != j) {
+          isFourElementShuffle = false;
+          break;
+        }
 
-      if (EltNo == 8) {
-        EltNo = ByteSource/4;
-      } else if (EltNo != ByteSource/4) {
-        isFourElementShuffle = false;
-        break;
+        if (EltNo == 8) {
+          EltNo = ByteSource / 4;
+        } else if (EltNo != ByteSource / 4) {
+          isFourElementShuffle = false;
+          break;
+        }
       }
+      PFIndexes[i] = EltNo;
     }
-    PFIndexes[i] = EltNo;
-  }
 
-  // If this shuffle can be expressed as a shuffle of 4-byte elements, use the
-  // perfect shuffle vector to determine if it is cost effective to do this as
-  // discrete instructions, or whether we should use a vperm.
-  // For now, we skip this for little endian until such time as we have a
-  // little-endian perfect shuffle table.
-  if (isFourElementShuffle && !isLittleEndian) {
-    // Compute the index in the perfect shuffle table.
-    unsigned PFTableIndex =
-      PFIndexes[0]*9*9*9+PFIndexes[1]*9*9+PFIndexes[2]*9+PFIndexes[3];
+    // If this shuffle can be expressed as a shuffle of 4-byte elements, use the
+    // perfect shuffle vector to determine if it is cost effective to do this as
+    // discrete instructions, or whether we should use a vperm.
+    // For now, we skip this for little endian until such time as we have a
+    // little-endian perfect shuffle table.
+    if (isFourElementShuffle) {
+      // Compute the index in the perfect shuffle table.
+      unsigned PFTableIndex = PFIndexes[0] * 9 * 9 * 9 + PFIndexes[1] * 9 * 9 +
+                              PFIndexes[2] * 9 + PFIndexes[3];
 
-    unsigned PFEntry = PerfectShuffleTable[PFTableIndex];
-    unsigned Cost  = (PFEntry >> 30);
+      unsigned PFEntry = PerfectShuffleTable[PFTableIndex];
+      unsigned Cost = (PFEntry >> 30);
 
-    // Determining when to avoid vperm is tricky.  Many things affect the cost
-    // of vperm, particularly how many times the perm mask needs to be computed.
-    // For example, if the perm mask can be hoisted out of a loop or is already
-    // used (perhaps because there are multiple permutes with the same shuffle
-    // mask?) the vperm has a cost of 1.  OTOH, hoisting the permute mask out of
-    // the loop requires an extra register.
-    //
-    // As a compromise, we only emit discrete instructions if the shuffle can be
-    // generated in 3 or fewer operations.  When we have loop information
-    // available, if this block is within a loop, we should avoid using vperm
-    // for 3-operation perms and use a constant pool load instead.
-    if (Cost < 3)
-      return GeneratePerfectShuffle(PFEntry, V1, V2, DAG, dl);
+      // Determining when to avoid vperm is tricky.  Many things affect the cost
+      // of vperm, particularly how many times the perm mask needs to be
+      // computed. For example, if the perm mask can be hoisted out of a loop or
+      // is already used (perhaps because there are multiple permutes with the
+      // same shuffle mask?) the vperm has a cost of 1.  OTOH, hoisting the
+      // permute mask out of the loop requires an extra register.
+      //
+      // As a compromise, we only emit discrete instructions if the shuffle can
+      // be generated in 3 or fewer operations.  When we have loop information
+      // available, if this block is within a loop, we should avoid using vperm
+      // for 3-operation perms and use a constant pool load instead.
+      if (Cost < 3)
+        return GeneratePerfectShuffle(PFEntry, V1, V2, DAG, dl);
+    }
   }
 
   // Lower this to a VPERM(V1, V2, V3) expression, where V3 is a constant
@@ -18046,7 +18058,7 @@ Value *PPCTargetLowering::emitMaskedAtomicRMWIntrinsic(
   assert(EnableQuadwordAtomics && Subtarget.hasQuadwordAtomics() &&
          "Only support quadword now");
   Module *M = Builder.GetInsertBlock()->getParent()->getParent();
-  Type *ValTy = AlignedAddr->getType()->getPointerElementType();
+  Type *ValTy = Incr->getType();
   assert(ValTy->getPrimitiveSizeInBits() == 128);
   Function *RMW = Intrinsic::getDeclaration(
       M, getIntrinsicForAtomicRMWBinOp128(AI->getOperation()));
@@ -18071,7 +18083,7 @@ Value *PPCTargetLowering::emitMaskedAtomicCmpXchgIntrinsic(
   assert(EnableQuadwordAtomics && Subtarget.hasQuadwordAtomics() &&
          "Only support quadword now");
   Module *M = Builder.GetInsertBlock()->getParent()->getParent();
-  Type *ValTy = AlignedAddr->getType()->getPointerElementType();
+  Type *ValTy = CmpVal->getType();
   assert(ValTy->getPrimitiveSizeInBits() == 128);
   Function *IntCmpXchg =
       Intrinsic::getDeclaration(M, Intrinsic::ppc_cmpxchg_i128);

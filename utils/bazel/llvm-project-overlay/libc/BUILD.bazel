@@ -39,6 +39,7 @@ cc_library(
     hdrs = [
         "src/__support/CPP/Array.h",
         "src/__support/CPP/ArrayRef.h",
+        "src/__support/CPP/Bit.h",
         "src/__support/CPP/Bitset.h",
         "src/__support/CPP/Functional.h",
         "src/__support/CPP/Limits.h",
@@ -72,7 +73,6 @@ fputil_common_hdrs = [
     "src/__support/FPUtil/BasicOperations.h",
     "src/__support/FPUtil/DivisionAndRemainderOperations.h",
     "src/__support/FPUtil/FEnvImpl.h",
-    "src/__support/FPUtil/FEnvUtils.h",
     "src/__support/FPUtil/FPBits.h",
     "src/__support/FPUtil/FloatProperties.h",
     "src/__support/FPUtil/Hypot.h",
@@ -399,7 +399,12 @@ libc_math_function(name = "frexpl")
 
 libc_math_function(name = "hypot")
 
-libc_math_function(name = "hypotf")
+libc_math_function(
+    name = "hypotf",
+    additional_deps = [
+        ":__support_fputil_sqrt",
+    ],
+)
 
 libc_math_function(name = "logb")
 
@@ -661,6 +666,7 @@ cc_library(
     ],
     deps = [
         ":__support_common",
+        ":__support_standalone_cpp",
         ":libc_root",
     ],
 )

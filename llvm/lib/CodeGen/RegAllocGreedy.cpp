@@ -133,6 +133,12 @@ static cl::opt<bool> ConsiderLocalIntervalCost(
              "candidate when choosing the best split candidate."),
     cl::init(false));
 
+static cl::opt<long> GrowRegionComplexityBudget(
+    "grow-region-complexity-budget",
+    cl::desc("growRegion() does not scale with the number of BB edges, so "
+             "limit its budget and bail out once we reach the limit."),
+    cl::init(10000), cl::Hidden);
+
 static RegisterRegAlloc greedyRegAlloc("greedy", "greedy register allocator",
                                        createGreedyRegisterAllocator);
 
@@ -784,6 +790,7 @@ bool RAGreedy::growRegion(GlobalSplitCandidate &Cand) {
   unsigned Visited = 0;
 #endif
 
+  long Budget = GrowRegionComplexityBudget;
   while (true) {
     ArrayRef<unsigned> NewBundles = SpillPlacer->getRecentPositive();
     // Find new through blocks in the periphery of PrefRegBundles.
@@ -791,6 +798,9 @@ bool RAGreedy::growRegion(GlobalSplitCandidate &Cand) {
       // Look at all blocks connected to Bundle in the full graph.
       ArrayRef<unsigned> Blocks = Bundles->getBlocks(Bundle);
       for (unsigned Block : Blocks) {
+        // Limit compilation time by bailing out after we use all our budget.
+        if (Budget-- == 0)
+          return false;
         if (!Todo.test(Block))
           continue;
         Todo.reset(Block);
@@ -1961,8 +1971,14 @@ bool RAGreedy::mayRecolorAllInterferences(
       // it would not be recolorable as it is in the same state as VirtReg.
       // However, if VirtReg has tied defs and Intf doesn't, then
       // there is still a point in examining if it can be recolorable.
+      //
+      // Also, don't try to evict a register which is assigned to an overlapping
+      // super register.
+      //
+      // TODO: Can we evict an interfering subset of the subregisters?
       if (((ExtraInfo->getStage(*Intf) == RS_Done &&
-            MRI->getRegClass(Intf->reg()) == CurRC) &&
+            (MRI->getRegClass(Intf->reg()) == CurRC ||
+             TRI->regsOverlap(VRM->getPhys(Intf->reg()), PhysReg))) &&
            !(hasTiedDef(MRI, VirtReg.reg()) &&
              !hasTiedDef(MRI, Intf->reg()))) ||
           FixedRegisters.count(Intf->reg())) {

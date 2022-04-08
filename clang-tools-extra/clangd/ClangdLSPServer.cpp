@@ -9,9 +9,8 @@
 #include "ClangdLSPServer.h"
 #include "ClangdServer.h"
 #include "CodeComplete.h"
+#include "CompileCommands.h"
 #include "Diagnostics.h"
-#include "DraftStore.h"
-#include "DumpAST.h"
 #include "Feature.h"
 #include "GlobalCompilationDatabase.h"
 #include "LSPBinder.h"
@@ -21,22 +20,19 @@
 #include "TUScheduler.h"
 #include "URI.h"
 #include "refactor/Tweak.h"
+#include "support/Cancellation.h"
 #include "support/Context.h"
 #include "support/MemoryTree.h"
 #include "support/Trace.h"
-#include "clang/AST/ASTContext.h"
 #include "clang/Tooling/Core/Replacement.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/Allocator.h"
-#include "llvm/Support/Errc.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/JSON.h"
-#include "llvm/Support/Path.h"
 #include "llvm/Support/SHA1.h"
 #include "llvm/Support/ScopedPrinter.h"
 #include "llvm/Support/raw_ostream.h"
@@ -986,8 +982,8 @@ void ClangdLSPServer::onCodeAction(const CodeActionParams &Params,
 
   // Now enumerate the semantic code actions.
   auto ConsumeActions =
-      [Reply = std::move(Reply), File, Selection = Params.range,
-       FixIts = std::move(FixIts), this](
+      [Diags = Params.context.diagnostics, Reply = std::move(Reply), File,
+       Selection = Params.range, FixIts = std::move(FixIts), this](
           llvm::Expected<std::vector<ClangdServer::TweakRef>> Tweaks) mutable {
         if (!Tweaks)
           return Reply(Tweaks.takeError());
@@ -1003,12 +999,16 @@ void ClangdLSPServer::onCodeAction(const CodeActionParams &Params,
         for (auto &Action : Actions) {
           if (Action.kind && *Action.kind == CodeAction::QUICKFIX_KIND) {
             if (OnlyFix) {
-              OnlyFix->isPreferred = false;
+              OnlyFix = nullptr;
               break;
             }
-            Action.isPreferred = true;
             OnlyFix = &Action;
           }
+        }
+        if (OnlyFix) {
+          OnlyFix->isPreferred = true;
+          if (Diags.size() == 1 && Diags.front().range == Selection)
+            OnlyFix->diagnostics = {Diags.front()};
         }
 
         if (SupportsCodeAction)

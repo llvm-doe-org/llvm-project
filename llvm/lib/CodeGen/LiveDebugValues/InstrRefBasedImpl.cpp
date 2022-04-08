@@ -266,7 +266,7 @@ public:
   /// object fields to track variable locations as we step through the block.
   /// FIXME: could just examine mloctracker instead of passing in \p mlocs?
   void
-  loadInlocs(MachineBasicBlock &MBB, ValueIDNum *MLocs,
+  loadInlocs(MachineBasicBlock &MBB, ValueTable &MLocs,
              const SmallVectorImpl<std::pair<DebugVariable, DbgValue>> &VLocs,
              unsigned NumLocs) {
     ActiveMLocs.clear();
@@ -899,7 +899,7 @@ MachineInstrBuilder MLocTracker::emitLoc(Optional<LocIdx> MLoc,
 }
 
 /// Default construct and initialize the pass.
-InstrRefBasedLDV::InstrRefBasedLDV() {}
+InstrRefBasedLDV::InstrRefBasedLDV() = default;
 
 bool InstrRefBasedLDV::isCalleeSaved(LocIdx L) const {
   unsigned Reg = MTracker->LocIdxToLocID[L];
@@ -1022,8 +1022,8 @@ bool InstrRefBasedLDV::transferDebugValue(const MachineInstr &MI) {
 }
 
 bool InstrRefBasedLDV::transferDebugInstrRef(MachineInstr &MI,
-                                             ValueIDNum **MLiveOuts,
-                                             ValueIDNum **MLiveIns) {
+                                             const ValueTable *MLiveOuts,
+                                             const ValueTable *MLiveIns) {
   if (!MI.isDebugRef())
     return false;
 
@@ -1091,15 +1091,25 @@ bool InstrRefBasedLDV::transferDebugInstrRef(MachineInstr &MI,
       if (L)
         NewID = ValueIDNum(BlockNo, InstrIt->second.second, *L);
     } else if (OpNo != MachineFunction::DebugOperandMemNumber) {
-      assert(OpNo < TargetInstr.getNumOperands());
-      const MachineOperand &MO = TargetInstr.getOperand(OpNo);
+      // Permit the debug-info to be completely wrong: identifying a nonexistant
+      // operand, or one that is not a register definition, means something
+      // unexpected happened during optimisation. Broken debug-info, however,
+      // shouldn't crash the compiler -- instead leave the variable value as
+      // None, which will make it appear "optimised out".
+      if (OpNo < TargetInstr.getNumOperands()) {
+        const MachineOperand &MO = TargetInstr.getOperand(OpNo);
 
-      // Today, this can only be a register.
-      assert(MO.isReg() && MO.isDef());
+        if (MO.isReg() && MO.isDef() && MO.getReg()) {
+          unsigned LocID = MTracker->getLocID(MO.getReg());
+          LocIdx L = MTracker->LocIDToLocIdx[LocID];
+          NewID = ValueIDNum(BlockNo, InstrIt->second.second, L);
+        }
+      }
 
-      unsigned LocID = MTracker->getLocID(MO.getReg());
-      LocIdx L = MTracker->LocIDToLocIdx[LocID];
-      NewID = ValueIDNum(BlockNo, InstrIt->second.second, L);
+      if (!NewID) {
+        LLVM_DEBUG(
+            { dbgs() << "Seen instruction reference to illegal operand\n"; });
+      }
     }
     // else: NewID is left as None.
   } else if (PHIIt != DebugPHINumToValue.end() && PHIIt->InstrNum == InstNo) {
@@ -1249,7 +1259,16 @@ bool InstrRefBasedLDV::transferDebugPHI(MachineInstr &MI) {
   const MachineOperand &MO = MI.getOperand(0);
   unsigned InstrNum = MI.getOperand(1).getImm();
 
-  if (MO.isReg()) {
+  auto EmitBadPHI = [this, &MI, InstrNum](void) -> bool {
+    // Helper lambda to do any accounting when we fail to find a location for
+    // a DBG_PHI. This can happen if DBG_PHIs are malformed, or refer to a
+    // dead stack slot, for example.
+    // Record a DebugPHIRecord with an empty value + location.
+    DebugPHINumToValue.push_back({InstrNum, MI.getParent(), None, None});
+    return true;
+  };
+
+  if (MO.isReg() && MO.getReg()) {
     // The value is whatever's currently in the register. Read and record it,
     // to be analysed later.
     Register Reg = MO.getReg();
@@ -1261,15 +1280,14 @@ bool InstrRefBasedLDV::transferDebugPHI(MachineInstr &MI) {
     // Ensure this register is tracked.
     for (MCRegAliasIterator RAI(MO.getReg(), TRI, true); RAI.isValid(); ++RAI)
       MTracker->lookupOrTrackRegister(*RAI);
-  } else {
+  } else if (MO.isFI()) {
     // The value is whatever's in this stack slot.
-    assert(MO.isFI());
     unsigned FI = MO.getIndex();
 
     // If the stack slot is dead, then this was optimized away.
     // FIXME: stack slot colouring should account for slots that get merged.
     if (MFI->isDeadObjectIndex(FI))
-      return true;
+      return EmitBadPHI();
 
     // Identify this spill slot, ensure it's tracked.
     Register Base;
@@ -1280,7 +1298,7 @@ bool InstrRefBasedLDV::transferDebugPHI(MachineInstr &MI) {
     // We might be able to find a value, but have chosen not to, to avoid
     // tracking too much stack information.
     if (!SpillNo)
-      return true;
+      return EmitBadPHI();
 
     // Problem: what value should we extract from the stack? LLVM does not
     // record what size the last store to the slot was, and it would become
@@ -1315,8 +1333,17 @@ bool InstrRefBasedLDV::transferDebugPHI(MachineInstr &MI) {
     }
 
     // Record this DBG_PHI for later analysis.
-    auto DbgPHI = DebugPHIRecord({InstrNum, MI.getParent(), *Result, *SpillLoc});
+    auto DbgPHI =
+        DebugPHIRecord({InstrNum, MI.getParent(), *Result, *SpillLoc});
     DebugPHINumToValue.push_back(DbgPHI);
+  } else {
+    // Else: if the operand is neither a legal register or a stack slot, then
+    // we're being fed illegal debug-info. Record an empty PHI, so that any
+    // debug users trying to read this number will be put off trying to
+    // interpret the value.
+    LLVM_DEBUG(
+        { dbgs() << "Seen DBG_PHI with unrecognised operand format\n"; });
+    return EmitBadPHI();
   }
 
   return true;
@@ -1755,8 +1782,8 @@ void InstrRefBasedLDV::accumulateFragmentMap(MachineInstr &MI) {
   AllSeenFragments.insert(ThisFragment);
 }
 
-void InstrRefBasedLDV::process(MachineInstr &MI, ValueIDNum **MLiveOuts,
-                               ValueIDNum **MLiveIns) {
+void InstrRefBasedLDV::process(MachineInstr &MI, const ValueTable *MLiveOuts,
+                               const ValueTable *MLiveIns) {
   // Try to interpret an MI as a debug or transfer instruction. Only if it's
   // none of these should we interpret it's register defs as new value
   // definitions.
@@ -1806,7 +1833,10 @@ void InstrRefBasedLDV::produceMLocTransferFunction(
 
     // Step through each instruction in this block.
     for (auto &MI : MBB) {
-      process(MI);
+      // Pass in an empty unique_ptr for the value tables when accumulating the
+      // machine transfer function.
+      process(MI, nullptr, nullptr);
+
       // Also accumulate fragment map.
       if (MI.isDebugValue() || MI.isDebugRef())
         accumulateFragmentMap(MI);
@@ -1895,7 +1925,7 @@ void InstrRefBasedLDV::produceMLocTransferFunction(
 
 bool InstrRefBasedLDV::mlocJoin(
     MachineBasicBlock &MBB, SmallPtrSet<const MachineBasicBlock *, 16> &Visited,
-    ValueIDNum **OutLocs, ValueIDNum *InLocs) {
+    FuncValueTable &OutLocs, ValueTable &InLocs) {
   LLVM_DEBUG(dbgs() << "join MBB: " << MBB.getNumber() << "\n");
   bool Changed = false;
 
@@ -1996,7 +2026,7 @@ void InstrRefBasedLDV::findStackIndexInterference(
 
 void InstrRefBasedLDV::placeMLocPHIs(
     MachineFunction &MF, SmallPtrSetImpl<MachineBasicBlock *> &AllBlocks,
-    ValueIDNum **MInLocs, SmallVectorImpl<MLocTransferMap> &MLocTransfer) {
+    FuncValueTable &MInLocs, SmallVectorImpl<MLocTransferMap> &MLocTransfer) {
   SmallVector<unsigned, 4> StackUnits;
   findStackIndexInterference(StackUnits);
 
@@ -2125,7 +2155,7 @@ void InstrRefBasedLDV::placeMLocPHIs(
 }
 
 void InstrRefBasedLDV::buildMLocValueMap(
-    MachineFunction &MF, ValueIDNum **MInLocs, ValueIDNum **MOutLocs,
+    MachineFunction &MF, FuncValueTable &MInLocs, FuncValueTable &MOutLocs,
     SmallVectorImpl<MLocTransferMap> &MLocTransfer) {
   std::priority_queue<unsigned int, std::vector<unsigned int>,
                       std::greater<unsigned int>>
@@ -2267,7 +2297,7 @@ void InstrRefBasedLDV::BlockPHIPlacement(
 
 Optional<ValueIDNum> InstrRefBasedLDV::pickVPHILoc(
     const MachineBasicBlock &MBB, const DebugVariable &Var,
-    const LiveIdxT &LiveOuts, ValueIDNum **MOutLocs,
+    const LiveIdxT &LiveOuts, FuncValueTable &MOutLocs,
     const SmallVectorImpl<const MachineBasicBlock *> &BlockOrders) {
   // Collect a set of locations from predecessor where its live-out value can
   // be found.
@@ -2535,7 +2565,7 @@ void InstrRefBasedLDV::getBlocksForScope(
 void InstrRefBasedLDV::buildVLocValueMap(
     const DILocation *DILoc, const SmallSet<DebugVariable, 4> &VarsWeCareAbout,
     SmallPtrSetImpl<MachineBasicBlock *> &AssignBlocks, LiveInsT &Output,
-    ValueIDNum **MOutLocs, ValueIDNum **MInLocs,
+    FuncValueTable &MOutLocs, FuncValueTable &MInLocs,
     SmallVectorImpl<VLocTracker> &AllTheVLocs) {
   // This method is much like buildMLocValueMap: but focuses on a single
   // LexicalScope at a time. Pick out a set of blocks and variables that are
@@ -2920,7 +2950,7 @@ void InstrRefBasedLDV::makeDepthFirstEjectionMap(
 bool InstrRefBasedLDV::depthFirstVLocAndEmit(
     unsigned MaxNumBlocks, const ScopeToDILocT &ScopeToDILocation,
     const ScopeToVarsT &ScopeToVars, ScopeToAssignBlocksT &ScopeToAssignBlocks,
-    LiveInsT &Output, ValueIDNum **MOutLocs, ValueIDNum **MInLocs,
+    LiveInsT &Output, FuncValueTable &MOutLocs, FuncValueTable &MInLocs,
     SmallVectorImpl<VLocTracker> &AllTheVLocs, MachineFunction &MF,
     DenseMap<DebugVariable, unsigned> &AllVarsNumbering,
     const TargetPassConfig &TPC) {
@@ -2929,15 +2959,8 @@ bool InstrRefBasedLDV::depthFirstVLocAndEmit(
   VTracker = nullptr;
 
   // No scopes? No variable locations.
-  if (!LS.getCurrentFunctionScope()) {
-    // FIXME: this is a sticking plaster to prevent a memory leak, these
-    // pointers will be automagically freed by being unique pointers, shortly.
-    for (unsigned int I = 0; I < MaxNumBlocks; ++I) {
-      delete[] MInLocs[I];
-      delete[] MOutLocs[I];
-    }
+  if (!LS.getCurrentFunctionScope())
     return false;
-  }
 
   // Build map from block number to the last scope that uses the block.
   SmallVector<unsigned, 16> EjectionMap;
@@ -2961,17 +2984,14 @@ bool InstrRefBasedLDV::depthFirstVLocAndEmit(
     CurBB = BBNum;
     CurInst = 1;
     for (auto &MI : MBB) {
-      process(MI, MOutLocs, MInLocs);
+      process(MI, MOutLocs.get(), MInLocs.get());
       TTracker->checkInstForNewValues(CurInst, MI.getIterator());
       ++CurInst;
     }
 
     // Free machine-location tables for this block.
-    delete[] MInLocs[BBNum];
-    delete[] MOutLocs[BBNum];
-    // Make ourselves brittle to use-after-free errors.
-    MInLocs[BBNum] = nullptr;
-    MOutLocs[BBNum] = nullptr;
+    MInLocs[BBNum].reset();
+    MOutLocs[BBNum].reset();
     // We don't need live-in variable values for this block either.
     Output[BBNum].clear();
     AllTheVLocs[BBNum].clear();
@@ -3038,16 +3058,6 @@ bool InstrRefBasedLDV::depthFirstVLocAndEmit(
   for (auto *MBB : ArtificialBlocks)
     if (MOutLocs[MBB->getNumber()])
       EjectBlock(*MBB);
-
-  // Finally, there might have been gaps in the block numbering, from dead
-  // blocks being deleted or folded. In those scenarios, we might allocate a
-  // block-table that's never ejected, meaning we have to free it at the end.
-  for (unsigned int I = 0; I < MaxNumBlocks; ++I) {
-    if (MInLocs[I]) {
-      delete[] MInLocs[I];
-      delete[] MOutLocs[I];
-    }
-  }
 
   return emitTransfers(AllVarsNumbering);
 }
@@ -3146,13 +3156,13 @@ bool InstrRefBasedLDV::ExtendRanges(MachineFunction &MF,
   // Allocate and initialize two array-of-arrays for the live-in and live-out
   // machine values. The outer dimension is the block number; while the inner
   // dimension is a LocIdx from MLocTracker.
-  ValueIDNum **MOutLocs = new ValueIDNum *[MaxNumBlocks];
-  ValueIDNum **MInLocs = new ValueIDNum *[MaxNumBlocks];
+  FuncValueTable MOutLocs = std::make_unique<ValueTable[]>(MaxNumBlocks);
+  FuncValueTable MInLocs = std::make_unique<ValueTable[]>(MaxNumBlocks);
   unsigned NumLocs = MTracker->getNumLocs();
   for (int i = 0; i < MaxNumBlocks; ++i) {
     // These all auto-initialize to ValueIDNum::EmptyValue
-    MOutLocs[i] = new ValueIDNum[NumLocs];
-    MInLocs[i] = new ValueIDNum[NumLocs];
+    MOutLocs[i] = std::make_unique<ValueIDNum[]>(NumLocs);
+    MInLocs[i] = std::make_unique<ValueIDNum[]>(NumLocs);
   }
 
   // Solve the machine value dataflow problem using the MLocTransfer function,
@@ -3165,7 +3175,10 @@ bool InstrRefBasedLDV::ExtendRanges(MachineFunction &MF,
   // either live-through machine values, or PHIs.
   for (auto &DBG_PHI : DebugPHINumToValue) {
     // Identify unresolved block-live-ins.
-    ValueIDNum &Num = DBG_PHI.ValueRead;
+    if (!DBG_PHI.ValueRead)
+      continue;
+
+    ValueIDNum &Num = *DBG_PHI.ValueRead;
     if (!Num.isPHI())
       continue;
 
@@ -3186,7 +3199,7 @@ bool InstrRefBasedLDV::ExtendRanges(MachineFunction &MF,
     MTracker->loadFromArray(MInLocs[CurBB], CurBB);
     CurInst = 1;
     for (auto &MI : MBB) {
-      process(MI, MOutLocs, MInLocs);
+      process(MI, MOutLocs.get(), MInLocs.get());
       ++CurInst;
     }
     MTracker->reset();
@@ -3241,12 +3254,6 @@ bool InstrRefBasedLDV::ExtendRanges(MachineFunction &MF,
                       << " has " << MaxNumBlocks << " basic blocks and "
                       << VarAssignCount
                       << " variable assignments, exceeding limits.\n");
-
-    // Perform memory cleanup that emitLocations would do otherwise.
-    for (int Idx = 0; Idx < MaxNumBlocks; ++Idx) {
-      delete[] MOutLocs[Idx];
-      delete[] MInLocs[Idx];
-    }
   } else {
     // Optionally, solve the variable value problem and emit to blocks by using
     // a lexical-scope-depth search. It should be functionally identical to
@@ -3255,10 +3262,6 @@ bool InstrRefBasedLDV::ExtendRanges(MachineFunction &MF,
         MaxNumBlocks, ScopeToDILocation, ScopeToVars, ScopeToAssignBlocks,
         SavedLiveIns, MOutLocs, MInLocs, vlocs, MF, AllVarsNumbering, *TPC);
   }
-
-  // Elements of these arrays will be deleted by emitLocations.
-  delete[] MOutLocs;
-  delete[] MInLocs;
 
   delete MTracker;
   delete TTracker;
@@ -3376,9 +3379,10 @@ public:
   /// Machine location where any PHI must occur.
   LocIdx Loc;
   /// Table of live-in machine value numbers for blocks / locations.
-  ValueIDNum **MLiveIns;
+  const ValueTable *MLiveIns;
 
-  LDVSSAUpdater(LocIdx L, ValueIDNum **MLiveIns) : Loc(L), MLiveIns(MLiveIns) {}
+  LDVSSAUpdater(LocIdx L, const ValueTable *MLiveIns)
+      : Loc(L), MLiveIns(MLiveIns) {}
 
   void reset() {
     for (auto &Block : BlockMap)
@@ -3535,11 +3539,13 @@ public:
 
 } // end namespace llvm
 
-Optional<ValueIDNum> InstrRefBasedLDV::resolveDbgPHIs(MachineFunction &MF,
-                                                      ValueIDNum **MLiveOuts,
-                                                      ValueIDNum **MLiveIns,
-                                                      MachineInstr &Here,
-                                                      uint64_t InstrNum) {
+Optional<ValueIDNum> InstrRefBasedLDV::resolveDbgPHIs(
+    MachineFunction &MF, const ValueTable *MLiveOuts,
+    const ValueTable *MLiveIns, MachineInstr &Here, uint64_t InstrNum) {
+  assert(MLiveOuts && MLiveIns &&
+         "Tried to resolve DBG_PHI before location "
+         "tables allocated?");
+
   // This function will be called twice per DBG_INSTR_REF, and might end up
   // computing lots of SSA information: memoize it.
   auto SeenDbgPHIIt = SeenDbgPHIs.find(&Here);
@@ -3553,8 +3559,8 @@ Optional<ValueIDNum> InstrRefBasedLDV::resolveDbgPHIs(MachineFunction &MF,
 }
 
 Optional<ValueIDNum> InstrRefBasedLDV::resolveDbgPHIsImpl(
-    MachineFunction &MF, ValueIDNum **MLiveOuts, ValueIDNum **MLiveIns,
-    MachineInstr &Here, uint64_t InstrNum) {
+    MachineFunction &MF, const ValueTable *MLiveOuts,
+    const ValueTable *MLiveIns, MachineInstr &Here, uint64_t InstrNum) {
   // Pick out records of DBG_PHI instructions that have been observed. If there
   // are none, then we cannot compute a value number.
   auto RangePair = std::equal_range(DebugPHINumToValue.begin(),
@@ -3566,17 +3572,24 @@ Optional<ValueIDNum> InstrRefBasedLDV::resolveDbgPHIsImpl(
   if (LowerIt == UpperIt)
     return None;
 
+  // If any DBG_PHIs referred to a location we didn't understand, don't try to
+  // compute a value. There might be scenarios where we could recover a value
+  // for some range of DBG_INSTR_REFs, but at this point we can have high
+  // confidence that we've seen a bug.
+  auto DBGPHIRange = make_range(LowerIt, UpperIt);
+  for (const DebugPHIRecord &DBG_PHI : DBGPHIRange)
+    if (!DBG_PHI.ValueRead)
+      return None;
+
   // If there's only one DBG_PHI, then that is our value number.
   if (std::distance(LowerIt, UpperIt) == 1)
-    return LowerIt->ValueRead;
-
-  auto DBGPHIRange = make_range(LowerIt, UpperIt);
+    return *LowerIt->ValueRead;
 
   // Pick out the location (physreg, slot) where any PHIs must occur. It's
   // technically possible for us to merge values in different registers in each
   // block, but highly unlikely that LLVM will generate such code after register
   // allocation.
-  LocIdx Loc = LowerIt->ReadLoc;
+  LocIdx Loc = *LowerIt->ReadLoc;
 
   // We have several DBG_PHIs, and a use position (the Here inst). All each
   // DBG_PHI does is identify a value at a program position. We can treat each
@@ -3595,7 +3608,7 @@ Optional<ValueIDNum> InstrRefBasedLDV::resolveDbgPHIsImpl(
   // for the SSAUpdater.
   for (const auto &DBG_PHI : DBGPHIRange) {
     LDVSSABlock *Block = Updater.getSSALDVBlock(DBG_PHI.MBB);
-    const ValueIDNum &Num = DBG_PHI.ValueRead;
+    const ValueIDNum &Num = *DBG_PHI.ValueRead;
     AvailableValues.insert(std::make_pair(Block, Num.asU64()));
   }
 
@@ -3629,7 +3642,7 @@ Optional<ValueIDNum> InstrRefBasedLDV::resolveDbgPHIsImpl(
   // Define all the input DBG_PHI values in ValidatedValues.
   for (const auto &DBG_PHI : DBGPHIRange) {
     LDVSSABlock *Block = Updater.getSSALDVBlock(DBG_PHI.MBB);
-    const ValueIDNum &Num = DBG_PHI.ValueRead;
+    const ValueIDNum &Num = *DBG_PHI.ValueRead;
     ValidatedValues.insert(std::make_pair(Block, Num));
   }
 
@@ -3654,7 +3667,7 @@ Optional<ValueIDNum> InstrRefBasedLDV::resolveDbgPHIsImpl(
         return None;
 
       ValueIDNum ValueToCheck;
-      ValueIDNum *BlockLiveOuts = MLiveOuts[PHIIt.first->BB.getNumber()];
+      const ValueTable &BlockLiveOuts = MLiveOuts[PHIIt.first->BB.getNumber()];
 
       auto VVal = ValidatedValues.find(PHIIt.first);
       if (VVal == ValidatedValues.end()) {

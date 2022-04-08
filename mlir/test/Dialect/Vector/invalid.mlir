@@ -73,7 +73,7 @@ func @shuffle_index_out_of_range(%arg0: vector<2xf32>, %arg1: vector<2xf32>) {
 // -----
 
 func @shuffle_empty_mask(%arg0: vector<2xf32>, %arg1: vector<2xf32>) {
-  // expected-error@+1 {{'vector.shuffle' invalid mask length}}
+  // expected-error@+1 {{'vector.shuffle' op invalid mask length}}
   %1 = vector.shuffle %arg0, %arg1 [] : vector<2xf32>, vector<2xf32>
 }
 
@@ -104,7 +104,7 @@ func @extract_element(%arg0: vector<4x4xf32>) {
 // -----
 
 func @extract_vector_type(%arg0: index) {
-  // expected-error@+1 {{expected vector type}}
+  // expected-error@+1 {{invalid kind of type specified}}
   %1 = vector.extract %arg0[] : index
 }
 
@@ -1082,21 +1082,21 @@ func @bitcast_sizemismatch(%arg0 : vector<5x1x3x2xf32>) {
 // -----
 
 func @reduce_unknown_kind(%arg0: vector<16xf32>) -> f32 {
-  // expected-error@+1 {{'vector.reduction' op unknown reduction kind: joho}}
-  %0 = vector.reduction "joho", %arg0 : vector<16xf32> into f32
+  // expected-error@+1 {{custom op 'vector.reduction' Unknown combining kind: joho}}
+  %0 = vector.reduction <joho>, %arg0 : vector<16xf32> into f32
 }
 
 // -----
 
 func @reduce_elt_type_mismatch(%arg0: vector<16xf32>) -> i32 {
   // expected-error@+1 {{'vector.reduction' op failed to verify that source operand and result have same element type}}
-  %0 = vector.reduction "add", %arg0 : vector<16xf32> into i32
+  %0 = vector.reduction <add>, %arg0 : vector<16xf32> into i32
 }
 
 // -----
 
 func @reduce_unsupported_attr(%arg0: vector<16xf32>) -> i32 {
-  // expected-error@+1 {{attribute 'kind' failed to satisfy constraint: string attribute}}
+  // expected-error@+1 {{expected '<'}}
   %0 = vector.reduction 1234, %arg0 : vector<16xf32> into i32
 }
 
@@ -1104,35 +1104,42 @@ func @reduce_unsupported_attr(%arg0: vector<16xf32>) -> i32 {
 
 func @reduce_unsupported_third_argument(%arg0: vector<16xf32>, %arg1: f32) -> f32 {
   // expected-error@+1 {{'vector.reduction' unsupported number of operands}}
-  %0 = vector.reduction "add", %arg0, %arg1, %arg1 : vector<16xf32> into f32
+  %0 = vector.reduction <add>, %arg0, %arg1, %arg1 : vector<16xf32> into f32
 }
 
 // -----
 
 func @reduce_unsupported_accumulator_kind(%arg0: vector<16xf32>, %arg1: f32) -> f32 {
   // expected-error@+1 {{'vector.reduction' op no accumulator for reduction kind: min}}
-  %0 = vector.reduction "minf", %arg0, %arg1 : vector<16xf32> into f32
+  %0 = vector.reduction <minf>, %arg0, %arg1 : vector<16xf32> into f32
 }
 
 // -----
 
 func @reduce_unsupported_accumulator_type(%arg0: vector<16xi32>, %arg1: i32) -> i32 {
   // expected-error@+1 {{'vector.reduction' op no accumulator for type: 'i32'}}
-  %0 = vector.reduction "add", %arg0, %arg1 : vector<16xi32> into i32
+  %0 = vector.reduction <add>, %arg0, %arg1 : vector<16xi32> into i32
 }
 
 // -----
 
 func @reduce_unsupported_type(%arg0: vector<16xf32>) -> f32 {
   // expected-error@+1 {{'vector.reduction' op unsupported reduction type}}
-  %0 = vector.reduction "xor", %arg0 : vector<16xf32> into f32
+  %0 = vector.reduction <xor>, %arg0 : vector<16xf32> into f32
 }
 
 // -----
 
 func @reduce_unsupported_rank(%arg0: vector<4x16xf32>) -> f32 {
   // expected-error@+1 {{'vector.reduction' op unsupported reduction rank: 2}}
-  %0 = vector.reduction "add", %arg0 : vector<4x16xf32> into f32
+  %0 = vector.reduction <add>, %arg0 : vector<4x16xf32> into f32
+}
+
+// -----
+
+func @multi_reduce_invalid_type(%arg0: vector<4x16xf32>) -> f32 {
+  // expected-error@+1 {{'vector.multi_reduction' op inferred type(s) 'vector<4xf32>' are incompatible with return type(s) of operation 'vector<16xf32>'}}
+  %0 = vector.multi_reduction <mul>, %arg0 [1] : vector<4x16xf32> to vector<16xf32>
 }
 
 // -----

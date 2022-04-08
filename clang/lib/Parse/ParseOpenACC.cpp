@@ -135,7 +135,10 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
     // Consume final annot_pragma_openacc_end.
     ConsumeAnnotationToken();
     DeclGroupPtrTy Group;
-    ParseTopLevelDecl(Group);
+    // We've seen a routine directive, so there should be no more imports.
+    // TODO: Is that right?  Revisit when OpenACC C++ support is enabled.
+    Sema::ModuleImportState IS = Sema::ModuleImportState::ImportFinished;
+    ParseTopLevelDecl(Group, IS);
     Actions.ActOnOpenACCRoutineDirective(ACC_EXPLICIT, Group.get());
     Actions.EndOpenACCDirectiveAndAssociate(DKind);
     return Group;

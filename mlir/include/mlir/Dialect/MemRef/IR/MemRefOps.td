@@ -26,10 +26,7 @@ def MemRefTypeAttr
 }
 
 class MemRef_Op<string mnemonic, list<Trait> traits = []>
-    : Op<MemRef_Dialect, mnemonic, traits> {
-  let printer = [{ return ::print(p, *this); }];
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-}
+    : Op<MemRef_Dialect, mnemonic, traits>;
 
 // Base class for ops with static/dynamic offset, sizes and strides
 // attributes/arguments.
@@ -275,7 +272,8 @@ def MemRef_AllocaScopeOp : MemRef_Op<"alloca_scope",
 
   let results = (outs Variadic<AnyType>:$results);
   let regions = (region SizedRegion<1>:$bodyRegion);
-  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+  let hasCanonicalizer = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -374,11 +372,6 @@ def MemRef_CastOp : MemRef_Op<"cast", [
   let arguments = (ins AnyRankedOrUnrankedMemRef:$source);
   let results = (outs AnyRankedOrUnrankedMemRef:$dest);
   let assemblyFormat = "$source attr-dict `:` type($source) `to` type($dest)";
-  let builders = [
-    OpBuilder<(ins "Value":$source, "Type":$destType), [{
-       impl::buildCastOp($_builder, $_state, source, destType);
-    }]>
-  ];
 
   let extraClassDeclaration = [{
     /// Fold the given CastOp into consumer op.
@@ -388,7 +381,6 @@ def MemRef_CastOp : MemRef_Op<"cast", [
   }];
 
   let hasFolder = 1;
-  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -663,6 +655,7 @@ def MemRef_DmaStartOp : MemRef_Op<"dma_start"> {
       return getOperand(getNumOperands() - 1);
     }
   }];
+  let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
   let hasVerifier = 1;
 }
@@ -777,6 +770,7 @@ def GenericAtomicRMWOp : MemRef_Op<"generic_atomic_rmw", [
       return memref().getType().cast<MemRefType>();
     }
   }];
+  let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
 
@@ -908,7 +902,7 @@ def LoadOp : MemRef_Op<"load",
     In an `affine.if` or `affine.for` body, the indices of a load are restricted
     to SSA values bound to surrounding loop induction variables,
     [symbols](Affine.md/#dimensions-and-symbols), results of a
-    [`constant` operation](Standard.md/#stdconstant-constantop), or the result of an
+    constant operations, or the result of an
     `affine.apply` operation that can in turn take as arguments all of the
     aforementioned SSA values or the recursively result of such an
     `affine.apply` operation.
@@ -1002,6 +996,7 @@ def MemRef_PrefetchOp : MemRef_Op<"prefetch"> {
     static StringRef getIsDataCacheAttrName() { return "isDataCache"; }
   }];
 
+  let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
   let hasVerifier = 1;
 }
@@ -1054,8 +1049,6 @@ def MemRef_ReinterpretCastOp
     attr-dict `:` type($source) `to` type($result)
   }];
 
-  let parser = ?;
-  let printer = ?;
   let hasVerifier = 1;
 
   let builders = [
@@ -1247,11 +1240,13 @@ class MemRef_ReassociativeReshapeOp<string mnemonic, list<Trait> traits = []> :
     Value getViewSource() { return src(); }
   }];
 
+  let assemblyFormat = [{
+    $src $reassociation attr-dict `:` type($src) `into` type($result)
+  }];
+
   let hasFolder = 1;
   let hasCanonicalizer = 1;
   let hasVerifier = 1;
-  let printer = [{ return ::print(p, *this); }];
-  let parser = [{ return ::parseReshapeLikeOp(parser, result); }];
 }
 
 def MemRef_ExpandShapeOp : MemRef_ReassociativeReshapeOp<"expand_shape"> {
@@ -1348,7 +1343,7 @@ def MemRef_StoreOp : MemRef_Op<"store",
     In an affine context, the indices of a store are restricted to SSA values
     bound to surrounding loop induction variables,
     [symbols](Affine.md/#restrictions-on-dimensions-and-symbols), results of a
-    [`constant` operation](Standard.md/#stdconstant-constantop), or the result of an
+    `constant` operation, or the result of an
     [`affine.apply`](Affine.md/#affineapply-affineapplyop) operation that can in
     turn take as arguments all of the aforementioned SSA values or the
     recursively result of such an `affine.apply` operation.
@@ -1639,7 +1634,7 @@ def SubViewOp : MemRef_OpWithOffsetSizesAndStrides<"subview", [
 
     /// Return the dimensions of the source type that are dropped when
     /// the result is rank-reduced.
-    llvm::SmallDenseSet<unsigned> getDroppedDims();
+    llvm::SmallBitVector getDroppedDims();
   }];
 
   let hasCanonicalizer = 1;
@@ -1706,6 +1701,7 @@ def MemRef_TransposeOp : MemRef_Op<"transpose", [NoSideEffect]>,
     ShapedType getShapedType() { return in().getType().cast<ShapedType>(); }
   }];
 
+  let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
   let hasVerifier = 1;
 }
@@ -1773,6 +1769,11 @@ def MemRef_ViewOp : MemRef_Op<"view", [
     operand_range getDynamicSizes() {
       return {sizes().begin(), sizes().end()};
     }
+  }];
+
+  let assemblyFormat = [{
+    $source `[` $byte_shift `]` `` `[` $sizes `]` attr-dict
+    `:` type($source) `to` type(results)
   }];
 
   let hasCanonicalizer = 1;

@@ -14,14 +14,15 @@
 #include "../PassDetail.h"
 #include "mlir/Analysis/DataLayoutAnalysis.h"
 #include "mlir/Conversion/ArithmeticToLLVM/ArithmeticToLLVM.h"
+#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Conversion/LLVMCommon/VectorPattern.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
@@ -54,7 +55,7 @@ static void filterFuncAttributes(ArrayRef<NamedAttribute> attrs,
   for (const auto &attr : attrs) {
     if (attr.getName() == SymbolTable::getSymbolAttrName() ||
         attr.getName() == FunctionOpInterface::getTypeAttrName() ||
-        attr.getName() == "std.varargs" ||
+        attr.getName() == "func.varargs" ||
         (filterArgAttrs &&
          attr.getName() == FunctionOpInterface::getArgDictAttrName()))
       continue;
@@ -227,7 +228,7 @@ protected:
                             ConversionPatternRewriter &rewriter) const {
     // Convert the original function arguments. They are converted using the
     // LLVMTypeConverter provided to this legalization pattern.
-    auto varargsAttr = funcOp->getAttrOfType<BoolAttr>("std.varargs");
+    auto varargsAttr = funcOp->getAttrOfType<BoolAttr>("func.varargs");
     TypeConverter::SignatureConversion result(funcOp.getNumArguments());
     auto llvmType = getTypeConverter()->convertFunctionSignature(
         funcOp.getType(), varargsAttr && varargsAttr.getValue(), result);
@@ -387,53 +388,11 @@ struct BarePtrFuncOpConversion : public FuncOpConversionBase {
   }
 };
 
-/// Lower `std.assert`. The default lowering calls the `abort` function if the
-/// assertion is violated and has no effect otherwise. The failure message is
-/// ignored by the default lowering but should be propagated by any custom
-/// lowering.
-struct AssertOpLowering : public ConvertOpToLLVMPattern<AssertOp> {
-  using ConvertOpToLLVMPattern<AssertOp>::ConvertOpToLLVMPattern;
+struct ConstantOpLowering : public ConvertOpToLLVMPattern<func::ConstantOp> {
+  using ConvertOpToLLVMPattern<func::ConstantOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(AssertOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
-
-    // Insert the `abort` declaration if necessary.
-    auto module = op->getParentOfType<ModuleOp>();
-    auto abortFunc = module.lookupSymbol<LLVM::LLVMFuncOp>("abort");
-    if (!abortFunc) {
-      OpBuilder::InsertionGuard guard(rewriter);
-      rewriter.setInsertionPointToStart(module.getBody());
-      auto abortFuncTy = LLVM::LLVMFunctionType::get(getVoidType(), {});
-      abortFunc = rewriter.create<LLVM::LLVMFuncOp>(rewriter.getUnknownLoc(),
-                                                    "abort", abortFuncTy);
-    }
-
-    // Split block at `assert` operation.
-    Block *opBlock = rewriter.getInsertionBlock();
-    auto opPosition = rewriter.getInsertionPoint();
-    Block *continuationBlock = rewriter.splitBlock(opBlock, opPosition);
-
-    // Generate IR to call `abort`.
-    Block *failureBlock = rewriter.createBlock(opBlock->getParent());
-    rewriter.create<LLVM::CallOp>(loc, abortFunc, llvm::None);
-    rewriter.create<LLVM::UnreachableOp>(loc);
-
-    // Generate assertion test.
-    rewriter.setInsertionPointToEnd(opBlock);
-    rewriter.replaceOpWithNewOp<LLVM::CondBrOp>(
-        op, adaptor.getArg(), continuationBlock, failureBlock);
-
-    return success();
-  }
-};
-
-struct ConstantOpLowering : public ConvertOpToLLVMPattern<ConstantOp> {
-  using ConvertOpToLLVMPattern<ConstantOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(ConstantOp op, OpAdaptor adaptor,
+  matchAndRewrite(func::ConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto type = typeConverter->convertType(op.getResult().getType());
     if (!type || !LLVM::isCompatibleType(type))
@@ -515,11 +474,12 @@ struct CallOpInterfaceLowering : public ConvertOpToLLVMPattern<CallOpType> {
   }
 };
 
-struct CallOpLowering : public CallOpInterfaceLowering<CallOp> {
+struct CallOpLowering : public CallOpInterfaceLowering<func::CallOp> {
   using Super::Super;
 };
 
-struct CallIndirectOpLowering : public CallOpInterfaceLowering<CallIndirectOp> {
+struct CallIndirectOpLowering
+    : public CallOpInterfaceLowering<func::CallIndirectOp> {
   using Super::Super;
 };
 
@@ -550,33 +510,17 @@ struct UnrealizedConversionCastOpLowering
   }
 };
 
-// Base class for LLVM IR lowering terminator operations with successors.
-template <typename SourceOp, typename TargetOp>
-struct OneToOneLLVMTerminatorLowering
-    : public ConvertOpToLLVMPattern<SourceOp> {
-  using ConvertOpToLLVMPattern<SourceOp>::ConvertOpToLLVMPattern;
-  using Super = OneToOneLLVMTerminatorLowering<SourceOp, TargetOp>;
-
-  LogicalResult
-  matchAndRewrite(SourceOp op, typename SourceOp::Adaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getOperands(),
-                                          op->getSuccessors(), op->getAttrs());
-    return success();
-  }
-};
-
 // Special lowering pattern for `ReturnOps`.  Unlike all other operations,
 // `ReturnOp` interacts with the function signature and must have as many
 // operands as the function has return values.  Because in LLVM IR, functions
 // can only return 0 or 1 value, we pack multiple values into a structure type.
 // Emit `UndefOp` followed by `InsertValueOp`s to create such structure if
 // necessary before returning it
-struct ReturnOpLowering : public ConvertOpToLLVMPattern<ReturnOp> {
-  using ConvertOpToLLVMPattern<ReturnOp>::ConvertOpToLLVMPattern;
+struct ReturnOpLowering : public ConvertOpToLLVMPattern<func::ReturnOp> {
+  using ConvertOpToLLVMPattern<func::ReturnOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(ReturnOp op, OpAdaptor adaptor,
+  matchAndRewrite(func::ReturnOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
     unsigned numArguments = op.getNumOperands();
@@ -633,21 +577,6 @@ struct ReturnOpLowering : public ConvertOpToLLVMPattern<ReturnOp> {
     return success();
   }
 };
-
-// FIXME: this should be tablegen'ed as well.
-struct BranchOpLowering
-    : public OneToOneLLVMTerminatorLowering<BranchOp, LLVM::BrOp> {
-  using Super::Super;
-};
-struct CondBranchOpLowering
-    : public OneToOneLLVMTerminatorLowering<CondBranchOp, LLVM::CondBrOp> {
-  using Super::Super;
-};
-struct SwitchOpLowering
-    : public OneToOneLLVMTerminatorLowering<SwitchOp, LLVM::SwitchOp> {
-  using Super::Super;
-};
-
 } // namespace
 
 void mlir::populateStdToLLVMFuncOpConversionPattern(
@@ -663,14 +592,10 @@ void mlir::populateStdToLLVMConversionPatterns(LLVMTypeConverter &converter,
   populateStdToLLVMFuncOpConversionPattern(converter, patterns);
   // clang-format off
   patterns.add<
-      AssertOpLowering,
-      BranchOpLowering,
       CallIndirectOpLowering,
       CallOpLowering,
-      CondBranchOpLowering,
       ConstantOpLowering,
-      ReturnOpLowering,
-      SwitchOpLowering>(converter);
+      ReturnOpLowering>(converter);
   // clang-format on
 }
 
@@ -721,6 +646,7 @@ struct LLVMLoweringPass : public ConvertStandardToLLVMBase<LLVMLoweringPass> {
     RewritePatternSet patterns(&getContext());
     populateStdToLLVMConversionPatterns(typeConverter, patterns);
     arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
+    cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
 
     LLVMConversionTarget target(getContext());
     if (failed(applyPartialConversion(m, target, std::move(patterns))))

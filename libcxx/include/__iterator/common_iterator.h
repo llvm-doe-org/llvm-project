@@ -10,8 +10,8 @@
 #ifndef _LIBCPP___ITERATOR_COMMON_ITERATOR_H
 #define _LIBCPP___ITERATOR_COMMON_ITERATOR_H
 
+#include <__assert>
 #include <__config>
-#include <__debug>
 #include <__iterator/concepts.h>
 #include <__iterator/incrementable_traits.h>
 #include <__iterator/iter_move.h>
@@ -42,7 +42,7 @@ class common_iterator {
 
     iter_value_t<_Iter> __value;
     // We can move __x because the only caller verifies that __x is not a reference.
-    constexpr __proxy(iter_reference_t<_Iter>&& __x)
+    constexpr explicit __proxy(iter_reference_t<_Iter>&& __x)
       : __value(_VSTD::move(__x)) {}
 
   public:
@@ -55,7 +55,7 @@ class common_iterator {
     friend common_iterator;
 
     iter_value_t<_Iter> __value;
-    constexpr __postfix_proxy(iter_reference_t<_Iter>&& __x)
+    constexpr explicit __postfix_proxy(iter_reference_t<_Iter>&& __x)
       : __value(_VSTD::forward<iter_reference_t<_Iter>>(__x)) {}
 
   public:

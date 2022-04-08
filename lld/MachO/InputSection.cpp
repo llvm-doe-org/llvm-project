@@ -55,46 +55,26 @@ static uint64_t resolveSymbolVA(const Symbol *sym, uint8_t type) {
   return sym->getVA();
 }
 
-// ICF needs to hash any section that might potentially be duplicated so
-// that it can match on content rather than identity.
-bool ConcatInputSection::isHashableForICF() const {
-  switch (sectionType(getFlags())) {
-  case S_REGULAR:
-    return true;
-  case S_CSTRING_LITERALS:
-  case S_4BYTE_LITERALS:
-  case S_8BYTE_LITERALS:
-  case S_16BYTE_LITERALS:
-  case S_LITERAL_POINTERS:
-    llvm_unreachable("found unexpected literal type in ConcatInputSection");
-  case S_ZEROFILL:
-  case S_GB_ZEROFILL:
-  case S_NON_LAZY_SYMBOL_POINTERS:
-  case S_LAZY_SYMBOL_POINTERS:
-  case S_SYMBOL_STUBS:
-  case S_MOD_INIT_FUNC_POINTERS:
-  case S_MOD_TERM_FUNC_POINTERS:
-  case S_COALESCED:
-  case S_INTERPOSING:
-  case S_DTRACE_DOF:
-  case S_LAZY_DYLIB_SYMBOL_POINTERS:
-  case S_THREAD_LOCAL_REGULAR:
-  case S_THREAD_LOCAL_ZEROFILL:
-  case S_THREAD_LOCAL_VARIABLES:
-  case S_THREAD_LOCAL_VARIABLE_POINTERS:
-  case S_THREAD_LOCAL_INIT_FUNCTION_POINTERS:
-    return false;
-  default:
-    llvm_unreachable("Section type");
-  }
-}
+std::string InputSection::getLocation(uint64_t off) const {
+  // First, try to find a symbol that's near the offset. Use it as a reference
+  // point.
+  for (size_t i = 0; i < symbols.size(); ++i)
+    if (symbols[i]->value <= off &&
+        (i + 1 == symbols.size() || symbols[i + 1]->value > off))
+      return (toString(getFile()) + ":(symbol " + symbols.front()->getName() +
+              "+0x" + Twine::utohexstr(off - symbols[i]->value) + ")")
+          .str();
 
-void ConcatInputSection::hashForICF() {
-  assert(data.data()); // zeroFill section data has nullptr with non-zero size
-  assert(icfEqClass[0] == 0); // don't overwrite a unique ID!
-  // Turn-on the top bit to guarantee that valid hashes have no collisions
-  // with the small-integer unique IDs for ICF-ineligible sections
-  icfEqClass[0] = xxHash64(data) | (1ull << 63);
+  // If that fails, use the section itself as a reference point.
+  for (const Subsection &subsec : section.subsections) {
+    if (subsec.isec == this) {
+      off += subsec.offset;
+      break;
+    }
+  }
+  return (toString(getFile()) + ":(" + getName() + "+0x" +
+          Twine::utohexstr(off) + ")")
+      .str();
 }
 
 void ConcatInputSection::foldIdentical(ConcatInputSection *copy) {
@@ -195,7 +175,7 @@ void CStringInputSection::splitIntoPieces() {
   while (!s.empty()) {
     size_t end = s.find(0);
     if (end == StringRef::npos)
-      fatal(toString(this) + ": string is not null terminated");
+      fatal(getLocation(off) + ": string is not null terminated");
     size_t size = end + 1;
     uint32_t hash = config->dedupLiterals ? xxHash64(s.substr(0, size)) : 0;
     pieces.emplace_back(off, hash);

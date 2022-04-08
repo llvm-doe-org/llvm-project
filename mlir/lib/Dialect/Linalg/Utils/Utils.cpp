@@ -22,7 +22,6 @@
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Tensor/Utils/Utils.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
@@ -125,7 +124,6 @@ RegionMatcher::matchAsScalarBinaryOp(GenericOp op) {
 template struct mlir::linalg::GenerateLoopNest<scf::ForOp>;
 template struct mlir::linalg::GenerateLoopNest<scf::ParallelOp>;
 template struct mlir::linalg::GenerateLoopNest<AffineForOp>;
-template struct mlir::linalg::GenerateLoopNest<TiledLoopOp>;
 
 /// Given a list of subview ranges, extract individual values for lower, upper
 /// bounds and steps and put them into the corresponding vectors.
@@ -423,6 +421,29 @@ GenericOp makeTransposeOp(OpBuilder &b, Location loc, Value inputTensor,
   return transposeOp;
 }
 
+GenericOp makeMemRefCopyOp(OpBuilder &b, Location loc, Value from, Value to) {
+  auto memrefTypeTo = to.getType().cast<MemRefType>();
+#ifndef NDEBUG
+  auto memrefTypeFrom = from.getType().cast<MemRefType>();
+  assert(memrefTypeFrom.getRank() == memrefTypeTo.getRank() &&
+         "`from` and `to` memref must have the same rank");
+#endif // NDEBUG
+
+  AffineMap id =
+      AffineMap::getMultiDimIdentityMap(memrefTypeTo.getRank(), b.getContext());
+  SmallVector<StringRef> iteratorTypes(memrefTypeTo.getRank(),
+                                       getParallelIteratorTypeName());
+  return b.create<linalg::GenericOp>(
+      loc,
+      /*inputs=*/from,
+      /*outputs=*/to,
+      /*indexingMaps=*/llvm::makeArrayRef({id, id}),
+      /*iteratorTypes=*/iteratorTypes,
+      [](OpBuilder &b, Location loc, ValueRange args) {
+        b.create<linalg::YieldOp>(loc, args.front());
+      });
+}
+
 /// Specialization to build an scf "for" nest.
 template <>
 void GenerateLoopNest<scf::ForOp>::doit(
@@ -512,39 +533,6 @@ void GenerateLoopNest<AffineForOp>::doit(
                                   linalgOp.getInputAndOutputOperands();
                               bodyBuilderFn(b, loc, ivs, operandValuesToUse);
                             });
-}
-
-/// Specialization to build an linalg.tiled_loop
-template <>
-void GenerateLoopNest<TiledLoopOp>::doit(
-    OpBuilder &b, Location loc, ArrayRef<Range> loopRanges, LinalgOp linalgOp,
-    ArrayRef<Attribute> iteratorTypes,
-    function_ref<scf::ValueVector(OpBuilder &, Location, ValueRange,
-                                  ValueRange)>
-        bodyBuilderFn,
-    Optional<LinalgLoopDistributionOptions> distributionOptions,
-    ArrayRef<StringRef> distributionTypes) {
-  SmallVector<ProcInfo, 2> procInfo;
-  SmallVector<Value, 4> lbs, ubs, steps;
-  unpackRanges(loopRanges, lbs, ubs, steps);
-
-  auto wrappedBuilderFn = [&](OpBuilder &nestedBuilder, Location nestedLoc,
-                              ValueRange ivs, ValueRange inputs,
-                              ValueRange outputs) {
-    SmallVector<Value> operandValuesToUse = inputs;
-    operandValuesToUse.append(outputs.begin(), outputs.end());
-    scf::ValueVector results =
-        bodyBuilderFn(nestedBuilder, nestedLoc, ivs, operandValuesToUse);
-    nestedBuilder.create<linalg::YieldOp>(nestedLoc, results);
-  };
-
-  SmallVector<Value> inputOperands = linalgOp.getInputOperands();
-  SmallVector<Value> outputOperands = linalgOp.getOutputOperands();
-  auto tiledLoop =
-      b.create<TiledLoopOp>(loc, lbs, ubs, steps, inputOperands, outputOperands,
-                            b.getArrayAttr(iteratorTypes), wrappedBuilderFn);
-  if (!distributionTypes.empty())
-    tiledLoop.setDistributionTypes(b, distributionTypes);
 }
 
 /// Update the `lb`, `ub` and `step` to get per processor `lb`, `ub` and `step`.

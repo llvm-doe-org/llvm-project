@@ -121,18 +121,18 @@ OpFoldResult emitc::ConstantOp::fold(ArrayRef<Attribute> operands) {
 // IncludeOp
 //===----------------------------------------------------------------------===//
 
-static void print(OpAsmPrinter &p, IncludeOp &op) {
-  bool standardInclude = op.is_standard_include();
+void IncludeOp::print(OpAsmPrinter &p) {
+  bool standardInclude = is_standard_include();
 
   p << " ";
   if (standardInclude)
     p << "<";
-  p << "\"" << op.include() << "\"";
+  p << "\"" << include() << "\"";
   if (standardInclude)
     p << ">";
 }
 
-static ParseResult parseIncludeOp(OpAsmParser &parser, OperationState &result) {
+ParseResult IncludeOp::parse(OpAsmParser &parser, OperationState &result) {
   bool standardInclude = !parser.parseOptionalLess();
 
   StringAttr include;
@@ -149,6 +149,20 @@ static ParseResult parseIncludeOp(OpAsmParser &parser, OperationState &result) {
     result.addAttribute("is_standard_include",
                         UnitAttr::get(parser.getContext()));
 
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// VariableOp
+//===----------------------------------------------------------------------===//
+
+/// The variable op requires that the attribute's type matches the return type.
+LogicalResult emitc::VariableOp::verify() {
+  Attribute value = valueAttr();
+  Type type = getType();
+  if (!value.getType().isa<NoneType>() && type != value.getType())
+    return emitOpError() << "requires attribute's type (" << value.getType()
+                         << ") to match op's return type (" << type << ")";
   return success();
 }
 
@@ -192,6 +206,10 @@ void emitc::OpaqueAttr::print(AsmPrinter &printer) const {
 
 #define GET_TYPEDEF_CLASSES
 #include "mlir/Dialect/EmitC/IR/EmitCTypes.cpp.inc"
+
+//===----------------------------------------------------------------------===//
+// OpaqueType
+//===----------------------------------------------------------------------===//
 
 Type emitc::OpaqueType::parse(AsmParser &parser) {
   if (parser.parseLess())

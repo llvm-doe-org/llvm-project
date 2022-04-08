@@ -80,6 +80,8 @@ static lldb::LanguageType TranslateLanguage(PDB_Lang lang) {
     return lldb::LanguageType::eLanguageTypeC;
   case PDB_Lang::Swift:
     return lldb::LanguageType::eLanguageTypeSwift;
+  case PDB_Lang::Rust:
+    return lldb::LanguageType::eLanguageTypeRust;
   default:
     return lldb::LanguageType::eLanguageTypeUnknown;
   }
@@ -171,6 +173,8 @@ static llvm::StringRef GetSimpleTypeName(SimpleTypeKind kind) {
     return "char16_t";
   case SimpleTypeKind::Character32:
     return "char32_t";
+  case SimpleTypeKind::Character8:
+    return "char8_t";
   case SimpleTypeKind::Complex80:
   case SimpleTypeKind::Complex64:
   case SimpleTypeKind::Complex32:
