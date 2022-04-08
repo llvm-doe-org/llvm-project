@@ -75,11 +75,7 @@ stages:
       "
       libomp :: atomic/kmp_atomic_float10_max_min.c
       libomp :: env/kmp_set_dispatch_buf.c
-      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49779.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
-      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/memory_manager.cpp
-      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/parallel_offloading_map.cpp
-      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/taskloop_offload_nowait.cpp
       "
     LIT_XFAIL_NOT:
       "
@@ -108,7 +104,6 @@ stages:
     LIT_XFAIL:
       "
       LLVM :: Bindings/Go/go.test
-      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49779.cpp
       "
     LIT_XFAIL_NOT:
       ""
