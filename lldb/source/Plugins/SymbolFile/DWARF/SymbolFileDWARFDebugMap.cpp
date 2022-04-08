@@ -61,7 +61,7 @@ SymbolFileDWARFDebugMap::CompileUnitInfo::GetFileRangeMap(
   if (!oso_objfile)
     return file_range_map;
 
-  Log *log(LogChannelDWARF::GetLogIfAll(DWARF_LOG_DEBUG_MAP));
+  Log *log = GetLog(DWARFLog::DebugMap);
   LLDB_LOGF(
       log,
       "%p: SymbolFileDWARFDebugMap::CompileUnitInfo::GetFileRangeMap ('%s')",
@@ -281,7 +281,7 @@ void SymbolFileDWARFDebugMap::InitOSO() {
 
   Symtab *symtab = m_objfile_sp->GetSymtab();
   if (symtab) {
-    Log *log(LogChannelDWARF::GetLogIfAll(DWARF_LOG_DEBUG_MAP));
+    Log *log = GetLog(DWARFLog::DebugMap);
 
     std::vector<uint32_t> oso_indexes;
     // When a mach-o symbol is encoded, the n_type field is encoded in bits
@@ -1447,8 +1447,8 @@ uint64_t SymbolFileDWARFDebugMap::GetDebugInfoSize() {
   return debug_info_size;
 }
 
-StatsDuration SymbolFileDWARFDebugMap::GetDebugInfoParseTime() {
-  StatsDuration elapsed(0.0);
+StatsDuration::Duration SymbolFileDWARFDebugMap::GetDebugInfoParseTime() {
+  StatsDuration::Duration elapsed(0.0);
   ForEachSymbolFile([&](SymbolFileDWARF *oso_dwarf) -> bool {
     ObjectFile *oso_objfile = oso_dwarf->GetObjectFile();
     if (oso_objfile) {
@@ -1464,8 +1464,8 @@ StatsDuration SymbolFileDWARFDebugMap::GetDebugInfoParseTime() {
   return elapsed;
 }
 
-StatsDuration SymbolFileDWARFDebugMap::GetDebugInfoIndexTime() {
-  StatsDuration elapsed(0.0);
+StatsDuration::Duration SymbolFileDWARFDebugMap::GetDebugInfoIndexTime() {
+  StatsDuration::Duration elapsed(0.0);
   ForEachSymbolFile([&](SymbolFileDWARF *oso_dwarf) -> bool {
     ObjectFile *oso_objfile = oso_dwarf->GetObjectFile();
     if (oso_objfile) {

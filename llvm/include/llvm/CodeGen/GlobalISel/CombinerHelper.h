@@ -124,9 +124,19 @@ public:
 
   const TargetLowering &getTargetLowering() const;
 
+  /// \returns true if the combiner is running pre-legalization.
+  bool isPreLegalize() const;
+
+  /// \returns true if \p Query is legal on the target.
+  bool isLegal(const LegalityQuery &Query) const;
+
   /// \return true if the combine is running prior to legalization, or if \p
   /// Query is legal on the target.
   bool isLegalOrBeforeLegalizer(const LegalityQuery &Query) const;
+
+  /// \return true if the combine is running prior to legalization, or if \p Ty
+  /// is a legal integer constant type on the target.
+  bool isConstantLegalOrBeforeLegalizer(const LLT Ty) const;
 
   /// MachineRegisterInfo::replaceRegWith() and inform the observer of the changes
   void replaceRegWith(MachineRegisterInfo &MRI, Register FromReg, Register ToReg) const;
@@ -323,6 +333,11 @@ public:
   void applyCombineUnmergeConstant(MachineInstr &MI,
                                    SmallVectorImpl<APInt> &Csts);
 
+  /// Transform G_UNMERGE G_IMPLICIT_DEF -> G_IMPLICIT_DEF, G_IMPLICIT_DEF, ...
+  bool
+  matchCombineUnmergeUndef(MachineInstr &MI,
+                           std::function<void(MachineIRBuilder &)> &MatchInfo);
+
   /// Transform X, Y<dead> = G_UNMERGE Z -> X = G_TRUNC Z.
   bool matchCombineUnmergeWithDeadLanesToTrunc(MachineInstr &MI);
   void applyCombineUnmergeWithDeadLanesToTrunc(MachineInstr &MI);
@@ -353,8 +368,8 @@ public:
                                   std::pair<Register, bool> &PtrRegAndCommute);
 
   // Transform G_PTR_ADD (G_PTRTOINT C1), C2 -> C1 + C2
-  bool matchCombineConstPtrAddToI2P(MachineInstr &MI, int64_t &NewCst);
-  void applyCombineConstPtrAddToI2P(MachineInstr &MI, int64_t &NewCst);
+  bool matchCombineConstPtrAddToI2P(MachineInstr &MI, APInt &NewCst);
+  void applyCombineConstPtrAddToI2P(MachineInstr &MI, APInt &NewCst);
 
   /// Transform anyext(trunc(x)) to x.
   bool matchCombineAnyExtTrunc(MachineInstr &MI, Register &Reg);
@@ -639,6 +654,14 @@ public:
   ///   (G_UMULO x, 2) -> (G_UADDO x, x)
   ///   (G_SMULO x, 2) -> (G_SADDO x, x)
   bool matchMulOBy2(MachineInstr &MI, BuildFnTy &MatchInfo);
+
+  /// Match:
+  /// (G_*MULO x, 0) -> 0 + no carry out
+  bool matchMulOBy0(MachineInstr &MI, BuildFnTy &MatchInfo);
+
+  /// Match:
+  /// (G_*ADDO x, 0) -> x + no carry out
+  bool matchAddOBy0(MachineInstr &MI, BuildFnTy &MatchInfo);
 
   /// Transform (fadd x, fneg(y)) -> (fsub x, y)
   ///           (fadd fneg(x), y) -> (fsub y, x)

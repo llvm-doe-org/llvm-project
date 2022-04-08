@@ -76,7 +76,6 @@ stages:
       libomp :: atomic/kmp_atomic_float10_max_min.c
       libomp :: env/kmp_set_dispatch_buf.c
       libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
-      libomptarget :: nvptx64-nvidia-cuda-newRTL :: offloading/bug49334.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/memory_manager.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/parallel_offloading_map.cpp
@@ -85,7 +84,6 @@ stages:
     LIT_XFAIL_NOT:
       "
       libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/api.c
-      libomptarget :: nvptx64-nvidia-cuda-newRTL :: unified_shared_memory/api.c
       "
 
 .oswald02:
@@ -110,7 +108,6 @@ stages:
       "
       LLVM :: Bindings/Go/go.test
       libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
-      libomptarget :: nvptx64-nvidia-cuda-newRTL :: offloading/bug49334.cpp
       "
     LIT_XFAIL_NOT:
       ""

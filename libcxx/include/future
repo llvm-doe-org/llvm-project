@@ -374,9 +374,10 @@ template <class R, class Alloc> struct uses_allocator<packaged_task<R>, Alloc>;
 #include <mutex>
 #include <system_error>
 #include <thread>
+#include <version>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
-#pragma GCC system_header
+#  pragma GCC system_header
 #endif
 
 #ifdef _LIBCPP_HAS_NO_THREADS

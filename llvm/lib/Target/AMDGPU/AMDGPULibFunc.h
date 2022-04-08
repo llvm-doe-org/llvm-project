@@ -10,6 +10,7 @@
 #define _AMDGPU_LIBFUNC_H_
 
 #include "llvm/ADT/StringRef.h"
+#include <memory>
 
 namespace llvm {
 
@@ -356,7 +357,7 @@ protected:
 /// Wrapper class for AMDGPULIbFuncImpl
 class AMDGPULibFunc : public AMDGPULibFuncBase {
 public:
-  explicit AMDGPULibFunc() {}
+  explicit AMDGPULibFunc() : Impl(std::unique_ptr<AMDGPULibFuncImpl>()) {}
   AMDGPULibFunc(const AMDGPULibFunc &F);
   /// Clone a mangled library func with the Id \p Id and argument info from \p
   /// CopyFrom.

@@ -391,7 +391,7 @@ def add_p2i_to_ptradd : GICombineRule<
 >;
 
 // Fold (ptr_add (int2ptr C1), C2) -> C1 + C2
-def const_ptradd_to_i2p_matchinfo : GIDefMatchData<"int64_t">;
+def const_ptradd_to_i2p_matchinfo : GIDefMatchData<"APInt">;
 def const_ptradd_to_i2p: GICombineRule<
   (defs root:$root, const_ptradd_to_i2p_matchinfo:$info),
   (match (wip_match_opcode G_PTR_ADD):$root,
@@ -533,6 +533,14 @@ def unmerge_cst : GICombineRule<
   (match (wip_match_opcode G_UNMERGE_VALUES): $d,
   [{ return Helper.matchCombineUnmergeConstant(*${d}, ${info}); }]),
   (apply [{ Helper.applyCombineUnmergeConstant(*${d}, ${info}); }])
+>;
+
+// Fold (unmerge undef) -> undef, undef, ...
+def unmerge_undef : GICombineRule<
+  (defs root:$root, build_fn_matchinfo:$info),
+  (match (wip_match_opcode G_UNMERGE_VALUES): $root,
+         [{ return Helper.matchCombineUnmergeUndef(*${root}, ${info}); }]),
+  (apply [{ Helper.applyBuildFn(*${root}, ${info}); }])
 >;
 
 // Transform x,y<dead> = unmerge z -> x = trunc z.
@@ -745,6 +753,18 @@ def mulo_by_2: GICombineRule<
          [{ return Helper.matchMulOBy2(*${root}, ${matchinfo}); }]),
   (apply [{ Helper.applyBuildFnNoErase(*${root}, ${matchinfo}); }])>;
 
+def mulo_by_0: GICombineRule<
+  (defs root:$root, build_fn_matchinfo:$matchinfo),
+  (match (wip_match_opcode G_UMULO, G_SMULO):$root,
+         [{ return Helper.matchMulOBy0(*${root}, ${matchinfo}); }]),
+  (apply [{ Helper.applyBuildFn(*${root}, ${matchinfo}); }])>;
+
+def addo_by_0: GICombineRule<
+  (defs root:$root, build_fn_matchinfo:$matchinfo),
+  (match (wip_match_opcode G_UADDO, G_SADDO):$root,
+         [{ return Helper.matchAddOBy0(*${root}, ${matchinfo}); }]),
+  (apply [{ Helper.applyBuildFn(*${root}, ${matchinfo}); }])>;
+
 def mulh_to_lshr : GICombineRule<
   (defs root:$root),
   (match (wip_match_opcode G_UMULH):$root,
@@ -844,7 +864,8 @@ def undef_combines : GICombineGroup<[undef_to_fp_zero, undef_to_int_zero,
                                      propagate_undef_any_op,
                                      propagate_undef_all_ops,
                                      propagate_undef_shuffle_mask,
-                                     erase_undef_store]>;
+                                     erase_undef_store,
+                                     unmerge_undef]>;
 
 def identity_combines : GICombineGroup<[select_same_val, right_identity_zero,
                                         binop_same_val, binop_left_to_zero,
@@ -853,7 +874,8 @@ def identity_combines : GICombineGroup<[select_same_val, right_identity_zero,
                                         fneg_fneg_fold, right_identity_one]>;
 
 def const_combines : GICombineGroup<[constant_fp_op, const_ptradd_to_i2p,
-                                     overlapping_and, mulo_by_2]>;
+                                     overlapping_and, mulo_by_2, mulo_by_0,
+                                     addo_by_0]>;
 
 def known_bits_simplifications : GICombineGroup<[
   redundant_and, redundant_sext_inreg, redundant_or, urem_pow2_to_mask,

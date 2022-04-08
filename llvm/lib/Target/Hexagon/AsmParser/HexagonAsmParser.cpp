@@ -214,7 +214,8 @@ struct HexagonOperand : public MCParsedAsmOperand {
   HexagonOperand(KindTy K, MCContext &Context) : Kind(K), Context(Context) {}
 
 public:
-  HexagonOperand(const HexagonOperand &o) : Context(o.Context) {
+  HexagonOperand(const HexagonOperand &o)
+      : MCParsedAsmOperand(), Context(o.Context) {
     Kind = o.Kind;
     StartLoc = o.StartLoc;
     EndLoc = o.EndLoc;

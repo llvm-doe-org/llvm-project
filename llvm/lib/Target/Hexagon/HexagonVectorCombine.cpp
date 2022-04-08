@@ -443,7 +443,7 @@ auto AlignVectors::createAdjustedPointer(IRBuilder<> &Builder, Value *Ptr,
   // we don't need to do pointer casts.
   auto *PtrTy = cast<PointerType>(Ptr->getType());
   if (!PtrTy->isOpaque()) {
-    Type *ElemTy = PtrTy->getElementType();
+    Type *ElemTy = PtrTy->getNonOpaquePointerElementType();
     int ElemSize = HVC.getAllocSizeOf(ElemTy);
     if (Adjust % ElemSize == 0 && Adjust != 0) {
       Value *Tmp0 =
@@ -718,7 +718,7 @@ auto AlignVectors::realignGroup(const MoveGroup &Move) const -> bool {
 
   // Maximum alignment present in the whole address group.
   const AddrInfo &WithMaxAlign =
-      getMaxOf(BaseInfos, [](const AddrInfo &AI) { return AI.HaveAlign; });
+      getMaxOf(MoveInfos, [](const AddrInfo &AI) { return AI.HaveAlign; });
   Align MaxGiven = WithMaxAlign.HaveAlign;
 
   // Minimum alignment present in the move address group.

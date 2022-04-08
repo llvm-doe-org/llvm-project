@@ -1298,7 +1298,8 @@ public:
     ASTContext &Context = getSema().getASTContext();
     OMPDeclareTargetDeclAttr *OMPAttr = OMPDeclareTargetDeclAttr::Create(
         Context, OMPDeclareTargetDeclAttr::MT_To,
-        OMPDeclareTargetDeclAttr::DT_Any, -1, /*IsOpenACCTranslation=*/true,
+        OMPDeclareTargetDeclAttr::DT_Any, /*IndirectExpr=*/nullptr,
+        /*Indirect=*/false, -1, /*IsOpenACCTranslation=*/true,
         ACCAttr->getRange());
     return OMPAttr;
   }

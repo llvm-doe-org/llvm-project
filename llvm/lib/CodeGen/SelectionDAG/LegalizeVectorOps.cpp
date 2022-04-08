@@ -134,6 +134,7 @@ class VectorLegalizer {
   /// supported by the target.
   SDValue ExpandVSELECT(SDNode *Node);
   SDValue ExpandVP_SELECT(SDNode *Node);
+  SDValue ExpandVP_MERGE(SDNode *Node);
   SDValue ExpandSELECT(SDNode *Node);
   std::pair<SDValue, SDValue> ExpandLoad(SDNode *N);
   SDValue ExpandStore(SDNode *N);
@@ -350,7 +351,6 @@ SDValue VectorLegalizer::LegalizeOp(SDValue Op) {
   case ISD::CTPOP:
   case ISD::SELECT:
   case ISD::VSELECT:
-  case ISD::VP_SELECT:
   case ISD::SELECT_CC:
   case ISD::ZERO_EXTEND:
   case ISD::ANY_EXTEND:
@@ -459,6 +459,14 @@ SDValue VectorLegalizer::LegalizeOp(SDValue Op) {
       Action = TLI.getOperationAction(Node->getOpcode(), Node->getValueType(0));
     break;
   }
+
+#define BEGIN_REGISTER_VP_SDNODE(VPID, LEGALPOS, ...)                          \
+  case ISD::VPID: {                                                            \
+    EVT LegalizeVT = LEGALPOS < 0 ? Node->getValueType(-(1 + LEGALPOS))        \
+                                  : Node->getOperand(LEGALPOS).getValueType(); \
+    Action = TLI.getOperationAction(Node->getOpcode(), LegalizeVT);            \
+  } break;
+#include "llvm/IR/VPIntrinsics.def"
   }
 
   LLVM_DEBUG(dbgs() << "\nLegalizing vector op: "; Node->dump(&DAG));
@@ -870,6 +878,9 @@ void VectorLegalizer::Expand(SDNode *Node, SmallVectorImpl<SDValue> &Results) {
   case ISD::UREM:
     ExpandREM(Node, Results);
     return;
+  case ISD::VP_MERGE:
+    Results.push_back(ExpandVP_MERGE(Node));
+    return;
   }
 
   Results.push_back(DAG.UnrollVectorOp(Node));
@@ -1229,6 +1240,48 @@ SDValue VectorLegalizer::ExpandVP_SELECT(SDNode *Node) {
   Op1 = DAG.getNode(ISD::VP_AND, DL, VT, Op1, Mask, Mask, EVL);
   Op2 = DAG.getNode(ISD::VP_AND, DL, VT, Op2, NotMask, Mask, EVL);
   return DAG.getNode(ISD::VP_OR, DL, VT, Op1, Op2, Mask, EVL);
+}
+
+SDValue VectorLegalizer::ExpandVP_MERGE(SDNode *Node) {
+  // Implement VP_MERGE in terms of VSELECT. Construct a mask where vector
+  // indices less than the EVL/pivot are true. Combine that with the original
+  // mask for a full-length mask. Use a full-length VSELECT to select between
+  // the true and false values.
+  SDLoc DL(Node);
+
+  SDValue Mask = Node->getOperand(0);
+  SDValue Op1 = Node->getOperand(1);
+  SDValue Op2 = Node->getOperand(2);
+  SDValue EVL = Node->getOperand(3);
+
+  EVT MaskVT = Mask.getValueType();
+  bool IsFixedLen = MaskVT.isFixedLengthVector();
+
+  EVT EVLVecVT = EVT::getVectorVT(*DAG.getContext(), EVL.getValueType(),
+                                  MaskVT.getVectorElementCount());
+
+  // If we can't construct the EVL mask efficiently, it's better to unroll.
+  if ((IsFixedLen &&
+       !TLI.isOperationLegalOrCustom(ISD::BUILD_VECTOR, EVLVecVT)) ||
+      (!IsFixedLen &&
+       (!TLI.isOperationLegalOrCustom(ISD::STEP_VECTOR, EVLVecVT) ||
+        !TLI.isOperationLegalOrCustom(ISD::SPLAT_VECTOR, EVLVecVT))))
+    return DAG.UnrollVectorOp(Node);
+
+  // If using a SETCC would result in a different type than the mask type,
+  // unroll.
+  if (TLI.getSetCCResultType(DAG.getDataLayout(), *DAG.getContext(),
+                             EVLVecVT) != MaskVT)
+    return DAG.UnrollVectorOp(Node);
+
+  SDValue StepVec = DAG.getStepVector(DL, EVLVecVT);
+  SDValue SplatEVL = IsFixedLen ? DAG.getSplatBuildVector(EVLVecVT, DL, EVL)
+                                : DAG.getSplatVector(EVLVecVT, DL, EVL);
+  SDValue EVLMask =
+      DAG.getSetCC(DL, MaskVT, StepVec, SplatEVL, ISD::CondCode::SETULT);
+
+  SDValue FullMask = DAG.getNode(ISD::AND, DL, MaskVT, Mask, EVLMask);
+  return DAG.getSelect(DL, Node->getValueType(0), FullMask, Op1, Op2);
 }
 
 void VectorLegalizer::ExpandFP_TO_UINT(SDNode *Node,

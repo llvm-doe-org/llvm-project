@@ -186,9 +186,13 @@ void CommaSeparatedList::precomputeFormattingInfos(const FormatToken *Token) {
   // The lengths of an item if it is put at the end of the line. This includes
   // trailing comments which are otherwise ignored for column alignment.
   SmallVector<unsigned, 8> EndOfLineItemLength;
+  MustBreakBeforeItem.reserve(Commas.size() + 1);
+  EndOfLineItemLength.reserve(Commas.size() + 1);
+  ItemLengths.reserve(Commas.size() + 1);
 
   bool HasSeparatingComment = false;
   for (unsigned i = 0, e = Commas.size() + 1; i != e; ++i) {
+    assert(ItemBegin);
     // Skip comments on their own line.
     while (ItemBegin->HasUnescapedNewline && ItemBegin->isTrailingComment()) {
       ItemBegin = ItemBegin->Next;
@@ -296,14 +300,11 @@ void CommaSeparatedList::precomputeFormattingInfos(const FormatToken *Token) {
 const CommaSeparatedList::ColumnFormat *
 CommaSeparatedList::getColumnFormat(unsigned RemainingCharacters) const {
   const ColumnFormat *BestFormat = nullptr;
-  for (SmallVector<ColumnFormat, 4>::const_reverse_iterator
-           I = Formats.rbegin(),
-           E = Formats.rend();
-       I != E; ++I) {
-    if (I->TotalWidth <= RemainingCharacters || I->Columns == 1) {
-      if (BestFormat && I->LineCount > BestFormat->LineCount)
+  for (const ColumnFormat &Format : llvm::reverse(Formats)) {
+    if (Format.TotalWidth <= RemainingCharacters || Format.Columns == 1) {
+      if (BestFormat && Format.LineCount > BestFormat->LineCount)
         break;
-      BestFormat = &*I;
+      BestFormat = &Format;
     }
   }
   return BestFormat;

@@ -9,6 +9,7 @@
 #ifndef _LIBCPP___RANGES_SIZE_H
 #define _LIBCPP___RANGES_SIZE_H
 
+#include <__concepts/class_or_enum.h>
 #include <__config>
 #include <__iterator/concepts.h>
 #include <__iterator/iterator_traits.h>
@@ -18,17 +19,17 @@
 #include <type_traits>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
-#pragma GCC system_header
+#  pragma GCC system_header
 #endif
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if !defined(_LIBCPP_HAS_NO_RANGES)
+#if !defined(_LIBCPP_HAS_NO_CONCEPTS)
 
 namespace ranges {
   template<class>
   inline constexpr bool disable_sized_range = false;
-}
+} // namespace ranges
 
 // [range.prim.size]
 
@@ -41,9 +42,12 @@ namespace __size {
   concept __size_enabled = !disable_sized_range<remove_cvref_t<_Tp>>;
 
   template <class _Tp>
-  concept __member_size = __size_enabled<_Tp> && requires(_Tp&& __t) {
-    { _LIBCPP_AUTO_CAST(__t.size()) } -> __integer_like;
-  };
+  concept __member_size =
+    __size_enabled<_Tp> &&
+    __workaround_52970<_Tp> &&
+    requires(_Tp&& __t) {
+      { _LIBCPP_AUTO_CAST(__t.size()) } -> __integer_like;
+    };
 
   template <class _Tp>
   concept __unqualified_size =
@@ -93,7 +97,7 @@ namespace __size {
       return _VSTD::__to_unsigned_like(ranges::end(__t) - ranges::begin(__t));
     }
   };
-}
+} // namespace __size
 
 inline namespace __cpo {
   inline constexpr auto size = __size::__fn{};
@@ -117,14 +121,14 @@ namespace __ssize {
         return static_cast<_Signed>(ranges::size(__t));
     }
   };
-}
+} // namespace __ssize
 
 inline namespace __cpo {
   inline constexpr auto ssize = __ssize::__fn{};
 } // namespace __cpo
 } // namespace ranges
 
-#endif // !defined(_LIBCPP_HAS_NO_RANGES)
+#endif // !defined(_LIBCPP_HAS_NO_CONCEPTS)
 
 _LIBCPP_END_NAMESPACE_STD
 

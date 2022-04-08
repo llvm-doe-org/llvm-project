@@ -11,9 +11,6 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/Instruction.h"
-#include "llvm/IR/Instructions.h"
 #include <algorithm>
 #include <utility>
 
@@ -26,7 +23,7 @@ public:
   using reference = T &;
   using const_reference = const T &;
 
-  virtual ~InlineOrder() {}
+  virtual ~InlineOrder() = default;
 
   virtual size_t size() = 0;
 

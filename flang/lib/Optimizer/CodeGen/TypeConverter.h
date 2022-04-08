@@ -31,9 +31,9 @@ static constexpr unsigned kTypePosInBox = 4;
 static constexpr unsigned kAttributePosInBox = 5;
 static constexpr unsigned kF18AddendumPosInBox = 6;
 static constexpr unsigned kDimsPosInBox = 7;
-static constexpr unsigned kStridePosInDim = 2;
 static constexpr unsigned kOptTypePtrPosInBox = 8;
 static constexpr unsigned kOptRowTypePosInBox = 9;
+
 // Position of the different values in [dims]
 static constexpr unsigned kDimLowerBoundPos = 0;
 static constexpr unsigned kDimExtentPos = 1;
@@ -80,8 +80,10 @@ public:
     });
     addConversion(
         [&](fir::PointerType pointer) { return convertPointerLike(pointer); });
-    addConversion(
-        [&](fir::RecordType derived) { return convertRecordType(derived); });
+    addConversion([&](fir::RecordType derived, SmallVectorImpl<Type> &results,
+                      ArrayRef<Type> callStack) {
+      return convertRecordType(derived, results, callStack);
+    });
     addConversion([&](fir::FieldType field) {
       // Convert to i32 because of LLVM GEP indexing restriction.
       return mlir::IntegerType::get(field.getContext(), 32);
@@ -109,11 +111,15 @@ public:
     });
     addConversion([&](mlir::TupleType tuple) {
       LLVM_DEBUG(llvm::dbgs() << "type convert: " << tuple << '\n');
-      llvm::SmallVector<mlir::Type> inMembers;
-      tuple.getFlattenedTypes(inMembers);
       llvm::SmallVector<mlir::Type> members;
-      for (auto mem : inMembers)
-        members.push_back(convertType(mem).cast<mlir::Type>());
+      for (auto mem : tuple.getTypes()) {
+        // Prevent fir.box from degenerating to a pointer to a descriptor in the
+        // context of a tuple type.
+        if (auto box = mem.dyn_cast<fir::BoxType>())
+          members.push_back(convertBoxTypeAsStruct(box));
+        else
+          members.push_back(convertType(mem).cast<mlir::Type>());
+      }
       return mlir::LLVM::LLVMStructType::getLiteral(&getContext(), members,
                                                     /*isPacked=*/false);
     });
@@ -127,16 +133,28 @@ public:
   mlir::Type indexType() { return mlir::IntegerType::get(&getContext(), 64); }
 
   // fir.type<name(p : TY'...){f : TY...}>  -->  llvm<"%name = { ty... }">
-  mlir::Type convertRecordType(fir::RecordType derived) {
+  llvm::Optional<LogicalResult>
+  convertRecordType(fir::RecordType derived, SmallVectorImpl<Type> &results,
+                    ArrayRef<Type> callStack) {
     auto name = derived.getName();
     auto st = mlir::LLVM::LLVMStructType::getIdentified(&getContext(), name);
+    if (llvm::count(callStack, derived) > 1) {
+      results.push_back(st);
+      return success();
+    }
     llvm::SmallVector<mlir::Type> members;
     for (auto mem : derived.getTypeList()) {
-      members.push_back(convertType(mem.second).cast<mlir::Type>());
+      // Prevent fir.box from degenerating to a pointer to a descriptor in the
+      // context of a record type.
+      if (auto box = mem.second.dyn_cast<fir::BoxType>())
+        members.push_back(convertBoxTypeAsStruct(box));
+      else
+        members.push_back(convertType(mem.second).cast<mlir::Type>());
     }
-    if (mlir::succeeded(st.setBody(members, /*isPacked=*/false)))
-      return st;
-    return mlir::Type();
+    if (mlir::failed(st.setBody(members, /*isPacked=*/false)))
+      return failure();
+    results.push_back(st);
+    return success();
   }
 
   // Is an extended descriptor needed given the element type of a fir.box type ?
@@ -216,6 +234,14 @@ public:
     return mlir::LLVM::LLVMPointerType::get(
         mlir::LLVM::LLVMStructType::getLiteral(&getContext(), dataDescFields,
                                                /*isPacked=*/false));
+  }
+
+  /// Convert fir.box type to the corresponding llvm struct type instead of a
+  /// pointer to this struct type.
+  mlir::Type convertBoxTypeAsStruct(BoxType box) {
+    return convertBoxType(box)
+        .cast<mlir::LLVM::LLVMPointerType>()
+        .getElementType();
   }
 
   unsigned characterBitsize(fir::CharacterType charTy) {

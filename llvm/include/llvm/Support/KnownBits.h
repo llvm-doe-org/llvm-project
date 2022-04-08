@@ -31,7 +31,7 @@ private:
 
 public:
   // Default construct Zero and One.
-  KnownBits() {}
+  KnownBits() = default;
 
   /// Create a known bits object of BitWidth bits initialized to unknown.
   KnownBits(unsigned BitWidth) : Zero(BitWidth, 0), One(BitWidth, 0) {}
@@ -254,8 +254,11 @@ public:
   }
 
   /// Returns the maximum number of bits needed to represent all possible
-  /// signed values with these known bits.
-  unsigned countMaxSignedBits() const {
+  /// signed values with these known bits. This is the inverse of the minimum
+  /// number of known sign bits. Examples for bitwidth 5:
+  /// 110?? --> 4
+  /// 0000? --> 2
+  unsigned countMaxSignificantBits() const {
     return getBitWidth() - countMinSignBits() + 1;
   }
 
@@ -289,6 +292,9 @@ public:
     return getBitWidth() - Zero.countPopulation();
   }
 
+  /// Returns the maximum number of bits needed to represent all possible
+  /// unsigned values with these known bits. This is the inverse of the
+  /// minimum number of leading zeros.
   unsigned countMaxActiveBits() const {
     return getBitWidth() - countMinLeadingZeros();
   }

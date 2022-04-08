@@ -838,12 +838,11 @@ void ReductionCodeGen::emitAggregateType(CodeGenFunction &CGF, unsigned N) {
   }
   llvm::Value *Size;
   llvm::Value *SizeInChars;
-  auto *ElemType =
-      cast<llvm::PointerType>(OrigAddresses[N].first.getPointer(CGF)->getType())
-          ->getElementType();
+  auto *ElemType = OrigAddresses[N].first.getAddress(CGF).getElementType();
   auto *ElemSizeOf = llvm::ConstantExpr::getSizeOf(ElemType);
   if (AsArraySection) {
-    Size = CGF.Builder.CreatePtrDiff(OrigAddresses[N].second.getPointer(CGF),
+    Size = CGF.Builder.CreatePtrDiff(ElemType,
+                                     OrigAddresses[N].second.getPointer(CGF),
                                      OrigAddresses[N].first.getPointer(CGF));
     Size = CGF.Builder.CreateNUWAdd(
         Size, llvm::ConstantInt::get(Size->getType(), /*V=*/1));
@@ -1009,7 +1008,8 @@ Address ReductionCodeGen::adjustPrivateAddress(CodeGenFunction &CGF, unsigned N,
                     OriginalBaseLValue);
     Address SharedAddr = SharedAddresses[N].first.getAddress(CGF);
     llvm::Value *Adjustment = CGF.Builder.CreatePtrDiff(
-        BaseLValue.getPointer(CGF), SharedAddr.getPointer());
+        SharedAddr.getElementType(), BaseLValue.getPointer(CGF),
+        SharedAddr.getPointer());
     llvm::Value *PrivatePointer =
         CGF.Builder.CreatePointerBitCastOrAddrSpaceCast(
             PrivateAddr.getPointer(), SharedAddr.getType());
@@ -3522,8 +3522,7 @@ static bool isAllocatableDecl(const VarDecl *VD) {
     return false;
   const auto *AA = CVD->getAttr<OMPAllocateDeclAttr>();
   // Use the default allocation.
-  return !((AA->getAllocatorType() == OMPAllocateDeclAttr::OMPDefaultMemAlloc ||
-            AA->getAllocatorType() == OMPAllocateDeclAttr::OMPNullMemAlloc) &&
+  return !(AA->getAllocatorType() == OMPAllocateDeclAttr::OMPDefaultMemAlloc &&
            !AA->getAllocator());
 }
 
@@ -8187,7 +8186,7 @@ private:
                           .getAddress(CGF);
                 }
                 Size = CGF.Builder.CreatePtrDiff(
-                    CGF.EmitCastToVoidPtr(ComponentLB.getPointer()),
+                    CGF.Int8Ty, CGF.EmitCastToVoidPtr(ComponentLB.getPointer()),
                     CGF.EmitCastToVoidPtr(LB.getPointer()));
                 break;
               }
@@ -8208,7 +8207,7 @@ private:
           CombinedInfo.BasePointers.push_back(BP.getPointer());
           CombinedInfo.Pointers.push_back(LB.getPointer());
           Size = CGF.Builder.CreatePtrDiff(
-              CGF.Builder.CreateConstGEP(HB, 1).getPointer(),
+              CGF.Int8Ty, CGF.Builder.CreateConstGEP(HB, 1).getPointer(),
               CGF.EmitCastToVoidPtr(LB.getPointer()));
           CombinedInfo.Sizes.push_back(
               CGF.Builder.CreateIntCast(Size, CGF.Int64Ty, /*isSigned=*/true));
@@ -9034,7 +9033,7 @@ public:
         CGF.Builder.CreateConstGEP1_32(HBAddr.getElementType(), HB, /*Idx0=*/1);
     llvm::Value *CLAddr = CGF.Builder.CreatePointerCast(LB, CGF.VoidPtrTy);
     llvm::Value *CHAddr = CGF.Builder.CreatePointerCast(HAddr, CGF.VoidPtrTy);
-    llvm::Value *Diff = CGF.Builder.CreatePtrDiff(CHAddr, CLAddr);
+    llvm::Value *Diff = CGF.Builder.CreatePtrDiff(CGF.Int8Ty, CHAddr, CLAddr);
     llvm::Value *Size = CGF.Builder.CreateIntCast(Diff, CGF.Int64Ty,
                                                   /*isSigned=*/false);
     CombinedInfo.Sizes.push_back(Size);
@@ -10289,8 +10288,7 @@ void CGOpenMPRuntime::emitUDMapperArrayInitOrDel(
   llvm::Value *Cond;
   if (IsInit) {
     // base != begin?
-    llvm::Value *BaseIsBegin = MapperCGF.Builder.CreateIsNotNull(
-        MapperCGF.Builder.CreatePtrDiff(Base, Begin));
+    llvm::Value *BaseIsBegin = MapperCGF.Builder.CreateICmpNE(Base, Begin);
     // IsPtrAndObj?
     llvm::Value *PtrAndObjBit = MapperCGF.Builder.CreateAnd(
         MapType,
@@ -10655,7 +10653,7 @@ void CGOpenMPRuntime::emitTargetCall(
     emitOffloadingArraysArgument(
         CGF, Info.BasePointersArray, Info.PointersArray, Info.SizesArray,
         Info.MapTypesArray, Info.MapNamesArray, Info.MappersArray, Info,
-        IsInOpenACCConstruct, {/*ForEndTask=*/false});
+        IsInOpenACCConstruct, {/*ForEndCall=*/false});
 
     InputInfo.NumberOfTargetItems = Info.NumberOfPtrs;
     InputInfo.BasePointersArray =
@@ -11543,7 +11541,7 @@ void CGOpenMPRuntime::emitTargetDataStandAloneCall(
     emitOffloadingArraysArgument(
         CGF, Info.BasePointersArray, Info.PointersArray, Info.SizesArray,
         Info.MapTypesArray, Info.MapNamesArray, Info.MappersArray, Info,
-        IsInOpenACCConstruct, {/*ForEndTask=*/false});
+        IsInOpenACCConstruct, {/*ForEndCall=*/false});
     InputInfo.NumberOfTargetItems = Info.NumberOfPtrs;
     InputInfo.BasePointersArray =
         Address(Info.BasePointersArray, CGM.getPointerAlign());
@@ -12293,6 +12291,26 @@ Address CGOpenMPRuntime::getParameterAddress(CodeGenFunction &CGF,
   return CGF.GetAddrOfLocalVar(NativeParam);
 }
 
+/// Return allocator value from expression, or return a null allocator (default
+/// when no allocator specified).
+static llvm::Value *getAllocatorVal(CodeGenFunction &CGF,
+                                    const Expr *Allocator) {
+  llvm::Value *AllocVal;
+  if (Allocator) {
+    AllocVal = CGF.EmitScalarExpr(Allocator);
+    // According to the standard, the original allocator type is a enum
+    // (integer). Convert to pointer type, if required.
+    AllocVal = CGF.EmitScalarConversion(AllocVal, Allocator->getType(),
+                                        CGF.getContext().VoidPtrTy,
+                                        Allocator->getExprLoc());
+  } else {
+    // If no allocator specified, it defaults to the null allocator.
+    AllocVal = llvm::Constant::getNullValue(
+        CGF.CGM.getTypes().ConvertType(CGF.getContext().VoidPtrTy));
+  }
+  return AllocVal;
+}
+
 Address CGOpenMPRuntime::getAddressOfLocalVariable(CodeGenFunction &CGF,
                                                    const VarDecl *VD) {
   if (!VD)
@@ -12329,20 +12347,24 @@ Address CGOpenMPRuntime::getAddressOfLocalVariable(CodeGenFunction &CGF,
     }
     llvm::Value *ThreadID = getThreadID(CGF, CVD->getBeginLoc());
     const auto *AA = CVD->getAttr<OMPAllocateDeclAttr>();
-    assert(AA->getAllocator() &&
-           "Expected allocator expression for non-default allocator.");
-    llvm::Value *Allocator = CGF.EmitScalarExpr(AA->getAllocator());
-    // According to the standard, the original allocator type is a enum
-    // (integer). Convert to pointer type, if required.
-    Allocator = CGF.EmitScalarConversion(
-        Allocator, AA->getAllocator()->getType(), CGF.getContext().VoidPtrTy,
-        AA->getAllocator()->getExprLoc());
-    llvm::Value *Args[] = {ThreadID, Size, Allocator};
-
-    llvm::Value *Addr =
-        CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
-                                CGM.getModule(), OMPRTL___kmpc_alloc),
-                            Args, getName({CVD->getName(), ".void.addr"}));
+    const Expr *Allocator = AA->getAllocator();
+    llvm::Value *AllocVal = getAllocatorVal(CGF, Allocator);
+    llvm::Value *Alignment =
+        AA->getAlignment()
+            ? CGF.Builder.CreateIntCast(CGF.EmitScalarExpr(AA->getAlignment()),
+                                        CGM.SizeTy, /*isSigned=*/false)
+            : nullptr;
+    SmallVector<llvm::Value *, 4> Args;
+    Args.push_back(ThreadID);
+    if (Alignment)
+      Args.push_back(Alignment);
+    Args.push_back(Size);
+    Args.push_back(AllocVal);
+    llvm::omp::RuntimeFunction FnID =
+        Alignment ? OMPRTL___kmpc_aligned_alloc : OMPRTL___kmpc_alloc;
+    llvm::Value *Addr = CGF.EmitRuntimeCall(
+        OMPBuilder.getOrCreateRuntimeFunction(CGM.getModule(), FnID), Args,
+        getName({CVD->getName(), ".void.addr"}));
     llvm::FunctionCallee FiniRTLFn = OMPBuilder.getOrCreateRuntimeFunction(
         CGM.getModule(), OMPRTL___kmpc_free);
     QualType Ty = CGM.getContext().getPointerType(CVD->getType());
@@ -12356,14 +12378,14 @@ Address CGOpenMPRuntime::getAddressOfLocalVariable(CodeGenFunction &CGF,
       llvm::FunctionCallee RTLFn;
       SourceLocation::UIntTy LocEncoding;
       Address Addr;
-      const Expr *Allocator;
+      const Expr *AllocExpr;
 
     public:
       OMPAllocateCleanupTy(llvm::FunctionCallee RTLFn,
                            SourceLocation::UIntTy LocEncoding, Address Addr,
-                           const Expr *Allocator)
+                           const Expr *AllocExpr)
           : RTLFn(RTLFn), LocEncoding(LocEncoding), Addr(Addr),
-            Allocator(Allocator) {}
+            AllocExpr(AllocExpr) {}
       void Emit(CodeGenFunction &CGF, Flags /*flags*/) override {
         if (!CGF.HaveInsertPoint())
           return;
@@ -12372,14 +12394,8 @@ Address CGOpenMPRuntime::getAddressOfLocalVariable(CodeGenFunction &CGF,
             CGF, SourceLocation::getFromRawEncoding(LocEncoding));
         Args[1] = CGF.Builder.CreatePointerBitCastOrAddrSpaceCast(
             Addr.getPointer(), CGF.VoidPtrTy);
-        llvm::Value *AllocVal = CGF.EmitScalarExpr(Allocator);
-        // According to the standard, the original allocator type is a enum
-        // (integer). Convert to pointer type, if required.
-        AllocVal = CGF.EmitScalarConversion(AllocVal, Allocator->getType(),
-                                            CGF.getContext().VoidPtrTy,
-                                            Allocator->getExprLoc());
+        llvm::Value *AllocVal = getAllocatorVal(CGF, AllocExpr);
         Args[2] = AllocVal;
-
         CGF.EmitRuntimeCall(RTLFn, Args);
       }
     };
@@ -12387,7 +12403,7 @@ Address CGOpenMPRuntime::getAddressOfLocalVariable(CodeGenFunction &CGF,
         UntiedRealAddr.isValid() ? UntiedRealAddr : Address(Addr, Align);
     CGF.EHStack.pushCleanup<OMPAllocateCleanupTy>(
         NormalAndEHCleanup, FiniRTLFn, CVD->getLocation().getRawEncoding(),
-        VDAddr, AA->getAllocator());
+        VDAddr, Allocator);
     if (UntiedRealAddr.isValid())
       if (auto *Region =
               dyn_cast_or_null<CGOpenMPRegionInfo>(CGF.CapturedStmtInfo))

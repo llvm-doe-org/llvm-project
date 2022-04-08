@@ -49,7 +49,7 @@ public:
     // conditional block since it already has the induction variable and
     // loop-carried values as arguments.
     auto *conditionalBlock = &loop.region().front();
-    conditionalBlock->addArgument(rewriter.getIndexType());
+    conditionalBlock->addArgument(rewriter.getIndexType(), loc);
     auto *firstBlock =
         rewriter.splitBlock(conditionalBlock, conditionalBlock->begin());
     auto *lastBlock = &loop.region().back();
@@ -75,7 +75,7 @@ public:
       auto cond = rewriter.create<mlir::arith::CmpIOp>(
           loc, arith::CmpIPredicate::sle, iters, zero);
       auto one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
-      iters = rewriter.create<mlir::SelectOp>(loc, cond, one, iters);
+      iters = rewriter.create<mlir::arith::SelectOp>(loc, cond, one, iters);
     }
 
     llvm::SmallVector<mlir::Value> loopOperands;
@@ -294,9 +294,9 @@ public:
 /// Convert FIR structured control flow ops to CFG ops.
 class CfgConversion : public CFGConversionBase<CfgConversion> {
 public:
-  void runOnFunction() override {
+  void runOnOperation() override {
     auto *context = &getContext();
-    mlir::OwningRewritePatternList patterns(context);
+    mlir::RewritePatternSet patterns(context);
     patterns.insert<CfgLoopConv, CfgIfConv, CfgIterWhileConv>(
         context, forceLoopToExecuteOnce);
     mlir::ConversionTarget target(*context);
@@ -306,7 +306,7 @@ public:
     // apply the patterns
     target.addIllegalOp<ResultOp, DoLoopOp, IfOp, IterWhileOp>();
     target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
-    if (mlir::failed(mlir::applyPartialConversion(getFunction(), target,
+    if (mlir::failed(mlir::applyPartialConversion(getOperation(), target,
                                                   std::move(patterns)))) {
       mlir::emitError(mlir::UnknownLoc::get(context),
                       "error in converting to CFG\n");

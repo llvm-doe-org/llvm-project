@@ -519,8 +519,7 @@ public:
   AccessAnalysis(Loop *TheLoop, AAResults *AA, LoopInfo *LI,
                  MemoryDepChecker::DepCandidates &DA,
                  PredicatedScalarEvolution &PSE)
-      : TheLoop(TheLoop), AST(*AA), LI(LI), DepCands(DA),
-        IsRTCheckAnalysisNeeded(false), PSE(PSE) {}
+      : TheLoop(TheLoop), AST(*AA), LI(LI), DepCands(DA), PSE(PSE) {}
 
   /// Register a load  and whether it is only read from.
   void addLoad(MemoryLocation &Loc, bool IsReadOnly) {
@@ -620,7 +619,7 @@ private:
   /// memcheck analysis without dependency checking
   /// (i.e. FoundNonConstantDistanceDependence), isDependencyCheckNeeded is
   /// cleared while this remains set if we have potentially dependent accesses.
-  bool IsRTCheckAnalysisNeeded;
+  bool IsRTCheckAnalysisNeeded = false;
 
   /// The SCEV predicate containing all the SCEV-related assumptions.
   PredicatedScalarEvolution &PSE;
@@ -1055,7 +1054,6 @@ int64_t llvm::getPtrStride(PredicatedScalarEvolution &PSE, Type *AccessTy,
                            bool ShouldCheckWrap) {
   Type *Ty = Ptr->getType();
   assert(Ty->isPointerTy() && "Unexpected non-ptr");
-  assert(!AccessTy->isAggregateType() && "Bad stride - Not a pointer to a scalar type");
 
   if (isa<ScalableVectorType>(AccessTy)) {
     LLVM_DEBUG(dbgs() << "LAA: Bad stride - Scalable object: " << *AccessTy
@@ -2131,13 +2129,61 @@ void LoopAccessInfo::analyzeLoop(AAResults *AA, LoopInfo *LI,
         dbgs() << "LAA: No unsafe dependent memory operations in loop.  We"
                << (PtrRtChecking->Need ? "" : " don't")
                << " need runtime memory checks.\n");
-  else {
-    recordAnalysis("UnsafeMemDep")
-        << "unsafe dependent memory operations in loop. Use "
-           "#pragma loop distribute(enable) to allow loop distribution "
-           "to attempt to isolate the offending operations into a separate "
-           "loop";
-    LLVM_DEBUG(dbgs() << "LAA: unsafe dependent memory operations in loop\n");
+  else
+    emitUnsafeDependenceRemark();
+}
+
+void LoopAccessInfo::emitUnsafeDependenceRemark() {
+  auto Deps = getDepChecker().getDependences();
+  if (!Deps)
+    return;
+  auto Found = std::find_if(
+      Deps->begin(), Deps->end(), [](const MemoryDepChecker::Dependence &D) {
+        return MemoryDepChecker::Dependence::isSafeForVectorization(D.Type) !=
+               MemoryDepChecker::VectorizationSafetyStatus::Safe;
+      });
+  if (Found == Deps->end())
+    return;
+  MemoryDepChecker::Dependence Dep = *Found;
+
+  LLVM_DEBUG(dbgs() << "LAA: unsafe dependent memory operations in loop\n");
+
+  // Emit remark for first unsafe dependence
+  OptimizationRemarkAnalysis &R =
+      recordAnalysis("UnsafeDep", Dep.getDestination(*this))
+      << "unsafe dependent memory operations in loop. Use "
+         "#pragma loop distribute(enable) to allow loop distribution "
+         "to attempt to isolate the offending operations into a separate "
+         "loop";
+
+  switch (Dep.Type) {
+  case MemoryDepChecker::Dependence::NoDep:
+  case MemoryDepChecker::Dependence::Forward:
+  case MemoryDepChecker::Dependence::BackwardVectorizable:
+    llvm_unreachable("Unexpected dependence");
+  case MemoryDepChecker::Dependence::Backward:
+    R << "\nBackward loop carried data dependence.";
+    break;
+  case MemoryDepChecker::Dependence::ForwardButPreventsForwarding:
+    R << "\nForward loop carried data dependence that prevents "
+         "store-to-load forwarding.";
+    break;
+  case MemoryDepChecker::Dependence::BackwardVectorizableButPreventsForwarding:
+    R << "\nBackward loop carried data dependence that prevents "
+         "store-to-load forwarding.";
+    break;
+  case MemoryDepChecker::Dependence::Unknown:
+    R << "\nUnknown data dependence.";
+    break;
+  }
+
+  if (Instruction *I = Dep.getSource(*this)) {
+    DebugLoc SourceLoc = I->getDebugLoc();
+    if (auto *DD = dyn_cast_or_null<Instruction>(getPointerOperand(I)))
+      SourceLoc = DD->getDebugLoc();
+    if (SourceLoc)
+      R << " Memory location is the same as accessed at "
+        << ore::NV("Location", SourceLoc);
   }
 }
 
@@ -2245,10 +2291,7 @@ LoopAccessInfo::LoopAccessInfo(Loop *L, ScalarEvolution *SE,
                                DominatorTree *DT, LoopInfo *LI)
     : PSE(std::make_unique<PredicatedScalarEvolution>(*SE, *L)),
       PtrRtChecking(std::make_unique<RuntimePointerChecking>(SE)),
-      DepChecker(std::make_unique<MemoryDepChecker>(*PSE, L)), TheLoop(L),
-      NumLoads(0), NumStores(0), MaxSafeDepDistBytes(-1), CanVecMem(false),
-      HasConvergentOp(false),
-      HasDependenceInvolvingLoopInvariantAddress(false) {
+      DepChecker(std::make_unique<MemoryDepChecker>(*PSE, L)), TheLoop(L) {
   if (canAnalyzeLoop())
     analyzeLoop(AA, LI, TLI, DT);
 }

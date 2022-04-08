@@ -104,7 +104,7 @@ CASE(caseDataSubarrayDisjoint) {
 //     EXE-caseDataSubarrayOverlapStart-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
 // EXE-caseDataSubarrayOverlapStart-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
 // EXE-caseDataSubarrayOverlapStart-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-// EXE-caseDataSubarrayOverlapStart-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+// EXE-caseDataSubarrayOverlapStart-OFF-NEXT: Libomptarget error: Consult {{.*}}
 // EXE-caseDataSubarrayOverlapStart-OFF-NEXT: {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                            # An abort message usually follows.
 //  EXE-caseDataSubarrayOverlapStart-OFF-NOT: Libomptarget
@@ -122,7 +122,7 @@ CASE(caseDataSubarrayOverlapStart) {
 //      EXE-caseDataSubarrayOverlapEnd-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
 //  EXE-caseDataSubarrayOverlapEnd-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
 //  EXE-caseDataSubarrayOverlapEnd-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-//  EXE-caseDataSubarrayOverlapEnd-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+//  EXE-caseDataSubarrayOverlapEnd-OFF-NEXT: Libomptarget error: Consult {{.*}}
 //  EXE-caseDataSubarrayOverlapEnd-OFF-NEXT: {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                           # An abort message usually follows.
 //  EXE-caseDataSubarrayOverlapEnd-OFF-NOT: Libomptarget
@@ -140,7 +140,7 @@ CASE(caseDataSubarrayOverlapEnd) {
 //     EXE-caseDataSubarrayConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
 // EXE-caseDataSubarrayConcat2-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
 // EXE-caseDataSubarrayConcat2-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-// EXE-caseDataSubarrayConcat2-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+// EXE-caseDataSubarrayConcat2-OFF-NEXT: Libomptarget error: Consult {{.*}}
 // EXE-caseDataSubarrayConcat2-OFF-NEXT: {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                       # An abort message usually follows.
 //  EXE-caseDataSubarrayConcat2-OFF-NOT: Libomptarget
@@ -159,7 +159,7 @@ CASE(caseDataSubarrayConcat2) {
 //     EXE-caseDataSubarrayNonSubarray-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
 // EXE-caseDataSubarrayNonSubarray-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
 // EXE-caseDataSubarrayNonSubarray-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-// EXE-caseDataSubarrayNonSubarray-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+// EXE-caseDataSubarrayNonSubarray-OFF-NEXT: Libomptarget error: Consult {{.*}}
 // EXE-caseDataSubarrayNonSubarray-OFF-NEXT: {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                           # An abort message usually follows.
 //  EXE-caseDataSubarrayNonSubarray-OFF-NOT: Libomptarget
@@ -199,7 +199,7 @@ CASE(caseParallelSubarrayDisjoint) {
 // EXE-caseParallelSubarrayOverlapStart-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
 // EXE-caseParallelSubarrayOverlapStart-OFF-NEXT: Libomptarget error: Call to targetDataBegin failed, abort target.
 // EXE-caseParallelSubarrayOverlapStart-OFF-NEXT: Libomptarget error: Failed to process data before launching the kernel.
-// EXE-caseParallelSubarrayOverlapStart-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+// EXE-caseParallelSubarrayOverlapStart-OFF-NEXT: Libomptarget error: Consult {{.*}}
 // EXE-caseParallelSubarrayOverlapStart-OFF-NEXT: {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                                # An abort message usually follows.
 //  EXE-caseParallelSubarrayOverlapStart-OFF-NOT: Libomptarget
@@ -221,7 +221,7 @@ CASE(caseParallelSubarrayOverlapStart) {
 // EXE-caseParallelSubarrayOverlapEnd-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
 // EXE-caseParallelSubarrayOverlapEnd-OFF-NEXT: Libomptarget error: Call to targetDataBegin failed, abort target.
 // EXE-caseParallelSubarrayOverlapEnd-OFF-NEXT: Libomptarget error: Failed to process data before launching the kernel.
-// EXE-caseParallelSubarrayOverlapEnd-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+// EXE-caseParallelSubarrayOverlapEnd-OFF-NEXT: Libomptarget error: Consult {{.*}}
 // EXE-caseParallelSubarrayOverlapEnd-OFF-NEXT: {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                              # An abort message usually follows.
 //  EXE-caseParallelSubarrayOverlapEnd-OFF-NOT: Libomptarget
@@ -243,7 +243,7 @@ CASE(caseParallelSubarrayOverlapEnd) {
 // EXE-caseParallelSubarrayConcat2-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
 // EXE-caseParallelSubarrayConcat2-OFF-NEXT: Libomptarget error: Call to targetDataBegin failed, abort target.
 // EXE-caseParallelSubarrayConcat2-OFF-NEXT: Libomptarget error: Failed to process data before launching the kernel.
-// EXE-caseParallelSubarrayConcat2-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+// EXE-caseParallelSubarrayConcat2-OFF-NEXT: Libomptarget error: Consult {{.*}}
 // EXE-caseParallelSubarrayConcat2-OFF-NEXT: {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                           # An abort message usually follows.
 //  EXE-caseParallelSubarrayConcat2-OFF-NOT: Libomptarget
@@ -266,7 +266,7 @@ CASE(caseParallelSubarrayConcat2) {
 // EXE-caseParallelSubarrayNonSubarray-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
 // EXE-caseParallelSubarrayNonSubarray-OFF-NEXT: Libomptarget error: Call to targetDataBegin failed, abort target.
 // EXE-caseParallelSubarrayNonSubarray-OFF-NEXT: Libomptarget error: Failed to process data before launching the kernel.
-// EXE-caseParallelSubarrayNonSubarray-OFF-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+// EXE-caseParallelSubarrayNonSubarray-OFF-NEXT: Libomptarget error: Consult {{.*}}
 // EXE-caseParallelSubarrayNonSubarray-OFF-NEXT: {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                               # An abort message usually follows.
 //  EXE-caseParallelSubarrayNonSubarray-OFF-NOT: Libomptarget

@@ -58,6 +58,7 @@ CGOPT(bool, EnableUnsafeFPMath)
 CGOPT(bool, EnableNoInfsFPMath)
 CGOPT(bool, EnableNoNaNsFPMath)
 CGOPT(bool, EnableNoSignedZerosFPMath)
+CGOPT(bool, EnableApproxFuncFPMath)
 CGOPT(bool, EnableNoTrappingFPMath)
 CGOPT(bool, EnableAIXExtendedAltivecABI)
 CGOPT(DenormalMode::DenormalModeKind, DenormalFPMath)
@@ -90,7 +91,6 @@ CGOPT(bool, EnableAddrsig)
 CGOPT(bool, EmitCallSiteInfo)
 CGOPT(bool, EnableMachineFunctionSplitter)
 CGOPT(bool, EnableDebugEntryValues)
-CGOPT_EXP(bool, ValueTrackingVariableLocations)
 CGOPT(bool, ForceDwarfFrameSection)
 CGOPT(bool, XRayOmitFunctionIndex)
 CGOPT(bool, DebugStrictDwarf)
@@ -218,6 +218,12 @@ codegen::RegisterCodeGenFlags::RegisterCodeGenFlags() {
                "the sign of 0 is insignificant"),
       cl::init(false));
   CGBINDOPT(EnableNoSignedZerosFPMath);
+
+  static cl::opt<bool> EnableApproxFuncFPMath(
+      "enable-approx-func-fp-math",
+      cl::desc("Enable FP math optimizations that assume approx func"),
+      cl::init(false));
+  CGBINDOPT(EnableApproxFuncFPMath);
 
   static cl::opt<bool> EnableNoTrappingFPMath(
       "enable-no-trapping-fp-math",
@@ -433,12 +439,6 @@ codegen::RegisterCodeGenFlags::RegisterCodeGenFlags() {
       cl::init(false));
   CGBINDOPT(EnableDebugEntryValues);
 
-  static cl::opt<bool> ValueTrackingVariableLocations(
-      "experimental-debug-variable-locations",
-      cl::desc("Use experimental new value-tracking variable locations"),
-      cl::init(false));
-  CGBINDOPT(ValueTrackingVariableLocations);
-
   static cl::opt<bool> EnableMachineFunctionSplitter(
       "split-machine-functions",
       cl::desc("Split out cold basic blocks from machine functions based on "
@@ -500,6 +500,7 @@ codegen::InitTargetOptionsFromCodeGenFlags(const Triple &TheTriple) {
   Options.NoInfsFPMath = getEnableNoInfsFPMath();
   Options.NoNaNsFPMath = getEnableNoNaNsFPMath();
   Options.NoSignedZerosFPMath = getEnableNoSignedZerosFPMath();
+  Options.ApproxFuncFPMath = getEnableApproxFuncFPMath();
   Options.NoTrappingFPMath = getEnableNoTrappingFPMath();
 
   DenormalMode::DenormalModeKind DenormKind = getDenormalFPMath();
@@ -538,12 +539,6 @@ codegen::InitTargetOptionsFromCodeGenFlags(const Triple &TheTriple) {
   Options.XRayOmitFunctionIndex = getXRayOmitFunctionIndex();
   Options.DebugStrictDwarf = getDebugStrictDwarf();
   Options.LoopAlignment = getAlignLoops();
-
-  if (auto Opt = getExplicitValueTrackingVariableLocations())
-    Options.ValueTrackingVariableLocations = *Opt;
-  else
-    Options.ValueTrackingVariableLocations =
-        getDefaultValueTrackingVariableLocations(TheTriple);
 
   Options.MCOptions = mc::InitMCTargetOptionsFromFlags();
 
@@ -620,7 +615,7 @@ void codegen::setFunctionAttributes(StringRef CPU, StringRef Features,
                                     Function &F) {
   auto &Ctx = F.getContext();
   AttributeList Attrs = F.getAttributes();
-  AttrBuilder NewAttrs;
+  AttrBuilder NewAttrs(Ctx);
 
   if (!CPU.empty() && !F.hasFnAttribute("target-cpu"))
     NewAttrs.addAttribute("target-cpu", CPU);
@@ -656,6 +651,7 @@ void codegen::setFunctionAttributes(StringRef CPU, StringRef Features,
   HANDLE_BOOL_ATTR(EnableNoInfsFPMathView, "no-infs-fp-math");
   HANDLE_BOOL_ATTR(EnableNoNaNsFPMathView, "no-nans-fp-math");
   HANDLE_BOOL_ATTR(EnableNoSignedZerosFPMathView, "no-signed-zeros-fp-math");
+  HANDLE_BOOL_ATTR(EnableApproxFuncFPMathView, "approx-func-fp-math");
 
   if (DenormalFPMathView->getNumOccurrences() > 0 &&
       !F.hasFnAttribute("denormal-fp-math")) {
@@ -698,8 +694,3 @@ void codegen::setFunctionAttributes(StringRef CPU, StringRef Features,
     setFunctionAttributes(CPU, Features, F);
 }
 
-bool codegen::getDefaultValueTrackingVariableLocations(const llvm::Triple &T) {
-  if (T.getArch() == llvm::Triple::x86_64)
-    return true;
-  return false;
-}

@@ -30,8 +30,6 @@
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/ManagedStatic.h"
-#include "llvm/Support/MathExtras.h"
 using namespace llvm;
 using namespace llvm::PatternMatch;
 
@@ -119,21 +117,21 @@ static Constant *FoldBitCast(Constant *V, Type *DestTy) {
     if (PointerType *DPTy = dyn_cast<PointerType>(DestTy))
       if (PTy->getAddressSpace() == DPTy->getAddressSpace() &&
           !PTy->isOpaque() && !DPTy->isOpaque() &&
-          PTy->getElementType()->isSized()) {
+          PTy->getNonOpaquePointerElementType()->isSized()) {
         SmallVector<Value*, 8> IdxList;
         Value *Zero =
           Constant::getNullValue(Type::getInt32Ty(DPTy->getContext()));
         IdxList.push_back(Zero);
-        Type *ElTy = PTy->getElementType();
-        while (ElTy && ElTy != DPTy->getElementType()) {
+        Type *ElTy = PTy->getNonOpaquePointerElementType();
+        while (ElTy && ElTy != DPTy->getNonOpaquePointerElementType()) {
           ElTy = GetElementPtrInst::getTypeAtIndex(ElTy, (uint64_t)0);
           IdxList.push_back(Zero);
         }
 
-        if (ElTy == DPTy->getElementType())
+        if (ElTy == DPTy->getNonOpaquePointerElementType())
           // This GEP is inbounds because all indices are zero.
-          return ConstantExpr::getInBoundsGetElementPtr(PTy->getElementType(),
-                                                        V, IdxList);
+          return ConstantExpr::getInBoundsGetElementPtr(
+              PTy->getNonOpaquePointerElementType(), V, IdxList);
       }
 
   // Handle casts from one vector constant to another.  We know that the src
@@ -1299,63 +1297,6 @@ Constant *llvm::ConstantFoldBinaryInstruction(unsigned Opcode, Constant *C1,
   return nullptr;
 }
 
-/// This type is zero-sized if it's an array or structure of zero-sized types.
-/// The only leaf zero-sized type is an empty structure.
-static bool isMaybeZeroSizedType(Type *Ty) {
-  if (StructType *STy = dyn_cast<StructType>(Ty)) {
-    if (STy->isOpaque()) return true;  // Can't say.
-
-    // If all of elements have zero size, this does too.
-    for (unsigned i = 0, e = STy->getNumElements(); i != e; ++i)
-      if (!isMaybeZeroSizedType(STy->getElementType(i))) return false;
-    return true;
-
-  } else if (ArrayType *ATy = dyn_cast<ArrayType>(Ty)) {
-    return isMaybeZeroSizedType(ATy->getElementType());
-  }
-  return false;
-}
-
-/// Compare the two constants as though they were getelementptr indices.
-/// This allows coercion of the types to be the same thing.
-///
-/// If the two constants are the "same" (after coercion), return 0.  If the
-/// first is less than the second, return -1, if the second is less than the
-/// first, return 1.  If the constants are not integral, return -2.
-///
-static int IdxCompare(Constant *C1, Constant *C2, Type *ElTy) {
-  if (C1 == C2) return 0;
-
-  // Ok, we found a different index.  If they are not ConstantInt, we can't do
-  // anything with them.
-  if (!isa<ConstantInt>(C1) || !isa<ConstantInt>(C2))
-    return -2; // don't know!
-
-  // We cannot compare the indices if they don't fit in an int64_t.
-  if (cast<ConstantInt>(C1)->getValue().getActiveBits() > 64 ||
-      cast<ConstantInt>(C2)->getValue().getActiveBits() > 64)
-    return -2; // don't know!
-
-  // Ok, we have two differing integer indices.  Sign extend them to be the same
-  // type.
-  int64_t C1Val = cast<ConstantInt>(C1)->getSExtValue();
-  int64_t C2Val = cast<ConstantInt>(C2)->getSExtValue();
-
-  if (C1Val == C2Val) return 0;  // They are equal
-
-  // If the type being indexed over is really just a zero sized type, there is
-  // no pointer difference being made here.
-  if (isMaybeZeroSizedType(ElTy))
-    return -2; // dunno.
-
-  // If they are really different, now that they are the same type, then we
-  // found a difference!
-  if (C1Val < C2Val)
-    return -1;
-  else
-    return 1;
-}
-
 /// This function determines if there is anything we can decide about the two
 /// constants provided. This doesn't need to handle simple things like
 /// ConstantFP comparisons, but should instead handle ConstantExprs.
@@ -1594,103 +1535,28 @@ static ICmpInst::Predicate evaluateICmpRelation(Constant *V1, Constant *V2,
         if (const GlobalValue *GV = dyn_cast<GlobalValue>(CE1Op0)) {
           // If its not weak linkage, the GVal must have a non-zero address
           // so the result is greater-than
-          if (!GV->hasExternalWeakLinkage())
+          if (!GV->hasExternalWeakLinkage() && CE1GEP->isInBounds())
             return ICmpInst::ICMP_UGT;
-        } else if (isa<ConstantPointerNull>(CE1Op0)) {
-          // If we are indexing from a null pointer, check to see if we have any
-          // non-zero indices.
-          for (unsigned i = 1, e = CE1->getNumOperands(); i != e; ++i)
-            if (!CE1->getOperand(i)->isNullValue())
-              // Offsetting from null, must not be equal.
-              return ICmpInst::ICMP_UGT;
-          // Only zero indexes from null, must still be zero.
-          return ICmpInst::ICMP_EQ;
         }
-        // Otherwise, we can't really say if the first operand is null or not.
       } else if (const GlobalValue *GV2 = dyn_cast<GlobalValue>(V2)) {
-        if (isa<ConstantPointerNull>(CE1Op0)) {
-          // If its not weak linkage, the GVal must have a non-zero address
-          // so the result is less-than
-          if (!GV2->hasExternalWeakLinkage())
-            return ICmpInst::ICMP_ULT;
-        } else if (const GlobalValue *GV = dyn_cast<GlobalValue>(CE1Op0)) {
-          if (GV == GV2) {
-            // If this is a getelementptr of the same global, then it must be
-            // different.  Because the types must match, the getelementptr could
-            // only have at most one index, and because we fold getelementptr's
-            // with a single zero index, it must be nonzero.
-            assert(CE1->getNumOperands() == 2 &&
-                   !CE1->getOperand(1)->isNullValue() &&
-                   "Surprising getelementptr!");
-            return ICmpInst::ICMP_UGT;
-          } else {
+        if (const GlobalValue *GV = dyn_cast<GlobalValue>(CE1Op0)) {
+          if (GV != GV2) {
             if (CE1GEP->hasAllZeroIndices())
               return areGlobalsPotentiallyEqual(GV, GV2);
             return ICmpInst::BAD_ICMP_PREDICATE;
           }
         }
-      } else {
-        ConstantExpr *CE2 = cast<ConstantExpr>(V2);
-        Constant *CE2Op0 = CE2->getOperand(0);
-
-        // There are MANY other foldings that we could perform here.  They will
-        // probably be added on demand, as they seem needed.
-        switch (CE2->getOpcode()) {
-        default: break;
-        case Instruction::GetElementPtr:
-          // By far the most common case to handle is when the base pointers are
-          // obviously to the same global.
-          if (isa<GlobalValue>(CE1Op0) && isa<GlobalValue>(CE2Op0)) {
-            // Don't know relative ordering, but check for inequality.
-            if (CE1Op0 != CE2Op0) {
-              GEPOperator *CE2GEP = cast<GEPOperator>(CE2);
-              if (CE1GEP->hasAllZeroIndices() && CE2GEP->hasAllZeroIndices())
-                return areGlobalsPotentiallyEqual(cast<GlobalValue>(CE1Op0),
-                                                  cast<GlobalValue>(CE2Op0));
-              return ICmpInst::BAD_ICMP_PREDICATE;
-            }
-            // Ok, we know that both getelementptr instructions are based on the
-            // same global.  From this, we can precisely determine the relative
-            // ordering of the resultant pointers.
-            unsigned i = 1;
-
-            // The logic below assumes that the result of the comparison
-            // can be determined by finding the first index that differs.
-            // This doesn't work if there is over-indexing in any
-            // subsequent indices, so check for that case first.
-            if (!CE1->isGEPWithNoNotionalOverIndexing() ||
-                !CE2->isGEPWithNoNotionalOverIndexing())
-               return ICmpInst::BAD_ICMP_PREDICATE; // Might be equal.
-
-            // Compare all of the operands the GEP's have in common.
-            gep_type_iterator GTI = gep_type_begin(CE1);
-            for (;i != CE1->getNumOperands() && i != CE2->getNumOperands();
-                 ++i, ++GTI)
-              switch (IdxCompare(CE1->getOperand(i),
-                                 CE2->getOperand(i), GTI.getIndexedType())) {
-              case -1: return ICmpInst::ICMP_ULT;
-              case 1:  return ICmpInst::ICMP_UGT;
-              case -2: return ICmpInst::BAD_ICMP_PREDICATE;
-              }
-
-            // Ok, we ran out of things they have in common.  If any leftovers
-            // are non-zero then we have a difference, otherwise we are equal.
-            for (; i < CE1->getNumOperands(); ++i)
-              if (!CE1->getOperand(i)->isNullValue()) {
-                if (isa<ConstantInt>(CE1->getOperand(i)))
-                  return ICmpInst::ICMP_UGT;
-                else
-                  return ICmpInst::BAD_ICMP_PREDICATE; // Might be equal.
-              }
-
-            for (; i < CE2->getNumOperands(); ++i)
-              if (!CE2->getOperand(i)->isNullValue()) {
-                if (isa<ConstantInt>(CE2->getOperand(i)))
-                  return ICmpInst::ICMP_ULT;
-                else
-                  return ICmpInst::BAD_ICMP_PREDICATE; // Might be equal.
-              }
-            return ICmpInst::ICMP_EQ;
+      } else if (const auto *CE2GEP = dyn_cast<GEPOperator>(V2)) {
+        // By far the most common case to handle is when the base pointers are
+        // obviously to the same global.
+        const Constant *CE2Op0 = cast<Constant>(CE2GEP->getPointerOperand());
+        if (isa<GlobalValue>(CE1Op0) && isa<GlobalValue>(CE2Op0)) {
+          // Don't know relative ordering, but check for inequality.
+          if (CE1Op0 != CE2Op0) {
+            if (CE1GEP->hasAllZeroIndices() && CE2GEP->hasAllZeroIndices())
+              return areGlobalsPotentiallyEqual(cast<GlobalValue>(CE1Op0),
+                                                cast<GlobalValue>(CE2Op0));
+            return ICmpInst::BAD_ICMP_PREDICATE;
           }
         }
       }
@@ -2106,31 +1972,13 @@ static Constant *foldGEPOfGEP(GEPOperator *GEP, Type *PointeeTy, bool InBounds,
        I != E; ++I)
     LastI = I;
 
-  // We cannot combine indices if doing so would take us outside of an
-  // array or vector.  Doing otherwise could trick us if we evaluated such a
-  // GEP as part of a load.
-  //
-  // e.g. Consider if the original GEP was:
-  // i8* getelementptr ({ [2 x i8], i32, i8, [3 x i8] }* @main.c,
-  //                    i32 0, i32 0, i64 0)
-  //
-  // If we then tried to offset it by '8' to get to the third element,
-  // an i8, we should *not* get:
-  // i8* getelementptr ({ [2 x i8], i32, i8, [3 x i8] }* @main.c,
-  //                    i32 0, i32 0, i64 8)
-  //
-  // This GEP tries to index array element '8  which runs out-of-bounds.
-  // Subsequent evaluation would get confused and produce erroneous results.
-  //
-  // The following prohibits such a GEP from being formed by checking to see
-  // if the index is in-range with respect to an array.
+  // We can't combine GEPs if the last index is a struct type.
   if (!LastI.isSequential())
     return nullptr;
+  // We could perform the transform with non-constant index, but prefer leaving
+  // it as GEP of GEP rather than GEP of add for now.
   ConstantInt *CI = dyn_cast<ConstantInt>(Idx0);
   if (!CI)
-    return nullptr;
-  if (LastI.isBoundedSequential() &&
-      !isIndexInRangeOfArrayType(LastI.getSequentialNumElements(), CI))
     return nullptr;
 
   // TODO: This code may be extended to handle vectors as well.
@@ -2246,11 +2094,12 @@ Constant *llvm::ConstantFoldGetElementPtr(Type *PointeeTy, Constant *C,
       PointerType *SrcPtrTy =
         dyn_cast<PointerType>(CE->getOperand(0)->getType());
       PointerType *DstPtrTy = dyn_cast<PointerType>(CE->getType());
-      if (SrcPtrTy && DstPtrTy) {
+      if (SrcPtrTy && DstPtrTy && !SrcPtrTy->isOpaque() &&
+          !DstPtrTy->isOpaque()) {
         ArrayType *SrcArrayTy =
-          dyn_cast<ArrayType>(SrcPtrTy->getElementType());
+          dyn_cast<ArrayType>(SrcPtrTy->getNonOpaquePointerElementType());
         ArrayType *DstArrayTy =
-          dyn_cast<ArrayType>(DstPtrTy->getElementType());
+          dyn_cast<ArrayType>(DstPtrTy->getNonOpaquePointerElementType());
         if (SrcArrayTy && DstArrayTy
             && SrcArrayTy->getElementType() == DstArrayTy->getElementType()
             && SrcPtrTy->getAddressSpace() == DstPtrTy->getAddressSpace())

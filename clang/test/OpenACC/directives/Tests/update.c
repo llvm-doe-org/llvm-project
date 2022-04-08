@@ -1434,7 +1434,7 @@ CASE(caseSubarrayNonSubarray) {
 }
 
 // EXE-notPASS-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes)
-// EXE-notPASS-NEXT: Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+// EXE-notPASS-NEXT: Libomptarget error: Consult {{.*}}
 // EXE-notPASS-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                   # An abort message usually follows.
 //  EXE-notPASS-NOT: Libomptarget

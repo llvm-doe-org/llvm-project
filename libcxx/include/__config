@@ -19,12 +19,12 @@
 #endif
 
 #ifndef _LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER
-#pragma GCC system_header
+#  pragma GCC system_header
 #endif
 
 #ifdef __cplusplus
 
-#define _LIBCPP_VERSION 14000
+#define _LIBCPP_VERSION 15000
 
 #ifndef _LIBCPP_ABI_VERSION
 #  define _LIBCPP_ABI_VERSION 1
@@ -107,6 +107,17 @@
 #  define _LIBCPP_ABI_ENABLE_UNIQUE_PTR_TRIVIAL_ABI
 // Enable clang::trivial_abi on std::shared_ptr and std::weak_ptr
 #  define _LIBCPP_ABI_ENABLE_SHARED_PTR_TRIVIAL_ABI
+// std::random_device holds some state when it uses an implementation that gets
+// entropy from a file (see _LIBCPP_USING_DEV_RANDOM). When switching from this
+// implementation to another one on a platform that has already shipped
+// std::random_device, one needs to retain the same object layout to remain ABI
+// compatible. This switch removes these workarounds for platforms that don't care
+// about ABI compatibility.
+#  define _LIBCPP_ABI_NO_RANDOM_DEVICE_COMPATIBILITY_LAYOUT
+// Remove basic_string common base
+#  define _LIBCPP_ABI_DO_NOT_EXPORT_BASIC_STRING_COMMON
+// Remove vector base class
+#  define _LIBCPP_ABI_DO_NOT_EXPORT_VECTOR_BASE_COMMON
 #elif _LIBCPP_ABI_VERSION == 1
 #  if !defined(_LIBCPP_OBJECT_FORMAT_COFF)
 // Enable compiling copies of now inline methods into the dylib to support
@@ -250,6 +261,10 @@
 #  endif // defined(__GLIBC_PREREQ)
 #endif // defined(__linux__)
 
+#if defined(__MVS__)
+#  include <features.h> // for __NATIVE_ASCII_F
+#endif
+
 #ifdef __LITTLE_ENDIAN__
 #  if __LITTLE_ENDIAN__
 #    define _LIBCPP_LITTLE_ENDIAN
@@ -354,6 +369,12 @@
 //      When this option is used, the token passed to `std::random_device`'s
 //      constructor *must* be "/dev/urandom" -- anything else is an error.
 //
+// _LIBCPP_USING_FUCHSIA_CPRNG
+//      Use Fuchsia's zx_cprng_draw() system call, which is specified to
+//      deliver high-quality entropy and cannot fail.
+//      When this option is used, the token passed to `std::random_device`'s
+//      constructor *must* be "/dev/urandom" -- anything else is an error.
+//
 // _LIBCPP_USING_NACL_RANDOM
 //      NaCl's sandbox (which PNaCl also runs in) doesn't allow filesystem access,
 //      including accesses to the special files under `/dev`. This implementation
@@ -365,10 +386,12 @@
 //      Use rand_s(), for use on Windows.
 //      When this option is used, the token passed to `std::random_device`'s
 //      constructor *must* be "/dev/urandom" -- anything else is an error.
-#if defined(__OpenBSD__)
+#if defined(__OpenBSD__) || defined(__APPLE__)
 #  define _LIBCPP_USING_ARC4_RANDOM
-#elif defined(__Fuchsia__) || defined(__wasi__)
+#elif defined(__wasi__)
 #  define _LIBCPP_USING_GETENTROPY
+#elif defined(__Fuchsia__)
+#  define _LIBCPP_USING_FUCHSIA_CPRNG
 #elif defined(__native_client__)
 #  define _LIBCPP_USING_NACL_RANDOM
 #elif defined(_LIBCPP_WIN32API)
@@ -800,10 +823,10 @@ typedef __char32_t char32_t;
 // Inline namespaces are available in Clang/GCC/MSVC regardless of C++ dialect.
 #define _LIBCPP_BEGIN_NAMESPACE_STD namespace std { inline namespace _LIBCPP_ABI_NAMESPACE {
 #define _LIBCPP_END_NAMESPACE_STD  } }
-#define _VSTD std::_LIBCPP_ABI_NAMESPACE
+#define _VSTD std
 _LIBCPP_BEGIN_NAMESPACE_STD _LIBCPP_END_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER >= 17
+#if _LIBCPP_STD_VER > 14
 #define _LIBCPP_BEGIN_NAMESPACE_FILESYSTEM \
   _LIBCPP_BEGIN_NAMESPACE_STD inline namespace __fs { namespace filesystem {
 #else
@@ -854,12 +877,8 @@ typedef unsigned int   char32_t;
 #  define _LIBCPP_CONSTEVAL consteval
 #endif
 
-#if !defined(__cpp_concepts) || __cpp_concepts < 201907L
+#if _LIBCPP_STD_VER <= 17 || !defined(__cpp_concepts) || __cpp_concepts < 201907L
 #define _LIBCPP_HAS_NO_CONCEPTS
-#endif
-
-#if _LIBCPP_STD_VER <= 17 || defined(_LIBCPP_HAS_NO_CONCEPTS)
-#define _LIBCPP_HAS_NO_RANGES
 #endif
 
 #ifdef __GNUC__
@@ -1204,9 +1223,9 @@ extern "C" _LIBCPP_FUNC_VIS void __sanitizer_annotate_contiguous_container(
 #   define _LIBCPP_C_HAS_NO_GETS
 #endif
 
-#if defined(__BIONIC__) || defined(__NuttX__) ||      \
-    defined(__Fuchsia__) || defined(__wasi__) || defined(_LIBCPP_HAS_MUSL_LIBC) || \
-    defined(__MVS__) || defined(__OpenBSD__)
+#if defined(__BIONIC__) || defined(__NuttX__) ||           \
+    defined(__Fuchsia__) || defined(__wasi__) ||           \
+    defined(_LIBCPP_HAS_MUSL_LIBC) || defined(__OpenBSD__)
 #define _LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE
 #endif
 
@@ -1237,8 +1256,9 @@ extern "C" _LIBCPP_FUNC_VIS void __sanitizer_annotate_contiguous_container(
 #  if defined(__clang__) && __has_attribute(acquire_capability)
 // Work around the attribute handling in clang.  When both __declspec and
 // __attribute__ are present, the processing goes awry preventing the definition
-// of the types.
-#    if !defined(_LIBCPP_OBJECT_FORMAT_COFF)
+// of the types. In MinGW mode, __declspec evaluates to __attribute__, and thus
+// combining the two does work.
+#    if !defined(_MSC_VER)
 #      define _LIBCPP_HAS_THREAD_SAFETY_ANNOTATIONS
 #    endif
 #  endif

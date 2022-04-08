@@ -77,14 +77,21 @@ std::unique_ptr<LinkerDriver> elf::driver;
 static void setConfigs(opt::InputArgList &args);
 static void readConfigs(opt::InputArgList &args);
 
-bool elf::link(ArrayRef<const char *> args, bool canExitEarly,
-               raw_ostream &stdoutOS, raw_ostream &stderrOS) {
-  lld::stdoutOS = &stdoutOS;
-  lld::stderrOS = &stderrOS;
+void elf::errorOrWarn(const Twine &msg) {
+  if (config->noinhibitExec)
+    warn(msg);
+  else
+    error(msg);
+}
 
-  errorHandler().cleanupCallback = []() {
-    freeArena();
+bool elf::link(ArrayRef<const char *> args, llvm::raw_ostream &stdoutOS,
+               llvm::raw_ostream &stderrOS, bool exitEarly,
+               bool disableOutput) {
+  // This driver-specific context will be freed later by lldMain().
+  auto *ctx = new CommonLinkerContext;
 
+  ctx->e.initialize(stdoutOS, stderrOS, exitEarly, disableOutput);
+  ctx->e.cleanupCallback = []() {
     inputSections.clear();
     outputSections.clear();
     memoryBuffers.clear();
@@ -96,6 +103,7 @@ bool elf::link(ArrayRef<const char *> args, bool canExitEarly,
     sharedFiles.clear();
     backwardReferences.clear();
     whyExtract.clear();
+    symAux.clear();
 
     tar = nullptr;
     in.reset();
@@ -105,13 +113,9 @@ bool elf::link(ArrayRef<const char *> args, bool canExitEarly,
 
     SharedFile::vernauxNum = 0;
   };
-
-  errorHandler().logName = args::getFilenameWithoutExe(args[0]);
-  errorHandler().errorLimitExceededMsg =
-      "too many errors emitted, stopping now (use "
-      "-error-limit=0 to see all errors)";
-  errorHandler().exitEarly = canExitEarly;
-  stderrOS.enable_colors(stderrOS.has_colors());
+  ctx->e.logName = args::getFilenameWithoutExe(args[0]);
+  ctx->e.errorLimitExceededMsg = "too many errors emitted, stopping now (use "
+                                 "-error-limit=0 to see all errors)";
 
   config = std::make_unique<Configuration>();
   driver = std::make_unique<LinkerDriver>();
@@ -125,16 +129,7 @@ bool elf::link(ArrayRef<const char *> args, bool canExitEarly,
 
   driver->linkerMain(args);
 
-  // Exit immediately if we don't need to return to the caller.
-  // This saves time because the overhead of calling destructors
-  // for all globally-allocated objects is not negligible.
-  if (canExitEarly)
-    exitLld(errorCount() ? 1 : 0);
-
-  bool ret = errorCount() == 0;
-  if (!canExitEarly)
-    errorHandler().reset();
-  return ret;
+  return errorCount() == 0;
 }
 
 // Parses a linker -m option.
@@ -201,8 +196,8 @@ std::vector<std::pair<MemoryBufferRef, uint64_t>> static getArchiveMembers(
           toString(std::move(err)));
 
   // Take ownership of memory buffers created for members of thin archives.
-  for (std::unique_ptr<MemoryBuffer> &mb : file->takeThinBuffers())
-    make<std::unique_ptr<MemoryBuffer>>(std::move(mb));
+  std::vector<std::unique_ptr<MemoryBuffer>> mbs = file->takeThinBuffers();
+  std::move(mbs.begin(), mbs.end(), std::back_inserter(memoryBuffers));
 
   return v;
 }
@@ -235,23 +230,22 @@ void LinkerDriver::addFile(StringRef path, bool withLOption) {
     std::unique_ptr<Archive> file =
         CHECK(Archive::create(mbref), path + ": failed to parse archive");
 
-    // If an archive file has no symbol table, it is likely that a user
-    // is attempting LTO and using a default ar command that doesn't
-    // understand the LLVM bitcode file. It is a pretty common error, so
-    // we'll handle it as if it had a symbol table.
+    // If an archive file has no symbol table, it may be intentional (used as a
+    // group of lazy object files where the symbol table is not useful), or the
+    // user is attempting LTO and using a default ar command that doesn't
+    // understand the LLVM bitcode file. Treat the archive as a group of lazy
+    // object files.
     if (!file->isEmpty() && !file->hasSymbolTable()) {
-      // Check if all members are bitcode files. If not, ignore, which is the
-      // default action without the LTO hack described above.
       for (const std::pair<MemoryBufferRef, uint64_t> &p :
-           getArchiveMembers(mbref))
-        if (identify_magic(p.first.getBuffer()) != file_magic::bitcode) {
-          error(path + ": archive has no index; run ranlib to add one");
-          return;
-        }
-
-      for (const std::pair<MemoryBufferRef, uint64_t> &p :
-           getArchiveMembers(mbref))
-        files.push_back(createLazyFile(p.first, path, p.second));
+           getArchiveMembers(mbref)) {
+        auto magic = identify_magic(p.first.getBuffer());
+        if (magic == file_magic::bitcode ||
+            magic == file_magic::elf_relocatable)
+          files.push_back(createLazyFile(p.first, path, p.second));
+        else
+          error(path + ": archive member '" + p.first.getBufferIdentifier() +
+                "' is neither ET_REL nor LLVM bitcode");
+      }
       return;
     }
 
@@ -559,22 +553,7 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
     // values such as a default image base address.
     target = getTarget();
 
-    switch (config->ekind) {
-    case ELF32LEKind:
-      link<ELF32LE>(args);
-      break;
-    case ELF32BEKind:
-      link<ELF32BE>(args);
-      break;
-    case ELF64LEKind:
-      link<ELF64LE>(args);
-      break;
-    case ELF64BEKind:
-      link<ELF64BE>(args);
-      break;
-    default:
-      llvm_unreachable("unknown Config->EKind");
-    }
+    link(args);
   }
 
   if (config->timeTraceEnabled) {
@@ -1259,7 +1238,7 @@ static void readConfigs(opt::InputArgList &args) {
 
   // Parse LTO options.
   if (auto *arg = args.getLastArg(OPT_plugin_opt_mcpu_eq))
-    parseClangOption(saver.save("-mcpu=" + StringRef(arg->getValue())),
+    parseClangOption(saver().save("-mcpu=" + StringRef(arg->getValue())),
                      arg->getSpelling());
 
   for (opt::Arg *arg : args.filtered(OPT_plugin_opt_eq_minus))
@@ -1725,7 +1704,7 @@ static void handleUndefinedGlob(StringRef arg) {
 
   // Calling sym->extract() in the loop is not safe because it may add new
   // symbols to the symbol table, invalidating the current iterator.
-  std::vector<Symbol *> syms;
+  SmallVector<Symbol *, 0> syms;
   for (Symbol *sym : symtab->symbols())
     if (!sym->isPlaceholder() && pat->match(sym->getName()))
       syms.push_back(sym);
@@ -1834,7 +1813,6 @@ static void replaceCommonSymbols() {
 
       auto *bss = make<BssSection>("COMMON", s->size, s->alignment);
       bss->file = s->file;
-      bss->markDead();
       inputSections.push_back(bss);
       s->replace(Defined{s->file, s->getName(), s->binding, s->stOther, s->type,
                          /*value=*/0, s->size, bss});
@@ -1850,8 +1828,7 @@ static void demoteSharedSymbols() {
   llvm::TimeTraceScope timeScope("Demote shared symbols");
   for (Symbol *sym : symtab->symbols()) {
     auto *s = dyn_cast<SharedSymbol>(sym);
-    if (!((s && !s->getFile().isNeeded) ||
-          (sym->isLazy() && sym->isUsedInRegularObj)))
+    if (!(s && !s->getFile().isNeeded) && !sym->isLazy())
       continue;
 
     bool used = sym->used;
@@ -2070,12 +2047,16 @@ static std::vector<WrappedSymbol> addWrappedSymbols(opt::InputArgList &args) {
       continue;
 
     Symbol *sym = symtab->find(name);
-    if (!sym)
+    // Avoid wrapping symbols that are lazy and unreferenced at this point, to
+    // not create undefined references. The isUsedInRegularObj check handles the
+    // case of a weak reference, which we still want to wrap even though it
+    // doesn't cause lazy symbols to be extracted.
+    if (!sym || (sym->isLazy() && !sym->isUsedInRegularObj))
       continue;
 
-    Symbol *real = addUnusedUndefined(saver.save("__real_" + name));
+    Symbol *real = addUnusedUndefined(saver().save("__real_" + name));
     Symbol *wrap =
-        addUnusedUndefined(saver.save("__wrap_" + name), sym->binding);
+        addUnusedUndefined(saver().save("__wrap_" + name), sym->binding);
     v.push_back({sym, real, wrap});
 
     // We want to tell LTO not to inline symbols to be overwritten
@@ -2186,14 +2167,14 @@ static void checkAndReportMissingFeature(StringRef config, uint32_t features,
 //
 // This is also the case with AARCH64's BTI and PAC which use the similar
 // GNU_PROPERTY_AARCH64_FEATURE_1_AND mechanism.
-template <class ELFT> static uint32_t getAndFeatures() {
+static uint32_t getAndFeatures() {
   if (config->emachine != EM_386 && config->emachine != EM_X86_64 &&
       config->emachine != EM_AARCH64)
     return 0;
 
   uint32_t ret = -1;
-  for (InputFile *f : objectFiles) {
-    uint32_t features = cast<ObjFile<ELFT>>(f)->andFeatures;
+  for (ELFFileBase *f : objectFiles) {
+    uint32_t features = f->andFeatures;
 
     checkAndReportMissingFeature(
         config->zBtiReport, features, GNU_PROPERTY_AARCH64_FEATURE_1_BTI,
@@ -2239,7 +2220,7 @@ template <class ELFT> static uint32_t getAndFeatures() {
 
 // Do actual linking. Note that when this function is called,
 // all linker scripts have already been parsed.
-template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
+void LinkerDriver::link(opt::InputArgList &args) {
   llvm::TimeTraceScope timeScope("Link", StringRef("LinkerDriver::Link"));
   // If a --hash-style option was not given, set to a default value,
   // which varies depending on the target.
@@ -2407,7 +2388,7 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
   //
   // With this the symbol table should be complete. After this, no new names
   // except a few linker-synthesized ones will be added to the symbol table.
-  compileBitcodeFiles<ELFT>(skipLinkedOutput);
+  invokeELFT(compileBitcodeFiles, skipLinkedOutput);
 
   // Symbol resolution finished. Report backward reference problems.
   reportBackrefs();
@@ -2448,7 +2429,7 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
     llvm::TimeTraceScope timeScope("Strip sections");
     llvm::erase_if(inputSections, [](InputSectionBase *s) {
       if (s->type == SHT_LLVM_SYMPART) {
-        readSymbolPartitionSection<ELFT>(s);
+        invokeELFT(readSymbolPartitionSection, s);
         return true;
       }
 
@@ -2479,7 +2460,7 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
 
   // Read .note.gnu.property sections from input object files which
   // contain a hint to tweak linker's and loader's behaviors.
-  config->andFeatures = getAndFeatures<ELFT>();
+  config->andFeatures = getAndFeatures();
 
   // The Target instance handles target-specific stuff, such as applying
   // relocations or writing a PLT section. It also contains target-dependent
@@ -2515,10 +2496,10 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
     inputSections.push_back(createCommentSection());
 
   // Split SHF_MERGE and .eh_frame sections into pieces in preparation for garbage collection.
-  splitSections<ELFT>();
+  invokeELFT(splitSections);
 
   // Garbage collection and removal of shared symbols from unused shared objects.
-  markLive<ELFT>();
+  invokeELFT(markLive);
   demoteSharedSymbols();
 
   // Make copies of any input sections that need to be copied into each
@@ -2527,7 +2508,7 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
 
   // Create synthesized sections such as .got and .plt. This is called before
   // processSectionCommands() so that they can be placed by SECTIONS commands.
-  createSyntheticSections<ELFT>();
+  invokeELFT(createSyntheticSections);
 
   // Some input sections that are used for exception handling need to be moved
   // into synthetic sections. Do that now so that they aren't assigned to
@@ -2566,8 +2547,8 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
   // Two input sections with different output sections should not be folded.
   // ICF runs after processSectionCommands() so that we know the output sections.
   if (config->icf != ICFLevel::None) {
-    findKeepUniqueSections<ELFT>(args);
-    doIcf<ELFT>();
+    invokeELFT(findKeepUniqueSections, args);
+    invokeELFT(doIcf);
   }
 
   // Read the callgraph now that we know what was gced or icfed
@@ -2575,9 +2556,9 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &args) {
     if (auto *arg = args.getLastArg(OPT_call_graph_ordering_file))
       if (Optional<MemoryBufferRef> buffer = readFile(arg->getValue()))
         readCallGraph(*buffer);
-    readCallGraphsFromObjectFiles<ELFT>();
+    invokeELFT(readCallGraphsFromObjectFiles);
   }
 
   // Write the result to the file.
-  writeResult<ELFT>();
+  invokeELFT(writeResult);
 }

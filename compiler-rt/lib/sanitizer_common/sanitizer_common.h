@@ -238,12 +238,12 @@ void SetPrintfAndReportCallback(void (*callback)(const char *));
 // Lock sanitizer error reporting and protects against nested errors.
 class ScopedErrorReportLock {
  public:
-  ScopedErrorReportLock() ACQUIRE(mutex_) { Lock(); }
-  ~ScopedErrorReportLock() RELEASE(mutex_) { Unlock(); }
+  ScopedErrorReportLock() SANITIZER_ACQUIRE(mutex_) { Lock(); }
+  ~ScopedErrorReportLock() SANITIZER_RELEASE(mutex_) { Unlock(); }
 
-  static void Lock() ACQUIRE(mutex_);
-  static void Unlock() RELEASE(mutex_);
-  static void CheckLocked() CHECK_LOCKED(mutex_);
+  static void Lock() SANITIZER_ACQUIRE(mutex_);
+  static void Unlock() SANITIZER_RELEASE(mutex_);
+  static void CheckLocked() SANITIZER_CHECK_LOCKED(mutex_);
 
  private:
   static atomic_uintptr_t reporting_thread_;
@@ -738,6 +738,9 @@ bool ReadFileToVector(const char *file_name,
 bool ReadFileToBuffer(const char *file_name, char **buff, uptr *buff_size,
                       uptr *read_len, uptr max_len = kDefaultFileMaxSize,
                       error_t *errno_p = nullptr);
+
+int GetModuleAndOffsetForPc(uptr pc, char *module_name, uptr module_name_len,
+                            uptr *pc_offset);
 
 // When adding a new architecture, don't forget to also update
 // script/asan_symbolize.py and sanitizer_symbolizer_libcdep.cpp.

@@ -637,7 +637,7 @@ static bool doesTransposeAccess(AffineMap map,
 ///     Fused dimensions : i, j
 ///
 /// Example 3:
-///   linalg.copy(%s, %b)
+///   memref.copy(%s, %b)
 ///   linalg.matmul ins(%a, %b) outs(%c)
 ///
 ///   Number of parallel loops = 2
@@ -784,7 +784,9 @@ tileRootOperation(OpBuilder &b, LinalgOp op, ArrayRef<Value> tileSizeVector,
       tileSizes[i] = zero;
   LinalgTilingOptions tileFusedLoopsOptions = options;
   tileFusedLoopsOptions.setTileSizes(tileSizes);
-  return tileLinalgOp(b, op, tileFusedLoopsOptions);
+  // TODO: Propagate RewriterBase everywhere.
+  IRRewriter rewriter(b);
+  return tileLinalgOp(rewriter, op, tileFusedLoopsOptions);
 }
 
 /// Fuse the operations in `fusionCandidates` with `tiledOp`. Latter is expected

@@ -232,7 +232,7 @@ static LogicalResult printOperation(CppEmitter &emitter,
 static LogicalResult printOperation(CppEmitter &emitter,
                                     mlir::ConstantOp constantOp) {
   Operation *operation = constantOp.getOperation();
-  Attribute value = constantOp.getValue();
+  Attribute value = constantOp.getValueAttr();
 
   return printConstantOp(emitter, operation, value);
 }
@@ -631,8 +631,8 @@ static LogicalResult printOperation(CppEmitter &emitter, FuncOp functionOp) {
   }
 
   for (Block &block : blocks) {
-    // Only print a label if there is more than one block.
-    if (blocks.size() > 1) {
+    // Only print a label if the block has predecessors.
+    if (!block.hasNoPredecessors()) {
       if (failed(emitter.emitLabel(block)))
         return failure();
     }

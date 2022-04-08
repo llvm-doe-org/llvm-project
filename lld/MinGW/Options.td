@@ -66,6 +66,7 @@ defm file_alignment: Eq<"file-alignment", "Set file alignment">;
 defm gc_sections: B<"gc-sections",
     "Remove unused sections",
     "Don't remove unused sections">;
+defm heap: Eq<"heap", "Set size of the initial heap">;
 def help: F<"help">, HelpText<"Print option help">;
 defm high_entropy_va: B_disable<"high-entropy-va",
     "Set the 'high entropy VA' flag", "Don't set the 'high entropy VA' flag">;
@@ -154,7 +155,6 @@ def: F<"end-group">;
 def: Flag<["--"], "full-shutdown">;
 defm: EqNoHelp<"major-image-version">;
 defm: EqNoHelp<"minor-image-version">;
-def: F<"no-as-needed">;
 def: F<"no-undefined">;
 def: F<"pic-executable">;
 defm: EqNoHelp<"plugin">;

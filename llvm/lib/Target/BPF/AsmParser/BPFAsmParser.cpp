@@ -104,7 +104,7 @@ struct BPFOperand : public MCParsedAsmOperand {
   BPFOperand(KindTy K) : Kind(K) {}
 
 public:
-  BPFOperand(const BPFOperand &o) {
+  BPFOperand(const BPFOperand &o) : MCParsedAsmOperand() {
     Kind = o.Kind;
     StartLoc = o.StartLoc;
     EndLoc = o.EndLoc;

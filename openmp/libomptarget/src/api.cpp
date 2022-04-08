@@ -251,10 +251,11 @@ EXTERN int omp_target_is_present(const void *ptr, int device_num) {
   DeviceTy &Device = *PM->Devices[device_num];
   bool IsLast; // not used
   bool IsHostPtr;
-  void *TgtPtr = Device.getTgtPtrBegin(const_cast<void *>(ptr), 0, IsLast,
-                                       /*UpdateRefCount=*/false,
-                                       /*UseHoldRefCount=*/false, IsHostPtr);
-  int rc = (TgtPtr != NULL);
+  TargetPointerResultTy TPR =
+      Device.getTgtPtrBegin(const_cast<void *>(ptr), 0, IsLast,
+                            /*UpdateRefCount=*/false,
+                            /*UseHoldRefCount=*/false, IsHostPtr);
+  int rc = (TPR.TargetPointer != NULL);
   // Under unified memory the host pointer can be returned by the
   // getTgtPtrBegin() function which means that there is no device
   // corresponding point for ptr. This function should return false
@@ -317,11 +318,11 @@ EXTERN int omp_target_is_accessible(const void *ptr, size_t size,
   // TODO: How does the spec intend for the size=0 case to be handled?
   // Currently, we return true if we would return true for size=1 (ptr is within
   // a range that's accessible).  Does the spec clarify this somewhere?
-  void *TgtPtr = Device.getTgtPtrBegin(const_cast<void *>(ptr), size, IsLast,
-                                       /*UpdateRefCount=*/false,
-                                       /*UseHoldRefCount=*/false, IsHostPtr,
-                                       /*MustContain=*/true);
-  int rc = (TgtPtr != NULL);
+  TargetPointerResultTy TPR =
+      Device.getTgtPtrBegin(const_cast<void *>(ptr), size, IsLast,
+                            /*UpdateRefCount=*/false, /*UseHoldRefCount=*/false,
+                            IsHostPtr, /*MustContain=*/true);
+  int rc = (TPR.TargetPointer != NULL);
   DP("Call to omp_target_is_accessible returns %d\n", rc);
   return rc;
 }
@@ -357,9 +358,11 @@ EXTERN void *omp_get_mapped_ptr(const void *ptr, int device_num) {
   DeviceTy &Device = *PM->Devices[device_num];
   bool IsLast; // not used
   bool IsHostPtr;
-  void *TgtPtr = Device.getTgtPtrBegin(const_cast<void *>(ptr), /*Size=*/0,
-                                       IsLast, /*UpdateRefCount=*/false,
-                                       /*UseHoldRefCount=*/false, IsHostPtr);
+  TargetPointerResultTy TPR =
+      Device.getTgtPtrBegin(const_cast<void *>(ptr), /*Size=*/0, IsLast,
+                            /*UpdateRefCount=*/false, /*UseHoldRefCount=*/false,
+                            IsHostPtr);
+  void *TgtPtr = TPR.TargetPointer;
   // Return nullptr in the case of unified shared memory.
   //
   // TODO: This seems to be implied by the named "mapped" instead of

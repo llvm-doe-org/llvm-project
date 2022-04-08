@@ -28,9 +28,6 @@
 
 namespace clang {
 
-class DeclContext;
-class IdentifierInfo;
-
 class PartialDiagnostic : public StreamingDiagnostic {
 private:
   // NOTE: Sema assumes that PartialDiagnostic is location-invariant
@@ -49,7 +46,8 @@ public:
   PartialDiagnostic(unsigned DiagID, DiagStorageAllocator &Allocator_)
       : StreamingDiagnostic(Allocator_), DiagID(DiagID) {}
 
-  PartialDiagnostic(const PartialDiagnostic &Other) : DiagID(Other.DiagID) {
+  PartialDiagnostic(const PartialDiagnostic &Other)
+      : StreamingDiagnostic(), DiagID(Other.DiagID) {
     Allocator = Other.Allocator;
     if (Other.DiagStorage) {
       DiagStorage = getStorage();

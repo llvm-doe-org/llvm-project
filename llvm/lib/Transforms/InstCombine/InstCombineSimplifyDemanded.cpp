@@ -544,6 +544,23 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
                                         NSW, LHSKnown, RHSKnown);
     break;
   }
+  case Instruction::Mul: {
+    // The LSB of X*Y is set only if (X & 1) == 1 and (Y & 1) == 1.
+    // If we demand exactly one bit N and we have "X * (C' << N)" where C' is
+    // odd (has LSB set), then the left-shifted low bit of X is the answer.
+    if (DemandedMask.isPowerOf2()) {
+      unsigned CTZ = DemandedMask.countTrailingZeros();
+      const APInt *C;
+      if (match(I->getOperand(1), m_APInt(C)) &&
+          C->countTrailingZeros() == CTZ) {
+        Constant *ShiftC = ConstantInt::get(I->getType(), CTZ);
+        Instruction *Shl = BinaryOperator::CreateShl(I->getOperand(0), ShiftC);
+        return InsertNewInstWith(Shl, *I);
+      }
+    }
+    computeKnownBits(I, Known, Depth, CxtI);
+    break;
+  }
   case Instruction::Shl: {
     const APInt *SA;
     if (match(I->getOperand(1), m_APInt(SA))) {
@@ -800,22 +817,21 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
         // Round NTZ down to the next byte.  If we have 11 trailing zeros, then
         // we need all the bits down to bit 8.  Likewise, round NLZ.  If we
         // have 14 leading zeros, round to 8.
-        NLZ &= ~7;
-        NTZ &= ~7;
+        NLZ = alignDown(NLZ, 8);
+        NTZ = alignDown(NTZ, 8);
         // If we need exactly one byte, we can do this transformation.
-        if (BitWidth-NLZ-NTZ == 8) {
-          unsigned ResultBit = NTZ;
-          unsigned InputBit = BitWidth-NTZ-8;
-
+        if (BitWidth - NLZ - NTZ == 8) {
           // Replace this with either a left or right shift to get the byte into
           // the right place.
           Instruction *NewVal;
-          if (InputBit > ResultBit)
-            NewVal = BinaryOperator::CreateLShr(II->getArgOperand(0),
-                    ConstantInt::get(I->getType(), InputBit-ResultBit));
+          if (NLZ > NTZ)
+            NewVal = BinaryOperator::CreateLShr(
+                II->getArgOperand(0),
+                ConstantInt::get(I->getType(), NLZ - NTZ));
           else
-            NewVal = BinaryOperator::CreateShl(II->getArgOperand(0),
-                    ConstantInt::get(I->getType(), ResultBit-InputBit));
+            NewVal = BinaryOperator::CreateShl(
+                II->getArgOperand(0),
+                ConstantInt::get(I->getType(), NTZ - NLZ));
           NewVal->takeName(I);
           return InsertNewInstWith(NewVal, *I);
         }
@@ -1220,7 +1236,7 @@ Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V,
       for (auto I = gep_type_begin(GEP), E = gep_type_end(GEP);
            I != E; I++)
         if (I.isStruct())
-          return true;;
+          return true;
       return false;
     };
     if (mayIndexStructType(cast<GetElementPtrInst>(*I)))
@@ -1229,10 +1245,11 @@ Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V,
     // Conservatively track the demanded elements back through any vector
     // operands we may have.  We know there must be at least one, or we
     // wouldn't have a vector result to get here. Note that we intentionally
-    // merge the undef bits here since gepping with either an undef base or
-    // index results in undef.
+    // merge the undef bits here since gepping with either an poison base or
+    // index results in poison.
     for (unsigned i = 0; i < I->getNumOperands(); i++) {
-      if (match(I->getOperand(i), m_Undef())) {
+      if (i == 0 ? match(I->getOperand(i), m_Undef())
+                 : match(I->getOperand(i), m_Poison())) {
         // If the entire vector is undefined, just return this info.
         UndefElts = EltMask;
         return nullptr;
@@ -1240,7 +1257,11 @@ Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V,
       if (I->getOperand(i)->getType()->isVectorTy()) {
         APInt UndefEltsOp(VWidth, 0);
         simplifyAndSetOp(I, i, DemandedElts, UndefEltsOp);
-        UndefElts |= UndefEltsOp;
+        // gep(x, undef) is not undef, so skip considering idx ops here
+        // Note that we could propagate poison, but we can't distinguish between
+        // undef & poison bits ATM
+        if (i == 0)
+          UndefElts |= UndefEltsOp;
       }
     }
 

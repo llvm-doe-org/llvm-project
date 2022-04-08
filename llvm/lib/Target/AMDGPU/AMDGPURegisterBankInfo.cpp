@@ -193,7 +193,9 @@ public:
 
 }
 AMDGPURegisterBankInfo::AMDGPURegisterBankInfo(const GCNSubtarget &ST)
-    : Subtarget(ST), TRI(Subtarget.getRegisterInfo()),
+    : AMDGPUGenRegisterBankInfo(),
+      Subtarget(ST),
+      TRI(Subtarget.getRegisterInfo()),
       TII(Subtarget.getInstrInfo()) {
 
   // HACK: Until this is fully tablegen'd.
@@ -426,11 +428,6 @@ AMDGPURegisterBankInfo::getInstrAlternativeMappingsIntrinsicWSideEffects(
   }
 }
 
-static bool memOpHasNoClobbered(const MachineMemOperand *MMO) {
-  const Instruction *I = dyn_cast_or_null<Instruction>(MMO->getValue());
-  return I && I->getMetadata("amdgpu.noclobber");
-}
-
 // FIXME: Returns uniform if there's no source value information. This is
 // probably wrong.
 static bool isScalarLoadLegal(const MachineInstr &MI) {
@@ -449,7 +446,7 @@ static bool isScalarLoadLegal(const MachineInstr &MI) {
          // spaces.
          (IsConst || !MMO->isVolatile()) &&
          // Memory must be known constant, or not written before this load.
-         (IsConst || MMO->isInvariant() || memOpHasNoClobbered(MMO)) &&
+         (IsConst || MMO->isInvariant() || (MMO->getFlags() & MONoClobber)) &&
          AMDGPUInstrInfo::isUniformMMO(MMO);
 }
 
@@ -716,8 +713,11 @@ bool AMDGPURegisterBankInfo::executeInWaterfallLoop(
   const TargetRegisterClass *WaveRC = TRI->getWaveMaskRegClass();
   const unsigned WaveAndOpc = Subtarget.isWave32() ?
     AMDGPU::S_AND_B32 : AMDGPU::S_AND_B64;
-  const unsigned MovTermOpc = Subtarget.isWave32() ?
-    AMDGPU::S_MOV_B32_term : AMDGPU::S_MOV_B64_term;
+  const unsigned MovExecOpc =
+      Subtarget.isWave32() ? AMDGPU::S_MOV_B32 : AMDGPU::S_MOV_B64;
+  const unsigned MovExecTermOpc =
+      Subtarget.isWave32() ? AMDGPU::S_MOV_B32_term : AMDGPU::S_MOV_B64_term;
+
   const unsigned XorTermOpc = Subtarget.isWave32() ?
     AMDGPU::S_XOR_B32_term : AMDGPU::S_XOR_B64_term;
   const unsigned AndSaveExecOpc =  Subtarget.isWave32() ?
@@ -994,12 +994,12 @@ bool AMDGPURegisterBankInfo::executeInWaterfallLoop(
   B.buildInstr(AMDGPU::SI_WATERFALL_LOOP).addMBB(LoopBB);
 
   // Save the EXEC mask before the loop.
-  BuildMI(MBB, MBB.end(), DL, TII->get(MovTermOpc), SaveExecReg)
+  BuildMI(MBB, MBB.end(), DL, TII->get(MovExecOpc), SaveExecReg)
     .addReg(ExecReg);
 
   // Restore the EXEC mask after the loop.
   B.setMBB(*RestoreExecBB);
-  B.buildInstr(MovTermOpc)
+  B.buildInstr(MovExecTermOpc)
     .addDef(ExecReg)
     .addReg(SaveExecReg);
 
@@ -2951,7 +2951,9 @@ void AMDGPURegisterBankInfo::applyMappingImpl(
     break;
   }
   case AMDGPU::G_AMDGPU_INTRIN_IMAGE_LOAD:
-  case AMDGPU::G_AMDGPU_INTRIN_IMAGE_STORE: {
+  case AMDGPU::G_AMDGPU_INTRIN_IMAGE_LOAD_D16:
+  case AMDGPU::G_AMDGPU_INTRIN_IMAGE_STORE:
+  case AMDGPU::G_AMDGPU_INTRIN_IMAGE_STORE_D16: {
     const AMDGPU::RsrcIntrinsic *RSrcIntrin
       = AMDGPU::lookupRsrcIntrinsic(MI.getIntrinsicID());
     assert(RSrcIntrin && RSrcIntrin->IsImage);
@@ -3689,6 +3691,16 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     OpdsMapping[1] = AMDGPU::getValueMapping(SrcBankID, 32);
     break;
   }
+  case AMDGPU::G_AMDGPU_WAVE_ADDRESS: {
+    // This case is weird because we expect a physical register in the source,
+    // but need to set a bank anyway.
+    //
+    // We could select the result to SGPR or VGPR, but for the one current use
+    // it's more practical to always use VGPR.
+    OpdsMapping[0] = AMDGPU::getValueMapping(AMDGPU::VGPRRegBankID, 32);
+    OpdsMapping[1] = AMDGPU::getValueMapping(AMDGPU::SGPRRegBankID, 32);
+    break;
+  }
   case AMDGPU::G_INSERT: {
     unsigned BankID = getMappingType(MRI, MI);
     unsigned DstSize = getSizeInBits(MI.getOperand(0).getReg(), MRI, *TRI);
@@ -4076,7 +4088,6 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     case Intrinsic::amdgcn_mqsad_pk_u16_u8:
     case Intrinsic::amdgcn_mqsad_u32_u8:
     case Intrinsic::amdgcn_cvt_pk_u8_f32:
-    case Intrinsic::amdgcn_alignbit:
     case Intrinsic::amdgcn_alignbyte:
     case Intrinsic::amdgcn_perm:
     case Intrinsic::amdgcn_fdot2:
@@ -4274,7 +4285,9 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     break;
   }
   case AMDGPU::G_AMDGPU_INTRIN_IMAGE_LOAD:
-  case AMDGPU::G_AMDGPU_INTRIN_IMAGE_STORE: {
+  case AMDGPU::G_AMDGPU_INTRIN_IMAGE_LOAD_D16:
+  case AMDGPU::G_AMDGPU_INTRIN_IMAGE_STORE:
+  case AMDGPU::G_AMDGPU_INTRIN_IMAGE_STORE_D16: {
     auto IntrID = MI.getIntrinsicID();
     const AMDGPU::RsrcIntrinsic *RSrcIntrin = AMDGPU::lookupRsrcIntrinsic(IntrID);
     assert(RSrcIntrin && "missing RsrcIntrinsic for image intrinsic");

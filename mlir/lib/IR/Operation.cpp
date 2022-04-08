@@ -506,7 +506,7 @@ LogicalResult Operation::fold(ArrayRef<Attribute> operands,
   if (!dialect)
     return failure();
 
-  auto *interface = dialect->getRegisteredInterface<DialectFoldInterface>();
+  auto *interface = dyn_cast<DialectFoldInterface>(dialect);
   if (!interface)
     return failure();
 
@@ -1144,7 +1144,7 @@ ParseResult impl::parseOneResultSameOperandTypeOp(OpAsmParser &parser,
   Type type;
   // If the operand list is in-between parentheses, then we have a generic form.
   // (see the fallback in `printOneResultOp`).
-  llvm::SMLoc loc = parser.getCurrentLocation();
+  SMLoc loc = parser.getCurrentLocation();
   if (!parser.parseOptionalLParen()) {
     if (parser.parseOperandList(ops) || parser.parseRParen() ||
         parser.parseOptionalAttrDict(result.attributes) ||

@@ -226,7 +226,7 @@ void UnwindInfoSectionImpl<Ptr>::prepareRelocations(ConcatInputSection *isec) {
         // (See discussions/alternatives already considered on D107533)
         if (!defined->isExternal())
           if (Symbol *sym = symtab->find(defined->getName()))
-            if (sym->kind() != Symbol::LazyKind)
+            if (!sym->isLazy())
               r.referent = s = sym;
       }
       if (auto *undefined = dyn_cast<Undefined>(s)) {
@@ -392,7 +392,7 @@ UnwindInfoSectionImpl<Ptr>::findLsdaReloc(ConcatInputSection *isec) const {
 }
 
 // Scan the __LD,__compact_unwind entries and compute the space needs of
-// __TEXT,__unwind_info and __TEXT,__eh_frame
+// __TEXT,__unwind_info and __TEXT,__eh_frame.
 template <class Ptr> void UnwindInfoSectionImpl<Ptr>::finalize() {
   if (symbols.empty())
     return;

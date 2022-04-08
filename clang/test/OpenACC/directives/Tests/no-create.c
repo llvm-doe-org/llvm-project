@@ -413,7 +413,7 @@ CASE(caseDataSubarrayDisjoint) {
 //          EXE-OFF-caseDataSubarrayOverlapStart-NEXT:   acc_ev_enter_data_start
 //    EXE-OFF-caseDataSubarrayOverlapStart-ALLOC-NEXT:   Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
 //    EXE-OFF-caseDataSubarrayOverlapStart-ALLOC-NEXT:   Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-//    EXE-OFF-caseDataSubarrayOverlapStart-ALLOC-NEXT:   Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+//    EXE-OFF-caseDataSubarrayOverlapStart-ALLOC-NEXT:   Libomptarget error: Consult {{.*}}
 //    EXE-OFF-caseDataSubarrayOverlapStart-ALLOC-NEXT:   {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                                       # An abort message usually follows.
 //     EXE-OFF-caseDataSubarrayOverlapStart-ALLOC-NOT:   Libomptarget
@@ -461,7 +461,7 @@ CASE(caseDataSubarrayOverlapStart) {
 //          EXE-OFF-caseDataSubarrayOverlapEnd-NEXT:   acc_ev_enter_data_start
 //    EXE-OFF-caseDataSubarrayOverlapEnd-ALLOC-NEXT:   Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
 //    EXE-OFF-caseDataSubarrayOverlapEnd-ALLOC-NEXT:   Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-//    EXE-OFF-caseDataSubarrayOverlapEnd-ALLOC-NEXT:   Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+//    EXE-OFF-caseDataSubarrayOverlapEnd-ALLOC-NEXT:   Libomptarget error: Consult {{.*}}
 //    EXE-OFF-caseDataSubarrayOverlapEnd-ALLOC-NEXT:   {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                                     # An abort message usually follows.
 //     EXE-OFF-caseDataSubarrayOverlapEnd-ALLOC-NOT:   Libomptarget
@@ -516,7 +516,7 @@ CASE(caseDataSubarrayOverlapEnd) {
 //          EXE-OFF-caseDataSubarrayConcat2-NEXT:     acc_ev_enter_data_start
 //    EXE-OFF-caseDataSubarrayConcat2-ALLOC-NEXT:     Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
 //    EXE-OFF-caseDataSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-//    EXE-OFF-caseDataSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+//    EXE-OFF-caseDataSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Consult {{.*}}
 //    EXE-OFF-caseDataSubarrayConcat2-ALLOC-NEXT:     {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                                    # An abort message usually follows.
 //     EXE-OFF-caseDataSubarrayConcat2-ALLOC-NOT:     Libomptarget
@@ -550,7 +550,7 @@ CASE(caseDataSubarrayConcat2) {
 //          EXE-OFF-caseDataSubarrayNonSubarray-NEXT:   acc_ev_enter_data_start
 //    EXE-OFF-caseDataSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
 //    EXE-OFF-caseDataSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-//    EXE-OFF-caseDataSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+//    EXE-OFF-caseDataSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Consult {{.*}}
 //    EXE-OFF-caseDataSubarrayNonSubarray-ALLOC-NEXT:   {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                                      # An abort message usually follows.
 //     EXE-OFF-caseDataSubarrayNonSubarray-ALLOC-NOT:   Libomptarget
@@ -737,7 +737,7 @@ CASE(caseParallelSubarrayDisjoint) {
 //    EXE-OFF-caseParallelSubarrayOverlapStart-ALLOC-NEXT:   Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
 //    EXE-OFF-caseParallelSubarrayOverlapStart-ALLOC-NEXT:   Libomptarget error: Call to targetDataBegin failed, abort target.
 //    EXE-OFF-caseParallelSubarrayOverlapStart-ALLOC-NEXT:   Libomptarget error: Failed to process data before launching the kernel.
-//    EXE-OFF-caseParallelSubarrayOverlapStart-ALLOC-NEXT:   Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+//    EXE-OFF-caseParallelSubarrayOverlapStart-ALLOC-NEXT:   Libomptarget error: Consult {{.*}}
 //    EXE-OFF-caseParallelSubarrayOverlapStart-ALLOC-NEXT:   {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                                           # An abort message usually follows.
 //     EXE-OFF-caseParallelSubarrayOverlapStart-ALLOC-NOT:   Libomptarget
@@ -771,7 +771,7 @@ CASE(caseParallelSubarrayOverlapStart) {
 //    EXE-OFF-caseParallelSubarrayOverlapEnd-ALLOC-NEXT:   Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
 //    EXE-OFF-caseParallelSubarrayOverlapEnd-ALLOC-NEXT:   Libomptarget error: Call to targetDataBegin failed, abort target.
 //    EXE-OFF-caseParallelSubarrayOverlapEnd-ALLOC-NEXT:   Libomptarget error: Failed to process data before launching the kernel.
-//    EXE-OFF-caseParallelSubarrayOverlapEnd-ALLOC-NEXT:   Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+//    EXE-OFF-caseParallelSubarrayOverlapEnd-ALLOC-NEXT:   Libomptarget error: Consult {{.*}}
 //    EXE-OFF-caseParallelSubarrayOverlapEnd-ALLOC-NEXT:   {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                                         # An abort message usually follows.
 //     EXE-OFF-caseParallelSubarrayOverlapEnd-ALLOC-NOT:   Libomptarget
@@ -808,7 +808,7 @@ CASE(caseParallelSubarrayOverlapEnd) {
 //    EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
 //    EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Call to targetDataBegin failed, abort target.
 //    EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Failed to process data before launching the kernel.
-//    EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+//    EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Consult {{.*}}
 //    EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NEXT:     {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                                        # An abort message usually follows.
 //     EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NOT:     Libomptarget
@@ -846,7 +846,7 @@ CASE(caseParallelSubarrayConcat2) {
 //    EXE-OFF-caseParallelSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
 //    EXE-OFF-caseParallelSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Call to targetDataBegin failed, abort target.
 //    EXE-OFF-caseParallelSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Failed to process data before launching the kernel.
-//    EXE-OFF-caseParallelSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Run with LIBOMPTARGET_INFO=4 to dump host-target pointer mappings.
+//    EXE-OFF-caseParallelSubarrayNonSubarray-ALLOC-NEXT:   Libomptarget error: Consult {{.*}}
 //    EXE-OFF-caseParallelSubarrayNonSubarray-ALLOC-NEXT:   {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
 //                                                          # An abort message usually follows.
 //     EXE-OFF-caseParallelSubarrayNonSubarray-ALLOC-NOT:   Libomptarget

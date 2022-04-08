@@ -1536,7 +1536,7 @@ TSAN_INTERCEPTOR(int, pthread_once, void *o, void (*f)()) {
   return 0;
 }
 
-#if SANITIZER_LINUX && !SANITIZER_ANDROID
+#if SANITIZER_GLIBC
 TSAN_INTERCEPTOR(int, __fxstat, int version, int fd, void *buf) {
   SCOPED_TSAN_INTERCEPTOR(__fxstat, version, fd, buf);
   if (fd > 0)
@@ -1562,7 +1562,7 @@ TSAN_INTERCEPTOR(int, fstat, int fd, void *buf) {
 #endif
 }
 
-#if SANITIZER_LINUX && !SANITIZER_ANDROID
+#if SANITIZER_GLIBC
 TSAN_INTERCEPTOR(int, __fxstat64, int version, int fd, void *buf) {
   SCOPED_TSAN_INTERCEPTOR(__fxstat64, version, fd, buf);
   if (fd > 0)
@@ -1574,7 +1574,7 @@ TSAN_INTERCEPTOR(int, __fxstat64, int version, int fd, void *buf) {
 #define TSAN_MAYBE_INTERCEPT___FXSTAT64
 #endif
 
-#if SANITIZER_LINUX && !SANITIZER_ANDROID
+#if SANITIZER_GLIBC
 TSAN_INTERCEPTOR(int, fstat64, int fd, void *buf) {
   SCOPED_TSAN_INTERCEPTOR(__fxstat64, 0, fd, buf);
   if (fd > 0)
@@ -2204,6 +2204,7 @@ void atfork_child() {
   FdOnFork(thr, pc);
 }
 
+#if !SANITIZER_IOS
 TSAN_INTERCEPTOR(int, vfork, int fake) {
   // Some programs (e.g. openjdk) call close for all file descriptors
   // in the child process. Under tsan it leads to false positives, because
@@ -2220,6 +2221,7 @@ TSAN_INTERCEPTOR(int, vfork, int fake) {
   // Instead we simply turn vfork into fork.
   return WRAP(fork)(fake);
 }
+#endif
 
 #if SANITIZER_LINUX
 TSAN_INTERCEPTOR(int, clone, int (*fn)(void *), void *stack, int flags,
