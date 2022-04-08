@@ -1626,9 +1626,6 @@ void withinGangFn() {
   // Worker partitioned.
   //............................................................................
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCWorkerClause
   // DMP-NEXT:   ACCCollapseClause
@@ -1660,8 +1657,6 @@ void withinGangFn() {
   for (int i = 0; i < 2; ++i)
     for (int j = 0; j < 2; ++j)
       TGT_PRINTF("withinGangFn: acc loop worker: %d, %d\n", i, j);
-// PRT-SRC-NEXT: #endif
-#endif
 
   //............................................................................
   // Vector partitioned.
@@ -1827,9 +1822,6 @@ void withinGangFn() {
   // Nested collapse.
   //............................................................................
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCGangClause
   //  DMP-NOT:   <implicit>
@@ -1901,8 +1893,6 @@ void withinGangFn() {
       for (int k = 0; k < 2; ++k)
         for (int l = 0; l < 2; ++l)
           TGT_PRINTF("withinGangFn: loop 2 {loop 2}: %d, %d, %d, %d\n", i, j, k, l);
-// PRT-SRC-NEXT: #endif
-#endif
 
   //............................................................................
   // Private for loop control variable that is assigned not declared in init of
@@ -1979,9 +1969,6 @@ void withinGangFn() {
           TGT_PRINTF("withinGangFn: loop gang private control var: %d, %d, %d\n", i, j, k);
   } // PRT-NEXT: }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT: int i = 99;
@@ -2045,8 +2032,6 @@ void withinGangFn() {
       }
     }
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // PRT-NEXT: {
   {
@@ -2261,9 +2246,6 @@ void withinWorkerFn() {
   // Worker partitioned.
   //............................................................................
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCWorkerClause
   // DMP-NEXT:   ACCCollapseClause
@@ -2298,8 +2280,6 @@ void withinWorkerFn() {
   for (int i = 0; i < 2; ++i)
     for (int j = 0; j < 2; ++j)
       TGT_PRINTF("withinWorkerFn: acc loop worker: %d, %d\n", i, j);
-// PRT-SRC-NEXT: #endif
-#endif
 
   //............................................................................
   // Vector partitioned.
@@ -2344,9 +2324,6 @@ void withinWorkerFn() {
   // More loops than necessary.
   //............................................................................
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCWorkerClause
   //  DMP-NOT:     <implicit>
@@ -2382,16 +2359,11 @@ void withinWorkerFn() {
   for (int i = 0; i < 2; ++i)
     for (int j = 0; j < 2; ++j)
       TGT_PRINTF("withinWorkerFn: loop 1 {1}: %d, %d\n", i, j);
-// PRT-SRC-NEXT: #endif
-#endif
 
   //............................................................................
   // Nested collapse.
   //............................................................................
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCWorkerClause
   //  DMP-NOT:   <implicit>
@@ -2479,8 +2451,6 @@ void withinWorkerFn() {
       for (int k = 0; k < 2; ++k)
         for (int l = 0; l < 2; ++l)
           TGT_PRINTF("withinWorkerFn: loop 2 {loop 2}: %d, %d, %d, %d\n", i, j, k, l);
-// PRT-SRC-NEXT: #endif
-#endif
 
   //............................................................................
   // Private for loop control variable that is assigned not declared in init of
@@ -2495,9 +2465,6 @@ void withinWorkerFn() {
   // nested but not associated loop control variables to be private.
   //............................................................................
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT: int i = 99;
@@ -2564,8 +2531,6 @@ void withinWorkerFn() {
       }
     }
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // PRT-NEXT: {
   {

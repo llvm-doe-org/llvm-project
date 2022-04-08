@@ -1795,9 +1795,6 @@ int main() {
     loopOnlyArr[0] = 88;
     printf("acc loop INDEPENDENT GANG worker\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCParallelDirective
     // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
@@ -1989,7 +1986,6 @@ int main() {
       else
         save.writeInLaterLoopFoundBadVal = true;
     } // PRT: }
-#endif
 
     // EXE-NEXT: save.loopOnlyFoundOldVal=1
     // EXE-NEXT: save.loopOnlyFoundBadVal=0
@@ -2001,8 +1997,6 @@ int main() {
     // EXE-NEXT: save.writeInLaterLoopFoundBadVal=0
     // EXE-NEXT: loopOnly=88
     // EXE-NEXT: loopOnlyArr[0]=77
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
     printf("save.loopOnlyFoundOldVal=%d\n", save.loopOnlyFoundOldVal);
     printf("save.loopOnlyFoundBadVal=%d\n", save.loopOnlyFoundBadVal);
     printf("save.loopOnlyArrFoundOldVal=%d\n", save.loopOnlyArrFoundOldVal);
@@ -2013,18 +2007,6 @@ int main() {
     printf("save.writeInLaterLoopFoundBadVal=%d\n", save.writeInLaterLoopFoundBadVal);
     printf("loopOnly=%d\n", loopOnly);
     printf("loopOnlyArr[0]=%d\n", loopOnlyArr[0]);
-#else
-    printf("save.loopOnlyFoundOldVal=%d\n", 1);
-    printf("save.loopOnlyFoundBadVal=%d\n", 0);
-    printf("save.loopOnlyArrFoundOldVal=%d\n", 1);
-    printf("save.loopOnlyArrFoundBadVal=%d\n", 0);
-    printf("save.assignLoopFoundBadVal=%d\n", 0);
-    printf("save.writeInLaterLoopFoundOldVal=%d\n", 1);
-    printf("save.writeInLaterLoopFoundNewVal=%d\n", 1);
-    printf("save.writeInLaterLoopFoundBadVal=%d\n", 0);
-    printf("loopOnly=%d\n", 88);
-    printf("loopOnlyArr[0]=%d\n", 77);
-#endif
   }
 
   //............................................................................
@@ -2304,9 +2286,6 @@ int main() {
     loopOnlyArr[0] = 88;
     printf("acc loop INDEPENDENT GANG worker vector\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCParallelDirective
     // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
@@ -2533,7 +2512,6 @@ int main() {
       else
         save.writeInLaterLoopFoundBadVal = true;
     } // PRT: }
-#endif
 
     // EXE-NEXT: save.loopOnlyFoundOldVal=1
     // EXE-NEXT: save.loopOnlyFoundBadVal=0
@@ -2545,8 +2523,6 @@ int main() {
     // EXE-NEXT: save.writeInLaterLoopFoundBadVal=0
     // EXE-NEXT: loopOnly=88
     // EXE-NEXT: loopOnlyArr[0]=77
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
     printf("save.loopOnlyFoundOldVal=%d\n", save.loopOnlyFoundOldVal);
     printf("save.loopOnlyFoundBadVal=%d\n", save.loopOnlyFoundBadVal);
     printf("save.loopOnlyArrFoundOldVal=%d\n", save.loopOnlyArrFoundOldVal);
@@ -2557,18 +2533,6 @@ int main() {
     printf("save.writeInLaterLoopFoundBadVal=%d\n", save.writeInLaterLoopFoundBadVal);
     printf("loopOnly=%d\n", loopOnly);
     printf("loopOnlyArr[0]=%d\n", loopOnlyArr[0]);
-#else
-    printf("save.loopOnlyFoundOldVal=%d\n", 1);
-    printf("save.loopOnlyFoundBadVal=%d\n", 0);
-    printf("save.loopOnlyArrFoundOldVal=%d\n", 1);
-    printf("save.loopOnlyArrFoundBadVal=%d\n", 0);
-    printf("save.assignLoopFoundBadVal=%d\n", 0);
-    printf("save.writeInLaterLoopFoundOldVal=%d\n", 1);
-    printf("save.writeInLaterLoopFoundNewVal=%d\n", 1);
-    printf("save.writeInLaterLoopFoundBadVal=%d\n", 0);
-    printf("loopOnly=%d\n", 88);
-    printf("loopOnlyArr[0]=%d\n", 77);
-#endif
   }
 
   //----------------------------------------------------------------------------
@@ -3876,9 +3840,6 @@ int main() {
     loopOnlyArr[0] = 88;
     printf("declared loop var: acc parallel loop INDEPENDENT GANG worker\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //              DMP: ACCParallelLoopDirective
     //         DMP-NEXT:   ACCNumGangsClause
     //         DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
@@ -3966,7 +3927,6 @@ int main() {
       checkLoopPartShared(save, i, loopOnlyArr, loopOnlyArr[0], 88, 77);
       loopOnlyArr[0] = 77;
     }
-#endif
 
     // EXE-NEXT: save.loopOnlyFoundOldVal=1
     // EXE-NEXT: save.loopOnlyFoundBadVal=0
@@ -3974,22 +3934,12 @@ int main() {
     // EXE-NEXT: save.loopOnlyArrFoundBadVal=0
     // EXE-NEXT: loopOnly=88
     // EXE-NEXT: loopOnlyArr[0]=77
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
     printf("save.loopOnlyFoundOldVal=%d\n", save.loopOnlyFoundOldVal);
     printf("save.loopOnlyFoundBadVal=%d\n", save.loopOnlyFoundBadVal);
     printf("save.loopOnlyArrFoundOldVal=%d\n", save.loopOnlyArrFoundOldVal);
     printf("save.loopOnlyArrFoundBadVal=%d\n", save.loopOnlyArrFoundBadVal);
     printf("loopOnly=%d\n", loopOnly);
     printf("loopOnlyArr[0]=%d\n", loopOnlyArr[0]);
-#else
-    printf("save.loopOnlyFoundOldVal=%d\n", 1);
-    printf("save.loopOnlyFoundBadVal=%d\n", 0);
-    printf("save.loopOnlyArrFoundOldVal=%d\n", 1);
-    printf("save.loopOnlyArrFoundBadVal=%d\n", 0);
-    printf("loopOnly=%d\n", 88);
-    printf("loopOnlyArr[0]=%d\n", 77);
-#endif
   }
 
   {
@@ -4001,9 +3951,6 @@ int main() {
     int k, l;
     printf("assigned loop var: acc parallel loop INDEPENDENT GANG worker\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //              DMP: ACCParallelLoopDirective
     //         DMP-NEXT:   ACCNumGangsClause
     //         DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
@@ -4077,7 +4024,6 @@ int main() {
       for (l = 0; l < 2; ++l)
         ;
     }
-#endif
   }
 
   //............................................................................
@@ -4335,9 +4281,6 @@ int main() {
     loopOnlyArr[0] = 88;
     printf("declare loop var: acc parallel loop INDEPENDENT GANG worker vector\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //              DMP: ACCParallelLoopDirective
     //         DMP-NEXT:   ACCNumGangsClause
     //         DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
@@ -4430,7 +4373,6 @@ int main() {
       checkLoopPartShared(save, i, loopOnlyArr, loopOnlyArr[0], 88, 77);
       loopOnlyArr[0] = 77;
     }
-#endif
 
     // EXE-NEXT: save.loopOnlyFoundOldVal=1
     // EXE-NEXT: save.loopOnlyFoundBadVal=0
@@ -4438,22 +4380,12 @@ int main() {
     // EXE-NEXT: save.loopOnlyArrFoundBadVal=0
     // EXE-NEXT: loopOnly=88
     // EXE-NEXT: loopOnlyArr[0]=77
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
     printf("save.loopOnlyFoundOldVal=%d\n", save.loopOnlyFoundOldVal);
     printf("save.loopOnlyFoundBadVal=%d\n", save.loopOnlyFoundBadVal);
     printf("save.loopOnlyArrFoundOldVal=%d\n", save.loopOnlyArrFoundOldVal);
     printf("save.loopOnlyArrFoundBadVal=%d\n", save.loopOnlyArrFoundBadVal);
     printf("loopOnly=%d\n", loopOnly);
     printf("loopOnlyArr[0]=%d\n", loopOnlyArr[0]);
-#else
-    printf("save.loopOnlyFoundOldVal=%d\n", 1);
-    printf("save.loopOnlyFoundBadVal=%d\n", 0);
-    printf("save.loopOnlyArrFoundOldVal=%d\n", 1);
-    printf("save.loopOnlyArrFoundBadVal=%d\n", 0);
-    printf("loopOnly=%d\n", 88);
-    printf("loopOnlyArr[0]=%d\n", 77);
-#endif
   }
 
   {
@@ -4465,9 +4397,6 @@ int main() {
     int k, l;
     printf("assigned loop var: acc parallel loop INDEPENDENT GANG worker vector\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //              DMP: ACCParallelLoopDirective
     //         DMP-NEXT:   ACCNumGangsClause
     //         DMP-NEXT:     IntegerLiteral {{.*}} 'int' 3
@@ -4579,7 +4508,6 @@ int main() {
       for (l = 0; l < 2; ++l)
         ;
     }
-#endif
   }
 
   //----------------------------------------------------------------------------
@@ -5933,13 +5861,8 @@ static void withinGangFnAccLoopIndependentGangWorkerRun() {
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   #pragma acc parallel num_gangs(3)
   withinGangFnAccLoopIndependentGangWorker(&save, &loopOnly, loopOnlyArr);
-#else
-  (void)withinGangFnAccLoopIndependentGangWorker;
-#endif
 
   // EXE-NEXT: save.loopOnlyFoundOldVal=1
   // EXE-NEXT: save.loopOnlyFoundBadVal=0
@@ -5951,8 +5874,6 @@ static void withinGangFnAccLoopIndependentGangWorkerRun() {
   // EXE-NEXT: save.writeInLaterLoopFoundBadVal=0
   // EXE-NEXT: loopOnly=88
   // EXE-NEXT: loopOnlyArr[0]=77
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   printf("save.loopOnlyFoundOldVal=%d\n", save.loopOnlyFoundOldVal);
   printf("save.loopOnlyFoundBadVal=%d\n", save.loopOnlyFoundBadVal);
   printf("save.loopOnlyArrFoundOldVal=%d\n", save.loopOnlyArrFoundOldVal);
@@ -5963,18 +5884,6 @@ static void withinGangFnAccLoopIndependentGangWorkerRun() {
   printf("save.writeInLaterLoopFoundBadVal=%d\n", save.writeInLaterLoopFoundBadVal);
   printf("loopOnly=%d\n", loopOnly);
   printf("loopOnlyArr[0]=%d\n", loopOnlyArr[0]);
-#else
-  printf("save.loopOnlyFoundOldVal=%d\n", 1);
-  printf("save.loopOnlyFoundBadVal=%d\n", 0);
-  printf("save.loopOnlyArrFoundOldVal=%d\n", 1);
-  printf("save.loopOnlyArrFoundBadVal=%d\n", 0);
-  printf("save.assignLoopFoundBadVal=%d\n", 0);
-  printf("save.writeInLaterLoopFoundOldVal=%d\n", 1);
-  printf("save.writeInLaterLoopFoundNewVal=%d\n", 1);
-  printf("save.writeInLaterLoopFoundBadVal=%d\n", 0);
-  printf("loopOnly=%d\n", 88);
-  printf("loopOnlyArr[0]=%d\n", 77);
-#endif
 }
 
 // DMP-LABEL: FunctionDecl {{.*}} withinGangFnAccLoopIndependentGangWorker
@@ -6377,13 +6286,8 @@ static void withinGangFnAccLoopIndependentGangWorkerVectorRun() {
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   #pragma acc parallel num_gangs(3)
   withinGangFnAccLoopIndependentGangWorkerVector(&save, &loopOnly, loopOnlyArr);
-#else
-  (void)withinGangFnAccLoopIndependentGangWorkerVector;
-#endif
 
   // EXE-NEXT: save.loopOnlyFoundOldVal=1
   // EXE-NEXT: save.loopOnlyFoundBadVal=0
@@ -6395,8 +6299,6 @@ static void withinGangFnAccLoopIndependentGangWorkerVectorRun() {
   // EXE-NEXT: save.writeInLaterLoopFoundBadVal=0
   // EXE-NEXT: loopOnly=88
   // EXE-NEXT: loopOnlyArr[0]=77
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   printf("save.loopOnlyFoundOldVal=%d\n", save.loopOnlyFoundOldVal);
   printf("save.loopOnlyFoundBadVal=%d\n", save.loopOnlyFoundBadVal);
   printf("save.loopOnlyArrFoundOldVal=%d\n", save.loopOnlyArrFoundOldVal);
@@ -6407,18 +6309,6 @@ static void withinGangFnAccLoopIndependentGangWorkerVectorRun() {
   printf("save.writeInLaterLoopFoundBadVal=%d\n", save.writeInLaterLoopFoundBadVal);
   printf("loopOnly=%d\n", loopOnly);
   printf("loopOnlyArr[0]=%d\n", loopOnlyArr[0]);
-#else
-  printf("save.loopOnlyFoundOldVal=%d\n", 1);
-  printf("save.loopOnlyFoundBadVal=%d\n", 0);
-  printf("save.loopOnlyArrFoundOldVal=%d\n", 1);
-  printf("save.loopOnlyArrFoundBadVal=%d\n", 0);
-  printf("save.assignLoopFoundBadVal=%d\n", 0);
-  printf("save.writeInLaterLoopFoundOldVal=%d\n", 1);
-  printf("save.writeInLaterLoopFoundNewVal=%d\n", 1);
-  printf("save.writeInLaterLoopFoundBadVal=%d\n", 0);
-  printf("loopOnly=%d\n", 88);
-  printf("loopOnlyArr[0]=%d\n", 77);
-#endif
 }
 
 // DMP-LABEL: FunctionDecl {{.*}} withinGangFnAccLoopIndependentGangWorkerVector
@@ -7825,15 +7715,10 @@ static void withinWorkerFnAccLoopIndependentWorkerRun() {
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   #pragma acc parallel num_gangs(3)
   #pragma acc loop gang
   for (int g = 0; g < 2; ++g)
     withinWorkerFnAccLoopIndependentWorker(&save, &loopOnly, loopOnlyArr);
-#else
-  (void)withinWorkerFnAccLoopIndependentWorker;
-#endif
   // EXE-NEXT: save.loopOnlyFoundOldVal=1
   // EXE-NEXT: save.loopOnlyFoundBadVal=0
   // EXE-NEXT: save.loopOnlyArrFoundOldVal=1
@@ -7842,8 +7727,6 @@ static void withinWorkerFnAccLoopIndependentWorkerRun() {
   // EXE-NEXT: save.writeInLaterLoopFoundBadVal=0
   // EXE-NEXT: loopOnly=88
   // EXE-NEXT: loopOnlyArr[0]=77
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   printf("save.loopOnlyFoundOldVal=%d\n", save.loopOnlyFoundOldVal);
   printf("save.loopOnlyFoundBadVal=%d\n", save.loopOnlyFoundBadVal);
   printf("save.loopOnlyArrFoundOldVal=%d\n", save.loopOnlyArrFoundOldVal);
@@ -7852,16 +7735,6 @@ static void withinWorkerFnAccLoopIndependentWorkerRun() {
   printf("save.writeInLaterLoopFoundBadVal=%d\n", save.writeInLaterLoopFoundBadVal);
   printf("loopOnly=%d\n", loopOnly);
   printf("loopOnlyArr[0]=%d\n", loopOnlyArr[0]);
-#else
-  printf("save.loopOnlyFoundOldVal=%d\n", 1);
-  printf("save.loopOnlyFoundBadVal=%d\n", 0);
-  printf("save.loopOnlyArrFoundOldVal=%d\n", 1);
-  printf("save.loopOnlyArrFoundBadVal=%d\n", 0);
-  printf("save.assignLoopFoundBadVal=%d\n", 0);
-  printf("save.writeInLaterLoopFoundBadVal=%d\n", 0);
-  printf("loopOnly=%d\n", 88);
-  printf("loopOnlyArr[0]=%d\n", 77);
-#endif
 
   // Call directly from the parallel construct: Gang-redundant mode executes the
   // function per gang.  Orphaned loops are the only way to achieve this
@@ -7884,11 +7757,8 @@ static void withinWorkerFnAccLoopIndependentWorkerRun() {
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   #pragma acc parallel num_gangs(3)
   withinWorkerFnAccLoopIndependentWorker(&save, &loopOnly, loopOnlyArr);
-#endif
   // EXE-NEXT: save.loopOnlyFoundOldVal=1
   // EXE-NEXT: save.loopOnlyFoundBadVal=0
   // EXE-NEXT: save.loopOnlyArrFoundOldVal=1
@@ -7897,8 +7767,6 @@ static void withinWorkerFnAccLoopIndependentWorkerRun() {
   // EXE-NEXT: save.writeInLaterLoopFoundBadVal=0
   // EXE-NEXT: loopOnly=88
   // EXE-NEXT: loopOnlyArr[0]=77
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   printf("save.loopOnlyFoundOldVal=%d\n", save.loopOnlyFoundOldVal);
   printf("save.loopOnlyFoundBadVal=%d\n", save.loopOnlyFoundBadVal);
   printf("save.loopOnlyArrFoundOldVal=%d\n", save.loopOnlyArrFoundOldVal);
@@ -7907,16 +7775,6 @@ static void withinWorkerFnAccLoopIndependentWorkerRun() {
   printf("save.writeInLaterLoopFoundBadVal=%d\n", save.writeInLaterLoopFoundBadVal);
   printf("loopOnly=%d\n", loopOnly);
   printf("loopOnlyArr[0]=%d\n", loopOnlyArr[0]);
-#else
-  printf("save.loopOnlyFoundOldVal=%d\n", 1);
-  printf("save.loopOnlyFoundBadVal=%d\n", 0);
-  printf("save.loopOnlyArrFoundOldVal=%d\n", 1);
-  printf("save.loopOnlyArrFoundBadVal=%d\n", 0);
-  printf("save.assignLoopFoundBadVal=%d\n", 0);
-  printf("save.writeInLaterLoopFoundBadVal=%d\n", 0);
-  printf("loopOnly=%d\n", 88);
-  printf("loopOnlyArr[0]=%d\n", 77);
-#endif
 }
 
 // DMP-LABEL: FunctionDecl {{.*}} withinWorkerFnAccLoopIndependentWorker
@@ -8330,13 +8188,10 @@ static void withinWorkerFnAccLoopIndependentWorkerVectorRun() {
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   #pragma acc parallel num_gangs(3)
   #pragma acc loop gang
   for (int g = 0; g < 2; ++g)
     withinWorkerFnAccLoopIndependentWorkerVector(&save, &loopOnly, loopOnlyArr);
-#endif
   // EXE-NEXT: save.loopOnlyFoundOldVal=1
   // EXE-NEXT: save.loopOnlyFoundBadVal=0
   // EXE-NEXT: save.loopOnlyArrFoundOldVal=1
@@ -8345,8 +8200,6 @@ static void withinWorkerFnAccLoopIndependentWorkerVectorRun() {
   // EXE-NEXT: save.writeInLaterLoopFoundBadVal=0
   // EXE-NEXT: loopOnly=88
   // EXE-NEXT: loopOnlyArr[0]=77
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   printf("save.loopOnlyFoundOldVal=%d\n", save.loopOnlyFoundOldVal);
   printf("save.loopOnlyFoundBadVal=%d\n", save.loopOnlyFoundBadVal);
   printf("save.loopOnlyArrFoundOldVal=%d\n", save.loopOnlyArrFoundOldVal);
@@ -8355,16 +8208,6 @@ static void withinWorkerFnAccLoopIndependentWorkerVectorRun() {
   printf("save.writeInLaterLoopFoundBadVal=%d\n", save.writeInLaterLoopFoundBadVal);
   printf("loopOnly=%d\n", loopOnly);
   printf("loopOnlyArr[0]=%d\n", loopOnlyArr[0]);
-#else
-  printf("save.loopOnlyFoundOldVal=%d\n", 1);
-  printf("save.loopOnlyFoundBadVal=%d\n", 0);
-  printf("save.loopOnlyArrFoundOldVal=%d\n", 1);
-  printf("save.loopOnlyArrFoundBadVal=%d\n", 0);
-  printf("save.assignLoopFoundBadVal=%d\n", 0);
-  printf("save.writeInLaterLoopFoundBadVal=%d\n", 0);
-  printf("loopOnly=%d\n", 88);
-  printf("loopOnlyArr[0]=%d\n", 77);
-#endif
 
   // Call directly from the parallel construct: Gang-redundant mode executes the
   // function per gang.  Orphaned loops are the only way to achieve this
@@ -8387,13 +8230,8 @@ static void withinWorkerFnAccLoopIndependentWorkerVectorRun() {
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
   // EXE-TGT-USE-STDIO-NEXT: loop iteration
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   #pragma acc parallel num_gangs(3)
   withinWorkerFnAccLoopIndependentWorkerVector(&save, &loopOnly, loopOnlyArr);
-#else
-  (void)withinWorkerFnAccLoopIndependentWorkerVector;
-#endif
   // EXE-NEXT: save.loopOnlyFoundOldVal=1
   // EXE-NEXT: save.loopOnlyFoundBadVal=0
   // EXE-NEXT: save.loopOnlyArrFoundOldVal=1
@@ -8402,8 +8240,6 @@ static void withinWorkerFnAccLoopIndependentWorkerVectorRun() {
   // EXE-NEXT: save.writeInLaterLoopFoundBadVal=0
   // EXE-NEXT: loopOnly=88
   // EXE-NEXT: loopOnlyArr[0]=77
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   printf("save.loopOnlyFoundOldVal=%d\n", save.loopOnlyFoundOldVal);
   printf("save.loopOnlyFoundBadVal=%d\n", save.loopOnlyFoundBadVal);
   printf("save.loopOnlyArrFoundOldVal=%d\n", save.loopOnlyArrFoundOldVal);
@@ -8412,16 +8248,6 @@ static void withinWorkerFnAccLoopIndependentWorkerVectorRun() {
   printf("save.writeInLaterLoopFoundBadVal=%d\n", save.writeInLaterLoopFoundBadVal);
   printf("loopOnly=%d\n", loopOnly);
   printf("loopOnlyArr[0]=%d\n", loopOnlyArr[0]);
-#else
-  printf("save.loopOnlyFoundOldVal=%d\n", 1);
-  printf("save.loopOnlyFoundBadVal=%d\n", 0);
-  printf("save.loopOnlyArrFoundOldVal=%d\n", 1);
-  printf("save.loopOnlyArrFoundBadVal=%d\n", 0);
-  printf("save.assignLoopFoundBadVal=%d\n", 0);
-  printf("save.writeInLaterLoopFoundBadVal=%d\n", 0);
-  printf("loopOnly=%d\n", 88);
-  printf("loopOnlyArr[0]=%d\n", 77);
-#endif
 }
 
 // DMP-LABEL: FunctionDecl {{.*}} withinWorkerFnAccLoopIndependentWorkerVector

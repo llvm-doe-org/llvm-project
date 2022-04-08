@@ -16,11 +16,10 @@ Architectures
   devices.
 * nvptx64 (NVIDIA GPUs) and amdgcn (AMD GPUs) are supported as
   accelerator devices.
-* Offload support inherits any limitations from upstream LLVM's OpenMP
-  offload support.  For example, stdio (e.g., `printf`), worker loops
-  (that is, `parallel for` in an OpenMP `target teams` region), some
-  standard math libraries (e.g., `complex.h`), and recursive functions
-  are not yet properly supported in kernels offloaded to AMD GPUs.
+* Offload support inherits any limitations from upstream LLVM's OpenMP offload
+  support.  For example, stdio (e.g., `printf`), some standard math libraries
+  (e.g., `complex.h`), and recursive functions are not yet properly supported in
+  kernels offloaded to AMD GPUs.
 
 Build Platforms
 ---------------

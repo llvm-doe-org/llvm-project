@@ -304,9 +304,6 @@ int main() {
   // EXE-LABEL: seq > worker > seq
   printf("seq > worker > seq\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP-CMB: ACCParallelLoopDirective
   // DMP-CMB-NEXT:   ACCNumGangsClause
   // DMP-CMB-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -423,8 +420,6 @@ int main() {
     }
 #if !CMB
   }
-#endif
-// PRT-SRC-NEXT: #endif
 #endif
 
   //--------------------------------------------------
@@ -564,9 +559,6 @@ int main() {
   // EXE-LABEL: gang > seq > worker
   printf("gang > seq > worker\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP-CMB: ACCParallelLoopDirective
   // DMP-CMB-NEXT:   ACCNumGangsClause
   // DMP-CMB-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -680,8 +672,6 @@ int main() {
 #if !CMB
   }
 #endif
-// PRT-SRC-NEXT: #endif
-#endif
 
   // DMP_LABEL: CallExpr
   // PRT-LABEL: printf("seq > gang worker > seq\n");
@@ -689,9 +679,6 @@ int main() {
   // EXE-LABEL: seq > gang worker > seq
   printf("seq > gang worker > seq\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP-CMB: ACCParallelLoopDirective
   // DMP-CMB-NEXT:   ACCNumGangsClause
   // DMP-CMB-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -808,8 +795,6 @@ int main() {
     }
 #if !CMB
   }
-#endif
-// PRT-SRC-NEXT: #endif
 #endif
 
   //--------------------------------------------------
@@ -1068,9 +1053,6 @@ int main() {
   // EXE-LABEL: worker > seq > vector
   printf("worker > seq > vector\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP-CMB: ACCParallelLoopDirective
   // DMP-CMB-NEXT:   ACCNumGangsClause
   // DMP-CMB-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -1192,8 +1174,6 @@ int main() {
 #if !CMB
   }
 #endif
-// PRT-SRC-NEXT: #endif
-#endif
 
   // DMP_LABEL: CallExpr
   // PRT-LABEL: printf("seq > worker vector > seq\n");
@@ -1201,9 +1181,6 @@ int main() {
   // EXE-LABEL: seq > worker vector > seq
   printf("seq > worker vector > seq\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP-CMB: ACCParallelLoopDirective
   // DMP-CMB-NEXT:   ACCNumGangsClause
   // DMP-CMB-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -1330,8 +1307,6 @@ int main() {
 #if !CMB
   }
 #endif
-// PRT-SRC-NEXT: #endif
-#endif
 
   //--------------------------------------------------
   // Loop nest has explicit gang, worker, and vector.
@@ -1343,9 +1318,6 @@ int main() {
   // EXE-LABEL: gang > worker > vector
   printf("gang > worker > vector\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP-CMB: ACCParallelLoopDirective
   // DMP-CMB-NEXT:   ACCNumGangsClause
   // DMP-CMB-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -1462,8 +1434,6 @@ int main() {
 #if !CMB
   }
 #endif
-// PRT-SRC-NEXT: #endif
-#endif
 
   // DMP_LABEL: CallExpr
   // PRT-LABEL: printf("gang worker > seq > vector\n");
@@ -1471,9 +1441,6 @@ int main() {
   // EXE-LABEL: gang worker > seq > vector
   printf("gang worker > seq > vector\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP-CMB: ACCParallelLoopDirective
   // DMP-CMB-NEXT:   ACCNumGangsClause
   // DMP-CMB-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -1596,8 +1563,6 @@ int main() {
 #if !CMB
   }
 #endif
-// PRT-SRC-NEXT: #endif
-#endif
 
   // DMP_LABEL: CallExpr
   // PRT-LABEL: printf("gang > seq > worker vector\n");
@@ -1605,9 +1570,6 @@ int main() {
   // EXE-LABEL: gang > seq > worker vector
   printf("gang > seq > worker vector\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP-CMB: ACCParallelLoopDirective
   // DMP-CMB-NEXT:   ACCNumGangsClause
   // DMP-CMB-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -1730,8 +1692,6 @@ int main() {
 #if !CMB
   }
 #endif
-// PRT-SRC-NEXT: #endif
-#endif
 
   // DMP_LABEL: CallExpr
   // PRT-LABEL: printf("seq > gang worker vector > seq\n");
@@ -1739,9 +1699,6 @@ int main() {
   // EXE-LABEL: seq > gang worker vector > seq
   printf("seq > gang worker vector > seq\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP-CMB: ACCParallelLoopDirective
   // DMP-CMB-NEXT:   ACCNumGangsClause
   // DMP-CMB-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -1867,8 +1824,6 @@ int main() {
     }
 #if !CMB
   }
-#endif
-// PRT-SRC-NEXT: #endif
 #endif
 
   // EXE-NOT: {{.}}

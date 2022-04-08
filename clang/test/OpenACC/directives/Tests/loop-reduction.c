@@ -989,9 +989,6 @@ int main() {
   // Reduction var is not private at loop due to explicit copy/copyin/copyout
   // clause.
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: double out0 =
@@ -1097,24 +1094,16 @@ int main() {
     // PRT-NEXT: printf
     // PRT-NEXT: printf
     // PRT-NEXT: printf
-    //        EXE-HOST-NEXT: out0 = -4.1
-    //        EXE-HOST-NEXT: out1 = -3.0
-    //        EXE-HOST-NEXT: out2 = -1.9
-    //  EXE-TGT-X86_64-NEXT: out0 = -4.1
-    //  EXE-TGT-X86_64-NEXT: out1 = 1.4
-    //  EXE-TGT-X86_64-NEXT: out2 =
-    // EXE-TGT-PPC64LE-NEXT: out0 = -4.1
-    // EXE-TGT-PPC64LE-NEXT: out1 = 1.4
-    // EXE-TGT-PPC64LE-NEXT: out2 =
-    // EXE-TGT-NVPTX64-NEXT: out0 = -4.1
-    // EXE-TGT-NVPTX64-NEXT: out1 = 1.4
-    // EXE-TGT-NVPTX64-NEXT: out2 =
+    // EXE-HOST-NEXT: out0 = -4.1{{$}}
+    // EXE-HOST-NEXT: out1 = -3.0{{$}}
+    // EXE-HOST-NEXT: out2 = -1.9{{$}}
+    //  EXE-OFF-NEXT: out0 = -4.1{{$}}
+    //  EXE-OFF-NEXT: out1 = 1.4{{$}}
+    //  EXE-OFF-NEXT: out2 = {{.*}}
     printf("out0 = %.1f\n", out0);
     printf("out1 = %.1f\n", out1);
     printf("out2 = %.1f\n", out2);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // Reduction var is not private at loop due to copy clause implied by
   // reduction on combined construct.
@@ -1500,9 +1489,6 @@ int main() {
 
   // Reduction vars are private at the loop.
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: float out0 = -5;
@@ -1588,54 +1574,31 @@ int main() {
       } // PRT-NEXT: }
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      //        EXE-HOST-DAG: out1 = -63.0
-      //  EXE-TGT-X86_64-DAG: out1 = -63.0
-      // EXE-TGT-PPC64LE-DAG: out1 = -63.0
-      // EXE-TGT-NVPTX64-DAG: out1 = -63.0
+      // EXE-TGT-USE-STDIO-DAG: out1 = -63.0{{$}}
       TGT_PRINTF("out1 = %.1f\n", out1);
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      //        EXE-HOST-DAG: in: 11
-      //        EXE-HOST-DAG: in: 11
-      //  EXE-TGT-X86_64-DAG: in: 11
-      //  EXE-TGT-X86_64-DAG: in: 11
-      // EXE-TGT-PPC64LE-DAG: in: 11
-      // EXE-TGT-PPC64LE-DAG: in: 11
-      // EXE-TGT-NVPTX64-DAG: in: 11
-      // EXE-TGT-NVPTX64-DAG: in: 11
+      // EXE-TGT-USE-STDIO-DAG: in: 11{{$}}
+      // EXE-TGT-USE-STDIO-DAG: in: 11{{$}}
       TGT_PRINTF("in: %d\n", in);
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //        EXE-HOST-NEXT: out0 = -405.0
-    //  EXE-TGT-X86_64-NEXT: out0 = -405.0
-    // EXE-TGT-PPC64LE-NEXT: out0 = -405.0
-    // EXE-TGT-NVPTX64-NEXT: out0 = -405.0
+    // EXE-NEXT: out0 = -405.0{{$}}
     printf("out0 = %.1f\n", out0);
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //        EXE-HOST-NEXT: out1 = -7.0
-    //  EXE-TGT-X86_64-NEXT: out1 = -7.0
-    // EXE-TGT-PPC64LE-NEXT: out1 = -7.0
-    // EXE-TGT-NVPTX64-NEXT: out1 = -7.0
+    // EXE-NEXT: out1 = -7.0{{$}}
     printf("out1 = %.1f\n", out1);
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //        EXE-HOST-NEXT: out2 = -8.0
-    //  EXE-TGT-X86_64-NEXT: out2 = -8.0
-    // EXE-TGT-PPC64LE-NEXT: out2 = -8.0
-    // EXE-TGT-NVPTX64-NEXT: out2 = -8.0
+    // EXE-NEXT: out2 = -8.0{{$}}
     printf("out2 = %.1f\n", out2);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // Reduction var is not private at loop due to explicit copy/copyin/copyout
   // clause.
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: double out0 =
@@ -1694,30 +1657,12 @@ int main() {
       // PRT-NEXT: {{TGT_PRINTF|printf}}
       // PRT-NEXT: {{TGT_PRINTF|printf}}
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      //        EXE-HOST-DAG: out0 init = 0.0{{$}}
-      //        EXE-HOST-DAG: out0 init = 0.0{{$}}
-      //        EXE-HOST-DAG: out1 init = 0.0{{$}}
-      //        EXE-HOST-DAG: out1 init = 0.0{{$}}
-      //        EXE-HOST-DAG: out2 init = 0.0{{$}}
-      //        EXE-HOST-DAG: out2 init = 0.0{{$}}
-      //  EXE-TGT-X86_64-DAG: out0 init = 0.0{{$}}
-      //  EXE-TGT-X86_64-DAG: out0 init = 0.0{{$}}
-      //  EXE-TGT-X86_64-DAG: out1 init = 0.0{{$}}
-      //  EXE-TGT-X86_64-DAG: out1 init = 0.0{{$}}
-      //  EXE-TGT-X86_64-DAG: out2 init = 0.0{{$}}
-      //  EXE-TGT-X86_64-DAG: out2 init = 0.0{{$}}
-      // EXE-TGT-PPC64LE-DAG: out0 init = 0.0{{$}}
-      // EXE-TGT-PPC64LE-DAG: out0 init = 0.0{{$}}
-      // EXE-TGT-PPC64LE-DAG: out1 init = 0.0{{$}}
-      // EXE-TGT-PPC64LE-DAG: out1 init = 0.0{{$}}
-      // EXE-TGT-PPC64LE-DAG: out2 init = 0.0{{$}}
-      // EXE-TGT-PPC64LE-DAG: out2 init = 0.0{{$}}
-      // EXE-TGT-NVPTX64-DAG: out0 init = 0.0{{$}}
-      // EXE-TGT-NVPTX64-DAG: out0 init = 0.0{{$}}
-      // EXE-TGT-NVPTX64-DAG: out1 init = 0.0{{$}}
-      // EXE-TGT-NVPTX64-DAG: out1 init = 0.0{{$}}
-      // EXE-TGT-NVPTX64-DAG: out2 init = 0.0{{$}}
-      // EXE-TGT-NVPTX64-DAG: out2 init = 0.0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: out0 init = 0.0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: out0 init = 0.0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: out1 init = 0.0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: out1 init = 0.0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: out2 init = 0.0{{$}}
+      // EXE-TGT-USE-STDIO-DAG: out2 init = 0.0{{$}}
       TGT_PRINTF("out0 init = %.1f\n", out0);
       TGT_PRINTF("out1 init = %.1f\n", out1);
       TGT_PRINTF("out2 init = %.1f\n", out2);
@@ -1760,31 +1705,20 @@ int main() {
     // PRT-NEXT: printf
     // PRT-NEXT: printf
     // PRT-NEXT: printf
-    //        EXE-HOST-NEXT: out0 = -4.1
-    //        EXE-HOST-NEXT: out1 = -3.0
-    //        EXE-HOST-NEXT: out2 = -1.9
-    //  EXE-TGT-X86_64-NEXT: out0 = -4.1
-    //  EXE-TGT-X86_64-NEXT: out1 = 1.4
-    //  EXE-TGT-X86_64-NEXT: out2 =
-    // EXE-TGT-PPC64LE-NEXT: out0 = -4.1
-    // EXE-TGT-PPC64LE-NEXT: out1 = 1.4
-    // EXE-TGT-PPC64LE-NEXT: out2 =
-    // EXE-TGT-NVPTX64-NEXT: out0 = -4.1
-    // EXE-TGT-NVPTX64-NEXT: out1 = 1.4
-    // EXE-TGT-NVPTX64-NEXT: out2 =
+    // EXE-HOST-NEXT: out0 = -4.1{{$}}
+    // EXE-HOST-NEXT: out1 = -3.0{{$}}
+    // EXE-HOST-NEXT: out2 = -1.9{{$}}
+    //  EXE-OFF-NEXT: out0 = -4.1{{$}}
+    //  EXE-OFF-NEXT: out1 = 1.4{{$}}
+    //  EXE-OFF-NEXT: out2 = {{.*}}
     printf("out0 = %.1f\n", out0);
     printf("out1 = %.1f\n", out1);
     printf("out2 = %.1f\n", out2);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // Reduction var is not private at loop due to copy clause implied by
   // reduction on combined construct.
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: float out = -5;
@@ -1837,14 +1771,9 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-     //       EXE-HOST-NEXT: out = -405.0
-     // EXE-TGT-X86_64-NEXT: out = -405.0
-    // EXE-TGT-PPC64LE-NEXT: out = -405.0
-    // EXE-TGT-NVPTX64-NEXT: out = -405.0
+    // EXE-NEXT: out = -405.0{{$}}
     printf("out = %.1f\n", out);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //----------------------------------------------------------------------------
   // gang and explicit acc parallel reduction.
@@ -2066,9 +1995,6 @@ int main() {
   //   EXE-NOT: {{.}}
   printf("gang, worker, and explicit acc parallel reduction\n");
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out = 3;
@@ -2126,30 +2052,16 @@ int main() {
       } // PRT-NEXT: }
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      //        EXE-HOST-NEXT: in = 7{{$}}
-      //        EXE-HOST-NEXT: in = 7{{$}}
-      //  EXE-TGT-X86_64-NEXT: in = 7{{$}}
-      //  EXE-TGT-X86_64-NEXT: in = 7{{$}}
-      // EXE-TGT-PPC64LE-NEXT: in = 7{{$}}
-      // EXE-TGT-PPC64LE-NEXT: in = 7{{$}}
-      // EXE-TGT-NVPTX64-NEXT: in = 7{{$}}
-      // EXE-TGT-NVPTX64-NEXT: in = 7{{$}}
+      // EXE-TGT-USE-STDIO-NEXT: in = 7{{$}}
+      // EXE-TGT-USE-STDIO-NEXT: in = 7{{$}}
       TGT_PRINTF("in = %d\n", in);
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //        EXE-HOST-NEXT: out = 11
-    //  EXE-TGT-X86_64-NEXT: out = 11
-    // EXE-TGT-PPC64LE-NEXT: out = 11
-    // EXE-TGT-NVPTX64-NEXT: out = 11
+    // EXE-NEXT: out = 11{{$}}
     printf("out = %d\n", out);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out = 3;
@@ -2201,14 +2113,9 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //        EXE-HOST-NEXT: out = 11
-    //  EXE-TGT-X86_64-NEXT: out = 11
-    // EXE-TGT-PPC64LE-NEXT: out = 11
-    // EXE-TGT-NVPTX64-NEXT: out = 11
+    // EXE-NEXT: out = 11{{$}}
     printf("out = %d\n", out);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //----------------------------------------------------------------------------
   // gang, vector, and implicit acc parallel reduction.
@@ -2359,9 +2266,6 @@ int main() {
   //   EXE-NOT: {{.}}
   printf("gang, worker, vector, and single loop\n");
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out = 3;
@@ -2421,30 +2325,16 @@ int main() {
       } // PRT-NEXT: }
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      //        EXE-HOST-NEXT: in = 7{{$}}
-      //        EXE-HOST-NEXT: in = 7{{$}}
-      //  EXE-TGT-X86_64-NEXT: in = 7{{$}}
-      //  EXE-TGT-X86_64-NEXT: in = 7{{$}}
-      // EXE-TGT-PPC64LE-NEXT: in = 7{{$}}
-      // EXE-TGT-PPC64LE-NEXT: in = 7{{$}}
-      // EXE-TGT-NVPTX64-NEXT: in = 7{{$}}
-      // EXE-TGT-NVPTX64-NEXT: in = 7{{$}}
+      // EXE-TGT-USE-STDIO-NEXT: in = 7{{$}}
+      // EXE-TGT-USE-STDIO-NEXT: in = 7{{$}}
       TGT_PRINTF("in = %d\n", in);
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //        EXE-HOST-NEXT: out = 11
-    //  EXE-TGT-X86_64-NEXT: out = 11
-    // EXE-TGT-PPC64LE-NEXT: out = 11
-    // EXE-TGT-NVPTX64-NEXT: out = 11
+    // EXE-NEXT: out = 11{{$}}
     printf("out = %d\n", out);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out = 3;
@@ -2498,14 +2388,9 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //        EXE-HOST-NEXT: out = 11
-    //  EXE-TGT-X86_64-NEXT: out = 11
-    // EXE-TGT-PPC64LE-NEXT: out = 11
-    // EXE-TGT-NVPTX64-NEXT: out = 11
+    // EXE-NEXT: out = 11{{$}}
     printf("out = %d\n", out);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //----------------------------------------------------------------------------
   // gang, worker, vector, and separate nested loops.
@@ -2518,9 +2403,6 @@ int main() {
   //   EXE-NOT: {{.}}
   printf("gang, worker, vector, and separate nested loops\n");
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out = 3;
@@ -2615,30 +2497,16 @@ int main() {
       } // PRT-NEXT: }
       // DMP: CallExpr
       // PRT-NEXT: {{TGT_PRINTF|printf}}
-      //        EXE-HOST-NEXT: in = 11{{$}}
-      //        EXE-HOST-NEXT: in = 11{{$}}
-      //  EXE-TGT-X86_64-NEXT: in = 11{{$}}
-      //  EXE-TGT-X86_64-NEXT: in = 11{{$}}
-      // EXE-TGT-PPC64LE-NEXT: in = 11{{$}}
-      // EXE-TGT-PPC64LE-NEXT: in = 11{{$}}
-      // EXE-TGT-NVPTX64-NEXT: in = 11{{$}}
-      // EXE-TGT-NVPTX64-NEXT: in = 11{{$}}
+      // EXE-TGT-USE-STDIO-NEXT: in = 11{{$}}
+      // EXE-TGT-USE-STDIO-NEXT: in = 11{{$}}
       TGT_PRINTF("in = %d\n", in);
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //        EXE-HOST-NEXT: out = 19
-    //  EXE-TGT-X86_64-NEXT: out = 19
-    // EXE-TGT-PPC64LE-NEXT: out = 19
-    // EXE-TGT-NVPTX64-NEXT: out = 19
+    // EXE-NEXT: out = 19{{$}}
     printf("out = %d\n", out);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out = 3;
@@ -2733,14 +2601,9 @@ int main() {
     } // PRT-NEXT: }
     // DMP: CallExpr
     // PRT-NEXT: printf
-    //        EXE-HOST-NEXT: out = 19
-    //  EXE-TGT-X86_64-NEXT: out = 19
-    // EXE-TGT-PPC64LE-NEXT: out = 19
-    // EXE-TGT-NVPTX64-NEXT: out = 19
+    // EXE-NEXT: out = 19{{$}}
     printf("out = %d\n", out);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //----------------------------------------------------------------------------
   // gang reductions from sibling loops.
@@ -3256,9 +3119,6 @@ int main() {
   // for out0 or out2, but it does need out1 in a firstprivate in order to
   // access its original value.
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out0 = 5;
@@ -3423,24 +3283,13 @@ int main() {
     // PRT-NEXT: printf
     // PRT-NEXT: printf
     // PRT-NEXT: printf
-    //        EXE-HOST-NEXT: out0 = 5
-    //        EXE-HOST-NEXT: out1 = 6
-    //        EXE-HOST-NEXT: out2 = 7
-    //  EXE-TGT-X86_64-NEXT: out0 = 5
-    //  EXE-TGT-X86_64-NEXT: out1 = 6
-    //  EXE-TGT-X86_64-NEXT: out2 = 7
-    // EXE-TGT-PPC64LE-NEXT: out0 = 5
-    // EXE-TGT-PPC64LE-NEXT: out1 = 6
-    // EXE-TGT-PPC64LE-NEXT: out2 = 7
-    // EXE-TGT-NVPTX64-NEXT: out0 = 5
-    // EXE-TGT-NVPTX64-NEXT: out1 = 6
-    // EXE-TGT-NVPTX64-NEXT: out2 = 7
+    // EXE-NEXT: out0 = 5{{$}}
+    // EXE-NEXT: out1 = 6{{$}}
+    // EXE-NEXT: out2 = 7{{$}}
     printf("out0 = %d\n", out0);
     printf("out1 = %d\n", out1);
     printf("out2 = %d\n", out2);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // This is the same as the previous test except the outer acc loop is now
   // combined with the enclosing acc parallel.  Thus, out1's reduction on the
@@ -3452,9 +3301,6 @@ int main() {
   // Also, the explicit copy has been replaced with copyin, which still
   // shouldn't have any observable effect.
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int out0 = 5;
@@ -3623,24 +3469,13 @@ int main() {
     // PRT-NEXT: printf
     // PRT-NEXT: printf
     // PRT-NEXT: printf
-    //        EXE-HOST-NEXT: out0 = 5
-    //        EXE-HOST-NEXT: out1 = 22
-    //        EXE-HOST-NEXT: out2 = 7
-    //  EXE-TGT-X86_64-NEXT: out0 = 5
-    //  EXE-TGT-X86_64-NEXT: out1 = 22
-    //  EXE-TGT-X86_64-NEXT: out2 = 7
-    // EXE-TGT-PPC64LE-NEXT: out0 = 5
-    // EXE-TGT-PPC64LE-NEXT: out1 = 22
-    // EXE-TGT-PPC64LE-NEXT: out2 = 7
-    // EXE-TGT-NVPTX64-NEXT: out0 = 5
-    // EXE-TGT-NVPTX64-NEXT: out1 = 22
-    // EXE-TGT-NVPTX64-NEXT: out2 = 7
+    // EXE-NEXT: out0 = 5{{$}}
+    // EXE-NEXT: out1 = 22{{$}}
+    // EXE-NEXT: out2 = 7{{$}}
     printf("out0 = %d\n", out0);
     printf("out1 = %d\n", out1);
     printf("out2 = %d\n", out2);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //----------------------------------------------------------------------------
   // Check within accelerator routines.
@@ -3919,9 +3754,6 @@ static void withinGangFn(int param) {
   // worker, vector, and implicit gang.
   //----------------------------------------------------------------------------
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: float f = -7;
@@ -3960,35 +3792,18 @@ static void withinGangFn(int param) {
     }
     // PRT-NEXT: {{TGT_PRINTF|printf}}
     // PRT-NEXT: {{TGT_PRINTF|printf}}
-    //        EXE-HOST-DAG: withinGangFn: worker, vector, and implicit gang: f = {{-21.0|-7.0}}{{$}}
-    //  EXE-TGT-X86_64-DAG: withinGangFn: worker, vector, and implicit gang: f = {{-21.0|-7.0}}{{$}}
-    // EXE-TGT-PPC64LE-DAG: withinGangFn: worker, vector, and implicit gang: f = {{-21.0|-7.0}}{{$}}
-    // EXE-TGT-NVPTX64-DAG: withinGangFn: worker, vector, and implicit gang: f = {{-21.0|-7.0}}{{$}}
-    //        EXE-HOST-DAG: withinGangFn: worker, vector, and implicit gang: f = {{-21.0|-63.0}}{{$}}
-    //  EXE-TGT-X86_64-DAG: withinGangFn: worker, vector, and implicit gang: f = {{-21.0|-63.0}}{{$}}
-    // EXE-TGT-PPC64LE-DAG: withinGangFn: worker, vector, and implicit gang: f = {{-21.0|-63.0}}{{$}}
-    // EXE-TGT-NVPTX64-DAG: withinGangFn: worker, vector, and implicit gang: f = {{-21.0|-63.0}}{{$}}
-    //        EXE-HOST-DAG: withinGangFn: worker, vector, and implicit gang: param = {{7|3}}{{$}}
-    //  EXE-TGT-X86_64-DAG: withinGangFn: worker, vector, and implicit gang: param = {{7|3}}{{$}}
-    // EXE-TGT-PPC64LE-DAG: withinGangFn: worker, vector, and implicit gang: param = {{7|3}}{{$}}
-    // EXE-TGT-NVPTX64-DAG: withinGangFn: worker, vector, and implicit gang: param = {{7|3}}{{$}}
-    //        EXE-HOST-DAG: withinGangFn: worker, vector, and implicit gang: param = {{7|11}}{{$}}
-    //  EXE-TGT-X86_64-DAG: withinGangFn: worker, vector, and implicit gang: param = {{7|11}}{{$}}
-    // EXE-TGT-PPC64LE-DAG: withinGangFn: worker, vector, and implicit gang: param = {{7|11}}{{$}}
-    // EXE-TGT-NVPTX64-DAG: withinGangFn: worker, vector, and implicit gang: param = {{7|11}}{{$}}
+    // EXE-TGT-USE-STDIO-DAG: withinGangFn: worker, vector, and implicit gang: f = {{-21.0|-7.0}}{{$}}
+    // EXE-TGT-USE-STDIO-DAG: withinGangFn: worker, vector, and implicit gang: f = {{-21.0|-63.0}}{{$}}
+    // EXE-TGT-USE-STDIO-DAG: withinGangFn: worker, vector, and implicit gang: param = {{7|3}}{{$}}
+    // EXE-TGT-USE-STDIO-DAG: withinGangFn: worker, vector, and implicit gang: param = {{7|11}}{{$}}
     TGT_PRINTF("withinGangFn: worker, vector, and implicit gang: f = %.1f\n", f);
     TGT_PRINTF("withinGangFn: worker, vector, and implicit gang: param = %d\n", param);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //----------------------------------------------------------------------------
   // gang, worker, vector, and separate nested loops.
   //----------------------------------------------------------------------------
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: local = 3;
@@ -4044,18 +3859,10 @@ static void withinGangFn(int param) {
       }
     }
     // PRT-NEXT: {{TGT_PRINTF|printf}}
-    //        EXE-HOST-DAG: withinGangFn: gang, worker, vector, and separate nested loops: local = {{11|3}}{{$}}
-    //  EXE-TGT-X86_64-DAG: withinGangFn: gang, worker, vector, and separate nested loops: local = {{11|3}}{{$}}
-    // EXE-TGT-PPC64LE-DAG: withinGangFn: gang, worker, vector, and separate nested loops: local = {{11|3}}{{$}}
-    // EXE-TGT-NVPTX64-DAG: withinGangFn: gang, worker, vector, and separate nested loops: local = {{11|3}}{{$}}
-    //        EXE-HOST-DAG: withinGangFn: gang, worker, vector, and separate nested loops: local = {{11|19}}{{$}}
-    //  EXE-TGT-X86_64-DAG: withinGangFn: gang, worker, vector, and separate nested loops: local = {{11|19}}{{$}}
-    // EXE-TGT-PPC64LE-DAG: withinGangFn: gang, worker, vector, and separate nested loops: local = {{11|19}}{{$}}
-    // EXE-TGT-NVPTX64-DAG: withinGangFn: gang, worker, vector, and separate nested loops: local = {{11|19}}{{$}}
+    // EXE-TGT-USE-STDIO-DAG: withinGangFn: gang, worker, vector, and separate nested loops: local = {{11|3}}{{$}}
+    // EXE-TGT-USE-STDIO-DAG: withinGangFn: gang, worker, vector, and separate nested loops: local = {{11|19}}{{$}}
     TGT_PRINTF("withinGangFn: gang, worker, vector, and separate nested loops: local = %d\n", local);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 } // PRT-NEXT: }
 
 //==============================================================================
@@ -4308,9 +4115,6 @@ static void withinWorkerFn(int param) {
   // worker and vector.
   //----------------------------------------------------------------------------
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: float f = -7;
@@ -4348,35 +4152,18 @@ static void withinWorkerFn(int param) {
     }
     // PRT-NEXT: {{TGT_PRINTF|printf}}
     // PRT-NEXT: {{TGT_PRINTF|printf}}
-    //        EXE-HOST-DAG: withinWorkerFn: worker and vector: f = -63.0{{$}}
-    //  EXE-TGT-X86_64-DAG: withinWorkerFn: worker and vector: f = -63.0{{$}}
-    // EXE-TGT-PPC64LE-DAG: withinWorkerFn: worker and vector: f = -63.0{{$}}
-    // EXE-TGT-NVPTX64-DAG: withinWorkerFn: worker and vector: f = -63.0{{$}}
-    //        EXE-HOST-DAG: withinWorkerFn: worker and vector: f = -63.0{{$}}
-    //  EXE-TGT-X86_64-DAG: withinWorkerFn: worker and vector: f = -63.0{{$}}
-    // EXE-TGT-PPC64LE-DAG: withinWorkerFn: worker and vector: f = -63.0{{$}}
-    // EXE-TGT-NVPTX64-DAG: withinWorkerFn: worker and vector: f = -63.0{{$}}
-    //        EXE-HOST-DAG: withinWorkerFn: worker and vector: param = 11{{$}}
-    //  EXE-TGT-X86_64-DAG: withinWorkerFn: worker and vector: param = 11{{$}}
-    // EXE-TGT-PPC64LE-DAG: withinWorkerFn: worker and vector: param = 11{{$}}
-    // EXE-TGT-NVPTX64-DAG: withinWorkerFn: worker and vector: param = 11{{$}}
-    //        EXE-HOST-DAG: withinWorkerFn: worker and vector: param = 11{{$}}
-    //  EXE-TGT-X86_64-DAG: withinWorkerFn: worker and vector: param = 11{{$}}
-    // EXE-TGT-PPC64LE-DAG: withinWorkerFn: worker and vector: param = 11{{$}}
-    // EXE-TGT-NVPTX64-DAG: withinWorkerFn: worker and vector: param = 11{{$}}
+    // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: worker and vector: f = -63.0{{$}}
+    // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: worker and vector: f = -63.0{{$}}
+    // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: worker and vector: param = 11{{$}}
+    // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: worker and vector: param = 11{{$}}
     TGT_PRINTF("withinWorkerFn: worker and vector: f = %.1f\n", f);
     TGT_PRINTF("withinWorkerFn: worker and vector: param = %d\n", param);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //----------------------------------------------------------------------------
   // worker, vector, and separate nested loops.
   //----------------------------------------------------------------------------
 
-  // FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: local = 3;
@@ -4415,18 +4202,10 @@ static void withinWorkerFn(int param) {
         local += 2;
     }
     // PRT-NEXT: {{TGT_PRINTF|printf}}
-    //        EXE-HOST-DAG: withinWorkerFn: worker, vector, and separate nested loops: local = 11{{$}}
-    //  EXE-TGT-X86_64-DAG: withinWorkerFn: worker, vector, and separate nested loops: local = 11{{$}}
-    // EXE-TGT-PPC64LE-DAG: withinWorkerFn: worker, vector, and separate nested loops: local = 11{{$}}
-    // EXE-TGT-NVPTX64-DAG: withinWorkerFn: worker, vector, and separate nested loops: local = 11{{$}}
-    //        EXE-HOST-DAG: withinWorkerFn: worker, vector, and separate nested loops: local = 11{{$}}
-    //  EXE-TGT-X86_64-DAG: withinWorkerFn: worker, vector, and separate nested loops: local = 11{{$}}
-    // EXE-TGT-PPC64LE-DAG: withinWorkerFn: worker, vector, and separate nested loops: local = 11{{$}}
-    // EXE-TGT-NVPTX64-DAG: withinWorkerFn: worker, vector, and separate nested loops: local = 11{{$}}
+    // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: worker, vector, and separate nested loops: local = 11{{$}}
+    // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: worker, vector, and separate nested loops: local = 11{{$}}
     TGT_PRINTF("withinWorkerFn: worker, vector, and separate nested loops: local = %d\n", local);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 } // PRT-NEXT: }
 
 //==============================================================================

@@ -72,9 +72,6 @@ int main() {
   // EXE-NOT: {{.}}
   printf("acc loop clause combinations without nesting\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCParallelDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -377,8 +374,6 @@ int main() {
     for (int i = 0; i < 2; ++i)
       TGT_PRINTF("acc loop auto gang without nesting: %d\n", i);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // Repeat for acc parallel loop.
 
@@ -470,9 +465,6 @@ int main() {
   //   EXE-NOT: {{.}}
   printf("acc parallel loop worker without nesting\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCParallelLoopDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -514,8 +506,6 @@ int main() {
   #pragma acc parallel loop num_gangs(2) num_workers(2) worker
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("acc parallel loop worker without nesting: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop vector without nesting\n"
   // PRT-LABEL: printf("acc parallel loop vector without nesting\n");
@@ -653,9 +643,6 @@ int main() {
   //   EXE-NOT: {{.}}
   printf("acc parallel loop gang worker without nesting\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCParallelLoopDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -700,8 +687,6 @@ int main() {
   #pragma acc parallel loop num_gangs(2) num_workers(2) gang worker
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("acc parallel loop gang worker without nesting: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop gang vector without nesting\n"
   // PRT-LABEL: printf("acc parallel loop gang vector without nesting\n");
@@ -764,9 +749,6 @@ int main() {
   //   EXE-NOT: {{.}}
   printf("acc parallel loop worker vector without nesting\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCParallelLoopDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -820,8 +802,6 @@ int main() {
   #pragma acc parallel loop num_gangs(2) num_workers(2) vector_length(2) worker vector
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("acc parallel loop worker vector without nesting: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop gang worker vector without nesting\n"
   // PRT-LABEL: printf("acc parallel loop gang worker vector without nesting\n");
@@ -830,9 +810,6 @@ int main() {
   //   EXE-NOT: {{.}}
   printf("acc parallel loop gang worker vector without nesting\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCParallelLoopDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -889,8 +866,6 @@ int main() {
   #pragma acc parallel loop num_gangs(2) num_workers(2) vector_length(2) gang worker vector
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("acc parallel loop gang worker vector without nesting: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop gang auto without nesting\n"
   // PRT-LABEL: printf("acc parallel loop gang auto without nesting\n");
@@ -947,9 +922,6 @@ int main() {
   // EXE-NOT: {{.}}
   printf("acc loop clause enclosing acc loop\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // DMP:      ACCParallelDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -1223,8 +1195,6 @@ int main() {
         TGT_PRINTF("acc loop auto gang enclosing acc loop: %d, %d\n", i, j);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // Repeat for acc parallel loop.
 
@@ -1295,9 +1265,6 @@ int main() {
   // EXE-NOT: {{.}}
   printf("acc parallel loop worker enclosing acc loop\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // DMP:      ACCParallelLoopDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -1357,8 +1324,6 @@ int main() {
       // EXE-TGT-USE-STDIO-DAG: {{^}}acc parallel loop worker enclosing acc loop: 1, 1{{$}}
       TGT_PRINTF("acc parallel loop worker enclosing acc loop: %d, %d\n", i, j);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // DMP-LABEL: StringLiteral {{.*}} "acc parallel loop vector enclosing acc loop\n"
   // PRT-LABEL: printf("acc parallel loop vector enclosing acc loop\n");
@@ -1620,9 +1585,6 @@ int main() {
   // EXE-NOT: {{.}}
   printf("acc loop clause enclosed by acc loop\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // DMP:      ACCParallelDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -1896,8 +1858,6 @@ int main() {
         TGT_PRINTF("acc loop gang auto enclosed by acc loop: %d, %d\n", i, j);
     } // PRT-NEXT: }
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // Repeat for acc parallel loop.
 
@@ -1964,9 +1924,6 @@ int main() {
   // EXE-NOT: {{.}}
   printf("acc loop worker enclosed by acc parallel loop\n");
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // DMP:      ACCParallelLoopDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 2
@@ -2026,8 +1983,6 @@ int main() {
       // EXE-TGT-USE-STDIO-DAG: {{^}}acc loop worker enclosed by acc parallel loop: 1, 1{{$}}
       TGT_PRINTF("acc loop worker enclosed by acc parallel loop: %d, %d\n", i, j);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // DMP-LABEL: StringLiteral {{.*}} "acc loop vector enclosed by acc parallel loop\n"
   // PRT-LABEL: printf("acc loop vector enclosed by acc parallel loop\n");
@@ -3508,9 +3463,6 @@ void withinGangFn() {
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("withinGangFn: orphaned acc loop gang without nesting: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCWorkerClause
   //  DMP-NOT:     <implicit>
@@ -3533,8 +3485,6 @@ void withinGangFn() {
   #pragma acc loop worker
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("withinGangFn: orphaned acc loop worker without nesting: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCVectorClause
@@ -3601,9 +3551,6 @@ void withinGangFn() {
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("withinGangFn: orphaned acc loop auto without nesting: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCGangClause
   //  DMP-NOT:     <implicit>
@@ -3627,8 +3574,6 @@ void withinGangFn() {
   #pragma acc loop gang worker
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("withinGangFn: orphaned acc loop gang worker without nesting: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCGangClause
@@ -3654,9 +3599,6 @@ void withinGangFn() {
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("withinGangFn: orphaned acc loop gang vector without nesting: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCWorkerClause
   //  DMP-NOT:     <implicit>
@@ -3680,12 +3622,7 @@ void withinGangFn() {
   #pragma acc loop worker vector
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("withinGangFn: orphaned acc loop worker vector without nesting: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCGangClause
   //  DMP-NOT:     <implicit>
@@ -3711,8 +3648,6 @@ void withinGangFn() {
   #pragma acc loop gang worker vector
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("withinGangFn: orphaned acc loop gang worker vector without nesting: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCGangClause
@@ -3781,9 +3716,6 @@ void withinGangFn() {
       TGT_PRINTF("withinGangFn: orphaned acc loop gang enclosing acc loop: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCWorkerClause
   //  DMP-NOT:     <implicit>
@@ -3824,8 +3756,6 @@ void withinGangFn() {
     for (int j = 0; j < 2; ++j)
       TGT_PRINTF("withinGangFn: orphaned acc loop worker enclosing acc loop: %d, %d\n", i, j);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCVectorClause
@@ -4035,9 +3965,6 @@ void withinGangFn() {
       TGT_PRINTF("withinGangFn: acc loop gang enclosed by orphaned acc loop: %d, %d\n", i, j);
   } // PRT-NEXT: }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
@@ -4081,8 +4008,6 @@ void withinGangFn() {
     for (int j = 0; j < 2; ++j)
       TGT_PRINTF("withinGangFn: acc loop worker enclosed by orphaned acc loop: %d, %d\n", i, j);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
@@ -4699,9 +4624,6 @@ void withinWorkerFn() {
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("withinWorkerFn: orphaned acc loop without nesting: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCWorkerClause
   //  DMP-NOT:     <implicit>
@@ -4725,8 +4647,6 @@ void withinWorkerFn() {
   #pragma acc loop worker
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("withinWorkerFn: orphaned acc loop worker without nesting: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCVectorClause
@@ -4794,9 +4714,6 @@ void withinWorkerFn() {
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("withinWorkerFn: orphaned acc loop auto without nesting: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCWorkerClause
   //  DMP-NOT:     <implicit>
@@ -4821,8 +4738,6 @@ void withinWorkerFn() {
   #pragma acc loop worker vector
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("withinWorkerFn: orphaned acc loop worker vector without nesting: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCWorkerClause

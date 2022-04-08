@@ -161,9 +161,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, gang: after loop: 99
     TGT_PRINTF("parallel-local loop-private scalar, gang: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCPrivateClause
@@ -195,8 +192,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, worker: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, worker: after loop: 99
     TGT_PRINTF("parallel-local loop-private scalar, worker: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCVectorClause
@@ -230,9 +225,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, vector: after loop: 99
     TGT_PRINTF("parallel-local loop-private scalar, vector: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
@@ -265,8 +257,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, worker vector: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private scalar, worker vector: after loop: 99
     TGT_PRINTF("parallel-local loop-private scalar, worker vector: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
   } // PRT-NEXT: }
 
   //............................................................................
@@ -412,9 +402,6 @@ int main() {
     TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, gang: after loop: %d\n", i);
   } // PRT-NEXT: }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int i = 99;
@@ -465,8 +452,6 @@ int main() {
     // EXE-TGT-USE-STDIO-NEXT: parallel-would-be-firstprivate loop-private scalar, worker: after loop: 99
     TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, worker: after loop: %d\n", i);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // PRT-NEXT: {
   {
@@ -519,9 +504,6 @@ int main() {
     TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, vector: after loop: %d\n", i);
   } // PRT-NEXT: }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int i = 99;
@@ -574,8 +556,6 @@ int main() {
     // EXE-TGT-USE-STDIO-NEXT: parallel-would-be-firstprivate loop-private scalar, worker vector: after loop: 99
     TGT_PRINTF("parallel-would-be-firstprivate loop-private scalar, worker vector: after loop: %d\n", i);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //............................................................................
   // Now variables are declared private on the "acc loop" but are also
@@ -703,9 +683,6 @@ int main() {
       // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, gang: after loop: 100, 88
       TGT_PRINTF("parallel-firstprivate loop-private scalar, gang: after loop: %d, %d\n", i, j);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
       //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCWorkerClause
       // DMP-NEXT:   ACCPrivateClause
@@ -739,8 +716,6 @@ int main() {
       // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, worker: after loop: 100, 88
       // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, worker: after loop: 100, 88
       TGT_PRINTF("parallel-firstprivate loop-private scalar, worker: after loop: %d, %d\n", i, j);
-// PRT-SRC-NEXT: #endif
-#endif
 
       //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCVectorClause
@@ -808,9 +783,6 @@ int main() {
       // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, vector: after loop: 100, 88
       TGT_PRINTF("parallel-firstprivate loop-private scalar, vector: after loop: %d, %d\n", i, j);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
       //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCWorkerClause
       // DMP-NEXT:   ACCVectorClause
@@ -877,8 +849,6 @@ int main() {
       // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, worker vector: after loop: 100, 88
       // EXE-TGT-USE-STDIO-DAG: parallel-firstprivate loop-private scalar, worker vector: after loop: 100, 88
       TGT_PRINTF("parallel-firstprivate loop-private scalar, worker vector: after loop: %d, %d\n", i, j);
-// PRT-SRC-NEXT: #endif
-#endif
 
       // PRT-NEXT: --j;
       --j;
@@ -1005,9 +975,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, gang: after loop: 99
     TGT_PRINTF("tentatively defined loop-private scalar, gang: after loop: %d\n", tentativeDef);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCPrivateClause
@@ -1039,8 +1006,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, worker: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, worker: after loop: 99
     TGT_PRINTF("tentatively defined loop-private scalar, worker: after loop: %d\n", tentativeDef);
-// PRT-SRC-NEXT: #endif
-#endif
 
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCVectorClause
@@ -1074,9 +1039,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, vector: after loop: 99
     TGT_PRINTF("tentatively defined loop-private scalar, vector: after loop: %d\n", tentativeDef);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
@@ -1109,8 +1071,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, worker vector: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: tentatively defined loop-private scalar, worker vector: after loop: 99
     TGT_PRINTF("tentatively defined loop-private scalar, worker vector: after loop: %d\n", tentativeDef);
-// PRT-SRC-NEXT: #endif
-#endif
   } // PRT-NEXT: }
 
   //............................................................................
@@ -1247,9 +1207,6 @@ int main() {
     TGT_PRINTF("tentatively defined loop-private scalar (combined directive), gang: after loop: %d\n", tentativeDef);
   } // PRT-NEXT: }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     //       DMP: ACCParallelLoopDirective
@@ -1297,8 +1254,6 @@ int main() {
     // EXE-TGT-USE-STDIO-NEXT: tentatively defined loop-private scalar (combined directive), worker: after loop: 99
     TGT_PRINTF("tentatively defined loop-private scalar (combined directive), worker: after loop: %d\n", tentativeDef);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // PRT-NEXT: {
   {
@@ -1348,9 +1303,6 @@ int main() {
     TGT_PRINTF("tentatively defined loop-private scalar (combined directive), vector: after loop: %d\n", tentativeDef);
   } // PRT-NEXT: }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     //       DMP: ACCParallelLoopDirective
@@ -1400,8 +1352,6 @@ int main() {
     // EXE-TGT-USE-STDIO-NEXT: tentatively defined loop-private scalar (combined directive), worker vector: after loop: 99
     TGT_PRINTF("tentatively defined loop-private scalar (combined directive), worker vector: after loop: %d\n", tentativeDef);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //............................................................................
   // Check private for loop control variable that is declared not assigned in
@@ -1507,9 +1457,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, gang: after loop: 99
     TGT_PRINTF("parallel-local loop-private declared loop control, gang: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCPrivateClause
@@ -1539,8 +1486,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, worker: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, worker: after loop: 99
     TGT_PRINTF("parallel-local loop-private declared loop control, worker: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCVectorClause
@@ -1572,9 +1517,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, vector: after loop: 99
     TGT_PRINTF("parallel-local loop-private declared loop control, vector: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
@@ -1605,8 +1547,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, worker vector: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private declared loop control, worker vector: after loop: 99
     TGT_PRINTF("parallel-local loop-private declared loop control, worker vector: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
   } // PRT-NEXT: }
 
   //............................................................................
@@ -1739,9 +1679,6 @@ int main() {
     TGT_PRINTF("parallel-firstprivate loop-private declared loop control, gang: after loop: %d\n", i);
   } // PRT-NEXT: }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int i = 99;
@@ -1789,8 +1726,6 @@ int main() {
     // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private declared loop control, worker: after loop: 99
     TGT_PRINTF("parallel-firstprivate loop-private declared loop control, worker: after loop: %d\n", i);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // PRT-NEXT: {
   {
@@ -1840,9 +1775,6 @@ int main() {
     TGT_PRINTF("parallel-firstprivate loop-private declared loop control, vector: after loop: %d\n", i);
   } // PRT-NEXT: }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int i = 99;
@@ -1892,8 +1824,6 @@ int main() {
     // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private declared loop control, worker vector: after loop: 99
     TGT_PRINTF("parallel-firstprivate loop-private declared loop control, worker vector: after loop: %d\n", i);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //............................................................................
   // Check private for loop control variable that is assigned not declared in
@@ -1999,9 +1929,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, gang: after loop: 99
     TGT_PRINTF("parallel-local loop-private assigned loop control, gang: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCPrivateClause
@@ -2031,8 +1958,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, worker: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, worker: after loop: 99
     TGT_PRINTF("parallel-local loop-private assigned loop control, worker: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCVectorClause
@@ -2091,9 +2016,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, vector: after loop: 99
     TGT_PRINTF("parallel-local loop-private assigned loop control, vector: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
@@ -2151,8 +2073,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, worker vector: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: parallel-local loop-private assigned loop control, worker vector: after loop: 99
     TGT_PRINTF("parallel-local loop-private assigned loop control, worker vector: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
   } // PRT-NEXT: }
 
   //............................................................................
@@ -2293,9 +2213,6 @@ int main() {
     TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, gang: after loop: %d\n", i);
   } // PRT-NEXT: }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int i = 99;
@@ -2351,8 +2268,6 @@ int main() {
     // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private assigned loop control, worker: after loop: 99
     TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, worker: after loop: %d\n", i);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // PRT-NEXT: {
   {
@@ -2429,9 +2344,6 @@ int main() {
     TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, vector: after loop: %d\n", i);
   } // PRT-NEXT: }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT-NEXT: int i = 99;
@@ -2508,8 +2420,6 @@ int main() {
     // EXE-TGT-USE-STDIO-NEXT: parallel-firstprivate loop-private assigned loop control, worker vector: after loop: 99
     TGT_PRINTF("parallel-firstprivate loop-private assigned loop control, worker vector: after loop: %d\n", i);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //............................................................................
   // Check multiple privates in same clause and different clauses, including
@@ -2646,9 +2556,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, gang: after loop: i=99, j=88, k=77
     TGT_PRINTF("multiple privates on acc loop, gang: after loop: i=%d, j=%d, k=%d\n", i, j, k);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCPrivateClause
@@ -2686,8 +2593,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, worker: after loop: i=99, j=88, k=77
     // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, worker: after loop: i=99, j=88, k=77
     TGT_PRINTF("multiple privates on acc loop, worker: after loop: i=%d, j=%d, k=%d\n", i, j, k);
-// PRT-SRC-NEXT: #endif
-#endif
 
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCVectorClause
@@ -2759,9 +2664,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, vector: after loop: i=99, j=88, k=77
     TGT_PRINTF("multiple privates on acc loop, vector: after loop: i=%d, j=%d, k=%d\n", i, j, k);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
@@ -2832,8 +2734,6 @@ int main() {
     // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, worker vector: after loop: i=99, j=88, k=77
     // EXE-TGT-USE-STDIO-DAG: multiple privates on acc loop, worker vector: after loop: i=99, j=88, k=77
     TGT_PRINTF("multiple privates on acc loop, worker vector: after loop: i=%d, j=%d, k=%d\n", i, j, k);
-// PRT-SRC-NEXT: #endif
-#endif
   } // PRT-NEXT: }
 
   //............................................................................
@@ -3005,9 +2905,6 @@ int main() {
     TGT_PRINTF("multiple privates on acc parallel loop, gang: after loop: i=%d, j=%d, k=%d\n", i, j, k);
   } // PRT-NEXT: }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT: int i = 99;
@@ -3070,8 +2967,6 @@ int main() {
     // EXE-TGT-USE-STDIO-NEXT: multiple privates on acc parallel loop, worker: after loop: i=99, j=88, k=77
     TGT_PRINTF("multiple privates on acc parallel loop, worker: after loop: i=%d, j=%d, k=%d\n", i, j, k);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   // PRT-NEXT: {
   {
@@ -3168,9 +3063,6 @@ int main() {
     TGT_PRINTF("multiple privates on acc parallel loop, vector: after loop: i=%d, j=%d, k=%d\n", i, j, k);
   } // PRT-NEXT: }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   // PRT-NEXT: {
   {
     // PRT: int i = 99;
@@ -3267,8 +3159,6 @@ int main() {
     // EXE-TGT-USE-STDIO-NEXT: multiple privates on acc parallel loop, worker vector: after loop: i=99, j=88, k=77
     TGT_PRINTF("multiple privates on acc parallel loop, worker vector: after loop: i=%d, j=%d, k=%d\n", i, j, k);
   } // PRT-NEXT: }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //............................................................................
   // Check private clauses within accelerator routines.
@@ -3417,9 +3307,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private scalar, gang: after loop: 99
     TGT_PRINTF("withinGangFn: parallel-local loop-private scalar, gang: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCPrivateClause
@@ -3451,8 +3338,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private scalar, worker: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private scalar, worker: after loop: 99
     TGT_PRINTF("withinGangFn: parallel-local loop-private scalar, worker: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCVectorClause
@@ -3486,9 +3371,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private scalar, vector: after loop: 99
     TGT_PRINTF("withinGangFn: parallel-local loop-private scalar, vector: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
@@ -3521,8 +3403,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private scalar, worker vector: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private scalar, worker vector: after loop: 99
     TGT_PRINTF("withinGangFn: parallel-local loop-private scalar, worker vector: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
   } // PRT-NEXT: }
 
   //............................................................................
@@ -3619,9 +3499,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private declared loop control, gang: after loop: 99
     TGT_PRINTF("withinGangFn: parallel-local loop-private declared loop control, gang: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCPrivateClause
@@ -3651,8 +3528,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private declared loop control, worker: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private declared loop control, worker: after loop: 99
     TGT_PRINTF("withinGangFn: parallel-local loop-private declared loop control, worker: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCVectorClause
@@ -3684,9 +3559,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private declared loop control, vector: after loop: 99
     TGT_PRINTF("withinGangFn: parallel-local loop-private declared loop control, vector: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
@@ -3717,8 +3589,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private declared loop control, worker vector: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private declared loop control, worker vector: after loop: 99
     TGT_PRINTF("withinGangFn: parallel-local loop-private declared loop control, worker vector: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
   } // PRT-NEXT: }
 
   //............................................................................
@@ -3815,9 +3685,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private assigned loop control, gang: after loop: 99
     TGT_PRINTF("withinGangFn: parallel-local loop-private assigned loop control, gang: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCPrivateClause
@@ -3847,8 +3714,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private assigned loop control, worker: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private assigned loop control, worker: after loop: 99
     TGT_PRINTF("withinGangFn: parallel-local loop-private assigned loop control, worker: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
      //      DMP: ACCLoopDirective
      // DMP-NEXT:   ACCVectorClause
@@ -3907,9 +3772,6 @@ void withinGangFn() {
      // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private assigned loop control, vector: after loop: 99
      TGT_PRINTF("withinGangFn: parallel-local loop-private assigned loop control, vector: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
      //      DMP: ACCLoopDirective
      // DMP-NEXT:   ACCWorkerClause
      // DMP-NEXT:   ACCVectorClause
@@ -3967,8 +3829,6 @@ void withinGangFn() {
      // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private assigned loop control, worker vector: after loop: 99
      // EXE-TGT-USE-STDIO-DAG: withinGangFn: parallel-local loop-private assigned loop control, worker vector: after loop: 99
      TGT_PRINTF("withinGangFn: parallel-local loop-private assigned loop control, worker vector: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
   } // PRT-NEXT: }
 
   //............................................................................
@@ -4096,9 +3956,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: multiple privates on acc loop, gang: after loop: i=99, j=88, k=77
     TGT_PRINTF("withinGangFn: multiple privates on acc loop, gang: after loop: i=%d, j=%d, k=%d\n", i, j, k);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCPrivateClause
@@ -4136,8 +3993,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: multiple privates on acc loop, worker: after loop: i=99, j=88, k=77
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: multiple privates on acc loop, worker: after loop: i=99, j=88, k=77
     TGT_PRINTF("withinGangFn: multiple privates on acc loop, worker: after loop: i=%d, j=%d, k=%d\n", i, j, k);
-// PRT-SRC-NEXT: #endif
-#endif
 
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCVectorClause
@@ -4209,9 +4064,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: multiple privates on acc loop, vector: after loop: i=99, j=88, k=77
     TGT_PRINTF("withinGangFn: multiple privates on acc loop, vector: after loop: i=%d, j=%d, k=%d\n", i, j, k);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
@@ -4282,8 +4134,6 @@ void withinGangFn() {
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: multiple privates on acc loop, worker vector: after loop: i=99, j=88, k=77
     // EXE-TGT-USE-STDIO-DAG: withinGangFn: multiple privates on acc loop, worker vector: after loop: i=99, j=88, k=77
     TGT_PRINTF("withinGangFn: multiple privates on acc loop, worker vector: after loop: i=%d, j=%d, k=%d\n", i, j, k);
-// PRT-SRC-NEXT: #endif
-#endif
   } // PRT-NEXT: }
 } // PRT-NEXT: }
 
@@ -4364,9 +4214,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private scalar, seq: after loop: 99
     TGT_PRINTF("withinWorkerFn: parallel-local loop-private scalar, seq: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCPrivateClause
@@ -4399,8 +4246,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private scalar, worker: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private scalar, worker: after loop: 99
     TGT_PRINTF("withinWorkerFn: parallel-local loop-private scalar, worker: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCVectorClause
@@ -4435,9 +4280,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private scalar, vector: after loop: 99
     TGT_PRINTF("withinWorkerFn: parallel-local loop-private scalar, vector: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
@@ -4471,8 +4313,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private scalar, worker vector: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private scalar, worker vector: after loop: 99
     TGT_PRINTF("withinWorkerFn: parallel-local loop-private scalar, worker vector: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
   } // PRT-NEXT: }
 
   //............................................................................
@@ -4540,9 +4380,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private declared loop control, seq: after loop: 99
     TGT_PRINTF("withinWorkerFn: parallel-local loop-private declared loop control, seq: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCPrivateClause
@@ -4573,8 +4410,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private declared loop control, worker: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private declared loop control, worker: after loop: 99
     TGT_PRINTF("withinWorkerFn: parallel-local loop-private declared loop control, worker: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCVectorClause
@@ -4607,9 +4442,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private declared loop control, vector: after loop: 99
     TGT_PRINTF("withinWorkerFn: parallel-local loop-private declared loop control, vector: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
@@ -4639,8 +4471,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private declared loop control, worker vector: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private declared loop control, worker vector: after loop: 99
     TGT_PRINTF("withinWorkerFn: parallel-local loop-private declared loop control, worker vector: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
   } // PRT-NEXT: }
 
   //............................................................................
@@ -4708,9 +4538,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private assigned loop control, seq: after loop: 99
     TGT_PRINTF("withinWorkerFn: parallel-local loop-private assigned loop control, seq: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCPrivateClause
@@ -4741,8 +4568,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private assigned loop control, worker: after loop: 99
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private assigned loop control, worker: after loop: 99
     TGT_PRINTF("withinWorkerFn: parallel-local loop-private assigned loop control, worker: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
 
      //      DMP: ACCLoopDirective
      // DMP-NEXT:   ACCVectorClause
@@ -4802,9 +4627,6 @@ void withinWorkerFn() {
      // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private assigned loop control, vector: after loop: 99
      TGT_PRINTF("withinWorkerFn: parallel-local loop-private assigned loop control, vector: after loop: %d\n", i);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
      //      DMP: ACCLoopDirective
      // DMP-NEXT:   ACCWorkerClause
      // DMP-NEXT:   ACCVectorClause
@@ -4863,8 +4685,6 @@ void withinWorkerFn() {
      // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private assigned loop control, worker vector: after loop: 99
      // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: parallel-local loop-private assigned loop control, worker vector: after loop: 99
      TGT_PRINTF("withinWorkerFn: parallel-local loop-private assigned loop control, worker vector: after loop: %d\n", i);
-// PRT-SRC-NEXT: #endif
-#endif
   } // PRT-NEXT: }
 
   //............................................................................
@@ -4955,9 +4775,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: multiple privates on acc loop, seq: after loop: i=99, j=88, k=77
     TGT_PRINTF("withinWorkerFn: multiple privates on acc loop, seq: after loop: i=%d, j=%d, k=%d\n", i, j, k);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCPrivateClause
@@ -4996,8 +4813,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: multiple privates on acc loop, worker: after loop: i=99, j=88, k=77
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: multiple privates on acc loop, worker: after loop: i=99, j=88, k=77
     TGT_PRINTF("withinWorkerFn: multiple privates on acc loop, worker: after loop: i=%d, j=%d, k=%d\n", i, j, k);
-// PRT-SRC-NEXT: #endif
-#endif
 
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCVectorClause
@@ -5070,9 +4885,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: multiple privates on acc loop, vector: after loop: i=99, j=88, k=77
     TGT_PRINTF("withinWorkerFn: multiple privates on acc loop, vector: after loop: i=%d, j=%d, k=%d\n", i, j, k);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCVectorClause
@@ -5144,8 +4956,6 @@ void withinWorkerFn() {
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: multiple privates on acc loop, worker vector: after loop: i=99, j=88, k=77
     // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: multiple privates on acc loop, worker vector: after loop: i=99, j=88, k=77
     TGT_PRINTF("withinWorkerFn: multiple privates on acc loop, worker vector: after loop: i=%d, j=%d, k=%d\n", i, j, k);
-// PRT-SRC-NEXT: #endif
-#endif
   } // PRT-NEXT: }
 } // PRT-NEXT: }
 

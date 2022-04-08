@@ -658,9 +658,6 @@ static void withinWorkerFn() {
   // worker vector loop.
   //----------------------------------------------------------------------------
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCWorkerClause
   //  DMP-NOT:     <implicit>
@@ -719,8 +716,6 @@ static void withinWorkerFn() {
   for (tentativeDef = 1; tentativeDef < 3; ++tentativeDef) {
     TGT_PRINTF("withinWorkerFn: acc loop worker vector: iteration %d\n", tentativeDef);
   }
-// PRT-SRC-NEXT: #endif
-#endif
 
   //----------------------------------------------------------------------------
   // auto->seq loop.
@@ -783,9 +778,6 @@ static void withinWorkerFn() {
   // worker loop.
   //----------------------------------------------------------------------------
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-// PRT-SRC-NEXT: #if !TGT_AMDGCN
-#if !TGT_AMDGCN
   //      DMP: ACCLoopDirective
   // DMP-NEXT:   ACCWorkerClause
   //  DMP-NOT:     <implicit>
@@ -816,8 +808,6 @@ static void withinWorkerFn() {
   for (tentativeDef = 1; tentativeDef < 3; ++tentativeDef) {
     TGT_PRINTF("withinWorkerFn: acc loop worker: iteration %d\n", tentativeDef);
   }
-// PRT-SRC-NEXT: #endif
-#endif
 } // PRT-NEXT: }
 
 //==============================================================================

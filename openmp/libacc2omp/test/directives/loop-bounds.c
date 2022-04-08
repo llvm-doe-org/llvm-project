@@ -332,8 +332,6 @@ static void withinWorkerFn() {
     i = 2;
   }
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: modify loop var in body: acc loop worker: 0{{$}}
   // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: modify loop var in body: acc loop worker: 1{{$}}
   // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: modify loop var in body: acc loop worker: 0{{$}}
@@ -347,10 +345,7 @@ static void withinWorkerFn() {
     TGT_PRINTF("withinWorkerFn: modify loop var in body: acc loop worker: %d\n", i);
     i = 2;
   }
-#endif
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: modify loop var in body: acc loop worker vector: 0{{$}}
   // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: modify loop var in body: acc loop worker vector: 1{{$}}
   // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: modify loop var in body: acc loop worker vector: 0{{$}}
@@ -364,7 +359,6 @@ static void withinWorkerFn() {
     TGT_PRINTF("withinWorkerFn: modify loop var in body: acc loop worker vector: %d\n", i);
     i = 2;
   }
-#endif
 
   //--------------------------------------------------
   // Make sure that an init!=0 or inc!=1 work correctly.
@@ -402,8 +396,6 @@ static void withinWorkerFn() {
   for (int j = 3; j > -2; j -= 2)
     TGT_PRINTF("withinWorkerFn: init!=0 and inc!=1: acc loop auto: %d\n", j);
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: init!=0 and inc!=1: acc loop worker: 3{{$}}
   // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: init!=0 and inc!=1: acc loop worker: 1{{$}}
   // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: init!=0 and inc!=1: acc loop worker: -1{{$}}
@@ -419,10 +411,7 @@ static void withinWorkerFn() {
   #pragma acc loop worker
   for (int j = 3; j > -2; j -= 2)
     TGT_PRINTF("withinWorkerFn: init!=0 and inc!=1: acc loop worker: %d\n", j);
-#endif
 
-// FIXME: amdgcn misbehaves sometimes for worker loops.
-#if !TGT_AMDGCN
   // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: init!=0 and inc!=1: acc loop worker vector: 3{{$}}
   // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: init!=0 and inc!=1: acc loop worker vector: 1{{$}}
   // EXE-TGT-USE-STDIO-DAG: withinWorkerFn: init!=0 and inc!=1: acc loop worker vector: -1{{$}}
@@ -438,7 +427,6 @@ static void withinWorkerFn() {
   #pragma acc loop worker vector
   for (int j = 3; j > -2; j -= 2)
     TGT_PRINTF("withinWorkerFn: init!=0 and inc!=1: acc loop worker vector: %d\n", j);
-#endif
 }
 
 //==============================================================================
