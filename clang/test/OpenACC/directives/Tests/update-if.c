@@ -15,10 +15,6 @@
 
 /* expected-error 0 {{}} */
 
-// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
-// issue is not limited to Clacc and is present upstream:
-/* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
-
 #include <stdio.h>
 
 #define setValues() setValues_(&s, &h, &d)

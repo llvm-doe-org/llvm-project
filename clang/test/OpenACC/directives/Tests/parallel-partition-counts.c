@@ -30,10 +30,6 @@
 // complains.
 /* nvptx64-note@__clang_cuda_device_functions.h:* 0+ {{used here}} */
 
-// FIXME: Clang produces spurious warning diagnostics for nvptx64 offload.  This
-// issue is not limited to Clacc and is present upstream:
-/* nvptx64-warning@*:* 0+ {{Linking two modules of different target triples}} */
-
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
