@@ -79,7 +79,18 @@ stages:
       "
       libomp :: atomic/kmp_atomic_float10_max_min.c
       libomp :: env/kmp_set_dispatch_buf.c
+      libomp :: worksharing/for/kmp_set_dispatch_buf.c
+      libomptarget :: nvptx64-nvidia-cuda :: mapping/map_back_race.cpp
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/info.c
+      libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/close_modifier.c
+      libomptarget :: nvptx64-nvidia-cuda-newDriver :: mapping/map_back_race.cpp
+      libomptarget :: nvptx64-nvidia-cuda-newDriver :: offloading/bug49334.cpp
+      libomptarget :: nvptx64-nvidia-cuda-newDriver :: unified_shared_memory/close_modifier.c
       libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu :: unified_shared_memory/close_modifier.c
+      libomptarget :: powerpc64le-ibm-linux-gnu-newDriver :: offloading/bug49334.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu-newDriver :: unified_shared_memory/close_modifier.c
       "
     LIT_XFAIL_NOT:
       "
@@ -107,7 +118,7 @@ stages:
     LIT_NPROC_DIVISOR: 1
     LIT_XFAIL:
       "
-      LLVM :: Bindings/Go/go.test
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/info.c
       "
     LIT_XFAIL_NOT:
       ""
@@ -166,9 +177,7 @@ stages:
     CPU_TRIPLE: "x86_64-pc-linux-gnu"
     CPU_COUNT:  4
     LIT_XFAIL:
-      "
-      LLVM :: Bindings/Go/go.test
-      "
+      ""
     LIT_XFAIL_NOT:
       ""
 
@@ -179,7 +188,6 @@ stages:
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=False
     LIT_XFAIL:
       "
-      LLVM :: Bindings/Go/go.test
       Clang :: Headers/wasm.c
       LLVM :: Analysis/CostModel/X86/interleaved-store-accesses-with-gaps.ll
       "
@@ -193,10 +201,11 @@ stages:
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Debug
     LIT_XFAIL:
       "
-      LLVM :: Bindings/Go/go.test
       libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
+      libomptarget :: x86_64-pc-linux-gnu :: unified_shared_memory/close_modifier.c
+      libomptarget :: x86_64-pc-linux-gnu-newDriver :: unified_shared_memory/close_modifier.c
       "
     LIT_XFAIL_NOT:
       ""
