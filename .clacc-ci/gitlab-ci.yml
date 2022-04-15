@@ -35,6 +35,10 @@ variables:
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
   LLVM_TARGETS_TO_BUILD: all
+  # check-all is supposed to include check-openmp.  However, D121276 broke that
+  # upstream.  D121647 was supposed to fix it but what landed didn't fix it.
+  # Until it gets fixed, work around it by running both.
+  CHECK_TARGETS: check-all check-openmp
   LIT_NPROC_DIVISOR: 1
 
 stages:
@@ -520,7 +524,7 @@ debug (build):
     - echo "$LIT_XFAIL_NOT"
     # Build test suite before running it so we can time those steps separately.
     - time LIT_FILTER_OUT=. LIT_OPTS=--allow-empty-runs
-      $NINJA -l `nproc` check-all
+      $NINJA -l `nproc` $CHECK_TARGETS
       |& tee $CI_PROJECT_DIR/check-all-build-log.txt
     # Check that no misconfiguration is quietly disabling key features and thus
     # tests.  For example, not adding the gitlab-runner account to the required
@@ -535,7 +539,7 @@ debug (build):
     # doesn't make sense to me, but it's how gitlab CI apparently works right
     # now.
     - tl=$CI_PROJECT_DIR/check-all-show-tests.txt
-    - LIT_OPTS=--show-tests $NINJA check-all > $tl 2>&1
+    - LIT_OPTS=--show-tests $NINJA $CHECK_TARGETS > $tl 2>&1
     - echo "$CPU_TRIPLE" "$CPU_COUNT" &&
       echo "$GPU_TRIPLE" "$GPU_COUNT"
     - echo "Test counts for libomptarget "'::'" $CPU_TRIPLE (expecting > 0):" &&
@@ -593,7 +597,7 @@ debug (build):
         --timeout 2400 -j `expr $NPROC / $LIT_NPROC_DIVISOR`
         --ignore-fail --xunit-xml-output $CI_PROJECT_DIR/check-all.xml
       "
-      $NINJA -l `nproc` check-all
+      $NINJA -l `nproc` $CHECK_TARGETS
       |& tee $CI_PROJECT_DIR/check-all-log.txt
     - "! grep -c \"'--ignore-fail' was specified\"
                  $CI_PROJECT_DIR/check-all-log.txt"
