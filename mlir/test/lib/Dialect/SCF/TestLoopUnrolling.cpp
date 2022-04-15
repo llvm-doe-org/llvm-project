@@ -30,9 +30,10 @@ static unsigned getNestingDepth(Operation *op) {
   return depth;
 }
 
-class TestLoopUnrollingPass
-    : public PassWrapper<TestLoopUnrollingPass, OperationPass<FuncOp>> {
-public:
+struct TestLoopUnrollingPass
+    : public PassWrapper<TestLoopUnrollingPass, OperationPass<>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestLoopUnrollingPass)
+
   StringRef getArgument() const final { return "test-loop-unrolling"; }
   StringRef getDescription() const final {
     return "Tests loop unrolling transformation";
@@ -52,9 +53,8 @@ public:
   }
 
   void runOnOperation() override {
-    FuncOp func = getOperation();
     SmallVector<scf::ForOp, 4> loops;
-    func.walk([&](scf::ForOp forOp) {
+    getOperation()->walk([&](scf::ForOp forOp) {
       if (getNestingDepth(forOp) == loopDepth)
         loops.push_back(forOp);
     });

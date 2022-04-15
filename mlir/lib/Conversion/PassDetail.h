@@ -12,6 +12,8 @@
 #include "mlir/Pass/Pass.h"
 
 #include "mlir/Conversion/GPUToROCDL/Runtimes.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/FunctionInterfaces.h"
 
 namespace mlir {
 class AffineDialect;

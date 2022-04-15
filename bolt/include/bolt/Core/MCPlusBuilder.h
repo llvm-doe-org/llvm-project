@@ -353,7 +353,7 @@ public:
   }
 
   virtual bool isUnconditionalBranch(const MCInst &Inst) const {
-    return Analysis->isUnconditionalBranch(Inst);
+    return Analysis->isUnconditionalBranch(Inst) && !isTailCall(Inst);
   }
 
   virtual bool isIndirectBranch(const MCInst &Inst) const {
@@ -511,22 +511,12 @@ public:
     return 0;
   }
 
-  virtual bool isADD64rr(const MCInst &Inst) const {
-    llvm_unreachable("not implemented");
-    return false;
-  }
-
   virtual bool isSUB(const MCInst &Inst) const {
     llvm_unreachable("not implemented");
     return false;
   }
 
   virtual bool isLEA64r(const MCInst &Inst) const {
-    llvm_unreachable("not implemented");
-    return false;
-  }
-
-  virtual bool isMOVSX64rm32(const MCInst &Inst) const {
     llvm_unreachable("not implemented");
     return false;
   }
@@ -1287,7 +1277,18 @@ public:
 
   /// Replace instruction with a shorter version that could be relaxed later
   /// if needed.
-  virtual bool shortenInstruction(MCInst &Inst) const {
+  virtual bool shortenInstruction(MCInst &Inst,
+                                  const MCSubtargetInfo &STI) const {
+    llvm_unreachable("not implemented");
+    return false;
+  }
+
+  /// Convert a move instruction into a conditional move instruction, given a
+  /// condition code.
+  virtual bool
+  convertMoveToConditionalMove(MCInst &Inst, unsigned CC,
+                               bool AllowStackMemOp = false,
+                               bool AllowBasePtrStackMemOp = false) const {
     llvm_unreachable("not implemented");
     return false;
   }

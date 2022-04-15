@@ -21,7 +21,9 @@ using namespace mlir;
 
 namespace {
 struct TestTensorTransforms
-    : public PassWrapper<TestTensorTransforms, OperationPass<FuncOp>> {
+    : public PassWrapper<TestTensorTransforms, OperationPass<>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestTensorTransforms)
+
   TestTensorTransforms() = default;
   TestTensorTransforms(const TestTensorTransforms &pass) : PassWrapper(pass) {}
 
@@ -50,14 +52,14 @@ struct TestTensorTransforms
 };
 } // namespace
 
-static void applySplitPaddingPatterns(FuncOp funcOp) {
-  RewritePatternSet patterns(funcOp.getContext());
+static void applySplitPaddingPatterns(Operation *rootOp) {
+  RewritePatternSet patterns(rootOp->getContext());
   tensor::populateSplitPaddingPatterns(patterns);
-  (void)applyPatternsAndFoldGreedily(funcOp, std::move(patterns));
+  (void)applyPatternsAndFoldGreedily(rootOp, std::move(patterns));
 }
 
-static void applyFoldConstantExtractSlicePatterns(FuncOp funcOp) {
-  RewritePatternSet patterns(funcOp.getContext());
+static void applyFoldConstantExtractSlicePatterns(Operation *rootOp) {
+  RewritePatternSet patterns(rootOp->getContext());
   tensor::ControlConstantExtractSliceFusionFn controlFn =
       [](tensor::ExtractSliceOp op) {
         if (!op.source().hasOneUse())
@@ -65,22 +67,19 @@ static void applyFoldConstantExtractSlicePatterns(FuncOp funcOp) {
 
         auto resultType = op.result().getType().cast<ShapedType>();
         constexpr int64_t kConstantFoldingMaxNumElements = 1024;
-        if (resultType.getNumElements() > kConstantFoldingMaxNumElements)
-          return false;
-
-        return true;
+        return resultType.getNumElements() <= kConstantFoldingMaxNumElements;
       };
 
   tensor::populateFoldConstantExtractSlicePatterns(patterns, controlFn);
-  (void)applyPatternsAndFoldGreedily(funcOp, std::move(patterns));
+  (void)applyPatternsAndFoldGreedily(rootOp, std::move(patterns));
 }
 
 void TestTensorTransforms::runOnOperation() {
-  FuncOp func = getOperation();
+  Operation *rootOp = getOperation();
   if (testSplitPaddingPatterns)
-    applySplitPaddingPatterns(func);
+    applySplitPaddingPatterns(rootOp);
   if (testFoldConstantExtractSlice)
-    applyFoldConstantExtractSlicePatterns(func);
+    applyFoldConstantExtractSlicePatterns(rootOp);
 }
 
 namespace mlir {

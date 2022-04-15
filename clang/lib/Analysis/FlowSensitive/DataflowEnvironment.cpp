@@ -49,7 +49,9 @@ llvm::DenseMap<K, V> intersectDenseMaps(const llvm::DenseMap<K, V> &Map1,
 }
 
 /// Returns true if and only if `Val1` is equivalent to `Val2`.
-static bool equivalentValues(QualType Type, Value *Val1, Value *Val2,
+static bool equivalentValues(QualType Type, Value *Val1,
+                             const Environment &Env1, Value *Val2,
+                             const Environment &Env2,
                              Environment::ValueModel &Model) {
   if (Val1 == Val2)
     return true;
@@ -60,7 +62,50 @@ static bool equivalentValues(QualType Type, Value *Val1, Value *Val2,
     return &IndVal1->getPointeeLoc() == &IndVal2->getPointeeLoc();
   }
 
-  return Model.compareEquivalent(Type, *Val1, *Val2);
+  return Model.compareEquivalent(Type, *Val1, Env1, *Val2, Env2);
+}
+
+/// Attempts to merge distinct values `Val1` and `Val1` in `Env1` and `Env2`,
+/// respectively, of the same type `Type`. Merging generally produces a single
+/// value that (soundly) approximates the two inputs, although the actual
+/// meaning depends on `Model`.
+static Value *mergeDistinctValues(QualType Type, Value *Val1, Environment &Env1,
+                                  Value *Val2, const Environment &Env2,
+                                  Environment::ValueModel &Model) {
+  // Join distinct boolean values preserving information about the constraints
+  // in the respective path conditions. Note: this construction can, in
+  // principle, result in exponential growth in the size of boolean values.
+  // Potential optimizations may be worth considering. For example, represent
+  // the flow condition of each environment using a bool atom and store, in
+  // `DataflowAnalysisContext`, a mapping of bi-conditionals between flow
+  // condition atoms and flow condition constraints. Something like:
+  // \code
+  //   FC1 <=> C1 ^ C2
+  //   FC2 <=> C2 ^ C3 ^ C4
+  //   FC3 <=> (FC1 v FC2) ^ C5
+  // \code
+  // Then, we can track dependencies between flow conditions (e.g. above `FC3`
+  // depends on `FC1` and `FC2`) and modify `flowConditionImplies` to construct
+  // a formula that includes the bi-conditionals for all flow condition atoms in
+  // the transitive set, before invoking the solver.
+  if (auto *Expr1 = dyn_cast<BoolValue>(Val1)) {
+    for (BoolValue *Constraint : Env1.getFlowConditionConstraints()) {
+      Expr1 = &Env1.makeAnd(*Expr1, *Constraint);
+    }
+    auto *Expr2 = cast<BoolValue>(Val2);
+    for (BoolValue *Constraint : Env2.getFlowConditionConstraints()) {
+      Expr2 = &Env1.makeAnd(*Expr2, *Constraint);
+    }
+    return &Env1.makeOr(*Expr1, *Expr2);
+  }
+
+  // FIXME: Consider destroying `MergedValue` immediately if `ValueModel::merge`
+  // returns false to avoid storing unneeded values in `DACtx`.
+  if (Value *MergedVal = Env1.createValue(Type))
+    if (Model.merge(Type, *Val1, Env1, *Val2, Env2, *MergedVal, Env1))
+      return MergedVal;
+
+  return nullptr;
 }
 
 /// Initializes a global storage value.
@@ -103,6 +148,99 @@ static void initGlobalVars(const Stmt &S, Environment &Env) {
   } else if (auto *E = dyn_cast<MemberExpr>(&S)) {
     initGlobalVar(*E->getMemberDecl(), Env);
   }
+}
+
+/// Returns constraints that represent the disjunction of `Constraints1` and
+/// `Constraints2`.
+///
+/// Requirements:
+///
+///  The elements of `Constraints1` and `Constraints2` must not be null.
+llvm::DenseSet<BoolValue *>
+joinConstraints(DataflowAnalysisContext *Context,
+                const llvm::DenseSet<BoolValue *> &Constraints1,
+                const llvm::DenseSet<BoolValue *> &Constraints2) {
+  // `(X ^ Y) v (X ^ Z)` is logically equivalent to `X ^ (Y v Z)`. Therefore, to
+  // avoid unnecessarily expanding the resulting set of constraints, we will add
+  // all common constraints of `Constraints1` and `Constraints2` directly and
+  // add a disjunction of the constraints that are not common.
+
+  llvm::DenseSet<BoolValue *> JoinedConstraints;
+
+  if (Constraints1.empty() || Constraints2.empty()) {
+    // Disjunction of empty set and non-empty set is represented as empty set.
+    return JoinedConstraints;
+  }
+
+  BoolValue *Val1 = nullptr;
+  for (BoolValue *Constraint : Constraints1) {
+    if (Constraints2.contains(Constraint)) {
+      // Add common constraints directly to `JoinedConstraints`.
+      JoinedConstraints.insert(Constraint);
+    } else if (Val1 == nullptr) {
+      Val1 = Constraint;
+    } else {
+      Val1 = &Context->getOrCreateConjunctionValue(*Val1, *Constraint);
+    }
+  }
+
+  BoolValue *Val2 = nullptr;
+  for (BoolValue *Constraint : Constraints2) {
+    // Common constraints are added to `JoinedConstraints` above.
+    if (Constraints1.contains(Constraint)) {
+      continue;
+    }
+    if (Val2 == nullptr) {
+      Val2 = Constraint;
+    } else {
+      Val2 = &Context->getOrCreateConjunctionValue(*Val2, *Constraint);
+    }
+  }
+
+  // An empty set of constraints (represented as a null value) is interpreted as
+  // `true` and `true v X` is logically equivalent to `true` so we need to add a
+  // constraint only if both `Val1` and `Val2` are not null.
+  if (Val1 != nullptr && Val2 != nullptr)
+    JoinedConstraints.insert(
+        &Context->getOrCreateDisjunctionValue(*Val1, *Val2));
+
+  return JoinedConstraints;
+}
+
+static void
+getFieldsFromClassHierarchy(QualType Type, bool IgnorePrivateFields,
+                            llvm::DenseSet<const FieldDecl *> &Fields) {
+  if (Type->isIncompleteType() || Type->isDependentType() ||
+      !Type->isRecordType())
+    return;
+
+  for (const FieldDecl *Field : Type->getAsRecordDecl()->fields()) {
+    if (IgnorePrivateFields &&
+        (Field->getAccess() == AS_private ||
+         (Field->getAccess() == AS_none && Type->getAsRecordDecl()->isClass())))
+      continue;
+    Fields.insert(Field);
+  }
+  if (auto *CXXRecord = Type->getAsCXXRecordDecl()) {
+    for (const CXXBaseSpecifier &Base : CXXRecord->bases()) {
+      // Ignore private fields (including default access in C++ classes) in
+      // base classes, because they are not visible in derived classes.
+      getFieldsFromClassHierarchy(Base.getType(), /*IgnorePrivateFields=*/true,
+                                  Fields);
+    }
+  }
+}
+
+/// Gets the set of all fields accesible from the type.
+///
+/// FIXME: Does not precisely handle non-virtual diamond inheritance. A single
+/// field decl will be modeled for all instances of the inherited field.
+static llvm::DenseSet<const FieldDecl *>
+getAccessibleObjectFields(QualType Type) {
+  llvm::DenseSet<const FieldDecl *> Fields;
+  // Don't ignore private fields for the class itself, only its super classes.
+  getFieldsFromClassHierarchy(Type, /*IgnorePrivateFields=*/false, Fields);
+  return Fields;
 }
 
 Environment::Environment(DataflowAnalysisContext &DACtx,
@@ -162,7 +300,7 @@ bool Environment::equivalentTo(const Environment &Other,
       return false;
     assert(It->second != nullptr);
 
-    if (!equivalentValues(Loc->getType(), Val, It->second, Model))
+    if (!equivalentValues(Loc->getType(), Val, *this, It->second, Other, Model))
       return false;
   }
 
@@ -208,20 +346,21 @@ LatticeJoinEffect Environment::join(const Environment &Other,
       continue;
     assert(It->second != nullptr);
 
-    if (equivalentValues(Loc->getType(), Val, It->second, Model)) {
+    if (equivalentValues(Loc->getType(), Val, *this, It->second, Other,
+                         Model)) {
       LocToVal.insert({Loc, Val});
       continue;
     }
 
-    // FIXME: Consider destroying `MergedValue` immediately if
-    // `ValueModel::merge` returns false to avoid storing unneeded values in
-    // `DACtx`.
-    if (Value *MergedVal = createValue(Loc->getType()))
-      if (Model.merge(Loc->getType(), *Val, *It->second, *MergedVal, *this))
-        LocToVal.insert({Loc, MergedVal});
+    if (Value *MergedVal = mergeDistinctValues(Loc->getType(), Val, *this,
+                                               It->second, Other, Model))
+      LocToVal.insert({Loc, MergedVal});
   }
   if (OldLocToVal.size() != LocToVal.size())
     Effect = LatticeJoinEffect::Changed;
+
+  FlowConditionConstraints = joinConstraints(DACtx, FlowConditionConstraints,
+                                             Other.FlowConditionConstraints);
 
   return Effect;
 }
@@ -232,7 +371,7 @@ StorageLocation &Environment::createStorageLocation(QualType Type) {
     // FIXME: Explore options to avoid eager initialization of fields as some of
     // them might not be needed for a particular analysis.
     llvm::DenseMap<const ValueDecl *, StorageLocation *> FieldLocs;
-    for (const FieldDecl *Field : Type->getAsRecordDecl()->fields()) {
+    for (const FieldDecl *Field : getAccessibleObjectFields(Type)) {
       FieldLocs.insert({Field, &createStorageLocation(Field->getType())});
     }
     return takeOwnership(
@@ -281,7 +420,8 @@ void Environment::setStorageLocation(const Expr &E, StorageLocation &Loc) {
 
 StorageLocation *Environment::getStorageLocation(const Expr &E,
                                                  SkipPast SP) const {
-  auto It = ExprToLoc.find(&E);
+  // FIXME: Add a test with parens.
+  auto It = ExprToLoc.find(E.IgnoreParens());
   return It == ExprToLoc.end() ? nullptr : &skip(*It->second, SP);
 }
 
@@ -298,11 +438,12 @@ void Environment::setValue(const StorageLocation &Loc, Value &Val) {
     const QualType Type = AggregateLoc.getType();
     assert(Type->isStructureOrClassType());
 
-    for (const FieldDecl *Field : Type->getAsRecordDecl()->fields()) {
+    for (const FieldDecl *Field : getAccessibleObjectFields(Type)) {
       assert(Field != nullptr);
       StorageLocation &FieldLoc = AggregateLoc.getChild(*Field);
       MemberLocToStruct[&FieldLoc] = std::make_pair(StructVal, Field);
-      setValue(FieldLoc, StructVal->getChild(*Field));
+      if (auto *FieldVal = StructVal->getChild(*Field))
+        setValue(FieldLoc, *FieldVal);
     }
   }
 
@@ -362,6 +503,11 @@ Value *Environment::createValueUnlessSelfReferential(
       Depth > MaxCompositeValueDepth)
     return nullptr;
 
+  if (Type->isBooleanType()) {
+    CreatedValuesCount++;
+    return &makeAtomicBoolValue();
+  }
+
   if (Type->isIntegerType()) {
     CreatedValuesCount++;
     return &takeOwnership(std::make_unique<IntegerValue>());
@@ -369,7 +515,7 @@ Value *Environment::createValueUnlessSelfReferential(
 
   if (Type->isReferenceType()) {
     CreatedValuesCount++;
-    QualType PointeeType = Type->getAs<ReferenceType>()->getPointeeType();
+    QualType PointeeType = Type->castAs<ReferenceType>()->getPointeeType();
     auto &PointeeLoc = createStorageLocation(PointeeType);
 
     if (!Visited.contains(PointeeType.getCanonicalType())) {
@@ -387,7 +533,7 @@ Value *Environment::createValueUnlessSelfReferential(
 
   if (Type->isPointerType()) {
     CreatedValuesCount++;
-    QualType PointeeType = Type->getAs<PointerType>()->getPointeeType();
+    QualType PointeeType = Type->castAs<PointerType>()->getPointeeType();
     auto &PointeeLoc = createStorageLocation(PointeeType);
 
     if (!Visited.contains(PointeeType.getCanonicalType())) {
@@ -408,7 +554,7 @@ Value *Environment::createValueUnlessSelfReferential(
     // FIXME: Initialize only fields that are accessed in the context that is
     // being analyzed.
     llvm::DenseMap<const ValueDecl *, Value *> FieldValues;
-    for (const FieldDecl *Field : Type->getAsRecordDecl()->fields()) {
+    for (const FieldDecl *Field : getAccessibleObjectFields(Type)) {
       assert(Field != nullptr);
 
       QualType FieldType = Field->getType();
@@ -416,9 +562,9 @@ Value *Environment::createValueUnlessSelfReferential(
         continue;
 
       Visited.insert(FieldType.getCanonicalType());
-      FieldValues.insert(
-          {Field, createValueUnlessSelfReferential(
-                      FieldType, Visited, Depth + 1, CreatedValuesCount)});
+      if (auto *FieldValue = createValueUnlessSelfReferential(
+              FieldType, Visited, Depth + 1, CreatedValuesCount))
+        FieldValues.insert({Field, FieldValue});
       Visited.erase(FieldType.getCanonicalType());
     }
 
@@ -457,7 +603,7 @@ void Environment::addToFlowCondition(BoolValue &Val) {
   FlowConditionConstraints.insert(&Val);
 }
 
-bool Environment::flowConditionImplies(BoolValue &Val) {
+bool Environment::flowConditionImplies(BoolValue &Val) const {
   // Returns true if and only if truth assignment of the flow condition implies
   // that `Val` is also true. We prove whether or not this property holds by
   // reducing the problem to satisfiability checking. In other words, we attempt

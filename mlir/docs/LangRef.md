@@ -203,7 +203,7 @@ bare-id-list ::= bare-id (`,` bare-id)*
 value-id ::= `%` suffix-id
 suffix-id ::= (digit+ | ((letter|id-punct) (letter|id-punct|digit)*))
 
-symbol-ref-id ::= `@` (suffix-id | string-literal)
+symbol-ref-id ::= `@` (suffix-id | string-literal) (`::` symbol-ref-id)?
 value-id-list ::= value-id (`,` value-id)*
 
 // Uses of value, e.g. in an operand list to an operation.
@@ -732,8 +732,7 @@ the lighter syntax: `!foo.something<a%%123^^^>>>` because it contains characters
 that are not allowed in the lighter syntax, as well as unbalanced `<>`
 characters.
 
-See [here](Tutorials/DefiningAttributesAndTypes.md) to learn how to define
-dialect types.
+See [here](AttributesAndTypes.md) to learn how to define dialect types.
 
 ### Builtin Types
 
@@ -840,8 +839,7 @@ valid in the lighter syntax: `#foo.something<a%%123^^^>>>` because it contains
 characters that are not allowed in the lighter syntax, as well as unbalanced
 `<>` characters.
 
-See [here](Tutorials/DefiningAttributesAndTypes.md) on how to define dialect
-attribute values.
+See [here](AttributesAndTypes.md) on how to define dialect attribute values.
 
 ### Builtin Attribute Values
 

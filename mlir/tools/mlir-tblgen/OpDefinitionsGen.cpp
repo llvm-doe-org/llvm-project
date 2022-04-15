@@ -1373,13 +1373,16 @@ void OpEmitter::genUseOperandAsResultTypeCollectiveParamBuilder() {
 }
 
 void OpEmitter::genInferredTypeCollectiveParamBuilder() {
-  // TODO: Expand to support regions.
   SmallVector<MethodParameter> paramList;
   paramList.emplace_back("::mlir::OpBuilder &", "odsBuilder");
   paramList.emplace_back("::mlir::OperationState &", builderOpState);
   paramList.emplace_back("::mlir::ValueRange", "operands");
+  StringRef attributesDefaultValue = op.getNumVariadicRegions() ? "" : "{}";
   paramList.emplace_back("::llvm::ArrayRef<::mlir::NamedAttribute>",
-                         "attributes", "{}");
+                         "attributes", attributesDefaultValue);
+  if (op.getNumVariadicRegions())
+    paramList.emplace_back("unsigned", "numRegions");
+
   auto *m = opClass.addStaticMethod("void", "build", std::move(paramList));
   // If the builder is redundant, skip generating the method
   if (!m)
@@ -1830,7 +1833,8 @@ void OpEmitter::genCodeForAddingArgAndRegionForBuilder(
     if (attr.isDerivedAttr() || inferredAttributes.contains(namedAttr.name))
       continue;
 
-    bool emitNotNullCheck = attr.isOptional();
+    bool emitNotNullCheck =
+        attr.isOptional() || (attr.hasDefaultValue() && !isRawValueAttr);
     if (emitNotNullCheck)
       body << formatv("  if ({0}) ", namedAttr.name) << "{\n";
 
@@ -2136,60 +2140,28 @@ void OpEmitter::genParser() {
   if (hasStringAttribute(def, "assemblyFormat"))
     return;
 
-  bool hasCppFormat = def.getValueAsBit("hasCustomAssemblyFormat");
-  if (!hasStringAttribute(def, "parser") && !hasCppFormat)
+  if (!def.getValueAsBit("hasCustomAssemblyFormat"))
     return;
 
   SmallVector<MethodParameter> paramList;
   paramList.emplace_back("::mlir::OpAsmParser &", "parser");
   paramList.emplace_back("::mlir::OperationState &", "result");
 
-  // If this uses the cpp format, only generate a declaration.
-  if (hasCppFormat) {
-    auto *method = opClass.declareStaticMethod("::mlir::ParseResult", "parse",
-                                               std::move(paramList));
-    ERROR_IF_PRUNED(method, "parse", op);
-    return;
-  }
-
-  PrintNote(op.getLoc(),
-            "`parser` and `printer` fields are deprecated and will be removed, "
-            "please use the `hasCustomAssemblyFormat` field instead");
-
-  auto *method = opClass.addStaticMethod("::mlir::ParseResult", "parse",
-                                         std::move(paramList));
+  auto *method = opClass.declareStaticMethod("::mlir::ParseResult", "parse",
+                                             std::move(paramList));
   ERROR_IF_PRUNED(method, "parse", op);
-
-  FmtContext fctx;
-  fctx.addSubst("cppClass", opClass.getClassName());
-  auto parser = def.getValueAsString("parser").ltrim().rtrim(" \t\v\f\r");
-  method->body() << "  " << tgfmt(parser, &fctx);
 }
 
 void OpEmitter::genPrinter() {
   if (hasStringAttribute(def, "assemblyFormat"))
     return;
 
-  // If this uses the cpp format, only generate a declaration.
-  if (def.getValueAsBit("hasCustomAssemblyFormat")) {
-    auto *method = opClass.declareMethod(
-        "void", "print", MethodParameter("::mlir::OpAsmPrinter &", "p"));
-    ERROR_IF_PRUNED(method, "print", op);
+  // Check to see if this op uses a c++ format.
+  if (!def.getValueAsBit("hasCustomAssemblyFormat"))
     return;
-  }
-
-  auto *valueInit = def.getValueInit("printer");
-  StringInit *stringInit = dyn_cast<StringInit>(valueInit);
-  if (!stringInit)
-    return;
-
-  auto *method = opClass.addMethod(
+  auto *method = opClass.declareMethod(
       "void", "print", MethodParameter("::mlir::OpAsmPrinter &", "p"));
   ERROR_IF_PRUNED(method, "print", op);
-  FmtContext fctx;
-  fctx.addSubst("cppClass", opClass.getClassName());
-  auto printer = stringInit->getValue().ltrim().rtrim(" \t\v\f\r");
-  method->body() << "  " << tgfmt(printer, &fctx);
 }
 
 /// Generate verification on native traits requiring attributes.
@@ -2272,14 +2244,10 @@ void OpEmitter::genVerifier() {
   // This may not act as their expectation because this doesn't call any
   // verifiers of native/interface traits. Needs to review those use cases and
   // see if we should use the mlir::verify() instead.
-  auto *valueInit = def.getValueInit("verifier");
-  StringInit *stringInit = dyn_cast<StringInit>(valueInit);
-  bool hasCustomVerifyCodeBlock = stringInit && !stringInit->getValue().empty();
-
   auto *method = opClass.addMethod("::mlir::LogicalResult", "verifyInvariants");
   ERROR_IF_PRUNED(method, "verifyInvariants", op);
   auto &body = method->body();
-  if (hasCustomVerifyCodeBlock || def.getValueAsBit("hasVerifier")) {
+  if (def.getValueAsBit("hasVerifier")) {
     body << "  if(::mlir::succeeded(verifyInvariantsImpl()) && "
             "::mlir::succeeded(verify()))\n";
     body << "    return ::mlir::success();\n";
@@ -2290,26 +2258,15 @@ void OpEmitter::genVerifier() {
 }
 
 void OpEmitter::genCustomVerifier() {
-  auto *valueInit = def.getValueInit("verifier");
-  StringInit *stringInit = dyn_cast<StringInit>(valueInit);
-  bool hasCustomVerifyCodeBlock = stringInit && !stringInit->getValue().empty();
-
   if (def.getValueAsBit("hasVerifier")) {
     auto *method = opClass.declareMethod("::mlir::LogicalResult", "verify");
     ERROR_IF_PRUNED(method, "verify", op);
-  } else if (def.getValueAsBit("hasRegionVerifier")) {
+  }
+
+  if (def.getValueAsBit("hasRegionVerifier")) {
     auto *method =
         opClass.declareMethod("::mlir::LogicalResult", "verifyRegions");
     ERROR_IF_PRUNED(method, "verifyRegions", op);
-  } else if (hasCustomVerifyCodeBlock) {
-    auto *method = opClass.addMethod("::mlir::LogicalResult", "verify");
-    ERROR_IF_PRUNED(method, "verify", op);
-    auto &body = method->body();
-
-    FmtContext fctx;
-    fctx.addSubst("cppClass", opClass.getClassName());
-    auto printer = stringInit->getValue().ltrim().rtrim(" \t\v\f\r");
-    body << "  " << tgfmt(printer, &fctx);
   }
 }
 
@@ -2824,7 +2781,7 @@ static void emitOpClasses(const RecordKeeper &recordKeeper,
       }
       // Emit the TypeID explicit specialization to have a single definition.
       if (!op.getCppNamespace().empty())
-        os << "DECLARE_EXPLICIT_TYPE_ID(" << op.getCppNamespace()
+        os << "MLIR_DECLARE_EXPLICIT_TYPE_ID(" << op.getCppNamespace()
            << "::" << op.getCppClassName() << ")\n\n";
     } else {
       {
@@ -2835,7 +2792,7 @@ static void emitOpClasses(const RecordKeeper &recordKeeper,
       }
       // Emit the TypeID explicit specialization to have a single definition.
       if (!op.getCppNamespace().empty())
-        os << "DEFINE_EXPLICIT_TYPE_ID(" << op.getCppNamespace()
+        os << "MLIR_DEFINE_EXPLICIT_TYPE_ID(" << op.getCppNamespace()
            << "::" << op.getCppClassName() << ")\n\n";
     }
   }

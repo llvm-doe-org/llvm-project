@@ -72,6 +72,7 @@ protected:
   // Dynamically set bits that enable features.
   bool FlatForGlobal;
   bool AutoWaitcntBeforeBarrier;
+  bool BackOffBarrier;
   bool UnalignedScratchAccess;
   bool UnalignedAccessMode;
   bool HasApertureRegs;
@@ -493,6 +494,12 @@ public:
     return AutoWaitcntBeforeBarrier;
   }
 
+  /// \returns true if the target supports backing off of s_barrier instructions
+  /// when an exception is raised.
+  bool supportsBackOffBarrier() const {
+    return BackOffBarrier;
+  }
+
   bool hasUnalignedBufferAccess() const {
     return UnalignedBufferAccess;
   }
@@ -563,6 +570,8 @@ public:
   bool hasFlatScratchSTMode() const {
     return hasFlatScratchInsts() && (hasGFX10_3Insts() || hasGFX940Insts());
   }
+
+  bool hasFlatScratchSVSMode() const { return GFX940Insts; }
 
   bool hasScalarFlatScratchInsts() const {
     return ScalarFlatScratchInsts;
@@ -836,7 +845,7 @@ public:
   }
 
   bool hasFmaakFmamkF32Insts() const {
-    return getGeneration() >= GFX10;
+    return getGeneration() >= GFX10 || hasGFX940Insts();
   }
 
   bool hasImageInsts() const {
@@ -884,6 +893,10 @@ public:
   }
 
   bool hasMadF16() const;
+
+  bool hasMovB64() const { return GFX940Insts; }
+
+  bool hasLshlAddB64() const { return GFX940Insts; }
 
   bool enableSIScheduler() const {
     return EnableSIScheduler;
@@ -951,6 +964,22 @@ public:
 
   bool hasLdsBranchVmemWARHazard() const {
     return HasLdsBranchVmemWARHazard;
+  }
+
+  // Has one cycle hazard on transcendental instruction feeding a
+  // non transcendental VALU.
+  bool hasTransForwardingHazard() const { return GFX940Insts; }
+
+  // Has one cycle hazard on a VALU instruction partially writing dst with
+  // a shift of result bits feeding another VALU instruction.
+  bool hasDstSelForwardingHazard() const { return GFX940Insts; }
+
+  // Cannot use op_sel with v_dot instructions.
+  bool hasDOTOpSelHazard() const { return GFX940Insts; }
+
+  // Does not have HW interlocs for VALU writing and then reading SGPRs.
+  bool hasVDecCoExecHazard() const {
+    return GFX940Insts;
   }
 
   bool hasNSAtoVMEMBug() const {

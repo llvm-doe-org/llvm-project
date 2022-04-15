@@ -919,22 +919,24 @@ bool RecurrenceDescriptor::isFirstOrderRecurrence(
       while (EarlierIt != SinkAfter.end()) {
         Instruction *EarlierInst = EarlierIt->second;
         EarlierIt = SinkAfter.find(EarlierInst);
-        assert((EarlierIt == SinkAfter.end() ||
-                EarlierInst->comesBefore(OtherPrev)) &&
-               "earlier instructions in the chain must come before later ones, "
-               "except for the first one");
+        // Bail out if order has not been preserved.
+        if (EarlierIt != SinkAfter.end() &&
+            !DT->dominates(EarlierInst, OtherPrev))
+          return false;
         OtherPrev = EarlierInst;
       }
-      assert((OtherPrev == It->second || It->second->comesBefore(OtherPrev)) &&
-             "found OtherPrev must either match the original one or come after "
-             "it");
+      // Bail out if order has not been preserved.
+      if (OtherPrev != It->second && !DT->dominates(It->second, OtherPrev))
+        return false;
 
       // SinkCandidate is already being sunk after an instruction after
       // Previous. Nothing left to do.
       if (DT->dominates(Previous, OtherPrev) || Previous == OtherPrev)
         return true;
       // Otherwise, Previous comes after OtherPrev and SinkCandidate needs to be
-      // re-sunk to Previous, instead of sinking to OtherPrev.
+      // re-sunk to Previous, instead of sinking to OtherPrev. Remove
+      // SinkCandidate from SinkAfter to ensure it's insert position is updated.
+      SinkAfter.erase(SinkCandidate);
     }
 
     // If we reach a PHI node that is not dominated by Previous, we reached a

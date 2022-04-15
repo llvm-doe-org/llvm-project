@@ -347,9 +347,18 @@ def ixlenimm_li : Operand<XLenVT> {
 
 // Standalone (codegen-only) immleaf patterns.
 
-// A 12-bit signed immediate plus one where the imm range will be -2047~2048.
+// A 12-bit signed immediate plus one where the imm range will be [-2047, 2048].
 def simm12_plus1 : ImmLeaf<XLenVT,
   [{return (isInt<12>(Imm) && Imm != -2048) || Imm == 2048;}]>;
+
+// A 12-bit signed immediate sub one and exclude zero
+def simm12_minus1_nonzero : PatLeaf<(imm), [{
+  if (!N->hasOneUse())
+    return false;
+  // The immediate operand must be in range [-2049, 0) or (0, 2046].
+  int64_t Imm = N->getSExtValue();
+  return (Imm >= -2049 && Imm < 0) || (Imm > 0 && Imm <= 2046);
+}]>;
 
 // A 6-bit constant greater than 32.
 def uimm6gt32 : ImmLeaf<XLenVT, [{
@@ -373,9 +382,9 @@ def ImmSub32 : SDNodeXForm<imm, [{
                                    N->getValueType(0));
 }]>;
 
-// Return an immediate value plus 32.
-def ImmPlus32 : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(N->getSExtValue() + 32, SDLoc(N),
+// Return an immediate value plus 1.
+def ImmPlus1 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(N->getSExtValue() + 1, SDLoc(N),
                                    N->getValueType(0));
 }]>;
 
@@ -415,6 +424,11 @@ def AddiPairImmB : SDNodeXForm<imm, [{
                                    N->getValueType(0));
 }]>;
 
+def TrailingZeros : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(N->getAPIntValue().countTrailingZeros(),
+                                   SDLoc(N), N->getValueType(0));
+}]>;
+
 def XLenSubTrailingOnes : SDNodeXForm<imm, [{
   uint64_t XLen = Subtarget->getXLen();
   uint64_t TrailingOnes = N->getAPIntValue().countTrailingOnes();
@@ -423,7 +437,13 @@ def XLenSubTrailingOnes : SDNodeXForm<imm, [{
 }]>;
 
 // Checks if this mask is a non-empty sequence of ones starting at the
-// least significant bit with the remainder zero and exceeds simm12.
+// most/least significant bit with the remainder zero and exceeds simm32/simm12.
+def LeadingOnesMask : PatLeaf<(imm), [{
+  if (!N->hasOneUse())
+    return false;
+  return !isInt<32>(N->getSExtValue()) && isMask_64(~N->getSExtValue());
+}], TrailingZeros>;
+
 def TrailingOnesMask : PatLeaf<(imm), [{
   if (!N->hasOneUse())
     return false;
@@ -901,6 +921,9 @@ def : InstAlias<"sfence.vma $rs", (SFENCE_VMA GPR:$rs, X0)>;
 def : InstAlias<"hfence.gvma",     (HFENCE_GVMA      X0, X0)>;
 def : InstAlias<"hfence.gvma $rs", (HFENCE_GVMA GPR:$rs, X0)>;
 
+def : InstAlias<"hfence.vvma",     (HFENCE_VVMA      X0, X0)>;
+def : InstAlias<"hfence.vvma $rs", (HFENCE_VVMA GPR:$rs, X0)>;
+
 let EmitPriority = 0 in {
 def : InstAlias<"lb $rd, (${rs1})",
                 (LB  GPR:$rd, GPR:$rs1, 0)>;
@@ -1088,13 +1111,14 @@ def assertzexti32 : PatFrag<(ops node:$src), (assertzext node:$src), [{
 }]>;
 def zexti32 : ComplexPattern<i64, 1, "selectZExti32">;
 
-def add_oneuse : PatFrag<(ops node:$A, node:$B), (add node:$A, node:$B), [{
+class binop_oneuse<SDPatternOperator operator>
+    : PatFrag<(ops node:$A, node:$B),
+              (operator node:$A, node:$B), [{
   return N->hasOneUse();
 }]>;
 
-def mul_oneuse : PatFrag<(ops node:$A, node:$B), (mul node:$A, node:$B), [{
-  return N->hasOneUse();
-}]>;
+def add_oneuse : binop_oneuse<add>;
+def mul_oneuse : binop_oneuse<mul>;
 
 def mul_const_oneuse : PatFrag<(ops node:$A, node:$B),
                                (mul node:$A, node:$B), [{
@@ -1104,22 +1128,16 @@ def mul_const_oneuse : PatFrag<(ops node:$A, node:$B),
   return false;
 }]>;
 
-def sext_oneuse : PatFrag<(ops node:$A), (sext node:$A), [{
+class unop_oneuse<SDPatternOperator operator>
+    : PatFrag<(ops node:$A),
+              (operator node:$A), [{
   return N->hasOneUse();
 }]>;
 
-def zext_oneuse : PatFrag<(ops node:$A), (zext node:$A), [{
-  return N->hasOneUse();
-}]>;
-
-def anyext_oneuse : PatFrag<(ops node:$A), (anyext node:$A), [{
-  return N->hasOneUse();
-}]>;
-
-def fpext_oneuse : PatFrag<(ops node:$A),
-                           (any_fpextend node:$A), [{
-  return N->hasOneUse();
-}]>;
+def sext_oneuse   : unop_oneuse<sext>;
+def zext_oneuse   : unop_oneuse<zext>;
+def anyext_oneuse : unop_oneuse<anyext>;
+def fpext_oneuse  : unop_oneuse<any_fpextend>;
 
 /// Simple arithmetic operations
 
@@ -1136,7 +1154,9 @@ def : PatGprUimmLog2XLen<shl, SLLI>;
 def : PatGprUimmLog2XLen<srl, SRLI>;
 def : PatGprUimmLog2XLen<sra, SRAI>;
 
-// AND with trailing ones mask exceeding simm12.
+// AND with leading/trailing ones mask exceeding simm32/simm12.
+def : Pat<(i64 (and GPR:$rs, LeadingOnesMask:$mask)),
+          (SLLI (SRLI $rs, LeadingOnesMask:$mask), LeadingOnesMask:$mask)>;
 def : Pat<(XLenVT (and GPR:$rs, TrailingOnesMask:$mask)),
           (SRLI (SLLI $rs, TrailingOnesMask:$mask), TrailingOnesMask:$mask)>;
 
@@ -1197,6 +1217,10 @@ def : Pat<(setule GPR:$rs1, GPR:$rs2), (XORI (SLTU GPR:$rs2, GPR:$rs1), 1)>;
 def : Pat<(setgt GPR:$rs1, GPR:$rs2), (SLT GPR:$rs2, GPR:$rs1)>;
 def : Pat<(setge GPR:$rs1, GPR:$rs2), (XORI (SLT GPR:$rs1, GPR:$rs2), 1)>;
 def : Pat<(setle GPR:$rs1, GPR:$rs2), (XORI (SLT GPR:$rs2, GPR:$rs1), 1)>;
+def : Pat<(setgt GPR:$rs1, simm12_minus1_nonzero:$imm),
+          (XORI (SLTI GPR:$rs1, (ImmPlus1 simm12_minus1_nonzero:$imm)), 1)>;
+def : Pat<(setugt GPR:$rs1, simm12_minus1_nonzero:$imm),
+          (XORI (SLTIU GPR:$rs1, (ImmPlus1 simm12_minus1_nonzero:$imm)), 1)>;
 
 def IntCCtoRISCVCC : SDNodeXForm<riscv_selectcc, [{
   ISD::CondCode CC = cast<CondCodeSDNode>(N->getOperand(2))->get();
@@ -1326,7 +1350,7 @@ let hasSideEffects = 0, mayLoad = 1, mayStore = 0, Size = 8, isCodeGenOnly = 0,
 def PseudoLA_TLS_IE : Pseudo<(outs GPR:$dst), (ins bare_symbol:$src), [],
                              "la.tls.ie", "$dst, $src">;
 
-let hasSideEffects = 0, mayLoad = 1, mayStore = 0, Size = 8, isCodeGenOnly = 0,
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Size = 8, isCodeGenOnly = 0,
     isAsmParserOnly = 1 in
 def PseudoLA_TLS_GD : Pseudo<(outs GPR:$dst), (ins bare_symbol:$src), [],
                              "la.tls.gd", "$dst, $src">;

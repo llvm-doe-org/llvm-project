@@ -1610,6 +1610,15 @@ void FTN_STDCALL FTN_DISPLAY_ENV(int verbose) {
 #endif
 }
 
+int FTN_STDCALL FTN_IN_EXPLICIT_TASK(void) {
+#ifdef KMP_STUB
+  return 0;
+#else
+  int gtid = __kmp_entry_gtid();
+  return __kmp_thread_from_gtid(gtid)->th.th_current_task->td_flags.tasktype;
+#endif
+}
+
 void FTN_STDCALL FTN_SET_SOURCE_INFO(const char *src_file,
                                      const char *func_name, int line_no,
                                      int end_line_no, int func_line_no,

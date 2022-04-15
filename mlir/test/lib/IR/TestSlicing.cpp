@@ -29,8 +29,8 @@ static LogicalResult createBackwardSliceFunction(Operation *op,
   OpBuilder builder(parentFuncOp);
   Location loc = op->getLoc();
   std::string clonedFuncOpName = parentFuncOp.getName().str() + suffix.str();
-  FuncOp clonedFuncOp =
-      builder.create<FuncOp>(loc, clonedFuncOpName, parentFuncOp.getType());
+  FuncOp clonedFuncOp = builder.create<FuncOp>(loc, clonedFuncOpName,
+                                               parentFuncOp.getFunctionType());
   BlockAndValueMapping mapper;
   builder.setInsertionPointToEnd(clonedFuncOp.addEntryBlock());
   for (const auto &arg : enumerate(parentFuncOp.getArguments()))
@@ -47,6 +47,8 @@ namespace {
 /// Pass to test slice generated from slice analysis.
 struct SliceAnalysisTestPass
     : public PassWrapper<SliceAnalysisTestPass, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SliceAnalysisTestPass)
+
   StringRef getArgument() const final { return "slice-analysis-test"; }
   StringRef getDescription() const final {
     return "Test Slice analysis functionality.";

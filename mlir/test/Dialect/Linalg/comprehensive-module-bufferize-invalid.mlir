@@ -173,7 +173,7 @@ func @unknown_op(%A : tensor<4xf32>) -> tensor<4xf32>
 func @mini_test_case1() -> tensor<10x20xf32> {
   %f0 = arith.constant 0.0 : f32
   %t = linalg.init_tensor [10, 20] : tensor<10x20xf32>
-  %r = linalg.fill(%f0, %t) : f32, tensor<10x20xf32> -> tensor<10x20xf32>
+  %r = linalg.fill ins(%f0 : f32) outs(%t : tensor<10x20xf32>) -> tensor<10x20xf32>
   // expected-error @+1 {{operand #0 of ReturnLike op does not satisfy destination passing style}}
   return %r : tensor<10x20xf32>
 }
@@ -212,11 +212,10 @@ func @to_memref_op_is_writing(
 
 // -----
 
+// expected-error @+1 {{cannot bufferize bodiless function that returns a tensor}}
 func private @foo(%t : tensor<?xf32>) -> (f32, tensor<?xf32>, f32)
 
 func @call_to_unknown_tensor_returning_func(%t : tensor<?xf32>) {
-  // expected-error @+2 {{call to FuncOp that returns non-equivalent tensors not supported}}
-  // expected-error @+1 {{op was not bufferized}}
   call @foo(%t) : (tensor<?xf32>) -> (f32, tensor<?xf32>, f32)
   return
 }

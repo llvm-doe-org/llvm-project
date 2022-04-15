@@ -16,7 +16,9 @@ using namespace mlir;
 
 namespace {
 struct TestMultiBufferingPass
-    : public PassWrapper<TestMultiBufferingPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestMultiBufferingPass, OperationPass<>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestMultiBufferingPass)
+
   TestMultiBufferingPass() = default;
   TestMultiBufferingPass(const TestMultiBufferingPass &pass)
       : PassWrapper(pass) {}
@@ -37,7 +39,7 @@ struct TestMultiBufferingPass
 
 void TestMultiBufferingPass::runOnOperation() {
   SmallVector<memref::AllocOp> allocs;
-  getOperation().walk(
+  getOperation()->walk(
       [&allocs](memref::AllocOp alloc) { allocs.push_back(alloc); });
   for (memref::AllocOp alloc : allocs)
     (void)multiBuffer(alloc, multiplier);

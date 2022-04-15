@@ -74,6 +74,7 @@ using namespace lld;
 using namespace lld::elf;
 
 std::unique_ptr<Configuration> elf::config;
+std::unique_ptr<Ctx> elf::ctx;
 std::unique_ptr<LinkerDriver> elf::driver;
 
 static void setConfigs(opt::InputArgList &args);
@@ -117,6 +118,7 @@ bool elf::link(ArrayRef<const char *> args, llvm::raw_ostream &stdoutOS,
                                  "--error-limit=0 to see all errors)";
 
   config = std::make_unique<Configuration>();
+  elf::ctx = std::make_unique<Ctx>();
   driver = std::make_unique<LinkerDriver>();
   script = std::make_unique<LinkerScript>();
   symtab = std::make_unique<SymbolTable>();
@@ -465,6 +467,7 @@ constexpr const char *knownZFlags[] = {
     "noexecstack",
     "nognustack",
     "nokeep-text-section-prefix",
+    "nopack-relative-relocs",
     "norelro",
     "noseparate-code",
     "nostart-stop-gc",
@@ -472,6 +475,7 @@ constexpr const char *knownZFlags[] = {
     "now",
     "origin",
     "pac-plt",
+    "pack-relative-relocs",
     "rel",
     "rela",
     "relro",
@@ -699,6 +703,28 @@ static StringRef getDynamicLinker(opt::InputArgList &args) {
     return "";
   }
   return arg->getValue();
+}
+
+static int getMemtagMode(opt::InputArgList &args) {
+  StringRef memtagModeArg = args.getLastArgValue(OPT_android_memtag_mode);
+  if (!config->androidMemtagHeap && !config->androidMemtagStack) {
+    if (!memtagModeArg.empty())
+      error("when using --android-memtag-mode, at least one of "
+            "--android-memtag-heap or "
+            "--android-memtag-stack is required");
+    return ELF::NT_MEMTAG_LEVEL_NONE;
+  }
+
+  if (memtagModeArg == "sync" || memtagModeArg.empty())
+    return ELF::NT_MEMTAG_LEVEL_SYNC;
+  if (memtagModeArg == "async")
+    return ELF::NT_MEMTAG_LEVEL_ASYNC;
+  if (memtagModeArg == "none")
+    return ELF::NT_MEMTAG_LEVEL_NONE;
+
+  error("unknown --android-memtag-mode value: \"" + memtagModeArg +
+        "\", should be one of {async, sync, none}");
+  return ELF::NT_MEMTAG_LEVEL_NONE;
 }
 
 static ICFLevel getICF(opt::InputArgList &args) {
@@ -1004,6 +1030,11 @@ static void readConfigs(opt::InputArgList &args) {
       args.hasFlag(OPT_allow_multiple_definition,
                    OPT_no_allow_multiple_definition, false) ||
       hasZOption(args, "muldefs");
+  config->androidMemtagHeap =
+      args.hasFlag(OPT_android_memtag_heap, OPT_no_android_memtag_heap, false);
+  config->androidMemtagStack = args.hasFlag(OPT_android_memtag_stack,
+                                            OPT_no_android_memtag_stack, false);
+  config->androidMemtagMode = getMemtagMode(args);
   config->auxiliaryList = args::getStrings(args, OPT_auxiliary);
   if (opt::Arg *arg =
           args.getLastArg(OPT_Bno_symbolic, OPT_Bsymbolic_non_weak_functions,
@@ -1054,7 +1085,7 @@ static void readConfigs(opt::InputArgList &args) {
   config->fixCortexA8 =
       args.hasArg(OPT_fix_cortex_a8) && !args.hasArg(OPT_relocatable);
   config->fortranCommon =
-      args.hasFlag(OPT_fortran_common, OPT_no_fortran_common, true);
+      args.hasFlag(OPT_fortran_common, OPT_no_fortran_common, false);
   config->gcSections = args.hasFlag(OPT_gc_sections, OPT_no_gc_sections, false);
   config->gnuUnique = args.hasFlag(OPT_gnu_unique, OPT_no_gnu_unique, true);
   config->gdbIndex = args.hasFlag(OPT_gdb_index, OPT_no_gdb_index, false);
@@ -1071,9 +1102,6 @@ static void readConfigs(opt::InputArgList &args) {
                                             OPT_no_lto_pgo_warn_mismatch, true);
   config->ltoDebugPassManager = args.hasArg(OPT_lto_debug_pass_manager);
   config->ltoEmitAsm = args.hasArg(OPT_lto_emit_asm);
-  config->ltoNewPassManager =
-      args.hasFlag(OPT_no_lto_legacy_pass_manager, OPT_lto_legacy_pass_manager,
-                   LLVM_ENABLE_NEW_PASS_MANAGER);
   config->ltoNewPmPasses = args.getLastArgValue(OPT_lto_newpm_passes);
   config->ltoWholeProgramVisibility =
       args.hasFlag(OPT_lto_whole_program_visibility,
@@ -1099,6 +1127,7 @@ static void readConfigs(opt::InputArgList &args) {
   config->oFormatBinary = isOutputFormatBinary(args);
   config->omagic = args.hasFlag(OPT_omagic, OPT_no_omagic, false);
   config->optRemarksFilename = args.getLastArgValue(OPT_opt_remarks_filename);
+  config->optStatsFilename = args.getLastArgValue(OPT_opt_stats_filename);
 
   // Parse remarks hotness threshold. Valid value is either integer or 'auto'.
   if (auto *arg = args.getLastArg(OPT_opt_remarks_hotness_threshold)) {
@@ -1282,6 +1311,8 @@ static void readConfigs(opt::InputArgList &args) {
       error(arg->getSpelling() + ": unknown plugin option '" + arg->getValue() +
             "'");
 
+  config->passPlugins = args::getStrings(args, OPT_load_pass_plugins);
+
   // Parse -mllvm options.
   for (auto *arg : args.filtered(OPT_mllvm))
     parseClangOption(arg->getValue(), arg->getSpelling());
@@ -1352,8 +1383,13 @@ static void readConfigs(opt::InputArgList &args) {
 
   std::tie(config->buildId, config->buildIdVector) = getBuildId(args);
 
-  std::tie(config->androidPackDynRelocs, config->relrPackDynRelocs) =
-      getPackDynRelocs(args);
+  if (getZFlag(args, "pack-relative-relocs", "nopack-relative-relocs", false)) {
+    config->relrGlibc = true;
+    config->relrPackDynRelocs = true;
+  } else {
+    std::tie(config->androidPackDynRelocs, config->relrPackDynRelocs) =
+        getPackDynRelocs(args);
+  }
 
   if (auto *arg = args.getLastArg(OPT_symbol_ordering_file)){
     if (args.hasArg(OPT_call_graph_ordering_file))
@@ -2479,6 +2515,16 @@ void LinkerDriver::link(opt::InputArgList &args) {
   parallelForEach(objectFiles, initializeLocalSymbols);
   parallelForEach(objectFiles, postParseObjectFile);
   parallelForEach(bitcodeFiles, [](BitcodeFile *file) { file->postParse(); });
+  for (auto &it : ctx->nonPrevailingSyms) {
+    Symbol &sym = *it.first;
+    sym.replace(Undefined{sym.file, sym.getName(), sym.binding, sym.stOther,
+                          sym.type, it.second});
+    cast<Undefined>(sym).nonPrevailing = true;
+  }
+  ctx->nonPrevailingSyms.clear();
+  for (const DuplicateSymbol &d : ctx->duplicates)
+    reportDuplicate(*d.sym, d.file, d.section, d.value);
+  ctx->duplicates.clear();
 
   // Return if there were name resolution errors.
   if (errorCount())
@@ -2551,6 +2597,8 @@ void LinkerDriver::link(opt::InputArgList &args) {
   auto newObjectFiles = makeArrayRef(objectFiles).slice(numObjsBeforeLTO);
   parallelForEach(newObjectFiles, initializeLocalSymbols);
   parallelForEach(newObjectFiles, postParseObjectFile);
+  for (const DuplicateSymbol &d : ctx->duplicates)
+    reportDuplicate(*d.sym, d.file, d.section, d.value);
 
   // Handle --exclude-libs again because lto.tmp may reference additional
   // libcalls symbols defined in an excluded archive. This may override
@@ -2580,26 +2628,28 @@ void LinkerDriver::link(opt::InputArgList &args) {
 
   {
     llvm::TimeTraceScope timeScope("Strip sections");
-    llvm::erase_if(inputSections, [](InputSectionBase *s) {
-      if (s->type == SHT_LLVM_SYMPART) {
+    if (ctx->hasSympart.load(std::memory_order_relaxed)) {
+      llvm::erase_if(inputSections, [](InputSectionBase *s) {
+        if (s->type != SHT_LLVM_SYMPART)
+          return false;
         invokeELFT(readSymbolPartitionSection, s);
         return true;
-      }
+      });
+    }
+    // We do not want to emit debug sections if --strip-all
+    // or --strip-debug are given.
+    if (config->strip != StripPolicy::None) {
+      llvm::erase_if(inputSections, [](InputSectionBase *s) {
+        if (isDebugSection(*s))
+          return true;
+        if (auto *isec = dyn_cast<InputSection>(s))
+          if (InputSectionBase *rel = isec->getRelocatedSection())
+            if (isDebugSection(*rel))
+              return true;
 
-      // We do not want to emit debug sections if --strip-all
-      // or --strip-debug are given.
-      if (config->strip == StripPolicy::None)
         return false;
-
-      if (isDebugSection(*s))
-        return true;
-      if (auto *isec = dyn_cast<InputSection>(s))
-        if (InputSectionBase *rel = isec->getRelocatedSection())
-          if (isDebugSection(*rel))
-            return true;
-
-      return false;
-    });
+      });
+    }
   }
 
   // Since we now have a complete set of input files, we can create
@@ -2690,8 +2740,8 @@ void LinkerDriver::link(opt::InputArgList &args) {
     // point onwards InputSectionDescription::sections should be used instead of
     // sectionBases.
     for (SectionCommand *cmd : script->sectionCommands)
-      if (auto *sec = dyn_cast<OutputSection>(cmd))
-        sec->finalizeInputSections();
+      if (auto *osd = dyn_cast<OutputDesc>(cmd))
+        osd->osec.finalizeInputSections();
     llvm::erase_if(inputSections, [](InputSectionBase *s) {
       return isa<MergeInputSection>(s);
     });

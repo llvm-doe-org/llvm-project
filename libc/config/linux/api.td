@@ -237,8 +237,12 @@ def ThreadsAPI : PublicAPI<"threads.h"> {
   ];
 }
 
+def PThreadAPI : PublicAPI<"pthread.h"> {
+  let Types = ["pthread_mutexattr_t"];
+}
+
 def UniStdAPI : PublicAPI<"unistd.h"> {
-  let Types = ["size_t", "ssize_t"];
+  let Types = ["off_t", "size_t", "ssize_t"];
 }
 
 def SysStatAPI : PublicAPI<"sys/stat.h"> {

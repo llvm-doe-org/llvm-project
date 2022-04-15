@@ -22,5 +22,4 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../../runtime/src)
 target_link_libraries(llvm-omp-device-info PRIVATE
   omp
   omptarget
-  ${LIBOMPTARGET_TESTED_PLUGINS}
 )

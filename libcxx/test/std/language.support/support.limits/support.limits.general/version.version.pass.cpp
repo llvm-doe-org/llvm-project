@@ -141,6 +141,7 @@
     __cpp_lib_semaphore                            201907L [C++20]
     __cpp_lib_shared_mutex                         201505L [C++17]
     __cpp_lib_shared_ptr_arrays                    201611L [C++17]
+                                                   201707L [C++20]
     __cpp_lib_shared_ptr_weak_type                 201606L [C++17]
     __cpp_lib_shared_timed_mutex                   201402L [C++14]
     __cpp_lib_shift                                201806L [C++20]
@@ -2921,17 +2922,11 @@
 #   error "__cpp_lib_int_pow2 should have the value 202002L in c++20"
 # endif
 
-# if defined(__cpp_concepts) && __cpp_concepts >= 201907L
-#   ifndef __cpp_lib_integer_comparison_functions
-#     error "__cpp_lib_integer_comparison_functions should be defined in c++20"
-#   endif
-#   if __cpp_lib_integer_comparison_functions != 202002L
-#     error "__cpp_lib_integer_comparison_functions should have the value 202002L in c++20"
-#   endif
-# else
-#   ifdef __cpp_lib_integer_comparison_functions
-#     error "__cpp_lib_integer_comparison_functions should not be defined when defined(__cpp_concepts) && __cpp_concepts >= 201907L is not defined!"
-#   endif
+# ifndef __cpp_lib_integer_comparison_functions
+#   error "__cpp_lib_integer_comparison_functions should be defined in c++20"
+# endif
+# if __cpp_lib_integer_comparison_functions != 202002L
+#   error "__cpp_lib_integer_comparison_functions should have the value 202002L in c++20"
 # endif
 
 # ifndef __cpp_lib_integer_sequence
@@ -3120,17 +3115,11 @@
 #   error "__cpp_lib_map_try_emplace should have the value 201411L in c++20"
 # endif
 
-# if defined(__cpp_concepts) && __cpp_concepts >= 201907L
-#   ifndef __cpp_lib_math_constants
-#     error "__cpp_lib_math_constants should be defined in c++20"
-#   endif
-#   if __cpp_lib_math_constants != 201907L
-#     error "__cpp_lib_math_constants should have the value 201907L in c++20"
-#   endif
-# else
-#   ifdef __cpp_lib_math_constants
-#     error "__cpp_lib_math_constants should not be defined when defined(__cpp_concepts) && __cpp_concepts >= 201907L is not defined!"
-#   endif
+# ifndef __cpp_lib_math_constants
+#   error "__cpp_lib_math_constants should be defined in c++20"
+# endif
+# if __cpp_lib_math_constants != 201907L
+#   error "__cpp_lib_math_constants should have the value 201907L in c++20"
 # endif
 
 # if !defined(_LIBCPP_VERSION)
@@ -3359,8 +3348,8 @@
 # ifndef __cpp_lib_shared_ptr_arrays
 #   error "__cpp_lib_shared_ptr_arrays should be defined in c++20"
 # endif
-# if __cpp_lib_shared_ptr_arrays != 201611L
-#   error "__cpp_lib_shared_ptr_arrays should have the value 201611L in c++20"
+# if __cpp_lib_shared_ptr_arrays != 201707L
+#   error "__cpp_lib_shared_ptr_arrays should have the value 201707L in c++20"
 # endif
 
 # ifndef __cpp_lib_shared_ptr_weak_type
@@ -3625,17 +3614,11 @@
 #   error "__cpp_lib_addressof_constexpr should have the value 201603L in c++2b"
 # endif
 
-# if !defined(_LIBCPP_VERSION)
-#   ifndef __cpp_lib_allocate_at_least
-#     error "__cpp_lib_allocate_at_least should be defined in c++2b"
-#   endif
-#   if __cpp_lib_allocate_at_least != 202106L
-#     error "__cpp_lib_allocate_at_least should have the value 202106L in c++2b"
-#   endif
-# else // _LIBCPP_VERSION
-#   ifdef __cpp_lib_allocate_at_least
-#     error "__cpp_lib_allocate_at_least should not be defined because it is unimplemented in libc++!"
-#   endif
+# ifndef __cpp_lib_allocate_at_least
+#   error "__cpp_lib_allocate_at_least should be defined in c++2b"
+# endif
+# if __cpp_lib_allocate_at_least != 202106L
+#   error "__cpp_lib_allocate_at_least should have the value 202106L in c++2b"
 # endif
 
 # ifndef __cpp_lib_allocator_traits_is_always_equal
@@ -4192,17 +4175,11 @@
 #   error "__cpp_lib_int_pow2 should have the value 202002L in c++2b"
 # endif
 
-# if defined(__cpp_concepts) && __cpp_concepts >= 201907L
-#   ifndef __cpp_lib_integer_comparison_functions
-#     error "__cpp_lib_integer_comparison_functions should be defined in c++2b"
-#   endif
-#   if __cpp_lib_integer_comparison_functions != 202002L
-#     error "__cpp_lib_integer_comparison_functions should have the value 202002L in c++2b"
-#   endif
-# else
-#   ifdef __cpp_lib_integer_comparison_functions
-#     error "__cpp_lib_integer_comparison_functions should not be defined when defined(__cpp_concepts) && __cpp_concepts >= 201907L is not defined!"
-#   endif
+# ifndef __cpp_lib_integer_comparison_functions
+#   error "__cpp_lib_integer_comparison_functions should be defined in c++2b"
+# endif
+# if __cpp_lib_integer_comparison_functions != 202002L
+#   error "__cpp_lib_integer_comparison_functions should have the value 202002L in c++2b"
 # endif
 
 # ifndef __cpp_lib_integer_sequence
@@ -4403,17 +4380,11 @@
 #   error "__cpp_lib_map_try_emplace should have the value 201411L in c++2b"
 # endif
 
-# if defined(__cpp_concepts) && __cpp_concepts >= 201907L
-#   ifndef __cpp_lib_math_constants
-#     error "__cpp_lib_math_constants should be defined in c++2b"
-#   endif
-#   if __cpp_lib_math_constants != 201907L
-#     error "__cpp_lib_math_constants should have the value 201907L in c++2b"
-#   endif
-# else
-#   ifdef __cpp_lib_math_constants
-#     error "__cpp_lib_math_constants should not be defined when defined(__cpp_concepts) && __cpp_concepts >= 201907L is not defined!"
-#   endif
+# ifndef __cpp_lib_math_constants
+#   error "__cpp_lib_math_constants should be defined in c++2b"
+# endif
+# if __cpp_lib_math_constants != 201907L
+#   error "__cpp_lib_math_constants should have the value 201907L in c++2b"
 # endif
 
 # if !defined(_LIBCPP_VERSION)
@@ -4744,8 +4715,8 @@
 # ifndef __cpp_lib_shared_ptr_arrays
 #   error "__cpp_lib_shared_ptr_arrays should be defined in c++2b"
 # endif
-# if __cpp_lib_shared_ptr_arrays != 201611L
-#   error "__cpp_lib_shared_ptr_arrays should have the value 201611L in c++2b"
+# if __cpp_lib_shared_ptr_arrays != 201707L
+#   error "__cpp_lib_shared_ptr_arrays should have the value 201707L in c++2b"
 # endif
 
 # ifndef __cpp_lib_shared_ptr_weak_type

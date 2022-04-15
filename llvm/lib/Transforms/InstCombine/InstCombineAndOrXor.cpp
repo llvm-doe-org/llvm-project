@@ -911,6 +911,26 @@ static Value *foldSignedTruncationCheck(ICmpInst *ICmp0, ICmpInst *ICmp1,
                                CxtI.getName() + ".simplified");
 }
 
+/// Fold (icmp eq ctpop(X) 1) | (icmp eq X 0) into (icmp ult ctpop(X) 2) and
+/// fold (icmp ne ctpop(X) 1) & (icmp ne X 0) into (icmp ugt ctpop(X) 1).
+static Value *foldIsPowerOf2OrZero(ICmpInst *Cmp0, ICmpInst *Cmp1, bool IsAnd,
+                                   InstCombiner::BuilderTy &Builder) {
+  CmpInst::Predicate Pred0, Pred1;
+  Value *X;
+  if (!match(Cmp0, m_ICmp(Pred0, m_Intrinsic<Intrinsic::ctpop>(m_Value(X)),
+                          m_SpecificInt(1))) ||
+      !match(Cmp1, m_ICmp(Pred1, m_Specific(X), m_ZeroInt())))
+    return nullptr;
+
+  Value *CtPop = Cmp0->getOperand(0);
+  if (IsAnd && Pred0 == ICmpInst::ICMP_NE && Pred1 == ICmpInst::ICMP_NE)
+    return Builder.CreateICmpUGT(CtPop, ConstantInt::get(CtPop->getType(), 1));
+  if (!IsAnd && Pred0 == ICmpInst::ICMP_EQ && Pred1 == ICmpInst::ICMP_EQ)
+    return Builder.CreateICmpULT(CtPop, ConstantInt::get(CtPop->getType(), 2));
+
+  return nullptr;
+}
+
 /// Reduce a pair of compares that check if a value has exactly 1 bit set.
 static Value *foldIsPowerOf2(ICmpInst *Cmp0, ICmpInst *Cmp1, bool JoinedByAnd,
                              InstCombiner::BuilderTy &Builder) {
@@ -1237,6 +1257,11 @@ Value *InstCombinerImpl::foldAndOfICmps(ICmpInst *LHS, ICmpInst *RHS,
   if (Value *V = foldAndOrOfICmpsWithConstEq(RHS, LHS, And, Builder, Q))
     return V;
 
+  if (Value *V = foldIsPowerOf2OrZero(LHS, RHS, /*IsAnd=*/true, Builder))
+    return V;
+  if (Value *V = foldIsPowerOf2OrZero(RHS, LHS, /*IsAnd=*/true, Builder))
+    return V;
+
   // E.g. (icmp sge x, 0) & (icmp slt x, n) --> icmp ult x, n
   if (Value *V = simplifyRangeCheck(LHS, RHS, /*Inverted=*/false))
     return V;
@@ -1322,7 +1347,7 @@ Value *InstCombinerImpl::foldAndOfICmps(ICmpInst *LHS, ICmpInst *RHS,
 }
 
 Value *InstCombinerImpl::foldLogicOfFCmps(FCmpInst *LHS, FCmpInst *RHS,
-                                          bool IsAnd) {
+                                          bool IsAnd, bool IsLogicalSelect) {
   Value *LHS0 = LHS->getOperand(0), *LHS1 = LHS->getOperand(1);
   Value *RHS0 = RHS->getOperand(0), *RHS1 = RHS->getOperand(1);
   FCmpInst::Predicate PredL = LHS->getPredicate(), PredR = RHS->getPredicate();
@@ -1351,11 +1376,22 @@ Value *InstCombinerImpl::foldLogicOfFCmps(FCmpInst *LHS, FCmpInst *RHS,
     unsigned FCmpCodeL = getFCmpCode(PredL);
     unsigned FCmpCodeR = getFCmpCode(PredR);
     unsigned NewPred = IsAnd ? FCmpCodeL & FCmpCodeR : FCmpCodeL | FCmpCodeR;
+
+    // Intersect the fast math flags.
+    // TODO: We can union the fast math flags unless this is a logical select.
+    IRBuilder<>::FastMathFlagGuard FMFG(Builder);
+    FastMathFlags FMF = LHS->getFastMathFlags();
+    FMF &= RHS->getFastMathFlags();
+    Builder.setFastMathFlags(FMF);
+
     return getFCmpValue(NewPred, LHS0, LHS1, Builder);
   }
 
-  if ((PredL == FCmpInst::FCMP_ORD && PredR == FCmpInst::FCMP_ORD && IsAnd) ||
-      (PredL == FCmpInst::FCMP_UNO && PredR == FCmpInst::FCMP_UNO && !IsAnd)) {
+  // This transform is not valid for a logical select.
+  if (!IsLogicalSelect &&
+      ((PredL == FCmpInst::FCMP_ORD && PredR == FCmpInst::FCMP_ORD && IsAnd) ||
+       (PredL == FCmpInst::FCMP_UNO && PredR == FCmpInst::FCMP_UNO &&
+        !IsAnd))) {
     if (LHS0->getType() != RHS0->getType())
       return nullptr;
 
@@ -2117,7 +2153,7 @@ Instruction *InstCombinerImpl::visitAnd(BinaryOperator &I) {
 
   if (FCmpInst *LHS = dyn_cast<FCmpInst>(I.getOperand(0)))
     if (FCmpInst *RHS = dyn_cast<FCmpInst>(I.getOperand(1)))
-      if (Value *Res = foldLogicOfFCmps(LHS, RHS, true))
+      if (Value *Res = foldLogicOfFCmps(LHS, RHS, /*IsAnd*/ true))
         return replaceInstUsesWith(I, Res);
 
   if (Instruction *FoldedFCmps = reassociateFCmps(I, Builder))
@@ -2584,6 +2620,11 @@ Value *InstCombinerImpl::foldOrOfICmps(ICmpInst *LHS, ICmpInst *RHS,
   if (Value *V = foldAndOrOfICmpsWithConstEq(RHS, LHS, Or, Builder, Q))
     return V;
 
+  if (Value *V = foldIsPowerOf2OrZero(LHS, RHS, /*IsAnd=*/false, Builder))
+    return V;
+  if (Value *V = foldIsPowerOf2OrZero(RHS, LHS, /*IsAnd=*/false, Builder))
+    return V;
+
   // E.g. (icmp slt x, 0) | (icmp sgt x, n) --> icmp ugt x, n
   if (Value *V = simplifyRangeCheck(LHS, RHS, /*Inverted=*/true))
     return V;
@@ -2883,7 +2924,7 @@ Instruction *InstCombinerImpl::visitOr(BinaryOperator &I) {
 
   if (FCmpInst *LHS = dyn_cast<FCmpInst>(I.getOperand(0)))
     if (FCmpInst *RHS = dyn_cast<FCmpInst>(I.getOperand(1)))
-      if (Value *Res = foldLogicOfFCmps(LHS, RHS, false))
+      if (Value *Res = foldLogicOfFCmps(LHS, RHS, /*IsAnd*/ false))
         return replaceInstUsesWith(I, Res);
 
   if (Instruction *FoldedFCmps = reassociateFCmps(I, Builder))
@@ -3525,8 +3566,20 @@ Instruction *InstCombinerImpl::visitXor(BinaryOperator &I) {
   Value *X, *Y;
   Constant *C1;
   if (match(Op1, m_Constant(C1))) {
-    // Use DeMorgan and reassociation to eliminate a 'not' op.
     Constant *C2;
+
+    if (match(Op0, m_OneUse(m_Or(m_Value(X), m_ImmConstant(C2)))) &&
+        match(C1, m_ImmConstant())) {
+      // (X | C2) ^ C1 --> (X & ~C2) ^ (C1^C2)
+      C2 = Constant::replaceUndefsWith(
+          C2, Constant::getAllOnesValue(C2->getType()->getScalarType()));
+      Value *And = Builder.CreateAnd(
+          X, Constant::mergeUndefsWith(ConstantExpr::getNot(C2), C1));
+      return BinaryOperator::CreateXor(
+          And, Constant::mergeUndefsWith(ConstantExpr::getXor(C1, C2), C1));
+    }
+
+    // Use DeMorgan and reassociation to eliminate a 'not' op.
     if (match(Op0, m_OneUse(m_Or(m_Not(m_Value(X)), m_Constant(C2))))) {
       // (~X | C2) ^ C1 --> ((X & ~C2) ^ -1) ^ C1 --> (X & ~C2) ^ ~C1
       Value *And = Builder.CreateAnd(X, ConstantExpr::getNot(C2));

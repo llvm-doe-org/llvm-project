@@ -71,18 +71,48 @@ enum Presence {
   PresenceSharedMemory
 };
 
-static inline Presence checkPresence(void *HostPtr, size_t Bytes, int Device) {
+static inline Presence checkPresence(void *HostPtr, size_t Bytes, int Device,
+                                     void **DevPtr = NULL) {
   void *BufferHost;
   void *BufferDevice;
   size_t BufferSize = omp_get_accessible_buffer(HostPtr, Bytes, Device,
                                                 &BufferHost, &BufferDevice);
-  if (!BufferSize)
+  if (!BufferSize) {
+    if (DevPtr)
+      *DevPtr = NULL;
     return PresenceNone;
-  if (BufferSize == SIZE_MAX)
+  }
+  if (BufferSize == SIZE_MAX) {
+    if (DevPtr)
+      *DevPtr = HostPtr;
     return PresenceSharedMemory;
-  if (BufferHost <= HostPtr &&
-      (char *)HostPtr + Bytes <= (char *)BufferHost + BufferSize)
+  }
+  void *HostPtrEnd = (char *)HostPtr + Bytes;
+  void *BufferHostEnd = (char *)BufferHost + BufferSize;
+  if (BufferHost <= HostPtr && HostPtrEnd <= BufferHostEnd) {
+    if (DevPtr)
+      *DevPtr = (char *)BufferDevice + ((char *)HostPtr - (char *)BufferHost);
     return PresenceFullyMapped;
+  }
+  if (DevPtr)
+    *DevPtr = NULL;
+  // Handle any case that omp_get_accessible_buffer returns a buffer that
+  // doesn't actually indicate presence for OpenACC:
+  // - The motivating case is when Bytes=0, arr[N:M] is mapped, and HostPtr is
+  //   within arr[0:N].  This omp_get_accessible_buffer behavior is based on our
+  //   current omp_target_is_accessible behavior, which is under discussion at
+  //   <https://github.com/llvm/llvm-project/issues/54899>.
+  // - Actually, no checkPresence caller currently cares about that case because
+  //   they all specify Bytes>0 or only check for PresenceSharedMemory.  Callers
+  //   might evolve, so we handle that case anyway.
+  // - The detection here is general in case more cases appear later.  That is,
+  //   it handles any case where the Host[0:Bytes] is outside the device buffer
+  //   returned by omp_get_accessible_buffer.
+  // - In summary, as omp_get_accessible_buffer, omp_target_is_accessible, and
+  //   checkPresence callers evolve in this regard, most likely checkPresence
+  //   won't need to be adjusted except for these comments.
+  if (HostPtrEnd <= BufferHost || BufferHostEnd <= HostPtr)
+    return PresenceNone;
   return PresencePartiallyMapped;
 }
 
@@ -1028,74 +1058,45 @@ void acc_unmap_data(void *data_arg) {
  *--------------------------------------------------------------------------*/
 
 void *acc_deviceptr(void *data_arg) {
-  // Handling of null pointer:
-  // - Return a null pointer.
+  // Handling of null pointer or shared memory (including host as current
+  // device):
+  // - OpenACC 3.2, sec. 3.2.23 "acc_deviceptr", L3843-3844:
+  //   "If the data is in shared memory or data_arg is a null pointer,
+  //   acc_deviceptr returns the incoming address."
   // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenACC 3.1 and OpenMP 5.1 are unclear about the behavior in this case.
-  // - This behavior seems to follow the OpenACC technical committee's idea that
-  //   a null pointer is considered always present, especially if we assume it
-  //   was automatically mapped to a null pointer.
+  // We do not call omp_get_mapped_ptr because OpenMP 5.2 does not clarify its
+  // handling of:
+  // - Null pointer.
+  // - Shared memory (including host as current device).  Moreover the current
+  //   omp_get_mapped_ptr implementation returns a null pointer in this case,
+  //   but acc_deviceptr must return data_arg, as explained above.
+  // - The case where data_arg is within arr[0:N] when only arr[N:M] is
+  //   currently mapped.  Moreover, the current omp_get_mapped_ptr
+  //   implementation returns a non-null pointer in this case, but
+  //   acc_deviceptr must return a null pointer.  This behavior is under
+  //   discussion at <https://github.com/llvm/llvm-project/issues/54899>.
   if (!data_arg)
     return NULL;
-  // Handling of shared memory (including host as current device):
-  // - Return data_arg, for consistency with acc_is_present, which always
-  //   returns true in this case.
-  // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  // - OpenMP 5.1 is unclear about the behavior in this case, but "mapped" seems
-  //   to imply an actual present table entry vs. just shared memory.  On the
-  //   other hand, the spec is clear that, if the specified device is the
-  //   initial device (host), then it returns the host pointer.
-  // - TODO: If we decide that omp_get_mapped_ptr definitely isn't intended to
-  //   handle shared memory as we require here, it's probably more reasonable to
-  //   just call omp_get_accessible_buffer once here to get the desired pointer,
-  //   thus eliminating checkPresence and omp_get_mapped_ptr calls here.  Of
-  //   course, if we decide omp_get_mapped_ptr definitely is intended to do what
-  //   we want, we can just eliminate this checkPresence call.
-  int Dev = omp_get_default_device();
-  if (PresenceSharedMemory == checkPresence(data_arg, /*Bytes=*/0, Dev))
-    return data_arg;
-  // OpenACC 3.1, sec. 3.2.34 "acc_deviceptr", L3665-3667:
-  // "The acc_deviceptr routine returns the device pointer associated with a
-  // host address.  data_arg is the address of a host variable or array that has
-  // an active lifetime on the current device.  If the data is not present in
-  // the current device memory, the routine returns a NULL value."
-  return omp_get_mapped_ptr(data_arg, Dev);
+  void *DevPtr;
+  checkPresence(data_arg, /*Bytes=*/1, omp_get_default_device(), &DevPtr);
+  return DevPtr;
 }
 
 void *acc_hostptr(void *data_dev) {
-  // Handling of null pointer:
-  // - Return a null pointer.
+  // Handling of null pointer or shared memory (including host as current
+  // device):
+  // - OpenACC 3.2, sec. 3.2.24 "acc_hostptr", L3860-3861:
+  //   "If the data is in shared memory or data_dev is a null pointer,
+  //   acc_hostptr returns the incoming address."
   // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenACC 3.1, sec. 3.2.35 "acc_hostptr", L3677-3678:
-  //   "If the device address is NULL, or does not correspond to any host
-  //   address, the routine returns a NULL value."
-  // - This behavior seems to follow the OpenACC technical committee's idea that
-  //   a null pointer is considered always present, especially if we assume it
-  //   was automatically mapped to a null pointer.
-  // - OpenMP 5.1 is unclear about the behavior of acc_get_mapped_ptr in this
-  //   case, and our extension omp_get_mapped_hostptr should be consistent with
+  // - OpenMP 5.2 is unclear about the behavior of acc_get_mapped_ptr in these
+  //   cases, and our extension omp_get_mapped_hostptr should be consistent with
   //   omp_get_mapped_ptr.
   if (!data_dev)
     return NULL;
-  // Handling of shared memory (including host as current device):
-  // - Return data_dev, for consistency with acc_deviceptr.
-  // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  // - OpenMP 5.1 is unclear about the behavior of acc_get_mapped_ptr in this
-  //   case, and our extension omp_get_mapped_hostptr should be consistent with
-  //   omp_get_mapped_ptr.
-  // - TODO: As in acc_deviceptr, we can simplify the remaining code once we
-  //   decide how omp_get_mapped_hostptr should behave.
   int Dev = omp_get_default_device();
   if (PresenceSharedMemory == checkPresence(data_dev, /*Bytes=*/0, Dev))
     return data_dev;
-  // OpenACC 3.1, sec. 3.2.35 "acc_hostptr", L3675-3678:
-  // "The acc_hostptr routine returns the host pointer associated with a device
-  // address. data_dev is the address of a device variable or array, such as
-  // that returned from acc_deviceptr, acc_create or acc_copyin. If the device
-  // address is NULL, or does not correspond to any host address, the routine
-  // returns a NULL value."
   return omp_get_mapped_hostptr(data_dev, Dev);
 }
 
@@ -1104,26 +1105,28 @@ int acc_is_present(void *data_arg, size_t bytes) {
   // - Return true, regardless of bytes.
   // - This behavior appears to mimic nvc 20.9-0 except that, strangely, it
   //   returns false if the OpenACC runtime hasn't started yet.
-  // - OpenACC 3.1 is unclear about the behavior in this case.
-  // - This behavior seems to follow the OpenACC technical committee's idea that
-  //   a null pointer is considered always present.
-  // - OpenMP 5.1 sec. 3.8.3 "omp_target_is_present", p. 416, L13 and
-  //   OpenMP 5.1 sec. 3.8.4 "omp_target_is_accessible", p. 417, L15:
+  // - OpenACC 3.2, sec. 6 "Glossary", "Present data", L5134-5135:
+  //   "A null pointer is defined as always present with a length of zero
+  //   bytes."
+  // - OpenMP 5.2 sec. 18.8.3 "omp_target_is_present", p. 389, L13 and
+  //   OpenMP 5.2 sec. 18.8.4 "omp_target_is_accessible", p. 390, L15:
   //   "The value of ptr must be a valid host pointer or NULL (or C_NULL_PTR,
   //   for Fortran)."
-  // - Thus, OpenMP 5.1 explicitly permits this case but is unclear about the
+  // - Thus, OpenMP 5.2 explicitly permits this case but is unclear about the
   //   behavior.
+  // - FIXME: We are not yet handling the case of !data_arg and bytes>0
+  //   correctly according to OpenACC 3.2.  Should return false.
   if (!data_arg)
     return true;
   // Handling of shared memory (including host as current device):
   // - Return true.
-  // - OpenACC 3.1, sec. 3.2.36 "acc_is_present", L3692-3693:
-  //   "The acc_is_present routine tests whether the specified host data is
+  // - OpenACC 3.2, sec. 3.2.25 "acc_is_present", L3867-3868:
+  //   "The acc_is_present routine tests whether a variable or array region is
   //   accessible from the current device."
-  // - OpenACC 3.1, sec. 3.2.36 "acc_is_present", L3696-3697:
-  //   "The routine returns .true. if the specified data is in shared memory or
-  //   is fully present, and .false. otherwise."
-  // - OpenMP 5.1, sec. 3.8.4 "omp_target_is_accessible", p. 417, L21-22:
+  // - OpenACC 3.2, sec. 3.2.25 "acc_is_present", L3884:
+  //   "If the data is in shared memory, a call to acc_is_present will
+  //   evaluate to true."
+  // - OpenMP 5.2, sec. 18.8.4 "omp_target_is_accessible", p. 390, L20-21:
   //   "This routine returns true if the storage of size bytes starting at the
   //   address given by ptr is accessible from device device_num. Otherwise, it
   //   returns false."
@@ -1133,21 +1136,16 @@ int acc_is_present(void *data_arg, size_t bytes) {
   //   description also uses the term "accessible".  OpenACC spells out the
   //   intended meaning of that term for shared memory by spelling out the
   //   behavior of acc_is_present, as quoted above.  OpenMP establishes the same
-  //   meaning of that term for unified shared memory in OpenMP 5.1, sec. 2.5.1
-  //   "requires directive".
+  //   meaning of that term for unified shared memory in OpenMP 5.2, sec. 8.2.1
+  //   "requirement clauses".
   // Handling of bytes=0:
-  // - OpenACC 3.1, sec. 3.2.36 "acc_is_present", L3697-3699:
-  //   "If the byte length is zero, the routine returns nonzero in C/C++ or
-  //   .true. in Fortran if the given address is in shared memory or is present
-  //   at all in the current device memory."
-  // - OpenMP 5.1, sec. 3.8.4 "omp_target_is_accessible", p. 417, L21-22:
-  //   "This routine returns true if the storage of size bytes starting at the
-  //   address given by ptr is accessible from device device_num.  Otherwise, it
-  //   returns false."
-  // - The OpenMP 5.1 spec is not perfectly clear, but we assume it's intended
-  //   to handle bytes=0 in the same manner as OpenACC, and that's how LLVM's
-  //   OpenMP runtime currently implements it.
-  return omp_target_is_accessible(data_arg, bytes, omp_get_default_device());
+  // - OpenACC 3.2, sec. 3.2.35 "acc_is_present", L3881-3882:
+  //   "A bytes value of zero is treated as a value of one if data_arg is not a
+  //   null pointer."
+  // - The OpenMP 5.2 spec does not appear to clarify this case for
+  //   omp_target_is_accessible, so we make no assumption about its behavior.
+  return omp_target_is_accessible(data_arg, bytes ? bytes : 1,
+                                  omp_get_default_device());
 }
 
 /*----------------------------------------------------------------------------

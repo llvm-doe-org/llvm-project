@@ -282,8 +282,8 @@ public:
   }
 
   // Returns the SectionPiece at a given input section offset.
-  SectionPiece *getSectionPiece(uint64_t offset);
-  const SectionPiece *getSectionPiece(uint64_t offset) const {
+  SectionPiece &getSectionPiece(uint64_t offset);
+  const SectionPiece &getSectionPiece(uint64_t offset) const {
     return const_cast<MergeInputSection *>(this)->getSectionPiece(offset);
   }
 
@@ -325,6 +325,7 @@ public:
   SmallVector<EhSectionPiece, 0> pieces;
 
   SyntheticSection *getParent() const;
+  uint64_t getParentOffset(uint64_t offset) const;
 };
 
 // This is a section that is added directly to an output section
@@ -348,7 +349,9 @@ public:
   // beginning of the output section.
   template <class ELFT> void writeTo(uint8_t *buf);
 
-  OutputSection *getParent() const;
+  OutputSection *getParent() const {
+    return reinterpret_cast<OutputSection *>(parent);
+  }
 
   // This variable has two usages. Initially, it represents an index in the
   // OutputSection's InputSection list, and is used when ordering SHF_LINK_ORDER

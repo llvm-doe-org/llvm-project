@@ -15,6 +15,7 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
+#include "llvm/ADT/SmallString.h"
 
 #include "llvm/ADT/APSInt.h"
 
@@ -570,6 +571,15 @@ OpFoldResult arith::XOrIOp::fold(ArrayRef<Attribute> operands) {
 void arith::XOrIOp::getCanonicalizationPatterns(
     RewritePatternSet &patterns, MLIRContext *context) {
   patterns.add<XOrINotCmpI>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// NegFOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult arith::NegFOp::fold(ArrayRef<Attribute> operands) {
+  return constFoldUnaryOp<FloatAttr>(operands,
+                                     [](const APFloat &a) { return -a; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -1805,7 +1815,7 @@ OpFoldResult arith::SelectOp::fold(ArrayRef<Attribute> operands) {
 
 ParseResult SelectOp::parse(OpAsmParser &parser, OperationState &result) {
   Type conditionType, resultType;
-  SmallVector<OpAsmParser::OperandType, 3> operands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 3> operands;
   if (parser.parseOperandList(operands, /*requiredOperandCount=*/3) ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(resultType))
@@ -1862,10 +1872,40 @@ LogicalResult arith::SelectOp::verify() {
 OpFoldResult arith::ShLIOp::fold(ArrayRef<Attribute> operands) {
   // Don't fold if shifting more than the bit width.
   bool bounded = false;
-  auto result =
-      constFoldBinaryOp<IntegerAttr>(operands, [&](APInt a, const APInt &b) {
+  auto result = constFoldBinaryOp<IntegerAttr>(
+      operands, [&](const APInt &a, const APInt &b) {
         bounded = b.ule(b.getBitWidth());
         return std::move(a).shl(b);
+      });
+  return bounded ? result : Attribute();
+}
+
+//===----------------------------------------------------------------------===//
+// ShRUIOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult arith::ShRUIOp::fold(ArrayRef<Attribute> operands) {
+  // Don't fold if shifting more than the bit width.
+  bool bounded = false;
+  auto result = constFoldBinaryOp<IntegerAttr>(
+      operands, [&](const APInt &a, const APInt &b) {
+        bounded = b.ule(b.getBitWidth());
+        return std::move(a).lshr(b);
+      });
+  return bounded ? result : Attribute();
+}
+
+//===----------------------------------------------------------------------===//
+// ShRSIOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult arith::ShRSIOp::fold(ArrayRef<Attribute> operands) {
+  // Don't fold if shifting more than the bit width.
+  bool bounded = false;
+  auto result = constFoldBinaryOp<IntegerAttr>(
+      operands, [&](const APInt &a, const APInt &b) {
+        bounded = b.ule(b.getBitWidth());
+        return std::move(a).ashr(b);
       });
   return bounded ? result : Attribute();
 }

@@ -11,7 +11,6 @@ add_mlir_library(MLIRLinalgTestPasses
 
   LINK_LIBS PUBLIC
   MLIRAffine
-  MLIRAffineBufferizableOpInterfaceImpl
   MLIRArithmetic
   MLIRArithmeticTransforms
   MLIRBufferization
@@ -21,6 +20,7 @@ add_mlir_library(MLIRLinalgTestPasses
   MLIRLinalgTransforms
   MLIRLLVMToLLVMIRTranslation
   MLIRMemRef
+  MLIRParser
   MLIRPass
   MLIRSCF
   MLIRSCFTransforms

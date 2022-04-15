@@ -4,6 +4,7 @@ module LLVM_Analysis {
   module * { export * }
 
   // This is intended for (repeated) textual inclusion.
+  textual header "Analysis/ScalarFuncs.def"
   textual header "Analysis/TargetLibraryInfo.def"
   textual header "Analysis/VecFuncs.def"
 }
@@ -254,6 +255,7 @@ module LLVM_intrinsic_gen {
   module IR_InstrTypes { header "IR/InstrTypes.h" export * }
   module IR_Instructions { header "IR/Instructions.h" export * }
   module IR_TypeFinder { header "IR/TypeFinder.h" export * }
+  module IR_VectorBuilder { header "IR/VectorBuilder.h" export * }
 
 
   // Intrinsics.h

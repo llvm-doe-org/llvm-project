@@ -223,7 +223,7 @@ public:
 
   class CommandOptions : public Options {
   public:
-    CommandOptions() {}
+    CommandOptions() = default;
 
     ~CommandOptions() override = default;
 
@@ -351,7 +351,7 @@ public:
 
   class CommandOptions : public Options {
   public:
-    CommandOptions() {}
+    CommandOptions() = default;
 
     ~CommandOptions() override = default;
 
@@ -425,7 +425,7 @@ protected:
       // Dump the VFS to a buffer.
       std::string str;
       raw_string_ostream os(str);
-      static_cast<vfs::RedirectingFileSystem &>(*vfs).dump(os);
+      static_cast<vfs::RedirectingFileSystem &>(*vfs).print(os);
       os.flush();
 
       // Return the string.

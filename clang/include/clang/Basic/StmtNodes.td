@@ -284,6 +284,10 @@ def OMPInteropDirective : StmtNode<OMPExecutableDirective>;
 def OMPDispatchDirective : StmtNode<OMPExecutableDirective>;
 def OMPMaskedDirective : StmtNode<OMPExecutableDirective>;
 def OMPGenericLoopDirective : StmtNode<OMPLoopDirective>;
+def OMPTeamsGenericLoopDirective : StmtNode<OMPLoopDirective>;
+def OMPTargetTeamsGenericLoopDirective : StmtNode<OMPLoopDirective>;
+def OMPParallelGenericLoopDirective : StmtNode<OMPLoopDirective>;
+def OMPTargetParallelGenericLoopDirective : StmtNode<OMPLoopDirective>;
 
 // OpenACC Directives.
 def ACCDirectiveStmt : StmtNode<DirectiveStmt, 1>;

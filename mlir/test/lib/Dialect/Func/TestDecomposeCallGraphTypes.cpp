@@ -23,6 +23,7 @@ namespace {
 /// For example, `tuple<T1, T2, T3> --> T1, T2, T3`.
 struct TestDecomposeCallGraphTypes
     : public PassWrapper<TestDecomposeCallGraphTypes, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestDecomposeCallGraphTypes)
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<test::TestDialect>();
@@ -49,7 +50,7 @@ struct TestDecomposeCallGraphTypes
     target.addDynamicallyLegalOp<func::CallOp>(
         [&](func::CallOp op) { return typeConverter.isLegal(op); });
     target.addDynamicallyLegalOp<FuncOp>([&](FuncOp op) {
-      return typeConverter.isSignatureLegal(op.getType());
+      return typeConverter.isSignatureLegal(op.getFunctionType());
     });
 
     typeConverter.addConversion([](Type type) { return type; });

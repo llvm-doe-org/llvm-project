@@ -14,8 +14,7 @@
 #define LLVM_TRANSFORMS_VECTORIZE_VPLANTRANSFORMS_H
 
 #include "VPlan.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/Transforms/Vectorize/LoopVectorizationLegality.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 
 namespace llvm {
 
@@ -55,8 +54,10 @@ struct VPlanTransforms {
   /// removed.
   static void removeDeadRecipes(VPlan &Plan, Loop &OrigLoop);
 
-  //  If all users of a vector IV need scalar values, provide them by building
-  //  scalar steps off of the canonical scalar IV, and remove the vector IV.
+  /// If any user of a VPWidenIntOrFpInductionRecipe needs scalar values,
+  /// provide them by building scalar steps off of the canonical scalar IV and
+  /// update the original IV's users. This is an optional optimization to reduce
+  /// the needs of vector extracts.
   static void optimizeInductions(VPlan &Plan, ScalarEvolution &SE);
 };
 

@@ -76,9 +76,11 @@ void RTNAME(PointerAssociateLowerBounds)(Descriptor &pointer,
   Terminator terminator{__FILE__, __LINE__};
   std::size_t boundElementBytes{lowerBounds.ElementBytes()};
   for (int j{0}; j < rank; ++j) {
-    pointer.GetDimension(j).SetLowerBound(
-        GetInt64(lowerBounds.ZeroBasedIndexedElement<const char>(j),
-            boundElementBytes, terminator));
+    Dimension &dim{pointer.GetDimension(j)};
+    dim.SetLowerBound(dim.Extent() == 0
+            ? 1
+            : GetInt64(lowerBounds.ZeroBasedIndexedElement<const char>(j),
+                  boundElementBytes, terminator));
   }
 }
 
@@ -139,7 +141,7 @@ int RTNAME(PointerDeallocate)(Descriptor &pointer, bool hasStat,
   if (!pointer.IsAllocated()) {
     return ReturnError(terminator, StatBaseNull, errMsg, hasStat);
   }
-  return ReturnError(terminator, pointer.Destroy(true), errMsg, hasStat);
+  return ReturnError(terminator, pointer.Destroy(true, true), errMsg, hasStat);
 }
 
 bool RTNAME(PointerIsAssociated)(const Descriptor &pointer) {

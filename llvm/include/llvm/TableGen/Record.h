@@ -28,7 +28,6 @@
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/TrailingObjects.h"
 #include "llvm/Support/raw_ostream.h"
-#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -1907,6 +1906,11 @@ public:
   /// classes. The classes must be defined.
   std::vector<Record *> getAllDerivedDefinitions(
       ArrayRef<StringRef> ClassNames) const;
+
+  /// Get all the concrete records that inherit from specified class, if the
+  /// class is defined. Returns an empty vector if the class is not defined.
+  std::vector<Record *>
+  getAllDerivedDefinitionsIfDefined(StringRef ClassName) const;
 
   void dump() const;
 };

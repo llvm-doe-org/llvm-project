@@ -13,6 +13,7 @@
 #include "ToolChains/AVR.h"
 #include "ToolChains/Ananas.h"
 #include "ToolChains/BareMetal.h"
+#include "ToolChains/CSKYToolChain.h"
 #include "ToolChains/Clang.h"
 #include "ToolChains/CloudABI.h"
 #include "ToolChains/Contiki.h"
@@ -59,6 +60,7 @@
 #include "clang/Driver/InputInfo.h"
 #include "clang/Driver/Job.h"
 #include "clang/Driver/Options.h"
+#include "clang/Driver/Phases.h"
 #include "clang/Driver/SanitizerArgs.h"
 #include "clang/Driver/Tool.h"
 #include "clang/Driver/ToolChain.h"
@@ -334,10 +336,10 @@ phases::ID Driver::getFinalPhase(const DerivedArgList &DAL,
     FinalPhase = phases::Preprocess;
 
   // --precompile only runs up to precompilation.
-  } else if ((PhaseArg = DAL.getLastArg(options::OPT__precompile))) {
+  } else if ((PhaseArg = DAL.getLastArg(options::OPT__precompile)) ||
+             (PhaseArg = DAL.getLastArg(options::OPT_extract_api))) {
     FinalPhase = phases::Precompile;
-
-  // -{fsyntax-only,-analyze,emit-ast} only run up to the compiler.
+    // -{fsyntax-only,-analyze,emit-ast} only run up to the compiler.
   } else if ((PhaseArg = DAL.getLastArg(options::OPT_fsyntax_only)) ||
              (PhaseArg = DAL.getLastArg(options::OPT_fopenacc_print_EQ)) ||
              (PhaseArg = DAL.getLastArg(options::OPT_fopenacc_ast_print_EQ)) ||
@@ -348,8 +350,7 @@ phases::ID Driver::getFinalPhase(const DerivedArgList &DAL,
              (PhaseArg = DAL.getLastArg(options::OPT_rewrite_legacy_objc)) ||
              (PhaseArg = DAL.getLastArg(options::OPT__migrate)) ||
              (PhaseArg = DAL.getLastArg(options::OPT__analyze)) ||
-             (PhaseArg = DAL.getLastArg(options::OPT_emit_ast)) ||
-             (PhaseArg = DAL.getLastArg(options::OPT_extract_api))) {
+             (PhaseArg = DAL.getLastArg(options::OPT_emit_ast))) {
     FinalPhase = phases::Compile;
 
   // -S only runs up to the backend.
@@ -2313,6 +2314,14 @@ void Driver::BuildInputs(const ToolChain &TC, DerivedArgList &Args,
     assert(!Args.hasArg(options::OPT_x) && "-x and /TC or /TP is not allowed");
   }
 
+  // Warn -x after last input file has no effect
+  {
+    Arg *LastXArg = Args.getLastArgNoClaim(options::OPT_x);
+    Arg *LastInputArg = Args.getLastArgNoClaim(options::OPT_INPUT);
+    if (LastXArg && LastInputArg && LastInputArg->getIndex() < LastXArg->getIndex())
+      Diag(clang::diag::warn_drv_unused_x) << LastXArg->getValue();
+  }
+
   for (Arg *A : Args) {
     if (A->getOption().getKind() == Option::InputClass) {
       const char *Value = A->getValue();
@@ -3016,7 +3025,7 @@ class OffloadingActionBuilder final {
       if (Args.hasArg(options::OPT_gpu_bundle_output,
                       options::OPT_no_gpu_bundle_output))
         BundleOutput = Args.hasFlag(options::OPT_gpu_bundle_output,
-                                    options::OPT_no_gpu_bundle_output);
+                                    options::OPT_no_gpu_bundle_output, true);
     }
 
     bool canUseBundlerUnbundler() const override { return true; }
@@ -3878,13 +3887,9 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
   // Builder to be used to build offloading actions.
   OffloadingActionBuilder OffloadBuilder(C, Args, Inputs);
 
-  // Offload kinds active for this compilation.
-  unsigned OffloadKinds = Action::OFK_None;
-  if (C.hasOffloadToolChain<Action::OFK_OpenMP>())
-    OffloadKinds |= Action::OFK_OpenMP;
-
   // Construct the actions to perform.
   HeaderModulePrecompileJobAction *HeaderModuleAction = nullptr;
+  ExtractAPIJobAction *ExtractAPIAction = nullptr;
   ActionList LinkerInputs;
   ActionList MergerInputs;
 
@@ -3945,6 +3950,12 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
         break;
       }
 
+      if (Phase == phases::Precompile && ExtractAPIAction) {
+        ExtractAPIAction->addHeaderInput(Current);
+        Current = nullptr;
+        break;
+      }
+
       // Try to build the offloading actions and add the result as a dependency
       // to the host.
       if (Args.hasArg(options::OPT_fopenmp_new_driver))
@@ -3962,6 +3973,8 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
 
       if (auto *HMA = dyn_cast<HeaderModulePrecompileJobAction>(NewCurrent))
         HeaderModuleAction = HMA;
+      else if (auto *EAA = dyn_cast<ExtractAPIJobAction>(NewCurrent))
+        ExtractAPIAction = EAA;
 
       Current = NewCurrent;
 
@@ -3983,7 +3996,7 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
     if (!Args.hasArg(options::OPT_fopenmp_new_driver))
       OffloadBuilder.appendTopLevelActions(Actions, Current, InputArg);
     else if (Current)
-      Current->propagateHostOffloadInfo(OffloadKinds,
+      Current->propagateHostOffloadInfo(C.getActiveOffloadKinds(),
                                         /*BoundArch=*/nullptr);
   }
 
@@ -4004,9 +4017,9 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
     if (ShouldEmitStaticLibrary(Args)) {
       LA = C.MakeAction<StaticLibJobAction>(LinkerInputs, types::TY_Image);
     } else if (Args.hasArg(options::OPT_fopenmp_new_driver) &&
-               OffloadKinds != Action::OFK_None) {
+               C.getActiveOffloadKinds() != Action::OFK_None) {
       LA = C.MakeAction<LinkerWrapperJobAction>(LinkerInputs, types::TY_Image);
-      LA->propagateHostOffloadInfo(OffloadKinds,
+      LA->propagateHostOffloadInfo(C.getActiveOffloadKinds(),
                                    /*BoundArch=*/nullptr);
     } else {
       LA = C.MakeAction<LinkJobAction>(LinkerInputs, types::TY_Image);
@@ -4105,53 +4118,60 @@ Action *Driver::BuildOffloadingActions(Compilation &C,
   if (!isa<CompileJobAction>(HostAction))
     return HostAction;
 
-  SmallVector<const ToolChain *, 2> ToolChains;
-  ActionList DeviceActions;
+  OffloadAction::DeviceDependences DDeps;
 
   types::ID InputType = Input.first;
   const Arg *InputArg = Input.second;
 
-  auto OpenMPTCRange = C.getOffloadToolChains<Action::OFK_OpenMP>();
-  for (auto TI = OpenMPTCRange.first, TE = OpenMPTCRange.second; TI != TE; ++TI)
-    ToolChains.push_back(TI->second);
+  const Action::OffloadKind OffloadKinds[] = {Action::OFK_OpenMP};
 
-  for (unsigned I = 0; I < ToolChains.size(); ++I)
-    DeviceActions.push_back(C.MakeAction<InputAction>(*InputArg, InputType));
+  for (Action::OffloadKind Kind : OffloadKinds) {
+    SmallVector<const ToolChain *, 2> ToolChains;
+    ActionList DeviceActions;
 
-  if (DeviceActions.empty())
-    return HostAction;
+    auto TCRange = C.getOffloadToolChains(Kind);
+    for (auto TI = TCRange.first, TE = TCRange.second; TI != TE; ++TI)
+      ToolChains.push_back(TI->second);
 
-  auto PL = types::getCompilationPhases(*this, Args, InputType);
+    if (ToolChains.empty())
+      continue;
 
-  for (phases::ID Phase : PL) {
-    if (Phase == phases::Link) {
-      assert(Phase == PL.back() && "linking must be final compilation step.");
-      break;
+    for (unsigned I = 0; I < ToolChains.size(); ++I)
+      DeviceActions.push_back(C.MakeAction<InputAction>(*InputArg, InputType));
+
+    if (DeviceActions.empty())
+      return HostAction;
+
+    auto PL = types::getCompilationPhases(*this, Args, InputType);
+
+    for (phases::ID Phase : PL) {
+      if (Phase == phases::Link) {
+        assert(Phase == PL.back() && "linking must be final compilation step.");
+        break;
+      }
+
+      auto TC = ToolChains.begin();
+      for (Action *&A : DeviceActions) {
+        A = ConstructPhaseAction(C, Args, Phase, A, Kind);
+
+        if (isa<CompileJobAction>(A) && Kind == Action::OFK_OpenMP) {
+          HostAction->setCannotBeCollapsedWithNextDependentAction();
+          OffloadAction::HostDependence HDep(
+              *HostAction, *C.getSingleOffloadToolChain<Action::OFK_Host>(),
+              /*BourdArch=*/nullptr, Action::OFK_OpenMP);
+          OffloadAction::DeviceDependences DDep;
+          DDep.add(*A, **TC, /*BoundArch=*/nullptr, Kind);
+          A = C.MakeAction<OffloadAction>(HDep, DDep);
+        }
+        ++TC;
+      }
     }
 
     auto TC = ToolChains.begin();
-    for (Action *&A : DeviceActions) {
-      A = ConstructPhaseAction(C, Args, Phase, A, Action::OFK_OpenMP);
-
-      if (isa<CompileJobAction>(A)) {
-        HostAction->setCannotBeCollapsedWithNextDependentAction();
-        OffloadAction::HostDependence HDep(
-            *HostAction, *C.getSingleOffloadToolChain<Action::OFK_Host>(),
-            /*BourdArch=*/nullptr, Action::OFK_OpenMP);
-        OffloadAction::DeviceDependences DDep;
-        DDep.add(*A, **TC, /*BoundArch=*/nullptr, Action::OFK_OpenMP);
-        A = C.MakeAction<OffloadAction>(HDep, DDep);
-      }
-      ++TC;
+    for (Action *A : DeviceActions) {
+      DDeps.add(*A, **TC, /*BoundArch=*/nullptr, Kind);
+      TC++;
     }
-  }
-
-  OffloadAction::DeviceDependences DDeps;
-
-  auto TC = ToolChains.begin();
-  for (Action *A : DeviceActions) {
-    DDeps.add(*A, **TC, /*BoundArch=*/nullptr, Action::OFK_OpenMP);
-    TC++;
   }
 
   OffloadAction::HostDependence HDep(
@@ -4198,6 +4218,10 @@ Action *Driver::ConstructPhaseAction(
     return C.MakeAction<PreprocessJobAction>(Input, OutputTy);
   }
   case phases::Precompile: {
+    // API extraction should not generate an actual precompilation action.
+    if (Args.hasArg(options::OPT_extract_api))
+      return C.MakeAction<ExtractAPIJobAction>(Input, types::TY_API_INFO);
+
     types::ID OutputTy = getPrecompiledType(Input->getType());
     assert(OutputTy != types::TY_INVALID &&
            "Cannot precompile this input type!");
@@ -4213,7 +4237,6 @@ Action *Driver::ConstructPhaseAction(
     }
 
     if (Args.hasArg(options::OPT_fsyntax_only) ||
-        Args.hasArg(options::OPT_extract_api) ||
         Args.hasArg(options::OPT_fopenacc_print_EQ) ||
         Args.hasArg(options::OPT_fopenacc_ast_print_EQ)) {
       // Syntax checks should not emit a PCH file
@@ -4246,7 +4269,7 @@ Action *Driver::ConstructPhaseAction(
     if (Args.hasArg(options::OPT_verify_pch))
       return C.MakeAction<VerifyPCHJobAction>(Input, types::TY_Nothing);
     if (Args.hasArg(options::OPT_extract_api))
-      return C.MakeAction<CompileJobAction>(Input, types::TY_API_INFO);
+      return C.MakeAction<ExtractAPIJobAction>(Input, types::TY_API_INFO);
     return C.MakeAction<CompileJobAction>(Input, types::TY_LLVM_BC);
   }
   case phases::Backend: {
@@ -5713,6 +5736,9 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
       case llvm::Triple::spirv64:
         TC = std::make_unique<toolchains::SPIRVToolChain>(*this, Target, Args);
         break;
+      case llvm::Triple::csky:
+        TC = std::make_unique<toolchains::CSKYToolChain>(*this, Target, Args);
+        break;
       default:
         if (Target.getVendor() == llvm::Triple::Myriad)
           TC = std::make_unique<toolchains::MyriadToolChain>(*this, Target,
@@ -5777,7 +5803,8 @@ bool Driver::ShouldUseClangCompiler(const JobAction &JA) const {
 
   // And say "no" if this is not a kind of action clang understands.
   if (!isa<PreprocessJobAction>(JA) && !isa<PrecompileJobAction>(JA) &&
-      !isa<CompileJobAction>(JA) && !isa<BackendJobAction>(JA))
+      !isa<CompileJobAction>(JA) && !isa<BackendJobAction>(JA) &&
+      !isa<ExtractAPIJobAction>(JA))
     return false;
 
   return true;

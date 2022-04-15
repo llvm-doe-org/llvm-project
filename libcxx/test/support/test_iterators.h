@@ -46,7 +46,7 @@ public:
     template <class T>
     void operator,(T const &) = delete;
 };
-#ifndef _LIBCPP_HAS_NO_CONCEPTS
+#if _LIBCPP_STD_VER > 17
    static_assert(std::output_iterator<cpp17_output_iterator<int*>, int>);
 #endif
 
@@ -71,7 +71,6 @@ public:
         TEST_CONSTEXPR cpp17_input_iterator(const cpp17_input_iterator<U, T>& u) : it_(u.it_) {}
 
     TEST_CONSTEXPR reference operator*() const {return *it_;}
-    TEST_CONSTEXPR pointer operator->() const {return it_;}
 
     TEST_CONSTEXPR_CXX14 cpp17_input_iterator& operator++() {++it_; return *this;}
     TEST_CONSTEXPR_CXX14 cpp17_input_iterator operator++(int) {return cpp17_input_iterator(it_++);}
@@ -84,7 +83,7 @@ public:
     template <class T>
     void operator,(T const &) = delete;
 };
-#ifndef _LIBCPP_HAS_NO_CONCEPTS
+#if _LIBCPP_STD_VER > 17
    static_assert(std::input_iterator<cpp17_input_iterator<int*>>);
 #endif
 
@@ -107,7 +106,6 @@ public:
         TEST_CONSTEXPR forward_iterator(const forward_iterator<U>& u) : it_(u.it_) {}
 
     TEST_CONSTEXPR reference operator*() const {return *it_;}
-    TEST_CONSTEXPR pointer operator->() const {return it_;}
 
     TEST_CONSTEXPR_CXX14 forward_iterator& operator++() {++it_; return *this;}
     TEST_CONSTEXPR_CXX14 forward_iterator operator++(int) {return forward_iterator(it_++);}
@@ -140,7 +138,6 @@ public:
         TEST_CONSTEXPR bidirectional_iterator(const bidirectional_iterator<U>& u) : it_(u.it_) {}
 
     TEST_CONSTEXPR reference operator*() const {return *it_;}
-    TEST_CONSTEXPR pointer operator->() const {return it_;}
 
     TEST_CONSTEXPR_CXX14 bidirectional_iterator& operator++() {++it_; return *this;}
     TEST_CONSTEXPR_CXX14 bidirectional_iterator& operator--() {--it_; return *this;}
@@ -175,7 +172,6 @@ public:
         TEST_CONSTEXPR random_access_iterator(const random_access_iterator<U>& u) : it_(u.it_) {}
 
     TEST_CONSTEXPR_CXX14 reference operator*() const {return *it_;}
-    TEST_CONSTEXPR_CXX14 pointer operator->() const {return it_;}
     TEST_CONSTEXPR_CXX14 reference operator[](difference_type n) const {return it_[n];}
 
     TEST_CONSTEXPR_CXX14 random_access_iterator& operator++() {++it_; return *this;}
@@ -486,7 +482,7 @@ private:
     const T *current_;
 };
 
-#if TEST_STD_VER > 17 && !defined(_LIBCPP_HAS_NO_CONCEPTS)
+#if TEST_STD_VER > 17
 
 template <class It>
 class cpp20_input_iterator
@@ -518,6 +514,32 @@ template<std::input_iterator I>
 struct iter_value_or_void<I> {
     using type = std::iter_value_t<I>;
 };
+
+template <class It>
+class cpp20_output_iterator {
+  It it_;
+
+public:
+  using difference_type = std::iter_difference_t<It>;
+
+  constexpr explicit cpp20_output_iterator(It it) : it_(it) {}
+  cpp20_output_iterator(cpp20_output_iterator&&) = default;
+  cpp20_output_iterator& operator=(cpp20_output_iterator&&) = default;
+
+  constexpr decltype(auto) operator*() const { return *it_; }
+  constexpr cpp20_output_iterator& operator++() {
+    ++it_;
+    return *this;
+  }
+  constexpr cpp20_output_iterator operator++(int) { return cpp20_output_iterator(it_++); }
+
+  friend constexpr It base(const cpp20_output_iterator& i) { return i.it_; }
+
+  template <class T>
+  void operator,(T const&) = delete;
+};
+
+static_assert(std::output_iterator<cpp20_output_iterator<int*>, int>);
 
 // Iterator adaptor that counts the number of times the iterator has had a successor/predecessor
 // operation called. Has two recorders:
@@ -672,7 +694,7 @@ private:
     difference_type stride_displacement_ = 0;
 };
 
-#endif // TEST_STD_VER > 17 && !defined(_LIBCPP_HAS_NO_CONCEPTS)
+#endif // TEST_STD_VER > 17
 
 #if TEST_STD_VER > 17
 template <class It>

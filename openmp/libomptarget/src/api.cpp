@@ -156,6 +156,7 @@ EXTERN void *llvm_omp_target_alloc_shared(size_t size, int device_num) {
   return targetAllocExplicit(size, device_num, TARGET_ALLOC_SHARED, __func__);
 }
 
+EXTERN void *llvm_omp_target_dynamic_shared_alloc() { return nullptr; }
 EXTERN void *llvm_omp_get_dynamic_shared() { return nullptr; }
 
 EXTERN void omp_target_free(void *device_ptr, int device_num) {
@@ -268,6 +269,7 @@ EXTERN int omp_target_is_present(const void *ptr, int device_num) {
 
 EXTERN int omp_target_is_accessible(const void *ptr, size_t size,
                                     int device_num) {
+  TIMESCOPE();
   // OpenMP 5.1, sec. 3.8.4 "omp_target_is_accessible", p. 417, L21-22:
   // "This routine returns true if the storage of size bytes starting at the
   // address given by ptr is accessible from device device_num. Otherwise, it
@@ -316,8 +318,11 @@ EXTERN int omp_target_is_accessible(const void *ptr, size_t size,
   bool IsLast;    // not used
   bool IsHostPtr; // not used
   // TODO: How does the spec intend for the size=0 case to be handled?
-  // Currently, we return true if we would return true for size=1 (ptr is within
-  // a range that's accessible).  Does the spec clarify this somewhere?
+  // Currently, for the case where arr[N:M] is mapped, we return true for any
+  // address within arr[0:N+M].  However, size>1 returns true only for arr[N:M].
+  // This is based on the discussion so far at the time of this writing at
+  // <https://github.com/llvm/llvm-project/issues/54899>.  If the behavior
+  // changes, keep comments for omp_get_accessible_buffer in omp.h.var in sync.
   TargetPointerResultTy TPR =
       Device.getTgtPtrBegin(const_cast<void *>(ptr), size, IsLast,
                             /*UpdateRefCount=*/false, /*UseHoldRefCount=*/false,
@@ -328,6 +333,7 @@ EXTERN int omp_target_is_accessible(const void *ptr, size_t size,
 }
 
 EXTERN void *omp_get_mapped_ptr(const void *ptr, int device_num) {
+  TIMESCOPE();
   DP("Call to omp_get_mapped_ptr for device %d and address " DPxMOD
      "\n",
      device_num, DPxPTR(ptr));
@@ -379,6 +385,7 @@ EXTERN void *omp_get_mapped_ptr(const void *ptr, int device_num) {
 }
 
 EXTERN void *omp_get_mapped_hostptr(const void *ptr, int device_num) {
+  TIMESCOPE();
   DP("Call to omp_get_mapped_hostptr for device %d and address " DPxMOD "\n",
      device_num, DPxPTR(ptr));
 
@@ -416,6 +423,7 @@ EXTERN void *omp_get_mapped_hostptr(const void *ptr, int device_num) {
 EXTERN size_t omp_get_accessible_buffer(
   const void *ptr, size_t size, int device_num, void **buffer_host,
   void **buffer_device) {
+  TIMESCOPE();
   DP("Call to omp_get_accessible_buffer for address " DPxMOD ", size %zu, and "
      "device %d\n",
      DPxPTR(ptr), size, device_num);

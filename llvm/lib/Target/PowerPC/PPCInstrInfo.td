@@ -3069,6 +3069,22 @@ def MFLR  : XFXForm_1_ext<31, 339, 8, (outs gprc:$rT), (ins),
 }
 }
 
+let hasSideEffects = 1 in {
+  def MTUDSCR : XFXForm_7_ext<31, 467, 3, (outs), (ins gprc:$rX),
+                              "mtspr 3, $rX", IIC_SprMTSPR>,
+                PPC970_DGroup_Single, PPC970_Unit_FXU;
+  def MFUDSCR : XFXForm_1_ext<31, 339, 3, (outs gprc:$rX), (ins),
+                              "mfspr $rX, 3", IIC_SprMFSPR>,
+                PPC970_DGroup_First, PPC970_Unit_FXU;
+}
+
+// Disable these alias on AIX since they are not supported.
+let Predicates = [ModernAs] in {
+// Aliases for moving to/from dscr to mtspr/mfspr
+def : InstAlias<"mtudscr $Rx", (MTUDSCR gprc:$Rx)>;
+def : InstAlias<"mfudscr $Rx", (MFUDSCR gprc:$Rx)>;
+}
+
 let isCodeGenOnly = 1 in {
   // Move to/from VRSAVE: despite being a SPR, the VRSAVE register is renamed
   // like a GPR on the PPC970.  As such, copies in and out have the same
@@ -3728,8 +3744,6 @@ def : Pat<(fcopysign f32:$frB, f64:$frA),
 // XL Compat intrinsics.
 def : Pat<(int_ppc_fmsub f64:$A, f64:$B, f64:$C), (FMSUB $A, $B, $C)>;
 def : Pat<(int_ppc_fmsubs f32:$A, f32:$B, f32:$C), (FMSUBS $A, $B, $C)>;
-def : Pat<(int_ppc_fnmsub f64:$A, f64:$B, f64:$C), (FNMSUB $A, $B, $C)>;
-def : Pat<(int_ppc_fnmsubs f32:$A, f32:$B, f32:$C), (FNMSUBS $A, $B, $C)>;
 def : Pat<(int_ppc_fnmadd f64:$A, f64:$B, f64:$C), (FNMADD $A, $B, $C)>;
 def : Pat<(int_ppc_fnmadds f32:$A, f32:$B, f32:$C), (FNMADDS $A, $B, $C)>;
 def : Pat<(int_ppc_fre f64:$A), (FRE $A)>;

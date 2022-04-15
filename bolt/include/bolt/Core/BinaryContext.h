@@ -489,7 +489,9 @@ public:
   void adjustCodePadding();
 
   /// Regular page size.
-  static constexpr unsigned RegularPageSize = 0x1000;
+  unsigned RegularPageSize{0x1000};
+  static constexpr unsigned RegularPageSizeX86 = 0x1000;
+  static constexpr unsigned RegularPageSizeAArch64 = 0x10000;
 
   /// Huge page size to use.
   static constexpr unsigned HugePageSize = 0x200000;
@@ -770,6 +772,22 @@ public:
   BinaryData *getBinaryDataByName(StringRef Name) {
     auto Itr = GlobalSymbols.find(Name);
     return Itr != GlobalSymbols.end() ? Itr->second : nullptr;
+  }
+
+  /// Return registered PLT entry BinaryData with the given \p Name
+  /// or nullptr if no global PLT symbol with that name exists.
+  const BinaryData *getPLTBinaryDataByName(StringRef Name) const {
+    if (const BinaryData *Data = getBinaryDataByName(Name.str() + "@PLT"))
+      return Data;
+
+    // The symbol name might contain versioning information e.g
+    // memcpy@@GLIBC_2.17. Remove it and try to locate binary data
+    // without it.
+    size_t At = Name.find("@");
+    if (At != std::string::npos)
+      return getBinaryDataByName(Name.str().substr(0, At) + "@PLT");
+
+    return nullptr;
   }
 
   /// Return true if \p SymbolName was generated internally and was not present

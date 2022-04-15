@@ -38,12 +38,12 @@ std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>> createFirTargetRewritePass(
 /// FIR to LLVM translation pass options.
 struct FIRToLLVMPassOptions {
   // Do not fail when type descriptors are not found when translating
-  // operations that uses them at the LLVM level like fir.embox. Instead,
+  // operations that use them at the LLVM level like fir.embox. Instead,
   // just use a null pointer.
   // This is useful to test translating programs manually written where a
   // frontend did not generate type descriptor data structures. However, note
-  // that this programs would crash at runtime if the derived type descriptors
-  // are required by the runtime, so this only an option to help debugging.
+  // that such programs would crash at runtime if the derived type descriptors
+  // are required by the runtime, so this is only an option to help debugging.
   bool ignoreMissingTypeDescriptors = false;
 };
 
@@ -55,11 +55,17 @@ std::unique_ptr<mlir::Pass> createFIRToLLVMPass(FIRToLLVMPassOptions options);
 
 using LLVMIRLoweringPrinter =
     std::function<void(llvm::Module &, llvm::raw_ostream &)>;
+
 /// Convert the LLVM IR dialect to LLVM-IR proper
 std::unique_ptr<mlir::Pass> createLLVMDialectToLLVMPass(
     llvm::raw_ostream &output,
     LLVMIRLoweringPrinter printer =
         [](llvm::Module &m, llvm::raw_ostream &out) { m.print(out, nullptr); });
+
+/// Convert boxproc values to a lower level representation. The default is to
+/// use function pointers and thunks.
+std::unique_ptr<mlir::Pass> createBoxedProcedurePass();
+std::unique_ptr<mlir::Pass> createBoxedProcedurePass(bool useThunks);
 
 // declarative passes
 #define GEN_PASS_REGISTRATION

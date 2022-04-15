@@ -292,8 +292,8 @@ CASE(caseDeviceptrSuccess) {
   printf("deviceptr: %p\n", acc_deviceptr(arr));
 
   // Check that the correct offset is computed when the address is within or
-  // immediately beyond a larger allocation.  Check exactly one byte and one
-  // byte after in case there are off-by-one errors in the implementation.
+  // immediately beyond a larger allocation.  Check exactly one byte before and
+  // one byte after in case there are off-by-one errors in the implementation.
   #pragma acc data create(arr[1:])
   {
     // OUT-caseDeviceptrSuccess-HOST-NEXT: deviceptr: 0x[[#ARR_DEV0:ARR]]

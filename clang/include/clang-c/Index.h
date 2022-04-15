@@ -2600,33 +2600,49 @@ enum CXCursorKind {
    */
   CXCursor_OMPGenericLoopDirective = 295,
 
+  /** OpenMP teams loop directive.
+   */
+  CXCursor_OMPTeamsGenericLoopDirective = 296,
+
+  /** OpenMP target teams loop directive.
+   */
+  CXCursor_OMPTargetTeamsGenericLoopDirective = 297,
+
+  /** OpenMP parallel loop directive.
+   */
+  CXCursor_OMPParallelGenericLoopDirective = 298,
+
+  /** OpenMP target parallel loop directive.
+   */
+  CXCursor_OMPTargetParallelGenericLoopDirective = 299,
+
   /** OpenACC update directive.
    */
-  CXCursor_ACCUpdateDirective = 296,
+  CXCursor_ACCUpdateDirective = 300,
 
   /** OpenACC enter data directive.
    */
-  CXCursor_ACCEnterDataDirective = 297,
+  CXCursor_ACCEnterDataDirective = 301,
 
   /** OpenACC exit data directive.
    */
-  CXCursor_ACCExitDataDirective = 298,
+  CXCursor_ACCExitDataDirective = 302,
 
   /** OpenACC data directive.
    */
-  CXCursor_ACCDataDirective = 299,
+  CXCursor_ACCDataDirective = 303,
 
   /** OpenACC parallel directive.
    */
-  CXCursor_ACCParallelDirective = 300,
+  CXCursor_ACCParallelDirective = 304,
 
   /** OpenACC loop directive.
    */
-  CXCursor_ACCLoopDirective = 301,
+  CXCursor_ACCLoopDirective = 305,
 
   /** OpenACC parallel loop directive.
    */
-  CXCursor_ACCParallelLoopDirective = 302,
+  CXCursor_ACCParallelLoopDirective = 306,
 
   CXCursor_LastStmt = CXCursor_ACCParallelLoopDirective,
 
@@ -3429,7 +3445,8 @@ enum CXTypeKind {
   CXType_OCLIntelSubgroupAVCImeDualRefStreamin = 175,
 
   CXType_ExtVector = 176,
-  CXType_Atomic = 177
+  CXType_Atomic = 177,
+  CXType_BTFTagAttributed = 178
 };
 
 /**

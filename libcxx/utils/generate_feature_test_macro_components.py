@@ -74,7 +74,6 @@ feature_test_macros = [ add_version_header(x) for x in [
     "name": "__cpp_lib_allocate_at_least",
     "values": { "c++2b": 202106 },
     "headers": ["memory"],
-    "unimplemented": True,
   }, {
     "name": "__cpp_lib_allocator_traits_is_always_equal",
     "values": { "c++17": 201411 },
@@ -354,8 +353,6 @@ feature_test_macros = [ add_version_header(x) for x in [
     "name": "__cpp_lib_integer_comparison_functions",
     "values": { "c++20": 202002 },
     "headers": ["utility"],
-    "test_suite_guard": "defined(__cpp_concepts) && __cpp_concepts >= 201907L",
-    "libcxx_guard": "!defined(_LIBCPP_HAS_NO_CONCEPTS)",
   }, {
     "name": "__cpp_lib_integer_sequence",
     "values": { "c++14": 201304 },
@@ -464,8 +461,6 @@ feature_test_macros = [ add_version_header(x) for x in [
     "name": "__cpp_lib_math_constants",
     "values": { "c++20": 201907 },
     "headers": ["numbers"],
-    "test_suite_guard": "defined(__cpp_concepts) && __cpp_concepts >= 201907L",
-    "libcxx_guard": "!defined(_LIBCPP_HAS_NO_CONCEPTS)",
   }, {
     "name": "__cpp_lib_math_special_functions",
     "values": { "c++17": 201603 },
@@ -612,7 +607,7 @@ feature_test_macros = [ add_version_header(x) for x in [
     "libcxx_guard": "!defined(_LIBCPP_HAS_NO_THREADS) && !defined(_LIBCPP_AVAILABILITY_DISABLE_FTM___cpp_lib_shared_mutex)",
   }, {
     "name": "__cpp_lib_shared_ptr_arrays",
-    "values": { "c++17": 201611 },
+    "values": { "c++17": 201611, "c++20": 201707 },
     "headers": ["memory"],
   }, {
     "name": "__cpp_lib_shared_ptr_weak_type",
@@ -941,6 +936,7 @@ def produce_version_header():
 
 */
 
+#include <__assert> // all public C++ headers provide the assertion handler
 #include <__config>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)

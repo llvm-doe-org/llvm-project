@@ -142,6 +142,12 @@ STATISTIC(NumTripCountsNotComputed,
 STATISTIC(NumBruteForceTripCountsComputed,
           "Number of loops with trip counts computed by force");
 
+#ifdef EXPENSIVE_CHECKS
+bool llvm::VerifySCEV = true;
+#else
+bool llvm::VerifySCEV = false;
+#endif
+
 static cl::opt<unsigned>
 MaxBruteForceIterations("scalar-evolution-max-iterations", cl::ReallyHidden,
                         cl::ZeroOrMore,
@@ -150,9 +156,8 @@ MaxBruteForceIterations("scalar-evolution-max-iterations", cl::ReallyHidden,
                                  "derived loop"),
                         cl::init(100));
 
-// FIXME: Enable this with EXPENSIVE_CHECKS when the test suite is clean.
-static cl::opt<bool> VerifySCEV(
-    "verify-scev", cl::Hidden,
+static cl::opt<bool, true> VerifySCEVOpt(
+    "verify-scev", cl::Hidden, cl::location(VerifySCEV),
     cl::desc("Verify ScalarEvolution's backedge taken counts (slow)"));
 static cl::opt<bool> VerifySCEVStrict(
     "verify-scev-strict", cl::Hidden,
@@ -526,12 +531,13 @@ void SCEVUnknown::deleted() {
 }
 
 void SCEVUnknown::allUsesReplacedWith(Value *New) {
+  // Clear this SCEVUnknown from various maps.
+  SE->forgetMemoizedResults(this);
+
   // Remove this SCEVUnknown from the uniquing map.
   SE->UniqueSCEVs.RemoveNode(this);
 
-  // Update this SCEVUnknown to point to the new value. This is needed
-  // because there may still be outstanding SCEVs which still point to
-  // this SCEVUnknown.
+  // Replace the value pointer in case someone is still using this SCEVUnknown.
   setValPtr(New);
 }
 
@@ -13303,8 +13309,8 @@ ScalarEvolution::getUsedLoops(const SCEV *S,
   SCEVTraversal<FindUsedLoops>(F).visitAll(S);
 }
 
-static void getReachableBlocks(SmallPtrSetImpl<BasicBlock *> &Reachable,
-                               Function &F) {
+void ScalarEvolution::getReachableBlocks(
+    SmallPtrSetImpl<BasicBlock *> &Reachable, Function &F) {
   SmallVector<BasicBlock *> Worklist;
   Worklist.push_back(&F.getEntryBlock());
   while (!Worklist.empty()) {
@@ -13312,13 +13318,31 @@ static void getReachableBlocks(SmallPtrSetImpl<BasicBlock *> &Reachable,
     if (!Reachable.insert(BB).second)
       continue;
 
-    const APInt *Cond;
+    Value *Cond;
     BasicBlock *TrueBB, *FalseBB;
-    if (match(BB->getTerminator(),
-              m_Br(m_APInt(Cond), m_BasicBlock(TrueBB), m_BasicBlock(FalseBB))))
-      Worklist.push_back(Cond->isOne() ? TrueBB : FalseBB);
-    else
-      append_range(Worklist, successors(BB));
+    if (match(BB->getTerminator(), m_Br(m_Value(Cond), m_BasicBlock(TrueBB),
+                                        m_BasicBlock(FalseBB)))) {
+      if (auto *C = dyn_cast<ConstantInt>(Cond)) {
+        Worklist.push_back(C->isOne() ? TrueBB : FalseBB);
+        continue;
+      }
+
+      if (auto *Cmp = dyn_cast<ICmpInst>(Cond)) {
+        const SCEV *L = getSCEV(Cmp->getOperand(0));
+        const SCEV *R = getSCEV(Cmp->getOperand(1));
+        if (isKnownPredicateViaConstantRanges(Cmp->getPredicate(), L, R)) {
+          Worklist.push_back(TrueBB);
+          continue;
+        }
+        if (isKnownPredicateViaConstantRanges(Cmp->getInversePredicate(), L,
+                                              R)) {
+          Worklist.push_back(FalseBB);
+          continue;
+        }
+      }
+    }
+
+    append_range(Worklist, successors(BB));
   }
 }
 
@@ -13347,7 +13371,25 @@ void ScalarEvolution::verify() const {
 
   SCEVMapper SCM(SE2);
   SmallPtrSet<BasicBlock *, 16> ReachableBlocks;
-  getReachableBlocks(ReachableBlocks, F);
+  SE2.getReachableBlocks(ReachableBlocks, F);
+
+  auto GetDelta = [&](const SCEV *Old, const SCEV *New) -> const SCEV * {
+    if (containsUndefs(Old) || containsUndefs(New)) {
+      // SCEV treats "undef" as an unknown but consistent value (i.e. it does
+      // not propagate undef aggressively).  This means we can (and do) fail
+      // verification in cases where a transform makes a value go from "undef"
+      // to "undef+1" (say).  The transform is fine, since in both cases the
+      // result is "undef", but SCEV thinks the value increased by 1.
+      return nullptr;
+    }
+
+    // Unless VerifySCEVStrict is set, we only compare constant deltas.
+    const SCEV *Delta = SE2.getMinusSCEV(Old, New);
+    if (!VerifySCEVStrict && !isa<SCEVConstant>(Delta))
+      return nullptr;
+
+    return Delta;
+  };
 
   while (!LoopStack.empty()) {
     auto *L = LoopStack.pop_back_val();
@@ -13358,8 +13400,14 @@ void ScalarEvolution::verify() const {
     if (!ReachableBlocks.contains(L->getHeader()))
       continue;
 
-    auto *CurBECount = SCM.visit(
-        const_cast<ScalarEvolution *>(this)->getBackedgeTakenCount(L));
+    // Only verify cached BECounts. Computing new BECounts may change the
+    // results of subsequent SCEV uses.
+    auto It = BackedgeTakenCounts.find(L);
+    if (It == BackedgeTakenCounts.end())
+      continue;
+
+    auto *CurBECount =
+        SCM.visit(It->second.getExact(L, const_cast<ScalarEvolution *>(this)));
     auto *NewBECount = SE2.getBackedgeTakenCount(L);
 
     if (CurBECount == SE2.getCouldNotCompute() ||
@@ -13372,16 +13420,6 @@ void ScalarEvolution::verify() const {
       continue;
     }
 
-    if (containsUndefs(CurBECount) || containsUndefs(NewBECount)) {
-      // SCEV treats "undef" as an unknown but consistent value (i.e. it does
-      // not propagate undef aggressively).  This means we can (and do) fail
-      // verification in cases where a transform makes the trip count of a loop
-      // go from "undef" to "undef+1" (say).  The transform is fine, since in
-      // both cases the loop iterates "undef" times, but SCEV thinks we
-      // increased the trip count of the loop by 1 incorrectly.
-      continue;
-    }
-
     if (SE.getTypeSizeInBits(CurBECount->getType()) >
         SE.getTypeSizeInBits(NewBECount->getType()))
       NewBECount = SE2.getZeroExtendExpr(NewBECount, CurBECount->getType());
@@ -13389,10 +13427,8 @@ void ScalarEvolution::verify() const {
              SE.getTypeSizeInBits(NewBECount->getType()))
       CurBECount = SE2.getZeroExtendExpr(CurBECount, NewBECount->getType());
 
-    const SCEV *Delta = SE2.getMinusSCEV(CurBECount, NewBECount);
-
-    // Unless VerifySCEVStrict is set, we only compare constant deltas.
-    if ((VerifySCEVStrict || isa<SCEVConstant>(Delta)) && !Delta->isZero()) {
+    const SCEV *Delta = GetDelta(CurBECount, NewBECount);
+    if (Delta && !Delta->isZero()) {
       dbgs() << "Trip Count for " << *L << " Changed!\n";
       dbgs() << "Old: " << *CurBECount << "\n";
       dbgs() << "New: " << *NewBECount << "\n";
@@ -13424,6 +13460,21 @@ void ScalarEvolution::verify() const {
       dbgs() << "Value " << *KV.first
              << " is in ValueExprMap but not in ExprValueMap\n";
       std::abort();
+    }
+
+    if (auto *I = dyn_cast<Instruction>(&*KV.first)) {
+      if (!ReachableBlocks.contains(I->getParent()))
+        continue;
+      const SCEV *OldSCEV = SCM.visit(KV.second);
+      const SCEV *NewSCEV = SE2.getSCEV(I);
+      const SCEV *Delta = GetDelta(OldSCEV, NewSCEV);
+      if (Delta && !Delta->isZero()) {
+        dbgs() << "SCEV for value " << *I << " changed!\n"
+               << "Old: " << *OldSCEV << "\n"
+               << "New: " << *NewSCEV << "\n"
+               << "Delta: " << *Delta << "\n";
+        std::abort();
+      }
     }
   }
 

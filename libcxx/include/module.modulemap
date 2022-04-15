@@ -80,7 +80,10 @@ module std [system] {
       header "string.h"
       export *
     }
-    // FIXME: <uchar.h> is missing.
+    module uchar_h {
+      header "uchar.h"
+      export *
+    }
     // <time.h> provided by C library.
     module wchar_h {
       // <wchar.h>'s __need_* macros require textual inclusion.
@@ -203,7 +206,10 @@ module std [system] {
       header "ctime"
       export *
     }
-    // FIXME: <cuchar> is missing.
+    module cuchar {
+      header "cuchar"
+      export *
+    }
     module cwchar {
       header "cwchar"
       export depr.stdio_h
@@ -288,8 +294,18 @@ module std [system] {
       module pop_heap                 { private header "__algorithm/pop_heap.h" }
       module prev_permutation         { private header "__algorithm/prev_permutation.h" }
       module push_heap                { private header "__algorithm/push_heap.h" }
+      module ranges_count             { private header "__algorithm/ranges_count.h" }
+      module ranges_count_if          { private header "__algorithm/ranges_count_if.h" }
+      module ranges_find              { private header "__algorithm/ranges_find.h" }
+      module ranges_find_if           { private header "__algorithm/ranges_find_if.h" }
+      module ranges_find_if_not       { private header "__algorithm/ranges_find_if_not.h" }
+      module ranges_max               { private header "__algorithm/ranges_max.h" }
+      module ranges_max_element       { private header "__algorithm/ranges_max_element.h" }
+      module ranges_min               { private header "__algorithm/ranges_min.h" }
       module ranges_min_element       { private header "__algorithm/ranges_min_element.h" }
+      module ranges_mismatch          { private header "__algorithm/ranges_mismatch.h" }
       module ranges_swap_ranges       { private header "__algorithm/ranges_swap_ranges.h" }
+      module ranges_transform         { private header "__algorithm/ranges_transform.h" }
       module remove                   { private header "__algorithm/remove.h" }
       module remove_copy              { private header "__algorithm/remove_copy.h" }
       module remove_copy_if           { private header "__algorithm/remove_copy_if.h" }
@@ -377,12 +393,23 @@ module std [system] {
     module __chrono {
       module calendar              { private header "__chrono/calendar.h" }
       module convert_to_timespec   { private header "__chrono/convert_to_timespec.h" }
+      module day                   { private header "__chrono/day.h" }
       module duration              { private header "__chrono/duration.h" }
       module file_clock            { private header "__chrono/file_clock.h" }
+      module hh_mm_ss              { private header "__chrono/hh_mm_ss.h" }
       module high_resolution_clock { private header "__chrono/high_resolution_clock.h" }
+      module literals              { private header "__chrono/literals.h" }
+      module month                 { private header "__chrono/month.h" }
+      module month_weekday         { private header "__chrono/month_weekday.h" }
+      module monthday              { private header "__chrono/monthday.h" }
       module steady_clock          { private header "__chrono/steady_clock.h" }
       module system_clock          { private header "__chrono/system_clock.h" }
       module time_point            { private header "__chrono/time_point.h" }
+      module weekday               { private header "__chrono/weekday.h" }
+      module year                  { private header "__chrono/year.h" }
+      module year_month            { private header "__chrono/year_month.h" }
+      module year_month_day        { private header "__chrono/year_month_day.h" }
+      module year_month_weekday    { private header "__chrono/year_month_weekday.h" }
     }
   }
   module codecvt {
@@ -500,6 +527,8 @@ module std [system] {
     export *
 
     module __format {
+      module buffer                   { private header "__format/buffer.h" }
+      module enable_insertable        { private header "__format/enable_insertable.h" }
       module format_arg               { private header "__format/format_arg.h" }
       module format_args              { private header "__format/format_args.h" }
       module format_context {
@@ -634,7 +663,10 @@ module std [system] {
       module move_iterator         { private header "__iterator/move_iterator.h" }
       module next                  { private header "__iterator/next.h" }
       module ostream_iterator      { private header "__iterator/ostream_iterator.h" }
-      module ostreambuf_iterator   { private header "__iterator/ostreambuf_iterator.h" }
+      module ostreambuf_iterator   {
+        private header "__iterator/ostreambuf_iterator.h"
+        export iosfwd
+      }
       module permutable            { private header "__iterator/permutable.h" }
       module prev                  { private header "__iterator/prev.h" }
       module projected             { private header "__iterator/projected.h" }
@@ -676,6 +708,7 @@ module std [system] {
 
     module __memory {
       module addressof                       { private header "__memory/addressof.h" }
+      module allocate_at_least               { private header "__memory/allocate_at_least.h" }
       module allocation_guard                { private header "__memory/allocation_guard.h" }
       module allocator                       { private header "__memory/allocator.h" }
       module allocator_arg_t                 { private header "__memory/allocator_arg_t.h" }
@@ -925,6 +958,9 @@ module std [system] {
     header "type_traits"
     export functional.__functional.unwrap_ref
     export *
+
+    module integral_constant { private header "__type_traits/integral_constant.h" }
+    module is_callable       { private header "__type_traits/is_callable.h" }
   }
   module typeindex {
     header "typeindex"

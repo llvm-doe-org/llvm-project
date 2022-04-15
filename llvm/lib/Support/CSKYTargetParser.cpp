@@ -14,7 +14,6 @@
 
 #include "llvm/Support/CSKYTargetParser.h"
 #include "llvm/ADT/StringSwitch.h"
-#include <cctype>
 
 using namespace llvm;
 
@@ -173,8 +172,6 @@ bool CSKY::getExtensionFeatures(uint64_t Extensions,
   for (const auto &AE : CSKYARCHExtNames) {
     if ((Extensions & AE.ID) == AE.ID && AE.Feature)
       Features.push_back(AE.Feature);
-    else if (AE.NegFeature)
-      Features.push_back(AE.NegFeature);
   }
 
   return true;

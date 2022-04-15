@@ -473,6 +473,11 @@ def AArch64call          : SDNode<"AArch64ISD::CALL",
                                 [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
                                  SDNPVariadic]>;
 
+def AArch64call_bti      : SDNode<"AArch64ISD::CALL_BTI",
+                                SDTypeProfile<0, -1, [SDTCisPtrTy<0>]>,
+                                [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
+                                 SDNPVariadic]>;
+
 def AArch64call_rvmarker: SDNode<"AArch64ISD::CALL_RVMARKER",
                              SDTypeProfile<0, -1, [SDTCisPtrTy<0>]>,
                              [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
@@ -2081,6 +2086,10 @@ def : Pat<(bswap (rotr GPR64:$Rn, (i64 32))), (REV32Xr GPR64:$Rn)>;
 def : Pat<(srl (bswap top16Zero:$Rn), (i64 16)), (REV16Wr GPR32:$Rn)>;
 def : Pat<(srl (bswap top32Zero:$Rn), (i64 32)), (REV32Xr GPR64:$Rn)>;
 
+def : Pat<(or (and (srl GPR64:$Rn, (i64 8)), (i64 0x00ff00ff00ff00ff)),
+              (and (shl GPR64:$Rn, (i64 8)), (i64 0xff00ff00ff00ff00))),
+          (REV16Xr GPR64:$Rn)>;
+
 //===----------------------------------------------------------------------===//
 // Bitfield immediate extraction instruction.
 //===----------------------------------------------------------------------===//
@@ -2328,6 +2337,8 @@ let isCall = 1, Defs = [LR], Uses = [SP] in {
                 PseudoInstExpansion<(BLR GPR64:$Rn)>;
   def BLR_RVMARKER : Pseudo<(outs), (ins variable_ops), []>,
                      Sched<[WriteBrReg]>;
+  def BLR_BTI : Pseudo<(outs), (ins variable_ops), []>,
+                Sched<[WriteBrReg]>;
 } // isCall
 
 def : Pat<(AArch64call GPR64:$Rn),
@@ -2339,6 +2350,10 @@ def : Pat<(AArch64call GPR64noip:$Rn),
 
 def : Pat<(AArch64call_rvmarker (i64 tglobaladdr:$rvfunc), GPR64:$Rn),
           (BLR_RVMARKER tglobaladdr:$rvfunc, GPR64:$Rn)>,
+      Requires<[NoSLSBLRMitigation]>;
+
+def : Pat<(AArch64call_bti GPR64:$Rn),
+          (BLR_BTI GPR64:$Rn)>,
       Requires<[NoSLSBLRMitigation]>;
 
 let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in {
