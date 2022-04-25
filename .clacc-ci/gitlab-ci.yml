@@ -53,8 +53,8 @@ stages:
 # build configurations
 #
 # Test every architecture with a release build plus assertions using python3.
-# There are many kolds, so use them to check configuration choices that are
-# hopefully orthogonal to the architecture.
+# There are multiple excl-us* systems, so use them to check configuration
+# choices that are hopefully orthogonal to the architecture.
 #-------------------------------------------------
 
 .leconte:
@@ -148,30 +148,16 @@ stages:
     LIT_XFAIL: ""
     LIT_XFAIL_NOT: ""
 
-.kold:
-  tags: [shell, kold]
+.excl-us:
+  tags: [shell, excl-us]
   variables:
-    BUILD_ID: kold
+    BUILD_ID: excl-us
     MODULES: gnu/11.1.0
     PATH_PREPEND: ""
     CMAKE: cmake3
     NINJA: ninja-build
     PYTHON: /usr/bin/python3
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
-    # FIXME: Many of Clacc's Clang OpenACC tests fail if we let
-    # LLVM_TARGETS_TO_BUILD default to "all":
-    #
-    #   clang-14: error: cannot find libdevice for sm_35; provide path to different CUDA installation via '--cuda-path', or pass '-nocudalib' to build without linking with libdevice
-    #
-    # The trouble is that Clang's OpenACC test suite relies solely on
-    # llvm_omp_device_info to determine available devices, and it reports an
-    # NVIDIA GPU even though the kolds don't have required libraries for Clang
-    # to compile for it.  Thus, we set LLVM_TARGETS_TO_BUILD to disable support
-    # for targets beyond host.  In the future, all end-to-end compilation
-    # testing of Clang's OpenACC support should move into the libacc2omp test
-    # suite, which reuses libomptarget's detection of supported devices, which
-    # correctly suppresses NVIDIA GPU support in this case.
-    LLVM_TARGETS_TO_BUILD: "host"
     LLVM_ENABLE_PROJECTS: "clang"
     LLVM_ENABLE_RUNTIMES: "openmp"
     CPU_TRIPLE: "x86_64-pc-linux-gnu"
@@ -182,7 +168,7 @@ stages:
       ""
 
 .no-asserts:
-  extends: [.kold]
+  extends: [.excl-us]
   variables:
     BUILD_ID: no-asserts
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=False
@@ -195,7 +181,7 @@ stages:
       ""
 
 .debug:
-  extends: [.kold]
+  extends: [.excl-us]
   variables:
     BUILD_ID: debug
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Debug
@@ -276,8 +262,8 @@ oswald02 (setup):
 explorer (setup):
   extends: [.explorer, .setup]
 
-kold (setup):
-  extends: [.kold, .setup]
+excl-us (setup):
+  extends: [.excl-us, .setup]
 
 no-asserts (setup):
   extends: [.no-asserts, .setup]
@@ -326,10 +312,10 @@ explorer (cleanup):
     - job: explorer (test)
       artifacts: false
 
-kold (cleanup):
-  extends: [.kold, .cleanup]
+excl-us (cleanup):
+  extends: [.excl-us, .cleanup]
   needs:
-    - job: kold (test)
+    - job: excl-us (test)
       artifacts: false
 
 no-asserts (cleanup):
@@ -353,8 +339,8 @@ oswald02 (manual cleanup):
 explorer (manual cleanup):
   extends: [.explorer, .manual-cleanup]
 
-kold (manual cleanup):
-  extends: [.kold, .manual-cleanup]
+excl-us (manual cleanup):
+  extends: [.excl-us, .manual-cleanup]
 
 no-asserts (manual cleanup):
   extends: [.no-asserts, .manual-cleanup]
@@ -366,7 +352,7 @@ z-cleanup-pipeline-builds:
   stage: manual cleanup
   when: manual
   needs: []
-  tags: [shell, kold]
+  tags: [shell, excl-us]
   variables:
     GIT_STRATEGY: none
   script:
@@ -377,7 +363,7 @@ z-cleanup-project-builds:
   stage: manual cleanup
   when: manual
   needs: []
-  tags: [shell, kold]
+  tags: [shell, excl-us]
   variables:
     GIT_STRATEGY: none
   script:
@@ -441,10 +427,10 @@ explorer (config):
     - job: explorer (setup)
       artifacts: false
 
-kold (config):
-  extends: [.kold, .config]
+excl-us (config):
+  extends: [.excl-us, .config]
   needs:
-    - job: kold (setup)
+    - job: excl-us (setup)
       artifacts: false
 
 no-asserts (config):
@@ -492,10 +478,10 @@ explorer (build):
     - job: explorer (config)
       artifacts: false
 
-kold (build):
-  extends: [.kold, .build]
+excl-us (build):
+  extends: [.excl-us, .build]
   needs:
-    - job: kold (config)
+    - job: excl-us (config)
       artifacts: false
 
 no-asserts (build):
@@ -635,10 +621,10 @@ explorer (test):
     - job: explorer (build)
       artifacts: false
 
-kold (test):
-  extends: [.kold, .test]
+excl-us (test):
+  extends: [.excl-us, .test]
   needs:
-    - job: kold (build)
+    - job: excl-us (build)
       artifacts: false
 
 no-asserts (test):
