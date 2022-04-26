@@ -321,10 +321,17 @@ Run-Time Environment Variables
       `routine` directive applying to the same function within the
       same compilation unit.  Otherwise, a compile-time error
       diagnostic is produced.
-    * Compile-time error diagnostics are produced if a function's
-      level of parallelism is incompatible with any `loop` construct
-      or function enclosing a call.  An incompatible level of parallelism is not
-      diagnosed if a function's address is stored and called later.
+    * A compile-time error diagnostic is produced if a function's level of
+      parallelism is incompatible with any `loop` construct or function
+      enclosing a call.  An incompatible level of parallelism is not diagnosed
+      if a function's address is stored and called later.
+    * A special case of the previous diagnostic is produced if a function's
+      level of parallelism is `gang`, `worker`, or `vector`, if a call to it
+      appears within another function but outside any compute or loop construct,
+      and if the calling function has no `routine` directive.  In this case, the
+      calling function can execute only outside compute regions, but the called
+      function requires execution modes (gang-redundant, etc.) that are
+      impossible outside compute regions.
 * Other clauses
     * No other clauses are supported yet.
     * Specifying a name is not yet supported, so an immediately

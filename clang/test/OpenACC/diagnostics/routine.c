@@ -40,16 +40,16 @@ float f;
 #define CASE_WITH_TRANSFORM_2  4
 #define CASE_WITH_TRANSFORM_3  5
 
-//##################################################
+//##############################################################################
 // Diagnostic checks where it's fine that other diagnostics suppress all
 // transformation of OpenACC to OpenMP.
-//##################################################
+//##############################################################################
 
 #if CASE == CASE_WITHOUT_TRANSFORM
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Missing clauses
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // expected-error@+1 {{expected 'gang', 'worker', 'vector', or 'seq' clause for '#pragma acc routine'}}
 #pragma acc routine
@@ -71,9 +71,9 @@ void UNIQUE_NAME();
 #pragma acc routine seq
 void UNIQUE_NAME();
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Unrecognized clauses
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // Bogus clauses.
 
@@ -158,12 +158,12 @@ void UNIQUE_NAME();
 #pragma acc routine shared(i
 void UNIQUE_NAME();
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Level-of-parallelism clauses for a single function.
 //
 // Conflicts between uses of the function and enclosing loops or functions are
 // checked later.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // Parse errors.
 
@@ -438,9 +438,9 @@ void impSeqExpSeq_use() {
 #pragma acc routine seq
 void impSeqExpSeq();
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Context not permitted.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 void withinFunction() {
   // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
@@ -508,9 +508,9 @@ struct WithinStruct {
   int i;
 };
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Bad associated declaration.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // Multiple functions in one declaration.
 // expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
@@ -535,7 +535,7 @@ struct AssociatedDeclIsType {
   int i;
 };
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Restrictions on location of function definition and uses.
 //
 // Proposed text for OpenACC after 3.2:
@@ -546,7 +546,7 @@ struct AssociatedDeclIsType {
 //   appears in the same compilation unit."
 // Uses include host uses and accelerator uses but only if they're evaluated
 // (e.g., a reference in sizeof is not a use).
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // Evaluated host uses.
 void hostUseBefore();
@@ -765,9 +765,9 @@ void hostUseInErrorBefore_use() {
 #pragma acc routine seq
 void hostUseInErrorBefore();
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Restrictions on the function definition body for explicit routine directives.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // Does the definition check see the attached routine directive?
 //
@@ -870,9 +870,9 @@ void onDefOnDecl() {
 #pragma acc routine seq
 void onDefOnDecl();
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Restrictions on the function definition body for implicit routine directives.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // Does the definition check see the routine directive previously implied by a
 // use within a parallel construct?
@@ -1232,11 +1232,11 @@ void indirectParUseInDef() {
     ;
 }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Compatible levels of parallelism.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
-//..................................................
+//..............................................................................
 // Usee never has a routine directive, so user cannot either, so their levels of
 // parallelism are compatible.
 
@@ -1247,7 +1247,7 @@ void useeNoDir_user() {
   useeNoDir();
 }
 
-//..................................................
+//..............................................................................
 // Usee has no routine directive yet, so its level of parallelism is compatible
 // with any use site.
 
@@ -1412,27 +1412,21 @@ void useeInAnyConstruct_orphanedUnpartLoopUser() {
     useeInAutoLoop();
 }
 
-//..................................................
+//..............................................................................
 // Usee has routine directive already.
 
-// expected-note@+1 44 {{'#pragma acc routine' for function 'useeHasGang' appears here}}
+// expected-note@+1 48 {{'#pragma acc routine' for function 'useeHasGang' appears here}}
 #pragma acc routine gang
 void useeHasGang();
-// expected-note@+1 36 {{'#pragma acc routine' for function 'useeHasWorker' appears here}}
+// expected-note@+1 40 {{'#pragma acc routine' for function 'useeHasWorker' appears here}}
 #pragma acc routine worker
 void useeHasWorker();
-// expected-note@+1 24 {{'#pragma acc routine' for function 'useeHasVector' appears here}}
+// expected-note@+1 28 {{'#pragma acc routine' for function 'useeHasVector' appears here}}
 #pragma acc routine vector
 void useeHasVector();
 #pragma acc routine seq
 void useeHasSeq();
 
-void useeHasAny_hostUser() {
-  void useeHasGang();
-  void useeHasWorker();
-  void useeHasVector();
-  void useeHasSeq();
-}
 #pragma acc routine gang
 void useeHasAny_gangFnUser() {
   useeHasGang();
@@ -1573,52 +1567,92 @@ void useeHasAny_seqFnUser() {
   }
 }
 void useeHasAny_impLaterFnUser() {
-  // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+  // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
   useeHasGang();
-  // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+  // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
   useeHasWorker();
-  // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+  // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
   useeHasVector();
   useeHasSeq();
   // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i) {
-    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
     useeHasGang();
-    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
     useeHasWorker();
-    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
     useeHasVector();
     useeHasSeq();
   }
   // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop
   for (int i = 0; i < 5; ++i) {
-    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
     useeHasGang();
-    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
     useeHasWorker();
-    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
     useeHasVector();
     useeHasSeq();
   }
   // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop auto
   for (int i = 0; i < 5; ++i) {
-    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
     useeHasGang();
-    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
     useeHasWorker();
-    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has '#pragma acc routine seq' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+    // expected-error@+1 {{function 'useeHasAny_impLaterFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
     useeHasVector();
     useeHasSeq();
   }
 }
-// expected-note@+1 12 {{'#pragma acc routine' for function 'useeHasAny_impLaterFnUser_user' appears here}}
 #pragma acc routine seq
 void useeHasAny_impLaterFnUser_user() {
-  // expected-note@+1 12 {{'#pragma acc routine seq' implied for function 'useeHasAny_impLaterFnUser' by use in function 'useeHasAny_impLaterFnUser_user' here}}
   useeHasAny_impLaterFnUser();
+}
+void useeHasAny_hostFnUser() {
+  // expected-error@+1 {{function 'useeHasAny_hostFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+  useeHasGang();
+  // expected-error@+1 {{function 'useeHasAny_hostFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+  useeHasWorker();
+  // expected-error@+1 {{function 'useeHasAny_hostFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+  useeHasVector();
+  useeHasSeq();
+  // expected-error@+1 {{function 'useeHasAny_hostFnUser' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{function 'useeHasAny_hostFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{function 'useeHasAny_hostFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    // expected-error@+1 {{function 'useeHasAny_hostFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+    useeHasVector();
+    useeHasSeq();
+  }
+  // expected-error@+1 {{function 'useeHasAny_hostFnUser' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  #pragma acc loop
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{function 'useeHasAny_hostFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{function 'useeHasAny_hostFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    // expected-error@+1 {{function 'useeHasAny_hostFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+    useeHasVector();
+    useeHasSeq();
+  }
+  // expected-error@+1 {{function 'useeHasAny_hostFnUser' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  #pragma acc loop auto
+  for (int i = 0; i < 5; ++i) {
+    // expected-error@+1 {{function 'useeHasAny_hostFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasGang', which has '#pragma acc routine gang'}}
+    useeHasGang();
+    // expected-error@+1 {{function 'useeHasAny_hostFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasWorker', which has '#pragma acc routine worker'}}
+    useeHasWorker();
+    // expected-error@+1 {{function 'useeHasAny_hostFnUser' has no explicit '#pragma acc routine' but calls function 'useeHasVector', which has '#pragma acc routine vector'}}
+    useeHasVector();
+    useeHasSeq();
+  }
 }
 
 void useeHasAny_parUser() {
@@ -1949,7 +1983,7 @@ void useeHasAny_orphanedPartLoopUser() {
   }
 }
 
-//..................................................
+//..............................................................................
 // What is considered a use when checking levels of parallelism?
 
 // expected-note@+1 2 {{'#pragma acc routine' for function 'useKindParLevel' appears here}}
@@ -1983,7 +2017,7 @@ void useKindParLevel_loopUse() {
   }
 }
 
-//..................................................
+//..............................................................................
 // Usee is orphaned loop construct.
 
 #pragma acc routine gang
@@ -2243,9 +2277,9 @@ void useeIsOrphanedLoop_seqUser() {
     ;
 }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Missing declaration possibly within bad context.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 void missingDeclarationWithinFunctionOnce() {
   // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
@@ -2280,9 +2314,9 @@ struct MissingDeclarationWithinStructTwice {
 #pragma acc routine seq
 #pragma acc routine seq
 
-//##################################################
+//##############################################################################
 // Diagnostic checks that require some OpenACC to be transformed to OpenMP.
-//##################################################
+//##############################################################################
 
 #elif CASE == CASE_WITH_TRANSFORM_0
 
@@ -2370,18 +2404,11 @@ void dupStaticDiagAfterRoutineDir() {
 // construct isn't seen.  Later, the routine directive is implied, and all
 // recorded diagnostics are then emitted.
 
-// expected-note@+1 3 {{'#pragma acc routine' for function 'dupParLevelDiagBeforeRoutineDir_usee' appears here}}
+// expected-note@+1 2 {{'#pragma acc routine' for function 'dupParLevelDiagBeforeRoutineDir_usee' appears here}}
 #pragma acc routine gang
 void dupParLevelDiagBeforeRoutineDir_usee();
 void dupParLevelDiagBeforeRoutineDir_user() {
   int i;
-  // expected-error@+1 {{'#pragma acc data' is not permitted within function 'dupParLevelDiagBeforeRoutineDir_user' because the latter is attributed with '#pragma acc routine'}}
-  #pragma acc data copy(i)
-  {
-    // Diagnostic would be duplicated if not suppressed in OpenMP translation.
-    // expected-error@+1 {{function 'dupParLevelDiagBeforeRoutineDir_user' has '#pragma acc routine seq' but calls function 'dupParLevelDiagBeforeRoutineDir_usee', which has '#pragma acc routine gang'}}
-    dupParLevelDiagBeforeRoutineDir_usee();
-  }
   // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'dupParLevelDiagBeforeRoutineDir_user' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc parallel
   {
@@ -2414,7 +2441,7 @@ void dupParLevelDiagBeforeRoutineDir_user() {
   }
 }
 void dupParLevelDiagBeforeRoutineDir_user_user() {
-  // expected-note@+2 5 {{'#pragma acc routine seq' implied for function 'dupParLevelDiagBeforeRoutineDir_user' by use in construct '#pragma acc parallel' here}}
+  // expected-note@+2 3 {{'#pragma acc routine seq' implied for function 'dupParLevelDiagBeforeRoutineDir_user' by use in construct '#pragma acc parallel' here}}
   #pragma acc parallel
   dupParLevelDiagBeforeRoutineDir_user();
 }
@@ -2425,19 +2452,13 @@ void dupParLevelDiagBeforeRoutineDir_user_user() {
 // transforming to OpenMP should never happen, and neither should duplicate or
 // new diagnostics.
 
-// expected-note@+1 3 {{'#pragma acc routine' for function 'dupParLevelDiagBeforeRoutineDir_usee' appears here}}
+// expected-note@+1 2 {{'#pragma acc routine' for function 'dupParLevelDiagBeforeRoutineDir_usee' appears here}}
 #pragma acc routine gang
 void dupParLevelDiagBeforeRoutineDir_usee();
-// expected-note@+1 6 {{'#pragma acc routine' for function 'dupParLevelDiagBeforeRoutineDir_user' appears here}}
+// expected-note@+1 4 {{'#pragma acc routine' for function 'dupParLevelDiagBeforeRoutineDir_user' appears here}}
 #pragma acc routine seq
 void dupParLevelDiagBeforeRoutineDir_user() {
   int i;
-  // expected-error@+1 {{'#pragma acc data' is not permitted within function 'dupParLevelDiagBeforeRoutineDir_user' because the latter is attributed with '#pragma acc routine'}}
-  #pragma acc data copy(i)
-  {
-    // expected-error@+1 {{function 'dupParLevelDiagBeforeRoutineDir_user' has '#pragma acc routine seq' but calls function 'dupParLevelDiagBeforeRoutineDir_usee', which has '#pragma acc routine gang'}}
-    dupParLevelDiagBeforeRoutineDir_usee();
-  }
   // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'dupParLevelDiagBeforeRoutineDir_user' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc parallel
   {

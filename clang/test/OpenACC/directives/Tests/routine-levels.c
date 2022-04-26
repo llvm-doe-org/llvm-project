@@ -67,7 +67,6 @@ void start() { printf("start\n"); }
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 //
-//      EXE-NEXT: gang: host=1, not_host=0
 // EXE-HOST-NEXT: gang: host=1, not_host=0
 //  EXE-OFF-NEXT: gang: host=0, not_host=1
 #pragma acc routine gang
@@ -106,7 +105,6 @@ void gang(Result *Res);
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 //
-//      EXE-NEXT: worker: host=1, not_host=0
 // EXE-HOST-NEXT: worker: host=1, not_host=0
 //  EXE-OFF-NEXT: worker: host=0, not_host=1
 #pragma acc routine worker
@@ -158,7 +156,6 @@ void worker(Result *Res) { WRITE_RESULT(Res); }
 //  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
 // PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
 //
-//      EXE-NEXT: vector: host=1, not_host=0
 // EXE-HOST-NEXT: vector: host=1, not_host=0
 //  EXE-OFF-NEXT: vector: host=0, not_host=1
 #pragma acc routine vector
@@ -196,15 +193,12 @@ int main(int argc, char *argv[]) {
   start();
   Result Res;
 
-  gang(&Res); PRINT_RESULT(gang, Res);
   #pragma acc parallel num_gangs(1) copyout(Res)
   gang(&Res); PRINT_RESULT(gang, Res);
 
-  worker(&Res); PRINT_RESULT(worker, Res);
   #pragma acc parallel num_gangs(1) copyout(Res)
   worker(&Res); PRINT_RESULT(worker, Res);
 
-  vector(&Res); PRINT_RESULT(vector, Res);
   #pragma acc parallel num_gangs(1) copyout(Res)
   vector(&Res); PRINT_RESULT(vector, Res);
 

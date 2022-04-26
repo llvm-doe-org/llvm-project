@@ -11137,6 +11137,9 @@ def err_acc_routine_loop_par_level : Error<
 def err_acc_routine_func_par_level : Error<
   "function '%0' has '#pragma acc routine %1' but calls function '%2', which "
   "has '#pragma acc routine %3'">;
+def err_acc_routine_func_par_level_vs_no_explicit : Error<
+  "function '%0' has no explicit '#pragma acc routine' but calls function "
+  "'%1', which has '#pragma acc routine %2'">;
 // "previous" is used to contrast with a more recent routine directive.
 def note_acc_routine_explicit : Note<
   "%select{|previous }0'#pragma acc routine' for function '%1' appears here">;

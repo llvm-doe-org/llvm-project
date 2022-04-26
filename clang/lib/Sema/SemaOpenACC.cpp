@@ -798,16 +798,7 @@ public:
   /// All routine directives in that chain must already be attached to the
   /// functions to which they apply, and all that are implicit must already be
   /// recorded in this \c ImplicitRoutineDirInfoTy.
-  ///
-  /// If \a IfRoutineDirFor is not \c nullptr, then record all notes via
-  /// \c DiagIfRoutineDir with \a IfRoutineDirFor as the function that
-  /// determines when their actual emission occurs.  Because only notes are
-  /// recorded here, no additional notes are emitted to identify the origin
-  /// of the routine directive for \a IfRoutineDirFor.  It's assumed that will
-  /// happen with some previous non-note diagnostic recorded via
-  /// \a DiagIfRoutineDir for \a IfRoutineDirFor.
-  void emitNotesForRoutineDirChain(FunctionDecl *FD, bool PreviousDir = false,
-                                   FunctionDecl *IfRoutineDirFor = nullptr) {
+  void emitNotesForRoutineDirChain(FunctionDecl *FD, bool PreviousDir = false) {
     SourceLocation Loc;
     ACCRoutineDeclAttr *Attr =
         FD->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
@@ -816,8 +807,7 @@ public:
 
     // Handle explicit routine directive.
     if (Loc.isValid()) {
-      DiagIfRoutineDir(*this, IfRoutineDirFor, Loc,
-                       diag::note_acc_routine_explicit)
+      SemaRef.Diag(Loc, diag::note_acc_routine_explicit)
           << PreviousDir << FD->getName();
       return;
     }
@@ -831,12 +821,10 @@ public:
     StringRef UserName = UserIsFunction
                              ? Entry.UserFn->getName()
                              : getOpenACCName(Entry.UserComputeConstruct);
-    DiagIfRoutineDir(*this, IfRoutineDirFor, Entry.UseLoc,
-                     diag::note_acc_routine_seq_implicit)
+    SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
         << PreviousDir << FD->getName() << UserIsFunction << UserName;
     if (UserIsFunction)
-      emitNotesForRoutineDirChain(Entry.UserFn, /*PreviousDir=*/false,
-                                  IfRoutineDirFor);
+      emitNotesForRoutineDirChain(Entry.UserFn, /*PreviousDir=*/false);
   }
   /// Return the location of the use of this function that originally implied a
   /// routine seq directive for this function, or return an invalid location if
@@ -867,9 +855,6 @@ public:
     /// If \a Emitted is not \c nullptr, \a *Emitted is set to true or false
     /// upon destruction to indicate whether the diagnostic was emitted
     /// immediately.
-    ///
-    /// If \a FD is \c nullptr, the diagnostic is emitted immediately upon
-    /// destruction, and no notes are emitted to identify the origin of \a FD.
     DiagIfRoutineDir(ImplicitRoutineDirInfoTy &ImplicitRoutineDirInfo,
                      FunctionDecl *FD, SourceLocation DiagLoc, unsigned DiagID,
                      bool *Emitted = nullptr)
@@ -879,12 +864,6 @@ public:
     DiagIfRoutineDir(const DiagIfRoutineDir &) = delete;
     DiagIfRoutineDir &operator=(const DiagIfRoutineDir &) = delete;
     ~DiagIfRoutineDir() {
-      if (!FD) {
-        ImplicitRoutineDirInfo.SemaRef.Diag(DiagLoc, *this);
-        if (Emitted)
-          *Emitted = true;
-        return;
-      }
       if (FD->hasAttr<ACCRoutineDeclAttr>()) {
         ImplicitRoutineDirInfo.emitRoutineDirDiag(FD, DiagLoc, *this);
         if (Emitted)
@@ -2409,23 +2388,29 @@ void Sema::ActOnCallExprForOpenACC(CallExpr *Call) {
     return;
 
   // Callee has a routine directive, and there's no enclosing loop or compute
-  // construct.  If Caller has no routine directive yet, record a diagnostic if
-  // Callee has a higher level of parallelism than seq, to be emitted if a
-  // routine seq directive is implied for Caller later.
+  // construct.  If Caller has no routine directive yet, complain if Callee has
+  // a higher level of parallelism than seq.  Why?  First, if a routine
+  // directive is implied for Caller later, then seq is the highest possible
+  // level.  Second, if a routine directive is not implied for Caller later,
+  // then Caller can execute only outside compute regions, but Callee's higher
+  // level of parallelism requires execution modes (gang-redundant, etc.) that
+  // are impossible outside compute regions.
   FunctionDecl *Caller = getCurFunctionDecl();
   assert(Caller && "expected function use to be in a function");
   ACCRoutineDeclAttr *CallerAttr = Caller->getAttr<ACCRoutineDeclAttr>();
   if (!CallerAttr) {
     if (CalleePart > ACCRoutineDeclAttr::Seq) {
-      DiagIfRoutineDir(ImplicitRoutineDirInfo, Caller, CallLoc,
-                       diag::err_acc_routine_func_par_level)
+      // We report that Caller has no explicit routine directive.  That's true,
+      // and an explicit routine directive is required to enable the required
+      // level of parallelism.  However, if an implicit routine seq has already
+      // been implied for Caller, we report the mismatched level of parallelism
+      // at the next diagnostic even though this diagnostic's wording would
+      // cover that case too.
+      Diag(CallLoc, diag::err_acc_routine_func_par_level_vs_no_explicit)
           << Caller->getName()
-          << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(
-                 ACCRoutineDeclAttr::Seq)
           << Callee->getName()
           << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
-      ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(
-          Callee, /*PreviousDir=*/false, /*IfRoutineDirFor=*/Caller);
+      ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Callee);
     }
     return;
   }
