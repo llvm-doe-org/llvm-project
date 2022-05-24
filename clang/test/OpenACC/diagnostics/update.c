@@ -98,17 +98,12 @@ int main() {
   // expected-error@+2 {{unexpected OpenACC clause 'num_workers' in directive '#pragma acc update'}}
   // expected-error@+1 {{unexpected OpenACC clause 'vector_length' in directive '#pragma acc update'}}
   #pragma acc update self(i) num_gangs(1) num_workers(2) vector_length(3)
-  // expected-error@+11 {{unexpected OpenACC clause 'independent' in directive '#pragma acc update'}}
-  // expected-error@+10 {{unexpected OpenACC clause 'auto' in directive '#pragma acc update'}}
-  // expected-error@+9 {{unexpected OpenACC clause 'seq' in directive '#pragma acc update'}}
-  // expected-error@+8 {{unexpected OpenACC clause 'gang' in directive '#pragma acc update'}}
-  // expected-error@+7 {{unexpected OpenACC clause 'worker' in directive '#pragma acc update'}}
-  // expected-error@+6 {{unexpected OpenACC clause 'vector' in directive '#pragma acc update'}}
-  // expected-error@+5 {{unexpected OpenACC clause 'auto', 'independent' is specified already}}
-  // expected-error@+4 {{unexpected OpenACC clause 'seq', 'independent' is specified already}}
-  // expected-error@+3 {{unexpected OpenACC clause 'gang', 'seq' is specified already}}
-  // expected-error@+2 {{unexpected OpenACC clause 'worker', 'seq' is specified already}}
-  // expected-error@+1 {{unexpected OpenACC clause 'vector', 'seq' is specified already}}
+  // expected-error@+6 {{unexpected OpenACC clause 'independent' in directive '#pragma acc update'}}
+  // expected-error@+5 {{unexpected OpenACC clause 'auto' in directive '#pragma acc update'}}
+  // expected-error@+4 {{unexpected OpenACC clause 'seq' in directive '#pragma acc update'}}
+  // expected-error@+3 {{unexpected OpenACC clause 'gang' in directive '#pragma acc update'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'worker' in directive '#pragma acc update'}}
+  // expected-error@+1 {{unexpected OpenACC clause 'vector' in directive '#pragma acc update'}}
   #pragma acc update independent host(i) auto seq gang worker vector
   // expected-error@+1 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc update'}}
   #pragma acc update collapse(1) device(i)

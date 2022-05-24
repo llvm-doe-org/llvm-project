@@ -129,12 +129,11 @@ void UNIQUE_NAME();
 // expected-error@+1 {{unexpected OpenACC clause 'vector_length' in directive '#pragma acc routine'}}
 #pragma acc routine seq num_gangs(1) num_workers(2) vector_length(3)
 void UNIQUE_NAME();
-// expected-error@+6 {{unexpected OpenACC clause 'independent' in directive '#pragma acc routine'}}
-// expected-error@+5 {{unexpected OpenACC clause 'auto' in directive '#pragma acc routine'}}
-// expected-error@+4 {{unexpected OpenACC clause 'auto', 'independent' is specified already}}
-// expected-error@+3 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc routine'}}
-// expected-error@+2 {{unexpected OpenACC clause 'seq', 'independent' is specified already}}
-// expected-error@+1 {{expected 'gang', 'worker', 'vector', or 'seq' clause for '#pragma acc routine'}}
+// Note that it does not complain that seq conflicts with independent (as on acc
+// loop) because the latter isn't permitted here at all.
+// expected-error@+3 {{unexpected OpenACC clause 'independent' in directive '#pragma acc routine'}}
+// expected-error@+2 {{unexpected OpenACC clause 'auto' in directive '#pragma acc routine'}}
+// expected-error@+1 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc routine'}}
 #pragma acc routine independent auto collapse(1) seq
 void UNIQUE_NAME();
 
@@ -237,9 +236,12 @@ void UNIQUE_NAME();
 #pragma acc routine seq seq
 void UNIQUE_NAME();
 
-// expected-error@+7 {{unexpected OpenACC clause 'worker', 'gang' is specified already}}
-// expected-error@+6 {{unexpected OpenACC clause 'vector', 'gang' is specified already}}
-// expected-error@+5 {{unexpected OpenACC clause 'seq', 'gang' is specified already}}
+// expected-error@+10 {{unexpected OpenACC clause 'worker', 'gang' is specified already}}
+// expected-error@+9 {{unexpected OpenACC clause 'vector', 'gang' is specified already}}
+// expected-error@+8 {{unexpected OpenACC clause 'vector', 'worker' is specified already}}
+// expected-error@+7 {{unexpected OpenACC clause 'seq', 'gang' is specified already}}
+// expected-error@+6 {{unexpected OpenACC clause 'seq', 'worker' is specified already}}
+// expected-error@+5 {{unexpected OpenACC clause 'seq', 'vector' is specified already}}
 // expected-error@+4 {{directive '#pragma acc routine' cannot contain more than one 'gang' clause}}
 // expected-error@+3 {{directive '#pragma acc routine' cannot contain more than one 'worker' clause}}
 // expected-error@+2 {{directive '#pragma acc routine' cannot contain more than one 'vector' clause}}
@@ -247,9 +249,12 @@ void UNIQUE_NAME();
 #pragma acc routine gang worker vector seq gang worker vector seq
 void UNIQUE_NAME();
 
-// expected-error@+7 {{unexpected OpenACC clause 'vector', 'worker' is specified already}}
-// expected-error@+6 {{unexpected OpenACC clause 'seq', 'worker' is specified already}}
-// expected-error@+5 {{unexpected OpenACC clause 'gang', 'worker' is specified already}}
+// expected-error@+10 {{unexpected OpenACC clause 'vector', 'worker' is specified already}}
+// expected-error@+9 {{unexpected OpenACC clause 'seq', 'worker' is specified already}}
+// expected-error@+8 {{unexpected OpenACC clause 'seq', 'vector' is specified already}}
+// expected-error@+7 {{unexpected OpenACC clause 'gang', 'worker' is specified already}}
+// expected-error@+6 {{unexpected OpenACC clause 'gang', 'vector' is specified already}}
+// expected-error@+5 {{unexpected OpenACC clause 'gang', 'seq' is specified already}}
 // expected-error@+4 {{directive '#pragma acc routine' cannot contain more than one 'worker' clause}}
 // expected-error@+3 {{directive '#pragma acc routine' cannot contain more than one 'vector' clause}}
 // expected-error@+2 {{directive '#pragma acc routine' cannot contain more than one 'seq' clause}}
@@ -257,8 +262,11 @@ void UNIQUE_NAME();
 #pragma acc routine worker vector seq gang worker vector seq gang
 void UNIQUE_NAME();
 
-// expected-error@+7 {{unexpected OpenACC clause 'seq', 'vector' is specified already}}
-// expected-error@+6 {{unexpected OpenACC clause 'gang', 'vector' is specified already}}
+// expected-error@+10 {{unexpected OpenACC clause 'seq', 'vector' is specified already}}
+// expected-error@+9 {{unexpected OpenACC clause 'gang', 'vector' is specified already}}
+// expected-error@+8 {{unexpected OpenACC clause 'gang', 'seq' is specified already}}
+// expected-error@+7 {{unexpected OpenACC clause 'worker', 'vector' is specified already}}
+// expected-error@+6 {{unexpected OpenACC clause 'worker', 'seq' is specified already}}
 // expected-error@+5 {{unexpected OpenACC clause 'worker', 'gang' is specified already}}
 // expected-error@+4 {{directive '#pragma acc routine' cannot contain more than one 'vector' clause}}
 // expected-error@+3 {{directive '#pragma acc routine' cannot contain more than one 'seq' clause}}
@@ -267,9 +275,12 @@ void UNIQUE_NAME();
 #pragma acc routine vector seq gang worker vector seq gang worker
 void UNIQUE_NAME();
 
-// expected-error@+7 {{unexpected OpenACC clause 'gang', 'seq' is specified already}}
-// expected-error@+6 {{unexpected OpenACC clause 'worker', 'gang' is specified already}}
-// expected-error@+5 {{unexpected OpenACC clause 'vector', 'gang' is specified already}}
+// expected-error@+10 {{unexpected OpenACC clause 'gang', 'seq' is specified already}}
+// expected-error@+9 {{unexpected OpenACC clause 'worker', 'seq' is specified already}}
+// expected-error@+8 {{unexpected OpenACC clause 'worker', 'gang' is specified already}}
+// expected-error@+7 {{unexpected OpenACC clause 'vector', 'seq' is specified already}}
+// expected-error@+6 {{unexpected OpenACC clause 'vector', 'gang' is specified already}}
+// expected-error@+5 {{unexpected OpenACC clause 'vector', 'worker' is specified already}}
 // expected-error@+4 {{directive '#pragma acc routine' cannot contain more than one 'seq' clause}}
 // expected-error@+3 {{directive '#pragma acc routine' cannot contain more than one 'gang' clause}}
 // expected-error@+2 {{directive '#pragma acc routine' cannot contain more than one 'worker' clause}}

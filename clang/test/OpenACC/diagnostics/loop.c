@@ -242,7 +242,8 @@ void fn(int param) {
     #pragma acc CMB_PAR loop independent auto
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+2 {{unexpected OpenACC clause 'seq', 'auto' is specified already}}
+    // expected-error@+3 {{unexpected OpenACC clause 'seq', 'auto' is specified already}}
+    // expected-error@+2 {{unexpected OpenACC clause 'independent', 'auto' is specified already}}
     // expected-error@+1 {{unexpected OpenACC clause 'independent', 'seq' is specified already}}
     #pragma acc CMB_PAR loop auto seq independent
     for (int i = 0; i < 5; ++i)
@@ -317,6 +318,37 @@ void fn(int param) {
     // orph-sep-error@+2 {{directive '#pragma acc loop' cannot contain more than one 'vector' clause}}
     // cmb-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'vector' clause}}
     #pragma acc CMB_PAR loop vector seq vector
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
+
+  //--------------------------------------------------
+  // Partitionability and partitioning clauses
+  //--------------------------------------------------
+
+#if PARENT == PARENT_SEPARATE
+  #pragma acc parallel
+#endif
+  {
+    // expected-error@+18 {{unexpected OpenACC clause 'independent', 'auto' is specified already}}
+    // expected-error@+17 {{unexpected OpenACC clause 'seq', 'auto' is specified already}}
+    // expected-error@+16 {{unexpected OpenACC clause 'seq', 'independent' is specified already}}
+    // expected-error@+15 {{unexpected OpenACC clause 'gang', 'seq' is specified already}}
+    // expected-error@+14 {{unexpected OpenACC clause 'worker', 'seq' is specified already}}
+    // expected-error@+13 {{unexpected OpenACC clause 'vector', 'seq' is specified already}}
+    // orph-sep-error@+12 {{directive '#pragma acc loop' cannot contain more than one 'auto' clause}}
+    // orph-sep-error@+11 {{directive '#pragma acc loop' cannot contain more than one 'independent' clause}}
+    // orph-sep-error@+10 {{directive '#pragma acc loop' cannot contain more than one 'seq' clause}}
+    // orph-sep-error@+9 {{directive '#pragma acc loop' cannot contain more than one 'gang' clause}}
+    // orph-sep-error@+8 {{directive '#pragma acc loop' cannot contain more than one 'worker' clause}}
+    // orph-sep-error@+7 {{directive '#pragma acc loop' cannot contain more than one 'vector' clause}}
+    // cmb-error@+6 {{directive '#pragma acc parallel loop' cannot contain more than one 'auto' clause}}
+    // cmb-error@+5 {{directive '#pragma acc parallel loop' cannot contain more than one 'independent' clause}}
+    // cmb-error@+4 {{directive '#pragma acc parallel loop' cannot contain more than one 'seq' clause}}
+    // cmb-error@+3 {{directive '#pragma acc parallel loop' cannot contain more than one 'gang' clause}}
+    // cmb-error@+2 {{directive '#pragma acc parallel loop' cannot contain more than one 'worker' clause}}
+    // cmb-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'vector' clause}}
+    #pragma acc CMB_PAR loop auto independent seq gang worker vector auto independent seq gang worker vector
     for (int i = 0; i < 5; ++i)
       ;
   }

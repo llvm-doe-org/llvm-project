@@ -131,17 +131,18 @@ int main() {
   // parloop-error@+1 {{unexpected OpenACC clause 'device' in directive '#pragma acc parallel loop'}}
   #pragma acc parallel LOOP if(1) if_present self(i) host(i) device(i)
     FORLOOP
-  // par-error@+11 {{unexpected OpenACC clause 'seq' in directive '#pragma acc parallel'}}
-  // par-error@+10 {{unexpected OpenACC clause 'independent' in directive '#pragma acc parallel'}}
-  // par-error@+9 {{unexpected OpenACC clause 'auto' in directive '#pragma acc parallel'}}
-  // par-error@+8 {{unexpected OpenACC clause 'gang' in directive '#pragma acc parallel'}}
-  // par-error@+7 {{unexpected OpenACC clause 'worker' in directive '#pragma acc parallel'}}
-  // par-error@+6 {{unexpected OpenACC clause 'vector' in directive '#pragma acc parallel'}}
-  // expected-error@+5 {{unexpected OpenACC clause 'independent', 'seq' is specified already}}
-  // expected-error@+4 {{unexpected OpenACC clause 'auto', 'seq' is specified already}}
-  // expected-error@+3 {{unexpected OpenACC clause 'gang', 'seq' is specified already}}
-  // expected-error@+2 {{unexpected OpenACC clause 'worker', 'seq' is specified already}}
-  // expected-error@+1 {{unexpected OpenACC clause 'vector', 'seq' is specified already}}
+  // par-error@+12 {{unexpected OpenACC clause 'seq' in directive '#pragma acc parallel'}}
+  // par-error@+11 {{unexpected OpenACC clause 'independent' in directive '#pragma acc parallel'}}
+  // par-error@+10 {{unexpected OpenACC clause 'auto' in directive '#pragma acc parallel'}}
+  // par-error@+9 {{unexpected OpenACC clause 'gang' in directive '#pragma acc parallel'}}
+  // par-error@+8 {{unexpected OpenACC clause 'worker' in directive '#pragma acc parallel'}}
+  // par-error@+7 {{unexpected OpenACC clause 'vector' in directive '#pragma acc parallel'}}
+  // parloop-error@+6 {{unexpected OpenACC clause 'independent', 'seq' is specified already}}
+  // parloop-error@+5 {{unexpected OpenACC clause 'auto', 'seq' is specified already}}
+  // parloop-error@+4 {{unexpected OpenACC clause 'auto', 'independent' is specified already}}
+  // parloop-error@+3 {{unexpected OpenACC clause 'gang', 'seq' is specified already}}
+  // parloop-error@+2 {{unexpected OpenACC clause 'worker', 'seq' is specified already}}
+  // parloop-error@+1 {{unexpected OpenACC clause 'vector', 'seq' is specified already}}
   #pragma acc parallel LOOP seq independent auto gang worker vector
     FORLOOP
   // par-error@+1 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc parallel'}}

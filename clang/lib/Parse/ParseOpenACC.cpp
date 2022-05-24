@@ -79,14 +79,13 @@ OpenACCDirectiveKind parseOpenACCDirectiveKind(Parser &P) {
 } // namespace
 
 void Parser::ParseOpenACCClauses(OpenACCDirectiveKind DKind) {
-  SmallVector<bool, ACCC_unknown + 1> FirstClauses(ACCC_unknown + 1);
+  SmallVector<bool, ACCC_unknown + 1> SeenClauses(ACCC_unknown + 1);
   ConsumeToken();
   while (Tok.isNot(tok::annot_pragma_openacc_end)) {
     OpenACCClauseKind CKind = Tok.isAnnotation()
                                   ? ACCC_unknown
                                   : getOpenACCClauseKind(PP.getSpelling(Tok));
-    ACCClause *Clause = ParseOpenACCClause(DKind, CKind, FirstClauses);
-    FirstClauses[CKind] = true;
+    ACCClause *Clause = ParseOpenACCClause(DKind, CKind, SeenClauses);
     if (Clause)
       Actions.AddOpenACCClause(Clause);
     // Skip ',' if any.
@@ -256,13 +255,20 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
 ///       | seq-clause | independent-clause | auto-clause
 ///       | gang-clause | worker-clause | vector-clause | collapse-clause
 ///
-ACCClause *Parser::ParseOpenACCClause(
-    OpenACCDirectiveKind DKind, OpenACCClauseKind CKind,
-    const SmallVectorImpl<bool> &FirstClauses) {
+ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
+                                      OpenACCClauseKind CKind,
+                                      SmallVectorImpl<bool> &SeenClauses) {
   ACCClause *Clause = nullptr;
   bool ErrorFound = false;
   bool WrongDirective = false;
-  // Check if clause is allowed for the given directive.
+
+  // Check if the clause is ever permitted for the given directive.  If it's
+  // not, we finish parsing it based on its syntax in other directives because
+  // that's likely how the programmer wrote it and so that's probably the best
+  // way to reach and diagnose issues with subsequent clauses.  However, the
+  // clause has no meaning on this directive, so diagnostics about its conflicts
+  // with other occurrences of itself or with other clauses would be baseless
+  // and confusing, so we suppress them.
   if (CKind != ACCC_unknown && !isAllowedClauseForDirective(DKind, CKind)) {
     Diag(Tok, diag::err_acc_unexpected_clause) << getOpenACCName(CKind)
                                                << getOpenACCName(DKind);
@@ -276,7 +282,7 @@ ACCClause *Parser::ParseOpenACCClause(
   case ACCC_num_workers:
   case ACCC_vector_length:
   case ACCC_collapse:
-    if (FirstClauses[CKind]) {
+    if (!WrongDirective && SeenClauses[CKind]) {
       Diag(Tok, diag::err_acc_more_one_clause)
           << getOpenACCName(DKind) << getOpenACCName(CKind);
       ErrorFound = true;
@@ -290,57 +296,28 @@ ACCClause *Parser::ParseOpenACCClause(
   case ACCC_gang:
   case ACCC_worker:
   case ACCC_vector:
-    if (FirstClauses[CKind]) {
-      Diag(Tok, diag::err_acc_more_one_clause)
-          << getOpenACCName(DKind) << getOpenACCName(CKind);
-      ErrorFound = true;
-    }
-    else {
-      if (CKind == ACCC_seq || CKind == ACCC_independent ||
-           CKind == ACCC_auto) {
-        OpenACCClauseKind CKindOther;
-        if (FirstClauses[CKindOther = ACCC_seq] ||
-            FirstClauses[CKindOther = ACCC_independent] ||
-            FirstClauses[CKindOther = ACCC_auto]) {
-          Diag(Tok, diag::err_acc_mutually_exclusive_clauses)
-              << getOpenACCName(CKind) << getOpenACCName(CKindOther);
-          ErrorFound = true;
-        }
-      }
-      if (DKind == ACCD_routine) {
+    if (!WrongDirective) {
+      if (SeenClauses[CKind]) {
+        Diag(Tok, diag::err_acc_more_one_clause)
+            << getOpenACCName(DKind) << getOpenACCName(CKind);
+        ErrorFound = true;
+      } else if (DKind == ACCD_routine) {
         // OpenACC 3.2, sec. 2.15.1 "Routine Directive", L2881, L2890-2891,
         // L2901-2902, and L2906-2907:
         // "Only one of the gang, worker, vector, and seq clauses may appear for
         // each device type."
-        OpenACCClauseKind CKindOther;
-        if ((CKind == ACCC_gang || CKind == ACCC_worker ||
-             CKind == ACCC_vector || CKind == ACCC_seq) &&
-            (FirstClauses[CKindOther = ACCC_gang] ||
-             FirstClauses[CKindOther = ACCC_worker] ||
-             FirstClauses[CKindOther = ACCC_vector] ||
-             FirstClauses[CKindOther = ACCC_seq])) {
-          Diag(Tok, diag::err_acc_mutually_exclusive_clauses)
-              << getOpenACCName(CKind) << getOpenACCName(CKindOther);
-          ErrorFound = true;
-        }
-      } else if (CKind == ACCC_seq) {
-        OpenACCClauseKind CKindOther;
-        if (FirstClauses[CKindOther = ACCC_gang] ||
-            FirstClauses[CKindOther = ACCC_worker] ||
-            FirstClauses[CKindOther = ACCC_vector]) {
-          Diag(Tok, diag::err_acc_mutually_exclusive_clauses)
-              << getOpenACCName(CKind) << getOpenACCName(CKindOther);
-          ErrorFound = true;
-        }
-      } else if ((CKind == ACCC_gang || CKind == ACCC_worker ||
-                  CKind == ACCC_vector) &&
-                 FirstClauses[ACCC_seq]) {
-        Diag(Tok, diag::err_acc_mutually_exclusive_clauses)
-            << getOpenACCName(CKind) << getOpenACCName(ACCC_seq);
-        ErrorFound = true;
+        checkMutuallyExclusiveClauses(
+            SeenClauses, CKind, ErrorFound,
+            {ACCC_gang, ACCC_worker, ACCC_vector, ACCC_seq});
+      } else {
+        checkMutuallyExclusiveClauses(SeenClauses, CKind, ErrorFound,
+                                      {ACCC_seq, ACCC_independent, ACCC_auto});
+        checkMutuallyExclusiveClauses(SeenClauses, CKind, ErrorFound,
+                                      {ACCC_gang, ACCC_worker, ACCC_vector},
+                                      {ACCC_seq});
       }
     }
-    Clause = ParseOpenACCClause(CKind, WrongDirective);
+    Clause = ParseOpenACCNoArgClause(CKind, WrongDirective);
     break;
   case ACCC_present:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
@@ -376,6 +353,10 @@ ACCClause *Parser::ParseOpenACCClause(
     SkipUntil(tok::annot_pragma_openacc_end, StopBeforeMatch);
     break;
   }
+  // If the clause is ever permitted on this directive, then record its
+  // appearance for the sake of detecting conflicts with later clauses.
+  if (!WrongDirective)
+    SeenClauses[CKind] = true;
   return ErrorFound ? nullptr : Clause;
 }
 
@@ -428,13 +409,37 @@ ACCClause *Parser::ParseOpenACCSingleExprClause(OpenACCClauseKind Kind,
 ///    seq-clause:
 ///         'seq'
 ///
-ACCClause *Parser::ParseOpenACCClause(OpenACCClauseKind Kind, bool ParseOnly) {
+ACCClause *Parser::ParseOpenACCNoArgClause(OpenACCClauseKind Kind,
+                                           bool ParseOnly) {
   SourceLocation Loc = Tok.getLocation();
   ConsumeAnyToken();
 
   if (ParseOnly)
     return nullptr;
   return Actions.ActOnOpenACCClause(Kind, Loc, Tok.getLocation());
+}
+
+void Parser::checkMutuallyExclusiveClauses(
+    const SmallVectorImpl<bool> &SeenClauses, OpenACCClauseKind Kind,
+    bool &ErrorFound, const SmallVector<OpenACCClauseKind> &List0,
+    const SmallVector<OpenACCClauseKind> &List1) {
+  for (int I = 0; I < 2; ++I) {
+    const SmallVector<OpenACCClauseKind> &ListThis = I == 0 ? List0 : List1;
+    const SmallVector<OpenACCClauseKind> &ListOther = I == 0 ? List1 : List0;
+    for (OpenACCClauseKind KindThis : ListThis) {
+      if (Kind == KindThis) {
+        for (OpenACCClauseKind KindOther :
+             ListOther.empty() ? ListThis : ListOther) {
+          if (Kind != KindOther && SeenClauses[KindOther]) {
+            Diag(Tok, diag::err_acc_mutually_exclusive_clauses)
+                << getOpenACCName(Kind) << getOpenACCName(KindOther);
+            ErrorFound = true;
+          }
+        }
+        return;
+      }
+    }
+  }
 }
 
 static bool ParseReductionId(Parser &P, UnqualifiedId &ReductionId) {

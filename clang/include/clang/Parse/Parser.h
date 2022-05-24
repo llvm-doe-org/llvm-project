@@ -3367,13 +3367,14 @@ public:
   ///
   /// \param DKind Kind of current directive.
   /// \param CKind Kind of current clause.
-  /// \param FirstClauses Each entry is true if the corresponding member of
-  ///        \c OpenACCClauseKind has already been seen in the current
-  ///        directive.
+  /// \param SeenClauses Storage allocated for the duration of parsing a single
+  ///        directive.  It's indexed by \c OpenACCClauseKind to record which
+  ///        clauses have been seen except it omits those that are never
+  ///        permitted on the directive.
   ///
   ACCClause *ParseOpenACCClause(OpenACCDirectiveKind DKind,
                                 OpenACCClauseKind CKind,
-                                const SmallVectorImpl<bool> &FirstClauses);
+                                SmallVectorImpl<bool> &SeenClauses);
   /// Parses clause with a single expression of a kind \a Kind.
   ///
   /// \param Kind Kind of current clause.
@@ -3388,7 +3389,7 @@ public:
   /// \param ParseOnly true to skip the clause's semantic actions and return
   /// nullptr.
   ///
-  ACCClause *ParseOpenACCClause(OpenACCClauseKind Kind, bool ParseOnly);
+  ACCClause *ParseOpenACCNoArgClause(OpenACCClauseKind Kind, bool ParseOnly);
   /// Parses clause with the list of variables of a kind \a Kind.
   ///
   /// \param Kind Kind of current clause.
@@ -3397,6 +3398,35 @@ public:
   ///
   ACCClause *ParseOpenACCVarListClause(OpenACCDirectiveKind DKind,
                                        OpenACCClauseKind Kind, bool ParseOnly);
+  /// Diagnoses the appearance of mutually exclusive clauses on the current
+  /// directive.
+  ///
+  /// \param SeenClauses True for clauses that already appeared on the current
+  ///   directive.  It's indexed by \c OpenACCClauseKind.
+  /// \param Kind Kind of the current clause.
+  /// \param ErrorFound This is set to true when an error is reported.
+  /// \param List0 Clauses that cannot appear together with any clause in
+  ///   \p List1 on the current directive.
+  /// \param List1 Clauses that cannot appear together with any clause in
+  ///   \p List0 on the current directive.  If \p List1 is the empty set, then
+  ///   \p List0 is used for both sets, meaning no clause in \p List0 can appear
+  ///   with any other clause in \p List0.
+  ///
+  /// If \p Kind is in either of \p List0 or \p List1, then all clauses that are
+  /// in the other list and that already appeared on the current directive are
+  /// reported in the order of the other list.  There are two exceptions:
+  /// - Even if \p Kind appears in both lists, \p Kind is not considered to
+  ///   conflict with itself.  That is, repeated occurrences of a clause are
+  ///   usually diagnosed separately and suppress mutual exclusion diagnostics,
+  ///   which are usually reported for the original occurrence only.
+  /// - \p List0 or \p List1 should be either identical or disjoint.  This
+  ///   constraint is fine for the current callers and enables a small
+  ///   optimization: if \p Kind is found in \p List0, then \p List1 is not
+  ///   searched for \p Kind.
+  void checkMutuallyExclusiveClauses(
+      const SmallVectorImpl<bool> &SeenClauses, OpenACCClauseKind Kind,
+      bool &ErrorFound, const SmallVector<OpenACCClauseKind> &List0,
+      const SmallVector<OpenACCClauseKind> &List1 = {});
 
 public:
   /// Parses simple expression in parens for single-expression clauses of OpenACC
