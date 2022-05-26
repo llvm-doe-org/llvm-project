@@ -926,6 +926,56 @@ public:
       const ASTContext &C, unsigned NumClauses, EmptyShell);
 };
 
+/// This represents '#pragma acc atomic' directive.
+///
+/// \code
+/// #pragma acc atomic read
+/// \endcode
+/// In this example directive '#pragma acc atomic' has clause 'read'.
+class ACCAtomicDirective : public ACCDirectiveStmt {
+  friend class ASTStmtReader;
+
+  /// Build directive with the given start and end location.
+  ///
+  /// \param StartLoc Starting location of the directive (directive keyword).
+  /// \param EndLoc Ending Location of the directive.
+  /// \param NumClauses Number of clauses.
+  ACCAtomicDirective(SourceLocation StartLoc, SourceLocation EndLoc,
+                     unsigned NumClauses)
+      : ACCDirectiveStmt(this, ACCAtomicDirectiveClass, ACCD_atomic, StartLoc,
+                         EndLoc, NumClauses, /*MaxAddClauses=*/0,
+                         /*NumChildren=*/1) {}
+
+  /// Build an empty directive.
+  explicit ACCAtomicDirective(unsigned NumClauses)
+      : ACCDirectiveStmt(this, ACCAtomicDirectiveClass, ACCD_atomic,
+                         SourceLocation(), SourceLocation(), NumClauses,
+                         /*MaxAddClauses=*/0, /*NumChildren=*/1) {}
+
+public:
+  /// Creates directive.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param Clauses List of clauses.
+  /// \param AssociatedStmt Statement associated with the directive.
+  static ACCAtomicDirective *
+  Create(const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
+         ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt);
+
+  /// Creates an empty directive.
+  ///
+  /// \param C AST context.
+  /// \param NumClauses Number of clauses.
+  static ACCAtomicDirective *CreateEmpty(const ASTContext &C,
+                                         unsigned NumClauses, EmptyShell);
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ACCAtomicDirectiveClass;
+  }
+};
+
 } // end namespace clang
 
 #endif

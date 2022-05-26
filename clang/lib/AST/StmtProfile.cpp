@@ -1335,6 +1335,10 @@ void ACCClauseProfiler::VisitACCCollapseClause(const ACCCollapseClause *C) {
   if (C->getCollapse())
     Profiler->VisitStmt(C->getCollapse());
 }
+void ACCClauseProfiler::VisitACCReadClause(const ACCReadClause *) {}
+void ACCClauseProfiler::VisitACCWriteClause(const ACCWriteClause *) {}
+void ACCClauseProfiler::VisitACCUpdateClause(const ACCUpdateClause *) {}
+void ACCClauseProfiler::VisitACCCaptureClause(const ACCCaptureClause *) {}
 
 void StmtProfiler::VisitACCDirectiveStmt(const ACCDirectiveStmt *S) {
   VisitStmt(S);
@@ -1372,6 +1376,10 @@ void StmtProfiler::VisitACCLoopDirective(const ACCLoopDirective *S) {
 
 void StmtProfiler::VisitACCParallelLoopDirective(
     const ACCParallelLoopDirective *S) {
+  VisitACCDirectiveStmt(S);
+}
+
+void StmtProfiler::VisitACCAtomicDirective(const ACCAtomicDirective *S) {
   VisitACCDirectiveStmt(S);
 }
 

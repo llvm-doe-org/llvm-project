@@ -2644,7 +2644,11 @@ enum CXCursorKind {
    */
   CXCursor_ACCParallelLoopDirective = 306,
 
-  CXCursor_LastStmt = CXCursor_ACCParallelLoopDirective,
+  /** OpenACC atomic directive.
+   */
+  CXCursor_ACCAtomicDirective = 307,
+
+  CXCursor_LastStmt = CXCursor_ACCAtomicDirective,
 
   /**
    * Cursor that represents the translation unit itself.

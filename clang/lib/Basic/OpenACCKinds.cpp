@@ -198,6 +198,7 @@ bool clang::isAllowedDAForDirective(OpenACCDirectiveKind DKind,
       break;
     }
     break;
+  case ACCD_atomic:
   case ACCD_routine:
     break;
   case ACCD_unknown:
@@ -280,6 +281,7 @@ bool clang::isAllowedDAForDirective(OpenACCDirectiveKind DKind,
       break;
     }
     break;
+  case ACCD_atomic:
   case ACCD_routine:
     break;
   case ACCD_unknown:
@@ -345,8 +347,8 @@ bool clang::isAllowedClauseForDirective(OpenACCDirectiveKind DKind,
   case ACCD_loop:
     switch (CKind) {
 #define OPENACC_LOOP_CLAUSE(Name)                                              \
-  case ACCC_##Name:                                                            \
-    return true;
+    case ACCC_##Name:                                                          \
+      return true;
 #include "clang/Basic/OpenACCKinds.def"
     default:
       break;
@@ -355,8 +357,18 @@ bool clang::isAllowedClauseForDirective(OpenACCDirectiveKind DKind,
   case ACCD_parallel_loop:
     switch (CKind) {
 #define OPENACC_PARALLEL_LOOP_CLAUSE(Name)                                     \
-  case ACCC_##Name:                                                            \
-    return true;
+    case ACCC_##Name:                                                          \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
+  case ACCD_atomic:
+    switch (CKind) {
+#define OPENACC_ATOMIC_CLAUSE(Name)                                            \
+    case ACCC_##Name:                                                          \
+      return true;
 #include "clang/Basic/OpenACCKinds.def"
     default:
       break;
@@ -365,8 +377,8 @@ bool clang::isAllowedClauseForDirective(OpenACCDirectiveKind DKind,
   case ACCD_routine:
     switch (CKind) {
 #define OPENACC_ROUTINE_CLAUSE(Name)                                           \
-  case ACCC_##Name:                                                            \
-    return true;
+    case ACCC_##Name:                                                          \
+      return true;
 #include "clang/Basic/OpenACCKinds.def"
     default:
       break;
@@ -451,11 +463,21 @@ bool clang::isAllowedParentForDirective(OpenACCDirectiveKind DKind,
       break;
     }
     break;
+  case ACCD_atomic:
+    switch (ParentDKind) {
+#define OPENACC_ATOMIC_PARENT(Name)                                            \
+    case ACCD_##Name:                                                          \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
   case ACCD_routine:
     switch (ParentDKind) {
 #define OPENACC_ROUTINE_PARENT(Name)                                           \
-  case ACCD_##Name:                                                            \
-    return true;
+    case ACCD_##Name:                                                          \
+      return true;
 #include "clang/Basic/OpenACCKinds.def"
     default:
       break;
@@ -475,6 +497,7 @@ int clang::getOpenACCEffectiveDirectives(OpenACCDirectiveKind DKind) {
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
+  case ACCD_atomic:
   case ACCD_routine:
     return 1;
   case ACCD_parallel_loop:
@@ -493,6 +516,7 @@ bool clang::isOpenACCDirectiveStmt(OpenACCDirectiveKind DKind) {
   case ACCD_parallel:
   case ACCD_loop:
   case ACCD_parallel_loop:
+  case ACCD_atomic:
     return true;
   case ACCD_routine:
   case ACCD_unknown:

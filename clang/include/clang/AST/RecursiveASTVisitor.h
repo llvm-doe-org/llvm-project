@@ -3798,6 +3798,8 @@ DEF_TRAVERSE_STMT(ACCLoopDirective, { TRY_TO(TraverseACCDirectiveStmt(S)); })
 DEF_TRAVERSE_STMT(ACCParallelLoopDirective,
                   { TRY_TO(TraverseACCDirectiveStmt(S)); })
 
+DEF_TRAVERSE_STMT(ACCAtomicDirective, { TRY_TO(TraverseACCDirectiveStmt(S)); })
+
 // OpenACC clauses.
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseACCClause(ACCClause *C) {
@@ -3983,6 +3985,26 @@ template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCCollapseClause(
     ACCCollapseClause *C) {
   TRY_TO(TraverseStmt(C->getCollapse()));
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCReadClause(ACCReadClause *) {
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCWriteClause(ACCWriteClause *) {
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCUpdateClause(ACCUpdateClause *) {
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCCaptureClause(ACCCaptureClause *) {
   return true;
 }
 

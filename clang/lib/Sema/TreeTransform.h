@@ -10777,6 +10777,17 @@ TreeTransform<Derived>::TransformACCParallelLoopDirective(
   return Res;
 }
 
+template <typename Derived>
+StmtResult
+TreeTransform<Derived>::TransformACCAtomicDirective(ACCAtomicDirective *D) {
+  if (getDerived().getSema().StartOpenACCDirectiveAndAssociate(
+          ACCD_atomic, D->getBeginLoc()))
+    return StmtError();
+  StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
+  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_atomic);
+  return Res;
+}
+
 //===----------------------------------------------------------------------===//
 // OpenACC clause transformation
 //===----------------------------------------------------------------------===//
@@ -11099,6 +11110,32 @@ TreeTransform<Derived>::TransformACCCollapseClause(ACCCollapseClause *C) {
     return nullptr;
   return getDerived().RebuildACCCollapseClause(
       E.get(), C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
+}
+
+template <typename Derived>
+ACCClause *TreeTransform<Derived>::TransformACCReadClause(ACCReadClause *C) {
+  // No need to rebuild this clause, no parameters.
+  return C;
+}
+
+template <typename Derived>
+ACCClause *TreeTransform<Derived>::TransformACCWriteClause(ACCWriteClause *C) {
+  // No need to rebuild this clause, no parameters.
+  return C;
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCUpdateClause(ACCUpdateClause *C) {
+  // No need to rebuild this clause, no parameters.
+  return C;
+}
+
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCCaptureClause(ACCCaptureClause *C) {
+  // No need to rebuild this clause, no parameters.
+  return C;
 }
 
 //===----------------------------------------------------------------------===//

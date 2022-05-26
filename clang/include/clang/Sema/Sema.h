@@ -11658,6 +11658,10 @@ public:
   /// of the associated statement.
   StmtResult ActOnOpenACCParallelLoopDirective(ArrayRef<ACCClause *> Clauses,
                                                Stmt *AStmt);
+  /// Called on well-formed '\#pragma acc atomic' after parsing of the
+  /// associated statement.
+  StmtResult ActOnOpenACCAtomicDirective(ArrayRef<ACCClause *> Clauses,
+                                         Stmt *AStmt);
   /// Called on well-formed '\#pragma acc routine'.
   void ActOnOpenACCRoutineDirective(OpenACCDetermination Determination,
                                     DeclGroupRef Decl);
@@ -11795,6 +11799,19 @@ public:
                                         SourceLocation StartLoc,
                                         SourceLocation LParenLoc,
                                         SourceLocation EndLoc);
+  /// Called on well-formed 'read' clause.
+  ACCClause *ActOnOpenACCReadClause(SourceLocation StartLoc,
+                                    SourceLocation EndLoc);
+  /// Called on well-formed 'write' clause.
+  ACCClause *ActOnOpenACCWriteClause(SourceLocation StartLoc,
+                                     SourceLocation EndLoc);
+  /// Called on well-formed 'update' clause.
+  ACCClause *ActOnOpenACCUpdateClause(OpenACCDetermination Determination,
+                                      SourceLocation StartLoc,
+                                      SourceLocation EndLoc);
+  /// Called on well-formed 'capture' clause.
+  ACCClause *ActOnOpenACCCaptureClause(SourceLocation StartLoc,
+                                       SourceLocation EndLoc);
 
   /// Is an OpenACC directive that forms a statement currently being analyzed?
   bool isInOpenACCDirectiveStmt();

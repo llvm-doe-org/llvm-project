@@ -1666,6 +1666,116 @@ public:
   }
 };
 
+/// This represents 'read' clause in the '#pragma acc atomic' directive.
+///
+/// \code
+/// #pragma acc atomic read
+/// \endcode
+/// In this example directive '#pragma acc atomic' has clause 'read'.
+class ACCReadClause : public ACCClause {
+public:
+  /// Build 'read' clause.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param EndLoc Ending location of the clause.
+  ACCReadClause(SourceLocation StartLoc, SourceLocation EndLoc)
+      : ACCClause(ACCC_read, ACC_EXPLICIT, StartLoc, EndLoc) {}
+
+  /// Build an empty clause.
+  ACCReadClause() : ACCClause(ACCC_read) {}
+
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_read;
+  }
+};
+
+/// This represents 'write' clause in the '#pragma acc atomic' directive.
+///
+/// \code
+/// #pragma acc atomic write
+/// \endcode
+/// In this example directive '#pragma acc atomic' has clause 'write'.
+class ACCWriteClause : public ACCClause {
+public:
+  /// Build 'write' clause.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param EndLoc Ending location of the clause.
+  ACCWriteClause(SourceLocation StartLoc, SourceLocation EndLoc)
+      : ACCClause(ACCC_write, ACC_EXPLICIT, StartLoc, EndLoc) {}
+
+  /// Build an empty clause.
+  ACCWriteClause() : ACCClause(ACCC_write) {}
+
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_write;
+  }
+};
+
+/// This represents 'update' clause in the '#pragma acc atomic' directive.
+///
+/// \code
+/// #pragma acc atomic update
+/// \endcode
+/// In this example directive '#pragma acc atomic' has clause 'update'.
+class ACCUpdateClause : public ACCClause {
+public:
+  /// Build 'update' clause.
+  ///
+  /// \param Determination How the clause was determined.
+  /// \param StartLoc Starting location of the clause.
+  /// \param EndLoc Ending location of the clause.
+  ACCUpdateClause(OpenACCDetermination Determination, SourceLocation StartLoc,
+                  SourceLocation EndLoc)
+      : ACCClause(ACCC_update, Determination, StartLoc, EndLoc) {}
+
+  /// Build an empty clause.
+  ACCUpdateClause() : ACCClause(ACCC_update) {}
+
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_update;
+  }
+};
+
+/// This represents 'capture' clause in the '#pragma acc atomic' directive.
+///
+/// \code
+/// #pragma acc atomic capture
+/// \endcode
+/// In this example directive '#pragma acc atomic' has clause 'capture'.
+class ACCCaptureClause : public ACCClause {
+public:
+  /// Build 'capture' clause.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param EndLoc Ending location of the clause.
+  ACCCaptureClause(SourceLocation StartLoc, SourceLocation EndLoc)
+      : ACCClause(ACCC_capture, ACC_EXPLICIT, StartLoc, EndLoc) {}
+
+  /// Build an empty clause.
+  ACCCaptureClause() : ACCClause(ACCC_capture) {}
+
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_capture;
+  }
+};
+
 /// This class implements a simple visitor for ACCClause
 /// subclasses.
 template<class ImplClass, template <typename> class Ptr, typename RetTy>

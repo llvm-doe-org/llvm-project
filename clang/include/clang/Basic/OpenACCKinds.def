@@ -112,6 +112,9 @@
 #ifndef OPENACC_PARALLEL_LOOP_CLAUSE
 #  define OPENACC_PARALLEL_LOOP_CLAUSE(Name)
 #endif
+#ifndef OPENACC_ATOMIC_CLAUSE
+#  define OPENACC_ATOMIC_CLAUSE(Name)
+#endif
 #ifndef OPENACC_ROUTINE_CLAUSE
 #  define OPENACC_ROUTINE_CLAUSE(Name)
 #endif
@@ -135,6 +138,9 @@
 #endif
 #ifndef OPENACC_PARALLEL_LOOP_PARENT
 #  define OPENACC_PARALLEL_LOOP_PARENT(Name)
+#endif
+#ifndef OPENACC_ATOMIC_PARENT
+#  define OPENACC_ATOMIC_PARENT(Name)
 #endif
 #ifndef OPENACC_ROUTINE_PARENT
 #  define OPENACC_ROUTINE_PARENT(Name)
@@ -179,6 +185,7 @@ OPENACC_DIRECTIVE(data)
 OPENACC_DIRECTIVE(parallel)
 OPENACC_DIRECTIVE(loop)
 OPENACC_DIRECTIVE_EXT(parallel_loop, "parallel loop")
+OPENACC_DIRECTIVE(atomic)
 OPENACC_DIRECTIVE(routine)
 
 // Specifying and iterating OpenACC clauses, data attributes (DAs), data
@@ -309,6 +316,10 @@ OPENACC_CLAUSE(gang, ACCGangClause)
 OPENACC_CLAUSE(worker, ACCWorkerClause)
 OPENACC_CLAUSE(vector, ACCVectorClause)
 OPENACC_CLAUSE(collapse, ACCCollapseClause)
+OPENACC_CLAUSE(read, ACCReadClause)
+OPENACC_CLAUSE(write, ACCWriteClause)
+OPENACC_CLAUSE(update, ACCUpdateClause)
+OPENACC_CLAUSE(capture, ACCCaptureClause)
 
 // Explicit clauses allowed for OpenACC directive 'update'.
 OPENACC_UPDATE_CLAUSE(if)
@@ -414,6 +425,12 @@ OPENACC_PARALLEL_LOOP_CLAUSE(worker)
 OPENACC_PARALLEL_LOOP_CLAUSE(vector)
 OPENACC_PARALLEL_LOOP_CLAUSE(collapse)
 
+// Explicit clauses allowed for OpenACC directive 'atomic'.
+OPENACC_ATOMIC_CLAUSE(read)
+OPENACC_ATOMIC_CLAUSE(write)
+OPENACC_ATOMIC_CLAUSE(update)
+OPENACC_ATOMIC_CLAUSE(capture)
+
 // Explicit clauses allowed for OpenACC directive 'routine'.
 OPENACC_ROUTINE_CLAUSE(gang)
 OPENACC_ROUTINE_CLAUSE(worker)
@@ -455,6 +472,14 @@ OPENACC_LOOP_PARENT(routine)
 OPENACC_PARALLEL_LOOP_PARENT(unknown)
 OPENACC_PARALLEL_LOOP_PARENT(data)
 
+// Parent directives allowed for 'atomic'.
+OPENACC_ATOMIC_PARENT(unknown)
+OPENACC_ATOMIC_PARENT(data)
+OPENACC_ATOMIC_PARENT(parallel)
+OPENACC_ATOMIC_PARENT(loop)
+OPENACC_ATOMIC_PARENT(parallel_loop)
+OPENACC_ATOMIC_PARENT(routine)
+
 // Parent directives allowed for 'routine'.
 OPENACC_ROUTINE_PARENT(unknown)
 
@@ -491,6 +516,7 @@ OPENACC_ROUTINE_PARENT(unknown)
 #undef OPENACC_PARALLEL_CLAUSE
 #undef OPENACC_LOOP_CLAUSE
 #undef OPENACC_PARALLEL_LOOP_CLAUSE
+#undef OPENACC_ATOMIC_CLAUSE
 #undef OPENACC_ROUTINE_CLAUSE
 #undef OPENACC_UPDATE_PARENT
 #undef OPENACC_ENTER_DATA_PARENT
@@ -499,6 +525,7 @@ OPENACC_ROUTINE_PARENT(unknown)
 #undef OPENACC_PARALLEL_PARENT
 #undef OPENACC_LOOP_PARENT
 #undef OPENACC_PARALLEL_LOOP_PARENT
+#undef OPENACC_ATOMIC_PARENT
 #undef OPENACC_ROUTINE_PARENT
 #undef OPENACC_ALIASED_CLAUSE
 #undef OPENACC_CLAUSE_AND_DMA

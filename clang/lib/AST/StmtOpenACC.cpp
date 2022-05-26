@@ -70,8 +70,11 @@ bool ACCDirectiveStmt::ompStmtPrintsDifferently(const PrintingPolicy &Policy,
   Stmt *OMPStmt = getOMPNode();
   for (int i = 0, e = getOpenACCEffectiveDirectives(getDirectiveKind());
        i < e; ++i) {
-    if (auto *OMPDir = dyn_cast<OMPExecutableDirective>(OMPStmt))
-      OMPStmt = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
+    if (auto *OMPDir = dyn_cast<OMPExecutableDirective>(OMPStmt)) {
+      OMPStmt = OMPDir->getAssociatedStmt();
+      if (isa<CapturedStmt>(OMPStmt))
+        OMPStmt = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
+    }
   }
   if (ACCStmt == OMPStmt)
     return false;
@@ -269,4 +272,30 @@ ACCParallelLoopDirective *ACCParallelLoopDirective::CreateEmpty(
   void *Mem =
       C.Allocate(Size + sizeof(ACCClause *) * NumClauses + sizeof(Stmt *));
   return new (Mem) ACCParallelLoopDirective(NumClauses);
+}
+
+ACCAtomicDirective *ACCAtomicDirective::Create(const ASTContext &C,
+                                               SourceLocation StartLoc,
+                                               SourceLocation EndLoc,
+                                               ArrayRef<ACCClause *> Clauses,
+                                               Stmt *AssociatedStmt) {
+  unsigned Size =
+      llvm::alignTo(sizeof(ACCAtomicDirective), alignof(ACCClause *));
+  void *Mem = C.Allocate(Size + sizeof(ACCClause *) * (Clauses.size() + 1) +
+                         sizeof(Stmt *));
+  ACCAtomicDirective *Dir =
+      new (Mem) ACCAtomicDirective(StartLoc, EndLoc, Clauses.size());
+  Dir->setClauses(Clauses);
+  Dir->setAssociatedStmt(AssociatedStmt);
+  return Dir;
+}
+
+ACCAtomicDirective *ACCAtomicDirective::CreateEmpty(const ASTContext &C,
+                                                    unsigned NumClauses,
+                                                    EmptyShell) {
+  unsigned Size =
+      llvm::alignTo(sizeof(ACCAtomicDirective), alignof(ACCClause *));
+  void *Mem =
+      C.Allocate(Size + sizeof(ACCClause *) * NumClauses + sizeof(Stmt *));
+  return new (Mem) ACCAtomicDirective(NumClauses);
 }

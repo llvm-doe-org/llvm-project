@@ -148,6 +148,16 @@ int main() {
   // par-error@+1 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc parallel'}}
   #pragma acc parallel LOOP collapse(1)
     FORLOOP
+  // par-error@+8 {{unexpected OpenACC clause 'read' in directive '#pragma acc parallel'}}
+  // parloop-error@+7 {{unexpected OpenACC clause 'read' in directive '#pragma acc parallel loop'}}
+  // par-error@+6 {{unexpected OpenACC clause 'write' in directive '#pragma acc parallel'}}
+  // parloop-error@+5 {{unexpected OpenACC clause 'write' in directive '#pragma acc parallel loop'}}
+  // par-error@+4 {{unexpected OpenACC clause 'update' in directive '#pragma acc parallel'}}
+  // parloop-error@+3 {{unexpected OpenACC clause 'update' in directive '#pragma acc parallel loop'}}
+  // par-error@+2 {{unexpected OpenACC clause 'capture' in directive '#pragma acc parallel'}}
+  // parloop-error@+1 {{unexpected OpenACC clause 'capture' in directive '#pragma acc parallel loop'}}
+  #pragma acc parallel LOOP read write update capture
+    FORLOOP
 
   // Malformed clauses not permitted here.
 

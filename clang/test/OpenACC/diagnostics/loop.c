@@ -181,6 +181,18 @@ void fn(int param) {
     #pragma acc CMB_PAR loop num_gangs(3) num_workers(3) vector_length(3)
     for (int i = 0; i < 5; ++i)
       ;
+
+    // orph-sep-error@+8 {{unexpected OpenACC clause 'read' in directive '#pragma acc loop'}}
+    // orph-sep-error@+7 {{unexpected OpenACC clause 'write' in directive '#pragma acc loop'}}
+    // orph-sep-error@+6 {{unexpected OpenACC clause 'update' in directive '#pragma acc loop'}}
+    // orph-sep-error@+5 {{unexpected OpenACC clause 'capture' in directive '#pragma acc loop'}}
+    // cmb-error@+4 {{unexpected OpenACC clause 'read' in directive '#pragma acc parallel loop'}}
+    // cmb-error@+3 {{unexpected OpenACC clause 'write' in directive '#pragma acc parallel loop'}}
+    // cmb-error@+2 {{unexpected OpenACC clause 'update' in directive '#pragma acc parallel loop'}}
+    // cmb-error@+1 {{unexpected OpenACC clause 'capture' in directive '#pragma acc parallel loop'}}
+    #pragma acc CMB_PAR loop read write update capture
+    for (int i = 0; i < 5; ++i)
+      ;
   }
 
   //--------------------------------------------------

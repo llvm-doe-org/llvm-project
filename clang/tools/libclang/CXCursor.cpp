@@ -859,6 +859,9 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::ACCParallelLoopDirectiveClass:
     K = CXCursor_ACCParallelLoopDirective;
     break;
+  case Stmt::ACCAtomicDirectiveClass:
+    K = CXCursor_ACCAtomicDirective;
+    break;
   case Stmt::BuiltinBitCastExprClass:
     K = CXCursor_BuiltinBitCastExpr;
   }

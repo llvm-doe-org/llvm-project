@@ -2740,6 +2740,13 @@ void ASTStmtReader::VisitACCParallelLoopDirective(ACCParallelLoopDirective *D)
   VisitACCDirectiveStmt(D);
 }
 
+void ASTStmtReader::VisitACCAtomicDirective(ACCAtomicDirective *D) {
+  VisitStmt(D);
+  // The NumClauses field was read in ReadStmtFromStream.
+  Record.skipInts(1);
+  VisitACCDirectiveStmt(D);
+}
+
 //===----------------------------------------------------------------------===//
 // ASTReader Implementation
 //===----------------------------------------------------------------------===//
@@ -3767,6 +3774,12 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
     case STMT_ACC_PARALLEL_LOOP_DIRECTIVE: {
       unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
       S = ACCParallelLoopDirective::CreateEmpty(Context, NumClauses, Empty);
+      break;
+    }
+
+    case STMT_ACC_ATOMIC_DIRECTIVE: {
+      unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
+      S = ACCAtomicDirective::CreateEmpty(Context, NumClauses, Empty);
       break;
     }
 

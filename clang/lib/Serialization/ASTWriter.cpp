@@ -7120,3 +7120,8 @@ void ACCClauseWriter::VisitACCCollapseClause(ACCCollapseClause *C) {
   Record.AddStmt(C->getCollapse());
   Record.AddSourceLocation(C->getLParenLoc());
 }
+
+void ACCClauseWriter::VisitACCReadClause(ACCReadClause *) {}
+void ACCClauseWriter::VisitACCWriteClause(ACCWriteClause *) {}
+void ACCClauseWriter::VisitACCUpdateClause(ACCUpdateClause *) {}
+void ACCClauseWriter::VisitACCCaptureClause(ACCCaptureClause *) {}

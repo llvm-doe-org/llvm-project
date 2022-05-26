@@ -2699,6 +2699,13 @@ void ASTStmtWriter::VisitACCParallelLoopDirective(
   Code = serialization::STMT_ACC_PARALLEL_LOOP_DIRECTIVE;
 }
 
+void ASTStmtWriter::VisitACCAtomicDirective(ACCAtomicDirective *D) {
+  VisitStmt(D);
+  Record.push_back(D->getNumClauses());
+  VisitACCDirectiveStmt(D);
+  Code = serialization::STMT_ACC_ATOMIC_DIRECTIVE;
+}
+
 //===----------------------------------------------------------------------===//
 // ASTWriter Implementation
 //===----------------------------------------------------------------------===//

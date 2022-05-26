@@ -916,6 +916,7 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
+  case ACCD_atomic:
   case ACCD_routine:
     DirStack.push(RealDKind, RealDKind, StartLoc);
     break;
@@ -951,13 +952,13 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
           << getOpenACCName(RealDKind) << CurFnDecl->getName();
       return Err;
     }
-    assert(RealDKind == ACCD_loop &&
-           "expected only orphaned loop to be permitted in function with "
-           "routine directive");
+    assert((RealDKind == ACCD_loop || RealDKind == ACCD_atomic) &&
+           "expected only orphaned loop or atomic construct to be permitted in "
+           "function with routine directive");
     // Proposed text for OpenACC after 3.2:
     // "A procedure definition containing an orphaned loop construct must be in
     // the scope of an explicit and applying routine directive."
-    if (!Attr || !Attr->getLoc().isValid()) {
+    if (RealDKind == ACCD_loop && (!Attr || !Attr->getLoc().isValid())) {
       Diag(StartLoc, diag::err_acc_routine_for_orphaned_loop)
           << CurFnDecl->getName();
       return true;
@@ -1048,6 +1049,10 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
   case ACCC_worker:
   case ACCC_vector:
   case ACCC_collapse:
+  case ACCC_read:
+  case ACCC_write:
+  case ACCC_update:
+  case ACCC_capture:
   case ACCC_unknown:
     llvm_unreachable("expected explicit clause that accepts a variable list");
   }
@@ -1417,8 +1422,8 @@ public:
     assert((!ScalarReductionRequiresDataClause ||
             DirStack.getEffectiveDirective() == ACCD_parallel) &&
            "expected compute construct to be parallel construct");
-    bool IsGangReduction =
-        cast<ACCLoopDirective>(D)->getPartitioning().hasGangPartitioning();
+    ACCLoopDirective *LD = dyn_cast<ACCLoopDirective>(D);
+    bool IsGangReduction = LD && LD->getPartitioning().hasGangPartitioning();
 
     // Search this directive's clauses for reductions requiring data clauses and
     // for privatizations.
@@ -1898,29 +1903,40 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
   // separate nested directives, acting on the effective innermost directive
   // first.  The AST node for the combined directive contains AST nodes for the
   // effective nested directives, facilitating translation to OpenMP.
-  if (isOpenACCCombinedDirective(DKind)) {
-    switch (DKind) {
-    case ACCD_parallel_loop:
-      return ActOnOpenACCParallelLoopDirective(Clauses, AStmt);
-    case ACCD_update:
-    case ACCD_enter_data:
-    case ACCD_exit_data:
-    case ACCD_data:
-    case ACCD_parallel:
-    case ACCD_loop:
-    case ACCD_routine:
-    case ACCD_unknown:
-      llvm_unreachable("expected combined OpenACC directive");
-    }
+  switch (DKind) {
+  case ACCD_parallel_loop:
+    assert(isOpenACCCombinedDirective(DKind) &&
+           "expected combined OpenACC directive");
+    return ActOnOpenACCParallelLoopDirective(Clauses, AStmt);
+  case ACCD_update:
+  case ACCD_enter_data:
+  case ACCD_exit_data:
+  case ACCD_data:
+  case ACCD_parallel:
+  case ACCD_loop:
+  case ACCD_atomic:
+  case ACCD_routine:
+  case ACCD_unknown:
+    assert(!isOpenACCCombinedDirective(DKind) &&
+           "expected non-combined OpenACC directive");
+    break;
   }
 
-  // Compute implicit independent clause.
+  // Compute implicit independent clause for loop construct.
   llvm::SmallVector<ACCClause *, 8> ComputedClauses;
   bool ErrorFound = false;
   ComputedClauses.append(Clauses.begin(), Clauses.end());
   ACCPartitioningKind LoopKind = DirStack.getLoopPartitioning();
   if (LoopKind.hasIndependentImplicit()) {
     ACCClause *Implicit = ActOnOpenACCIndependentClause(
+        ACC_IMPLICIT, SourceLocation(), SourceLocation());
+    assert(Implicit);
+    ComputedClauses.push_back(Implicit);
+  }
+
+  // Compute implicit update clause for atomic construct.
+  if (DKind == ACCD_atomic && ComputedClauses.empty()) {
+    ACCClause *Implicit = ActOnOpenACCUpdateClause(
         ACC_IMPLICIT, SourceLocation(), SourceLocation());
     assert(Implicit);
     ComputedClauses.push_back(Implicit);
@@ -2099,6 +2115,9 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
     Res = ActOnOpenACCLoopDirective(ComputedClauses, AStmt, LCVVars);
     break;
   }
+  case ACCD_atomic:
+    Res = ActOnOpenACCAtomicDirective(ComputedClauses, AStmt);
+    break;
   case ACCD_parallel_loop:
     llvm_unreachable("expected non-combined OpenACC directive");
   case ACCD_routine:
@@ -2560,6 +2579,285 @@ Sema::ActOnOpenACCParallelLoopDirective(ArrayRef<ACCClause *> Clauses,
       Clauses, AStmt, ParallelDir);
 }
 
+struct AtomicDirNoteTy {
+  unsigned DiagID;
+  SourceLocation Loc;
+  SourceRange Range0;
+  SourceRange Range1;
+  AtomicDirNoteTy(unsigned DiagID, const Stmt *S)
+      : DiagID(DiagID), Loc(S->getBeginLoc()), Range0(S->getSourceRange()) {}
+  AtomicDirNoteTy(unsigned DiagID, const BinaryOperator *Op)
+      : DiagID(DiagID), Loc(Op->getOperatorLoc()),
+        Range0(Op->getLHS()->getSourceRange()),
+        Range1(Op->getRHS()->getSourceRange()) {}
+};
+
+// Check associated statement forms for atomic constructs.
+//
+// These functions don't check that Op_* are lvalues and scalar types as that is
+// handled later.  These functions sometimes set Op_* arguments even if
+// validation of the form fails.  That way, additional complaints about
+// whether they're lvalues and scalar types can be produced later.
+//
+// Some of these functions are reused by the other functions, so the diagnostic
+// wording must not be specific to a particular atomic construct clause.
+static bool
+isAtomicDirReadOrWriteForm(Sema &SemaRef, Stmt *AStmt, const Expr *&Op_lhs,
+                           const Expr *&Op_rhs,
+                           SmallVectorImpl<AtomicDirNoteTy> *Notes = nullptr) {
+  const Expr *AExpr = dyn_cast<Expr>(AStmt);
+  if (!AExpr) {
+    if (Notes)
+      Notes->emplace_back(diag::note_acc_atomic_not_expr_stmt, AStmt);
+    return false;
+  }
+  const BinaryOperator *BinOp =
+      dyn_cast<BinaryOperator>(AExpr->IgnoreParenImpCasts());
+  if (!BinOp || BinOp->getOpcode() != BO_Assign) {
+    if (Notes)
+      Notes->emplace_back(diag::note_acc_atomic_not_simple_assign, AExpr);
+    return false;
+  }
+  Op_lhs = BinOp->getLHS()->IgnoreParenImpCasts();
+  Op_rhs = BinOp->getRHS()->IgnoreParenImpCasts();
+  return true;
+}
+static void checkAtomicDirUpdateForm(Sema &SemaRef, Stmt *AStmt,
+                                     const Expr *&Op_x, const Expr *&Op_expr,
+                                     SmallVectorImpl<AtomicDirNoteTy> &Notes) {
+  const Expr *AExpr = dyn_cast<Expr>(AStmt);
+  if (!AExpr) {
+    Notes.emplace_back(diag::note_acc_atomic_not_expr_stmt, AStmt);
+    return;
+  }
+
+  // Check unary-operator form.
+  if (const UnaryOperator *OutOp =
+          dyn_cast<UnaryOperator>(AExpr->IgnoreParenImpCasts())) {
+    if (!OutOp->isIncrementDecrementOp()) {
+      Notes.emplace_back(diag::note_acc_atomic_not_supported_inc_dec_assign,
+                         AExpr);
+      return;
+    }
+    Op_x = OutOp->getSubExpr()->IgnoreParenImpCasts();
+    return;
+  }
+
+  // Complain if not binary-operator form.
+  const BinaryOperator *OutOp =
+      dyn_cast<BinaryOperator>(AExpr->IgnoreParenImpCasts());
+  if (!OutOp) {
+    Notes.emplace_back(diag::note_acc_atomic_not_supported_inc_dec_assign,
+                       AExpr);
+    return;
+  }
+
+  // Check binary-operator form.
+  switch (OutOp->getOpcode()) {
+  case BO_AddAssign:
+  case BO_MulAssign:
+  case BO_SubAssign:
+  case BO_DivAssign:
+  case BO_AndAssign:
+  case BO_XorAssign:
+  case BO_OrAssign:
+  case BO_ShlAssign:
+  case BO_ShrAssign:
+    Op_x = OutOp->getLHS()->IgnoreParenImpCasts();
+    Op_expr = OutOp->getRHS()->IgnoreParenImpCasts();
+    return;
+  case BO_Assign: {
+    Op_x = OutOp->getLHS()->IgnoreParenImpCasts();
+    const BinaryOperator *InOp =
+        dyn_cast<BinaryOperator>(OutOp->getRHS()->IgnoreParenImpCasts());
+    if (!InOp) {
+      Notes.emplace_back(diag::note_acc_atomic_not_supported_binop_after_assign,
+                         OutOp->getRHS());
+      return;
+    }
+    switch (InOp->getOpcode()) {
+    case BO_Add:
+    case BO_Mul:
+    case BO_Sub:
+    case BO_Div:
+    case BO_And:
+    case BO_Xor:
+    case BO_Or:
+    case BO_Shl:
+    case BO_Shr: {
+      const Expr *LHS = InOp->getLHS()->IgnoreParenImpCasts();
+      const Expr *RHS = InOp->getRHS()->IgnoreParenImpCasts();
+      llvm::FoldingSetNodeID ID_x, ID_LHS, ID_RHS;
+      Op_x->Profile(ID_x, SemaRef.getASTContext(), /*Canonical=*/true);
+      LHS->Profile(ID_LHS, SemaRef.getASTContext(), /*Canonical=*/true);
+      RHS->Profile(ID_RHS, SemaRef.getASTContext(), /*Canonical=*/true);
+      if (ID_x == ID_LHS)
+        Op_expr = RHS;
+      else if (ID_x == ID_RHS)
+        Op_expr = LHS;
+      else
+        Notes.emplace_back(diag::note_acc_atomic_lhs_not_in_rhs, OutOp);
+      return;
+    }
+    default:
+      Notes.emplace_back(diag::note_acc_atomic_not_supported_binop_after_assign,
+                         InOp);
+      return;
+    }
+  }
+  default:
+    Notes.emplace_back(diag::note_acc_atomic_not_supported_inc_dec_assign,
+                       OutOp);
+    return;
+  }
+}
+static void checkAtomicDirCaptureForm(Sema &SemaRef, Stmt *AStmt,
+                                      const Expr *&Op_v, const Expr *&Op_x,
+                                      const Expr *&Op_expr,
+                                      SmallVectorImpl<AtomicDirNoteTy> &Notes) {
+  // Check expression-statement form.
+  if (const Expr *AExpr = dyn_cast<Expr>(AStmt)) {
+    const BinaryOperator *Op =
+        dyn_cast<BinaryOperator>(AExpr->IgnoreParenImpCasts());
+    if (!Op || Op->getOpcode() != BO_Assign) {
+      Notes.emplace_back(diag::note_acc_atomic_not_simple_assign, AExpr);
+    } else {
+      Op_v = Op->getLHS()->IgnoreParenImpCasts();
+      checkAtomicDirUpdateForm(SemaRef, Op->getRHS(), Op_x, Op_expr, Notes);
+    }
+    return;
+  }
+
+  // Complain if not compound-statement form.
+  const CompoundStmt *CS = dyn_cast<CompoundStmt>(AStmt);
+  if (!CS) {
+    Notes.emplace_back(diag::note_acc_atomic_not_expr_stmt_or_compound_stmt,
+                       AStmt);
+    return;
+  }
+
+  // Complain if the compound statement's children aren't exactly two expression
+  // statements.
+  //
+  // The later checks for read and write/update statements would also ensure
+  // the children are expression statements.  However, the diagnostic here is
+  // clearer in some cases.  For example, if a read statement is mistakenly
+  // within a compound/if/etc. statement, complaining that the child is not an
+  // expression statement is clearer than complaining that the read statement
+  // is missing.
+  for (int I = 0, E = CS->size(); I < E && I < 2; ++I) {
+    const Stmt *Child = CS->body_begin()[I];
+    if (!isa<Expr>(Child))
+      Notes.emplace_back(diag::note_acc_atomic_not_expr_stmt, Child);
+  }
+  if (CS->size() != 2)
+    Notes.emplace_back(diag::note_acc_atomic_not_two_stmts, CS);
+  if (!Notes.empty())
+    return;
+
+  // Find the read statement.
+  int ReadStmtIdx;
+  for (ReadStmtIdx = 0; ReadStmtIdx < 2; ++ReadStmtIdx) {
+    if (isAtomicDirReadOrWriteForm(SemaRef, CS->body_begin()[ReadStmtIdx], Op_v,
+                                   Op_x) &&
+        Op_v->isLValue() && Op_x->isLValue())
+      break;
+  }
+  if (ReadStmtIdx == 2) {
+    Op_v = Op_x = nullptr;
+    Notes.emplace_back(diag::note_acc_atomic_no_read_stmt, AStmt);
+    return;
+  }
+
+  // Check the write or update statement.
+  const Expr *Op_x2 = nullptr;
+  if (ReadStmtIdx == 0) {
+    Stmt *WriteOrUpdateStmt = CS->body_begin()[1];
+    if (!isAtomicDirReadOrWriteForm(SemaRef, WriteOrUpdateStmt, Op_x2, Op_expr))
+      checkAtomicDirUpdateForm(SemaRef, WriteOrUpdateStmt, Op_x2, Op_expr,
+                               Notes);
+  } else {
+    checkAtomicDirUpdateForm(SemaRef, CS->body_begin()[0], Op_x2, Op_expr,
+                             Notes);
+  }
+
+  // Check that the x from the read statement matches the x from the
+  // write/update statement.
+  if (Op_x && Op_x2) {
+    llvm::FoldingSetNodeID ID_x, ID_x2;
+    Op_x->Profile(ID_x, SemaRef.getASTContext(), /*Canonical=*/true);
+    Op_x2->Profile(ID_x2, SemaRef.getASTContext(), /*Canonical=*/true);
+    if (ID_x != ID_x2) {
+      Notes.emplace_back(diag::note_acc_atomic_not_match_read_stmt_rhs, Op_x2);
+      Notes.emplace_back(diag::note_acc_atomic_read_stmt_rhs, Op_x);
+    }
+  }
+}
+
+StmtResult Sema::ActOnOpenACCAtomicDirective(ArrayRef<ACCClause *> Clauses,
+                                             Stmt *AStmt) {
+  if (!AStmt)
+    return StmtError();
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  assert(Clauses.size() == 1 && "expected one clause for acc atomic");
+  OpenACCClauseKind ClauseKind = Clauses.back()->getClauseKind();
+
+  // Validate associated statement's form and gather operands.
+  SmallVector<AtomicDirNoteTy, 4> Notes;
+  const Expr *Op_v = nullptr;
+  const Expr *Op_x = nullptr;
+  const Expr *Op_expr = nullptr;
+  switch (ClauseKind) {
+  case ACCC_read:
+    isAtomicDirReadOrWriteForm(*this, AStmt, Op_v, Op_x, &Notes);
+    break;
+  case ACCC_write:
+    isAtomicDirReadOrWriteForm(*this, AStmt, Op_x, Op_expr, &Notes);
+    break;
+  case ACCC_update:
+    checkAtomicDirUpdateForm(*this, AStmt, Op_x, Op_expr, Notes);
+    break;
+  case ACCC_capture:
+    checkAtomicDirCaptureForm(*this, AStmt, Op_v, Op_x, Op_expr, Notes);
+    break;
+  default:
+    llvm_unreachable("unexpected acc atomic clause");
+  }
+
+  // Validate associated statement's operands.
+  if (Op_v) {
+    if (!Op_v->isLValue())
+      Notes.emplace_back(diag::note_acc_atomic_not_lvalue, Op_v);
+    if (!Op_v->getType()->isScalarType())
+      Notes.emplace_back(diag::note_acc_atomic_not_scalar, Op_v);
+  }
+  if (Op_x) {
+    if (!Op_x->isLValue())
+      Notes.emplace_back(diag::note_acc_atomic_not_lvalue, Op_x);
+    if (!Op_x->getType()->isScalarType())
+      Notes.emplace_back(diag::note_acc_atomic_not_scalar, Op_x);
+  }
+  if (Op_expr && !Op_expr->getType()->isScalarType())
+    Notes.emplace_back(diag::note_acc_atomic_not_scalar, Op_expr);
+
+  // Emit any diagnostics about the associated statement.
+  if (!Notes.empty()) {
+    Diag(AStmt->getBeginLoc(), diag::err_acc_atomic_invalid_stmt)
+        << getOpenACCName(ClauseKind) << AStmt->getSourceRange();
+    for (const AtomicDirNoteTy &Note : Notes) {
+      SemaDiagnosticBuilder DiagBuilder = Diag(Note.Loc, Note.DiagID);
+      DiagBuilder << Note.Range0;
+      if (Note.Range1.isValid())
+        DiagBuilder << Note.Range1;
+    }
+    return StmtError();
+  }
+
+  return ACCAtomicDirective::Create(Context, DirStack.getDirectiveStartLoc(),
+                                    DirStack.getDirectiveEndLoc(), Clauses,
+                                    AStmt);
+}
+
 void Sema::ActOnOpenACCRoutineDirective(OpenACCDetermination Determination,
                                         DeclGroupRef TheDeclGroup) {
   DirStackTy &DirStack = OpenACCData->DirStack;
@@ -2807,6 +3105,10 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
   case ACCC_gang:
   case ACCC_worker:
   case ACCC_vector:
+  case ACCC_read:
+  case ACCC_write:
+  case ACCC_update:
+  case ACCC_capture:
   case ACCC_unknown:
     llvm_unreachable("expected clause that takes a single expression");
   }
@@ -3710,6 +4012,18 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_vector:
     Res = ActOnOpenACCVectorClause(StartLoc, EndLoc);
     break;
+  case ACCC_read:
+    Res = ActOnOpenACCReadClause(StartLoc, EndLoc);
+    break;
+  case ACCC_write:
+    Res = ActOnOpenACCWriteClause(StartLoc, EndLoc);
+    break;
+  case ACCC_update:
+    Res = ActOnOpenACCUpdateClause(ACC_EXPLICIT, StartLoc, EndLoc);
+    break;
+  case ACCC_capture:
+    Res = ActOnOpenACCCaptureClause(StartLoc, EndLoc);
+    break;
   case ACCC_nomap:
   case ACCC_present:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
@@ -3843,6 +4157,27 @@ ACCClause *Sema::ActOnOpenACCCollapseClause(Expr *Collapse,
       Collapse->EvaluateKnownConstInt(Context).getExtValue());
   return new (Context) ACCCollapseClause(Collapse, StartLoc, LParenLoc,
                                          EndLoc);
+}
+
+ACCClause *Sema::ActOnOpenACCReadClause(SourceLocation StartLoc,
+                                        SourceLocation EndLoc) {
+  return new (Context) ACCReadClause(StartLoc, EndLoc);
+}
+
+ACCClause *Sema::ActOnOpenACCWriteClause(SourceLocation StartLoc,
+                                         SourceLocation EndLoc) {
+  return new (Context) ACCWriteClause(StartLoc, EndLoc);
+}
+
+ACCClause *Sema::ActOnOpenACCUpdateClause(OpenACCDetermination Determination,
+                                          SourceLocation StartLoc,
+                                          SourceLocation EndLoc) {
+  return new (Context) ACCUpdateClause(Determination, StartLoc, EndLoc);
+}
+
+ACCClause *Sema::ActOnOpenACCCaptureClause(SourceLocation StartLoc,
+                                           SourceLocation EndLoc) {
+  return new (Context) ACCCaptureClause(StartLoc, EndLoc);
 }
 
 bool Sema::isInOpenACCDirectiveStmt() {

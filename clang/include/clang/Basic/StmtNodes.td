@@ -298,3 +298,4 @@ def ACCDataDirective : StmtNode<ACCDirectiveStmt>;
 def ACCParallelDirective : StmtNode<ACCDirectiveStmt>;
 def ACCLoopDirective : StmtNode<ACCDirectiveStmt>;
 def ACCParallelLoopDirective : StmtNode<ACCDirectiveStmt>;
+def ACCAtomicDirective : StmtNode<ACCDirectiveStmt>;

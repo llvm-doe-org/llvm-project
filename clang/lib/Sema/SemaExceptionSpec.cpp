@@ -1420,6 +1420,7 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
   case Stmt::ACCLoopDirectiveClass:
   case Stmt::ACCParallelDirectiveClass:
   case Stmt::ACCParallelLoopDirectiveClass:
+  case Stmt::ACCAtomicDirectiveClass:
   case Stmt::BreakStmtClass:
   case Stmt::CapturedStmtClass:
   case Stmt::CaseStmtClass:

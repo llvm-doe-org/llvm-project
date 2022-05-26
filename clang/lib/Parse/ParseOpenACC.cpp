@@ -113,6 +113,7 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
   case ACCD_parallel:
   case ACCD_loop:
   case ACCD_parallel_loop:
+  case ACCD_atomic:
     Diag(Tok, diag::err_acc_unexpected_directive)
         << getOpenACCName(DKind);
     SkipUntil(tok::annot_pragma_openacc_end);
@@ -155,7 +156,7 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
 ///   directive-stmt:
 ///     annot_pragma_openacc
 ///     'update' | 'enter data' | 'exit data' | 'data' | 'parallel' | 'loop'
-///     | 'parallel loop'
+///     | 'parallel loop' | 'atomic'
 ///     {clause}
 ///     annot_pragma_openacc_end
 StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
@@ -183,7 +184,7 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
     // support are consistent here, facilitating translation to OpenMP.  For
     // example, Clang does not enforce the case of labels, and Clang
     // additionally restricts the cases of "else", "for", and other directives.
-    // More importantly, Clang enforces these restrictions for all executables
+    // More importantly, Clang enforces these restrictions for all executable
     // directives.
     if ((StmtCtx & ParsedStmtContext::AllowExecutableOpenACCDirectives) ==
         ParsedStmtContext()) {
@@ -194,7 +195,8 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
-  case ACCD_parallel_loop: {
+  case ACCD_parallel_loop:
+  case ACCD_atomic: {
     if (isOpenACCLoopDirective(DKind))
       ScopeFlags |= Scope::OpenACCLoopDirectiveScope;
     ParseScope ACCDirectiveScope(this, ScopeFlags);
@@ -254,6 +256,7 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
 ///       | num_gangs-clause | num_workers-clause | vector_length-clause
 ///       | seq-clause | independent-clause | auto-clause
 ///       | gang-clause | worker-clause | vector-clause | collapse-clause
+///       | read-clause | write-clause | update-clause | capture-clause
 ///
 ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
                                       OpenACCClauseKind CKind,
@@ -351,6 +354,23 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
     Diag(Tok, diag::warn_acc_extra_tokens_at_eol)
         << getOpenACCName(DKind);
     SkipUntil(tok::annot_pragma_openacc_end, StopBeforeMatch);
+    break;
+  case ACCC_read:
+  case ACCC_write:
+  case ACCC_update:
+  case ACCC_capture:
+    if (!WrongDirective) {
+      if (SeenClauses[CKind]) {
+        Diag(Tok, diag::err_acc_more_one_clause)
+            << getOpenACCName(DKind) << getOpenACCName(CKind);
+        ErrorFound = true;
+      } else {
+        checkMutuallyExclusiveClauses(
+            SeenClauses, CKind, ErrorFound,
+            {ACCC_read, ACCC_write, ACCC_update, ACCC_capture});
+      }
+    }
+    Clause = ParseOpenACCNoArgClause(CKind, WrongDirective);
     break;
   }
   // If the clause is ever permitted on this directive, then record its

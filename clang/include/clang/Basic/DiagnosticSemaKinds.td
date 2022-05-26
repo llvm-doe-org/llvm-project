@@ -11106,6 +11106,37 @@ def note_acc_disable_diag : Note<
 def err_acc_no_self_host_device_clause : Error<
   "expected at least one 'self', 'host', or 'device' clause for '#pragma acc "
   "update'">;
+def err_acc_atomic_invalid_stmt : Error<
+  "invalid statement after '#pragma acc atomic %0'">;
+def note_acc_atomic_not_expr_stmt : Note<
+  "expected statement here to be an expression statement">;
+def note_acc_atomic_not_expr_stmt_or_compound_stmt : Note<
+  "expected statement here to be an expression statement or compound "
+  "statement">;
+def note_acc_atomic_not_two_stmts : Note<
+  "expected compound statement here to contain exactly two statements">;
+def note_acc_atomic_no_read_stmt : Note<
+  "expected compound statement here to contain one read statement (i.e., form "
+  "'v = x;' where v and x are lvalues)">;
+def note_acc_atomic_not_simple_assign : Note<
+  "expected expression here to be a simple assignment">;
+def note_acc_atomic_not_supported_inc_dec_assign : Note<
+  "expected operator expression here where the operator is one of '++', '--', "
+  "'+=', '*=', '-=', '/=', '&=', '|=', '^=', '<<=', '>>=', or '='">;
+def note_acc_atomic_not_supported_binop_after_assign : Note<
+  "expected operator expression here where the operator is one of '+', "
+  "'*', '-', '/', '&', '|', '^', '<<', or '>>'">;
+def note_acc_atomic_lhs_not_in_rhs : Note<
+  "expected left-hand expression here to appear as operand within right-hand "
+  "expression here">;
+def note_acc_atomic_not_match_read_stmt_rhs : Note<
+  "expected this expression to match right-hand operand of read statement">;
+def note_acc_atomic_read_stmt_rhs : Note<
+  "read statement right-hand operand appears here">;
+def note_acc_atomic_not_lvalue : Note<
+  "expected operand here to be an lvalue">;
+def note_acc_atomic_not_scalar : Note<
+  "expected operand here to be of scalar type">;
 def err_acc_routine_no_gang_worker_vector_seq_clause : Error<
   "expected 'gang', 'worker', 'vector', or 'seq' clause for "
   "'#pragma acc routine'">;

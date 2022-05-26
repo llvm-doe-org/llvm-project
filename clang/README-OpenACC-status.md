@@ -225,7 +225,7 @@ Run-Time Environment Variables
           `vector_length` as a hint, so we choose to ignore it and
           warn in the case of a non-constant expression.
 
-`loop` directive
+`loop` Directive
 ----------------
 
 * Lexical context
@@ -305,6 +305,31 @@ Run-Time Environment Variables
   are also supported here.
 * A `reduction` clause implies a `copy` clause (overriding the
   implicit `firstprivate` clause).
+
+`atomic` Directive
+----------------
+
+* Lexical context
+    * Appearing within any OpenACC construct besides `atomic` is supported.
+    * Appearing outside any OpenACC construct is supported.
+    * Currently, the `atomic` directive is supported even in contexts that are
+      compiled only for the host, including the `data` construct.  The semantics
+      and usefulness of this usage are not clear.  In the future, this usage
+      might produce a compile-time error diagnostic.
+* Supported clauses
+    * `read`
+    * `write`
+    * `update`
+    * Implicit `update`
+    * `capture`
+* Gang-private atomically accessed variable
+    * A run-time error diagnostic is produced for some offload targets in this
+      case.
+    * Specifically, we have observed CUDA errors when the target is nvptx64.
+    * We have observed similar behavior when compiling using nvc 21.11.
+    * In the future, this usage might produce a compile-time error diagnostic.
+* See the section "OpenMP Extensions" below for caveats related to
+  source-to-source mode.
 
 `routine` Directive
 -------------------
@@ -962,6 +987,25 @@ modifier extension for OpenMP is not well tested outside of Clacc's
 translations from OpenACC to OpenMP.  Thus, it is not yet recommended
 for use in hand-written OpenMP code as it might not integrate well
 with some OpenMP features.
+
+### `atomic` in Gang-Redundant Mode ###
+
+* OpenACC Features Affected
+    * `atomic` construct
+* OpenMP Extension Employed
+    * `atomic` construct strictly nested in `target teams` region (not permitted
+      in OpenMP 5.2)
+* OpenACC Semantics Required
+    * OpenACC 3.2 permits the `atomic` construct in gang-redundant mode.  This
+      case occurs when an `atomic` construct is encountered within a `parallel`
+      region and there is no partitioned `loop` region nested in between.
+    * Clacc strictly nests OpenMP's `atomic` construct within a `target teams`
+      region to implement the case that an OpenACC `atomic` construct appears
+      in gang-redundant mode.
+* Diagnostic Options
+    * None.
+* Translation Options
+    * None.
 
 OpenMP Runtime Library API
 --------------------------

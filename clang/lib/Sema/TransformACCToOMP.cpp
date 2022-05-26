@@ -163,7 +163,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     const SourceLocation LParenLoc;
     const SourceLocation LocEnd;
     ExplicitClauseLocs(ACCDirectiveStmt *D, ACCClause *C,
-                       SourceLocation LParenLoc)
+                       SourceLocation LParenLoc = SourceLocation())
         // So far, it appears that only LocStart is used to decide if the
         // directive is implicit.
         : LocStart(D && C->getBeginLoc().isInvalid() ? D->getEndLoc()
@@ -306,6 +306,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     case ACCD_update:
     case ACCD_loop:
     case ACCD_routine:
+    case ACCD_atomic:
     case ACCD_unknown:
       llvm_unreachable("expected directive that takes data clauses");
     }
@@ -822,6 +823,41 @@ public:
     return Res;
   }
 
+  StmtResult TransformACCAtomicDirective(ACCAtomicDirective *D) {
+    DirStackEntryRAII TheDirStackEntryRAII(*this, D);
+
+    // Start OpenMP DA block.
+    getSema().StartOpenMPDSABlock(OMPD_atomic, DeclarationNameInfo(),
+                                  /*CurScope=*/nullptr, D->getBeginLoc());
+
+    // Transform OpenACC clauses.
+    llvm::SmallVector<OMPClause *, 16> TClauses;
+    size_t TClausesEmptyCount;
+    size_t NumClausesAdded = 0;
+    transformACCClauses(D, OMPD_atomic, TClauses, TClausesEmptyCount,
+                        NumClausesAdded);
+
+    // Transform associated statement.
+    StmtResult AssociatedStmt =
+        transformACCAssociatedStmt(D, OMPD_atomic, TClauses);
+
+    // Build OpenMP directive and finalize enclosing compound statement, if
+    // any.
+    StmtResult Res;
+    if (AssociatedStmt.isInvalid() ||
+        TClauses.size() !=
+            D->clauses().size() - TClausesEmptyCount + NumClausesAdded)
+      Res = StmtError();
+    else
+      Res = getDerived().RebuildOMPExecutableDirective(
+          OMPD_atomic, DeclarationNameInfo(), OMPD_unknown, TClauses,
+          AssociatedStmt.get(), D->getBeginLoc(), D->getEndLoc());
+    getSema().EndOpenMPDSABlock(Res.get());
+    if (!Res.isInvalid())
+      D->setOMPNode(Res.get());
+    return Res;
+  }
+
   OMPClauseResult TransformACCClause(ACCDirectiveStmt *D,
                                      OpenMPDirectiveKind TDKind, ACCClause *C) {
     if (!C)
@@ -1273,6 +1309,34 @@ public:
                                            OpenMPDirectiveKind TDKind,
                                            ACCVectorClause *C) {
     return OMPClauseEmpty();
+  }
+
+  OMPClauseResult TransformACCReadClause(ACCDirectiveStmt *D,
+                                         OpenMPDirectiveKind TDKind,
+                                         ACCReadClause *C) {
+    ExplicitClauseLocs L(D, C);
+    return getSema().ActOnOpenMPReadClause(L.LocStart, L.LocEnd);
+  }
+
+  OMPClauseResult TransformACCWriteClause(ACCDirectiveStmt *D,
+                                          OpenMPDirectiveKind TDKind,
+                                          ACCWriteClause *C) {
+    ExplicitClauseLocs L(D, C);
+    return getSema().ActOnOpenMPWriteClause(L.LocStart, L.LocEnd);
+  }
+
+  OMPClauseResult TransformACCUpdateClause(ACCDirectiveStmt *D,
+                                           OpenMPDirectiveKind TDKind,
+                                           ACCUpdateClause *C) {
+    ExplicitClauseLocs L(D, C);
+    return getSema().ActOnOpenMPUpdateClause(L.LocStart, L.LocEnd);
+  }
+
+  OMPClauseResult TransformACCCaptureClause(ACCDirectiveStmt *D,
+                                            OpenMPDirectiveKind TDKind,
+                                            ACCCaptureClause *C) {
+    ExplicitClauseLocs L(D, C);
+    return getSema().ActOnOpenMPCaptureClause(L.LocStart, L.LocEnd);
   }
 
   InheritableAttr *TransformACCAttrToOMP(ACCDeclAttr *ACCAttr,

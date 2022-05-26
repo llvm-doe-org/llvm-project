@@ -71,6 +71,10 @@ clang::getPrivateVarsFromClause(ACCClause *C) {
   case ACCC_worker:
   case ACCC_vector:
   case ACCC_collapse:
+  case ACCC_read:
+  case ACCC_write:
+  case ACCC_update:
+  case ACCC_capture:
     return llvm::iterator_range<ArrayRef<Expr *>::iterator>(
         llvm::makeArrayRef<Expr *>(nullptr, (int)0));
   case ACCC_unknown:

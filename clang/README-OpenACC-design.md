@@ -1914,6 +1914,18 @@ as follows:
   the effective directives because there are none because semantic
   analysis computes them only on the effective directives.
 
+Atomic Directive
+----------------
+
+Clacc's current mapping of an `acc atomic` directive and its clauses to OpenMP
+is as follows:
+
+* `acc atomic` -> `omp atomic`
+* *exp* `read` -> *exp* `read`
+* *exp* `write` -> *exp* `write`
+* *exp*|*imp* `update` -> *exp* `update`
+* *exp* `capture` -> *exp* `capture`
+
 Routine Directive
 -----------------
 

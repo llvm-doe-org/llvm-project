@@ -1257,6 +1257,20 @@ void ACCClausePrinter::VisitACCCollapseClause(ACCCollapseClause *Node) {
   Node->getCollapse()->printPretty(OS, nullptr, Policy, 0);
   OS << ")";
 }
+
+void ACCClausePrinter::VisitACCReadClause(ACCReadClause *Node) { OS << "read"; }
+
+void ACCClausePrinter::VisitACCWriteClause(ACCWriteClause *Node) {
+  OS << "write";
+}
+
+void ACCClausePrinter::VisitACCUpdateClause(ACCUpdateClause *Node) {
+  OS << "update";
+}
+
+void ACCClausePrinter::VisitACCCaptureClause(ACCCaptureClause *Node) {
+  OS << "capture";
+}
 }
 
 //===----------------------------------------------------------------------===//
@@ -1318,10 +1332,10 @@ void StmtPrinter::PrintOMPExecutableDirectiveBody(Stmt *S) {
   // printing of the associated statement by specifying ForceNoStmt=true when
   // calling PrintOMPExecutableDirective.)
   if (OMPDir->hasAssociatedStmt() && !OMPDir->isStandaloneDirective()) {
-    assert(isa<CapturedStmt>(OMPDir->getAssociatedStmt()) &&
-           "Expected captured statement!");
-    Stmt *CS = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
-    PrintStmt(CS);
+    Stmt *OMPStmt = OMPDir->getAssociatedStmt();
+    if (isa<CapturedStmt>(OMPStmt))
+      OMPStmt = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
+    PrintStmt(OMPStmt);
   }
 }
 
@@ -1439,6 +1453,10 @@ void StmtPrinter::VisitACCLoopDirective(ACCLoopDirective *Node) {
 
 void StmtPrinter::VisitACCParallelLoopDirective(
     ACCParallelLoopDirective *Node) {
+  PrintACCDirectiveStmt(Node);
+}
+
+void StmtPrinter::VisitACCAtomicDirective(ACCAtomicDirective *Node) {
   PrintACCDirectiveStmt(Node);
 }
 

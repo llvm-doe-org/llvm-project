@@ -13120,6 +13120,18 @@ ACCClause *ACCClauseReader::readClause() {
   case ACCC_collapse:
     C = new (Context) ACCCollapseClause();
     break;
+  case ACCC_read:
+    C = new (Context) ACCReadClause();
+    break;
+  case ACCC_write:
+    C = new (Context) ACCWriteClause();
+    break;
+  case ACCC_update:
+    C = new (Context) ACCUpdateClause();
+    break;
+  case ACCC_capture:
+    C = new (Context) ACCCaptureClause();
+    break;
   case ACCC_unknown:
     llvm_unreachable("Clause is not known");
   }
@@ -13307,3 +13319,8 @@ void ACCClauseReader::VisitACCCollapseClause(ACCCollapseClause *C) {
   C->setCollapse(Record.readSubExpr());
   C->setLParenLoc(Record.readSourceLocation());
 }
+
+void ACCClauseReader::VisitACCReadClause(ACCReadClause *C) {}
+void ACCClauseReader::VisitACCWriteClause(ACCWriteClause *C) {}
+void ACCClauseReader::VisitACCUpdateClause(ACCUpdateClause *C) {}
+void ACCClauseReader::VisitACCCaptureClause(ACCCaptureClause *C) {}
