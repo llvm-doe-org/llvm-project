@@ -1251,9 +1251,10 @@ private:
         getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag)
             << DiagnosticIDs::getWarningOptionForDiag(
                    diag::warn_acc_omp_update_present);
-      getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_all_omp_ext_diags)
-          << DiagnosticIDs::getWarningOptionForGroup(
-                 diag::Group::OpenACCOMPExt);
+        getSema().Diag(C->getBeginLoc(),
+                       diag::note_acc_disable_all_omp_ext_diags)
+            << DiagnosticIDs::getWarningOptionForGroup(
+                   diag::Group::OpenACCOMPExt);
       }
       break;
     case LangOptions::OpenACCUpdatePresentOMP_NoPresent:
