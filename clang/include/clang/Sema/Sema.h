@@ -10741,6 +10741,9 @@ public:
   /// Return true inside OpenMP target region.
   bool isInOpenMPTargetExecutionDirective() const;
 
+  /// Return true when strictly nested inside OpenMP teams region.
+  bool isStrictlyNestedInOpenMPTeamsRegion() const;
+
   /// Return the number of captured regions created for an OpenMP directive.
   static int getOpenMPCaptureLevels(OpenMPDirectiveKind Kind);
 

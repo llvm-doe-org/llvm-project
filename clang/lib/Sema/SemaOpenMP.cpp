@@ -2184,6 +2184,12 @@ bool Sema::isInOpenMPTargetExecutionDirective() const {
              false);
 }
 
+bool Sema::isStrictlyNestedInOpenMPTeamsRegion() const {
+  OpenMPDirectiveKind DKind = DSAStack->getCurrentDirective();
+  return (DKind == OMPD_target_teams || DKind == OMPD_teams) &&
+         !DSAStack->isClauseParsingMode();
+}
+
 VarDecl *Sema::isOpenMPCapturedDecl(ValueDecl *D, bool CheckScopeInfo,
                                     unsigned StopAt) {
   assert(LangOpts.OpenMP && "OpenMP is not allowed");

@@ -1246,9 +1246,10 @@ def OpenACCOMPUpdatePresent : DiagGroup<"openacc-omp-update-present">;
 def OpenACCOMPMapOmpxHold : DiagGroup<"openacc-omp-map-ompx-hold">;
 def OpenACCOMPMapPresent : DiagGroup<"openacc-omp-map-present">;
 def OpenACCOMPMapOmpxNoAlloc : DiagGroup<"openacc-omp-map-ompx-no-alloc">;
+def OpenACCOMPAtomicInTeams : DiagGroup<"openacc-omp-atomic-in-teams">;
 def OpenACCOMPExt : DiagGroup<"openacc-omp-ext", [
     OpenACCOMPUpdatePresent, OpenACCOMPMapOmpxHold, OpenACCOMPMapPresent,
-    OpenACCOMPMapOmpxNoAlloc]>;
+    OpenACCOMPMapOmpxNoAlloc, OpenACCOMPAtomicInTeams]>;
 
 // Backend warnings.
 def BackendInlineAsm : DiagGroup<"inline-asm">;

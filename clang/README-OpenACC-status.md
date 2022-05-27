@@ -74,6 +74,7 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
     * `-Wopenacc-omp-map-ompx-hold`
     * `-Wopenacc-omp-map-present`
     * `-Wopenacc-omp-map-ompx-no-alloc`
+    * `-Wopenacc-omp-atomic-in-teams`
     * `-Wopenacc-omp-ext`
     * See the section "OpenMP Extensions" below for details.
 * Other diagnostic options
@@ -1007,7 +1008,11 @@ with some OpenMP features.
       region to implement the case that an OpenACC `atomic` construct appears
       in gang-redundant mode.
 * Diagnostic Options
-    * None.
+    * `-Wopenacc-omp-atomic-in-teams`
+    * `-Wno-error=openacc-omp-atomic-in-teams`
+    * `-Wno-openacc-omp-atomic-in-teams`
+    * These warnings diagnose use of the above OpenMP extension only when the
+      nesting is lexical.  Dynamic cases are not diagnosed by Clacc's compiler.
 * Translation Options
     * None.
 

@@ -828,6 +828,17 @@ public:
   }
 
   StmtResult TransformACCAtomicDirective(ACCAtomicDirective *D) {
+    if (getSema().isStrictlyNestedInOpenMPTeamsRegion()) {
+      getSema().Diag(D->getBeginLoc(), diag::warn_acc_omp_atomic_in_teams)
+          << D->getSourceRange();
+      getSema().Diag(D->getBeginLoc(), diag::note_acc_disable_diag)
+          << DiagnosticIDs::getWarningOptionForDiag(
+                 diag::warn_acc_omp_atomic_in_teams);
+      getSema().Diag(D->getBeginLoc(), diag::note_acc_disable_all_omp_ext_diags)
+          << DiagnosticIDs::getWarningOptionForGroup(
+                 diag::Group::OpenACCOMPExt);
+    }
+
     DirStackEntryRAII TheDirStackEntryRAII(*this, D);
 
     // Start OpenMP DA block.
