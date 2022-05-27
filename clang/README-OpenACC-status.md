@@ -74,6 +74,7 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
     * `-Wopenacc-omp-map-ompx-hold`
     * `-Wopenacc-omp-map-present`
     * `-Wopenacc-omp-map-ompx-no-alloc`
+    * `-Wopenacc-omp-ext`
     * See the section "OpenMP Extensions" below for details.
 * Other diagnostic options
     * `-Wopenacc-omp-macro-inserted`
@@ -829,6 +830,9 @@ behavior is affected as follows:
               OpenMP Mapping" in `README-OpenACC-design.md` sometimes
               includes a discussion of alternative translations that
               we considered.
+    * `<OMP-EXT>` can be `ext` to control all warnings about OpenMP extensions.
+    * Other possible values for `<OMP-EXT>`, `<ACC-FEATURE>`, and `<KIND>` are
+      described in the remainder of this section.
 * `-fopenacc[-ast]-print=acc`, `-ast-print`, `-ast-dump`,
   etc. mode
     * Debugging modes like these do not actually print OpenMP source

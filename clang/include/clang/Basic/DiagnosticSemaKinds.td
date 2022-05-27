@@ -11102,7 +11102,10 @@ def note_acc_alternate_omp : Note<
   "an alternative OpenMP translation can be specified with, for example, "
   "'-fopenacc-%0-omp=%1'">;
 def note_acc_disable_diag : Note<
-  "or you can just disable this diagnostic with '-Wno-%0'">;
+  "you can disable this diagnostic with '-Wno-%0'">;
+def note_acc_disable_all_omp_ext_diags : Note<
+  "you can disable all diagnostics about OpenMP extensions appearing in the "
+  "translation with '-Wno-%0'">;
 def err_acc_no_self_host_device_clause : Error<
   "expected at least one 'self', 'host', or 'device' clause for '#pragma acc "
   "update'">;

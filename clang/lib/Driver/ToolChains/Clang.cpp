@@ -4558,12 +4558,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // warning options so the user can override.
   const Arg *OpenACCPrint = Args.getLastArg(
       options::OPT_fopenacc_print_EQ, options::OPT_fopenacc_ast_print_EQ);
-  if (OpenACCPrint && StringRef(OpenACCPrint->getValue()) != "acc") {
-    CmdArgs.push_back("-Werror=openacc-omp-update-present");
-    CmdArgs.push_back("-Werror=openacc-omp-map-ompx-hold");
-    CmdArgs.push_back("-Werror=openacc-omp-map-present");
-    CmdArgs.push_back("-Werror=openacc-omp-map-ompx-no-alloc");
-  }
+  if (OpenACCPrint && StringRef(OpenACCPrint->getValue()) != "acc")
+    CmdArgs.push_back("-Werror=openacc-omp-ext");
 
   // FIXME: Subclass ToolChain for SPIR and move this to addClangWarningOptions.
   if (Triple.isSPIR() || Triple.isSPIRV())

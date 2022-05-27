@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "TreeTransform.h"
+#include "clang/Basic/DiagnosticCategories.h"
 using namespace clang;
 
 namespace {
@@ -322,6 +323,9 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag)
           << DiagnosticIDs::getWarningOptionForDiag(
                  diag::warn_acc_omp_map_ompx_hold);
+      getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_all_omp_ext_diags)
+          << DiagnosticIDs::getWarningOptionForGroup(
+                 diag::Group::OpenACCOMPExt);
       break;
     case LangOptions::OpenACCStructuredRefCountOMP_NoOmpxHold:
       break;
@@ -973,6 +977,9 @@ public:
       getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag)
           << DiagnosticIDs::getWarningOptionForDiag(
               diag::warn_acc_omp_map_present);
+      getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_all_omp_ext_diags)
+          << DiagnosticIDs::getWarningOptionForGroup(
+                 diag::Group::OpenACCOMPExt);
       break;
     case LangOptions::OpenACCPresentOMP_NoPresent:
       break;
@@ -1085,6 +1092,9 @@ public:
       getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag)
           << DiagnosticIDs::getWarningOptionForDiag(
               diag::warn_acc_omp_map_ompx_no_alloc);
+      getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_all_omp_ext_diags)
+          << DiagnosticIDs::getWarningOptionForGroup(
+                 diag::Group::OpenACCOMPExt);
       break;
     case LangOptions::OpenACCNoCreateOMP_NoOmpxNoAlloc:
       break;
@@ -1241,6 +1251,9 @@ private:
         getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_diag)
             << DiagnosticIDs::getWarningOptionForDiag(
                    diag::warn_acc_omp_update_present);
+      getSema().Diag(C->getBeginLoc(), diag::note_acc_disable_all_omp_ext_diags)
+          << DiagnosticIDs::getWarningOptionForGroup(
+                 diag::Group::OpenACCOMPExt);
       }
       break;
     case LangOptions::OpenACCUpdatePresentOMP_NoPresent:

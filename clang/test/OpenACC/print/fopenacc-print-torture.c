@@ -28,8 +28,7 @@
 // RUN: %for cpps {
 // RUN:   %for prt-args {
 // RUN:     %clang -Xclang -verify -fopenacc-print=%[prt-arg] %[cpp] %t-acc.c \
-// RUN:            -Wno-openacc-omp-map-ompx-hold \
-// RUN:            -Wno-openacc-omp-update-present \
+// RUN:            -Wno-openacc-omp-ext \
 // RUN:     | FileCheck -check-prefixes=%[prt-chk] -match-full-lines \
 // RUN:                 -strict-whitespace %s
 // RUN:   }
