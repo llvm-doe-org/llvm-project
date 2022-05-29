@@ -11134,17 +11134,15 @@ def note_acc_atomic_not_supported_inc_dec_assign : Note<
 def note_acc_atomic_not_supported_binop_after_assign : Note<
   "expected operator expression here where the operator is one of '+', "
   "'*', '-', '/', '&', '|', '^', '<<', or '>>'">;
-def note_acc_atomic_lhs_not_in_rhs : Note<
-  "expected left-hand expression here to appear as operand within right-hand "
-  "expression here">;
-def note_acc_atomic_not_match_read_stmt_rhs : Note<
-  "expected this expression to match right-hand operand of read statement">;
-def note_acc_atomic_read_stmt_rhs : Note<
-  "read statement right-hand operand appears here">;
+def note_acc_atomic_unmatched_expr : Note<
+  "expected this expression to match other expression">;
+def note_acc_atomic_unmatched_operand : Note<
+  "expected one operand of this expression to match other expression">;
+def note_acc_atomic_other_expr : Note<"other expression appears here">;
 def note_acc_atomic_not_lvalue : Note<
-  "expected operand here to be an lvalue">;
+  "expected expression here to be an lvalue">;
 def note_acc_atomic_not_scalar : Note<
-  "expected operand here to be of scalar type">;
+  "expected expression here to be of scalar type">;
 def err_acc_routine_no_gang_worker_vector_seq_clause : Error<
   "expected 'gang', 'worker', 'vector', or 'seq' clause for "
   "'#pragma acc routine'">;

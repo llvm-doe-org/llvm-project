@@ -2602,8 +2602,8 @@ struct AtomicDirNoteTy {
 // Some of these functions are reused by the other functions, so the diagnostic
 // wording must not be specific to a particular atomic construct clause.
 static bool
-isAtomicDirReadOrWriteForm(Sema &SemaRef, Stmt *AStmt, const Expr *&Op_lhs,
-                           const Expr *&Op_rhs,
+isAtomicDirReadOrWriteForm(Sema &SemaRef, const Stmt *AStmt,
+                           const Expr *&Op_lhs, const Expr *&Op_rhs,
                            SmallVectorImpl<AtomicDirNoteTy> *Notes = nullptr) {
   const Expr *AExpr = dyn_cast<Expr>(AStmt);
   if (!AExpr) {
@@ -2613,16 +2613,21 @@ isAtomicDirReadOrWriteForm(Sema &SemaRef, Stmt *AStmt, const Expr *&Op_lhs,
   }
   const BinaryOperator *BinOp =
       dyn_cast<BinaryOperator>(AExpr->IgnoreParenImpCasts());
-  if (!BinOp || BinOp->getOpcode() != BO_Assign) {
+  if (!BinOp) {
     if (Notes)
       Notes->emplace_back(diag::note_acc_atomic_not_simple_assign, AExpr);
+    return false;
+  }
+  if (BinOp->getOpcode() != BO_Assign) {
+    if (Notes)
+      Notes->emplace_back(diag::note_acc_atomic_not_simple_assign, BinOp);
     return false;
   }
   Op_lhs = BinOp->getLHS()->IgnoreParenImpCasts();
   Op_rhs = BinOp->getRHS()->IgnoreParenImpCasts();
   return true;
 }
-static void checkAtomicDirUpdateForm(Sema &SemaRef, Stmt *AStmt,
+static void checkAtomicDirUpdateForm(Sema &SemaRef, const Stmt *AStmt,
                                      const Expr *&Op_x, const Expr *&Op_expr,
                                      SmallVectorImpl<AtomicDirNoteTy> &Notes) {
   const Expr *AExpr = dyn_cast<Expr>(AStmt);
@@ -2632,28 +2637,28 @@ static void checkAtomicDirUpdateForm(Sema &SemaRef, Stmt *AStmt,
   }
 
   // Check unary-operator form.
-  if (const UnaryOperator *OutOp =
+  if (const UnaryOperator *IncDecOp =
           dyn_cast<UnaryOperator>(AExpr->IgnoreParenImpCasts())) {
-    if (!OutOp->isIncrementDecrementOp()) {
+    if (!IncDecOp->isIncrementDecrementOp()) {
       Notes.emplace_back(diag::note_acc_atomic_not_supported_inc_dec_assign,
                          AExpr);
       return;
     }
-    Op_x = OutOp->getSubExpr()->IgnoreParenImpCasts();
+    Op_x = IncDecOp->getSubExpr()->IgnoreParenImpCasts();
     return;
   }
 
   // Complain if not binary-operator form.
-  const BinaryOperator *OutOp =
+  const BinaryOperator *Assign =
       dyn_cast<BinaryOperator>(AExpr->IgnoreParenImpCasts());
-  if (!OutOp) {
+  if (!Assign) {
     Notes.emplace_back(diag::note_acc_atomic_not_supported_inc_dec_assign,
                        AExpr);
     return;
   }
 
   // Check binary-operator form.
-  switch (OutOp->getOpcode()) {
+  switch (Assign->getOpcode()) {
   case BO_AddAssign:
   case BO_MulAssign:
   case BO_SubAssign:
@@ -2663,16 +2668,16 @@ static void checkAtomicDirUpdateForm(Sema &SemaRef, Stmt *AStmt,
   case BO_OrAssign:
   case BO_ShlAssign:
   case BO_ShrAssign:
-    Op_x = OutOp->getLHS()->IgnoreParenImpCasts();
-    Op_expr = OutOp->getRHS()->IgnoreParenImpCasts();
+    Op_x = Assign->getLHS()->IgnoreParenImpCasts();
+    Op_expr = Assign->getRHS()->IgnoreParenImpCasts();
     return;
   case BO_Assign: {
-    Op_x = OutOp->getLHS()->IgnoreParenImpCasts();
+    Op_x = Assign->getLHS()->IgnoreParenImpCasts();
     const BinaryOperator *InOp =
-        dyn_cast<BinaryOperator>(OutOp->getRHS()->IgnoreParenImpCasts());
+        dyn_cast<BinaryOperator>(Assign->getRHS()->IgnoreParenImpCasts());
     if (!InOp) {
       Notes.emplace_back(diag::note_acc_atomic_not_supported_binop_after_assign,
-                         OutOp->getRHS());
+                         Assign->getRHS());
       return;
     }
     switch (InOp->getOpcode()) {
@@ -2695,8 +2700,10 @@ static void checkAtomicDirUpdateForm(Sema &SemaRef, Stmt *AStmt,
         Op_expr = RHS;
       else if (ID_x == ID_RHS)
         Op_expr = LHS;
-      else
-        Notes.emplace_back(diag::note_acc_atomic_lhs_not_in_rhs, OutOp);
+      else {
+        Notes.emplace_back(diag::note_acc_atomic_unmatched_operand, InOp);
+        Notes.emplace_back(diag::note_acc_atomic_other_expr, Op_x);
+      }
       return;
     }
     default:
@@ -2707,24 +2714,28 @@ static void checkAtomicDirUpdateForm(Sema &SemaRef, Stmt *AStmt,
   }
   default:
     Notes.emplace_back(diag::note_acc_atomic_not_supported_inc_dec_assign,
-                       OutOp);
+                       Assign);
     return;
   }
 }
-static void checkAtomicDirCaptureForm(Sema &SemaRef, Stmt *AStmt,
+static void checkAtomicDirCaptureForm(Sema &SemaRef, const Stmt *AStmt,
                                       const Expr *&Op_v, const Expr *&Op_x,
                                       const Expr *&Op_expr,
                                       SmallVectorImpl<AtomicDirNoteTy> &Notes) {
   // Check expression-statement form.
   if (const Expr *AExpr = dyn_cast<Expr>(AStmt)) {
-    const BinaryOperator *Op =
+    const BinaryOperator *Assign =
         dyn_cast<BinaryOperator>(AExpr->IgnoreParenImpCasts());
-    if (!Op || Op->getOpcode() != BO_Assign) {
+    if (!Assign) {
       Notes.emplace_back(diag::note_acc_atomic_not_simple_assign, AExpr);
-    } else {
-      Op_v = Op->getLHS()->IgnoreParenImpCasts();
-      checkAtomicDirUpdateForm(SemaRef, Op->getRHS(), Op_x, Op_expr, Notes);
+      return;
     }
+    if (Assign->getOpcode() != BO_Assign) {
+      Notes.emplace_back(diag::note_acc_atomic_not_simple_assign, Assign);
+      return;
+    }
+    Op_v = Assign->getLHS()->IgnoreParenImpCasts();
+    checkAtomicDirUpdateForm(SemaRef, Assign->getRHS(), Op_x, Op_expr, Notes);
     return;
   }
 
@@ -2788,8 +2799,8 @@ static void checkAtomicDirCaptureForm(Sema &SemaRef, Stmt *AStmt,
     Op_x->Profile(ID_x, SemaRef.getASTContext(), /*Canonical=*/true);
     Op_x2->Profile(ID_x2, SemaRef.getASTContext(), /*Canonical=*/true);
     if (ID_x != ID_x2) {
-      Notes.emplace_back(diag::note_acc_atomic_not_match_read_stmt_rhs, Op_x2);
-      Notes.emplace_back(diag::note_acc_atomic_read_stmt_rhs, Op_x);
+      Notes.emplace_back(diag::note_acc_atomic_unmatched_expr, Op_x2);
+      Notes.emplace_back(diag::note_acc_atomic_other_expr, Op_x);
     }
   }
 }

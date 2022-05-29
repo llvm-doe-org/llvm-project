@@ -303,7 +303,7 @@ int main() {
   #pragma acc atomic read
   x // expected-error {{invalid statement after '#pragma acc atomic read'}}
     =
-      1; // expected-note {{expected operand here to be an lvalue}}
+      1; // expected-note {{expected expression here to be an lvalue}}
   #pragma acc atomic read
   x++; // expected-error {{invalid statement after '#pragma acc atomic read'}}
        // expected-note@-1 {{expected expression here to be a simple assignment}}
@@ -317,44 +317,45 @@ int main() {
   --x; // expected-error {{invalid statement after '#pragma acc atomic read'}}
        // expected-note@-1 {{expected expression here to be a simple assignment}}
   #pragma acc atomic read
-  x += 3; // expected-error {{invalid statement after '#pragma acc atomic read'}}
-          // expected-note@-1 {{expected expression here to be a simple assignment}}
+  x // expected-error {{invalid statement after '#pragma acc atomic read'}}
+    += // expected-note {{expected expression here to be a simple assignment}}
+       3;
   #pragma acc atomic read
   x // expected-error {{invalid statement after '#pragma acc atomic read'}}
     =
-      x - 9; // expected-note {{expected operand here to be an lvalue}}
+      x - 9; // expected-note {{expected expression here to be an lvalue}}
   #pragma acc atomic read
   x // expected-error {{invalid statement after '#pragma acc atomic read'}}
     =
-      10 * x; // expected-note {{expected operand here to be an lvalue}}
+      10 * x; // expected-note {{expected expression here to be an lvalue}}
   #pragma acc atomic read
   v // expected-error {{invalid statement after '#pragma acc atomic read'}}
     =
-      x++; // expected-note {{expected operand here to be an lvalue}}
+      x++; // expected-note {{expected expression here to be an lvalue}}
   #pragma acc atomic read
   v // expected-error {{invalid statement after '#pragma acc atomic read'}}
     =
-      x--; // expected-note {{expected operand here to be an lvalue}}
+      x--; // expected-note {{expected expression here to be an lvalue}}
   #pragma acc atomic read
   v // expected-error {{invalid statement after '#pragma acc atomic read'}}
     =
-      ++x; // expected-note {{expected operand here to be an lvalue}}
+      ++x; // expected-note {{expected expression here to be an lvalue}}
   #pragma acc atomic read
   v // expected-error {{invalid statement after '#pragma acc atomic read'}}
     =
-      --x; // expected-note {{expected operand here to be an lvalue}}
+      --x; // expected-note {{expected expression here to be an lvalue}}
   #pragma acc atomic read
   v // expected-error {{invalid statement after '#pragma acc atomic read'}}
     =
-      x /= 89; // expected-note {{expected operand here to be an lvalue}}
+      x /= 89; // expected-note {{expected expression here to be an lvalue}}
   #pragma acc atomic read
   v // expected-error {{invalid statement after '#pragma acc atomic read'}}
     =
-      x = x & 5; // expected-note {{expected operand here to be an lvalue}}
+      x = x & 5; // expected-note {{expected expression here to be an lvalue}}
   #pragma acc atomic read
   v // expected-error {{invalid statement after '#pragma acc atomic read'}}
     =
-      x = 384 ^ x; // expected-note {{expected operand here to be an lvalue}}
+      x = 384 ^ x; // expected-note {{expected expression here to be an lvalue}}
   #pragma acc atomic read
   { // expected-error {{invalid statement after '#pragma acc atomic read'}}
     // expected-note@-1 {{expected statement here to be an expression statement}}
@@ -393,9 +394,9 @@ int main() {
   // Check non-scalar operands.
   #pragma acc atomic read
   vs // expected-error {{invalid statement after '#pragma acc atomic read'}}
-     // expected-note@-1 {{expected operand here to be of scalar type}}
+     // expected-note@-1 {{expected expression here to be of scalar type}}
      =
-       xs; // expected-note {{expected operand here to be of scalar type}}
+       xs; // expected-note {{expected expression here to be of scalar type}}
 
   //----------------------------------------------------------------------------
   // acc atomic write
@@ -422,8 +423,9 @@ int main() {
   --x; // expected-error {{invalid statement after '#pragma acc atomic write'}}
        // expected-note@-1 {{expected expression here to be a simple assignment}}
   #pragma acc atomic write
-  x += 3; // expected-error {{invalid statement after '#pragma acc atomic write'}}
-          // expected-note@-1 {{expected expression here to be a simple assignment}}
+  x // expected-error {{invalid statement after '#pragma acc atomic write'}}
+    += // expected-note {{expected expression here to be a simple assignment}}
+       3;
   // We don't currently have compile-time diagnostics for the next two forms,
   // but they are not permitted by OpenACC because the right-hand side accesses
   // x.
@@ -484,9 +486,9 @@ int main() {
   // Check non-scalar operands.
   #pragma acc atomic write
   vs // expected-error {{invalid statement after '#pragma acc atomic write'}}
-     // expected-note@-1 {{expected operand here to be of scalar type}}
+     // expected-note@-1 {{expected expression here to be of scalar type}}
      =
-       xs; // expected-note {{expected operand here to be of scalar type}}
+       xs; // expected-note {{expected expression here to be of scalar type}}
 
 #endif // !CHECK_IMPLICIT_UPDATE
 
@@ -621,16 +623,20 @@ int main() {
   x = v + x;
   #pragma acc atomic UPDATE
   x // expected-error {{invalid statement after '#pragma acc atomic update'}}
-    = // expected-note {{expected left-hand expression here to appear as operand within right-hand expression here}}
-      i + v;
+    // expected-note@-1 {{other expression appears here}}
+    = i
+        + // expected-note {{expected one operand of this expression to match other expression}}
+          v;
   #pragma acc atomic UPDATE
   xs.i = xs.i + v;
   #pragma acc atomic UPDATE
   xs.i = v + xs.i;
   #pragma acc atomic UPDATE
   xs.i // expected-error {{invalid statement after '#pragma acc atomic update'}}
-       = // expected-note {{expected left-hand expression here to appear as operand within right-hand expression here}}
-         xs.j + v;
+       // expected-note@-1 {{other expression appears here}}
+       = xs.j
+              + // expected-note {{expected one operand of this expression to match other expression}}
+                 v;
 
   // Non-lvalue is generally not permitted for increment, decrement, or LHS of
   // assign, so some OpenACC checks don't run.
@@ -662,14 +668,14 @@ int main() {
         vs;
   #pragma acc atomic UPDATE
   xs // expected-error {{invalid statement after '#pragma acc atomic update'}}
-     // expected-note@-1 {{expected operand here to be of scalar type}}
+     // expected-note@-1 {{expected expression here to be of scalar type}}
      =
        xs // expected-note {{expected operator expression here where the operator is one of '+', }}
           - // expected-noacc-error {{invalid operands to binary expression ('struct S' and 'struct S')}}
             vs;
   #pragma acc atomic UPDATE
   xs // expected-error {{invalid statement after '#pragma acc atomic update'}}
-     // expected-note@-1 {{expected operand here to be of scalar type}}
+     // expected-note@-1 {{expected expression here to be of scalar type}}
      =
        vs // expected-note {{expected operator expression here where the operator is one of '+', }}
           / // expected-noacc-error {{invalid operands to binary expression ('struct S' and 'struct S')}}
@@ -706,8 +712,9 @@ int main() {
   --x; // expected-error {{invalid statement after '#pragma acc atomic capture'}}
        // expected-note@-1 {{expected expression here to be a simple assignment}}
   #pragma acc atomic capture
-  x += 3; // expected-error {{invalid statement after '#pragma acc atomic capture'}}
-          // expected-note@-1 {{expected expression here to be a simple assignment}}
+  x // expected-error {{invalid statement after '#pragma acc atomic capture'}}
+    += // expected-note {{expected expression here to be a simple assignment}}
+       3;
   #pragma acc atomic capture
   x // expected-error {{invalid statement after '#pragma acc atomic capture'}}
     = x
@@ -800,8 +807,9 @@ int main() {
 
   // Check a binary-operator expression that is not a simple assignment.
   #pragma acc atomic capture
-  x += v; // expected-error {{invalid statement after '#pragma acc atomic capture'}}
-          // expected-note@-1 {{expected expression here to be a simple assignment}}
+  x // expected-error {{invalid statement after '#pragma acc atomic capture'}}
+    += // expected-note {{expected expression here to be a simple assignment}}
+       v;
 
   // After assign, check an expression statement that is not a unary- or
   // binary-operator expression.
@@ -855,18 +863,22 @@ int main() {
   v = x = v + x;
   #pragma acc atomic capture
   v // expected-error {{invalid statement after '#pragma acc atomic capture'}}
-    = x
-        = // expected-note {{expected left-hand expression here to appear as operand within right-hand expression here}}
-          i + v;
+    =
+      x // expected-note {{other expression appears here}}
+        = i
+            + // expected-note {{expected one operand of this expression to match other expression}}
+              v;
   #pragma acc atomic capture
   vs.i = xs.i = xs.i + v;
   #pragma acc atomic capture
   vs.i = xs.i = v + xs.i;
   #pragma acc atomic capture
   vs.i // expected-error {{invalid statement after '#pragma acc atomic capture'}}
-       = xs.i
-              = // expected-note {{expected left-hand expression here to appear as operand within right-hand expression here}}
-                xs.j + v;
+       =
+         xs.i // expected-note {{other expression appears here}}
+              = xs.j
+                     + // expected-note {{expected one operand of this expression to match other expression}}
+                       v;
 
   // Non-lvalue is generally not permitted for LHS of assign, so some OpenACC
   // checks don't run.
@@ -900,31 +912,31 @@ int main() {
   // here, so some OpenACC checks don't run.
   #pragma acc atomic capture
   vs // expected-error {{invalid statement after '#pragma acc atomic capture'}}
-     // expected-note@-1 {{expected operand here to be of scalar type}}
+     // expected-note@-1 {{expected expression here to be of scalar type}}
      =
        xs++; // expected-noacc-error {{cannot increment value of type 'struct S'}}
              // expected-note@-1 {{expected operator expression here where the operator is one of '++', }}
   #pragma acc atomic capture
   vs // expected-error {{invalid statement after '#pragma acc atomic capture'}}
-     // expected-note@-1 {{expected operand here to be of scalar type}}
+     // expected-note@-1 {{expected expression here to be of scalar type}}
      =
        xs // expected-note {{expected operator expression here where the operator is one of '++', }}
           *= // expected-noacc-error {{invalid operands to binary expression ('struct S' and 'struct S')}}
              vs;
   #pragma acc atomic capture
   vs // expected-error {{invalid statement after '#pragma acc atomic capture'}}
-     // expected-note@-1 {{expected operand here to be of scalar type}}
+     // expected-note@-1 {{expected expression here to be of scalar type}}
      =
-       xs // expected-note {{expected operand here to be of scalar type}}
+       xs // expected-note {{expected expression here to be of scalar type}}
           =
             xs // expected-note {{expected operator expression here where the operator is one of '+', }}
                - // expected-noacc-error {{invalid operands to binary expression ('struct S' and 'struct S')}}
                  vs;
   #pragma acc atomic capture
   vs // expected-error {{invalid statement after '#pragma acc atomic capture'}}
-     // expected-note@-1 {{expected operand here to be of scalar type}}
+     // expected-note@-1 {{expected expression here to be of scalar type}}
      =
-       xs // expected-note {{expected operand here to be of scalar type}}
+       xs // expected-note {{expected expression here to be of scalar type}}
           =
             vs // expected-note {{expected operator expression here where the operator is one of '+', }}
                / // expected-noacc-error {{invalid operands to binary expression ('struct S' and 'struct S')}}
@@ -1119,16 +1131,18 @@ int main() {
   }
   #pragma acc atomic capture
   { // expected-error {{invalid statement after '#pragma acc atomic capture'}}
-    x
-      = // expected-note {{expected left-hand expression here to appear as operand within right-hand expression here}}
-        i + v;
+    x // expected-note {{other expression appears here}}
+      = i
+          + // expected-note {{expected one operand of this expression to match other expression}}
+            v;
     v = x;
   }
   #pragma acc atomic capture
   { // expected-error {{invalid statement after '#pragma acc atomic capture'}}
-    xs.i
-         = // expected-note {{expected left-hand expression here to appear as operand within right-hand expression here}}
-           xs.j + v;
+    xs.i // expected-note {{other expression appears here}}
+         = xs.j
+                + // expected-note {{expected one operand of this expression to match other expression}}
+                  v;
     vs.i = xs.i;
   }
 
@@ -1137,22 +1151,25 @@ int main() {
   #pragma acc atomic capture
   { // expected-error {{invalid statement after '#pragma acc atomic capture'}}
     v =
-        x; // expected-note {{read statement right-hand operand appears here}}
-    i // expected-note {{expected this expression to match right-hand operand of read statement}}
+        x // expected-note {{other expression appears here}}
+          ;
+    i // expected-note {{expected this expression to match other expression}}
       = 10;
   }
   #pragma acc atomic capture
   { // expected-error {{invalid statement after '#pragma acc atomic capture'}}
     v =
-        x; // expected-note {{read statement right-hand operand appears here}}
-    i // expected-note {{expected this expression to match right-hand operand of read statement}}
+        x // expected-note {{other expression appears here}}
+          ;
+    i // expected-note {{expected this expression to match other expression}}
       = i + 10;
   }
   #pragma acc atomic capture
   { // expected-error {{invalid statement after '#pragma acc atomic capture'}}
-    i++; // expected-note {{expected this expression to match right-hand operand of read statement}}
+    i // expected-note {{expected this expression to match other expression}}
+     ++;
     v =
-        x; // expected-note {{read statement right-hand operand appears here}}
+        x; // expected-note {{other expression appears here}}
   }
 
   // Non-lvalue is generally not permitted for increment, decrement, or LHS of
@@ -1174,9 +1191,9 @@ int main() {
   // here, so some OpenACC checks don't run.
   #pragma acc atomic capture
   { // expected-error {{invalid statement after '#pragma acc atomic capture'}}
-    vs // expected-note {{expected operand here to be of scalar type}}
+    vs // expected-note {{expected expression here to be of scalar type}}
        =
-         xs; // expected-note {{expected operand here to be of scalar type}}
+         xs; // expected-note {{expected expression here to be of scalar type}}
     xs++; // expected-noacc-error {{cannot increment value of type 'struct S'}}
           // expected-note@-1 {{expected operator expression here where the operator is one of '++', }}
   }
@@ -1184,9 +1201,9 @@ int main() {
   { // expected-error {{invalid statement after '#pragma acc atomic capture'}}
     xs++; // expected-noacc-error {{cannot increment value of type 'struct S'}}
           // expected-note@-1 {{expected operator expression here where the operator is one of '++', }}
-    vs // expected-note {{expected operand here to be of scalar type}}
+    vs // expected-note {{expected expression here to be of scalar type}}
        =
-         xs; // expected-note {{expected operand here to be of scalar type}}
+         xs; // expected-note {{expected expression here to be of scalar type}}
   }
 
   //----------------------------------------------------------------------------
