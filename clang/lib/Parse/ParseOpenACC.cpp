@@ -359,6 +359,7 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
   case ACCC_write:
   case ACCC_update:
   case ACCC_capture:
+  case ACCC_compare:
     if (!WrongDirective) {
       if (SeenClauses[CKind]) {
         Diag(Tok, diag::err_acc_more_one_clause)
@@ -367,7 +368,7 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
       } else {
         checkMutuallyExclusiveClauses(
             SeenClauses, CKind, ErrorFound,
-            {ACCC_read, ACCC_write, ACCC_update, ACCC_capture});
+            {ACCC_read, ACCC_write, ACCC_update, ACCC_capture, ACCC_compare});
       }
     }
     Clause = ParseOpenACCNoArgClause(CKind, WrongDirective);

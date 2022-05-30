@@ -7125,3 +7125,4 @@ void ACCClauseWriter::VisitACCReadClause(ACCReadClause *) {}
 void ACCClauseWriter::VisitACCWriteClause(ACCWriteClause *) {}
 void ACCClauseWriter::VisitACCUpdateClause(ACCUpdateClause *) {}
 void ACCClauseWriter::VisitACCCaptureClause(ACCCaptureClause *) {}
+void ACCClauseWriter::VisitACCCompareClause(ACCCompareClause *) {}

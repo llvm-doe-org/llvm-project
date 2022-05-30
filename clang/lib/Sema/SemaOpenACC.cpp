@@ -1053,6 +1053,7 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
   case ACCC_write:
   case ACCC_update:
   case ACCC_capture:
+  case ACCC_compare:
   case ACCC_unknown:
     llvm_unreachable("expected explicit clause that accepts a variable list");
   }
@@ -2584,6 +2585,8 @@ struct AtomicDirNoteTy {
   SourceLocation Loc;
   SourceRange Range0;
   SourceRange Range1;
+  AtomicDirNoteTy(unsigned DiagID, SourceLocation Loc)
+      : DiagID(DiagID), Loc(Loc) {}
   AtomicDirNoteTy(unsigned DiagID, const Stmt *S)
       : DiagID(DiagID), Loc(S->getBeginLoc()), Range0(S->getSourceRange()) {}
   AtomicDirNoteTy(unsigned DiagID, const BinaryOperator *Op)
@@ -2804,6 +2807,218 @@ static void checkAtomicDirCaptureForm(Sema &SemaRef, const Stmt *AStmt,
     }
   }
 }
+static void checkAtomicDirCompareForm(Sema &SemaRef, const Stmt *AStmt,
+                                      const Expr *&Op_x, const Expr *&Op_expr,
+                                      const Expr *&Op_e, const Expr *&Op_d,
+                                      SmallVectorImpl<AtomicDirNoteTy> &Notes) {
+  // Check expression-statement form.
+  if (const Expr *AExpr = dyn_cast<Expr>(AStmt)) {
+    // Check that it's an assign-operator expression.  If so, record the LHS as
+    // 'x'.
+    const BinaryOperator *Assign =
+        dyn_cast<BinaryOperator>(AExpr->IgnoreParenImpCasts());
+    if (!Assign) {
+      Notes.emplace_back(diag::note_acc_atomic_not_simple_assign, AExpr);
+      return;
+    }
+    if (Assign->getOpcode() != BO_Assign) {
+      Notes.emplace_back(diag::note_acc_atomic_not_simple_assign, Assign);
+      return;
+    }
+    Op_x = Assign->getLHS()->IgnoreParenImpCasts();
+
+    // Check that assign operator RHS is conditional-operator expression.  Give
+    // up if not.
+    const ConditionalOperator *CondOp =
+        dyn_cast<ConditionalOperator>(Assign->getRHS()->IgnoreParenImpCasts());
+    if (!CondOp) {
+      Notes.emplace_back(diag::note_acc_atomic_not_condop_after_assign,
+                         Assign->getRHS());
+      return;
+    }
+
+    // Check that x in conditional-operator expression's false expression is x
+    // from assign operator's LHS.
+    const Expr *CondFalse = CondOp->getFalseExpr()->IgnoreParenImpCasts();
+    llvm::FoldingSetNodeID ID_x, ID_CondFalse;
+    Op_x->Profile(ID_x, SemaRef.getASTContext(), /*Canonical=*/true);
+    CondFalse->Profile(ID_CondFalse, SemaRef.getASTContext(),
+                       /*Canonical=*/true);
+    if (ID_x != ID_CondFalse) {
+      Notes.emplace_back(diag::note_acc_atomic_unmatched_expr, CondFalse);
+      Notes.emplace_back(diag::note_acc_atomic_other_expr, Op_x);
+    }
+
+    // Check that condition expression is a binary-operator expression.  Give
+    // up if not.
+    const BinaryOperator *CmpOp =
+        dyn_cast<BinaryOperator>(CondOp->getCond()->IgnoreParenImpCasts());
+    if (!CmpOp) {
+      Notes.emplace_back(diag::note_acc_atomic_not_supported_cmpop,
+                         CondOp->getCond());
+      return;
+    }
+
+    // Check that condition expression's binary operator is a supported
+    // comparison operator.  If so, gather operands ('x', 'expr', 'e', and/or
+    // 'd') depending on the operator, and check that they match among the
+    // assignment's LHS, the condition, and the true/false statements.
+    switch (CmpOp->getOpcode()) {
+    // Where ordop is '<' or '>', check these forms:
+    // - x = expr ordop x ? expr : x;
+    // - x = x ordop expr ? expr : x;
+    case BO_LT:
+    case BO_GT: {
+      const Expr *CmpLHS = CmpOp->getLHS()->IgnoreParenImpCasts();
+      const Expr *CmpRHS = CmpOp->getRHS()->IgnoreParenImpCasts();
+      const Expr *CondTrue = CondOp->getTrueExpr()->IgnoreParenImpCasts();
+      llvm::FoldingSetNodeID ID_CmpLHS, ID_CmpRHS;
+      llvm::FoldingSetNodeID ID_CondTrue;
+      CmpLHS->Profile(ID_CmpLHS, SemaRef.getASTContext(), /*Canonical=*/true);
+      CmpRHS->Profile(ID_CmpRHS, SemaRef.getASTContext(), /*Canonical=*/true);
+      CondTrue->Profile(ID_CondTrue, SemaRef.getASTContext(),
+                        /*Canonical=*/true);
+      if (ID_x == ID_CmpRHS)
+        Op_expr = CmpLHS;
+      else if (ID_x == ID_CmpLHS)
+        Op_expr = CmpRHS;
+      else {
+        Notes.emplace_back(diag::note_acc_atomic_unmatched_operand, CmpOp);
+        Notes.emplace_back(diag::note_acc_atomic_other_expr, Op_x);
+      }
+      if (Op_expr) {
+        llvm::FoldingSetNodeID ID_expr;
+        Op_expr->Profile(ID_expr, SemaRef.getASTContext(), /*Canonical=*/true);
+        if (ID_expr != ID_CondTrue) {
+          Notes.emplace_back(diag::note_acc_atomic_unmatched_expr, CondTrue);
+          Notes.emplace_back(diag::note_acc_atomic_other_expr, Op_expr);
+        }
+      }
+      break;
+    }
+    // Check this form:
+    // - x = x == e ? d : x;
+    case BO_EQ: {
+      const Expr *CmpLHS = CmpOp->getLHS()->IgnoreParenImpCasts();
+      Op_e = CmpOp->getRHS()->IgnoreParenImpCasts();
+      Op_d = CondOp->getTrueExpr()->IgnoreParenImpCasts();
+      llvm::FoldingSetNodeID ID_CmpLHS;
+      CmpLHS->Profile(ID_CmpLHS, SemaRef.getASTContext(), /*Canonical=*/true);
+      if (ID_x != ID_CmpLHS) {
+        Notes.emplace_back(diag::note_acc_atomic_unmatched_expr, CmpLHS);
+        Notes.emplace_back(diag::note_acc_atomic_other_expr, Op_x);
+      }
+      break;
+    }
+    default:
+      Notes.emplace_back(diag::note_acc_atomic_not_supported_cmpop, CmpOp);
+      break;
+    }
+    return;
+  }
+
+  // Check that associated statement is an 'if' statement.  Give up if not.
+  const IfStmt *If = dyn_cast<IfStmt>(AStmt);
+  if (!If) {
+    Notes.emplace_back(diag::note_acc_atomic_not_expr_stmt_or_if_stmt, AStmt);
+    return;
+  }
+
+  // Check that 'then' statement is a single simple assignment statement or a
+  // compound statement enclosing one.  If so, record the 'then' statement's
+  // 'x'.
+  const Expr *ThenExpr = nullptr;
+  if (const CompoundStmt *CS = dyn_cast<CompoundStmt>(If->getThen())) {
+    if (CS->size() != 1)
+      Notes.emplace_back(diag::note_acc_atomic_not_one_stmt, CS);
+    else if (!(ThenExpr = dyn_cast<Expr>(CS->body_begin()[0])))
+      Notes.emplace_back(diag::note_acc_atomic_not_expr_stmt,
+                         CS->body_begin()[0]);
+  } else if (!(ThenExpr = dyn_cast<Expr>(If->getThen()))) {
+    Notes.emplace_back(diag::note_acc_atomic_not_expr_stmt_or_compound_stmt,
+                       If->getThen());
+  }
+  const BinaryOperator *Assign = nullptr;
+  if (ThenExpr) {
+    Assign = dyn_cast<BinaryOperator>(ThenExpr->IgnoreParenImpCasts());
+    if (!Assign)
+      Notes.emplace_back(diag::note_acc_atomic_not_simple_assign, ThenExpr);
+    else if (Assign->getOpcode() != BO_Assign)
+      Notes.emplace_back(diag::note_acc_atomic_not_simple_assign, Assign);
+    else
+      Op_x = Assign->getLHS()->IgnoreParenImpCasts();
+  }
+
+  // Check that the condition is a binary-operator expression with a supported
+  // comparison operator.  If so, gather operands ('x', 'expr', 'e', and/or 'd')
+  // depending on the operator, and check that they match between the condition
+  // and the 'then' statement.
+  const BinaryOperator *CmpOp =
+      dyn_cast<BinaryOperator>(If->getCond()->IgnoreParenImpCasts());
+  if (!CmpOp) {
+    Notes.emplace_back(diag::note_acc_atomic_not_supported_cmpop,
+                       If->getCond());
+  } else {
+    switch (CmpOp->getOpcode()) {
+    // Where ordop is '<' or '>', check these forms:
+    // - if (expr ordop x) { x = expr; }
+    // - if (expr ordop x) x = expr;
+    // - if (x ordop expr) { x = expr; }
+    // - if (x ordop expr) x = expr;
+    case BO_LT:
+    case BO_GT:
+      if (Op_x) {
+        Op_expr = Assign->getRHS()->IgnoreParenImpCasts();
+        const Expr *CmpLHS = CmpOp->getLHS()->IgnoreParenImpCasts();
+        const Expr *CmpRHS = CmpOp->getRHS()->IgnoreParenImpCasts();
+        llvm::FoldingSetNodeID ID_x, ID_expr, ID_CmpLHS, ID_CmpRHS;
+        Op_x->Profile(ID_x, SemaRef.getASTContext(), /*Canonical=*/true);
+        Op_expr->Profile(ID_expr, SemaRef.getASTContext(), /*Canonical=*/true);
+        CmpLHS->Profile(ID_CmpLHS, SemaRef.getASTContext(), /*Canonical=*/true);
+        CmpRHS->Profile(ID_CmpRHS, SemaRef.getASTContext(), /*Canonical=*/true);
+        if (ID_x == ID_CmpRHS) {
+          if (ID_expr != ID_CmpLHS) {
+            Notes.emplace_back(diag::note_acc_atomic_unmatched_expr, CmpLHS);
+            Notes.emplace_back(diag::note_acc_atomic_other_expr, Op_expr);
+          }
+        } else if (ID_x == ID_CmpLHS) {
+          if (ID_expr != ID_CmpRHS) {
+            Notes.emplace_back(diag::note_acc_atomic_unmatched_expr, CmpRHS);
+            Notes.emplace_back(diag::note_acc_atomic_other_expr, Op_expr);
+          }
+        } else {
+          Notes.emplace_back(diag::note_acc_atomic_unmatched_operand, CmpOp);
+          Notes.emplace_back(diag::note_acc_atomic_other_expr, Op_x);
+        }
+      }
+      break;
+    // Check these forms:
+    // - if (x == e) { x = d; }
+    // - if (x == e) x = d;
+    case BO_EQ:
+      Op_e = CmpOp->getRHS()->IgnoreParenImpCasts();
+      if (Op_x) {
+        Op_d = Assign->getRHS()->IgnoreParenImpCasts();
+        const Expr *CmpLHS = CmpOp->getLHS()->IgnoreParenImpCasts();
+        llvm::FoldingSetNodeID ID_x, ID_CmpLHS;
+        Op_x->Profile(ID_x, SemaRef.getASTContext(), /*Canonical=*/true);
+        CmpLHS->Profile(ID_CmpLHS, SemaRef.getASTContext(), /*Canonical=*/true);
+        if (ID_x != ID_CmpLHS) {
+          Notes.emplace_back(diag::note_acc_atomic_unmatched_expr, CmpLHS);
+          Notes.emplace_back(diag::note_acc_atomic_other_expr, Op_x);
+        }
+      }
+      break;
+    default:
+      Notes.emplace_back(diag::note_acc_atomic_not_supported_cmpop, CmpOp);
+      break;
+    }
+  }
+
+  // Complain about any 'else' statement.
+  if (If->getElse())
+    Notes.emplace_back(diag::note_acc_atomic_unexpected_else, If->getElseLoc());
+}
 
 StmtResult Sema::ActOnOpenACCAtomicDirective(ArrayRef<ACCClause *> Clauses,
                                              Stmt *AStmt) {
@@ -2818,6 +3033,8 @@ StmtResult Sema::ActOnOpenACCAtomicDirective(ArrayRef<ACCClause *> Clauses,
   const Expr *Op_v = nullptr;
   const Expr *Op_x = nullptr;
   const Expr *Op_expr = nullptr;
+  const Expr *Op_e = nullptr;
+  const Expr *Op_d = nullptr;
   switch (ClauseKind) {
   case ACCC_read:
     isAtomicDirReadOrWriteForm(*this, AStmt, Op_v, Op_x, &Notes);
@@ -2830,6 +3047,9 @@ StmtResult Sema::ActOnOpenACCAtomicDirective(ArrayRef<ACCClause *> Clauses,
     break;
   case ACCC_capture:
     checkAtomicDirCaptureForm(*this, AStmt, Op_v, Op_x, Op_expr, Notes);
+    break;
+  case ACCC_compare:
+    checkAtomicDirCompareForm(*this, AStmt, Op_x, Op_expr, Op_e, Op_d, Notes);
     break;
   default:
     llvm_unreachable("unexpected acc atomic clause");
@@ -2850,6 +3070,10 @@ StmtResult Sema::ActOnOpenACCAtomicDirective(ArrayRef<ACCClause *> Clauses,
   }
   if (Op_expr && !Op_expr->getType()->isScalarType())
     Notes.emplace_back(diag::note_acc_atomic_not_scalar, Op_expr);
+  if (Op_e && !Op_e->getType()->isScalarType())
+    Notes.emplace_back(diag::note_acc_atomic_not_scalar, Op_e);
+  if (Op_d && !Op_d->getType()->isScalarType())
+    Notes.emplace_back(diag::note_acc_atomic_not_scalar, Op_d);
 
   // Emit any diagnostics about the associated statement.
   if (!Notes.empty()) {
@@ -2857,7 +3081,8 @@ StmtResult Sema::ActOnOpenACCAtomicDirective(ArrayRef<ACCClause *> Clauses,
         << getOpenACCName(ClauseKind) << AStmt->getSourceRange();
     for (const AtomicDirNoteTy &Note : Notes) {
       SemaDiagnosticBuilder DiagBuilder = Diag(Note.Loc, Note.DiagID);
-      DiagBuilder << Note.Range0;
+      if (Note.Range0.isValid())
+        DiagBuilder << Note.Range0;
       if (Note.Range1.isValid())
         DiagBuilder << Note.Range1;
     }
@@ -3120,6 +3345,7 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
   case ACCC_write:
   case ACCC_update:
   case ACCC_capture:
+  case ACCC_compare:
   case ACCC_unknown:
     llvm_unreachable("expected clause that takes a single expression");
   }
@@ -4035,6 +4261,9 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_capture:
     Res = ActOnOpenACCCaptureClause(StartLoc, EndLoc);
     break;
+  case ACCC_compare:
+    Res = ActOnOpenACCCompareClause(StartLoc, EndLoc);
+    break;
   case ACCC_nomap:
   case ACCC_present:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
@@ -4189,6 +4418,11 @@ ACCClause *Sema::ActOnOpenACCUpdateClause(OpenACCDetermination Determination,
 ACCClause *Sema::ActOnOpenACCCaptureClause(SourceLocation StartLoc,
                                            SourceLocation EndLoc) {
   return new (Context) ACCCaptureClause(StartLoc, EndLoc);
+}
+
+ACCClause *Sema::ActOnOpenACCCompareClause(SourceLocation StartLoc,
+                                           SourceLocation EndLoc) {
+  return new (Context) ACCCompareClause(StartLoc, EndLoc);
 }
 
 bool Sema::isInOpenACCDirectiveStmt() {

@@ -11138,6 +11138,13 @@ TreeTransform<Derived>::TransformACCCaptureClause(ACCCaptureClause *C) {
   return C;
 }
 
+template <typename Derived>
+ACCClause *
+TreeTransform<Derived>::TransformACCCompareClause(ACCCompareClause *C) {
+  // No need to rebuild this clause, no parameters.
+  return C;
+}
+
 //===----------------------------------------------------------------------===//
 // Expression transformation
 //===----------------------------------------------------------------------===//

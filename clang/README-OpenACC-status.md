@@ -309,7 +309,7 @@ Run-Time Environment Variables
   implicit `firstprivate` clause).
 
 `atomic` Directive
-----------------
+------------------
 
 * Lexical context
     * Appearing within any OpenACC construct besides `atomic` is supported.
@@ -324,6 +324,27 @@ Run-Time Environment Variables
     * `update`
     * Implicit `update`
     * `capture`
+    * `compare`
+        * This is an OpenACC extension based on the OpenMP `atomic` construct's
+          `compare` clause except that Clacc currently does not support
+          combining `compare` with other clauses.
+        * `compare` permits the associated statement to take any of the
+          following forms:
+            * `x = expr ordop x ? expr : x;`
+            * `x = x ordop expr ? expr : x;`
+            * `x = x == e ? d : x;`
+            * `if (expr ordop x) { x = expr; }`
+            * `if (x ordop expr) { x = expr; }`
+            * `if (x == e) { x = d; }`
+            * `if (expr ordop x) x = expr;`
+            * `if (x ordop expr) x = expr;`
+            * `if (x == e) x = d;`
+        * `x` and `expr` are as specified by OpenACC 3.2 for other forms of the
+          associated statement.
+        * `ordop` is either `<` or `>`.
+        * `e` and `d` are expressions with scalar type.
+        * Because this extension is translated directly to OpenMP, refer to the
+          OpenMP specification for a detailed description of the semantics.
 * Gang-private atomically accessed variable
     * A run-time error diagnostic is produced for some offload targets in this
       case.

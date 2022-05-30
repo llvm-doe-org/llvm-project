@@ -1925,6 +1925,7 @@ is as follows:
 * *exp* `write` -> *exp* `write`
 * *exp*|*imp* `update` -> *exp* `update`
 * *exp* `capture` -> *exp* `capture`
+* *exp* `compare` -> *exp* `compare`.  Note: This is an OpenACC extension.
 
 Routine Directive
 -----------------

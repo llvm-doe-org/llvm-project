@@ -1339,6 +1339,7 @@ void ACCClauseProfiler::VisitACCReadClause(const ACCReadClause *) {}
 void ACCClauseProfiler::VisitACCWriteClause(const ACCWriteClause *) {}
 void ACCClauseProfiler::VisitACCUpdateClause(const ACCUpdateClause *) {}
 void ACCClauseProfiler::VisitACCCaptureClause(const ACCCaptureClause *) {}
+void ACCClauseProfiler::VisitACCCompareClause(const ACCCompareClause *) {}
 
 void StmtProfiler::VisitACCDirectiveStmt(const ACCDirectiveStmt *S) {
   VisitStmt(S);

@@ -33,8 +33,8 @@
 // __uint128_t does require atomic reads and writes, but atomics aren't
 // supported for it currently, so we cannot use it.
 //
-// In contrast, capture and update clauses each pair a read and a write, so any
-// data type is sufficient to verify their effect.
+// In contrast, update, capture, and compare clauses each pair a read and a
+// write, so any data type is sufficient to verify their effect.
 typedef uint64_t WideInt;
 #define OLD_VAL 0
 #define NEW_VAL ((WideInt)0 - 1)
@@ -65,8 +65,8 @@ typedef uint64_t WideInt;
 
 //==============================================================================
 // Check every clause within every parallel execution mode: gang-redundant, etc.
-// Vary the associated statement form (for update and capture) arbitrarily for
-// now, and we'll be sure to cover all forms later.
+// Vary the associated statement form (for update, capture, and compare)
+// arbitrarily for now, and we'll be sure to cover all forms later.
 //==============================================================================
 
 //------------------------------------------------------------------------------
@@ -180,6 +180,34 @@ void gr_wp_vs_capture(int *x, bool *arr) {
       v = *x;
     }
     arr[v - 1] = true;
+  }
+}
+
+// compare with '<' or '>': search for min or max value.
+//
+// DMP-LABEL: FunctionDecl {{.*}} gr_wp_vs_compare
+//       DMP: ACCAtomicDirective
+//  DMP-NEXT:   ACCCompareClause
+//   DMP-NOT:     <implicit>
+//  DMP-NEXT:   impl: OMPAtomicDirective
+//  DMP-NEXT:     OMPCompareClause
+//  DMP-NEXT:     BinaryOperator {{.*}} '='
+//
+//   PRT-LABEL: void gr_wp_vs_compare({{.*}})
+//         PRT: for (int i = {{.*}}) {
+//  PRT-A-NEXT:   #pragma acc atomic compare
+// PRT-AO-NEXT:   // #pragma omp atomic compare
+//  PRT-O-NEXT:   #pragma omp atomic compare
+// PRT-OA-NEXT:   // #pragma acc atomic compare
+//    PRT-NEXT:   *x = Base + i > *x ? Base + i : *x;
+//    PRT-NEXT: }
+#pragma acc routine worker
+void gr_wp_vs_compare(int *x, int gangIdx) {
+  int Base = gangIdx * WP_VS_NUM_WORKERS;
+  #pragma acc loop worker
+  for (int i = 1; i <= WP_VS_NUM_WORKERS; ++i) {
+    #pragma acc atomic compare
+    *x = Base + i > *x ? Base + i : *x;
   }
 }
 
@@ -297,6 +325,34 @@ void gr_ws_vp_capture(int *x, bool *arr) {
   }
 }
 
+// compare with '<' or '>': search for min or max value.
+//
+// DMP-LABEL: FunctionDecl {{.*}} gr_ws_vp_compare
+//       DMP: ACCAtomicDirective
+//  DMP-NEXT:   ACCCompareClause
+//   DMP-NOT:     <implicit>
+//  DMP-NEXT:   impl: OMPAtomicDirective
+//  DMP-NEXT:     OMPCompareClause
+//  DMP-NEXT:     BinaryOperator {{.*}} '='
+//
+//   PRT-LABEL: void gr_ws_vp_compare({{.*}})
+//         PRT: for (int i = {{.*}}) {
+//  PRT-A-NEXT:   #pragma acc atomic compare
+// PRT-AO-NEXT:   // #pragma omp atomic compare
+//  PRT-O-NEXT:   #pragma omp atomic compare
+// PRT-OA-NEXT:   // #pragma acc atomic compare
+//    PRT-NEXT:   *x = *x < Base + i ? Base + i : *x;
+//    PRT-NEXT: }
+#pragma acc routine vector
+void gr_ws_vp_compare(int *x, int gangIdx) {
+  int Base = gangIdx * WS_VP_VECTOR_LENGTH;
+  #pragma acc loop vector
+  for (int i = 1; i <= WS_VP_VECTOR_LENGTH; ++i) {
+    #pragma acc atomic compare
+    *x = *x < Base + i ? Base + i : *x;
+  }
+}
+
 //------------------------------------------------------------------------------
 // Orphaned loops for GR/WP/VP mode.
 //------------------------------------------------------------------------------
@@ -408,6 +464,34 @@ void gr_wp_vp_capture(int *x, bool *arr) {
       --*x;
     }
     arr[v - 1] = true;
+  }
+}
+
+// compare with '<' or '>': search for min or max value.
+//
+// DMP-LABEL: FunctionDecl {{.*}} gr_wp_vp_compare
+//       DMP: ACCAtomicDirective
+//  DMP-NEXT:   ACCCompareClause
+//   DMP-NOT:     <implicit>
+//  DMP-NEXT:   impl: OMPAtomicDirective
+//  DMP-NEXT:     OMPCompareClause
+//  DMP-NEXT:     BinaryOperator {{.*}} '='
+//
+//   PRT-LABEL: void gr_wp_vp_compare({{.*}})
+//         PRT: for (int i = {{.*}}) {
+//  PRT-A-NEXT:   #pragma acc atomic compare
+// PRT-AO-NEXT:   // #pragma omp atomic compare
+//  PRT-O-NEXT:   #pragma omp atomic compare
+// PRT-OA-NEXT:   // #pragma acc atomic compare
+//    PRT-NEXT:   *x = *x > Base + i ? Base + i : *x;
+//    PRT-NEXT: }
+#pragma acc routine worker
+void gr_wp_vp_compare(int *x, int gangIdx) {
+  int Base = gangIdx * WP_VP_NUM_WORKERS * WP_VP_VECTOR_LENGTH;
+  #pragma acc loop worker vector
+  for (int i = 1; i <= WP_VP_NUM_WORKERS * WP_VP_VECTOR_LENGTH; ++i) {
+    #pragma acc atomic compare
+    *x = *x > Base + i ? Base + i : *x;
   }
 }
 
@@ -556,6 +640,47 @@ int main() {
   }
   printf("err=%d\n", err);
 
+  // compare with '<' or '>': search for min or max value.
+  //
+  // DMP-LABEL: "GR/WS/VS compare: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     IfStmt
+  //
+  //   PRT-LABEL: printf("GR/WS/VS compare: ");
+  //         PRT:   gangIdx = i;
+  //  PRT-A-NEXT: #pragma acc atomic compare
+  // PRT-AO-NEXT: // #pragma omp atomic compare
+  //  PRT-O-NEXT: #pragma omp atomic compare
+  // PRT-OA-NEXT: // #pragma acc atomic compare
+  //    PRT-NEXT: if (gangIdx + 1 < x) {
+  //    PRT-NEXT:   x = gangIdx + 1;
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: GR/WS/VS compare: err=0
+  printf("GR/WS/VS compare: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = INT_MAX;
+    #pragma acc parallel num_gangs(WS_VS_NUM_GANGS) copy(x)
+    {
+      int gangIdx;
+      #pragma acc loop gang
+      for (int i = 0; i < WS_VS_NUM_GANGS; ++i)
+        gangIdx = i;
+      #pragma acc atomic compare
+      if (gangIdx + 1 < x) {
+        x = gangIdx + 1;
+      }
+    }
+    if (x != 1)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
   //----------------------------------------------------------------------------
   // GP/WS/VS mode.
   //----------------------------------------------------------------------------
@@ -693,6 +818,47 @@ int main() {
       if (!arr[i])
         err = true;
     if (x != 0)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
+  // compare with '<' or '>': search for min or max value.
+  //
+  // DMP-LABEL: "GP/WS/VS compare: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     IfStmt
+  //
+  //   PRT-LABEL: printf("GP/WS/VS compare: ");
+  //         PRT: for (int i = {{.*}}) {
+  //  PRT-A-NEXT:   #pragma acc atomic compare
+  // PRT-AO-NEXT:   // #pragma omp atomic compare
+  //  PRT-O-NEXT:   #pragma omp atomic compare
+  // PRT-OA-NEXT:   // #pragma acc atomic compare
+  //    PRT-NEXT:   if (i > x) {
+  //    PRT-NEXT:     x = i;
+  //    PRT-NEXT:   }
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: GP/WS/VS compare: err=0
+  printf("GP/WS/VS compare: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = 0;
+    #pragma acc parallel num_gangs(WS_VS_NUM_GANGS) copy(x)
+    {
+      #pragma acc loop gang
+      for (int i = 1; i <= WS_VS_NUM_GANGS; ++i) {
+        #pragma acc atomic compare
+        if (i > x) {
+          x = i;
+        }
+      }
+    }
+    if (x != WS_VS_NUM_GANGS)
       err = true;
   }
   printf("err=%d\n", err);
@@ -844,6 +1010,49 @@ int main() {
   }
   printf("err=%d\n", err);
 
+  // compare with '<' or '>': search for min or max value.
+  //
+  // DMP-LABEL: "GP/WP/VS compare: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     IfStmt
+  //
+  //   PRT-LABEL: printf("GP/WP/VS compare: ");
+  //         PRT: for (int i = {{.*}}) {
+  //  PRT-A-NEXT:   #pragma acc atomic compare
+  // PRT-AO-NEXT:   // #pragma omp atomic compare
+  //  PRT-O-NEXT:   #pragma omp atomic compare
+  // PRT-OA-NEXT:   // #pragma acc atomic compare
+  //    PRT-NEXT:   if (x < i) {
+  //    PRT-NEXT:     x = i;
+  //    PRT-NEXT:   }
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: GP/WP/VS compare: err=0
+  printf("GP/WP/VS compare: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = 0;
+    #pragma acc parallel num_gangs(WP_VS_NUM_GANGS)                            \
+                         num_workers(WP_VS_NUM_WORKERS)                        \
+                         copy(x)
+    {
+      #pragma acc loop gang worker
+      for (int i = 1; i <= WP_VS_NUM_GANGS * WP_VS_NUM_WORKERS; ++i) {
+        #pragma acc atomic compare
+        if (x < i) {
+          x = i;
+        }
+      }
+    }
+    if (x != WP_VS_NUM_GANGS * WP_VS_NUM_WORKERS)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
   //----------------------------------------------------------------------------
   // GP/WS/VP mode.
   //----------------------------------------------------------------------------
@@ -990,6 +1199,49 @@ int main() {
       if (!arr[i])
         err = true;
     if (x != WS_VP_NUM_GANGS * WS_VP_VECTOR_LENGTH)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
+  // compare with '<' or '>': search for min or max value.
+  //
+  // DMP-LABEL: "GP/WS/VP compare: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     IfStmt
+  //
+  //   PRT-LABEL: printf("GP/WS/VP compare: ");
+  //         PRT: for (int i = {{.*}}) {
+  //  PRT-A-NEXT:   #pragma acc atomic compare
+  // PRT-AO-NEXT:   // #pragma omp atomic compare
+  //  PRT-O-NEXT:   #pragma omp atomic compare
+  // PRT-OA-NEXT:   // #pragma acc atomic compare
+  //    PRT-NEXT:   if (x > i + 1) {
+  //    PRT-NEXT:     x = i + 1;
+  //    PRT-NEXT:   }
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: GP/WS/VP compare: err=0
+  printf("GP/WS/VP compare: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = INT_MAX;
+    #pragma acc parallel num_gangs(WS_VP_NUM_GANGS)                            \
+                         vector_length(WS_VP_VECTOR_LENGTH)                    \
+                         copy(x)
+    {
+      #pragma acc loop gang worker
+      for (int i = 0; i < WS_VP_NUM_GANGS * WS_VP_VECTOR_LENGTH; ++i) {
+        #pragma acc atomic compare
+        if (x > i + 1) {
+          x = i + 1;
+        }
+      }
+    }
+    if (x != 1)
       err = true;
   }
   printf("err=%d\n", err);
@@ -1156,11 +1408,53 @@ int main() {
   }
   printf("err=%d\n", err);
 
+  // compare with '<' or '>': search for min or max value.
+  //
+  // DMP-LABEL: "GP/WP/VP compare: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     BinaryOperator {{.*}} '='
+  //
+  //   PRT-LABEL: printf("GP/WP/VP compare: ");
+  //         PRT: for (int i =
+  //         PRT: {
+  //  PRT-A-NEXT:   #pragma acc atomic compare
+  // PRT-AO-NEXT:   // #pragma omp atomic compare
+  //  PRT-O-NEXT:   #pragma omp atomic compare
+  // PRT-OA-NEXT:   // #pragma acc atomic compare
+  //    PRT-NEXT:   x = i + 1 < x ? i + 1 : x;
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: GP/WP/VP compare: err=0
+  printf("GP/WP/VP compare: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = INT_MAX;
+    #pragma acc parallel num_gangs(WP_VP_NUM_GANGS)                            \
+                         num_workers(WP_VP_NUM_WORKERS)                        \
+                         vector_length(WP_VP_VECTOR_LENGTH)                    \
+                         copy(x)
+    {
+      #pragma acc loop gang worker vector
+      for (int i = 0;
+           i < WP_VP_NUM_GANGS * WP_VP_NUM_WORKERS * WP_VP_VECTOR_LENGTH;
+           ++i) {
+        #pragma acc atomic compare
+        x = i + 1 < x ? i + 1 : x;
+      }
+    }
+    if (x != 1)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
   //----------------------------------------------------------------------------
   // GR/WP/VS mode.
   //----------------------------------------------------------------------------
 
-  // read/write
   // EXE-NEXT: GR/WP/VS read/write: err=0
   printf("GR/WP/VS read/write: ");
   err = false;
@@ -1173,7 +1467,6 @@ int main() {
   }
   printf("err=%d\n", err);
 
-  // update
   // EXE-NEXT: GR/WP/VS update: err=0
   printf("GR/WP/VS update: ");
   err = false;
@@ -1188,7 +1481,6 @@ int main() {
   }
   printf("err=%d\n", err);
 
-  // capture
   // EXE-NEXT: GR/WP/VS capture: err=0
   printf("GR/WP/VS capture: ");
   err = false;
@@ -1208,11 +1500,30 @@ int main() {
   }
   printf("err=%d\n", err);
 
+  // EXE-NEXT: GR/WP/VS compare: err=0
+  printf("GR/WP/VS compare: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = 0;
+    #pragma acc parallel num_gangs(WP_VS_NUM_GANGS)                            \
+                         num_workers(WP_VS_NUM_WORKERS)                        \
+                         copy(x, err)
+    {
+      int gangIdx;
+      #pragma acc loop gang
+      for (int i = 0; i < WP_VS_NUM_GANGS; ++i)
+        gangIdx = i;
+      gr_wp_vs_compare(&x, gangIdx);
+    }
+    if (x != WP_VS_NUM_GANGS * WP_VS_NUM_WORKERS)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
   //----------------------------------------------------------------------------
   // GR/WS/VP mode.
   //----------------------------------------------------------------------------
 
-  // read/write
   // EXE-NEXT: GR/WS/VP read/write: err=0
   printf("GR/WS/VP read/write: ");
   err = false;
@@ -1225,7 +1536,6 @@ int main() {
   }
   printf("err=%d\n", err);
 
-  // update
   // EXE-NEXT: GR/WS/VP update: err=0
   printf("GR/WS/VP update: ");
   err = false;
@@ -1240,7 +1550,6 @@ int main() {
   }
   printf("err=%d\n", err);
 
-  // capture
   // EXE-NEXT: GR/WS/VP capture: err=0
   printf("GR/WS/VP capture: ");
   err = false;
@@ -1260,11 +1569,30 @@ int main() {
   }
   printf("err=%d\n", err);
 
+  // EXE-NEXT: GR/WS/VP compare: err=0
+  printf("GR/WS/VP compare: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = 0;
+    #pragma acc parallel num_gangs(WS_VP_NUM_GANGS)                            \
+                         vector_length(WS_VP_VECTOR_LENGTH)                    \
+                         copy(x, err)
+    {
+      int gangIdx;
+      #pragma acc loop gang
+      for (int i = 0; i < WS_VP_NUM_GANGS; ++i)
+        gangIdx = i;
+      gr_ws_vp_compare(&x, gangIdx);
+    }
+    if (x != WS_VP_NUM_GANGS * WS_VP_VECTOR_LENGTH)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
   //----------------------------------------------------------------------------
   // GR/WP/VP mode.
   //----------------------------------------------------------------------------
 
-  // read/write
   // EXE-NEXT: GR/WP/VP read/write: err=0
   printf("GR/WP/VP read/write: ");
   err = false;
@@ -1278,7 +1606,6 @@ int main() {
   }
   printf("err=%d\n", err);
 
-  // update
   // EXE-NEXT: GR/WP/VP update: err=0
   printf("GR/WP/VP update: ");
   err = false;
@@ -1294,7 +1621,6 @@ int main() {
   }
   printf("err=%d\n", err);
 
-  // capture
   // EXE-NEXT: GR/WP/VP capture: err=0
   printf("GR/WP/VP capture: ");
   err = false;
@@ -1316,10 +1642,31 @@ int main() {
   }
   printf("err=%d\n", err);
 
+  // EXE-NEXT: GR/WP/VP compare: err=0
+  printf("GR/WP/VP compare: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = INT_MAX;
+    #pragma acc parallel num_gangs(WP_VP_NUM_GANGS)                            \
+                         num_workers(WP_VP_NUM_WORKERS)                        \
+                         vector_length(WP_VP_VECTOR_LENGTH)                    \
+                         copy(x, err)
+    {
+      int gangIdx;
+      #pragma acc loop gang
+      for (int i = 0; i < WP_VP_NUM_GANGS; ++i)
+        gangIdx = i;
+      gr_wp_vp_compare(&x, gangIdx);
+    }
+    if (x != 1)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
   //============================================================================
-  // Check every associated statement form for update and capture, but just for
-  // GP/WP/VP mode.  Checking every combination of form and mode would seem like
-  // overkill.
+  // Check every associated statement form for update, capture, and compare, but
+  // just for GP/WP/VP mode.  Checking every combination of form and mode would
+  // seem like overkill.
   //============================================================================
 
   //----------------------------------------------------------------------------
@@ -3534,13 +3881,287 @@ int main() {
   }
   printf("err=%d\n", err);
 
+  //----------------------------------------------------------------------------
+  // compare with '<' or '>': search for min or max value.
+  //
+  // While iterating execution modes above, we already managed to check every
+  // form for each of '<' and '>' except the 'if'-statement forms without a
+  // compound statement, so we check only those remaining forms here.
+  //----------------------------------------------------------------------------
+
+  // DMP-LABEL: "compare if (expr < x) x = expr: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     IfStmt
+  //
+  //   PRT-LABEL: printf("compare if (expr < x) x = expr: ");
+  //         PRT: for (int i = {{.*}}) {
+  //  PRT-A-NEXT:   #pragma acc atomic compare
+  // PRT-AO-NEXT:   // #pragma omp atomic compare
+  //  PRT-O-NEXT:   #pragma omp atomic compare
+  // PRT-OA-NEXT:   // #pragma acc atomic compare
+  //    PRT-NEXT:   if (i < x)
+  //    PRT-NEXT:     x = i;
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: compare if (expr < x) x = expr: err=0
+  printf("compare if (expr < x) x = expr: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = INT_MAX;
+    #pragma acc parallel num_gangs(2) num_workers(2) vector_length(2) copy(x)
+    {
+      #pragma acc loop gang worker vector
+      for (int i = 1; i <= 8; ++i) {
+        #pragma acc atomic compare
+        if (i < x)
+          x = i;
+      }
+    }
+    if (x != 1)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
+  // DMP-LABEL: "compare if (expr > x) x = expr: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     IfStmt
+  //
+  //   PRT-LABEL: printf("compare if (expr > x) x = expr: ");
+  //         PRT: for (int i = {{.*}}) {
+  //  PRT-A-NEXT:   #pragma acc atomic compare
+  // PRT-AO-NEXT:   // #pragma omp atomic compare
+  //  PRT-O-NEXT:   #pragma omp atomic compare
+  // PRT-OA-NEXT:   // #pragma acc atomic compare
+  //    PRT-NEXT:   if (i + 1 > x)
+  //    PRT-NEXT:     x = i + 1;
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: compare if (expr > x) x = expr: err=0
+  printf("compare if (expr > x) x = expr: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = 0;
+    #pragma acc parallel num_gangs(2) num_workers(2) vector_length(2) copy(x)
+    {
+      #pragma acc loop gang worker vector
+      for (int i = 0; i < 8; ++i) {
+        #pragma acc atomic compare
+        if (i + 1 > x)
+          x = i + 1;
+      }
+    }
+    if (x != 8)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
+  // DMP-LABEL: "compare if (x < expr) x = expr: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     IfStmt
+  //
+  //   PRT-LABEL: printf("compare if (x < expr) x = expr: ");
+  //         PRT: for (int i = {{.*}}) {
+  //  PRT-A-NEXT:   #pragma acc atomic compare
+  // PRT-AO-NEXT:   // #pragma omp atomic compare
+  //  PRT-O-NEXT:   #pragma omp atomic compare
+  // PRT-OA-NEXT:   // #pragma acc atomic compare
+  //    PRT-NEXT:   if (x < i + 1)
+  //    PRT-NEXT:     x = i + 1;
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: compare if (x < expr) x = expr: err=0
+  printf("compare if (x < expr) x = expr: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = 0;
+    #pragma acc parallel num_gangs(2) num_workers(2) vector_length(2) copy(x)
+    {
+      #pragma acc loop gang worker vector
+      for (int i = 0; i < 8; ++i) {
+        #pragma acc atomic compare
+        if (x < i + 1)
+          x = i + 1;
+      }
+    }
+    if (x != 8)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
+  // DMP-LABEL: "compare if (x > expr) x = expr: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     IfStmt
+  //
+  //   PRT-LABEL: printf("compare if (x > expr) x = expr: ");
+  //         PRT: for (int i = {{.*}}) {
+  //  PRT-A-NEXT:   #pragma acc atomic compare
+  // PRT-AO-NEXT:   // #pragma omp atomic compare
+  //  PRT-O-NEXT:   #pragma omp atomic compare
+  // PRT-OA-NEXT:   // #pragma acc atomic compare
+  //    PRT-NEXT:   if (x > i)
+  //    PRT-NEXT:     x = i;
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: compare if (x > expr) x = expr: err=0
+  printf("compare if (x > expr) x = expr: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = INT_MAX;
+    #pragma acc parallel num_gangs(2) num_workers(2) vector_length(2) copy(x)
+    {
+      #pragma acc loop gang worker vector
+      for (int i = 1; i <= 8; ++i) {
+        #pragma acc atomic compare
+        if (x > i)
+          x = i;
+      }
+    }
+    if (x != 1)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
+  //----------------------------------------------------------------------------
+  // compare with '==': many try to interfere with one changing the value.
+  //
+  // That is, if x still has the old value, one thread changes it, and many
+  // other threads just write the old value back again.  With atomicity in both
+  // cases, the many threads should never have any effect.  Otherwise, they are
+  // likely to write the old value after the one thread writes the new value.
+  //----------------------------------------------------------------------------
+
+  // DMP-LABEL: "compare if (x == e) { x = d; }: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     IfStmt
+  //
+  //   PRT-LABEL: printf("compare if (x == e) { x = d; }: ");
+  //         PRT: for (int i = {{.*}}) {
+  //  PRT-A-NEXT:   #pragma acc atomic compare
+  // PRT-AO-NEXT:   // #pragma omp atomic compare
+  //  PRT-O-NEXT:   #pragma omp atomic compare
+  // PRT-OA-NEXT:   // #pragma acc atomic compare
+  //    PRT-NEXT:   if (x == 77) {
+  //    PRT-NEXT:     x = i == 0 ? 88 : 77;
+  //    PRT-NEXT:   }
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: compare if (x == e) { x = d; }: err=0
+  printf("compare if (x == e) { x = d; }: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = 77;
+    #pragma acc parallel num_gangs(2) num_workers(2) vector_length(2) copy(x)
+    {
+      #pragma acc loop gang worker vector
+      for (int i = 0; i < 8; ++i) {
+        #pragma acc atomic compare
+        if (x == 77) {
+          x = i == 0 ? 88 : 77;
+        }
+      }
+    }
+    if (x != 88)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
+  // DMP-LABEL: "compare if (x == e) x = d: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     IfStmt
+  //
+  //   PRT-LABEL: printf("compare if (x == e) x = d: ");
+  //         PRT: for (int i = {{.*}}) {
+  //  PRT-A-NEXT:   #pragma acc atomic compare
+  // PRT-AO-NEXT:   // #pragma omp atomic compare
+  //  PRT-O-NEXT:   #pragma omp atomic compare
+  // PRT-OA-NEXT:   // #pragma acc atomic compare
+  //    PRT-NEXT:   if (x == 77)
+  //    PRT-NEXT:     x = i == 0 ? 88 : 77;
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: compare if (x == e) x = d: err=0
+  printf("compare if (x == e) x = d: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = 77;
+    #pragma acc parallel num_gangs(2) num_workers(2) vector_length(2) copy(x)
+    {
+      #pragma acc loop gang worker vector
+      for (int i = 0; i < 8; ++i) {
+        #pragma acc atomic compare
+        if (x == 77)
+          x = i == 0 ? 88 : 77;
+      }
+    }
+    if (x != 88)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
+  // DMP-LABEL: "compare x = x == e ? d : x: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     BinaryOperator {{.*}} '='
+  //
+  //   PRT-LABEL: printf("compare x = x == e ? d : x: ");
+  //         PRT: for (int i = {{.*}}) {
+  //  PRT-A-NEXT:   #pragma acc atomic compare
+  // PRT-AO-NEXT:   // #pragma omp atomic compare
+  //  PRT-O-NEXT:   #pragma omp atomic compare
+  // PRT-OA-NEXT:   // #pragma acc atomic compare
+  //    PRT-NEXT:   x = x == 77 ? (i == 0 ? 88 : 77) : x;
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: compare x = x == e ? d : x: err=0
+  printf("compare x = x == e ? d : x: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = 77;
+    #pragma acc parallel num_gangs(2) num_workers(2) vector_length(2) copy(x)
+    {
+      #pragma acc loop gang worker vector
+      for (int i = 0; i < 8; ++i) {
+        #pragma acc atomic compare
+        x = x == 77 ? (i == 0 ? 88 : 77) : x;
+      }
+    }
+    if (x != 88)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
   //============================================================================
   // Check that atomic works in acc parallel loop.  Checking a few basic forms
   // should be sufficient.
   //============================================================================
 
-  // read/write: many readers try to catch one writer while it's incomplete.
-  //
   // DMP-LABEL: "acc parallel loop with acc atomic read/write: "
   //       DMP: ACCAtomicDirective
   //  DMP-NEXT:   ACCWriteClause
@@ -3750,6 +4371,43 @@ int main() {
   }
   printf("err=%d\n", err);
 
+  // DMP-LABEL: "acc parallel loop with acc atomic compare: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     IfStmt
+  //
+  //   PRT-LABEL: printf("acc parallel loop with acc atomic compare: ");
+  //         PRT: for (int i = {{.*}}) {
+  //  PRT-A-NEXT:   #pragma acc atomic compare
+  // PRT-AO-NEXT:   // #pragma omp atomic compare
+  //  PRT-O-NEXT:   #pragma omp atomic compare
+  // PRT-OA-NEXT:   // #pragma acc atomic compare
+  //    PRT-NEXT:   if (i < x) {
+  //    PRT-NEXT:     x = i;
+  //    PRT-NEXT:   }
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: acc parallel loop with acc atomic compare: err=0
+  printf("acc parallel loop with acc atomic compare: ");
+  err = false;
+  for (int rep = 0; rep < NUM_REPS; ++rep) {
+    int x = INT_MAX;
+    #pragma acc parallel loop num_gangs(2) num_workers(2) vector_length(2)     \
+        gang worker vector copy(x)
+    for (int i = 1; i <= 8; ++i) {
+      #pragma acc atomic compare
+      if (i < x) {
+        x = i;
+      }
+    }
+    if (x != 1)
+      err = true;
+  }
+  printf("err=%d\n", err);
+
   //============================================================================
   // Check host-only compilation, where the atomic directive has no effect in
   // OpenACC.  For a few cases, try it within acc data to make sure that nesting
@@ -3758,7 +4416,7 @@ int main() {
   // It's questionable whether this use case actually needs to be supported.
   //============================================================================
 
-  // DMP-LABEL: "host-only: acc atomic read: {{.*}}"
+  // DMP-LABEL: "host-only: acc atomic read: "
   //       DMP: ACCAtomicDirective
   //  DMP-NEXT:   ACCReadClause
   //   DMP-NOT:     <implicit>
@@ -3786,7 +4444,7 @@ int main() {
     printf("v=%d, x=%d\n", v, x);
   }
 
-  // DMP-LABEL: "host-only: acc atomic write: {{.*}}"
+  // DMP-LABEL: "host-only: acc atomic write: "
   //       DMP: ACCAtomicDirective
   //  DMP-NEXT:   ACCWriteClause
   //   DMP-NOT:     <implicit>
@@ -3817,7 +4475,7 @@ int main() {
     printf("x=%d\n", x);
   }
 
-  // DMP-LABEL: "host-only: acc atomic update: {{.*}}"
+  // DMP-LABEL: "host-only: acc atomic update: "
   //       DMP: ACCAtomicDirective
   //  DMP-NEXT:   ACCUpdateClause
   //   DMP-NOT:     <implicit>
@@ -3843,7 +4501,7 @@ int main() {
     printf("x=%d\n", x);
   }
 
-  // DMP-LABEL: "host-only: acc atomic: {{.*}}"
+  // DMP-LABEL: "host-only: acc atomic: "
   //       DMP: ACCAtomicDirective
   //  DMP-NEXT:   ACCUpdateClause {{.*}} <implicit>
   //  DMP-NEXT:   impl: OMPAtomicDirective
@@ -3873,7 +4531,7 @@ int main() {
     printf("x=%d\n", x);
   }
 
-  // DMP-LABEL: "host-only: acc atomic capture: {{.*}}"
+  // DMP-LABEL: "host-only: acc atomic capture: "
   //       DMP: ACCAtomicDirective
   //  DMP-NEXT:   ACCCaptureClause
   //   DMP-NOT:     <implicit>
@@ -3901,7 +4559,7 @@ int main() {
     printf("v=%d, x=%d\n", v, x);
   }
 
-  // DMP-LABEL: "host-only: acc atomic capture compound statement: {{.*}}"
+  // DMP-LABEL: "host-only: acc atomic capture compound statement: "
   //       DMP: ACCAtomicDirective
   //  DMP-NEXT:   ACCCaptureClause
   //   DMP-NOT:     <implicit>
@@ -3939,6 +4597,37 @@ int main() {
     }
     printf("v=%d, x=%d\n", v, x);
   }
+
+  // DMP-LABEL: "host-only: acc atomic compare: "
+  //       DMP: ACCAtomicDirective
+  //  DMP-NEXT:   ACCCompareClause
+  //   DMP-NOT:     <implicit>
+  //  DMP-NEXT:   impl: OMPAtomicDirective
+  //  DMP-NEXT:     OMPCompareClause
+  //  DMP-NEXT:     IfStmt
+  //
+  //   PRT-LABEL: printf("host-only: acc atomic compare: ");
+  //         PRT: for (int i = {{.*}}) {
+  //  PRT-A-NEXT:   #pragma acc atomic compare
+  // PRT-AO-NEXT:   // #pragma omp atomic compare
+  //  PRT-O-NEXT:   #pragma omp atomic compare
+  // PRT-OA-NEXT:   // #pragma acc atomic compare
+  //    PRT-NEXT:   if (i > x) {
+  //    PRT-NEXT:     x = i;
+  //    PRT-NEXT:   }
+  //    PRT-NEXT: }
+  //
+  // EXE-NEXT: host-only: acc atomic compare: x=8
+  printf("host-only: acc atomic compare: ");
+  err = false;
+  int x = 0;
+  for (int i = 1; i <= 8; ++i) {
+    #pragma acc atomic compare
+    if (i > x) {
+      x = i;
+    }
+  }
+  printf("x=%d\n", x);
 
   // EXE-NOT: {{.}}
   return 0;

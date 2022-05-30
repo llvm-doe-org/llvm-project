@@ -1776,6 +1776,33 @@ public:
   }
 };
 
+/// This represents 'compare' clause in the '#pragma acc atomic' directive.
+///
+/// \code
+/// #pragma acc atomic compare
+/// \endcode
+/// In this example directive '#pragma acc atomic' has clause 'compare'.
+class ACCCompareClause : public ACCClause {
+public:
+  /// Build 'compare' clause.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param EndLoc Ending location of the clause.
+  ACCCompareClause(SourceLocation StartLoc, SourceLocation EndLoc)
+      : ACCClause(ACCC_compare, ACC_EXPLICIT, StartLoc, EndLoc) {}
+
+  /// Build an empty clause.
+  ACCCompareClause() : ACCClause(ACCC_compare) {}
+
+  child_range children() {
+    return child_range(child_iterator(), child_iterator());
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_compare;
+  }
+};
+
 /// This class implements a simple visitor for ACCClause
 /// subclasses.
 template<class ImplClass, template <typename> class Ptr, typename RetTy>

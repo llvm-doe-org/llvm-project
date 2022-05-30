@@ -1271,6 +1271,10 @@ void ACCClausePrinter::VisitACCUpdateClause(ACCUpdateClause *Node) {
 void ACCClausePrinter::VisitACCCaptureClause(ACCCaptureClause *Node) {
   OS << "capture";
 }
+
+void ACCClausePrinter::VisitACCCompareClause(ACCCompareClause *Node) {
+  OS << "compare";
+}
 }
 
 //===----------------------------------------------------------------------===//

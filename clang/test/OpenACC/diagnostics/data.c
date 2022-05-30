@@ -111,11 +111,12 @@ int main() {
   // expected-error@+1 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc data'}}
   #pragma acc data collapse(1) copy(i)
     ;
-  // expected-error@+4 {{unexpected OpenACC clause 'read' in directive '#pragma acc data'}}
-  // expected-error@+3 {{unexpected OpenACC clause 'write' in directive '#pragma acc data'}}
-  // expected-error@+2 {{unexpected OpenACC clause 'update' in directive '#pragma acc data'}}
-  // expected-error@+1 {{unexpected OpenACC clause 'capture' in directive '#pragma acc data'}}
-  #pragma acc data read write update capture copy(i)
+  // expected-error@+5 {{unexpected OpenACC clause 'read' in directive '#pragma acc data'}}
+  // expected-error@+4 {{unexpected OpenACC clause 'write' in directive '#pragma acc data'}}
+  // expected-error@+3 {{unexpected OpenACC clause 'update' in directive '#pragma acc data'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'capture' in directive '#pragma acc data'}}
+  // expected-error@+1 {{unexpected OpenACC clause 'compare' in directive '#pragma acc data'}}
+  #pragma acc data read write update capture compare copy(i)
     ;
 
   // Malformed clauses not permitted here.

@@ -123,8 +123,8 @@ int main() {
   // expected-error@+3 {{unexpected OpenACC clause 'present_or_copyin' in directive '#pragma acc atomic'}}
   // expected-error@+2 {{unexpected OpenACC clause 'present_or_copyout' in directive '#pragma acc atomic'}}
   // expected-error@+1 {{unexpected OpenACC clause 'present_or_create' in directive '#pragma acc atomic'}}
-  #pragma acc atomic present_or_copy(i) present_or_copyin(i) present_or_copyout(i) present_or_create(i)
-  x++;
+  #pragma acc atomic present_or_copy(i) present_or_copyin(i) present_or_copyout(i) present_or_create(i) compare
+  x = 234 < x ? 234 : x;
   // expected-error@+4 {{unexpected OpenACC clause 'shared' in directive '#pragma acc atomic'}}
   // expected-error@+3 {{unexpected OpenACC clause 'reduction' in directive '#pragma acc atomic'}}
   // expected-error@+2 {{unexpected OpenACC clause 'private' in directive '#pragma acc atomic'}}
@@ -189,6 +189,9 @@ int main() {
   // expected-error@+1 {{unexpected OpenACC clause 'capture', 'read' is specified already}}
   #pragma acc atomic read capture
   v = x;
+  // expected-error@+1 {{unexpected OpenACC clause 'compare', 'read' is specified already}}
+  #pragma acc atomic read compare
+  v = x;
 
   // expected-error@+1 {{unexpected OpenACC clause 'read', 'write' is specified already}}
   #pragma acc atomic write read
@@ -201,6 +204,9 @@ int main() {
   x = 10;
   // expected-error@+1 {{unexpected OpenACC clause 'capture', 'write' is specified already}}
   #pragma acc atomic write capture
+  x = 10;
+  // expected-error@+1 {{unexpected OpenACC clause 'compare', 'write' is specified already}}
+  #pragma acc atomic write compare
   x = 10;
 
   // expected-error@+1 {{unexpected OpenACC clause 'read', 'update' is specified already}}
@@ -215,6 +221,9 @@ int main() {
   // expected-error@+1 {{unexpected OpenACC clause 'capture', 'update' is specified already}}
   #pragma acc atomic update capture
   x++;
+  // expected-error@+1 {{unexpected OpenACC clause 'compare', 'update' is specified already}}
+  #pragma acc atomic update compare
+  x++;
 
   // expected-error@+1 {{unexpected OpenACC clause 'read', 'capture' is specified already}}
   #pragma acc atomic capture read
@@ -228,66 +237,123 @@ int main() {
   // expected-error@+1 {{directive '#pragma acc atomic' cannot contain more than one 'capture' clause}}
   #pragma acc atomic capture capture
   v = x++;
-
-  // expected-error@+10 {{unexpected OpenACC clause 'write', 'read' is specified already}}
-  // expected-error@+9 {{unexpected OpenACC clause 'update', 'read' is specified already}}
-  // expected-error@+8 {{unexpected OpenACC clause 'update', 'write' is specified already}}
-  // expected-error@+7 {{unexpected OpenACC clause 'capture', 'read' is specified already}}
-  // expected-error@+6 {{unexpected OpenACC clause 'capture', 'write' is specified already}}
-  // expected-error@+5 {{unexpected OpenACC clause 'capture', 'update' is specified already}}
-  // expected-error@+4 {{directive '#pragma acc atomic' cannot contain more than one 'read' clause}}
-  // expected-error@+3 {{directive '#pragma acc atomic' cannot contain more than one 'write' clause}}
-  // expected-error@+2 {{directive '#pragma acc atomic' cannot contain more than one 'update' clause}}
-  // expected-error@+1 {{directive '#pragma acc atomic' cannot contain more than one 'capture' clause}}
-  #pragma acc atomic read write update capture read write update capture
-  v = x;
-  // expected-error@+10 {{unexpected OpenACC clause 'update', 'write' is specified already}}
-  // expected-error@+9 {{unexpected OpenACC clause 'capture', 'write' is specified already}}
-  // expected-error@+8 {{unexpected OpenACC clause 'capture', 'update' is specified already}}
-  // expected-error@+7 {{unexpected OpenACC clause 'read', 'write' is specified already}}
-  // expected-error@+6 {{unexpected OpenACC clause 'read', 'update' is specified already}}
-  // expected-error@+5 {{unexpected OpenACC clause 'read', 'capture' is specified already}}
-  // expected-error@+4 {{directive '#pragma acc atomic' cannot contain more than one 'write' clause}}
-  // expected-error@+3 {{directive '#pragma acc atomic' cannot contain more than one 'update' clause}}
-  // expected-error@+2 {{directive '#pragma acc atomic' cannot contain more than one 'capture' clause}}
-  // expected-error@+1 {{directive '#pragma acc atomic' cannot contain more than one 'read' clause}}
-  #pragma acc atomic write update capture read write update capture read
-  x = 10;
-  // expected-error@+10 {{unexpected OpenACC clause 'capture', 'update' is specified already}}
-  // expected-error@+9 {{unexpected OpenACC clause 'read', 'update' is specified already}}
-  // expected-error@+8 {{unexpected OpenACC clause 'read', 'capture' is specified already}}
-  // expected-error@+7 {{unexpected OpenACC clause 'write', 'update' is specified already}}
-  // expected-error@+6 {{unexpected OpenACC clause 'write', 'capture' is specified already}}
-  // expected-error@+5 {{unexpected OpenACC clause 'write', 'read' is specified already}}
-  // expected-error@+4 {{directive '#pragma acc atomic' cannot contain more than one 'update' clause}}
-  // expected-error@+3 {{directive '#pragma acc atomic' cannot contain more than one 'capture' clause}}
-  // expected-error@+2 {{directive '#pragma acc atomic' cannot contain more than one 'read' clause}}
-  // expected-error@+1 {{directive '#pragma acc atomic' cannot contain more than one 'write' clause}}
-  #pragma acc atomic update capture read write update capture read write
-  x++;
-  // expected-error@+10 {{unexpected OpenACC clause 'read', 'capture' is specified already}}
-  // expected-error@+9 {{unexpected OpenACC clause 'write', 'capture' is specified already}}
-  // expected-error@+8 {{unexpected OpenACC clause 'write', 'read' is specified already}}
-  // expected-error@+7 {{unexpected OpenACC clause 'update', 'capture' is specified already}}
-  // expected-error@+6 {{unexpected OpenACC clause 'update', 'read' is specified already}}
-  // expected-error@+5 {{unexpected OpenACC clause 'update', 'write' is specified already}}
-  // expected-error@+4 {{directive '#pragma acc atomic' cannot contain more than one 'capture' clause}}
-  // expected-error@+3 {{directive '#pragma acc atomic' cannot contain more than one 'read' clause}}
-  // expected-error@+2 {{directive '#pragma acc atomic' cannot contain more than one 'write' clause}}
-  // expected-error@+1 {{directive '#pragma acc atomic' cannot contain more than one 'update' clause}}
-  #pragma acc atomic capture read write update capture read write update
+  // expected-error@+1 {{unexpected OpenACC clause 'compare', 'capture' is specified already}}
+  #pragma acc atomic capture compare
   v = x++;
+
+  // expected-error@+1 {{unexpected OpenACC clause 'read', 'compare' is specified already}}
+  #pragma acc atomic compare read
+  x = 83 < x ? 83 : x;
+  // expected-error@+1 {{unexpected OpenACC clause 'write', 'compare' is specified already}}
+  #pragma acc atomic compare write
+  x = 83 < x ? 83 : x;
+  // expected-error@+1 {{unexpected OpenACC clause 'update', 'compare' is specified already}}
+  #pragma acc atomic compare update
+  x = 83 < x ? 83 : x;
+  // expected-error@+1 {{unexpected OpenACC clause 'capture', 'compare' is specified already}}
+  #pragma acc atomic compare capture
+  x = 83 < x ? 83 : x;
+  // expected-error@+1 {{directive '#pragma acc atomic' cannot contain more than one 'compare' clause}}
+  #pragma acc atomic compare compare
+  x = 83 < x ? 83 : x;
+
+  // expected-error@+15 {{unexpected OpenACC clause 'write', 'read' is specified already}}
+  // expected-error@+14 {{unexpected OpenACC clause 'update', 'read' is specified already}}
+  // expected-error@+13 {{unexpected OpenACC clause 'update', 'write' is specified already}}
+  // expected-error@+12 {{unexpected OpenACC clause 'capture', 'read' is specified already}}
+  // expected-error@+11 {{unexpected OpenACC clause 'capture', 'write' is specified already}}
+  // expected-error@+10 {{unexpected OpenACC clause 'capture', 'update' is specified already}}
+  // expected-error@+9  {{unexpected OpenACC clause 'compare', 'read' is specified already}}
+  // expected-error@+8  {{unexpected OpenACC clause 'compare', 'write' is specified already}}
+  // expected-error@+7  {{unexpected OpenACC clause 'compare', 'update' is specified already}}
+  // expected-error@+6  {{unexpected OpenACC clause 'compare', 'capture' is specified already}}
+  // expected-error@+5  {{directive '#pragma acc atomic' cannot contain more than one 'read' clause}}
+  // expected-error@+4  {{directive '#pragma acc atomic' cannot contain more than one 'write' clause}}
+  // expected-error@+3  {{directive '#pragma acc atomic' cannot contain more than one 'update' clause}}
+  // expected-error@+2  {{directive '#pragma acc atomic' cannot contain more than one 'capture' clause}}
+  // expected-error@+1  {{directive '#pragma acc atomic' cannot contain more than one 'compare' clause}}
+  #pragma acc atomic read write update capture compare read write update capture compare
+  v = x;
+  // expected-error@+15 {{unexpected OpenACC clause 'update', 'write' is specified already}}
+  // expected-error@+14 {{unexpected OpenACC clause 'capture', 'write' is specified already}}
+  // expected-error@+13 {{unexpected OpenACC clause 'capture', 'update' is specified already}}
+  // expected-error@+12 {{unexpected OpenACC clause 'compare', 'write' is specified already}}
+  // expected-error@+11 {{unexpected OpenACC clause 'compare', 'update' is specified already}}
+  // expected-error@+10 {{unexpected OpenACC clause 'compare', 'capture' is specified already}}
+  // expected-error@+9  {{unexpected OpenACC clause 'read', 'write' is specified already}}
+  // expected-error@+8  {{unexpected OpenACC clause 'read', 'update' is specified already}}
+  // expected-error@+7  {{unexpected OpenACC clause 'read', 'capture' is specified already}}
+  // expected-error@+6  {{unexpected OpenACC clause 'read', 'compare' is specified already}}
+  // expected-error@+5  {{directive '#pragma acc atomic' cannot contain more than one 'write' clause}}
+  // expected-error@+4  {{directive '#pragma acc atomic' cannot contain more than one 'update' clause}}
+  // expected-error@+3  {{directive '#pragma acc atomic' cannot contain more than one 'capture' clause}}
+  // expected-error@+2  {{directive '#pragma acc atomic' cannot contain more than one 'compare' clause}}
+  // expected-error@+1  {{directive '#pragma acc atomic' cannot contain more than one 'read' clause}}
+  #pragma acc atomic write update capture compare read write update capture compare read
+  x = 10;
+  // expected-error@+15 {{unexpected OpenACC clause 'capture', 'update' is specified already}}
+  // expected-error@+14 {{unexpected OpenACC clause 'compare', 'update' is specified already}}
+  // expected-error@+13 {{unexpected OpenACC clause 'compare', 'capture' is specified already}}
+  // expected-error@+12 {{unexpected OpenACC clause 'read', 'update' is specified already}}
+  // expected-error@+11 {{unexpected OpenACC clause 'read', 'capture' is specified already}}
+  // expected-error@+10 {{unexpected OpenACC clause 'read', 'compare' is specified already}}
+  // expected-error@+9  {{unexpected OpenACC clause 'write', 'update' is specified already}}
+  // expected-error@+8  {{unexpected OpenACC clause 'write', 'capture' is specified already}}
+  // expected-error@+7  {{unexpected OpenACC clause 'write', 'compare' is specified already}}
+  // expected-error@+6  {{unexpected OpenACC clause 'write', 'read' is specified already}}
+  // expected-error@+5  {{directive '#pragma acc atomic' cannot contain more than one 'update' clause}}
+  // expected-error@+4  {{directive '#pragma acc atomic' cannot contain more than one 'capture' clause}}
+  // expected-error@+3  {{directive '#pragma acc atomic' cannot contain more than one 'compare' clause}}
+  // expected-error@+2  {{directive '#pragma acc atomic' cannot contain more than one 'read' clause}}
+  // expected-error@+1  {{directive '#pragma acc atomic' cannot contain more than one 'write' clause}}
+  #pragma acc atomic update capture compare read write update capture compare read write
+  x++;
+  // expected-error@+15 {{unexpected OpenACC clause 'compare', 'capture' is specified already}}
+  // expected-error@+14 {{unexpected OpenACC clause 'read', 'capture' is specified already}}
+  // expected-error@+13 {{unexpected OpenACC clause 'read', 'compare' is specified already}}
+  // expected-error@+12 {{unexpected OpenACC clause 'write', 'capture' is specified already}}
+  // expected-error@+11 {{unexpected OpenACC clause 'write', 'compare' is specified already}}
+  // expected-error@+10 {{unexpected OpenACC clause 'write', 'read' is specified already}}
+  // expected-error@+9  {{unexpected OpenACC clause 'update', 'capture' is specified already}}
+  // expected-error@+8  {{unexpected OpenACC clause 'update', 'compare' is specified already}}
+  // expected-error@+7  {{unexpected OpenACC clause 'update', 'read' is specified already}}
+  // expected-error@+6  {{unexpected OpenACC clause 'update', 'write' is specified already}}
+  // expected-error@+5  {{directive '#pragma acc atomic' cannot contain more than one 'capture' clause}}
+  // expected-error@+4  {{directive '#pragma acc atomic' cannot contain more than one 'compare' clause}}
+  // expected-error@+3  {{directive '#pragma acc atomic' cannot contain more than one 'read' clause}}
+  // expected-error@+2  {{directive '#pragma acc atomic' cannot contain more than one 'write' clause}}
+  // expected-error@+1  {{directive '#pragma acc atomic' cannot contain more than one 'update' clause}}
+  #pragma acc atomic capture compare read write update capture compare read write update
+  v = x++;
+  // expected-error@+15 {{unexpected OpenACC clause 'read', 'compare' is specified already}}
+  // expected-error@+14 {{unexpected OpenACC clause 'write', 'compare' is specified already}}
+  // expected-error@+13 {{unexpected OpenACC clause 'write', 'read' is specified already}}
+  // expected-error@+12 {{unexpected OpenACC clause 'update', 'compare' is specified already}}
+  // expected-error@+11 {{unexpected OpenACC clause 'update', 'read' is specified already}}
+  // expected-error@+10 {{unexpected OpenACC clause 'update', 'write' is specified already}}
+  // expected-error@+9  {{unexpected OpenACC clause 'capture', 'compare' is specified already}}
+  // expected-error@+8  {{unexpected OpenACC clause 'capture', 'read' is specified already}}
+  // expected-error@+7  {{unexpected OpenACC clause 'capture', 'write' is specified already}}
+  // expected-error@+6  {{unexpected OpenACC clause 'capture', 'update' is specified already}}
+  // expected-error@+5  {{directive '#pragma acc atomic' cannot contain more than one 'compare' clause}}
+  // expected-error@+4  {{directive '#pragma acc atomic' cannot contain more than one 'capture' clause}}
+  // expected-error@+3  {{directive '#pragma acc atomic' cannot contain more than one 'read' clause}}
+  // expected-error@+2  {{directive '#pragma acc atomic' cannot contain more than one 'write' clause}}
+  // expected-error@+1  {{directive '#pragma acc atomic' cannot contain more than one 'update' clause}}
+  #pragma acc atomic compare read write update capture compare read write update capture
+  x = 83 < x ? 83 : x;
 
   //============================================================================
   // Associated statement.
   //
   // For each clause, as part of the effort to achieve reasonable coverage of
   // the associated statement validation, we check all associated statement
-  // forms that are listed in OpenACC 3.2, sec. 2.12 "Atomic Construct".  The
-  // forms listed for other clauses seem especially important because providing
-  // the wrong clause for a valid form seems like an easy mistake to make.  One
-  // exception is that, if a structured block isn't permitted, it seems
-  // unnecessary to check all structured block forms listed in the spec.
+  // forms that are listed in OpenACC 3.2, sec. 2.12 "Atomic Construct", plus
+  // the forms for our 'compare' extension.  The forms listed for other clauses
+  // seem especially important because providing the wrong clause for a valid
+  // form seems like an easy mistake to make.  One exception is that, if a
+  // structured block or 'if' statement isn't permitted, it seems unnecessary to
+  // check all structured block or 'if' forms listed in the spec.
   //============================================================================
 
   //----------------------------------------------------------------------------
@@ -295,7 +361,7 @@ int main() {
   //----------------------------------------------------------------------------
 
   //............................................................................
-  // Check forms listed in the spec.
+  // Check forms listed in the spec or for supported extensions.
   //............................................................................
 
   #pragma acc atomic read
@@ -362,6 +428,24 @@ int main() {
      v = x;
      x |= 3;
   }
+  #pragma acc atomic read
+  x // expected-error {{invalid statement after '#pragma acc atomic read'}}
+    =
+      23 < x ? 23 : x; // expected-note {{expected expression here to be an lvalue}}
+  #pragma acc atomic read
+  x // expected-error {{invalid statement after '#pragma acc atomic read'}}
+    =
+      x > 35 ? 35 : x; // expected-note {{expected expression here to be an lvalue}}
+  #pragma acc atomic read
+  x // expected-error {{invalid statement after '#pragma acc atomic read'}}
+    =
+      x == 89 ? 13 : x; // expected-note {{expected expression here to be an lvalue}}
+  #pragma acc atomic read
+  if // expected-error {{invalid statement after '#pragma acc atomic read'}}
+     // expected-note@-1 {{expected statement here to be an expression statement}}
+     (234 < x) {
+    x = 234;
+  }
 
   //............................................................................
   // Try another non-expression statement.
@@ -403,7 +487,7 @@ int main() {
   //----------------------------------------------------------------------------
 
   //............................................................................
-  // Check forms listed in the spec.
+  // Check forms listed in the spec or for supported extensions.
   //............................................................................
 
   #pragma acc atomic write
@@ -454,6 +538,21 @@ int main() {
     v = x;
     x |= 3;
   }
+  // We don't currently have compile-time diagnostics for the next four forms,
+  // but they are not permitted by OpenACC because the right-hand side accesses
+  // x.
+  #pragma acc atomic write
+  x = 23 < x ? 23 : x;
+  #pragma acc atomic write
+  x = x > 35 ? 35 : x;
+  #pragma acc atomic write
+  x = x == 89 ? 13 : x;
+  #pragma acc atomic write
+  if // expected-error {{invalid statement after '#pragma acc atomic write'}}
+     // expected-note@-1 {{expected statement here to be an expression statement}}
+     (234 < x) {
+    x = 234;
+  }
 
   //............................................................................
   // Try another non-expression statement.
@@ -497,7 +596,7 @@ int main() {
   //----------------------------------------------------------------------------
 
   //............................................................................
-  // Check forms listed in the spec.
+  // Check forms listed in the spec or for supported extensions.
   //............................................................................
 
   #pragma acc atomic UPDATE
@@ -557,6 +656,24 @@ int main() {
   // expected-note@+2 {{expected statement here to be an expression statement}}
   #pragma acc atomic UPDATE
   { v = x; x |= 3; }
+  #pragma acc atomic UPDATE
+  x // expected-error {{invalid statement after '#pragma acc atomic update'}}
+    =
+      23 < x ? 23 : x; // expected-note {{expected operator expression here where the operator is one of '+', }}
+  #pragma acc atomic UPDATE
+  x // expected-error {{invalid statement after '#pragma acc atomic update'}}
+    =
+      x > 35 ? 35 : x; // expected-note {{expected operator expression here where the operator is one of '+', }}
+  #pragma acc atomic UPDATE
+  x // expected-error {{invalid statement after '#pragma acc atomic update'}}
+    =
+      x == 89 ? 13 : x; // expected-note {{expected operator expression here where the operator is one of '+', }}
+  #pragma acc atomic UPDATE
+  if // expected-error {{invalid statement after '#pragma acc atomic update'}}
+     // expected-note@-1 {{expected statement here to be an expression statement}}
+     (234 < x) {
+    x = 234;
+  }
 
   //............................................................................
   // Try another non-expression statement.
@@ -688,7 +805,7 @@ int main() {
   //----------------------------------------------------------------------------
 
   //............................................................................
-  // Check forms listed in the spec.
+  // Check forms listed in the spec or for supported extensions.
   //............................................................................
 
   #pragma acc atomic capture
@@ -769,6 +886,24 @@ int main() {
   { --x; v = x; }
   #pragma acc atomic capture
   { x--; v = x; }
+  #pragma acc atomic capture
+  x // expected-error {{invalid statement after '#pragma acc atomic capture'}}
+    =
+      23 < x ? 23 : x; // expected-note {{expected operator expression here where the operator is one of '++', }}
+  #pragma acc atomic capture
+  x // expected-error {{invalid statement after '#pragma acc atomic capture'}}
+    =
+      x > 35 ? 35 : x; // expected-note {{expected operator expression here where the operator is one of '++', }}
+  #pragma acc atomic capture
+  x // expected-error {{invalid statement after '#pragma acc atomic capture'}}
+    =
+      x == 89 ? 13 : x; // expected-note {{expected operator expression here where the operator is one of '++', }}
+  #pragma acc atomic capture
+  if // expected-error {{invalid statement after '#pragma acc atomic capture'}}
+     // expected-note@-1 {{expected statement here to be an expression statement}}
+     (234 < x) {
+    x = 234;
+  }
 
   //............................................................................
   // Try a statement that is not an expression statement or compound statement.
@@ -1207,6 +1342,613 @@ int main() {
   }
 
   //----------------------------------------------------------------------------
+  // acc atomic compare
+  //----------------------------------------------------------------------------
+
+  //............................................................................
+  // Check forms listed in the spec or for supported extensions.
+  //............................................................................
+
+  #pragma acc atomic compare
+  v // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      x // expected-note {{expected '?:' operator expression here}}
+      ;
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      1 // expected-note {{expected '?:' operator expression here}}
+       ;
+  #pragma acc atomic compare
+  x++; // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+       // expected-note@-1 {{expected expression here to be a simple assignment}}
+  #pragma acc atomic compare
+  x--; // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+       // expected-note@-1 {{expected expression here to be a simple assignment}}
+  #pragma acc atomic compare
+  ++x; // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+       // expected-note@-1 {{expected expression here to be a simple assignment}}
+  #pragma acc atomic compare
+  --x; // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+       // expected-note@-1 {{expected expression here to be a simple assignment}}
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    += // expected-note {{expected expression here to be a simple assignment}}
+       3;
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      x - 9; // expected-note {{expected '?:' operator expression here}}
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      10 * x; // expected-note {{expected '?:' operator expression here}}
+  #pragma acc atomic compare
+  v // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      x++; // expected-note {{expected '?:' operator expression here}}
+  #pragma acc atomic compare
+  v // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      x--; // expected-note {{expected '?:' operator expression here}}
+  #pragma acc atomic compare
+  v // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      ++x; // expected-note {{expected '?:' operator expression here}}
+  #pragma acc atomic compare
+  v // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      --x; // expected-note {{expected '?:' operator expression here}}
+  #pragma acc atomic compare
+  v // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      x /= 89; // expected-note {{expected '?:' operator expression here}}
+  #pragma acc atomic compare
+  v // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      x = x & 5; // expected-note {{expected '?:' operator expression here}}
+  #pragma acc atomic compare
+  v // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      x = 384 ^ x; // expected-note {{expected '?:' operator expression here}}
+  #pragma acc atomic compare
+  { // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{expected statement here to be an expression statement}}
+     v = x;
+     x |= 3;
+  }
+  #pragma acc atomic compare
+  x = 23 < x ? 23 : x;
+  #pragma acc atomic compare
+  x = x > 35 ? 35 : x;
+  #pragma acc atomic compare
+  x = x == 89 ? 13 : x;
+  #pragma acc atomic compare
+  if (234 < x) { x = 234; }
+  #pragma acc atomic compare
+  if (x > 52) { x = 52; }
+  #pragma acc atomic compare
+  if (x == 1) { x = 2; }
+
+  //............................................................................
+  // Try a statement that is not an expression statement or 'if' statement.
+  //............................................................................
+
+  #pragma acc atomic compare
+  do { // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+       // expected-note@-1 {{expected statement here to be an expression statement or 'if' statement}}
+    x++;
+  } while (0);
+  #pragma acc atomic compare
+  do { // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+       // expected-note@-1 {{expected statement here to be an expression statement or 'if' statement}}
+    {
+      v = x;
+      x += 3;
+    }
+  } while (0);
+
+  //............................................................................
+  // Check expression-statement form.
+  //............................................................................
+
+  // Make sure a valid form for an expression statement isn't accepted within
+  // compound statement.
+  #pragma acc atomic compare
+  { // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{expected statement here to be an expression statement or 'if' statement}}
+    x = 234 < x ? 234 : x;
+  }
+
+  // Check an expression statement that is not a binary-operator expression.
+  #pragma acc atomic compare
+  foo(); // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+         // expected-note@-1 {{expected expression here to be a simple assignment}}
+
+  // Check a binary-operator expression that is not a simple assignment.
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    += // expected-note {{expected expression here to be a simple assignment}}
+       v;
+
+  // After assign, check an expression statement that is not a conditional
+  // operator.
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      foo(); // expected-note {{expected '?:' operator expression here}}
+
+  // Check a condition expression that is not a binary-operator expression.
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      1 // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+        ? 1 : x;
+
+  // Check a condition expression that is a binary-operator expression with an
+  // unsupported binary operator.
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    = 1
+        <= // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+           x ? 1 : x;
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    = 1
+        >= // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+           x ? 1 : x;
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    = 1
+        != // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+           x ? 1 : x;
+
+  // Check a comparison-operator expression where the LHS of the assignment
+  // isn't where it's supposed to be.
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{other expression appears here}}
+    = 1
+        < // expected-note {{expected one operand of this expression to match other expression}}
+          v ? 1 : x;
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{other expression appears here}}
+    = v
+        > // expected-note {{expected one operand of this expression to match other expression}}
+          1 ? 1 : x;
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{other expression appears here}}
+    =
+      v // expected-note {{expected this expression to match other expression}}
+        == 2 ? 1 : x;
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{other expression appears here}}
+    =
+      v // expected-note {{expected this expression to match other expression}}
+        == x ? 1 : x;
+
+  // Check a true expression that does not match the corresponding operand of
+  // the comparison-operand expression (only for < or >).
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    =
+      1 // expected-note {{other expression appears here}}
+        > x ?
+              2 // expected-note {{expected this expression to match other expression}}
+                : x;
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    = x <
+          3 // expected-note {{other expression appears here}}
+            ?
+              5 // expected-note {{expected this expression to match other expression}}
+                : x;
+
+  // Check a false expression that does not match the LHS of the assignment.
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{other expression appears here}}
+    = 1 > x ? 1 :
+                  v // expected-note {{expected this expression to match other expression}}
+                   ;
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{other expression appears here}}
+    = x < 1 ? 1 :
+                  v // expected-note {{expected this expression to match other expression}}
+                   ;
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{other expression appears here}}
+    = x == 1 ? 2 :
+                   v // expected-note {{expected this expression to match other expression}}
+                    ;
+
+  // Check cases with multiple unmatched expressions.
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{other expression appears here}}
+    = 1 // expected-note {{other expression appears here}}
+        > x ?
+              2 // expected-note {{expected this expression to match other expression}}
+                :
+                  v // expected-note {{expected this expression to match other expression}}
+                   ;
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 2 {{other expression appears here}}
+    = v
+        < // expected-note {{expected one operand of this expression to match other expression}}
+          1 ? 2 :
+                  v // expected-note {{expected this expression to match other expression}}
+                   ;
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 2 {{other expression appears here}}
+    = v // expected-note {{expected this expression to match other expression}}
+         == 1 ? 2 :
+                   v // expected-note {{expected this expression to match other expression}}
+                    ;
+
+  // Check a false expression that does not match the LHS of the assignment
+  // while condition expression is not a binary-operator expression or has an
+  // unsupported binary operator.
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{other expression appears here}}
+    =
+      1 // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+        ? 1 :
+              v // expected-note {{expected this expression to match other expression}}
+               ;
+  #pragma acc atomic compare
+  x // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{other expression appears here}}
+    = x
+        + // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+          1 ? 1 :
+                  v // expected-note {{expected this expression to match other expression}}
+                   ;
+
+  // Non-lvalue is generally not permitted for LHS of assign, so some OpenACC
+  // checks don't run.
+  #pragma acc atomic compare
+  1 // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{expected expression here to be a simple assignment}}
+    = // expected-noacc-error {{expression is not assignable}}
+      2 < 1 ? 2 : 1;
+  #pragma acc atomic compare
+  1 // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{expected expression here to be a simple assignment}}
+    = // expected-noacc-error {{expression is not assignable}}
+      1 == 2 ? 3 : 1;
+
+  // Non-scalar operands are generally not permitted in expressions accepted
+  // here, so some OpenACC checks don't run.
+  #pragma acc atomic compare
+  xs // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     // expected-note@-1 {{expected expression here to be of scalar type}}
+     =
+       vs // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+          < // expected-noacc-error {{invalid operands to binary expression ('struct S' and 'struct S')}}
+            xs ? vs : xs;
+  #pragma acc atomic compare
+  xs // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     // expected-note@-1 {{expected expression here to be of scalar type}}
+     =
+       vs // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+          == // expected-noacc-error {{invalid operands to binary expression ('struct S' and 'struct S')}}
+             xs ? vs : xs;
+
+  //............................................................................
+  // Check 'if'-statement form.
+  //............................................................................
+
+  // Make sure a valid form for an 'if' statement isn't accepted within a
+  // compound statement.
+  #pragma acc atomic compare
+  { // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+    // expected-note@-1 {{expected statement here to be an expression statement or 'if' statement}}
+    if (234 < x) { x = 234; }
+  }
+
+  // Check a 'then' statement that is a compound statement not containing
+  // exactly one statement.
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (3 < x)
+             { // expected-note {{expected compound statement here to contain exactly one statement}}
+              }
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (3 > x)
+             { // expected-note {{expected compound statement here to contain exactly one statement}}
+               x = 3; x = 3; }
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x < 3)
+             { // expected-note {{expected compound statement here to contain exactly one statement}}
+               x = 3; foo(); }
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x == 3)
+              { // expected-note {{expected compound statement here to contain exactly one statement}}
+                x = 4; x = 5; x = 6; }
+
+  // Check a 'then' statement that is either (1) not an expression statement or
+  // compound statement or (2) a compound statement containing exactly one
+  // statement that is #1.
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (3 < x)
+             if // expected-note {{expected statement here to be an expression statement or compound statement}}
+                (3 < x) { x = 3; }
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x > 3) {
+               if // expected-note {{expected statement here to be an expression statement}}
+                  (x > 3) { x = 3; } }
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x == 3)
+              do // expected-note {{expected statement here to be an expression statement or compound statement}}
+                 { x = 3; } while (0);
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x == 3) {
+                do // expected-note {{expected statement here to be an expression statement}}
+                   { x = 3; } while (0); }
+
+  // Check a 'then' statement that is either (1) an expression statement but not
+  // a binary-operator expression or is (2) a compound statement containing only
+  // #1.
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x == 1)
+              ++x; // expected-note {{expected expression here to be a simple assignment}}
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (1 > x)
+             { ++x; } // expected-note {{expected expression here to be a simple assignment}}
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x < foo())
+                 x // expected-note {{expected expression here to be a simple assignment}}
+                   < foo() ? foo() : x;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x == foo()) {
+                    x // expected-note {{expected expression here to be a simple assignment}}
+                      == foo() ? foo() : x; }
+
+  // Check a 'then' statement that is either (1) a binary-operator expression
+  // that is not a simple assignment expression or is (2) a compound statement
+  // containing only #1.
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (1 > x) x
+               + // expected-note {{expected expression here to be a simple assignment}}
+                 // expected-noacc-warning@-1 {{expression result unused}}
+                 1;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x < 1) { x
+                 + // expected-note {{expected expression here to be a simple assignment}}
+                   // expected-noacc-warning@-1 {{expression result unused}}
+                   1; }
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x == 1) x
+                += // expected-note {{expected expression here to be a simple assignment}}
+                   2;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x == 1) { x
+                  += // expected-note {{expected expression here to be a simple assignment}}
+                     2; }
+
+  // Check a condition expression that is not a binary-operator expression.
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (
+      x // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+       ) x = 0;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (
+      ! // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+       x) { x = 1; }
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (
+      x // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+        ? 0 : 1)
+                 x = 1;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (
+      v // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+        ? x : 1)
+                 { x = 1; }
+
+  // Check a condition expression that is a binary-operator expression where the
+  // operator is not a supported comparison operator.
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x
+        + // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+          1) x = 1;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (1
+        <= // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+           x) { x = 1; }
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x
+        >= // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+           1) x = 1;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x
+        != // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+           1) { x = 2; }
+
+  // Check a condition expression with a '<' or '>' operator but without an
+  // operand that matches 'x' from the assignment expression.
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (v
+        < // expected-note {{expected one operand of this expression to match other expression}}
+          1)
+             x // expected-note {{other expression appears here}}
+               = 1;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (1
+        > // expected-note {{expected one operand of this expression to match other expression}}
+          x) {
+               v // expected-note {{other expression appears here}}
+                 = 1; }
+
+  // Check a condition expression with a '<' or '>' operator with an operand
+  // that matches 'x' from the assignment expression, but the other operand
+  // doesn't match 'expr' from the assignment expression.
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (
+      1 // expected-note {{expected this expression to match other expression}}
+        < x) x =
+                 2 // expected-note {{other expression appears here}}
+                  ;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x >
+          1 // expected-note {{expected this expression to match other expression}}
+           ) { x =
+                   - // expected-note {{other expression appears here}}
+                    1; }
+
+  // Check a condition expression with a '==' operator, but the 'x' operand
+  // doesn't match 'x' from the assignment expression.
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (
+      1 // expected-note {{expected this expression to match other expression}}
+        == x)
+              x // expected-note {{other expression appears here}}
+                = 1;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (
+      x // expected-note {{expected this expression to match other expression}}
+        == 1) {
+                v // expected-note {{other expression appears here}}
+                  = 1; }
+
+  // Check an 'if' statement with an 'else' statement.
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (1 < x) { x = 1; }
+                        else // expected-note {{unexpected 'else' statement}}
+                             { x = 0; }
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x > 1) x = 1;
+                    else // expected-note {{unexpected 'else' statement}}
+                         x = 0;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x == 1) x = 2;
+                     else // expected-note {{unexpected 'else' statement}}
+                          { x = 3; }
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (x == 1) { x = 2; }
+                         else // expected-note {{unexpected 'else' statement}}
+                              x = 3;
+
+  // Non-lvalue is generally not permitted for LHS of assign, so some OpenACC
+  // checks don't run.
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (1 < 2) {
+               2 // expected-note {{expected expression here to be a simple assignment}}
+                 = // expected-noacc-error {{expression is not assignable}}
+                   1; }
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (2 > 1)
+             2 // expected-note {{expected expression here to be a simple assignment}}
+               = // expected-noacc-error {{expression is not assignable}}
+                 1;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (1 == 2)
+              1 // expected-note {{expected expression here to be a simple assignment}}
+                = // expected-noacc-error {{expression is not assignable}}
+                  3;
+
+  // Non-scalar operands are generally not permitted in expressions accepted
+  // here, so some OpenACC checks don't run.
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (
+      vs // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+          > // expected-noacc-error {{invalid operands to binary expression ('struct S' and 'struct S')}}
+            xs)
+                xs // expected-note {{expected expression here to be of scalar type}}
+                   = vs;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (
+      xs // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+         < // expected-noacc-error {{invalid operands to binary expression ('struct S' and 'struct S')}}
+           vs) {
+                 xs // expected-note {{expected expression here to be of scalar type}}
+                    = vs; }
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (
+      xs // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+         == // expected-noacc-error {{invalid operands to binary expression ('struct S' and 'struct S')}}
+            vs)
+                xs // expected-note {{expected expression here to be of scalar type}}
+                   = vs;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (
+      xs // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+         == // expected-noacc-error {{invalid operands to binary expression ('struct S' and 'struct S')}}
+            vs) {
+                  xs // expected-note {{expected expression here to be of scalar type}}
+                     = vs; }
+
+  // Check cases where errors are reported for the condition expression, for the
+  // 'then' statement, and for the 'else' statement.
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (
+      x // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+       )
+         do // expected-note {{expected statement here to be an expression statement or compound statement}}
+            { x = 1; } while (0);
+                                  else // expected-note {{unexpected 'else' statement}}
+                                       x = 2;
+  #pragma acc atomic compare
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (1
+        <= // expected-note {{expected operator expression here where the operator is one of '<', '>', or '=='}}
+           x) { x
+                  += // expected-note {{expected expression here to be a simple assignment}}
+                     1; }
+                          else // expected-note {{unexpected 'else' statement}}
+                               { x = 2; }
+
+  //----------------------------------------------------------------------------
   // Enclosed directive.
   //----------------------------------------------------------------------------
 
@@ -1230,6 +1972,20 @@ int main() {
     #pragma acc exit data copyout(x) // expected-error {{'#pragma acc exit data' cannot be nested within '#pragma acc atomic'}}
     v = x;
   }
+
+  #pragma acc atomic compare // expected-note {{enclosing '#pragma acc atomic' here}}
+  if // expected-error {{invalid statement after '#pragma acc atomic compare'}}
+     (1 < x)
+             { // expected-note {{expected compound statement here to contain exactly one statement}}
+    #pragma acc atomic write // expected-error {{'#pragma acc atomic' cannot be nested within '#pragma acc atomic'}}
+    x = 1;
+  }
+
+  #pragma acc atomic compare // expected-note {{enclosing '#pragma acc atomic' here}}
+  if
+     (x == 1)
+    #pragma acc atomic write // expected-error {{'#pragma acc atomic' cannot be nested within '#pragma acc atomic'}}
+    x = 2;
 
   #pragma acc atomic read // expected-note {{enclosing '#pragma acc atomic' here}}
   #pragma acc parallel // expected-error {{'#pragma acc parallel' cannot be nested within '#pragma acc atomic'}}

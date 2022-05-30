@@ -136,11 +136,12 @@ void UNIQUE_NAME();
 // expected-error@+1 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc routine'}}
 #pragma acc routine independent auto collapse(1) seq
 void UNIQUE_NAME();
-// expected-error@+4 {{unexpected OpenACC clause 'read' in directive '#pragma acc routine'}}
-// expected-error@+3 {{unexpected OpenACC clause 'write' in directive '#pragma acc routine'}}
-// expected-error@+2 {{unexpected OpenACC clause 'update' in directive '#pragma acc routine'}}
-// expected-error@+1 {{unexpected OpenACC clause 'capture' in directive '#pragma acc routine'}}
-#pragma acc routine read write update capture seq
+// expected-error@+5 {{unexpected OpenACC clause 'read' in directive '#pragma acc routine'}}
+// expected-error@+4 {{unexpected OpenACC clause 'write' in directive '#pragma acc routine'}}
+// expected-error@+3 {{unexpected OpenACC clause 'update' in directive '#pragma acc routine'}}
+// expected-error@+2 {{unexpected OpenACC clause 'capture' in directive '#pragma acc routine'}}
+// expected-error@+1 {{unexpected OpenACC clause 'compare' in directive '#pragma acc routine'}}
+#pragma acc routine read write update capture compare seq
 void UNIQUE_NAME();
 
 // Malformed clauses not permitted here.

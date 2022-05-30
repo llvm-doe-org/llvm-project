@@ -197,16 +197,18 @@ int main() {
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
   #pragma acc exit data seq independent auto gang worker vector collapse(1)
 
-  // expected-error@+4 {{unexpected OpenACC clause 'read' in directive '#pragma acc enter data'}}
-  // expected-error@+3 {{unexpected OpenACC clause 'write' in directive '#pragma acc enter data'}}
-  // expected-error@+2 {{unexpected OpenACC clause 'update' in directive '#pragma acc enter data'}}
-  // expected-error@+1 {{unexpected OpenACC clause 'capture' in directive '#pragma acc enter data'}}
-  #pragma acc enter data read write update capture copyin(i)
-  // expected-error@+4 {{unexpected OpenACC clause 'read' in directive '#pragma acc exit data'}}
-  // expected-error@+3 {{unexpected OpenACC clause 'write' in directive '#pragma acc exit data'}}
-  // expected-error@+2 {{unexpected OpenACC clause 'update' in directive '#pragma acc exit data'}}
-  // expected-error@+1 {{unexpected OpenACC clause 'capture' in directive '#pragma acc exit data'}}
-  #pragma acc exit data copyout(i) read write update capture
+  // expected-error@+5 {{unexpected OpenACC clause 'read' in directive '#pragma acc enter data'}}
+  // expected-error@+4 {{unexpected OpenACC clause 'write' in directive '#pragma acc enter data'}}
+  // expected-error@+3 {{unexpected OpenACC clause 'update' in directive '#pragma acc enter data'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'capture' in directive '#pragma acc enter data'}}
+  // expected-error@+1 {{unexpected OpenACC clause 'compare' in directive '#pragma acc enter data'}}
+  #pragma acc enter data read write update capture compare copyin(i)
+  // expected-error@+5 {{unexpected OpenACC clause 'read' in directive '#pragma acc exit data'}}
+  // expected-error@+4 {{unexpected OpenACC clause 'write' in directive '#pragma acc exit data'}}
+  // expected-error@+3 {{unexpected OpenACC clause 'update' in directive '#pragma acc exit data'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'capture' in directive '#pragma acc exit data'}}
+  // expected-error@+1 {{unexpected OpenACC clause 'compare' in directive '#pragma acc exit data'}}
+  #pragma acc exit data copyout(i) read write update capture compare
 
   // Malformed clauses not permitted here.
 

@@ -11121,6 +11121,11 @@ def note_acc_atomic_not_expr_stmt : Note<
 def note_acc_atomic_not_expr_stmt_or_compound_stmt : Note<
   "expected statement here to be an expression statement or compound "
   "statement">;
+def note_acc_atomic_not_expr_stmt_or_if_stmt : Note<
+  "expected statement here to be an expression statement or 'if' statement">;
+def note_acc_atomic_unexpected_else : Note<"unexpected 'else' statement">;
+def note_acc_atomic_not_one_stmt : Note<
+  "expected compound statement here to contain exactly one statement">;
 def note_acc_atomic_not_two_stmts : Note<
   "expected compound statement here to contain exactly two statements">;
 def note_acc_atomic_no_read_stmt : Note<
@@ -11134,6 +11139,11 @@ def note_acc_atomic_not_supported_inc_dec_assign : Note<
 def note_acc_atomic_not_supported_binop_after_assign : Note<
   "expected operator expression here where the operator is one of '+', "
   "'*', '-', '/', '&', '|', '^', '<<', or '>>'">;
+def note_acc_atomic_not_condop_after_assign : Note<
+  "expected '?:' operator expression here">;
+def note_acc_atomic_not_supported_cmpop : Note<
+  "expected operator expression here where the operator is one of '<', '>', or "
+  "'=='">;
 def note_acc_atomic_unmatched_expr : Note<
   "expected this expression to match other expression">;
 def note_acc_atomic_unmatched_operand : Note<

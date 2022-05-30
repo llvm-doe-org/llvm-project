@@ -13132,6 +13132,9 @@ ACCClause *ACCClauseReader::readClause() {
   case ACCC_capture:
     C = new (Context) ACCCaptureClause();
     break;
+  case ACCC_compare:
+    C = new (Context) ACCCompareClause();
+    break;
   case ACCC_unknown:
     llvm_unreachable("Clause is not known");
   }
@@ -13324,3 +13327,4 @@ void ACCClauseReader::VisitACCReadClause(ACCReadClause *C) {}
 void ACCClauseReader::VisitACCWriteClause(ACCWriteClause *C) {}
 void ACCClauseReader::VisitACCUpdateClause(ACCUpdateClause *C) {}
 void ACCClauseReader::VisitACCCaptureClause(ACCCaptureClause *C) {}
+void ACCClauseReader::VisitACCCompareClause(ACCCompareClause *C) {}

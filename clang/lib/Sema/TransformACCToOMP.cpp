@@ -1364,6 +1364,13 @@ public:
     return getSema().ActOnOpenMPCaptureClause(L.LocStart, L.LocEnd);
   }
 
+  OMPClauseResult TransformACCCompareClause(ACCDirectiveStmt *D,
+                                            OpenMPDirectiveKind TDKind,
+                                            ACCCompareClause *C) {
+    ExplicitClauseLocs L(D, C);
+    return getSema().ActOnOpenMPCompareClause(L.LocStart, L.LocEnd);
+  }
+
   InheritableAttr *TransformACCAttrToOMP(ACCDeclAttr *ACCAttr,
                                          FunctionDecl *FD) {
     if (!ACCAttr)

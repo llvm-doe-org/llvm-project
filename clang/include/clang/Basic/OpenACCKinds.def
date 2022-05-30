@@ -320,6 +320,7 @@ OPENACC_CLAUSE(read, ACCReadClause)
 OPENACC_CLAUSE(write, ACCWriteClause)
 OPENACC_CLAUSE(update, ACCUpdateClause)
 OPENACC_CLAUSE(capture, ACCCaptureClause)
+OPENACC_CLAUSE(compare, ACCCompareClause)
 
 // Explicit clauses allowed for OpenACC directive 'update'.
 OPENACC_UPDATE_CLAUSE(if)
@@ -430,6 +431,7 @@ OPENACC_ATOMIC_CLAUSE(read)
 OPENACC_ATOMIC_CLAUSE(write)
 OPENACC_ATOMIC_CLAUSE(update)
 OPENACC_ATOMIC_CLAUSE(capture)
+OPENACC_ATOMIC_CLAUSE(compare)
 
 // Explicit clauses allowed for OpenACC directive 'routine'.
 OPENACC_ROUTINE_CLAUSE(gang)

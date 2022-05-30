@@ -107,11 +107,12 @@ int main() {
   #pragma acc update independent host(i) auto seq gang worker vector
   // expected-error@+1 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc update'}}
   #pragma acc update collapse(1) device(i)
-  // expected-error@+4 {{unexpected OpenACC clause 'read' in directive '#pragma acc update'}}
-  // expected-error@+3 {{unexpected OpenACC clause 'write' in directive '#pragma acc update'}}
-  // expected-error@+2 {{unexpected OpenACC clause 'update' in directive '#pragma acc update'}}
-  // expected-error@+1 {{unexpected OpenACC clause 'capture' in directive '#pragma acc update'}}
-  #pragma acc update read write self(i) update capture
+  // expected-error@+5 {{unexpected OpenACC clause 'read' in directive '#pragma acc update'}}
+  // expected-error@+4 {{unexpected OpenACC clause 'write' in directive '#pragma acc update'}}
+  // expected-error@+3 {{unexpected OpenACC clause 'update' in directive '#pragma acc update'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'capture' in directive '#pragma acc update'}}
+  // expected-error@+1 {{unexpected OpenACC clause 'compare' in directive '#pragma acc update'}}
+  #pragma acc update read write self(i) update capture compare
 
   // Malformed clauses not permitted here.
 
