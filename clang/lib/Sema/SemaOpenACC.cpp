@@ -452,7 +452,8 @@ public:
       if (isOpenACCComputeDirective(DKind))
         return DKind;
     }
-    if (SemaRef.getCurFunctionDecl()->hasAttr<ACCRoutineDeclAttr>())
+    FunctionDecl *CurFD = SemaRef.getCurFunctionDecl();
+    if (CurFD && CurFD->hasAttr<ACCRoutineDeclAttr>())
       return ACCD_routine;
     return ACCD_unknown;
   }
@@ -2341,8 +2342,9 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
           Usee, UseLoc, getCurFunctionDecl(), ComputeDKind);
       return;
     }
-    ImplicitRoutineDirInfo.addHostFunctionUse(getCurFunctionDecl(), Usee,
-                                              UseLoc);
+    FunctionDecl *CurFD = getCurFunctionDecl();
+    if (CurFD)
+      ImplicitRoutineDirInfo.addHostFunctionUse(CurFD, Usee, UseLoc);
   }
 }
 void Sema::ActOnCallExprForOpenACC(CallExpr *Call) {
