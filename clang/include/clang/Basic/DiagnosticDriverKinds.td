@@ -323,10 +323,6 @@ def err_drv_omp_offload_target_cuda_version_not_support : Error<
 def warn_drv_omp_offload_target_duplicate : Warning<
   "OpenMP offloading target '%0' is similar to target '%1' already specified; "
   "will be ignored">, InGroup<OpenMPTarget>;
-def err_drv_acc_cxx_not_supported : Error<
-  "OpenACC support for C++ not yet implemented">;
-def err_drv_acc_omp_not_supported : Error<
-  "-fopenacc combined with -fopenmp is not supported">;
 def err_drv_unsupported_embed_bitcode
     : Error<"%0 is not supported with -fembed-bitcode">;
 def err_drv_bitcode_unsupported_on_toolchain : Error<

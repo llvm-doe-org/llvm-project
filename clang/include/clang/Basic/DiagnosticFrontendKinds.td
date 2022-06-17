@@ -317,6 +317,11 @@ def warn_profile_data_unprofiled : Warning<
   InGroup<ProfileInstrUnprofiled>;
 } // end of instrumentation issue category
 
+def err_acc_omp_not_supported : Error<
+  "-fopenacc combined with -fopenmp is not supported">;
+def err_acc_cxx_not_supported : Error<
+  "OpenACC support for C++ not yet implemented">;
+
 let CategoryName = "RewriteOpenACC" in {
 def warn_rewrite_acc_omp_openacc_macro_inserted : Warning<
   "inserted '_OPENACC' macro definition for uses that remain after translation "

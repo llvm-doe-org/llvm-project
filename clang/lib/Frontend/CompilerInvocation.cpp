@@ -4032,7 +4032,7 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
                  Args.hasArg(OPT_fopenacc_print_EQ) ||
                  Args.hasArg(OPT_fopenacc_ast_print_EQ);
   if (Opts.OpenACC && Opts.CPlusPlus)
-    Diags.Report(clang::diag::err_drv_acc_cxx_not_supported);
+    Diags.Report(clang::diag::err_acc_cxx_not_supported);
 
   // Check if -fopenacc-update-present-omp is specified.
   if (Arg *A = Args.getLastArg(OPT_fopenacc_update_present_omp_EQ)) {
@@ -4104,7 +4104,7 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   // outside of system headers is disabled if Opts.OpenACC despite Opts.OpenMP.)
   if (Opts.OpenACC) {
     if (Opts.OpenMP)
-      Diags.Report(clang::diag::err_drv_acc_omp_not_supported);
+      Diags.Report(clang::diag::err_acc_omp_not_supported);
     // We require at least OpenMP 5.1 to enable OpenMP's "present" map type
     // modifier in order to support OpenACC's "present" clause.
     //

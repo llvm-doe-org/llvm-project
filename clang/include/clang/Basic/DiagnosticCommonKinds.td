@@ -369,10 +369,6 @@ def err_omp_more_one_clause : Error<
 def err_omp_required_clause : Error<
   "directive '#pragma omp %0' requires the '%1' clause">;
 
-// OpenACC
-def err_acc_more_one_clause : Error<
-  "directive '#pragma acc %0' cannot contain more than one '%1' clause">;
-
 // Static Analyzer Core
 def err_unknown_analyzer_checker_or_package : Error<
     "no analyzer checkers or packages are associated with '%0'">;
