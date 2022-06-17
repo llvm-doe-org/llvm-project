@@ -319,8 +319,12 @@ def warn_profile_data_unprofiled : Warning<
 
 def err_acc_omp_not_supported : Error<
   "-fopenacc combined with -fopenmp is not supported">;
-def err_acc_cxx_not_supported : Error<
-  "OpenACC support for C++ not yet implemented">;
+def warn_acc_and_cxx : Warning<
+  "OpenACC support for C++ is highly experimental and might not function "
+  "correctly">,
+  InGroup<DiagGroup<"openacc-and-cxx">>, DefaultError;
+def note_acc_disable_diag_lang : Note<
+  "you can disable this diagnostic with '-Wno-%0'">;
 
 let CategoryName = "RewriteOpenACC" in {
 def warn_rewrite_acc_omp_openacc_macro_inserted : Warning<

@@ -4031,8 +4031,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   Opts.OpenACC = Args.hasArg(OPT_fopenacc) ||
                  Args.hasArg(OPT_fopenacc_print_EQ) ||
                  Args.hasArg(OPT_fopenacc_ast_print_EQ);
-  if (Opts.OpenACC && Opts.CPlusPlus)
-    Diags.Report(clang::diag::err_acc_cxx_not_supported);
 
   // Check if -fopenacc-update-present-omp is specified.
   if (Arg *A = Args.getLastArg(OPT_fopenacc_update_present_omp_EQ)) {
@@ -4102,6 +4100,16 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   // OpenMP in the same source.  However, if only -fopenacc, activate OpenMP
   // for the sake of translating OpenACC to it.  (Parsing of OpenMP directives
   // outside of system headers is disabled if Opts.OpenACC despite Opts.OpenMP.)
+  //
+  // TODO: If we ever decide to provide experimental support for OpenACC plus
+  // OpenMP and to diagnose that usage with a warning that is by default an
+  // error (as we do/did for OpenACC plus C++), then here is not the place to
+  // produce that diagnostic because diagnostic options (like -Wno-error) have
+  // not been processed yet (at least in Clang's current implementation).
+  // Instead, we would probably record here whether OpenMP was already enabled
+  // by the user before we enabled OpenMP for the sake of OpenACC.  Then, in
+  // cc1_main, we would report the diagnostic using Clang->getDiagnostics(), and
+  // the parser would also have to enable parsing of OpenMP directives.
   if (Opts.OpenACC) {
     if (Opts.OpenMP)
       Diags.Report(clang::diag::err_acc_omp_not_supported);

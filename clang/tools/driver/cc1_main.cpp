@@ -242,6 +242,27 @@ int cc1_main(ArrayRef<const char *> Argv, const char *Argv0, void *MainAddr) {
     return 1;
   }
 
+  // Diagnose the use of OpenACC in C++.
+  //
+  // It might seem more reasonable to check this in
+  // CompilerInvocation::ParseLangArgs, but that uses the above Diags instead of
+  // Clang->getDiagnostics(), so -Wno-openacc-and-cxx would have no effect
+  // because Diags doesn't process diagnostic options.
+  //
+  // Clang sets this diagnostic to an error by default because the parser and
+  // sema still sometimes fail assertions, seg fault, or otherwise misbehave
+  // when OpenACC is enabled for C++.  We don't want the error diagnostic to be
+  // followed by Clang crashing, so it's important that this diagnostic is
+  // produced here where it can still prevent the parser and sema from running.
+  //
+  // FIXME: This doesn't work correctly with Clang's -verify.  There's probably
+  // a better place to produce the diagnostic.
+  if (Clang->getLangOpts().OpenACC && Clang->getLangOpts().CPlusPlus) {
+    Clang->getDiagnostics().Report(diag::warn_acc_and_cxx);
+    Clang->getDiagnostics().Report(diag::note_acc_disable_diag_lang)
+        << DiagnosticIDs::getWarningOptionForDiag(diag::warn_acc_and_cxx);
+  }
+
   // Execute the frontend actions.
   {
     llvm::TimeTraceScope TimeScope("ExecuteCompiler");

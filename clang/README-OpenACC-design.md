@@ -58,8 +58,8 @@ following figure:
 The components of this diagram are as follows:
 
 * **OpenACC source** is C application source code containing OpenACC
-  directives.  C++ will be supported in the future.  Fortran support
-  is being developed for Flang in a separate project.
+  directives.  C++ support is under development.  Fortran support is being
+  developed for Flang in a separate project.
 * **Parser** is the existing Clang parser and semantic analyzer
   extended for OpenACC.
 * **OpenACC AST** is a Clang AST in which OpenACC directives are

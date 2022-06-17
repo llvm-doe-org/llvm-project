@@ -86,6 +86,12 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
           enabled.
     * `-Wopenacc-ignored-clause`
         * See the discussion of the `vector_length` clause below.
+    * `-Wopenacc-and-cxx`
+        * Warns that OpenACC support for C++ is highly experimental and might
+          not function correctly.
+        * This warning is an error by default.  To try out C++ support, you
+          might wish to disable the warning entirely with
+          `-Wno-openacc-and-cxx`.
 
 Run-Time Environment Variables
 ------------------------------
@@ -670,7 +676,8 @@ Language Support
 * C11 is supported with the following extensions:
     * `__uint128_t`, `__int128_t`, `__SIZEOF_INT128__`
 * The nested function definition extension for C is not yet supported.
-* C++ is not yet supported.
+* C++ support is highly experimental and incomplete.  See `-Wopenacc-and-cxx`
+  above for how to enable it.
 * Objective-C/C++ are not supported.
 
 Source-to-Source Mode Limitations
