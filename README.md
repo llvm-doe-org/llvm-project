@@ -21,7 +21,21 @@ issues, etc. can be found in the wiki:
 
 > <https://github.com/llvm-doe-org/llvm-project/wiki>
 
-## Building
+## Building and Installing
+
+This section describes two approaches for building and installing Clacc: (1) by
+directly cloning Clacc from its git repo, running cmake, etc., or (2) by using
+Spack.  The first approach enables maximum control over the build, is regularly
+tested during Clacc development, and is recommended for anyone who wishes to
+modify Clacc.  However, the second approach might be more convenient for some
+Clacc users, especially those already using Spack.
+
+After generally describing both approaches, this section presents a series of
+examples that apply these approaches to build Clacc on real machines.  Even if
+none of those examples fit your requirements exactly, they might reveal options
+you should investigate.
+
+### From Git
 
 Clacc should be built in the same manner as upstream LLVM when Clang
 and OpenMP support are desired.  At minimum, you must build the
@@ -36,6 +50,8 @@ $ cmake -DCMAKE_INSTALL_PREFIX=../install \
         ../llvm
 $ make
 $ make install
+$ export PATH=$LLVM_GIT_DIR/install:$PATH
+$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install:$LD_LIBRARY_PATH
 ```
 
 Building LLVM successfully can be challenging, and the above minimal
@@ -43,9 +59,7 @@ procedure might not be sufficient for your system, or you might wish
 to tweak some options.  It is not practical to capture all possible
 issues here.  However, there are several resources that can help:
 
-* See the example Clacc build procedures in the remainder of this
-  section.  Even if none of them fit your requirements exactly, they
-  might reveal the options you should investigate.
+* See the example Clacc build procedures later in this section.
 * For further details on building OpenMP support, see the following FAQ:
 
     > <https://openmp.llvm.org/docs/SupportAndFAQ.html>
@@ -56,10 +70,41 @@ issues here.  However, there are several resources that can help:
 * Contact the Clacc maintainers.  See the [contact info
   above](#clacc).
 
+### From Spack
+
+[Spack](https://spack.io/) is a package manager that has become popular in HPC,
+but it can also be used on, for example, a Linux laptop.  If you're not familiar
+with Spack, see the [Spack
+documentation](https://spack.readthedocs.io/en/latest/).
+
+Spack's Clacc package builds from `clacc/main` in the LLVM DOE Fork.  The
+package specification is:
+
+```
+llvm-doe@develop.clacc
+```
+
+For example, the following minimal procedure installs Spack and then uses it to
+install Clacc:
+
+```
+$ git clone -c feature.manyFiles=true https://github.com/spack/spack.git
+$ . spack/share/spack/setup-env.sh # different shells require different scripts
+
+$ spack install llvm-doe@develop.clacc # might take hours to build
+$ spack load llvm-doe@develop.clacc # adjusts PATH, LD_LIBRARY_PATH, etc.
+$ clang --version # reveals the Clacc git commit hash
+```
+
+As in the examples below, additional options might be required for some systems.
+For example, `cuda` options are required to enable NVIDIA GPU offloading.
+
 ### Example Build: ORNL ExCL's equinox
 
 [System details](https://excl.ornl.gov/excl-systems/): x86_64, 4
 NVIDIA V100 GPUs
+
+From Git:
 
 ```
 $ cd $LLVM_GIT_DIR
@@ -76,12 +121,26 @@ $ cmake -DCMAKE_INSTALL_PREFIX=../install    \
         ../llvm
 $ make
 $ make install
+$ export PATH=$LLVM_GIT_DIR/install:$PATH
+$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install:$LD_LIBRARY_PATH
+```
+
+From Spack:
+
+```
+$ git clone -c feature.manyFiles=true https://github.com/spack/spack.git
+$ . spack/share/spack/setup-env.sh
+$ module load llvm/13.0.1
+$ spack install llvm-doe@develop.clacc % clang@13.0.1 +cuda cuda_arch=70
+$ spack load llvm-doe@develop.clacc
 ```
 
 ### Example Build: ORNL ExCL's explorer
 
 [System details](https://excl.ornl.gov/excl-systems/): AMD EPYC 7272,
 2 AMD MI60 Instinct GPUs
+
+From Git:
 
 ```
 $ cd $LLVM_GIT_DIR
@@ -96,12 +155,25 @@ $ cmake -DCMAKE_INSTALL_PREFIX=../install     \
         ../llvm
 $ make
 $ make install
+$ export PATH=$LLVM_GIT_DIR/install:$PATH
+$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install:$LD_LIBRARY_PATH
+```
+
+From Spack:
+
+```
+$ git clone -c feature.manyFiles=true https://github.com/spack/spack.git
+$ . spack/share/spack/setup-env.sh
+$ spack install llvm-doe@develop.clacc % clang@10.0.0
+$ spack load llvm-doe@develop.clacc
 ```
 
 ### Example Build: ORNL ExCL's leconte
 
 [System details](https://excl.ornl.gov/excl-systems/): 2 POWER9 CPUs,
 6 NVIDIA V100 GPUs
+
+From Git:
 
 ```
 $ cd $LLVM_GIT_DIR
@@ -119,36 +191,35 @@ $ cmake -DCMAKE_INSTALL_PREFIX=../install    \
         ../llvm
 $ make
 $ make install
+$ export PATH=$LLVM_GIT_DIR/install:$PATH
+$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install:$LD_LIBRARY_PATH
 ```
 
-## Testing
-
-Test suites checking Clacc's OpenACC support can be run by themselves
-or as part of larger test suites, as follows:
+From Spack:
 
 ```
-$ make check-clang-openacc # OpenACC directives
-$ make check-clang         # all of Clang including OpenACC directives
-$ make check-libacc2omp    # OpenACC runtime
-$ make check-openmp        # OpenMP and OpenACC runtime
-$ make check-all           # all LLVM subprojects
+$ git clone -c feature.manyFiles=true https://github.com/spack/spack.git
+$ . spack/share/spack/setup-env.sh
+$ module load gnu/10.2.0
+$ cp spack/var/spack/repos/builtin/packages/llvm/llvm14-hwloc-ompd.patch \
+     spack/var/spack/repos/builtin/packages/llvm-doe
+# Open spack/var/spack/repos/builtin/packages/llvm-doe/package.py in an editor.
+# Add the following lines after the existing calls to the 'patch' function,
+# making sure to indent the same amount as those calls:
+#
+#   # patch for missing hwloc.h include for libompd
+#   patch('llvm14-hwloc-ompd.patch', when="@develop.clacc")
+$ spack install llvm-doe@develop.clacc % gcc@10.2.0 +cuda cuda_arch=70
+$ spack load llvm-doe@develop.clacc
 ```
 
 ## Basic Usage
 
-Clacc is still under development and requires significant manual
-intervention for some applications (see the Documentation section
-below).  Currently, Clacc only supports OpenACC programs with C as the
-base language.
-
-Clacc's compiler is the `clang` executable in the `bin` subdirectory
-of the install directory.  Here's a simple example of using it, where
-`$CLACC_INSTALL_DIR` is `$LLVM_GIT_DIR/install` when following the
-build procedures above:
+Clacc's compiler is the `clang` executable in the `bin` subdirectory of the
+install directory.  Here's a simple example of using Clacc after installing it
+and after setting environment variables as described in the previous section:
 
 ```
-$ export PATH=$CLACC_INSTALL_DIR/bin:$PATH
-$ export LD_LIBRARY_PATH=$CLACC_INSTALL_DIR/lib:$LD_LIBRARY_PATH
 $ cat test.c
 #include <stdio.h>
 int main() {
@@ -170,6 +241,14 @@ To compile and run for an NVIDIA GPU:
 
 ```
 $ clang -fopenacc -fopenmp-targets=nvptx64-nvidia-cuda test.c && ./a.out
+Hello World
+Hello World
+```
+
+To compile and run for an AMD GPU:
+
+```
+$ clang -fopenacc -fopenmp-targets=amdgcn-amd-amdhsa test.c && ./a.out
 Hello World
 Hello World
 ```
@@ -199,8 +278,8 @@ compile time or run time.  This complexity is inherited from LLVM
 upstream and is not unique to Clacc.
 
 For example, to compile and run for an NVIDIA GPU, where
-`$CLACC_BUILD_DIR` is `$LLVM_GIT_DIR/build` when following the build
-procedures above:
+`$CLACC_BUILD_DIR` is `$LLVM_GIT_DIR/build` when following [the above build
+procedure from Git](#from-git):
 
 ```
 $ export PATH=$CLACC_BUILD_DIR/bin:$PATH
@@ -227,6 +306,21 @@ $ clang -fopenacc -fopenmp-targets=amdgcn-amd-amdhsa \
   -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
   -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
   test.c
+```
+
+## Testing
+
+Test suites checking Clacc's OpenACC support can be run from Clacc's build
+directory, such as `$LLVM_GIT_DIR/build` when following [the above build
+procedure from Git](#from-git).  They can be run by themselves or as part of
+larger test suites, as follows:
+
+```
+$ make check-clang-openacc # OpenACC directives
+$ make check-clang         # all of Clang including OpenACC directives
+$ make check-libacc2omp    # OpenACC runtime
+$ make check-openmp        # OpenMP and OpenACC runtime
+$ make check-all           # all LLVM subprojects
 ```
 
 ## Compiler Options
