@@ -98,6 +98,9 @@ private:
     /// the outer effective directive.  That way, they live as long as any part
     /// of the real directive lives.
     SmallVector<ACCClause *, 5> Clauses;
+    /// Has the current (explicit) directive on the stack been acted on?
+    /// Undefined if that's not a routine directive.
+    bool ExplicitRoutineDirectiveIsActedOn = false;
     ACCPartitioningKind LoopDirectiveKind;
     SourceLocation LoopBreakLoc; // invalid if no break statement or not loop
     unsigned AssociatedLoops = 1; // from collapse clause
@@ -154,6 +157,24 @@ public:
     while (I->RealDKind == ACCD_unknown)
       ++I;
     return I->Clauses;
+  }
+
+  /// Mark the current (explicit) directive on the stack as having been acted
+  /// on.  Fails an assert if that's not a routine directive.
+  void setExplicitRoutineDirectiveActedOn() {
+    assert(!Stack.empty() && "expected non-empty directive stack");
+    assert(Stack.rbegin()->EffectiveDKind == ACCD_routine &&
+           "expected routine directive at top of directive stack");
+    Stack.rbegin()->ExplicitRoutineDirectiveIsActedOn = true;
+  }
+
+  /// Has the current (explicit) directive on the stack been acted on?  Fails an
+  /// assert if that's not a routine directive.
+  bool isExplicitRoutineDirectiveActedOn() {
+    assert(!Stack.empty() && "expected non-empty directive stack");
+    assert(Stack.rbegin()->EffectiveDKind == ACCD_routine &&
+           "expected routine directive at top of directive stack");
+    return Stack.rbegin()->ExplicitRoutineDirectiveIsActedOn;
   }
 
   /// Register break statement in current acc loop.
@@ -3099,9 +3120,15 @@ StmtResult Sema::ActOnOpenACCAtomicDirective(ArrayRef<ACCClause *> Clauses,
 void Sema::ActOnOpenACCRoutineDirective(OpenACCDetermination Determination,
                                         DeclGroupRef TheDeclGroup) {
   DirStackTy &DirStack = OpenACCData->DirStack;
+  // ActOnStartOfFunctionDefForOpenACC calls ActOnOpenACCRoutineDirective in the
+  // case of a function definition, but ParseOpenACCDeclarativeDirective doesn't
+  // know and calls it again, so skip if this is the second time.
+  if (DirStack.isExplicitRoutineDirectiveActedOn())
+    return;
   ActOnOpenACCRoutineDirective(DirStack.getClauses(), Determination,
                                DirStack.getDirectiveStartLoc(),
                                DirStack.getDirectiveEndLoc(), TheDeclGroup);
+  DirStack.setExplicitRoutineDirectiveActedOn();
 }
 
 void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
@@ -3144,12 +3171,6 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
   }
   FunctionDecl *FD = TheDecl->getAsFunction();
   ACCRoutineDeclAttr *ACCAttr = FD->getAttr<ACCRoutineDeclAttr>();
-
-  // ActOnStartOfFunctionDefForOpenACC calls ActOnOpenACCRoutineDirective in the
-  // case of a function definition, but ParseOpenACCDeclarativeDirective doesn't
-  // know and calls it again, so skip if this is the second time.
-  if (ACCAttr && !ACCAttr->isInherited())
-    return;
 
   // OpenACC 3.2, sec. 2.15.1 "Routine Directive", L2927:
   // "At least one of the (gang, worker, vector, or seq) clauses must appear on

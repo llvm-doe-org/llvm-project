@@ -171,6 +171,7 @@ void UNIQUE_NAME();
 // checked later.
 //------------------------------------------------------------------------------
 
+//..............................................................................
 // Parse errors.
 
 // expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
@@ -225,6 +226,7 @@ void UNIQUE_NAME();
 #pragma acc routine seq(i)
 void UNIQUE_NAME();
 
+//..............................................................................
 // Conflicting clauses on the same directive.
 
 // expected-error@+1 {{directive '#pragma acc routine' cannot contain more than one 'gang' clause}}
@@ -295,6 +297,7 @@ void UNIQUE_NAME();
 #pragma acc routine seq gang worker vector seq gang worker vector
 void UNIQUE_NAME();
 
+//..............................................................................
 // Conflicting clauses on different explicit directives for the same function.
 
 #pragma acc routine gang
@@ -401,6 +404,16 @@ void seqSeq();
 #pragma acc routine seq
 void seqSeq();
 
+// A routine directive conflict at a function definition used to produce a
+// duplicate diagnostic about the conflict.
+// expected-note@+1 {{previous '#pragma acc routine' for function 'declDefConflict' appears here}}
+#pragma acc routine gang
+void declDefConflict();
+// expected-error@+1 {{for function 'declDefConflict', '#pragma acc routine worker' conflicts with previous '#pragma acc routine gang'}}
+#pragma acc routine worker
+void declDefConflict() {}
+
+//..............................................................................
 // Conflicting clauses between explicit directive and previously implied
 // directive for the same function.  These necessarily include errors that the
 // explicit directives appear after uses.  Those errors are more thoroughly

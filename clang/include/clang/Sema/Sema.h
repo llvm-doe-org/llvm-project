@@ -11665,9 +11665,14 @@ public:
   /// associated statement.
   StmtResult ActOnOpenACCAtomicDirective(ArrayRef<ACCClause *> Clauses,
                                          Stmt *AStmt);
-  /// Called on well-formed '\#pragma acc routine'.
+  /// Called on a well-formed explicit '\#pragma acc routine'.  Uses the
+  /// internal directive stack to record the call and suppress any future calls
+  /// for the same directive.
   void ActOnOpenACCRoutineDirective(OpenACCDetermination Determination,
                                     DeclGroupRef Decl);
+  /// Called on an implicit '\#pragma acc routine'.  Also called by the other
+  /// \c ActOnOpenACCRoutineDirective.  Does not avoid duplicate calls like
+  /// that one.
   void ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
                                     OpenACCDetermination Determination,
                                     SourceLocation StartLoc,
