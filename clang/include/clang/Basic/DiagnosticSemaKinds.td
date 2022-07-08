@@ -11176,8 +11176,6 @@ def note_acc_routine_definition : Note<
   "definition of function '%0' appears here">;
 def note_acc_routine_use : Note<
   "use of function '%0' appears here">;
-def note_acc_routine_use_lost : Note<
-  "cannot report locations of uses of function '%0' due to previous errors">;
 def err_acc_routine_loop_par_level : Error<
   "'#pragma acc %0 %1' construct calls function '%2', which has '#pragma acc "
   "routine %3'">;

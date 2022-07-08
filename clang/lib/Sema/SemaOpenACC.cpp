@@ -717,7 +717,8 @@ private:
     std::list<DiagTy> Diags;
     /// This function's uses of other functions such that, in each case, the use
     /// does not appear in a compute construct and neither function was known to
-    /// have a routine directive when the use was parsed.
+    /// have a routine directive when the use was discovered.  For each such
+    /// other function FD, this table is indexed by FD->getCanonicalDecl().
     llvm::DenseMap<FunctionDecl *, SourceLocation> HostFunctionUses;
     /// The location of the use of this function that originally implied a
     /// routine seq directive for this function.  Invalid if no routine seq
@@ -734,6 +735,7 @@ private:
     /// function yet.
     OpenACCDirectiveKind UserComputeConstruct = ACCD_unknown;
   };
+  /// For each function FD, this table is indexed by FD->getCanonicalDecl().
   llvm::DenseMap<FunctionDecl *, FunctionEntryTy> Map;
 
   /// Emit a diagnostic that is caused by a function's routine directive.
@@ -915,6 +917,14 @@ struct Sema::OpenACCDataTy {
   bool TransformingOpenACC = false;
   DirStackTy DirStack;
   ImplicitRoutineDirInfoTy ImplicitRoutineDirInfo;
+  /// This table records locations of all uses discovered so far for all
+  /// functions.  For each function FD, it is indexed by FD->getCanonicalDecl().
+  ///
+  /// This table is maintained in order to produce notes upon an error.  If we
+  /// find it's too big, we might decide it's sufficient to record and report
+  /// just a single use.
+  llvm::DenseMap<FunctionDecl *, llvm::SmallVector<SourceLocation>>
+      FunctionUses;
   OpenACCDataTy(Sema &SemaRef)
       : DirStack(SemaRef), ImplicitRoutineDirInfo(SemaRef) {}
 };
@@ -1114,40 +1124,6 @@ void Sema::EndOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind) {
 }
 
 namespace {
-/// Per \c Stmt helper for \c RoutineUseReporter.
-class RoutineUsedDeclVisitor : public UsedDeclVisitor<RoutineUsedDeclVisitor> {
-private:
-  FunctionDecl *FD;
-  bool FoundUse;
-
-public:
-  void visitUsedDecl(SourceLocation Loc, Decl *D) {
-    if (D->getCanonicalDecl() != FD->getCanonicalDecl())
-      return;
-    FoundUse = true;
-    S.Diag(Loc, diag::note_acc_routine_use) << FD->getName();
-  }
-  RoutineUsedDeclVisitor(Sema &SemaRef, FunctionDecl *FD)
-      : UsedDeclVisitor<RoutineUsedDeclVisitor>(SemaRef), FD(FD),
-        FoundUse(false) {}
-  bool foundUse() const { return FoundUse; }
-};
-
-/// Emits note diagnostics for previous uses of a function.
-class RoutineUseReporter : public RecursiveASTVisitor<RoutineUseReporter> {
-private:
-  RoutineUsedDeclVisitor RUDV;
-
-public:
-  bool TraverseStmt(Stmt *S) {
-    if (S)
-      RUDV.Visit(S);
-    return true;
-  }
-  RoutineUseReporter(Sema &SemaRef, FunctionDecl *FD) : RUDV(SemaRef, FD) {}
-  bool foundUse() const { return RUDV.foundUse(); }
-};
-
 /// See the section "Implicit Gang Clauses" in the Clang OpenACC design
 /// document.
 class ImplicitGangAdder : public StmtVisitor<ImplicitGangAdder> {
@@ -2354,6 +2330,7 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
                                       SourceLocation UseLoc) {
   if (OpenACCData->TransformingOpenACC)
     return;
+  OpenACCData->FunctionUses[Usee->getCanonicalDecl()].push_back(UseLoc);
   DirStackTy &DirStack = OpenACCData->DirStack;
   ImplicitRoutineDirInfoTy &ImplicitRoutineDirInfo =
       OpenACCData->ImplicitRoutineDirInfo;
@@ -3232,7 +3209,6 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
   // evaluated (e.g., a reference in sizeof is not a use).
   bool AfterUseErrorReported = false;
   if (Determination == ACC_EXPLICIT && (!ACCAttr || ACCAttr->isImplicit())) {
-    bool PreviousErrors = getDiagnostics().hasErrorOccurred();
     if (FunctionDecl *Def = FD->getDefinition()) {
       if (Def != FD) {
         Diag(StartLoc, diag::err_acc_routine_not_in_scope_at_function_def)
@@ -3252,22 +3228,12 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
       AfterUseErrorReported = true;
       Diag(StartLoc, diag::err_acc_routine_not_in_scope_at_function_use)
           << FD->getName();
-      RoutineUseReporter Reporter(*this, FD);
-      Reporter.TraverseAST(Context);
-      if (!Reporter.foundUse()) {
-        assert(PreviousErrors &&
-               "expected to find and report function use if no previous errors "
-               "potentially discarded parts of the AST");
-        SourceLocation UseLoc =
-            OpenACCData->ImplicitRoutineDirInfo.getUseLoc(FD);
-        if (UseLoc.isValid()) {
-          // It's only one of potentially multiple uses, but that'll have to do.
-          Diag(UseLoc, diag::note_acc_routine_use) << FD->getName();
-        } else {
-          // Must have been host uses, which don't imply routine directives.
-          Diag(StartLoc, diag::note_acc_routine_use_lost) << FD->getName();
-        }
-      }
+      const SmallVector<SourceLocation> &Uses =
+          OpenACCData->FunctionUses[FD->getCanonicalDecl()];
+      assert(!Uses.empty() &&
+             "expected a use of FD to be recorded if FD->isUsed()");
+      for (SourceLocation UseLoc : Uses)
+        Diag(UseLoc, diag::note_acc_routine_use) << FD->getName();
     }
   }
 

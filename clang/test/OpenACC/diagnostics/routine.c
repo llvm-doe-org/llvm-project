@@ -737,61 +737,61 @@ void useDefBetween();
 #pragma acc routine seq
 void useDefBetween();
 
-// If some uses appear within broken and discarded sections of the AST and some
-// don't, only the latter uses are reported even if one of the former is an
-// offload use for which Clang saved its location for the routine directive it
-// implies (see next example for how that might be reported instead).
+// Some uses appear within broken and discarded sections of the AST, and some
+// don't, but Clang reports them all.  In the past, Clang reported only the
+// latter uses.
 void someUsesInErrorBefore();
 void someUsesInErrorBefore_use() {
-  // This use isn't reported even though it implied a routine directive.
   // expected-error@+2 {{statement after '#pragma acc parallel loop' must be a for loop}}
   #pragma acc parallel loop
-  someUsesInErrorBefore();
-  // This use is reported.
-  // expected-note@+1 {{use of function 'someUsesInErrorBefore' appears here}}
-  someUsesInErrorBefore();
-  // This use isn't reported.
+  someUsesInErrorBefore(); // #someUsesInErrorBefore_use0
+  someUsesInErrorBefore(); // #someUsesInErrorBefore_use1
   // expected-error@+2 {{statement after '#pragma acc parallel loop' must be a for loop}}
   #pragma acc parallel loop
-  someUsesInErrorBefore();
+  someUsesInErrorBefore(); // #someUsesInErrorBefore_use2
 }
-// expected-error@+1 {{first '#pragma acc routine' for function 'someUsesInErrorBefore' not in scope at some uses}}
+// expected-error@+4 {{first '#pragma acc routine' for function 'someUsesInErrorBefore' not in scope at some uses}}
+// expected-note@#someUsesInErrorBefore_use0 {{use of function 'someUsesInErrorBefore' appears here}}
+// expected-note@#someUsesInErrorBefore_use1 {{use of function 'someUsesInErrorBefore' appears here}}
+// expected-note@#someUsesInErrorBefore_use2 {{use of function 'someUsesInErrorBefore' appears here}}
 #pragma acc routine seq
 void someUsesInErrorBefore();
 
-// If all uses appear within broken and discarded sections of the AST but at
-// least one is an offload use, then the first offload use is reported because
-// Clang saved its location for the routine directive it implies.
+// All uses appear within broken and discarded sections of the AST and are
+// offload uses, but Clang reports them all.  In the past, Clang reported only
+// the first use.
 void accUseInErrorBefore();
 void accUseInErrorBefore_use() {
-  // expected-error@+3 {{statement after '#pragma acc parallel loop' must be a for loop}}
-  // expected-note@+2 {{use of function 'accUseInErrorBefore' appears here}}
-  #pragma acc parallel loop
-  accUseInErrorBefore();
   // expected-error@+2 {{statement after '#pragma acc parallel loop' must be a for loop}}
   #pragma acc parallel loop
-  accUseInErrorBefore();
+  accUseInErrorBefore(); // #accUseInErrorBefore_use0
+  // expected-error@+2 {{statement after '#pragma acc parallel loop' must be a for loop}}
+  #pragma acc parallel loop
+  accUseInErrorBefore(); // #accUseInErrorBefore_use1
 }
-// expected-error@+1 {{first '#pragma acc routine' for function 'accUseInErrorBefore' not in scope at some uses}}
+// expected-error@+3 {{first '#pragma acc routine' for function 'accUseInErrorBefore' not in scope at some uses}}
+// expected-note@#accUseInErrorBefore_use0 {{use of function 'accUseInErrorBefore' appears here}}
+// expected-note@#accUseInErrorBefore_use1 {{use of function 'accUseInErrorBefore' appears here}}
 #pragma acc routine seq
 void accUseInErrorBefore();
 
-// If all uses appear within broken and discarded sections of the AST and are
-// host-only uses, then Clang can report that there are uses but cannot report
-// any of their locations.
+// All uses appear within broken and discarded sections of the AST and are
+// host-only uses, but Clang report them all.  In the past, Clang reported that
+// there are uses but didn't report any of their locations.
 void hostUseInErrorBefore();
 void hostUseInErrorBefore_use() {
   // expected-error@+2 {{function 'hostUseInErrorBefore_use' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   // expected-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
   #pragma acc loop
-  hostUseInErrorBefore();
+  hostUseInErrorBefore(); // #hostUseInErrorBefore_use0
   // expected-error@+2 {{function 'hostUseInErrorBefore_use' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   // expected-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
   #pragma acc loop
-  hostUseInErrorBefore();
+  hostUseInErrorBefore(); // #hostUseInErrorBefore_use1
 }
-// expected-error@+2 {{first '#pragma acc routine' for function 'hostUseInErrorBefore' not in scope at some uses}}
-// expected-note@+1 {{cannot report locations of uses of function 'hostUseInErrorBefore' due to previous errors}}
+// expected-error@+3 {{first '#pragma acc routine' for function 'hostUseInErrorBefore' not in scope at some uses}}
+// expected-note@#hostUseInErrorBefore_use0 {{use of function 'hostUseInErrorBefore' appears here}}
+// expected-note@#hostUseInErrorBefore_use1 {{use of function 'hostUseInErrorBefore' appears here}}
 #pragma acc routine seq
 void hostUseInErrorBefore();
 
