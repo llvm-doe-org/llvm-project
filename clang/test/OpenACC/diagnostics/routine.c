@@ -10,18 +10,17 @@
 
 // OpenACC disabled
 // RUN: %for {
-// RUN:   %clang_cc1 -verify=noacc -Wno-gnu-alignof-expression %[cflags] %s
+// RUN:   %clang_cc1 -verify=noacc,expected-noacc -Wno-gnu-alignof-expression \
+// RUN:     %[cflags] %s
 // RUN: }
 
 // OpenACC enabled
 // RUN: %for {
-// RUN:   %clang_cc1 -verify=expected -fopenacc -Wno-gnu-alignof-expression \
-// RUN:     %[cflags] %s
+// RUN:   %clang_cc1 -verify=expected,expected-noacc -fopenacc \
+// RUN:     -Wno-gnu-alignof-expression %[cflags] %s
 // RUN: }
 
 // END.
-
-// noacc-no-diagnostics
 
 #include <stddef.h>
 
@@ -1295,43 +1294,50 @@ void indirectParUseInDef() {
 // Usee never has a routine directive, so user cannot either, so their levels of
 // parallelism are compatible.
 
-void useeNoDir();
+int useeNoDir();
+
 void useeNoDir_user() {
   useeNoDir();
   #pragma acc data copy(i)
   useeNoDir();
 }
 
+// For this function call at file scope, Clang used to fail an assertion because
+// the OpenACC routine directive analysis incorrectly assumed the call would
+// already be discarded because it's not permitted in C.
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeNoDir_fileScopeUser = useeNoDir();
+
 //..............................................................................
 // Usee has no routine directive yet, so its level of parallelism is compatible
 // with any use site.
 
-void useeInGangFn();
-void useeInWorkerFn();
-void useeInVectorFn();
-void useeInSeqFn();
-void useeInImpLaterFn();
-void useeInPar();
-void useeInParGangLoop();
-void useeInParWorkerLoop();
-void useeInParVectorLoop();
-void useeInParGangWorkerLoop();
-void useeInParGangVectorLoop();
-void useeInParWorkerVectorLoop();
-void useeInParGangWorkerVectorLoop();
-void useeInParSeqLoop();
-void useeInParNakedLoop();
-void useeInParAutoLoop();
-void useeInGangLoop();
-void useeInWorkerLoop();
-void useeInVectorLoop();
-void useeInGangWorkerLoop();
-void useeInGangVectorLoop();
-void useeInWorkerVectorLoop();
-void useeInGangWorkerVectorLoop();
-void useeInSeqLoop();
-void useeInNakedLoop();
-void useeInAutoLoop();
+int useeInGangFn();
+int useeInWorkerFn();
+int useeInVectorFn();
+int useeInSeqFn();
+int useeInImpLaterFn();
+int useeInPar();
+int useeInParGangLoop();
+int useeInParWorkerLoop();
+int useeInParVectorLoop();
+int useeInParGangWorkerLoop();
+int useeInParGangVectorLoop();
+int useeInParWorkerVectorLoop();
+int useeInParGangWorkerVectorLoop();
+int useeInParSeqLoop();
+int useeInParNakedLoop();
+int useeInParAutoLoop();
+int useeInGangLoop();
+int useeInWorkerLoop();
+int useeInVectorLoop();
+int useeInGangWorkerLoop();
+int useeInGangVectorLoop();
+int useeInWorkerVectorLoop();
+int useeInGangWorkerVectorLoop();
+int useeInSeqLoop();
+int useeInNakedLoop();
+int useeInAutoLoop();
 
 void useeInAny_hostUser() {
   useeInGangFn();
@@ -1361,6 +1367,62 @@ void useeInAny_hostUser() {
   useeInNakedLoop();
   useeInAutoLoop();
 }
+
+// For these function calls at file scope, Clang used to fail an assertion
+// because the OpenACC routine directive analysis incorrectly assumed the call
+// would already be discarded because it's not permitted in C.
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInGangFn_fileScopeUser = useeInGangFn();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInWorkerFn_fileScopeUser = useeInWorkerFn();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInVectorFn_fileScopeUser = useeInVectorFn();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInSeqFn_fileScopeUser = useeInSeqFn();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInImpLaterFn_fileScopeUser = useeInImpLaterFn();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInPar_fileScopeUser = useeInPar();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInParGangLoop_fileScopeUser = useeInParGangLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInParWorkerLoop_fileScopeUser = useeInParWorkerLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInParVectorLoop_fileScopeUser = useeInParVectorLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInParGangWorkerLoop_fileScopeUser = useeInParGangWorkerLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInParGangVectorLoop_fileScopeUser = useeInParGangVectorLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInParWorkerVectorLoop_fileScopeUser = useeInParWorkerVectorLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInParGangWorkerVectorLoop_fileScopeUser = useeInParGangWorkerVectorLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInParSeqLoop_fileScopeUser = useeInParSeqLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInParNakedLoop_fileScopeUser = useeInParNakedLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInParAutoLoop_fileScopeUser = useeInParAutoLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInGangLoop_fileScopeUser = useeInGangLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInWorkerLoop_fileScopeUser = useeInWorkerLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInVectorLoop_fileScopeUser = useeInVectorLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInGangWorkerLoop_fileScopeUser = useeInGangWorkerLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInGangVectorLoop_fileScopeUser = useeInGangVectorLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInWorkerVectorLoop_fileScopeUser = useeInWorkerVectorLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInGangWorkerVectorLoop_fileScopeUser = useeInGangWorkerVectorLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInSeqLoop_fileScopeUser = useeInSeqLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInNakedLoop_fileScopeUser = useeInNakedLoop();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeInAutoLoop_fileScopeUser = useeInAutoLoop();
 
 #pragma acc routine gang
 void useeInGangFn_user() { useeInGangFn(); }
@@ -1471,16 +1533,16 @@ void useeInAnyConstruct_orphanedUnpartLoopUser() {
 // Usee has routine directive already.
 
 // expected-note@+1 48 {{'#pragma acc routine' for function 'useeHasGang' appears here}}
-#pragma acc routine gang
-void useeHasGang();
+#pragma acc routine gang // #useeHasGang_routine
+int useeHasGang();
 // expected-note@+1 40 {{'#pragma acc routine' for function 'useeHasWorker' appears here}}
-#pragma acc routine worker
-void useeHasWorker();
+#pragma acc routine worker // #useeHasWorker_routine
+int useeHasWorker();
 // expected-note@+1 28 {{'#pragma acc routine' for function 'useeHasVector' appears here}}
-#pragma acc routine vector
-void useeHasVector();
+#pragma acc routine vector // #useeHasVector_routine
+int useeHasVector();
 #pragma acc routine seq
-void useeHasSeq();
+int useeHasSeq();
 
 #pragma acc routine gang
 void useeHasAny_gangFnUser() {
@@ -2038,6 +2100,24 @@ void useeHasAny_orphanedPartLoopUser() {
   }
 }
 
+// For these function calls at file scope, Clang used to fail an assertion
+// because the OpenACC routine directive analysis incorrectly assumed the call
+// would already be discarded because it's not permitted in C.
+// expected-error@+3 {{function 'useeHasGang' has '#pragma acc routine gang' but is called at file scope}}
+// expected-note@#useeHasGang_routine {{'#pragma acc routine' for function 'useeHasGang' appears here}}
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeHasGang_fileScopeUser = useeHasGang();
+// expected-error@+3 {{function 'useeHasWorker' has '#pragma acc routine worker' but is called at file scope}}
+// expected-note@#useeHasWorker_routine {{'#pragma acc routine' for function 'useeHasWorker' appears here}}
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeHasWorker_fileScopeUser = useeHasWorker();
+// expected-error@+3 {{function 'useeHasVector' has '#pragma acc routine vector' but is called at file scope}}
+// expected-note@#useeHasVector_routine {{'#pragma acc routine' for function 'useeHasVector' appears here}}
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeHasVector_fileScopeUser = useeHasVector();
+// expected-noacc-error@+1 {{initializer element is not a compile-time constant}}
+int useeHasSeq_fileScopeUser = useeHasSeq();
+
 //..............................................................................
 // What is considered a use when checking levels of parallelism?
 
@@ -2375,6 +2455,8 @@ struct MissingDeclarationWithinStructTwice {
 
 #elif CASE == CASE_WITH_TRANSFORM_0
 
+// noacc-no-diagnostics
+
 // Within each OpenACC construct below, diagnostics are recorded, and then the
 // construct is transformed to OpenMP.  During the transformation, SemaOpenACC
 // is careful to skip recording the diagnostics again.  Later, the routine
@@ -2417,6 +2499,8 @@ void dupStaticDiagBeforeRoutineDir_use() {
 
 #elif CASE == CASE_WITH_TRANSFORM_1
 
+// noacc-no-diagnostics
+
 // Same as previous case except diagnostics are emitted immediately, so
 // transforming to OpenMP should never happen, and neither should duplicate
 // diagnostics.
@@ -2451,6 +2535,8 @@ void dupStaticDiagAfterRoutineDir() {
 }
 
 #elif CASE == CASE_WITH_TRANSFORM_2
+
+// noacc-no-diagnostics
 
 // Within each OpenACC construct below, any diagnostic is recorded, and then the
 // construct is transformed to OpenMP.  During the transformation, SemaOpenACC
@@ -2502,6 +2588,8 @@ void dupParLevelDiagBeforeRoutineDir_user_user() {
 }
 
 #elif CASE == CASE_WITH_TRANSFORM_3
+
+// noacc-no-diagnostics
 
 // Same as previous case except diagnostics are emitted immediately, so
 // transforming to OpenMP should never happen, and neither should duplicate or

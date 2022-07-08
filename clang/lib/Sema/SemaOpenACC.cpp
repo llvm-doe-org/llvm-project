@@ -2438,15 +2438,24 @@ void Sema::ActOnCallExprForOpenACC(CallExpr *Call) {
     return;
 
   // Callee has a routine directive, and there's no enclosing loop or compute
-  // construct.  If Caller has no routine directive yet, complain if Callee has
-  // a higher level of parallelism than seq.  Why?  First, if a routine
-  // directive is implied for Caller later, then seq is the highest possible
-  // level.  Second, if a routine directive is not implied for Caller later,
-  // then Caller can execute only outside compute regions, but Callee's higher
-  // level of parallelism requires execution modes (gang-redundant, etc.) that
-  // are impossible outside compute regions.
+  // construct.  If there is no Caller (because call is at file scope) or Caller
+  // has no routine directive yet, complain if Callee has a higher level of
+  // parallelism than seq.  Why?  First, if a routine directive is implied for
+  // Caller later, then seq is the highest possible level.  Second, if a routine
+  // directive is not implied for Caller later or there is no Caller, then
+  // Caller can execute only outside compute regions, but Callee's higher level
+  // of parallelism requires execution modes (gang-redundant, etc.) that are
+  // impossible outside compute regions.
   FunctionDecl *Caller = getCurFunctionDecl();
-  assert(Caller && "expected function use to be in a function");
+  if (!Caller) {
+    if (CalleePart > ACCRoutineDeclAttr::Seq) {
+      Diag(CallLoc, diag::err_acc_routine_func_par_level_at_file_scope)
+          << Callee->getName()
+          << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
+      ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Callee);
+    }
+    return;
+  }
   ACCRoutineDeclAttr *CallerAttr = Caller->getAttr<ACCRoutineDeclAttr>();
   if (!CallerAttr) {
     if (CalleePart > ACCRoutineDeclAttr::Seq) {

@@ -376,16 +376,18 @@ Run-Time Environment Variables
       same compilation unit.  Otherwise, a compile-time error
       diagnostic is produced.
     * A compile-time error diagnostic is produced if a function's level of
-      parallelism is incompatible with any `loop` construct or function
-      enclosing a call.  An incompatible level of parallelism is not diagnosed
-      if a function's address is stored and called later.
+      parallelism is incompatible with the calling context (e.g., `loop`
+      construct or enclosing function).  An incompatible level of parallelism is
+      not diagnosed if a function's address is stored and called later.
     * A special case of the previous diagnostic is produced if a function's
-      level of parallelism is `gang`, `worker`, or `vector`, if a call to it
-      appears within another function but outside any compute or loop construct,
-      and if the calling function has no `routine` directive.  In this case, the
-      calling function can execute only outside compute regions, but the called
-      function requires execution modes (gang-redundant, etc.) that are
-      impossible outside compute regions.
+      level of parallelism is `gang`, `worker`, or `vector` and if a call to it
+      appears in host-only code.
+        * In C, host-only code is any code outside of any compute or loop
+          construct and within a function that has no `routine` directive.
+        * In C++, host-only code also includes code executed at file scope.
+        * In these cases, the call site can execute only outside compute
+          regions, but the called function requires execution modes
+          (gang-redundant, etc.) that are impossible outside compute regions.
 * Other clauses
     * No other clauses are supported yet.
     * Specifying a name is not yet supported, so an immediately
