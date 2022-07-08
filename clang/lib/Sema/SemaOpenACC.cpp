@@ -958,10 +958,17 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
   FunctionDecl *CurFnDecl = getCurFunctionDecl();
   if (CurFnDecl && !isOpenACCDirectiveStmt(ParentDKind)) {
     assert((ParentDKind == ACCD_unknown || ParentDKind == ACCD_routine) &&
-           "expected the only ACCDirectiveStmt to be the routine directive");
+           "expected the only non-ACCDirectiveStmt OpenACC directive to be the "
+           "routine directive");
     ACCRoutineDeclAttr *Attr = CurFnDecl->getAttr<ACCRoutineDeclAttr>();
+    // Any lexically attached routine directive should be recorded as an
+    // ACCRoutineDeclAttr on the function, and that's important for how we
+    // detect the routine directive below.  The only exception is that an
+    // erroneous routine directive might have been discarded, leaving no
+    // ACCRoutineDeclAttr or a previous routine directive's ACCRoutineDeclAttr.
     assert((ParentDKind != ACCD_routine ||
-            (Attr && ParentLoc == Attr->getLoc())) &&
+            (Attr && ParentLoc == Attr->getLoc()) ||
+            getDiagnostics().hasErrorOccurred()) &&
            "expected lexically attached routine directive to be attached as "
            "ACCRoutineDeclAttr to FunctionDecl");
     assert(isAllowedParentForDirective(RealDKind, ACCD_unknown) &&

@@ -901,6 +901,30 @@ void onDefOnDecl() {
 #pragma acc routine seq
 void onDefOnDecl();
 
+// When checking directives in a function body, an assert in Clang used to
+// assume that any lexically attached routine directive was the active routine
+// directive for the function.  That assert failed if the lexically attached
+// routine directive was discarded due to an error.  In that case, either a
+// stale routine directive is active, or none is.
+// expected-note@+1 {{previous '#pragma acc routine' for function 'dirUnderStaleRoutineDir' appears here}}
+#pragma acc routine worker
+void dirUnderStaleRoutineDir();
+// expected-error@+1 {{for function 'dirUnderStaleRoutineDir', '#pragma acc routine vector' conflicts with previous '#pragma acc routine worker'}}
+#pragma acc routine vector
+void dirUnderStaleRoutineDir() {
+  #pragma acc loop vector
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+// expected-error@+1 {{expected 'gang', 'worker', 'vector', or 'seq' clause for '#pragma acc routine'}}
+#pragma acc routine
+void dirUnderDiscardedRoutineDir() {
+  // expected-error@+1 {{function 'dirUnderDiscardedRoutineDir' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  #pragma acc loop vector
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+
 //------------------------------------------------------------------------------
 // Restrictions on the function definition body for implicit routine directives.
 //------------------------------------------------------------------------------
