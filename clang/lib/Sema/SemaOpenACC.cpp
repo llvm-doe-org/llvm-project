@@ -798,7 +798,15 @@ public:
     for (auto Diag : Entry.Diags)
       emitRoutineDirDiag(FD, Diag.first, Diag.second);
     Entry.Diags.clear(); // don't need them anymore
-    for (auto Use : Entry.HostFunctionUses) {
+    SmallVector<std::pair<FunctionDecl *, SourceLocation>> Uses;
+    // addImplicitRoutineSeqDir sometimes inserts a new entry into Map (above),
+    // so calling it could relocate the current Entry in memory and break any
+    // ongoing iteration over Entry.HostFunctionUses.  Thus, we move
+    // Entry.HostFunctionUses to local memory before iterating it below.  We
+    // won't need Entry.HostFunctionUses again, so it's fine that it's destroyed
+    // afterward.
+    auto HostFunctionUses = std::move(Entry.HostFunctionUses);
+    for (auto Use : HostFunctionUses) {
       FunctionDecl *Usee = Use.first;
       SourceLocation UseeUseLoc = Use.second;
       Usee = Usee->getMostRecentDecl();
@@ -806,7 +814,6 @@ public:
         continue; // avoid infinite recursion
       addImplicitRoutineSeqDir(Usee, UseeUseLoc, FD, ACCD_routine);
     }
-    Entry.HostFunctionUses.clear(); // don't need them anymore
   }
 
   /// Emit notes identifying the origin of the routine directive for \a FD.
