@@ -50,8 +50,8 @@ $ cmake -DCMAKE_INSTALL_PREFIX=../install \
         ../llvm
 $ make
 $ make install
-$ export PATH=$LLVM_GIT_DIR/install:$PATH
-$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install:$LD_LIBRARY_PATH
+$ export PATH=$LLVM_GIT_DIR/install/bin:$PATH
+$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install/lib:$LD_LIBRARY_PATH
 ```
 
 Building LLVM successfully can be challenging, and the above minimal
@@ -121,8 +121,8 @@ $ cmake -DCMAKE_INSTALL_PREFIX=../install    \
         ../llvm
 $ make
 $ make install
-$ export PATH=$LLVM_GIT_DIR/install:$PATH
-$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install:$LD_LIBRARY_PATH
+$ export PATH=$LLVM_GIT_DIR/install/bin:$PATH
+$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install/lib:$LD_LIBRARY_PATH
 ```
 
 From Spack:
@@ -155,8 +155,8 @@ $ cmake -DCMAKE_INSTALL_PREFIX=../install     \
         ../llvm
 $ make
 $ make install
-$ export PATH=$LLVM_GIT_DIR/install:$PATH
-$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install:$LD_LIBRARY_PATH
+$ export PATH=$LLVM_GIT_DIR/install/bin:$PATH
+$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install/lib:$LD_LIBRARY_PATH
 ```
 
 From Spack:
@@ -191,8 +191,8 @@ $ cmake -DCMAKE_INSTALL_PREFIX=../install    \
         ../llvm
 $ make
 $ make install
-$ export PATH=$LLVM_GIT_DIR/install:$PATH
-$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install:$LD_LIBRARY_PATH
+$ export PATH=$LLVM_GIT_DIR/install/bin:$PATH
+$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install/lib:$LD_LIBRARY_PATH
 ```
 
 From Spack:
@@ -223,8 +223,10 @@ and after setting environment variables as described in the previous section:
 $ cat test.c
 #include <stdio.h>
 int main() {
-  #pragma acc parallel num_gangs(2)
-  printf("Hello World\n");
+  int x = 0;
+  #pragma acc parallel num_gangs(2) reduction(+:x)
+  x += 1;
+  printf("Hello World: %d\n", x);
   return 0;
 }
 ```
@@ -233,24 +235,21 @@ To compile and run only for host:
 
 ```
 $ clang -fopenacc test.c && ./a.out
-Hello World
-Hello World
+Hello World: 2
 ```
 
 To compile and run for an NVIDIA GPU:
 
 ```
 $ clang -fopenacc -fopenmp-targets=nvptx64-nvidia-cuda test.c && ./a.out
-Hello World
-Hello World
+Hello World: 2
 ```
 
 To compile and run for an AMD GPU:
 
 ```
 $ clang -fopenacc -fopenmp-targets=amdgcn-amd-amdhsa test.c && ./a.out
-Hello World
-Hello World
+Hello World: 2
 ```
 
 To use source-to-source mode:
