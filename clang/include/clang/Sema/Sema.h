@@ -11630,7 +11630,11 @@ public:
   /// Add implicit routine directive upon an offload device use of a function.
   void ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc);
   /// Check the level of parallelism of a called function.
-  void ActOnCallExprForOpenACC(CallExpr *Call);
+  //@{
+  void ActOnFunctionCallForOpenACC(FunctionDecl *Callee,
+                                   SourceLocation CallLoc);
+  void ActOnFunctionCallForOpenACC(CallExpr *CE);
+  //@}
   /// Check that a given declaration is ok for any current OpenACC directives.
   void ActOnDeclStmtForOpenACC(DeclStmt *S);
 

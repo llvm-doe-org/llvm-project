@@ -4911,7 +4911,13 @@ ExprResult Sema::ActOnArraySubscriptExpr(Scope *S, Expr *base,
   if (getLangOpts().CPlusPlus && !base->getType()->isObjCObjectPointerType() &&
       ((base->getType()->isRecordType() ||
         (ArgExprs.size() != 1 || ArgExprs[0]->getType()->isRecordType())))) {
-    return CreateOverloadedArraySubscriptExpr(lbLoc, rbLoc, base, ArgExprs);
+    ExprResult Result = CreateOverloadedArraySubscriptExpr(lbLoc, rbLoc, base,
+                                                           ArgExprs);
+    if (getLangOpts().OpenACC && !Result.isInvalid()) {
+      if (CXXOperatorCallExpr *CE = dyn_cast<CXXOperatorCallExpr>(Result.get()))
+        ActOnFunctionCallForOpenACC(CE);
+    }
+    return Result;
   }
 
   ExprResult Res =
@@ -6598,7 +6604,7 @@ ExprResult Sema::ActOnCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
 
   if (LangOpts.OpenACC) {
     if (CallExpr *CE = dyn_cast<CallExpr>(Call.get()))
-      ActOnCallExprForOpenACC(CE);
+      ActOnFunctionCallForOpenACC(CE);
   }
 
   if (LangOpts.CPlusPlus) {
@@ -15105,7 +15111,12 @@ static ExprResult BuildOverloadedBinOp(Sema &S, Scope *Sc, SourceLocation OpLoc,
 
   // Build the (potentially-overloaded, potentially-dependent)
   // binary operation.
-  return S.CreateOverloadedBinOp(OpLoc, Opc, Functions, LHS, RHS);
+  ExprResult Result = S.CreateOverloadedBinOp(OpLoc, Opc, Functions, LHS, RHS);
+  if (S.getLangOpts().OpenACC && !Result.isInvalid()) {
+    if (CXXOperatorCallExpr *CE = dyn_cast<CXXOperatorCallExpr>(Result.get()))
+      S.ActOnFunctionCallForOpenACC(CE);
+  }
+  return Result;
 }
 
 ExprResult Sema::BuildBinOp(Scope *S, SourceLocation OpLoc,
@@ -15564,7 +15575,12 @@ ExprResult Sema::BuildUnaryOp(Scope *S, SourceLocation OpLoc,
     if (S && OverOp != OO_None)
       LookupOverloadedOperatorName(OverOp, S, Functions);
 
-    return CreateOverloadedUnaryOp(OpLoc, Opc, Functions, Input);
+    ExprResult Result = CreateOverloadedUnaryOp(OpLoc, Opc, Functions, Input);
+    if (LangOpts.OpenACC && !Result.isInvalid()) {
+      if (CXXOperatorCallExpr *CE = dyn_cast<CXXOperatorCallExpr>(Result.get()))
+        ActOnFunctionCallForOpenACC(CE);
+    }
+    return Result;
   }
 
   return CreateBuiltinUnaryOp(OpLoc, Opc, Input);

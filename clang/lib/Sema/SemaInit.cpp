@@ -6555,6 +6555,8 @@ PerformConstructorInitialization(Sema &S,
         return ExprError();
     }
     S.MarkFunctionReferenced(Loc, CalleeDecl);
+    if (S.getLangOpts().OpenACC)
+      S.ActOnFunctionCallForOpenACC(CalleeDecl, Loc);
 
     CurInit = S.CheckForImmediateInvocation(
         CXXTemporaryObjectExpr::Create(

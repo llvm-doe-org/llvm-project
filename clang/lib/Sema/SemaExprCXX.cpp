@@ -1003,6 +1003,8 @@ bool Sema::CheckCXXThrowOperand(SourceLocation ThrowLoc,
   if (!RD->hasIrrelevantDestructor()) {
     if (CXXDestructorDecl *Destructor = LookupDestructor(RD)) {
       MarkFunctionReferenced(E->getExprLoc(), Destructor);
+      if (getLangOpts().OpenACC)
+        ActOnFunctionCallForOpenACC(Destructor, E->getExprLoc());
       CheckDestructorAccess(E->getExprLoc(), Destructor,
                             PDiag(diag::err_access_dtor_exception) << Ty);
       if (DiagnoseUseOfDecl(Destructor, E->getExprLoc()))
@@ -2403,11 +2405,15 @@ Sema::BuildCXXNew(SourceRange Range, bool UseGlobal,
     if (DiagnoseUseOfDecl(OperatorNew, StartLoc))
       return ExprError();
     MarkFunctionReferenced(StartLoc, OperatorNew);
+    if (LangOpts.OpenACC)
+      ActOnFunctionCallForOpenACC(OperatorNew, StartLoc);
   }
   if (OperatorDelete) {
     if (DiagnoseUseOfDecl(OperatorDelete, StartLoc))
       return ExprError();
     MarkFunctionReferenced(StartLoc, OperatorDelete);
+    if (LangOpts.OpenACC)
+      ActOnFunctionCallForOpenACC(OperatorDelete, StartLoc);
   }
 
   return CXXNewExpr::Create(Context, UseGlobal, OperatorNew, OperatorDelete,
@@ -3656,6 +3662,8 @@ Sema::ActOnCXXDelete(SourceLocation StartLoc, bool UseGlobal,
         if (CXXDestructorDecl *Dtor = LookupDestructor(PointeeRD)) {
           MarkFunctionReferenced(StartLoc,
                                     const_cast<CXXDestructorDecl*>(Dtor));
+          if (LangOpts.OpenACC)
+            ActOnFunctionCallForOpenACC(Dtor, StartLoc);
           if (DiagnoseUseOfDecl(Dtor, StartLoc))
             return ExprError();
         }
@@ -3684,6 +3692,8 @@ Sema::ActOnCXXDelete(SourceLocation StartLoc, bool UseGlobal,
     }
 
     MarkFunctionReferenced(StartLoc, OperatorDelete);
+    if (LangOpts.OpenACC)
+      ActOnFunctionCallForOpenACC(OperatorDelete, StartLoc);
 
     // Check access and ambiguity of destructor if we're going to call it.
     // Note that this is required even for a virtual delete.
@@ -7114,6 +7124,8 @@ ExprResult Sema::MaybeBindToTemporary(Expr *E) {
 
   if (Destructor) {
     MarkFunctionReferenced(E->getExprLoc(), Destructor);
+    if (getLangOpts().OpenACC)
+      ActOnFunctionCallForOpenACC(Destructor, E->getExprLoc());
     CheckDestructorAccess(E->getExprLoc(), Destructor,
                           PDiag(diag::err_access_dtor_temp)
                             << E->getType());
@@ -7881,6 +7893,9 @@ ExprResult Sema::BuildCXXMemberCallExpr(Expr *E, NamedDecl *FoundDecl,
   if (CheckFunctionCall(Method, CE,
                         Method->getType()->castAs<FunctionProtoType>()))
     return ExprError();
+
+  if (getLangOpts().OpenACC)
+    ActOnFunctionCallForOpenACC(CE);
 
   return CheckForImmediateInvocation(CE, CE->getMethodDecl());
 }

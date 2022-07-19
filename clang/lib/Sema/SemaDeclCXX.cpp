@@ -5106,6 +5106,8 @@ Sema::SetDelegatingInitializer(CXXConstructorDecl *Constructor,
 
   if (CXXDestructorDecl *Dtor = LookupDestructor(Constructor->getParent())) {
     MarkFunctionReferenced(Initializer->getSourceLocation(), Dtor);
+    if (getLangOpts().OpenACC)
+      ActOnFunctionCallForOpenACC(Dtor, Initializer->getSourceLocation());
     DiagnoseUseOfDecl(Dtor, Initializer->getSourceLocation());
   }
 
@@ -5638,6 +5640,8 @@ Sema::MarkBaseAndMemberDestructorsReferenced(SourceLocation Location,
                             << FieldType);
 
     MarkFunctionReferenced(Location, Dtor);
+    if (getLangOpts().OpenACC)
+      ActOnFunctionCallForOpenACC(Dtor, Location);
     DiagnoseUseOfDecl(Dtor, Location);
   }
 
@@ -5686,6 +5690,8 @@ Sema::MarkBaseAndMemberDestructorsReferenced(SourceLocation Location,
                           Context.getTypeDeclType(ClassDecl));
 
     MarkFunctionReferenced(Location, Dtor);
+    if (getLangOpts().OpenACC)
+      ActOnFunctionCallForOpenACC(Dtor, Location);
     DiagnoseUseOfDecl(Dtor, Location);
   }
 
@@ -5727,6 +5733,8 @@ void Sema::MarkVirtualBaseDestructorsReferenced(
           SourceRange(), DeclarationName(), nullptr);
     }
 
+    if (getLangOpts().OpenACC)
+      ActOnFunctionCallForOpenACC(Dtor, Location);
     MarkFunctionReferenced(Location, Dtor);
     DiagnoseUseOfDecl(Dtor, Location);
   }
@@ -13635,6 +13643,8 @@ void Sema::DefineInheritingConstructor(SourceLocation CurrentLocation,
         continue;
 
       MarkFunctionReferenced(CurrentLocation, BaseCtor.first);
+      if (getLangOpts().OpenACC)
+        ActOnFunctionCallForOpenACC(BaseCtor.first, CurrentLocation);
       ExprResult Init = new (Context) CXXInheritedCtorInitExpr(
           InitLoc, B.getType(), BaseCtor.first, VBase, BaseCtor.second);
 
@@ -15503,6 +15513,8 @@ Sema::BuildCXXConstructExpr(SourceLocation ConstructLoc, QualType DeclInitType,
   if (getLangOpts().SYCLIsDevice &&
       !checkSYCLDeviceFunction(ConstructLoc, Constructor))
     return ExprError();
+  if (getLangOpts().OpenACC)
+    ActOnFunctionCallForOpenACC(Constructor, ConstructLoc);
 
   return CheckForImmediateInvocation(
       CXXConstructExpr::Create(
@@ -15594,6 +15606,8 @@ void Sema::FinalizeVarWithDestructor(VarDecl *VD, const RecordType *Record) {
     return;
 
   CXXDestructorDecl *Destructor = LookupDestructor(ClassDecl);
+  if (getLangOpts().OpenACC)
+    ActOnFunctionCallForOpenACC(Destructor, VD->getLocation());
 
   // If this is an array, we'll require the destructor during initialization, so
   // we can skip over this. We still want to emit exit-time destructor warnings

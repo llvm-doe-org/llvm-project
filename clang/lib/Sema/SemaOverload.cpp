@@ -14940,6 +14940,8 @@ Sema::BuildOverloadedArrowExpr(Scope *S, Expr *Base, SourceLocation OpLoc,
   if (CheckFunctionCall(Method, TheCall,
                         Method->getType()->castAs<FunctionProtoType>()))
     return ExprError();
+  if (getLangOpts().OpenACC)
+    ActOnFunctionCallForOpenACC(TheCall);
 
   return CheckForImmediateInvocation(MaybeBindToTemporary(TheCall), Method);
 }
@@ -15086,6 +15088,8 @@ Sema::BuildForRangeBeginEndCall(SourceLocation Loc,
       return FRS_DiagnosticIssued;
     }
   }
+  if (LangOpts.OpenACC)
+    ActOnFunctionCallForOpenACC(cast<clang::CallExpr>(CallExpr->get()));
   return FRS_Success;
 }
 

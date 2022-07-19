@@ -20,6 +20,35 @@
 using namespace clang;
 
 //===----------------------------------------------------------------------===//
+// Utilities.
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Convenient way to stream a function name into a diagnostic.  For example:
+///
+/// Diag(Loc, diag::err_acc_foobar)
+///   << NameForDiag(*this, getCurFunctionDecl());
+///
+/// TODO: While convenient, it might be expensive, most notably if used before
+/// diagnostics are actually known to be needed.
+class NameForDiag {
+  SmallString<128> FnName;
+public:
+  NameForDiag(Sema &SemaRef, FunctionDecl *FD) {
+    llvm::raw_svector_ostream OS(FnName);
+    FD->getNameForDiagnostic(OS, SemaRef.getPrintingPolicy(),
+                             /*Qualified=*/true);
+  }
+  friend const StreamingDiagnostic&
+  operator<<(const StreamingDiagnostic &SD, const NameForDiag &NFD);
+};
+const StreamingDiagnostic&
+operator<<(const StreamingDiagnostic &SD, const NameForDiag &NFD) {
+  return SD << NFD.FnName;
+}
+}
+
+//===----------------------------------------------------------------------===//
 // OpenACC directive stack
 //===----------------------------------------------------------------------===//
 
@@ -779,7 +808,7 @@ public:
             UserComputeConstruct == ACCD_routine) &&
            "expected use to be in compute construct or function with a routine "
            "directive");
-    assert(!FD->hasAttr<ACCRoutineDeclAttr>() &&
+    assert(!FD->getMostRecentDecl()->hasAttr<ACCRoutineDeclAttr>() &&
            "expected function not to have routine directive already");
     FunctionEntryTy &Entry = Map[FD->getCanonicalDecl()];
     assert(Entry.UseLoc.isInvalid() &&
@@ -839,7 +868,7 @@ public:
     // Handle explicit routine directive.
     if (Loc.isValid()) {
       SemaRef.Diag(Loc, diag::note_acc_routine_explicit)
-          << PreviousDir << FD->getName();
+          << PreviousDir << NameForDiag(SemaRef, FD);
       return;
     }
 
@@ -848,14 +877,16 @@ public:
     assert(Entry.UseLoc.isValid() && Entry.UserFn &&
            Entry.UserComputeConstruct != ACCD_unknown &&
            "expected function to have implicit seq routine directive");
-    bool UserIsFunction = Entry.UserComputeConstruct == ACCD_routine;
-    StringRef UserName = UserIsFunction
-                             ? Entry.UserFn->getName()
-                             : getOpenACCName(Entry.UserComputeConstruct);
-    SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
-        << PreviousDir << FD->getName() << UserIsFunction << UserName;
-    if (UserIsFunction)
+    if (Entry.UserComputeConstruct == ACCD_routine) {
+      SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
+          << PreviousDir << NameForDiag(SemaRef, FD) << 1
+          << NameForDiag(SemaRef, Entry.UserFn);
       emitNotesForRoutineDirChain(Entry.UserFn, /*PreviousDir=*/false);
+    } else {
+      SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
+          << PreviousDir << NameForDiag(SemaRef, FD) << 0
+          << getOpenACCName(Entry.UserComputeConstruct);
+    }
   }
   /// Return the location of the use of this function that originally implied a
   /// routine seq directive for this function, or return an invalid location if
@@ -895,7 +926,7 @@ public:
     DiagIfRoutineDir(const DiagIfRoutineDir &) = delete;
     DiagIfRoutineDir &operator=(const DiagIfRoutineDir &) = delete;
     ~DiagIfRoutineDir() {
-      if (FD->hasAttr<ACCRoutineDeclAttr>()) {
+      if (FD->getMostRecentDecl()->hasAttr<ACCRoutineDeclAttr>()) {
         ImplicitRoutineDirInfo.emitRoutineDirDiag(FD, DiagLoc, *this);
         if (Emitted)
           *Emitted = true;
@@ -995,7 +1026,7 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
       bool Err;
       DiagIfRoutineDir(OpenACCData->ImplicitRoutineDirInfo, CurFnDecl, StartLoc,
                        diag::err_acc_routine_unexpected_directive, &Err)
-          << getOpenACCName(RealDKind) << CurFnDecl->getName();
+          << getOpenACCName(RealDKind) << NameForDiag(*this, CurFnDecl);
       return Err;
     }
     assert((RealDKind == ACCD_loop || RealDKind == ACCD_atomic) &&
@@ -1006,7 +1037,7 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
     // the scope of an explicit and applying routine directive."
     if (RealDKind == ACCD_loop && (!Attr || !Attr->getLoc().isValid())) {
       Diag(StartLoc, diag::err_acc_routine_for_orphaned_loop)
-          << CurFnDecl->getName();
+          << NameForDiag(*this, CurFnDecl);
       return true;
     }
     return false;
@@ -1869,7 +1900,7 @@ bool Sema::StartOpenACCAssociatedStatement() {
               FnAttr->getPartitioning();
           if (FnLevel < LoopLevel) {
             Diag(StartLoc, diag::err_acc_loop_func_par_level)
-                << Fn->getName()
+                << NameForDiag(*this, Fn)
                 << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(FnLevel)
                 << getOpenACCName(DKind)
                 << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(LoopLevel);
@@ -2346,7 +2377,8 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
   // directive if it's an accelerator use, and record as host use otherwise.
   // Either way, seq is the highest level of parallelism Usee might eventually
   // have, so any level of parallelism at the use site is compatible.
-  ACCRoutineDeclAttr *UseeAttr = Usee->getAttr<ACCRoutineDeclAttr>();
+  ACCRoutineDeclAttr *UseeAttr =
+      Usee->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
   if (!UseeAttr) {
     OpenACCDirectiveKind ComputeDKind = DirStack.isInComputeRegion();
     if (ComputeDKind != ACCD_unknown) {
@@ -2359,19 +2391,22 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
       ImplicitRoutineDirInfo.addHostFunctionUse(CurFD, Usee, UseLoc);
   }
 }
-void Sema::ActOnCallExprForOpenACC(CallExpr *Call) {
-  if (OpenACCData->TransformingOpenACC)
+void Sema::ActOnFunctionCallForOpenACC(CallExpr *CE) {
+  if (FunctionDecl *Callee = CE->getDirectCallee())
+    ActOnFunctionCallForOpenACC(Callee, CE->getExprLoc());
+}
+void Sema::ActOnFunctionCallForOpenACC(FunctionDecl *Callee,
+                                       SourceLocation CallLoc) {
+  assert(Callee && "expected Callee != nullptr");
+  if (OpenACCData->TransformingOpenACC || isUnevaluatedContext())
     return;
   DirStackTy &DirStack = OpenACCData->DirStack;
   ImplicitRoutineDirInfoTy &ImplicitRoutineDirInfo =
       OpenACCData->ImplicitRoutineDirInfo;
-  FunctionDecl *Callee = Call->getDirectCallee();
-  if (!Callee)
-    return;
-  ACCRoutineDeclAttr *CalleeAttr = Callee->getAttr<ACCRoutineDeclAttr>();
+  ACCRoutineDeclAttr *CalleeAttr =
+      Callee->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
   if (!CalleeAttr)
     return;
-  SourceLocation CallLoc = Call->getExprLoc();
 
   // Callee has a routine directive.  Record its level of parallelism on the
   // directive stack.  If there's an enclosing loop construct, complain if
@@ -2406,7 +2441,7 @@ void Sema::ActOnCallExprForOpenACC(CallExpr *Call) {
       Diag(CallLoc, diag::err_acc_routine_loop_par_level)
           << getOpenACCName(LoopDirKind)
           << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(LoopPart)
-          << Callee->getName()
+          << NameForDiag(*this, Callee)
           << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
       Diag(LoopLoc, diag::note_acc_enclosing_directive)
           << getOpenACCName(LoopDirKind);
@@ -2434,7 +2469,7 @@ void Sema::ActOnCallExprForOpenACC(CallExpr *Call) {
   if (!Caller) {
     if (CalleePart > ACCRoutineDeclAttr::Seq) {
       Diag(CallLoc, diag::err_acc_routine_func_par_level_at_file_scope)
-          << Callee->getName()
+          << NameForDiag(*this, Callee)
           << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
       ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Callee);
     }
@@ -2450,8 +2485,8 @@ void Sema::ActOnCallExprForOpenACC(CallExpr *Call) {
       // at the next diagnostic even though this diagnostic's wording would
       // cover that case too.
       Diag(CallLoc, diag::err_acc_routine_func_par_level_vs_no_explicit)
-          << Caller->getName()
-          << Callee->getName()
+          << NameForDiag(*this, Caller)
+          << NameForDiag(*this, Callee)
           << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
       ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Callee);
     }
@@ -2464,28 +2499,28 @@ void Sema::ActOnCallExprForOpenACC(CallExpr *Call) {
   ACCRoutineDeclAttr::PartitioningTy CallerPart = CallerAttr->getPartitioning();
   if (CallerPart < CalleePart) {
     Diag(CallLoc, diag::err_acc_routine_func_par_level)
-        << Caller->getName()
+        << NameForDiag(*this, Caller)
         << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CallerPart)
-        << Callee->getName()
+        << NameForDiag(*this, Callee)
         << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
     ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Caller);
     ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Callee);
   }
 }
+
 void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
   if (OpenACCData->TransformingOpenACC)
     return;
-  FunctionDecl *Fn = getCurFunctionDecl();
-  StringRef FnName = getCurFunctionDecl()->getName();
+  FunctionDecl *CurFn = getCurFunctionDecl();
   for (Decl *D : S->decls()) {
     if (VarDecl *VD = dyn_cast<VarDecl>(D)) {
       // OpenACC 3.1, sec. 2.15.1 "Routine Directive", L2794-2795:
       // "In C and C++, function static variables are not supported in functions
       // to which a routine directive applies."
       if (VD->isStaticLocal()) {
-        DiagIfRoutineDir(OpenACCData->ImplicitRoutineDirInfo, Fn,
+        DiagIfRoutineDir(OpenACCData->ImplicitRoutineDirInfo, CurFn,
                          VD->getLocation(), diag::err_acc_routine_static_local)
-            << VD->getName() << FnName;
+            << VD->getName() << NameForDiag(*this, CurFn);
       }
     }
   }
@@ -3170,7 +3205,8 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
     return;
   }
   FunctionDecl *FD = TheDecl->getAsFunction();
-  ACCRoutineDeclAttr *ACCAttr = FD->getAttr<ACCRoutineDeclAttr>();
+  ACCRoutineDeclAttr *ACCAttr =
+      FD->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
 
   // OpenACC 3.2, sec. 2.15.1 "Routine Directive", L2927:
   // "At least one of the (gang, worker, vector, or seq) clauses must appear on
@@ -3219,9 +3255,9 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
     if (FunctionDecl *Def = FD->getDefinition()) {
       if (Def != FD) {
         Diag(StartLoc, diag::err_acc_routine_not_in_scope_at_function_def)
-            << FD->getName();
+            << NameForDiag(*this, FD);
         Diag(Def->getBeginLoc(), diag::note_acc_routine_definition)
-            << FD->getName();
+            << NameForDiag(*this, FD);
       }
     }
     if (FD->isUsed()) {
@@ -3234,13 +3270,13 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
       // compiler's current analysis of any code in between.
       AfterUseErrorReported = true;
       Diag(StartLoc, diag::err_acc_routine_not_in_scope_at_function_use)
-          << FD->getName();
+          << NameForDiag(*this, FD);
       const SmallVector<SourceLocation> &Uses =
           OpenACCData->FunctionUses[FD->getCanonicalDecl()];
       assert(!Uses.empty() &&
              "expected a use of FD to be recorded if FD->isUsed()");
       for (SourceLocation UseLoc : Uses)
-        Diag(UseLoc, diag::note_acc_routine_use) << FD->getName();
+        Diag(UseLoc, diag::note_acc_routine_use) << NameForDiag(*this, FD);
     }
   }
 
@@ -3273,7 +3309,7 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
     // parallelism."
     if (PartOld != Part) {
       Diag(PartClause->getBeginLoc(), diag::err_acc_routine_inconsistent)
-          << FD->getName()
+          << NameForDiag(*this, FD)
           << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(Part)
           << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(PartOld);
       OpenACCData->ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(

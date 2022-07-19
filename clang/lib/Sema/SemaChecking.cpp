@@ -15104,6 +15104,8 @@ bool Sema::CheckParmsForFunctionDef(ArrayRef<ParmVarDecl *> Parameters,
             ClassDecl->isParamDestroyedInCallee()) {
           CXXDestructorDecl *Destructor = LookupDestructor(ClassDecl);
           MarkFunctionReferenced(Param->getLocation(), Destructor);
+          if (getLangOpts().OpenACC)
+            ActOnFunctionCallForOpenACC(Destructor, Param->getLocation());
           DiagnoseUseOfDecl(Destructor, Param->getLocation());
         }
       }
