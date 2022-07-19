@@ -4911,8 +4911,8 @@ ExprResult Sema::ActOnArraySubscriptExpr(Scope *S, Expr *base,
   if (getLangOpts().CPlusPlus && !base->getType()->isObjCObjectPointerType() &&
       ((base->getType()->isRecordType() ||
         (ArgExprs.size() != 1 || ArgExprs[0]->getType()->isRecordType())))) {
-    ExprResult Result = CreateOverloadedArraySubscriptExpr(lbLoc, rbLoc, base,
-                                                           ArgExprs);
+    ExprResult Result =
+        CreateOverloadedArraySubscriptExpr(lbLoc, rbLoc, base, ArgExprs);
     if (getLangOpts().OpenACC && !Result.isInvalid()) {
       if (CXXOperatorCallExpr *CE = dyn_cast<CXXOperatorCallExpr>(Result.get()))
         ActOnFunctionCallForOpenACC(CE);

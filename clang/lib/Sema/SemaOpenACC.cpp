@@ -33,20 +33,21 @@ namespace {
 /// diagnostics are actually known to be needed.
 class NameForDiag {
   SmallString<128> FnName;
+
 public:
   NameForDiag(Sema &SemaRef, FunctionDecl *FD) {
     llvm::raw_svector_ostream OS(FnName);
     FD->getNameForDiagnostic(OS, SemaRef.getPrintingPolicy(),
                              /*Qualified=*/true);
   }
-  friend const StreamingDiagnostic&
-  operator<<(const StreamingDiagnostic &SD, const NameForDiag &NFD);
+  friend const StreamingDiagnostic &operator<<(const StreamingDiagnostic &SD,
+                                               const NameForDiag &NFD);
 };
-const StreamingDiagnostic&
-operator<<(const StreamingDiagnostic &SD, const NameForDiag &NFD) {
+const StreamingDiagnostic &operator<<(const StreamingDiagnostic &SD,
+                                      const NameForDiag &NFD) {
   return SD << NFD.FnName;
 }
-}
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // OpenACC directive stack
@@ -2487,8 +2488,7 @@ void Sema::ActOnFunctionCallForOpenACC(FunctionDecl *Callee,
       // at the next diagnostic even though this diagnostic's wording would
       // cover that case too.
       Diag(CallLoc, diag::err_acc_routine_func_par_level_vs_no_explicit)
-          << NameForDiag(*this, Caller)
-          << NameForDiag(*this, Callee)
+          << NameForDiag(*this, Caller) << NameForDiag(*this, Callee)
           << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
       ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Callee);
     }
