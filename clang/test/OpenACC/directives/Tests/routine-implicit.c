@@ -3,7 +3,7 @@
 // Implicit routine directives are seen only in dump checks.  However, we also
 // make sure there's no misprint or miscompilation when they're present.  We
 // specifically avoid the clutter of checking that explicit routine directives
-// dump and print correctly as that's checked in routine.c.
+// dump and print correctly as that's checked in other routine-*.c.
 
 // RUN: %data uses {
 // RUN:   (use-cflags=-DUSE_CALL)
