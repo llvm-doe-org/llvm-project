@@ -2366,7 +2366,7 @@ void Sema::ActOnStartOfFunctionDefForOpenACC(FunctionDecl *FD) {
 }
 void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
                                       SourceLocation UseLoc) {
-  if (OpenACCData->TransformingOpenACC)
+  if (OpenACCData->TransformingOpenACC || isa<CXXDeductionGuideDecl>(Usee))
     return;
   OpenACCData->FunctionUses[Usee->getCanonicalDecl()].push_back(UseLoc);
   DirStackTy &DirStack = OpenACCData->DirStack;
@@ -2398,6 +2398,8 @@ void Sema::ActOnFunctionCallForOpenACC(CallExpr *CE) {
 void Sema::ActOnFunctionCallForOpenACC(FunctionDecl *Callee,
                                        SourceLocation CallLoc) {
   assert(Callee && "expected Callee != nullptr");
+  assert(!isa<CXXDeductionGuideDecl>(Callee) &&
+         "unexpected call to C++ deduction guide");
   if (OpenACCData->TransformingOpenACC || isUnevaluatedContext())
     return;
   DirStackTy &DirStack = OpenACCData->DirStack;
@@ -3196,7 +3198,8 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
     }
     TheDecl = D;
   }
-  if (!TheDecl || !TheDecl->isFunctionOrFunctionTemplate()) {
+  if (!TheDecl || !TheDecl->isFunctionOrFunctionTemplate() ||
+      isa<CXXDeductionGuideDecl>(TheDecl->getAsFunction())) {
     // !TheDecl includes the case that the routine directive is at the end of
     // the enclosing context (e.g., the file, or a type definition).  It also
     // includes the case that the routine directive precedes a type declaration.
