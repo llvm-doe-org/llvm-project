@@ -178,20 +178,6 @@ Diamond_C::Diamond_C() {} // #Diamond_C_ctor
 USER_USER_ROUTINE_DIR // #Diamond_C_dtor_routine
 Diamond_C::~Diamond_C() {} // #Diamond_C_dtor
 
-// The MemberUseesTrivial destructor is declared trivial (by
-// clang::trivial_abi).  Thus, when MemberUseesTrivial is a parameter (for
-// passByVal below), its destructor is called at the callee not the caller, and
-// so we see the following at the callee's (passByVal's) definition:
-// - For call-par-level.cpp: An OpenACC level-of-parallelism diagnostic for the
-//   destructor.
-// - For early-uses.cpp: A note that this is a previous use of the destructor.
-//   This note is associated with the destructor's late routine directive
-//   diagnostic.
-// We also see both at the caller.  That's fine in the first case as the
-// level-of-parallelism relationship must be caller <= callee <= destructor, so
-// requiring caller <= destructor is fine.
-// FIXME: That's not ok for the second case.
-//
 // Because this routine directive is attached to the definition (not an earlier
 // prototype) of passByVal, Clang must be careful to attach the
 // ACCRoutineDeclAttr to passByVal before checking destructor (or other
@@ -264,6 +250,7 @@ void accRoutineUse(int cond) {
   // callParLevel-note@#accRoutineUse_routine {{'#pragma acc routine' for function 'accRoutineUse' appears here}}
   // callParLevel-note@#MemberUseesTrivial_ctorCopy_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::MemberUseesTrivial' appears here}}
   //
+  // FIXME: See clang::trivial_abi FIXME in routine-cxx-funcs/README.md.
   // callParLevel-error@#accRoutineUse_passByVal_call{{function 'accRoutineUse' has '#pragma acc routine worker' but calls function 'MemberUseesTrivial::~MemberUseesTrivial', which has '#pragma acc routine gang'}}
   // callParLevel-note@#accRoutineUse_routine {{'#pragma acc routine' for function 'accRoutineUse' appears here}}
   // callParLevel-note@#MemberUseesTrivial_dtor_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
@@ -433,6 +420,7 @@ void accLoopUse(int cond) {
     // callParLevel-note@#accLoopUse_accLoop {{enclosing '#pragma acc loop' here}}
     // callParLevel-note@#MemberUseesTrivial_ctorCopy_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::MemberUseesTrivial' appears here}}
     //
+    // FIXME: See clang::trivial_abi FIXME in routine-cxx-funcs/README.md.
     // callParLevel-error@#accLoopUse_passByVal_call{{'#pragma acc loop worker' construct calls function 'MemberUseesTrivial::~MemberUseesTrivial', which has '#pragma acc routine gang'}}
     // callParLevel-note@#accLoopUse_accLoop {{enclosing '#pragma acc loop' here}}
     // callParLevel-note@#MemberUseesTrivial_dtor_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
@@ -555,6 +543,7 @@ void hostUse(int cond) {
   // callParLevel-error@#hostUse_passByVal_call{{function 'hostUse' has no explicit '#pragma acc routine' but calls function 'MemberUseesTrivial::MemberUseesTrivial', which has '#pragma acc routine gang'}}
   // callParLevel-note@#MemberUseesTrivial_ctorCopy_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::MemberUseesTrivial' appears here}}
   //
+  // FIXME: See clang::trivial_abi FIXME in routine-cxx-funcs/README.md.
   // callParLevel-error@#hostUse_passByVal_call{{function 'hostUse' has no explicit '#pragma acc routine' but calls function 'MemberUseesTrivial::~MemberUseesTrivial', which has '#pragma acc routine gang'}}
   // callParLevel-note@#MemberUseesTrivial_dtor_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
   // 

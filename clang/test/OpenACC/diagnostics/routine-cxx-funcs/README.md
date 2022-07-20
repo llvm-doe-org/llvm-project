@@ -61,6 +61,47 @@ location would be helpful.
 This issue is not relevant to the default constructor, which is built regardless
 of the `using` declaration.)
 
+## FIXME: clang::trivial_abi
+
+When a class object is passed by value to a function foo, Clang enforces
+restrictions on calling its destructor (e.g., due to a deleted or private
+destructor) at foo's callers.  That is true even if the destructor is trivial
+(perhaps via `~MyClass() = default;`) and thus isn't actually called.
+
+That is also currently true if the destructor is non-trivial but is considered
+trivial due to a `[[clang::trivial_abi]]` attribute on the class.  However, in
+this case, the destructor is actually called by foo not by foo's callers (as can
+be proven by examining the generated LLVM IR), so it would seem Clang would
+enforce the destructor call's restrictions at foo's definition instead.
+
+Just like the rest of Clang, Clang's OpenACC analysis always enforces the
+destructor call's restrictions at foo's callers.  However, in the case of a
+destructor considered trivial due to `[[clang::trivial_abi]]`, it *additionally*
+enforces them at foo's definition.  It needs to because that's where the
+destructor is actually called.  Should we then eliminate enforcement at foo's
+callers?  So far, we've discovered the following consequences from not
+eliminating enforcement there:
+
+* In the case of level-of-parallelism restrictions (`call-par-level.cpp`) for
+  the destructor's call, enforcement at foo's definition means the
+  level-of-parallelism relationship must be foo's caller `>=` foo `>=`
+  destructor, which already requires foo's caller `>=` destructor.  Thus,
+  enforcement also at foo's callers adds redundant diagnostics but does not
+  actually add any new restrictions.
+* In the case of late `routine` directive restrictions (`early-uses.cpp`) for
+  the destructor's call, enforcement also at foo's callers further restricts
+  where the `routine` directive for the destructor can appear.
+
+We might later decide to change where Clang's OpenACC analysis enforces
+restrictions for destructors considered trivial due to `[[clang::trivial_abi]]`.
+First, we need to better understand the rationale behind Clang's handling of
+this case elsewhere.  We've chosen maximal restrictiveness in the meantime.
+
+Occurrences of this issue in these tests are marked by FIXME comments.
+
+Reference for `[[clang::trivial_abi]]`:
+<https://quuxplusone.github.io/blog/2018/05/02/trivial-abi-101/>
+
 ## `-fexceptions`
 
 The Clang driver normally adds `-fexceptions`, but we use `-cc1` in these tests,

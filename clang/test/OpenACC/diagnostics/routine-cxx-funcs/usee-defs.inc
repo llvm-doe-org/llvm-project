@@ -223,12 +223,16 @@ MemberUseesTrivial::MemberUseesTrivial(MemberUseesTrivial &) {
 // earlyUses-error@#MemberUseesTrivial_dtor_routine {{first '#pragma acc routine' for function 'MemberUseesTrivial::~MemberUseesTrivial' not in scope at some uses}}
 // earlyUses-note@#passByVal_def {{use of function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
 // earlyUses-note@#accRoutineUse_MemberUseesTrivial_var {{use of function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
+// FIXME: See clang::trivial_abi FIXME in routine-cxx-funcs/README.md.
 // earlyUses-note@#accRoutineUse_passByVal_call {{use of function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
 // earlyUses-note@#accParallelUse_MemberUseesTrivial_var {{use of function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
+// FIXME: See clang::trivial_abi FIXME in routine-cxx-funcs/README.md.
 // earlyUses-note@#accParallelUse_passByVal_call {{use of function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
 // earlyUses-note@#accLoopUse_MemberUseesTrivial_var {{use of function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
+// FIXME: See clang::trivial_abi FIXME in routine-cxx-funcs/README.md.
 // earlyUses-note@#accLoopUse_passByVal_call {{use of function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
 // earlyUses-note@#hostUse_MemberUseesTrivial_var {{use of function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
+// FIXME: See clang::trivial_abi FIXME in routine-cxx-funcs/README.md.
 // earlyUses-note@#hostUse_passByVal_call {{use of function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
 USEE_ROUTINE_DIR // #MemberUseesTrivial_dtor_routine
 MemberUseesTrivial::~MemberUseesTrivial() {
