@@ -627,7 +627,7 @@ MemberUsees varFileScope; // #fileScope_MemberUsees_var
 // mean they would not be inheriting constructors, as declared by the using
 // declaration).
 //
-// FIXME: Confusing locations.  See inherited ctor FIXME in header comments.
+// FIXME: See inherited ctor FIXME in routine-cxx-funcs/README.md.
 //
 // FIXME: If we move this after the routine directive, early-uses.cpp loses
 // diagnostics because Clang thinks the use came after routine directive.

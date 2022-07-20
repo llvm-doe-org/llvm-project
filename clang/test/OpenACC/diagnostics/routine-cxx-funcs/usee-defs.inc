@@ -91,7 +91,7 @@ MemberUsees::MemberUsees(MemberUsees &) {
 }
 
 // earlyUses-error@#MemberUsees_ctorInherited_routine {{first '#pragma acc routine' for function 'MemberUsees::MemberUsees' not in scope at some uses}}
-// FIXME: Confusing locations.  See inherited ctor FIXME in header comments.
+// FIXME: See inherited ctor FIXME in routine-cxx-funcs/README.md.
 // earlyUses-note@#Derived_ctorInherited_use {{use of function 'MemberUsees::MemberUsees' appears here}}
 USEE_ROUTINE_DIR // #MemberUsees_ctorInherited_routine
 MemberUsees::MemberUsees(CtorInherited) {

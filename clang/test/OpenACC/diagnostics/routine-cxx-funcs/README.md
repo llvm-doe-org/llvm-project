@@ -40,7 +40,7 @@ This section contains some notes that are relevant to many of the tests in this 
 
 ## FIXME: Inheriting Constructors
 
-FIXME: An inheriting construct is a constructor created by a declaration like
+An inheriting construct is a constructor created by a declaration like
 `using MyBaseClass::MyBaseClass;`.  For some reason, Clang doesn't build an
 inheriting constructor and mark the functions it uses until it is actually
 called.  However, some uses within it (e.g., its call to the base class
@@ -52,7 +52,7 @@ inheriting constructor, so we haven't tried to change it for OpenACC support.
 However, it makes some OpenACC diagnostics confusing.
 
 Occurrences of this issue in these tests are marked by FIXME comments.  When
-reporting that a `routine` directive is too late (in `early-uses.cpp` ), the
+reporting that a `routine` directive is too late (in `early-uses.cpp`), the
 location should be fixed to point to wherever Clang requires the `routine`
 directive to appear before, which currently seems to be the first call to the
 inheriting constructor.  In that case, also reporting the `using` declaration's
