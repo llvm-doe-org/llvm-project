@@ -375,7 +375,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       Tx.getDerived().transformedLocalDecl(VD, VD);
       // Transform Def and create a declaration statement for it.
       Decl *DPrivate = Tx.getDerived().TransformDefinition(RefStartLoc, VD,
-                                                           /*DropInit*/true);
+                                                           /*DropInit=*/true);
       add(Tx.getSema().ActOnDeclStmt(
           Tx.getSema().ConvertDeclToDeclGroup(DPrivate), RefStartLoc,
           RefEndLoc));

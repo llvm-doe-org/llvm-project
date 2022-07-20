@@ -71,10 +71,21 @@ public:
           VDOld->getLocation(), VDOld->getIdentifier(), VDOld->getType(),
           VDOld->getTypeSourceInfo(), VDOld->getStorageClass());
       if (!DropInit && VDOld->hasInit()) {
+        // Sema::InstantiateVariableInitializer seems to be a good model for how
+        // this code can expand to handle more cases.  We cannot use it directly
+        // as is because its call to TransformInitializer (within
+        // SubstInitializer) is on a local TemplateInstantiator instead of on
+        // this->getDerived(), and so it doesn't perform all desired
+        // transformations (specifically, we've noticed it using old references
+        // to local variables instead of the transformed versions).
         ExprResult Init = this->getDerived().TransformInitializer(
-            VDOld->getInit(), /*NotCopyInit=*/false);
+            VDOld->getInit(), VDOld->getInitStyle() == VarDecl::CallInit);
         assert(!Init.isInvalid() && "Failed to transform VarDecl initializer");
-        this->getSema().AddInitializerToDecl(VDNew, Init.get(), false);
+        if (Init.get())
+          this->getSema().AddInitializerToDecl(VDNew, Init.get(),
+                                               VDOld->isDirectInit());
+        else
+          this->getSema().ActOnUninitializedDecl(VDNew);
       }
       this->getDerived().transformedLocalDecl(VDOld, VDNew);
       return VDNew;

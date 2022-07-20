@@ -338,9 +338,6 @@ void accRoutineUse(int cond) {
 void accParallelUse(int cond) {
   #pragma acc parallel // #accParallelUse_accParallel
   for (int i = 0; i < 5; ++i) {
-    // FIXME: This shouldn't happen:
-    // earlyUses-error@#accParallelUse_MemberUsees_var {{no matching constructor for initialization of 'MemberUsees'}}
-    // earlyUses-note@* 3 {{candidate constructor not viable}}
     MemberUsees var; // #accParallelUse_MemberUsees_var
     MemberUsees(); // #accParallelUse_MemberUsees_tmp
     decltype(MemberUsees()) *tmpUneval; // not a use
@@ -348,9 +345,6 @@ void accParallelUse(int cond) {
     decltype(new MemberUsees()) varPtrUneval; // not a use
     if (cond)
       throw var; // #accParallelUse_MemberUsees_throw
-    // FIXME: This shouldn't happen:
-    // earlyUses-error@#accParallelUse_MemberUseesTrivial_var {{no matching constructor for initialization of 'MemberUseesTrivial'}}
-    // earlyUses-note@* 3 {{candidate constructor not viable}}
     MemberUseesTrivial varTrivial; // #accParallelUse_MemberUseesTrivial_var
     passByVal(var, varTrivial); // #accParallelUse_passByVal_call
     decltype(passByVal(var, varTrivial)) varPassByValUneval;
