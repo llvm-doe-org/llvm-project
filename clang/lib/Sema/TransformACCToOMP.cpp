@@ -12,7 +12,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "TreeTransform.h"
+#include "TransformContext.h"
 #include "clang/Basic/DiagnosticCategories.h"
 using namespace clang;
 
