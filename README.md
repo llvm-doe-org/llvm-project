@@ -42,7 +42,8 @@ and OpenMP support are desired.  At minimum, you must build the
 `clang` and `openmp` subprojects of LLVM.  For example:
 
 ```
-$ cd $LLVM_GIT_DIR
+$ git clone -b clacc/main https://github.com/llvm-doe-org/llvm-project.git
+$ cd llvm-project
 $ mkdir build && cd build
 $ cmake -DCMAKE_INSTALL_PREFIX=../install \
         -DLLVM_ENABLE_PROJECTS=clang      \
@@ -50,8 +51,8 @@ $ cmake -DCMAKE_INSTALL_PREFIX=../install \
         ../llvm
 $ make
 $ make install
-$ export PATH=$LLVM_GIT_DIR/install/bin:$PATH
-$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install/lib:$LD_LIBRARY_PATH
+$ export PATH=`pwd`/../install/bin:$PATH
+$ export LD_LIBRARY_PATH=`pwd`/../install/lib:$LD_LIBRARY_PATH
 ```
 
 Building LLVM successfully can be challenging, and the above minimal
@@ -107,7 +108,8 @@ NVIDIA V100 GPUs
 From Git:
 
 ```
-$ cd $LLVM_GIT_DIR
+$ git clone -b clacc/main https://github.com/llvm-doe-org/llvm-project.git
+$ cd llvm-project
 $ mkdir build && cd build
 $ module load nvhpc/21.7
 $ PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/21.7/cuda/11.4/bin:$PATH
@@ -121,8 +123,8 @@ $ cmake -DCMAKE_INSTALL_PREFIX=../install    \
         ../llvm
 $ make
 $ make install
-$ export PATH=$LLVM_GIT_DIR/install/bin:$PATH
-$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install/lib:$LD_LIBRARY_PATH
+$ export PATH=`pwd`/../install/bin:$PATH
+$ export LD_LIBRARY_PATH=`pwd`/../install/lib:$LD_LIBRARY_PATH
 ```
 
 From Spack:
@@ -143,7 +145,8 @@ $ spack load llvm-doe@develop.clacc
 From Git:
 
 ```
-$ cd $LLVM_GIT_DIR
+$ git clone -b clacc/main https://github.com/llvm-doe-org/llvm-project.git
+$ cd llvm-project
 $ mkdir build && cd build
 $ cmake -DCMAKE_INSTALL_PREFIX=../install     \
         -DCMAKE_BUILD_TYPE=Release            \
@@ -155,8 +158,8 @@ $ cmake -DCMAKE_INSTALL_PREFIX=../install     \
         ../llvm
 $ make
 $ make install
-$ export PATH=$LLVM_GIT_DIR/install/bin:$PATH
-$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install/lib:$LD_LIBRARY_PATH
+$ export PATH=`pwd`/../install/bin:$PATH
+$ export LD_LIBRARY_PATH=`pwd`/../install/lib:$LD_LIBRARY_PATH
 ```
 
 From Spack:
@@ -176,7 +179,8 @@ $ spack load llvm-doe@develop.clacc
 From Git:
 
 ```
-$ cd $LLVM_GIT_DIR
+$ git clone -b clacc/main https://github.com/llvm-doe-org/llvm-project.git
+$ cd llvm-project
 $ mkdir build && cd build
 $ module load cmake/3.19.2 gnu/9.2.0 nvhpc/22.2
 $ PATH=/opt/nvidia/hpc_sdk/Linux_ppc64le/22.2/cuda/11.6/bin:$PATH
@@ -191,8 +195,8 @@ $ cmake -DCMAKE_INSTALL_PREFIX=../install    \
         ../llvm
 $ make
 $ make install
-$ export PATH=$LLVM_GIT_DIR/install/bin:$PATH
-$ export LD_LIBRARY_PATH=$LLVM_GIT_DIR/install/lib:$LD_LIBRARY_PATH
+$ export PATH=`pwd`/../install/bin:$PATH
+$ export LD_LIBRARY_PATH=`pwd`/../install/lib:$LD_LIBRARY_PATH
 ```
 
 From Spack:
@@ -276,9 +280,9 @@ directories.  Not setting those can produce unexpected behavior at
 compile time or run time.  This complexity is inherited from LLVM
 upstream and is not unique to Clacc.
 
-For example, to compile and run for an NVIDIA GPU, where
-`$CLACC_BUILD_DIR` is `$LLVM_GIT_DIR/build` when following [the above build
-procedure from Git](#from-git):
+For example, to compile and run for an NVIDIA GPU, where `$CLACC_BUILD_DIR` is
+the `build` directory created when following [the above build procedure from
+Git](#from-git):
 
 ```
 $ export PATH=$CLACC_BUILD_DIR/bin:$PATH
@@ -310,9 +314,9 @@ $ clang -fopenacc -fopenmp-targets=amdgcn-amd-amdhsa \
 ## Testing
 
 Test suites checking Clacc's OpenACC support can be run from Clacc's build
-directory, such as `$LLVM_GIT_DIR/build` when following [the above build
-procedure from Git](#from-git).  They can be run by themselves or as part of
-larger test suites, as follows:
+directory, such as  the `build` directory created when following [the above
+build procedure from Git](#from-git).  They can be run by themselves or as part
+of larger test suites, as follows:
 
 ```
 $ make check-clang-openacc # OpenACC directives
