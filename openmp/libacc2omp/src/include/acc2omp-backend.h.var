@@ -90,9 +90,8 @@
 /// Message IDs that libacc2omp passes to backends for optional
 /// internationalization.
 ///
-/// The \c acc2omp_msg definition in acc2omp-backend-internal.cpp contains
-/// printf-style format strings in English showing the expected semantics and
-/// arguments.
+/// The \c acc2omp_msg definition in backend-internal.cpp contains printf-style
+/// format strings in English showing the expected semantics and arguments.
 typedef enum {
   acc2omp_msg_env_acc_device_type_invalid,
   acc2omp_msg_env_acc_device_num_parse_error,
