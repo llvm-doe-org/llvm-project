@@ -102,9 +102,9 @@ stages:
   tags: [shell, oswald02]
   variables:
     BUILD_ID: oswald02
-    MODULES: cmake gnu/11.1.0 nvhpc/21.7
+    MODULES: cmake gnu/11.1.0 nvhpc/22.7
     PATH_PREPEND:
-      /opt/nvidia/hpc_sdk/Linux_x86_64/21.7/cuda/11.4/bin
+      /opt/nvidia/hpc_sdk/Linux_x86_64/22.7/cuda/11.7/bin
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
