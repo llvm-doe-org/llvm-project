@@ -1,0 +1,10 @@
+# You cannot continue a RUN with a REDEFINE.
+
+# RUN: echo \
+# RUN:   Hello \
+# REDEFINE: %{global:what}=bar
+# RUN: too late to continue
+
+# CHECK: Test has unterminated '{{RUN}}:' directive (with '\') from line [[#@LINE-5]] to [[#@LINE-4]]
+
+# CHECK: Unresolved: 1

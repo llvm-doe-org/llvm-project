@@ -612,6 +612,13 @@ RUN lines:
 
    Example: ``Windows %errc_ENOENT: no such file or directory``
 
+``%(line)``, ``%(line+<number>)``, ``%(line-<number>)``
+
+  The number of the line where this substitution is used, with an
+  optional integer offset.  These expand only if they appear
+  immediately in ``RUN:``, ``DEFINE:``, and ``REDEFINE:`` directives.
+  Occurrences in substitutions defined elsewhere are never expanded.
+
 **LLVM-specific substitutions:**
 
 ``%shlibext``
@@ -625,12 +632,6 @@ RUN lines:
    period as the first character.
 
    Example: ``.exe`` (Windows), empty on Linux.
-
-``%(line)``, ``%(line+<number>)``, ``%(line-<number>)``
-   The number of the line where this substitution is used, with an optional
-   integer offset. This can be used in tests with multiple RUN lines, which
-   reference test file's line numbers.
-
 
 **Clang-specific substitutions:**
 
@@ -663,8 +664,144 @@ RUN lines:
    output affects test results.  It's usually easy to tell: just look for
    redirection or piping of the ``FileCheck`` call's stdout or stderr.
 
-To add more substitutions, look at ``test/lit.cfg`` or ``lit.local.cfg``.
+**Test-specific substitutions:**
 
+Additional substitutions can be defined as follows:
+
+- Lit configuration files (e.g., ``test/lit.cfg`` or ``lit.local.cfg``) can
+  define substitutions for all tests in a test directory.  They do so by
+  extending the substitution list, ``config.substitutions``.  Each item in the
+  list is a tuple consisting of a pattern and its replacement, which lit applies
+  using python's ``re.sub`` function.
+- To define substitutions within a single test file, lit supports the
+  ``DEFINE:`` and ``REDEFINE:`` directives, described in detail below.  So that
+  they have no effect on other test files, these directives modify a copy of the
+  substitution list that is produced by lit configuration files.
+
+For example, the following directives can be inserted into a test file to define
+a ``%{check}`` substitution as well as empty default values for substitutions
+that serve as the parameters of ``%{check}``:
+
+.. code-block:: llvm
+
+    ; DEFINE: %{triple} =
+    ; DEFINE: %{cflags} =
+    ; DEFINE: %{fc-prefix} =
+
+    ; DEFINE: %{check} =                                                  \
+    ; DEFINE:   %clang_cc1 -verify -fopenmp -fopenmp-version=51 %{cflags} \
+    ; DEFINE:              -triple %{triple} -emit-llvm -o - %s |         \
+    ; DEFINE:     FileCheck -check-prefix=%{fc-prefix} %s
+
+Alternatively, the above substitutions can be defined in a lit configuration
+file to be shared with other test files.  Either way, the test file can then
+specify directives like the following to redefine the parameter substitutions as
+desired before each use of ``%{check}`` in a ``RUN:`` line:
+
+.. code-block:: llvm
+
+    ; REDEFINE: %{triple} = x86_64-apple-darwin10.6.0
+    ; REDEFINE: %{fc-prefix} = CHECK
+    ; RUN: %{check}
+    ;
+    ; REDEFINE: %{cflags} = -fopenmp-simd
+    ; REDEFINE: %{fc-prefix} = SIMD
+    ; RUN: %{check}
+
+    ; REDEFINE: %{triple} = x86_64-unknown-linux-gnu
+    ; REDEFINE: %{cflags} =
+    ; REDEFINE: %{fc-prefix} = CHECK
+    ; RUN: %{check}
+    ;
+    ; REDEFINE: %{cflags} = -fopenmp-simd
+    ; REDEFINE: %{fc-prefix} = SIMD
+    ; RUN: %{check}
+
+Besides providing default values, the initial empty definitions of the parameter
+substitutions in the above example serve a second purpose: they establish the
+substitution order so that both ``%{check}`` and its parameters expand as
+desired.  There's a simple way to remember the required definition order in a
+test file: define a substitution before you refer to it.
+
+In general, substitution expansion behaves as follows:
+
+- Upon arriving at each ``RUN:`` line, lit expands all substitutions in that
+  ``RUN:`` line using their current values from the substitution list.  No
+  substitution expansion is performed immediately at ``DEFINE:`` and
+  ``REDEFINE:`` directives except ``%(line)``, ``%(line+<number>)``, and
+  ``%(line-<number>)``.
+- When expanding substitutions in a ``RUN:`` line, lit makes only one pass
+  through the substitution list by default.  In this case, a substitution must
+  have been inserted earlier in the substitution list than any substitution
+  appearing in its value in order for the latter to expand.
+- While lit configuration files can insert anywhere in the substitution list,
+  the insertion behavior of the ``DEFINE:`` and ``REDEFINE:`` directives is
+  specified below and is designed specifically for the use case presented in the
+  example above.
+- If you find that the substitution expansion order is confusing or otherwise
+  insufficient for your test suite, consider specifying
+  ``recursiveExpansionLimit`` in a lit configuration file to enable multiple
+  passes through the substitution list, as documented in
+  :doc:`CommandGuide/lit`.
+- Defining a substitution in terms of itself, whether directly or via other
+  substitutions, usually produces an infinitely recursive definition that cannot
+  be fully expanded regardless of ``recursiveExpansionLimit``.  It does *not*
+  define the substitution in terms of its previous value, even when using
+  ``REDEFINE:``.
+
+``DEFINE: %{name} = value``
+
+   This directive assigns the specified value to a new substitution whose
+   pattern is ``%{name}``, or it reports an error if there is already a
+   substitution whose pattern contains ``%{name}`` because that could produce
+   confusing expansions.  The new substitution is inserted at the start of the
+   substitution list so that it will expand first.  Thus, even if
+   ``recursiveExpansionLimit`` is not used, this substitution's value can
+   contain any substitution previously defined, whether in the same test file or
+   in a lit configuration file, and both will expand.
+
+``REDEFINE: %{name} = value``
+
+   This directive assigns the specified value to an existing substitution whose
+   pattern is ``%{name}``, or it reports an error if there are no substitutions
+   with that pattern or if there are multiple substitutions whose patterns
+   contain ``%{name}``.  The substitution's current position in the substitution
+   list does not change so that expansion order relative to other existing
+   substitutions is preserved.
+
+The following properties apply to both the ``DEFINE:`` and ``REDEFINE:``
+directives:
+
+- **Substitution name**: In the directive, whitespace immediately before or
+  after ``%{name}`` is optional and discarded.  ``%{name}`` must start with
+  ``%{``, it must end with ``}``, and the rest must start with a letter and
+  contain only alphanumeric characters, hyphens, underscores, and colons.  This
+  syntax has a few advantages:
+
+    - It is impossible for ``%{name}`` to contain sequences that are special in
+      python's ``re.sub`` patterns.  Otherwise, attempting to specify
+      ``%{name}`` as a substitution pattern in a lit configuration file could
+      produce confusing expansions.
+    - The braces help avoid the possibility that another substitution's pattern
+      will match part of ``%{name}`` or vice-versa, producing confusing
+      expansions.  However, the patterns of substitutions not defined by these
+      directives are not restricted to this form, so overlaps are still
+      theoretically possible.
+
+- **Substitution value**: The value includes all text from the first
+  non-whitespace character after ``=`` to the last non-whitespace character.  If
+  there is no non-whitespace character after ``=``, the value is the empty
+  string.  Escape sequences that can appear in python ``re.sub`` replacement
+  strings are treated as plain text in the value.
+- **Line continuations**: If the last non-whitespace character on the line after
+  ``:`` is ``\``, then the next directive must use the same directive keyword
+  (e.g., ``DEFINE:``) , and it is an error if there is no additional directive.
+  That directive serves as a continuation.  That is, before following the rules
+  above to parse the text after ``:`` in either directive, lit joins that text
+  together to form a single directive, replaces the ``\`` with a single space,
+  and removes any other whitespace that is now adjacent to that space.  A
+  continuation can be continued in the same manner.  A continuation containing
+  only whitespace after its ``:`` is an error.
 
 Options
 -------

@@ -1186,6 +1186,137 @@ def _memoize(f):
 def _caching_re_compile(r):
     return re.compile(r)
 
+
+class ScriptDirective(object):
+    def __init__(self, start_line_number, end_line_number, keyword):
+        # Input line number where the directive starts.
+        self.start_line_number = start_line_number
+        # Input line number where the directive ends.
+        self.end_line_number = end_line_number
+        # The keyword used to indicate the directive.
+        self.keyword = keyword
+    def add_continuation(self, keyword, line):
+        assert False, "expected method to be called on derived class"
+    def needs_continuation(self):
+        assert False, "expected method to be called on derived class"
+    def get_location(self):
+        if (self.start_line_number == self.end_line_number):
+            return 'at line {line}'.format(line=self.start_line_number)
+        return 'from line {start} to {end}'.format(start=self.start_line_number,
+                                                   end=self.end_line_number)
+
+class CommandDirective(ScriptDirective):
+    def __init__(self, start_line_number, end_line_number, keyword, command):
+        super().__init__(start_line_number, end_line_number, keyword)
+        self.command = command
+    def add_continuation(self, line_number, keyword, line):
+        if keyword != self.keyword or not self.needs_continuation():
+            return False
+        self.command = self.command[:-1] + line
+        self.end_line_number = line_number
+        return True
+    def needs_continuation(self):
+        return self.command[-1] == '\\'
+
+class SubstDirective(ScriptDirective):
+    def __init__(self, start_line_number, end_line_number, keyword, line):
+        super().__init__(start_line_number, end_line_number, keyword)
+        self.body = line
+        self.name = None
+        self.value = None
+        self._parse_body()
+    def add_continuation(self, line_number, keyword, line):
+        if keyword != self.keyword or not self.needs_continuation():
+            return False
+        if not line.strip():
+            raise ValueError("Substitution's continuation is empty")
+        # Append line.  Replace the '\' and adjacent space with a single space.
+        self.body = self.body.rstrip()[:-1].rstrip() + ' ' + line.lstrip()
+        self.end_line_number = line_number
+        self._parse_body()
+        return True
+    def needs_continuation(self):
+        # '\' is documented as indicating a line continuation even if whitespace
+        # separates it from the newline.  It looks like a line continuation, and
+        # it would be confusing if it didn't behave as one.
+        return self.body.rstrip()[-1:] == '\\'
+    def _parse_body(self):
+        if self.needs_continuation():
+            return
+
+        # Extract the left-hand side and value, and discard any whitespace
+        # enclosing each.
+        parts = self.body.split('=', 1)
+        if len(parts) == 1:
+            raise ValueError("Substitution's definition does not contain '='")
+        self.name = parts[0].strip()
+        self.value = parts[1].strip()
+
+        # Check the substitution's name.
+        #
+        # Do not extend this to permit '.' or any sequence that's special in a
+        # python pattern.  We could escape that automatically for
+        # DEFINE/REDEFINE directives in test files.  However, lit configuration
+        # file authors would still have to remember to escape them manually in
+        # substitution names but not in values.  Moreover, the manually chosen
+        # and automatically chosen escape sequences would have to be consistent
+        # (e.g., '\.' vs. '[.]') in order for REDEFINE to successfully redefine
+        # a substitution previously defined by a lit configuration file.  All
+        # this seems too error prone and confusing to be worthwhile.  If you
+        # want your name to express structure, use ':' instead of '.'.
+        #
+        # Actually, '{' and '}' are special if they contain only digits possibly
+        # separated by a comma.  Requiring a leading letter avoids that.
+        if not re.fullmatch(r'%{[a-zA-Z][-_:0-9a-zA-Z]*}', self.name):
+            raise ValueError(
+                "Substitution name '{name}' is malformed as it must start with "
+                "'%{{', it must end with '}}', and the rest must must start "
+                "with a letter and contain only alphanumeric characters, "
+                "hyphens, underscores, and colons"
+                .format(name=self.name))
+    def adjust_substitutions(self, substitutions):
+        value_repl = self.value.replace('\\', '\\\\')
+        existing = [i for i, subst in enumerate(substitutions)
+                    if self.name in subst[0]]
+        existing_res = ''.join("\nExisting pattern: " + substitutions[i][0]
+                               for i in existing)
+        if self.keyword == 'DEFINE:':
+            if existing:
+                raise ValueError(
+                    "Substitution whose pattern contains '{name}' is already "
+                    "defined before '{key}' directive {loc}"
+                    "{existing}"
+                    .format(name=self.name, key=self.keyword,
+                            loc=self.get_location(), existing=existing_res))
+            substitutions.insert(0, (self.name, value_repl))
+            return
+        assert self.keyword == 'REDEFINE:'
+        if len(existing) > 1:
+            raise ValueError(
+                "Multiple substitutions whose patterns contain '{name}' are "
+                "defined before '{key}' directive {loc}"
+                "{existing}"
+                .format(name=self.name, key=self.keyword,
+                        loc=self.get_location(), existing=existing_res))
+        if not existing:
+            raise ValueError(
+                "No substitution for '{name}' is defined before '{key}' "
+                "directive {loc}"
+                .format(name=self.name, key=self.keyword,
+                        loc=self.get_location()))
+        if substitutions[existing[0]][0] != self.name:
+            raise ValueError(
+                "Existing substitution whose pattern contains '{name}' does "
+                "not have the pattern specified by '{key}' directive "
+                "{loc}\n"
+                "Expected pattern: {expected}"
+                "{existing}"
+                .format(name=self.name, key=self.keyword,
+                        loc=self.get_location(), expected=self.name,
+                        existing=existing_res))
+        substitutions[existing[0]] = (self.name, value_repl)
+
+
 def applySubstitutions(script, substitutions, recursion_limit=None):
     """
     Apply substitutions to the script.  Allow full regular expression syntax.
@@ -1246,8 +1377,21 @@ def applySubstitutions(script, substitutions, recursion_limit=None):
         return processed
 
     process = processLine if recursion_limit is None else processLineToFixedPoint
-    
-    return [unescape(process(ln)) for ln in script]
+
+    output = []
+    for dir in script:
+        if isinstance(dir, SubstDirective):
+            dir.adjust_substitutions(substitutions)
+        else:
+            if isinstance(dir, CommandDirective):
+                line = dir.command
+            else:
+                # can come from preamble_commands
+                assert isinstance(dir, str)
+                line = dir
+            output.append(unescape(process(line)))
+
+    return output
 
 
 class ParserKind(object):
@@ -1262,6 +1406,8 @@ class ParserKind(object):
         boolean expressions. Ex 'XFAIL:'
     INTEGER: A keyword taking a single integer. Ex 'ALLOW_RETRIES:'
     CUSTOM: A keyword with custom parsing semantics.
+    SUBST: A keyword taking a LIT substitution definition.  Ex
+        'DEFINE: %{name}=value'
     """
     TAG = 0
     COMMAND = 1
@@ -1269,6 +1415,7 @@ class ParserKind(object):
     BOOLEAN_EXPR = 3
     INTEGER = 4
     CUSTOM = 5
+    SUBST = 6
 
     @staticmethod
     def allowedKeywordSuffixes(value):
@@ -1277,7 +1424,8 @@ class ParserKind(object):
                  ParserKind.LIST:         [':'],
                  ParserKind.BOOLEAN_EXPR: [':'],
                  ParserKind.INTEGER:      [':'],
-                 ParserKind.CUSTOM:       [':', '.']
+                 ParserKind.CUSTOM:       [':', '.'],
+                 ParserKind.SUBST:        [':']
                } [value]
 
     @staticmethod
@@ -1287,7 +1435,8 @@ class ParserKind(object):
                  ParserKind.LIST:         'LIST',
                  ParserKind.BOOLEAN_EXPR: 'BOOLEAN_EXPR',
                  ParserKind.INTEGER:      'INTEGER',
-                 ParserKind.CUSTOM:       'CUSTOM'
+                 ParserKind.CUSTOM:       'CUSTOM',
+                 ParserKind.SUBST:        'SUBST'
                } [value]
 
 
@@ -1325,7 +1474,7 @@ class PdataPforState(object):
             self.id = id
             # Line where %for was opened.
             self.line_number = line_number
-            # Lines accumulated so far.
+            # CommandDirective directives accumulated so far.
             self.output = []
 
     def __init__(self, keyword):
@@ -1344,7 +1493,8 @@ class PdataPforState(object):
     # two cases, the returned output fully integrates any new output from
     # line.  In the last case, the line must still be parsed by the caller.
     def parseAnyDirective(self, line_number, line, output):
-        line_continued = output and output[-1][-1] == '\\'
+        line_continued = output and isinstance(output[-1], CommandDirective) \
+                         and output[-1].command[-1] == '\\'
         if self.context == self.IN_RUN:
             if line.find("%data") != -1:
                 self.parsePdataOpenLine(line_number, line, line_continued)
@@ -1642,7 +1792,7 @@ class PdataPforState(object):
             raise ValueError("In %for '{pfor_id}' opened on line {line}, "
                              "found nested %data".format(
                                  pfor_id=pfor.id, line=pfor.line_number))
-        line_continued = pfor.output and pfor.output[-1][-1] == '\\'
+        line_continued = pfor.output and pfor.output[-1].command[-1] == '\\'
         if line.find("%for") != -1:
             self.parsePforOpenLine(line_number, line, line_continued)
             return output
@@ -1666,7 +1816,8 @@ class PdataPforState(object):
         if line_continued:
             raise ValueError("%for '{pfor_id}' has unterminated run lines "
                              "(with '\\')".format(pfor_id=pfor.id))
-        assert not output or output[-1][-1] != '\\', \
+        assert not output or not isinstance(output[-1], CommandDirective) or \
+               output[-1].command[-1] != '\\', \
                "continued line expected to be reported at %for open"
         assert pfor.id in self.pdatas, \
                "%for with undefined %data identifier expected to be reported" \
@@ -1676,7 +1827,8 @@ class PdataPforState(object):
         # notes with %data iteration line numbers, and replacing the %data
         # field references with their values
         for itr in pdata.iterations:
-            for cmd in pfor.output:
+            for dir in pfor.output:
+                cmd = dir.command
                 match = re.match(kPdbgRegex, cmd)
                 assert match, \
                        "expected to find %dbg(ARG) at start of run pipeline"
@@ -1726,10 +1878,13 @@ class PdataPforState(object):
                         return "'" + re.sub("'", "'\\''", value) + "'"
                     assert False, "unexpected %data value quoting style"
                 cmd = re.sub(self.REF_RE, replace_field_ref, cmd)
+                dir_new = CommandDirective(dir.start_line_number,
+                                           dir.end_line_number, dir.keyword,
+                                           cmd)
                 if len(self.pfors) > 1:
-                    self.pfors[-2].output.append(cmd)
+                    self.pfors[-2].output.append(dir_new)
                 else:
-                    output.append(cmd)
+                    output.append(dir_new)
         self.pfors.pop()
         if not self.pfors:
             self.context = self.IN_RUN
@@ -1783,6 +1938,10 @@ class IntegratedTestKeywordParser(object):
             if parser is None:
                 raise ValueError("ParserKind.CUSTOM requires a custom parser")
             self.parser = parser
+        elif kind == ParserKind.SUBST:
+            self.parser = lambda line_number, line, output: \
+                                 self._handleSubst(line_number, line, output,
+                                                   self.keyword)
         else:
             raise ValueError("Unknown kind '%s'" % kind)
 
@@ -1805,7 +1964,18 @@ class IntegratedTestKeywordParser(object):
         return (not line.strip() or output)
 
     @staticmethod
-    def _handleCommand(line_number, line, output, keyword, pdata_pfor_state):
+    def _substituteLineNumbers(line_number, line):
+        line = re.sub(r'%\(line\)', str(line_number), line)
+        def replace_line_number(match):
+            if match.group(1) == '+':
+                return str(line_number + int(match.group(2)))
+            if match.group(1) == '-':
+                return str(line_number - int(match.group(2)))
+        return re.sub(r'%\(line *([\+-]) *(\d+)\)', replace_line_number, line)
+
+    @classmethod
+    def _handleCommand(cls, line_number, line, output, keyword,
+                       pdata_pfor_state):
         """A helper for parsing COMMAND type keywords"""
         # Parse any %data or %for lines
         output_buf = pdata_pfor_state.parseAnyDirective(line_number, line,
@@ -1817,13 +1987,7 @@ class IntegratedTestKeywordParser(object):
         line = line.rstrip()
 
         # Substitute line number expressions
-        line = re.sub(r'%\(line\)', str(line_number), line)
-        def replace_line_number(match):
-            if match.group(1) == '+':
-                return str(line_number + int(match.group(2)))
-            if match.group(1) == '-':
-                return str(line_number - int(match.group(2)))
-        line = re.sub(r'%\(line *([\+-]) *(\d+)\)', replace_line_number, line)
+        line = cls._substituteLineNumbers(line_number, line)
 
         # Select output
         if pdata_pfor_state.context == PdataPforState.IN_FOR:
@@ -1835,9 +1999,8 @@ class IntegratedTestKeywordParser(object):
 
         # Collapse lines with trailing '\\', or add line with line number to
         # start a new pipeline.
-        if output_buf and output_buf[-1][-1] == '\\':
-            output_buf[-1] = output_buf[-1][:-1] + line
-        else:
+        if not output_buf or \
+           not output_buf[-1].add_continuation(line_number, keyword, line):
             pdbg = "%dbg({keyword} at line {line_number})".format(
                 keyword=keyword,
                 line_number=line_number)
@@ -1846,7 +2009,8 @@ class IntegratedTestKeywordParser(object):
             line = "{pdbg} {real_command}".format(
                 pdbg=pdbg,
                 real_command=line)
-            output_buf.append(line)
+            output_buf.append(CommandDirective(line_number, line_number,
+                                               keyword, line))
         return output
 
     @staticmethod
@@ -1886,6 +2050,17 @@ class IntegratedTestKeywordParser(object):
                 BooleanExpression.evaluate(s, [])
         return output
 
+    @classmethod
+    def _handleSubst(cls, line_number, line, output, keyword):
+        """A parser for SUBST type keywords"""
+        line = cls._substituteLineNumbers(line_number, line)
+        if output and output[-1].add_continuation(line_number, keyword, line):
+            return output
+        if output is None:
+            output = []
+        output.append(SubstDirective(line_number, line_number, keyword, line))
+        return output
+
 
 def _parseKeywords(sourcepath, additional_parsers=[],
                    require_script=True):
@@ -1893,8 +2068,8 @@ def _parseKeywords(sourcepath, additional_parsers=[],
 
     Scan an LLVM/Clang style integrated test script and extract all the lines
     pertaining to a special parser. This includes 'RUN', 'XFAIL', 'REQUIRES',
-    'UNSUPPORTED' and 'ALLOW_RETRIES', as well as other specified custom
-    parsers.
+    'UNSUPPORTED', 'ALLOW_RETRIES', 'END', 'DEFINE', 'REDEFINE', as well as
+    other specified custom parsers.
 
     Returns a dictionary mapping each custom parser to its value after
     parsing the test.
@@ -1907,7 +2082,11 @@ def _parseKeywords(sourcepath, additional_parsers=[],
         IntegratedTestKeywordParser('REQUIRES:', ParserKind.BOOLEAN_EXPR),
         IntegratedTestKeywordParser('UNSUPPORTED:', ParserKind.BOOLEAN_EXPR),
         IntegratedTestKeywordParser('ALLOW_RETRIES:', ParserKind.INTEGER),
-        IntegratedTestKeywordParser('END.', ParserKind.TAG)
+        IntegratedTestKeywordParser('END.', ParserKind.TAG),
+        IntegratedTestKeywordParser('DEFINE:', ParserKind.SUBST,
+                                    initial_value=script),
+        IntegratedTestKeywordParser('REDEFINE:', ParserKind.SUBST,
+                                    initial_value=script)
     ]
     keyword_parsers = {p.keyword: p for p in builtin_parsers}
 
@@ -1943,12 +2122,21 @@ def _parseKeywords(sourcepath, additional_parsers=[],
                          .format(id=pfor.id, line=pfor.line_number))
 
     # Verify the script contains a run line.
-    if require_script and not script:
+    if require_script and not any(isinstance(dir, CommandDirective)
+                                  for dir in script):
         raise ValueError("Test has no 'RUN:' line")
 
-    # Check for unterminated run lines.
-    if script and script[-1][-1] == '\\':
-        raise ValueError("Test has unterminated 'RUN:' lines (with '\\')")
+    # Check for unterminated run or subst lines.
+    #
+    # If, after a line continuation for one kind of directive (e.g., 'RUN:',
+    # 'DEFINE:', 'REDEFINE:') in script, the next directive in script is a
+    # different kind, then the '\\' remains on the former, and we report it
+    # here.
+    for dir in script:
+        if dir.needs_continuation():
+            raise ValueError("Test has unterminated '{key}' directive "
+                             "(with '\\') {loc}".format(
+                                 key=dir.keyword, loc=dir.get_location()))
 
     # Check boolean expressions for unterminated lines.
     for key in keyword_parsers:
@@ -1988,6 +2176,8 @@ def parseIntegratedTestScript(test, additional_parsers=[],
     except ValueError as e:
         return lit.Test.Result(Test.UNRESOLVED, str(e))
     script = parsed['RUN:'] or []
+    assert parsed['DEFINE:'] == script
+    assert parsed['REDEFINE:'] == script
     test.xfails += parsed['XFAIL:'] or []
     test.requires += parsed['REQUIRES:'] or []
     test.unsupported += parsed['UNSUPPORTED:'] or []

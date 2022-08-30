@@ -104,8 +104,10 @@ class TestIntegratedTestKeywordParser(unittest.TestCase):
         cmd_parser = self.get_parser(parsers, 'MY_RUN:')
         value = cmd_parser.getValue()
         self.assertEqual(len(value), 2)  # there are only two run lines
-        self.assertEqual(value[0].strip(), "%dbg(MY_RUN: at line 4)  baz")
-        self.assertEqual(value[1].strip(), "%dbg(MY_RUN: at line 7)  foo  bar")
+        self.assertEqual(value[0].command.strip(),
+                         "%dbg(MY_RUN: at line 4)  baz")
+        self.assertEqual(value[1].command.strip(),
+                         "%dbg(MY_RUN: at line 7)  foo  bar")
 
     def test_boolean(self):
         parsers = self.make_parsers()

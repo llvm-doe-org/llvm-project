@@ -7,7 +7,7 @@
 
 # RUN: not %{lit} %{inputs}/shtest-recursive-substitution/does-not-substitute-within-limit --show-all | FileCheck --check-prefix=CHECK-TEST2 %s
 # CHECK-TEST2: UNRESOLVED: does-not-substitute-within-limit :: test.py
-# CHECK-TEST2: ValueError: Recursive substitution of
+# CHECK-TEST2: Recursive substitution of
 
 # RUN: %{lit} %{inputs}/shtest-recursive-substitution/does-not-substitute-no-limit --show-all | FileCheck --check-prefix=CHECK-TEST3 %s
 # CHECK-TEST3: PASS: does-not-substitute-no-limit :: test.py
