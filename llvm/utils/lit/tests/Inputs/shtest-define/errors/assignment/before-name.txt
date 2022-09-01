@@ -5,4 +5,3 @@
 # CHECK-NEXT: in {{DEFINE}}: directive on test line [[#@LINE-4]]
 
 # CHECK: Unresolved: 1
-

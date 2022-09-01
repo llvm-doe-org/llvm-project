@@ -1,4 +1,4 @@
-# DEFINE:%{}=value
+# DEFINE: %{} = value
 # RUN: echo %{}
 
 #      CHECK: Substitution name '%{}' is malformed {{.*}}

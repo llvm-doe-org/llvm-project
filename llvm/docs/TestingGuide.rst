@@ -749,7 +749,11 @@ In general, substitution expansion behaves as follows:
   define the substitution in terms of its previous value, even when using
   ``REDEFINE:``.
 
-``DEFINE: %{name} = value``
+The relationship between the ``DEFINE:`` and ``REDEFINE:`` directive is
+analogous to the relationship between a variable declaration and variable
+assignment in many programming languages:
+
+- ``DEFINE: %{name} = value``
 
    This directive assigns the specified value to a new substitution whose
    pattern is ``%{name}``, or it reports an error if there is already a
@@ -760,7 +764,7 @@ In general, substitution expansion behaves as follows:
    contain any substitution previously defined, whether in the same test file or
    in a lit configuration file, and both will expand.
 
-``REDEFINE: %{name} = value``
+- ``REDEFINE: %{name} = value``
 
    This directive assigns the specified value to an existing substitution whose
    pattern is ``%{name}``, or it reports an error if there are no substitutions
