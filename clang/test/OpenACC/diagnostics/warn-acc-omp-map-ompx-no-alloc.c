@@ -5,43 +5,42 @@
 // different values of -fopenacc-no-create-omp is checked in
 // directives/Tests/no-create.c.
 
-// RUN: %data prt-opts {
-//        # Default is error.
-// RUN:   (prt-opt=-fopenacc-ast-print=omp     none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-ast-print=acc-omp none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-ast-print=omp-acc none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-print=omp         none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-print=acc-omp     none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-print=omp-acc     none=error warn=error noerr=warn)
-//        # Default is no warning.
-// RUN:   (prt-opt=-fopenacc-ast-print=acc     none=none  warn=warn  noerr=none)
-// RUN:   (prt-opt=-fopenacc-print=acc         none=none  warn=warn  noerr=none)
-// RUN:   (prt-opt='-c -fopenacc'              none=none  warn=warn  noerr=none)
-// RUN: }
-// RUN: %data warn-opts {
-// RUN:   (warn-opt=                                         no-alloc=%[none] )
-// RUN:   (warn-opt=-Wopenacc-omp-map-ompx-no-alloc          no-alloc=%[warn] )
-// RUN:   (warn-opt=-Wopenacc-omp-ext                        no-alloc=%[warn] )
-// RUN:   (warn-opt=-Wno-error=openacc-omp-map-ompx-no-alloc no-alloc=%[noerr])
-// RUN:   (warn-opt=-Wno-error=openacc-omp-ext               no-alloc=%[noerr])
-// RUN:   (warn-opt=-Werror=openacc-omp-map-ompx-no-alloc    no-alloc=error   )
-// RUN:   (warn-opt=-Werror=openacc-omp-ext                  no-alloc=error   )
-// RUN:   (warn-opt=-Wno-openacc-omp-map-ompx-no-alloc       no-alloc=none    )
-// RUN:   (warn-opt=-Wno-openacc-omp-ext                     no-alloc=none    )
-// RUN: }
-// RUN: %data no-create-opts {
-// RUN:   (no-create-opt=                                         verify=%[no-alloc])
-// RUN:   (no-create-opt=-fopenacc-no-create-omp=ompx-no-alloc    verify=%[no-alloc])
-// RUN:   (no-create-opt=-fopenacc-no-create-omp=no-ompx-no-alloc verify=none       )
-// RUN: }
-// RUN: %for prt-opts {
-// RUN:   %for warn-opts {
-// RUN:     %for no-create-opts {
-// RUN:       %clang %[prt-opt] %[warn-opt] %[no-create-opt] %s \
-// RUN:              -Xclang -verify=%[verify] -Wno-openacc-omp-map-ompx-hold
-// RUN:     }
-// RUN:   }
-// RUN: }
+// DEFINE: %{check-no-create-opt}( CFLAGS %, VERIFY %) =                       \
+// DEFINE:   : '------ VERIFY=%{VERIFY}; CFLAGS=%{CFLAGS} -------'          && \
+// DEFINE:   %clang %{CFLAGS} -Xclang -verify=%{VERIFY} %s > /dev/null         \
+// DEFINE:       -Wno-openacc-omp-map-ompx-hold
+
+// DEFINE: %{check-no-create-opts}( CFLAGS %, NO_ALLOC %) =                                                  \
+//                                   CFLAGS                                                VERIFY
+// DEFINE:   %{check-no-create-opt}( %{CFLAGS}                                          %, %{NO_ALLOC} %) && \
+// DEFINE:   %{check-no-create-opt}( %{CFLAGS} -fopenacc-no-create-omp=ompx-no-alloc    %, %{NO_ALLOC} %) && \
+// DEFINE:   %{check-no-create-opt}( %{CFLAGS} -fopenacc-no-create-omp=no-ompx-no-alloc %, none        %)
+
+// DEFINE: %{check-warn-opts}( CFLAGS %, NONE %, WARN %, NOERR %) =                                         \
+//                                    CFLAGS                                                NO_ALLOC
+// DEFINE:   %{check-no-create-opts}( %{CFLAGS}                                          %, %{NONE}   %) && \
+// DEFINE:   %{check-no-create-opts}( %{CFLAGS} -Wopenacc-omp-map-ompx-no-alloc          %, %{WARN}   %) && \
+// DEFINE:   %{check-no-create-opts}( %{CFLAGS} -Wopenacc-omp-ext                        %, %{WARN}   %) && \
+// DEFINE:   %{check-no-create-opts}( %{CFLAGS} -Wno-error=openacc-omp-map-ompx-no-alloc %, %{NOERR}  %) && \
+// DEFINE:   %{check-no-create-opts}( %{CFLAGS} -Wno-error=openacc-omp-ext               %, %{NOERR}  %) && \
+// DEFINE:   %{check-no-create-opts}( %{CFLAGS} -Werror=openacc-omp-map-ompx-no-alloc    %, error     %) && \
+// DEFINE:   %{check-no-create-opts}( %{CFLAGS} -Werror=openacc-omp-ext                  %, error     %) && \
+// DEFINE:   %{check-no-create-opts}( %{CFLAGS} -Wno-openacc-omp-map-ompx-no-alloc       %, none      %) && \
+// DEFINE:   %{check-no-create-opts}( %{CFLAGS} -Wno-openacc-omp-ext                     %, none      %)
+
+//                          CFLAGS                         NONE     WARN     NOERR
+// Default is error.
+// RUN: %{check-warn-opts}( -fopenacc-ast-print=omp     %, error %, error %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-ast-print=acc-omp %, error %, error %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-ast-print=omp-acc %, error %, error %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-print=omp         %, error %, error %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-print=acc-omp     %, error %, error %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-print=omp-acc     %, error %, error %, warn %)
+//
+// Default is no warning.
+// RUN: %{check-warn-opts}( -fopenacc-ast-print=acc     %, none  %, warn  %, none %)
+// RUN: %{check-warn-opts}( -fopenacc-print=acc         %, none  %, warn  %, none %)
+// RUN: %{check-warn-opts}( -c -fopenacc                %, none  %, warn  %, none %)
 
 // END.
 

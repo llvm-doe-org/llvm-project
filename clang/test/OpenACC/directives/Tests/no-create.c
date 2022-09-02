@@ -8,13 +8,6 @@
 // -fopenacc-no-create-omp arguments are checked in
 // diagnostics/fopenacc-no-create-omp.c.
 //
-// The various cases covered here should be kept consistent with present.c,
-// update.c, and subarray-errors.c (the last is located in
-// openmp/libacc2omp/test/directives).  For example, a subarray that extends a
-// subarray already present is consistently considered not present, so the
-// present clause produces a runtime error and the no_create clause doesn't
-// allocate.  However, INHERITED cases have no meaning for the present clause.
-//
 // In some cases, it's challenging to check when no_create actually doesn't
 // allocate memory.  Specifically, calling acc_is_present or
 // omp_target_is_present or specifying a present clause on a directive only
@@ -26,73 +19,117 @@
 // We include dump and print checking on only a few representative cases, which
 // should be more than sufficient to show it's working for the no_create clause.
 
-// RUN: %data no-create-opts {
-// RUN:   (no-create-opt=                                         no-create-mt=ompx_no_alloc,ompx_hold,alloc inherited-no-create-mt=ompx_no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-crash-if-off-and-alloc=                            )
-// RUN:   (no-create-opt=-fopenacc-no-create-omp=ompx-no-alloc    no-create-mt=ompx_no_alloc,ompx_hold,alloc inherited-no-create-mt=ompx_no_alloc,alloc noAlloc-or-alloc=NO-ALLOC not-crash-if-off-and-alloc=                            )
-// RUN:   (no-create-opt=-fopenacc-no-create-omp=no-ompx-no-alloc no-create-mt=ompx_hold,alloc               inherited-no-create-mt=alloc               noAlloc-or-alloc=ALLOC    not-crash-if-off-and-alloc='%if-tgt-host<|not --crash>')
-// RUN: }
-
-//      # "acc parallel loop" should be about the same as "acc parallel", so a
-//      # few cases are probably sufficient for it.
-// RUN: %data cases {
-// RUN:   (case=caseDataScalarPresent            not-crash-if-fail=                             )
-// RUN:   (case=caseDataScalarAbsent             not-crash-if-fail=                             )
-// RUN:   (case=caseDataArrayPresent             not-crash-if-fail=                             )
-// RUN:   (case=caseDataArrayAbsent              not-crash-if-fail=                             )
-// RUN:   (case=caseDataSubarrayPresent          not-crash-if-fail=                             )
-// RUN:   (case=caseDataSubarrayDisjoint         not-crash-if-fail=                             )
-// RUN:   (case=caseDataSubarrayOverlapStart     not-crash-if-fail=%[not-crash-if-off-and-alloc])
-// RUN:   (case=caseDataSubarrayOverlapEnd       not-crash-if-fail=%[not-crash-if-off-and-alloc])
-// RUN:   (case=caseDataSubarrayConcat2          not-crash-if-fail=%[not-crash-if-off-and-alloc])
-// RUN:   (case=caseDataSubarrayNonSubarray      not-crash-if-fail=%[not-crash-if-off-and-alloc])
-// RUN:   (case=caseParallelScalarPresent        not-crash-if-fail=                             )
-// RUN:   (case=caseParallelScalarAbsent         not-crash-if-fail=                             )
-// RUN:   (case=caseParallelArrayPresent         not-crash-if-fail=                             )
-// RUN:   (case=caseParallelArrayAbsent          not-crash-if-fail=                             )
-// RUN:   (case=caseParallelSubarrayPresent      not-crash-if-fail=                             )
-// RUN:   (case=caseParallelSubarrayDisjoint     not-crash-if-fail=                             )
-// RUN:   (case=caseParallelSubarrayOverlapStart not-crash-if-fail=%[not-crash-if-off-and-alloc])
-// RUN:   (case=caseParallelSubarrayOverlapEnd   not-crash-if-fail=%[not-crash-if-off-and-alloc])
-// RUN:   (case=caseParallelSubarrayConcat2      not-crash-if-fail=%[not-crash-if-off-and-alloc])
-// RUN:   (case=caseParallelSubarrayNonSubarray  not-crash-if-fail=%[not-crash-if-off-and-alloc])
-// RUN:   (case=caseParallelLoopScalarPresent    not-crash-if-fail=                             )
-// RUN:   (case=caseParallelLoopScalarAbsent     not-crash-if-fail=                             )
-// RUN:   (case=caseConstPresent                 not-crash-if-fail=                             )
-// RUN:   (case=caseConstAbsent                  not-crash-if-fail=                             )
-// RUN:   (case=caseInheritedPresent             not-crash-if-fail=                             )
-// RUN:   (case=caseInheritedAbsent              not-crash-if-fail=                             )
-// RUN:   (case=caseInheritedSubarrayPresent     not-crash-if-fail=                             )
-// RUN:   (case=caseInheritedSubarrayAbsent      not-crash-if-fail=                             )
-// RUN: }
-// RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
-// RUN: %for cases {
-// RUN:   echo '  Macro(%[case]) \' >> %t-cases.h
-// RUN: }
+// Redefine this to specify how %{check-cases} expands for each case.
 //
-// RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
+// - CASE = the case name used in the enum and as a command line argument.
+// - NO_ALLOC_OR_ALLOC = 'NO-ALLOC' if the no_create clause will create
+//   allocations, and 'ALLOC' otherwise.
+// - NOT_CRASH_IF_FAIL = 'not --crash' if the case is expected to fail an
+//   array extension check, and the empty string otherwise.
+//
+// DEFINE: %{check-case}( CASE %, NO_ALLOC_OR_ALLOC %, NOT_CRASH_IF_FAIL %) =
 
-// RUN: %for no-create-opts {
-// RUN:   %acc-check-dmp{                                                      \
-// RUN:     clang-args: %[no-create-opt] -DCASES_HEADER='"%t-cases.h"';        \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[noAlloc-or-alloc]}
-// RUN:   %acc-check-prt{                                                      \
-// RUN:     clang-args: %[no-create-opt] -DCASES_HEADER='"%t-cases.h"';        \
-// RUN:     fc-args:    -DNO_CREATE_MT=%[no-create-mt]                         \
-// RUN:                 -DINHERITED_NO_CREATE_MT=%[inherited-no-create-mt];    \
-// RUN:     fc-pres:    %[noAlloc-or-alloc]}
-// RUN:   %acc-check-exe-compile{                                              \
-// RUN:     clang-args: %[no-create-opt] -DCASES_HEADER='"%t-cases.h"'         \
-// RUN:                 -gline-tables-only}
-// RUN:   %for cases {
-// RUN:     %acc-check-exe-run{                                                \
-// RUN:       exe-args:  %[case];                                              \
-// RUN:       cmd-start: %[not-crash-if-fail]}
-// RUN:     %acc-check-exe-filecheck{                                          \
-// RUN:       fc-args: -match-full-lines -allow-empty;                         \
-// RUN:       fc-pres: %[case],%[case]-%[noAlloc-or-alloc]}
-// RUN:   }
-// RUN: }
+// Substitution to run %{check-case} for each case.
+//
+// - NO_ALLOC_OR_ALLOC = 'NO-ALLOC' if the no_create clause will create
+//   allocations, and 'ALLOC' otherwise.
+// - NOT_CRASH_IF_OFF_AND_ALLOC = 'not --crash' if the no_create clause will
+//   create allocations, and the empty string otherwise.  Each case will use
+//   this if it is expected to fail an array extension check.
+//
+// If a case is listed here but is not covered in the code, that case will fail.
+// If a case is covered in the code but not listed here, the code will not
+// compile because this list produces the enum used by the code.
+//
+// The various cases covered here should be kept consistent with present.c,
+// update.c, and subarray-errors.c (the last is located in
+// openmp/libacc2omp/test/directives).  For example, a subarray that extends a
+// subarray already present is consistently considered not present, so the
+// present clause produces a runtime error and the no_create clause doesn't
+// allocate.  However, INHERITED cases have no meaning for the present clause.
+//
+// "acc parallel loop" should be about the same as "acc parallel", so a few
+// cases are probably sufficient.
+//
+// DEFINE: %{check-cases}( NO_ALLOC_OR_ALLOC %, NOT_CRASH_IF_OFF_AND_ALLOC %) =                                             \
+//                          CASE                                NO_ALLOC_OR_ALLOC       NOT_CRASH_IF_FAIL
+// DEFINE:   %{check-case}( caseDataScalarPresent            %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataScalarAbsent             %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataArrayPresent             %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataArrayAbsent              %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayPresent          %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayDisjoint         %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayOverlapStart     %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayOverlapEnd       %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayConcat2          %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayNonSubarray      %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseParallelScalarPresent        %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelScalarAbsent         %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelArrayPresent         %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelArrayAbsent          %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayPresent      %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayDisjoint     %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayOverlapStart %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayOverlapEnd   %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayConcat2      %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayNonSubarray  %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseParallelLoopScalarPresent    %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelLoopScalarAbsent     %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseConstPresent                 %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseConstAbsent                  %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseInheritedPresent             %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseInheritedAbsent              %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseInheritedSubarrayPresent     %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseInheritedSubarrayAbsent      %, %{NO_ALLOC_OR_ALLOC} %,                               %)
+
+// Generate the enum of cases.
+//
+//      RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
+// REDEFINE: %{check-case}( CASE %, NO_ALLOC_OR_ALLOC %, NOT_CRASH_IF_FAIL %) = \
+// REDEFINE: echo '  Macro(%{CASE}) \' >> %t-cases.h
+//      RUN: %{check-cases}(%,%)
+//      RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
+
+// Prepare substitutions for trying all cases many times while varying the value
+// of -fopenacc-no-create-omp.
+//
+// REDEFINE: %{all:clang:args-stable} = \
+// REDEFINE:   -DCASES_HEADER='"%t-cases.h"' -gline-tables-only
+// REDEFINE: %{exe:fc:args-stable} = -match-full-lines -allow-empty
+// REDEFINE: %{check-case}( CASE %, NO_ALLOC_OR_ALLOC %, NOT_CRASH_IF_FAIL %) =          \
+// REDEFINE:   : '----------------- CASE: %{CASE} -----------------'                  && \
+// REDEFINE:   %{acc-check-exe-run-fn}( %{NOT_CRASH_IF_FAIL} %, %{CASE} %)            && \
+// REDEFINE:   %{acc-check-exe-filecheck-fn}( %{CASE},%{CASE}-%{NO_ALLOC_OR_ALLOC} %)
+
+// REDEFINE: %{all:clang:args} =
+// REDEFINE: %{dmp:fc:pres} = NO-ALLOC
+// REDEFINE: %{prt:fc:pres} = NO-ALLOC
+// REDEFINE: %{prt:fc:args} = -DNO_CREATE_MT=ompx_no_alloc,ompx_hold,alloc \
+// REDEFINE:                  -DINHERITED_NO_CREATE_MT=ompx_no_alloc,alloc
+//      RUN: %{acc-check-dmp}
+//      RUN: %{acc-check-prt}
+//      RUN: %{acc-check-exe-compile}
+//      RUN: %{check-cases}( NO-ALLOC %, %)
+
+// REDEFINE: %{all:clang:args} = -fopenacc-no-create-omp=ompx-no-alloc
+// REDEFINE: %{dmp:fc:pres} = NO-ALLOC
+// REDEFINE: %{prt:fc:pres} = NO-ALLOC
+// REDEFINE: %{prt:fc:args} = -DNO_CREATE_MT=ompx_no_alloc,ompx_hold,alloc \
+// REDEFINE:                  -DINHERITED_NO_CREATE_MT=ompx_no_alloc,alloc
+//      RUN: %{acc-check-dmp}
+//      RUN: %{acc-check-prt}
+//      RUN: %{acc-check-exe-compile}
+//      RUN: %{check-cases}( NO-ALLOC %, %)
+
+// REDEFINE: %{all:clang:args} = -fopenacc-no-create-omp=no-ompx-no-alloc
+// REDEFINE: %{dmp:fc:pres} = ALLOC
+// REDEFINE: %{prt:fc:pres} = ALLOC
+// REDEFINE: %{prt:fc:args} = -DNO_CREATE_MT=ompx_hold,alloc \
+// REDEFINE:                  -DINHERITED_NO_CREATE_MT=alloc
+//      RUN: %{acc-check-dmp}
+//      RUN: %{acc-check-prt}
+//      RUN: %{acc-check-exe-compile}
+//      RUN: %{check-cases}( ALLOC %, %if-tgt-host<|not --crash> %)
 
 // END.
 

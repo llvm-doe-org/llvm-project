@@ -5,6 +5,34 @@
 // checked in diagnostics/warn-acc-omp-map-present.c.  Diagnostics about bad
 // -fopenacc-present-omp arguments are checked in
 // diagnostics/fopenacc-present-omp.c.
+
+// Redefine this to specify how %{check-cases} expands for each case.
+//
+// - LINE = the line number of the caller.
+// - CASE = the case name used in the enum and as a command line argument.
+// - CONSTRUCT = the name of the OpenACC construct being tested.
+// - NOT_CRASH_IF_FAIL = 'not --crash' if the case is expected to fail a
+//   presence check or array extension check, and the empty string otherwise.
+// - NOT_IF_FAIL = same as NOT_CRASH_IF_FAIL except without the '--crash'.  It's
+//   the logical-or of NOT_IF_PRESENT_FAIL and NOT_IF_ARRAYEXT_FAIL.
+// - NOT_IF_PRESENT_FAIL = same as NOT_IF_FAIL but only for presence checks.
+// - NOT_IF_ARRAYEXT_FAIL = same as NOT_IF_FAIL but only for array extension
+//   checks.
+//
+// DEFINE: %{check-case}( LINE %, CASE %, CONSTRUCT %, NOT_CRASH_IF_FAIL %,    \
+// DEFINE:                NOT_IF_FAIL %, NOT_IF_PRESENT_FAIL %,                \
+// DEFINE:                NOT_IF_ARRAYEXT_FAIL  %) =
+
+// Substitution to run %{check-case} for each case.
+//
+// - NOT_CRASH_IF_PRESENT = 'not --crash' if presence checks are generally
+//   enabled, and the empty string otherwise.  Each case will use this if it is
+//   expected to fail a presence check.
+// - NOT_IF_PRESENT = same as NOT_CRASH_IF_PRESENT except without the '--crash'.
+//
+// If a case is listed here but is not covered in the code, that case will fail.
+// If a case is covered in the code but not listed here, the code will not
+// compile because this list produces the enum used by the code.
 //
 // The various cases covered here should be kept consistent with no-create.c,
 // update.c, and subarray-errors.c (the last is located in
@@ -12,17 +40,7 @@
 // subarray already present is consistently considered not present, so the
 // present clause produces a runtime error and the no_create clause doesn't
 // allocate.
-
-// RUN: %data present-opts {
-// RUN:   (present-opt=                                 present-mt=present,ompx_hold,alloc not-if-present=not not-crash-if-present='not --crash')
-// RUN:   (present-opt=-fopenacc-present-omp=present    present-mt=present,ompx_hold,alloc not-if-present=not not-crash-if-present='not --crash')
-// RUN:   (present-opt=-fopenacc-present-omp=no-present present-mt=ompx_hold,alloc         not-if-present=    not-crash-if-present=             )
-// RUN: }
-// RUN: %data use-vars {
-// RUN:   (use-var-cflags=            )
-// RUN:   (use-var-cflags=-DDO_USE_VAR)
-// RUN: }
-
+//
 // Due to a bug in Clang's OpenMP implementation, codegen and runtime behavior
 // used to behave differently for "present" clauses on "acc data" vs. "acc
 // parallel" if -fopenacc-present-omp=no-present were specified, so check all
@@ -36,58 +54,84 @@
 // "acc parallel loop" should be about the same as "acc parallel", so a few
 // cases are probably sufficient.
 //
-// RUN: %data cases {
-// RUN:   (case=caseDataScalarPresent            not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=data    )
-// RUN:   (case=caseDataScalarAbsent             not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=data    )
-// RUN:   (case=caseDataArrayPresent             not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=data    )
-// RUN:   (case=caseDataArrayAbsent              not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=data    )
-// RUN:   (case=caseDataSubarrayPresent          not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=data    )
-// RUN:   (case=caseDataSubarrayDisjoint         not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=data    )
-// RUN:   (case=caseDataSubarrayOverlapStart     not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=data    )
-// RUN:   (case=caseDataSubarrayOverlapEnd       not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=data    )
-// RUN:   (case=caseDataSubarrayConcat2          not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=data    )
-// RUN:   (case=caseDataSubarrayNonSubarray      not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=data    )
-// RUN:   (case=caseParallelScalarPresent        not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=parallel)
-// RUN:   (case=caseParallelScalarAbsent         not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=parallel)
-// RUN:   (case=caseParallelArrayPresent         not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=parallel)
-// RUN:   (case=caseParallelArrayAbsent          not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=parallel)
-// RUN:   (case=caseParallelSubarrayPresent      not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=parallel)
-// RUN:   (case=caseParallelSubarrayDisjoint     not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=parallel)
-// RUN:   (case=caseParallelSubarrayOverlapStart not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=parallel)
-// RUN:   (case=caseParallelSubarrayOverlapEnd   not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=parallel)
-// RUN:   (case=caseParallelSubarrayConcat2      not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=parallel)
-// RUN:   (case=caseParallelSubarrayNonSubarray  not-if-fail='%if-tgt-host<|not>'               not-crash-if-fail='%if-tgt-host<|not --crash>'             not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError='%if-tgt-host<|not>' construct=parallel)
-// RUN:   (case=caseParallelLoopScalarPresent    not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=parallel)
-// RUN:   (case=caseParallelLoopScalarAbsent     not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=parallel)
-// RUN:   (case=caseConstPresent                 not-if-fail=                                   not-crash-if-fail=                                         not-if-presentError=                                   not-if-arrayExtError=                     construct=parallel)
-// RUN:   (case=caseConstAbsent                  not-if-fail='%if-tgt-host<|%[not-if-present]>' not-crash-if-fail='%if-tgt-host<|%[not-crash-if-present]>' not-if-presentError='%if-tgt-host<|%[not-if-present]>' not-if-arrayExtError=                     construct=parallel)
-// RUN: }
-// RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
-// RUN: %for cases {
-// RUN:   echo '  Macro(%[case]) \' >> %t-cases.h
-// RUN: }
-// RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
+// DEFINE: %{check-cases}( LINE %, NOT_CRASH_IF_PRESENT %, NOT_IF_PRESENT %) =                                                                                                                                                              \
+//                          LINE                CASE                                CONSTRUCT    NOT_CRASH_IF_FAIL                         NOT_IF_FAIL                         NOT_IF_PRESENT_FAIL                 NOT_IF_ARRAYEXT_FAIL
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataScalarPresent            %, data      %,                                        %,                                  %,                                  %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataScalarAbsent             %, data      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataArrayPresent             %, data      %,                                        %,                                  %,                                  %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataArrayAbsent              %, data      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayPresent          %, data      %,                                        %,                                  %,                                  %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayDisjoint         %, data      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayOverlapStart     %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayOverlapEnd       %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayConcat2          %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayNonSubarray      %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelScalarPresent        %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelScalarAbsent         %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelArrayPresent         %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelArrayAbsent          %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayPresent      %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayDisjoint     %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayOverlapStart %, parallel  %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayOverlapEnd   %, parallel  %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayConcat2      %, parallel  %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayNonSubarray  %, parallel  %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelLoopScalarPresent    %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelLoopScalarAbsent     %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseConstPresent                 %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseConstAbsent                  %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %)
 
-// RUN: %for present-opts {
-// RUN:   %acc-check-dmp{                                                      \
-// RUN:     clang-args: %[present-opt] -DCASES_HEADER='"%t-cases.h"'}
-// RUN:   %acc-check-prt{                                                      \
-// RUN:     clang-args: %[present-opt] -DCASES_HEADER='"%t-cases.h"';          \
-// RUN:     fc-args:    -DPRESENT_MT=%[present-mt]}
-// RUN:   %for use-vars {
-// RUN:     %acc-check-exe-compile{                                            \
-// RUN:       clang-args: %[present-opt] -DCASES_HEADER='"%t-cases.h"'         \
-// RUN:                   %[use-var-cflags] -gline-tables-only}
-// RUN:     %for cases {
-// RUN:       %acc-check-exe-run{                                              \
-// RUN:         exe-args:  %[case];                                            \
-// RUN:         cmd-start: %[not-crash-if-fail]}
-// RUN:       %acc-check-exe-filecheck{                                        \
-// RUN:         fc-args: ;                                                     \
-// RUN:         fc-pres: %[not-if-fail]PASS,%[not-if-fail]PASS-%[construct],%[not-if-presentError]PRESENT,%[not-if-arrayExtError]ARRAYEXT,%[not-if-presentError]PRESENT-%[not-if-arrayExtError]ARRAYEXT}
-// RUN:     }
-// RUN:   }
-// RUN: }
+// Generate the enum of cases.
+//
+//      RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
+// REDEFINE: %{check-case}( LINE %, CASE %, CONSTRUCT %, NOT_CRASH_IF_FAIL %,  \
+// REDEFINE:                NOT_IF_FAIL %, NOT_IF_PRESENT_FAIL %,              \
+// REDEFINE:                NOT_IF_ARRAYEXT_FAIL %) =                          \
+// REDEFINE: echo '  Macro(%{CASE}) \' >> %t-cases.h
+//      RUN: %{check-cases}( %, %, %)
+//      RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
+
+// Prepare substitutions for trying all cases many times while varying the value
+// of -fopenacc-present-omp and whether the variable is used in the construct.
+//
+// REDEFINE: %{all:clang:args-stable} = \
+// REDEFINE:   -DCASES_HEADER='"%t-cases.h"' -gline-tables-only
+// REDEFINE: %{check-case}( LINE %, CASE %, CONSTRUCT %, NOT_CRASH_IF_FAIL %,  \
+// REDEFINE:                NOT_IF_FAIL %, NOT_IF_PRESENT_FAIL %,              \
+// REDEFINE:                NOT_IF_ARRAYEXT_FAIL %) =                          \
+// REDEFINE:   : '---------- CASE=%{CASE} at lines %{LINE} ----------'     &&  \
+// REDEFINE:   %{acc-check-exe-run-fn}( %{NOT_CRASH_IF_FAIL} %, %{CASE} %) &&  \
+// REDEFINE:   %{acc-check-exe-filecheck-fn}( %{NOT_IF_FAIL}PASS,%{NOT_IF_FAIL}PASS-%{CONSTRUCT},%{NOT_IF_PRESENT_FAIL}PRESENT,%{NOT_IF_ARRAYEXT_FAIL}ARRAYEXT,%{NOT_IF_PRESENT_FAIL}PRESENT-%{NOT_IF_ARRAYEXT_FAIL}ARRAYEXT %)
+// DEFINE: %{check-exe-present}( LINE %) =                                     \
+// DEFINE:   %{acc-check-exe-compile} &&                                       \
+// DEFINE:   %{check-cases}( %{LINE} %, not --crash %, not %)
+// DEFINE: %{check-exe-not-present}( LINE %) =                                 \
+// DEFINE:   %{acc-check-exe-compile} &&                                       \
+// DEFINE:   %{check-cases}( %{LINE} %, %, %)
+
+// REDEFINE: %{all:clang:args} =
+// REDEFINE: %{prt:fc:args} = -DPRESENT_MT=present,ompx_hold,alloc
+//      RUN: %{acc-check-dmp}
+//      RUN: %{acc-check-prt}
+//      RUN: %{check-exe-present}( %(line) %)
+// REDEFINE: %{all:clang:args} = -DDO_USE_VAR
+//      RUN: %{check-exe-present}( %(line) %)
+
+// REDEFINE: %{all:clang:args} = -fopenacc-present-omp=present
+// REDEFINE: %{prt:fc:args} = -DPRESENT_MT=present,ompx_hold,alloc
+//      RUN: %{acc-check-dmp}
+//      RUN: %{acc-check-prt}
+//      RUN: %{check-exe-present}( %(line) %)
+// REDEFINE: %{all:clang:args} = -fopenacc-present-omp=present -DDO_USE_VAR
+//      RUN: %{check-exe-present}( %(line) %)
+
+// REDEFINE: %{all:clang:args} = -fopenacc-present-omp=no-present
+// REDEFINE: %{prt:fc:args} = -DPRESENT_MT=ompx_hold,alloc
+//      RUN: %{acc-check-dmp}
+//      RUN: %{acc-check-prt}
+//      RUN: %{check-exe-not-present}( %(line) %)
+// REDEFINE: %{all:clang:args} = -fopenacc-present-omp=no-present -DDO_USE_VAR
+//      RUN: %{check-exe-not-present}( %(line) %)
 
 // END.
 

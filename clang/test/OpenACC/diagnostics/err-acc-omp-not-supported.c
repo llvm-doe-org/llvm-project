@@ -1,45 +1,38 @@
-// RUN: %data omps {
-// RUN:   (omp=-fopenmp       )
-// RUN:   (omp=-fopenmp=libomp)
-// RUN: }
-// RUN: %data omps-cc1 {
-// RUN:   (omp=-fopenmp)
-// RUN: }
-// RUN: %data accs {
-// RUN:   (acc=-fopenacc                  )
-// RUN:   (acc=-fopenacc-ast-print=acc    )
-// RUN:   (acc=-fopenacc-ast-print=omp    )
-// RUN:   (acc=-fopenacc-ast-print=acc-omp)
-// RUN:   (acc=-fopenacc-ast-print=omp-acc)
-// RUN:   (acc=-fopenacc-print=acc        )
-// RUN:   (acc=-fopenacc-print=omp        )
-// RUN:   (acc=-fopenacc-print=acc-omp    )
-// RUN:   (acc=-fopenacc-print=omp-acc    )
-// RUN: }
-// RUN: %for accs {
-// RUN:   %clang %[acc] -o %t %s 2>&1 | FileCheck -allow-empty %s
-// RUN:   %clang_cc1 %[acc] %s 2>&1 | FileCheck -allow-empty %s
-// RUN: }
-// RUN: %for omps {
-// RUN:   %clang %[omp] -o %t %s 2>&1 | FileCheck -allow-empty %s
-// RUN: }
-// RUN: %for omps-cc1 {
-// RUN:   %clang_cc1 %[omp] %s 2>&1 | FileCheck -allow-empty %s
-// RUN: }
-// RUN: %for accs {
-// RUN:   %for omps {
-// RUN:     not %clang %[acc] %[omp] -o %t %s 2>&1 \
-// RUN:     | FileCheck -check-prefix ERROR %s
-// RUN:     not %clang %[omp] %[acc] -o %t %s 2>&1 \
-// RUN:     | FileCheck -check-prefix ERROR %s
-// RUN:   }
-// RUN:   %for omps-cc1 {
-// RUN:     not %clang_cc1 %[acc] %[omp] %s 2>&1 \
-// RUN:     | FileCheck -check-prefix ERROR %s
-// RUN:     not %clang_cc1 %[omp] %[acc] %s 2>&1 \
-// RUN:     | FileCheck -check-prefix ERROR %s
-// RUN:   }
-// RUN: }
+// DEFINE: %{check-good}(CLANG%) = %{CLANG} -o %t %s > %t.out 2>&1 &&          \
+// DEFINE:                         FileCheck -allow-empty %s < %t.out
+// DEFINE: %{check-bad}(CLANG%) = not %{CLANG} -o %t %s > %t.out 2>&1 &&       \
+// DEFINE:                        FileCheck -check-prefix=ERROR %s < %t.out
+// DEFINE: %{check-accs}(RUN%, CLANG%, CFLAGS%) =                              \
+// DEFINE:   %{RUN}( %{CLANG} -fopenacc %{CFLAGS}                   %)      && \
+// DEFINE:   %{RUN}( %{CLANG} -fopenacc %{CFLAGS}                   %)      && \
+// DEFINE:   %{RUN}( %{CLANG} -fopenacc-ast-print=acc %{CFLAGS}     %)      && \
+// DEFINE:   %{RUN}( %{CLANG} -fopenacc-ast-print=omp %{CFLAGS}     %)      && \
+// DEFINE:   %{RUN}( %{CLANG} -fopenacc-ast-print=acc-omp %{CFLAGS} %)      && \
+// DEFINE:   %{RUN}( %{CLANG} -fopenacc-ast-print=omp-acc %{CFLAGS} %)      && \
+// DEFINE:   %{RUN}( %{CLANG} -fopenacc-print=acc %{CFLAGS}         %)      && \
+// DEFINE:   %{RUN}( %{CLANG} -fopenacc-print=omp %{CFLAGS}         %)      && \
+// DEFINE:   %{RUN}( %{CLANG} -fopenacc-print=acc-omp %{CFLAGS}     %)      && \
+// DEFINE:   %{RUN}( %{CLANG} -fopenacc-print=omp-acc %{CFLAGS}     %)
+
+// Make sure we're checking sane OpenMP options.
+// RUN: %{check-good}( %clang -fopenmp        %)
+// RUN: %{check-good}( %clang -fopenmp=libomp %)
+// RUN: %{check-good}( %clang_cc1 -fopenmp    %)
+
+// Make sure we're checking sane OpenACC options.
+//                     RUN              CLANG         CFLAGS
+// RUN: %{check-accs}( %{check-good} %, %clang     %,        %)
+// RUN: %{check-accs}( %{check-good} %, %clang_cc1 %,        %)
+
+// Make sure we cannot combine OpenACC and OpenMP options.
+//                     RUN             CLANG                     CFLAGS
+// RUN: %{check-accs}( %{check-bad} %, %clang -fopenmp        %,                 %)
+// RUN: %{check-accs}( %{check-bad} %, %clang -fopenmp=libomp %,                 %)
+// RUN: %{check-accs}( %{check-bad} %, %clang_cc1 -fopenmp    %,                 %)
+// RUN: %{check-accs}( %{check-bad} %, %clang                 %, -fopenmp        %)
+// RUN: %{check-accs}( %{check-bad} %, %clang                 %, -fopenmp=libomp %)
+// RUN: %{check-accs}( %{check-bad} %, %clang_cc1             %, -fopenmp        %)
+
 // END.
 
 // Braces prevent these directives from matching themselves when printing.

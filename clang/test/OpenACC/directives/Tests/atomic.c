@@ -9,9 +9,10 @@
 // wouldn't produce the desired test failure.  Putting them in separate parallel
 // directives helps resynchronize threads.
 
-// RUN: %acc-check-dmp{}
-// RUN: %acc-check-prt{}
-// RUN: %acc-check-exe{clang-args: -lm}
+// REDEFINE: %{all:clang:args} = -lm
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

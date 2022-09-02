@@ -1,25 +1,26 @@
 // Check registration/unregistration scenarios involving OpenACC events that
 // share ompt_callback_target_data_op_emi.
 
-// RUN: %data events {
-// RUN:   (event=NONE)
-// RUN:   (event=CREATE)
-// RUN:   (event=DELETE)
-// RUN:   (event=ALLOC)
-// RUN:   (event=FREE)
-// RUN:   (event=ENQUEUE_UPLOAD_START)
-// RUN:   (event=ENQUEUE_UPLOAD_END)
-// RUN:   (event=ENQUEUE_DOWNLOAD_START)
-// RUN:   (event=ENQUEUE_DOWNLOAD_END)
-// RUN: }
 // RUN: %clang-acc -o %t.exe %s
-// RUN: %for events {
-// RUN:   env EVENT=%[event] %t.exe > %t.out 2> %t.err
-// RUN:   FileCheck -input-file %t.err -allow-empty -check-prefixes=ERR %s
-// RUN:   FileCheck -input-file %t.out %s \
-// RUN:     -match-full-lines -strict-whitespace -allow-empty \
-// RUN:     -implicit-check-not=acc_ev_ -check-prefixes=%if-host(NONE,%[event])
-// RUN: }
+
+// DEFINE: %{check}( EVENT %) =                                                \
+// DEFINE:   env EVENT=%{EVENT} %t.exe > %t.out 2> %t.err &&                   \
+// DEFINE:   FileCheck -input-file %t.err -allow-empty -check-prefixes=ERR     \
+// DEFINE:             %s &&                                                   \
+// DEFINE:   FileCheck -input-file %t.out %s                                   \
+// DEFINE:     -match-full-lines -strict-whitespace -allow-empty               \
+// DEFINE:     -implicit-check-not=acc_ev_                                     \
+// DEFINE:     -check-prefixes=%if-host<NONE|%{EVENT}>
+
+// RUN: %{check}( NONE                   %)
+// RUN: %{check}( CREATE                 %)
+// RUN: %{check}( DELETE                 %)
+// RUN: %{check}( ALLOC                  %)
+// RUN: %{check}( FREE                   %)
+// RUN: %{check}( ENQUEUE_UPLOAD_START   %)
+// RUN: %{check}( ENQUEUE_UPLOAD_END     %)
+// RUN: %{check}( ENQUEUE_DOWNLOAD_START %)
+// RUN: %{check}( ENQUEUE_DOWNLOAD_END   %)
 //
 // END.
 

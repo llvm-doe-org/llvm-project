@@ -1,22 +1,22 @@
 // Check that no callbacks are missed upon a device allocation failure.
 
-// RUN: %data run-envs {
-// RUN:   (run-env=                                  host-or-off-post-env='%if-host(HOST,OFF)' not-if-off-post-env='%if-host(, %not --crash)')
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off-post-env=HOST                 not-if-off-post-env=                          )
-// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        host-or-off-post-env=HOST                 not-if-off-post-env=                          )
-// RUN: }
 // RUN: %clang-acc %s -o %t.exe
-// RUN: %for run-envs {
-// RUN:   %[not-if-off-post-env] %[run-env] %t.exe > %t.out 2> %t.err
-// RUN:   FileCheck -input-file %t.err -allow-empty %s \
-// RUN:     -check-prefixes=ERR,ERR-%[host-or-off-post-env]-POST-ENV
-// RUN:   FileCheck -input-file %t.out %s \
-// RUN:     -match-full-lines -strict-whitespace -allow-empty \
-// RUN:     -implicit-check-not=acc_ev_ \
-// RUN:     -check-prefixes=OUT,OUT-%if-host(HOST,OFF)-PRE-ENV \
-// RUN:     -check-prefixes=OUT-%[host-or-off-post-env]-POST-ENV \
-// RUN:     -check-prefixes=OUT-%if-host(HOST,OFF)-THEN-%[host-or-off-post-env]
-// RUN: }
+
+// DEFINE: %{check}( RUN_ENV %, HOST_OR_OFF_POST_ENV %,                        \
+// DEFINE:           NOT_IF_OFF_POST_ENV %) =                                  \
+// DEFINE:   %{NOT_IF_OFF_POST_ENV} %{RUN_ENV} %t.exe > %t.out 2> %t.err &&    \
+// DEFINE:   FileCheck -input-file %t.err -allow-empty %s                      \
+// DEFINE:     -check-prefixes=ERR,ERR-%{HOST_OR_OFF_POST_ENV}-POST-ENV &&     \
+// DEFINE:   FileCheck -input-file %t.out %s                                   \
+// DEFINE:     -match-full-lines -strict-whitespace -allow-empty               \
+// DEFINE:     -implicit-check-not=acc_ev_                                     \
+// DEFINE:     -check-prefixes=OUT,OUT-%if-host<HOST|OFF>-PRE-ENV              \
+// DEFINE:     -check-prefixes=OUT-%{HOST_OR_OFF_POST_ENV}-POST-ENV            \
+// DEFINE:     -check-prefixes=OUT-%if-host<HOST|OFF>-THEN-%{HOST_OR_OFF_POST_ENV}
+
+// RUN: %{check}(                                 %, %if-host<HOST|OFF> %, %if-host<|%not --crash> %)
+// RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled %, HOST               %,                         %)
+// RUN: %{check}( env ACC_DEVICE_TYPE=host        %, HOST               %,                         %)
 //
 // END.
 

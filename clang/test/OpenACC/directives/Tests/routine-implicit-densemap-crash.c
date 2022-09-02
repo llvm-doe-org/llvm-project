@@ -9,9 +9,9 @@
 // at compile time, but we add dump, print, and execution checks to make sure
 // the recursion to add an implicit routine seq to f actually behaved correctly.
 //
-// RUN: %acc-check-dmp{}
-// RUN: %acc-check-prt{}
-// RUN: %acc-check-exe{}
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 //
 // END.
 

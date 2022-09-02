@@ -1,53 +1,86 @@
 // Check device management routines with runtime errors.
 
-// RUN: %data run-envs {
-// RUN:   (run-env=                                  host-or-off='%if-host(HOST, OFF)' not-if-host='%if-host(%not --crash,)')
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off=HOST                  not-if-host='%not --crash'           )
-// RUN: }
-// RUN: %data cases {
-// RUN:   (case=caseGetNumDevicesInvalidTypePos not-if-fail='%not --crash')
-// RUN:   (case=caseGetNumDevicesInvalidTypeNeg not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceTypeInvalidTypePos not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceTypeInvalidTypeNeg not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceTypeNone           not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceTypeNoNotHost      not-if-fail=%[not-if-host])
-// RUN:   (case=caseSetDeviceNumInvalidTypePos  not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumInvalidTypeNeg  not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumNegOneNone      not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumZeroNone        not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumNegOneHost      not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumOneHost         not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumNegOneNotHost   not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumTooLargeNotHost not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumNegOneDefault   not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumTooLargeDefault not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumCurrent         not-if-fail=              )
-// RUN:   (case=caseSetDeviceNumNegOneNVIDIA    not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumTooLargeNVIDIA  not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumNegOneRADEON    not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumTooLargeRADEON  not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumNegOneX86_64    not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumTooLargeX86_64  not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumNegOnePPC64LE   not-if-fail='%not --crash')
-// RUN:   (case=caseSetDeviceNumTooLargePPC64LE not-if-fail='%not --crash')
-// RUN:   (case=caseGetDeviceNumInvalidTypePos  not-if-fail='%not --crash')
-// RUN:   (case=caseGetDeviceNumInvalidTypeNeg  not-if-fail='%not --crash')
-// RUN: }
-// RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
-// RUN: %for cases {
-// RUN:   echo '  Macro(%[case]) \' >> %t-cases.h
-// RUN: }
-// RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
+// Redefine this to specify how %{check-cases} expands for each case.
+//
+// - CASE = the case name used in the enum and as a command line argument.
+// - NOT_CRASH_IF_FAIL = 'not --crash' if the case is expected to fail at run
+//   time, or the empty string otherwise.
+// - RUN_ENV = an "env" command to set run-time environment variables, or the
+//   empty string if none.
+// - HOST_OR_OFF = 'HOST' if compute regions will not be offloaded, or 'OFF' if
+//   they will.
+//
+// DEFINE: %{check-case}( CASE %, NOT_CRASH_IF_FAIL %, RUN_ENV %, HOST_OR_OFF %) =
+
+// Substitution to run %{check-case} for each case.
+//
+// - RUN_ENV = an "env" command to set run-time environment variables, or the
+//   empty string if none.
+// - HOST_OR_OFF = 'HOST' if compute regions will not be offloaded, or 'OFF' if
+//   they will.
+// - NOT_IF_HOST = 'not --crash' if HOST_OR_OFF is 'HOST'.
+//
+// If a case is listed here but is not covered in the code, that case will fail.
+// If a case is covered in the code but not listed here, the code will not
+// compile because this list produces the enum used by the code.
+//
+// DEFINE: %{check-cases}( RUN_ENV %, HOST_OR_OFF %, NOT_IF_HOST %) =                                                  \
+//                          CASE                               NOT_CRASH_IF_FAIL    RUN_ENV       HOST_OR_OFF
+// DEFINE:   %{check-case}( caseGetNumDevicesInvalidTypePos %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseGetNumDevicesInvalidTypeNeg %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceTypeInvalidTypePos %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceTypeInvalidTypeNeg %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceTypeNone           %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceTypeNoNotHost      %, %{NOT_IF_HOST}    %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumInvalidTypePos  %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumInvalidTypeNeg  %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumNegOneNone      %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumZeroNone        %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumNegOneHost      %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumOneHost         %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumNegOneNotHost   %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumTooLargeNotHost %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumNegOneDefault   %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumTooLargeDefault %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumCurrent         %,                   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumNegOneNVIDIA    %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumTooLargeNVIDIA  %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumNegOneRADEON    %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumTooLargeRADEON  %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumNegOneX86_64    %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumTooLargeX86_64  %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumNegOnePPC64LE   %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseSetDeviceNumTooLargePPC64LE %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseGetDeviceNumInvalidTypePos  %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseGetDeviceNumInvalidTypeNeg  %, %not --crash      %, %{RUN_ENV} %, %{HOST_OR_OFF} %)
+
+// Generate the enum of cases.
+//
+//      RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
+// REDEFINE: %{check-case}( CASE %, NOT_CRASH_IF_FAIL %, RUN_ENV %,            \
+// REDEFINE:                HOST_OR_OFF %) =                                   \
+// REDEFINE: echo '  Macro(%{CASE}) \' >> %t-cases.h
+//      RUN: %{check-cases}(%,%,%)
+//      RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
+
+// Try all cases multiple times while varying the run-time environment.
+//
+// REDEFINE: %{check-case}( CASE %, NOT_CRASH_IF_FAIL %, RUN_ENV %,            \
+// REDEFINE:                HOST_OR_OFF %) =                                   \
+// REDEFINE:   : '---------- RUN_ENV: %{RUN_ENV}; CASE: %{CASE} ----------' && \
+// REDEFINE:   %{NOT_CRASH_IF_FAIL} %{RUN_ENV} %t.exe %{CASE}                  \
+// REDEFINE:     > %t.out 2> %t.err &&                                         \
+// REDEFINE:   FileCheck -input-file %t.out %s -match-full-lines -allow-empty  \
+// REDEFINE:     -check-prefixes=OUT,OUT-%{CASE},OUT-%{CASE}-%{HOST_OR_OFF} && \
+// REDEFINE:   FileCheck -input-file %t.err %s -match-full-lines -allow-empty  \
+// REDEFINE:     -check-prefixes=ERR,ERR-%{CASE},ERR-%{CASE}-%{HOST_OR_OFF}
+//
 // RUN: %clang-acc -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
-// RUN: %for run-envs {
-// RUN:   %for cases {
-// RUN:     %[not-if-fail] %[run-env] %t.exe %[case] > %t.out 2> %t.err
-// RUN:     FileCheck -input-file %t.out %s -match-full-lines -allow-empty \
-// RUN:       -check-prefixes=OUT,OUT-%[case],OUT-%[case]-%[host-or-off]
-// RUN:     FileCheck -input-file %t.err %s -match-full-lines -allow-empty \
-// RUN:       -check-prefixes=ERR,ERR-%[case],ERR-%[case]-%[host-or-off]
-// RUN:   }
-// RUN: }
+//
+//                      RUN_ENV                            HOST_OR_OFF           NOT_IF_HOST
+// RUN: %{check-cases}(                                 %, %if-host<HOST|OFF> %, %if-host<%not --crash|> %)
+// RUN: %{check-cases}( env OMP_TARGET_OFFLOAD=disabled %, HOST               %, %not --crash            %)
+
 //
 // END.
 

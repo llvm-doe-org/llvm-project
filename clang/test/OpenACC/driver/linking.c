@@ -4,16 +4,14 @@
 //
 // FIXME: Replace DEFAULT_OPENMP_LIB below with the value chosen at configure time.
 
-// RUN: %data {
-// RUN:   (target=i386-pc-linux-gnu   pre=LD)
-// RUN:   (target=x86_64-pc-linux-gnu pre=LD)
-// RUN:   (target=x86_64-msvc-win32   pre=MSVC-LINK-64)
-// RUN: }
-// RUN: %for {
-// RUN:   %clang -no-canonical-prefixes %s -### -o %t.o 2>&1 \
-// RUN:          -fopenacc -target %[target] -rtlib=platform \
-// RUN:   | FileCheck -check-prefix=%[pre] %s
-// RUN: }
+// DEFINE: %{check}( TARGET %, FC_PRE %) =                                     \
+// DEFINE:   %clang -no-canonical-prefixes %s -### -o %t.o                     \
+// DEFINE:     -fopenacc -target %{TARGET} -rtlib=platform > %t.out 2>&1 &&    \
+// DEFINE:   FileCheck -check-prefix=%{FC_PRE} -input-file=%t.out %s
+
+// RUN: %{check}( i386-pc-linux-gnu   %, LD           %)
+// RUN: %{check}( x86_64-pc-linux-gnu %, LD           %)
+// RUN: %{check}( x86_64-msvc-win32   %, MSVC-LINK-64 %)
 
 // LD: "{{.*}}ld{{(.exe)?}}"
 // LD: "-l[[DEFAULT_OPENMP_LIB:[^"]*]]"

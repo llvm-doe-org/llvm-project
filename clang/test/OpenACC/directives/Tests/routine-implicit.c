@@ -5,19 +5,28 @@
 // specifically avoid the clutter of checking that explicit routine directives
 // dump and print correctly as that's checked in other routine-*.c.
 
-// RUN: %data uses {
-// RUN:   (use-cflags=-DUSE_CALL)
-// RUN:   (use-cflags=-DUSE_ADDR)
-// RUN: }
-// RUN: %acc-check-exe-compile-c{base-name: other; clang-args: -DCOMPILE_OTHER}
-// RUN: %for uses {
-// RUN:   %acc-check-dmp{clang-args: %[use-cflags]}
-// RUN:   %acc-check-prt{clang-args: %[use-cflags]}
-// RUN:   %acc-check-exe-compile-c{base-name: main; clang-args: %[use-cflags]}
-// RUN:   %acc-check-exe-link{clang-args: main.o other.o}
-// RUN:   %acc-check-exe-run{}
-// RUN:   %acc-check-exe-filecheck{fc-args: -strict-whitespace}
-// RUN: }
+// REDEFINE: %{exe:fc:args-stable} = -strict-whitespace
+
+// REDEFINE: %{all:clang:args} = -DCOMPILE_OTHER
+// REDEFINE: %{exe:base-name} = other
+// RUN: %{acc-check-exe-compile-c}
+// REDEFINE: %{exe:base-name} = main
+
+// REDEFINE: %{all:clang:args} = -DUSE_CALL
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe-compile-c}
+// REDEFINE: %{all:clang:args} = main.o other.o
+// RUN: %{acc-check-exe-link}
+// RUN: %{acc-check-exe-run}
+
+// REDEFINE: %{all:clang:args} = -DUSE_ADDR
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe-compile-c}
+// REDEFINE: %{all:clang:args} = main.o other.o
+// RUN: %{acc-check-exe-link}
+// RUN: %{acc-check-exe-run}
 
 // END.
 

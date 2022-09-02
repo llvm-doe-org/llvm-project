@@ -2,18 +2,17 @@
 
 // Check that #define _OPENACC is generated as expected.
 //
-// RUN: %data tgts {
-// RUN:   (ndefs=0                   not-if-0=not cflags=                                                    )
-// RUN:   (ndefs=1                   not-if-0=    cflags=-fopenacc                                           )
-// RUN:   (ndefs='%num-off-tgts + 1' not-if-0=    cflags='-fopenacc -fopenmp-targets=%off-tgts -o - %libs-bc')
-// RUN: }
-// RUN: %for tgts {
-// RUN:   %clang -Xclang -verify=none -E -dM %[cflags] %s > %t.out
-// RUN:   %[not-if-0] grep -c '#define _OPENACC' %t.out | \
-// RUN:     FileCheck -D#N=%'ndefs' %s
-// RUN:   %[not-if-0] grep -c '#define _OPENACC %acc-version' %t.out | \
-// RUN:     FileCheck -D#N=%'ndefs' %s
-// RUN: }
+// DEFINE: %{check-def}( NDEFS %, NOT_IF_0 %, CFLAGS %) =                      \
+// DEFINE:   %clang -Xclang -verify=none -E -dM %{CFLAGS} %s > %t.out &&       \
+// DEFINE:   %{NOT_IF_0} grep -c '#define _OPENACC' %t.out |                   \
+// DEFINE:     FileCheck -D#N='%{NDEFS}' %s &&                                 \
+// DEFINE:   %{NOT_IF_0} grep -c '#define _OPENACC %acc-version' %t.out |      \
+// DEFINE:     FileCheck -D#N='%{NDEFS}' %s
+//
+//                    NDEFS                NOT_IF_0    CFLAGS
+// RUN: %{check-def}( 0                 %, not      %,                                                    %)
+// RUN: %{check-def}( 1                 %,          %, -fopenacc                                          %)
+// RUN: %{check-def}( %num-off-tgts + 1 %,          %, -fopenacc -fopenmp-targets=%off-tgts -o - %libs-bc %)
 //
 // CHECK-NOT: {{.}}
 //     CHECK: [[#N]]
@@ -28,30 +27,26 @@
 // Check that -fopenacc-ast-print does not warn or add an _OPENACC definition as
 // the output is fully expanded.
 //
-// RUN: %data prts {
-// RUN:   (prt=acc)
-// RUN:   (prt=omp)
-// RUN:   (prt=acc-omp)
-// RUN:   (prt=omp-acc)
-// RUN: }
-// RUN: %for prts {
-// RUN:   %clang -Xclang -verify=none -fopenacc-ast-print=%[prt] \
-// RUN:          -DACC_VERSION=%acc-version %s \
-// RUN:   | FileCheck -check-prefix=CPP %s
-// RUN: }
+// DEFINE: %{check-ast-print}( PRT %) =                                        \
+// DEFINE:   %clang -Xclang -verify=none -fopenacc-ast-print=%{PRT}            \
+// DEFINE:          -DACC_VERSION=%acc-version %s |                            \
+// DEFINE:     FileCheck -check-prefix=CPP %s
+//
+// RUN: %{check-ast-print}( acc     %)
+// RUN: %{check-ast-print}( omp     %)
+// RUN: %{check-ast-print}( acc-omp %)
+// RUN: %{check-ast-print}( omp-acc %)
 
 // Check that -fopenacc-print=acc|acc-omp does not warn or add an _OPENACC
 // definition as the output is still OpenACC.
 //
-// RUN: %data acc-prts {
-// RUN:   (prt=acc)
-// RUN:   (prt=acc-omp)
-// RUN: }
-// RUN: %for acc-prts {
-// RUN:   %clang -Xclang -verify=none -fopenacc-print=%[prt] %s > %t-acc.c \
-// RUN:          -DACC_VERSION=%acc-version
-// RUN:   diff -u %s %t-acc.c
-// RUN: }
+// DEFINE: %{check-print-acc}( PRT %) =                                        \
+// DEFINE:   %clang -Xclang -verify=none -fopenacc-print=%{PRT} %s > %t-acc.c  \
+// DEFINE:          -DACC_VERSION=%acc-version && \
+// DEFINE:   diff -u %s %t-acc.c
+//
+// RUN: %{check-print-acc}( acc     %)
+// RUN: %{check-print-acc}( acc-omp %)
 
 // Check that -fopenacc-print=omp|omp-acc does warn and add an _OPENACC
 // definition unless the compiler-generated _OPENACC definition isn't used.
@@ -63,31 +58,32 @@
 // RUN: echo '// none-no-diagnostics' >  %t-no-def.c
 // RUN: echo 'void foo();'            >> %t-no-def.c
 //
-// RUN: %data omp-prts {
-// RUN:   (prt=omp)
-// RUN:   (prt=omp-acc)
-// RUN: }
-// RUN: %for omp-prts {
-//        # Compiler's _OPENACC def is used.
-// RUN:   %clang -Xclang -verify=inserted -fopenacc-print=%[prt] %s > %t-omp.c \
-// RUN:          -DACC_VERSION=%acc-version
-// RUN:   diff -u %t-omp-expected.c %t-omp.c
+// DEFINE: %{check-print-omp}( PRT %) =                                        \
+//           # Compiler's _OPENACC def is used.
+// DEFINE:   %clang -Xclang -verify=inserted -fopenacc-print=%{PRT} %s         \
+// DEFINE:          > %t-omp.c -DACC_VERSION=%acc-version &&                   \
+// DEFINE:   diff -u %t-omp-expected.c %t-omp.c &&                             \
 //
-//        # Repeat that but check that we can suppress the warning.
-// RUN:   %clang -Xclang -verify=none -fopenacc-print=%[prt] %s > %t-omp.c \
-// RUN:          -DACC_VERSION=%acc-version -Wno-openacc-omp-macro-inserted
-// RUN:   diff -u %t-omp-expected.c %t-omp.c
+//           # Repeat that but check that we can suppress the warning.
+// DEFINE:   %clang -Xclang -verify=none -fopenacc-print=%{PRT} %s > %t-omp.c  \
+// DEFINE:          -DACC_VERSION=%acc-version                                 \
+// DEFINE:          -Wno-openacc-omp-macro-inserted &&                         \
+// DEFINE:   diff -u %t-omp-expected.c %t-omp.c &&                             \
 //
-//        # Compiler's _OPENACC def isn't used because of inserted def.
-// RUN:   %clang -Xclang -verify=none -fopenacc-print=%[prt] %t-omp.c \
-// RUN:          -DACC_VERSION=%acc-version > %t-omp2.c
-// RUN:   diff -u %t-omp.c %t-omp2.c
+//           # Compiler's _OPENACC def isn't used because of inserted def.
+// DEFINE:   %clang -Xclang -verify=none -fopenacc-print=%{PRT} %t-omp.c       \
+// DEFINE:          -DACC_VERSION=%acc-version > %t-omp2.c &&                  \
+// DEFINE:   diff -u %t-omp.c %t-omp2.c &&                                     \
 //
-//        # _OPENACC isn't used at all.
-// RUN:   %clang -Xclang -verify=none -fopenacc-print=%[prt] %t-no-def.c \
-// RUN:          > %t-no-def-omp.c
-// RUN:   diff -u %t-no-def.c %t-no-def-omp.c
-// RUN: }
+//           # _OPENACC isn't used at all.
+// DEFINE:   %clang -Xclang -verify=none -fopenacc-print=%{PRT} %t-no-def.c    \
+// DEFINE:          > %t-no-def-omp.c &&                                       \
+// DEFINE:   diff -u %t-no-def.c %t-no-def-omp.c
+//
+// RUN: %{check-print-omp}( omp     %)
+// RUN: %{check-print-omp}( omp-acc %)
+
+// END.
 
 // none-no-diagnostics
 

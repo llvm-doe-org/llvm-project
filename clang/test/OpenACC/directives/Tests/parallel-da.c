@@ -10,99 +10,74 @@
 // When ADD_LOOP_TO_PAR is set, it adds "loop seq" and a for loop to those "acc
 // parallel" directives in order to check data attributes for combined "acc
 // parallel loop" directives.
+
+// DEFINE: %{check}( DIR %) =                                                                                                                                                        \
+//                                CLANG_ARGS         FC_PRES
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_I   %, I,ICCiCoCrF,%{DIR},%{DIR}-I,%{DIR}-ICCiCoCrF                                                                              %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_C0  %, C,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%{DIR},%{DIR}-C,%{DIR}-CCiCoCr,%{DIR}-CCiCoCrF,%{DIR}-CCiCoCrFP,%{DIR}-ICCiCoCrF   %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_C1  %, C,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%{DIR},%{DIR}-C,%{DIR}-CCiCoCr,%{DIR}-CCiCoCrF,%{DIR}-CCiCoCrFP,%{DIR}-ICCiCoCrF   %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_C2  %, C,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%{DIR},%{DIR}-C,%{DIR}-CCiCoCr,%{DIR}-CCiCoCrF,%{DIR}-CCiCoCrFP,%{DIR}-ICCiCoCrF   %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_Ci0 %, Ci,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%{DIR},%{DIR}-Ci,%{DIR}-CCiCoCr,%{DIR}-CCiCoCrF,%{DIR}-CCiCoCrFP,%{DIR}-ICCiCoCrF %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_Ci1 %, Ci,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%{DIR},%{DIR}-Ci,%{DIR}-CCiCoCr,%{DIR}-CCiCoCrF,%{DIR}-CCiCoCrFP,%{DIR}-ICCiCoCrF %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_Ci2 %, Ci,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%{DIR},%{DIR}-Ci,%{DIR}-CCiCoCr,%{DIR}-CCiCoCrF,%{DIR}-CCiCoCrFP,%{DIR}-ICCiCoCrF %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_Co0 %, Co,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%{DIR},%{DIR}-Co,%{DIR}-CCiCoCr,%{DIR}-CCiCoCrF,%{DIR}-CCiCoCrFP,%{DIR}-ICCiCoCrF %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_Co1 %, Co,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%{DIR},%{DIR}-Co,%{DIR}-CCiCoCr,%{DIR}-CCiCoCrF,%{DIR}-CCiCoCrFP,%{DIR}-ICCiCoCrF %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_Co2 %, Co,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%{DIR},%{DIR}-Co,%{DIR}-CCiCoCr,%{DIR}-CCiCoCrF,%{DIR}-CCiCoCrFP,%{DIR}-ICCiCoCrF %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_Cr0 %, Cr,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%{DIR},%{DIR}-Cr,%{DIR}-CCiCoCr,%{DIR}-CCiCoCrF,%{DIR}-CCiCoCrFP,%{DIR}-ICCiCoCrF %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_Cr1 %, Cr,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%{DIR},%{DIR}-Cr,%{DIR}-CCiCoCr,%{DIR}-CCiCoCrF,%{DIR}-CCiCoCrFP,%{DIR}-ICCiCoCrF %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_Cr2 %, Cr,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%{DIR},%{DIR}-Cr,%{DIR}-CCiCoCr,%{DIR}-CCiCoCrF,%{DIR}-CCiCoCrFP,%{DIR}-ICCiCoCrF %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_F   %, F,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%{DIR},%{DIR}-F,%{DIR}-CCiCoCrF,%{DIR}-CCiCoCrFP,%{DIR}-ICCiCoCrF                          %) && \
+// DEFINE:   %{acc-check-dmp-fn}( -DMODE=MODE_P   %, P,CCiCoCrFP,%{DIR},%{DIR}-P,%{DIR}-CCiCoCrFP                                                                              %) && \
 //
-// RUN: %data directives {
-// RUN:   (dir=PAR     dir-cflags=                 )
-// RUN:   (dir=PARLOOP dir-cflags=-DADD_LOOP_TO_PAR)
-// RUN: }
-
-// RUN: %data dmps {
-// RUN:   (mode=MODE_I   pre=I,ICCiCoCrF,%[dir],%[dir]-I,%[dir]-ICCiCoCrF                                                                             )
-// RUN:   (mode=MODE_C0  pre=C,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-C,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF  )
-// RUN:   (mode=MODE_C1  pre=C,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-C,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF  )
-// RUN:   (mode=MODE_C2  pre=C,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-C,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF  )
-// RUN:   (mode=MODE_Ci0 pre=Ci,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Ci,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Ci1 pre=Ci,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Ci,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Ci2 pre=Ci,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Ci,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Co0 pre=Co,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Co,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Co1 pre=Co,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Co,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Co2 pre=Co,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Co,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Cr0 pre=Cr,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Cr,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Cr1 pre=Cr,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Cr,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_Cr2 pre=Cr,CCiCoCr,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-Cr,%[dir]-CCiCoCr,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF)
-// RUN:   (mode=MODE_F   pre=F,CCiCoCrF,CCiCoCrFP,ICCiCoCrF,%[dir],%[dir]-F,%[dir]-CCiCoCrF,%[dir]-CCiCoCrFP,%[dir]-ICCiCoCrF                         )
-// RUN:   (mode=MODE_P   pre=P,CCiCoCrFP,%[dir],%[dir]-P,%[dir]-CCiCoCrFP                                                                             )
-// RUN: }
-
-// RUN: %data prts {
-// RUN:   (mode=MODE_I   pre=I,%[dir],%[dir]-I    )
-// RUN:   (mode=MODE_C0  pre=C0,%[dir],%[dir]-C0  )
-// RUN:   (mode=MODE_C1  pre=C1,%[dir],%[dir]-C1  )
-// RUN:   (mode=MODE_C2  pre=C2,%[dir],%[dir]-C2  )
-// RUN:   (mode=MODE_Ci0 pre=Ci0,%[dir],%[dir]-Ci0)
-// RUN:   (mode=MODE_Ci1 pre=Ci1,%[dir],%[dir]-Ci1)
-// RUN:   (mode=MODE_Ci2 pre=Ci2,%[dir],%[dir]-Ci2)
-// RUN:   (mode=MODE_Co0 pre=Co0,%[dir],%[dir]-Co0)
-// RUN:   (mode=MODE_Co1 pre=Co1,%[dir],%[dir]-Co1)
-// RUN:   (mode=MODE_Co2 pre=Co2,%[dir],%[dir]-Co2)
-// RUN:   (mode=MODE_Cr0 pre=Cr0,%[dir],%[dir]-Cr0)
-// RUN:   (mode=MODE_Cr1 pre=Cr1,%[dir],%[dir]-Cr1)
-// RUN:   (mode=MODE_Cr2 pre=Cr2,%[dir],%[dir]-Cr2)
-// RUN:   (mode=MODE_F   pre=F,%[dir],%[dir]-F    )
-// RUN:   (mode=MODE_P   pre=P,%[dir],%[dir]-P    )
-// RUN: }
-
-// When we are targeting the host, memory is shared, so copy, copyin, copyout,
-// create, and their aliases all act like copy.
+//                                CLANG_ARGS         FC_PRES
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_I   %, I,%{DIR},%{DIR}-I     %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_C0  %, C0,%{DIR},%{DIR}-C0   %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_C1  %, C1,%{DIR},%{DIR}-C1   %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_C2  %, C2,%{DIR},%{DIR}-C2   %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_Ci0 %, Ci0,%{DIR},%{DIR}-Ci0 %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_Ci1 %, Ci1,%{DIR},%{DIR}-Ci1 %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_Ci2 %, Ci2,%{DIR},%{DIR}-Ci2 %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_Co0 %, Co0,%{DIR},%{DIR}-Co0 %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_Co1 %, Co1,%{DIR},%{DIR}-Co1 %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_Co2 %, Co2,%{DIR},%{DIR}-Co2 %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_Cr0 %, Cr0,%{DIR},%{DIR}-Cr0 %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_Cr1 %, Cr1,%{DIR},%{DIR}-Cr1 %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_Cr2 %, Cr2,%{DIR},%{DIR}-Cr2 %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_F   %, F,%{DIR},%{DIR}-F     %) && \
+// DEFINE:   %{acc-check-prt-fn}( -DMODE=MODE_P   %, P,%{DIR},%{DIR}-P     %) && \
 //
-// RUN: %data exes {
-// RUN:   (mode=MODE_I   cflags=                 pre=I,ICCi,ICCiF,ICCiCrFP,ICCo,ICiCrFP,IF                                                         )
-// RUN:   (mode=MODE_I   cflags=-DSTORAGE=static pre=I,ICCi,ICCiF,ICCiCrFP,ICCo,ICiCrFP,IF                                                         )
-// RUN:   (mode=MODE_C0  cflags=                 pre=C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                            )
-// RUN:   (mode=MODE_C0  cflags=-DSTORAGE=static pre=C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                            )
-// RUN:   (mode=MODE_C1  cflags=                 pre=C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                            )
-// RUN:   (mode=MODE_C1  cflags=-DSTORAGE=static pre=C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                            )
-// RUN:   (mode=MODE_C2  cflags=                 pre=C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                            )
-// RUN:   (mode=MODE_C2  cflags=-DSTORAGE=static pre=C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                            )
-// RUN:   (mode=MODE_Ci0 cflags=                 pre=%if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP>)
-// RUN:   (mode=MODE_Ci0 cflags=-DSTORAGE=static pre=%if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP>)
-// RUN:   (mode=MODE_Ci1 cflags=                 pre=%if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP>)
-// RUN:   (mode=MODE_Ci1 cflags=-DSTORAGE=static pre=%if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP>)
-// RUN:   (mode=MODE_Ci2 cflags=                 pre=%if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP>)
-// RUN:   (mode=MODE_Ci2 cflags=-DSTORAGE=static pre=%if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP>)
-// RUN:   (mode=MODE_Co0 cflags=                 pre=%if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                            )
-// RUN:   (mode=MODE_Co0 cflags=-DSTORAGE=static pre=%if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                            )
-// RUN:   (mode=MODE_Co1 cflags=                 pre=%if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                            )
-// RUN:   (mode=MODE_Co1 cflags=-DSTORAGE=static pre=%if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                            )
-// RUN:   (mode=MODE_Co2 cflags=                 pre=%if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                            )
-// RUN:   (mode=MODE_Co2 cflags=-DSTORAGE=static pre=%if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                            )
-// RUN:   (mode=MODE_F   cflags=                 pre=F,ICCiF,ICCiCrFP,ICiCrFP,CiCrFP,IF                                                            )
-// RUN:   (mode=MODE_F   cflags=-DSTORAGE=static pre=F,ICCiF,ICCiCrFP,ICiCrFP,CiCrFP,IF                                                            )
-// RUN:   (mode=MODE_P   cflags=                 pre=P,%if-tgt-host<CoCrP,|>ICCiCrFP,ICiCrFP,CiCrFP                                                )
-// RUN:   (mode=MODE_P   cflags=-DSTORAGE=static pre=P,%if-tgt-host<CoCrP,|>ICCiCrFP,ICiCrFP,CiCrFP                                                )
-// RUN: }
+//           When we are targeting the host, memory is shared, so copy, copyin,
+//           copyout, create, and their aliases all act like copy.
+//                                CLANG_ARGS                          FC_PRES
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_I                    %, I,ICCi,ICCiF,ICCiCrFP,ICCo,ICiCrFP,IF                                                          %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_I   -DSTORAGE=static %, I,ICCi,ICCiF,ICCiCrFP,ICCo,ICiCrFP,IF                                                          %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_C0                   %, C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_C0  -DSTORAGE=static %, C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_C1                   %, C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_C1  -DSTORAGE=static %, C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_C2                   %, C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_C2  -DSTORAGE=static %, C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo                                                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_Ci0                  %, %if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP> %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_Ci0 -DSTORAGE=static %, %if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP> %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_Ci1                  %, %if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP> %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_Ci1 -DSTORAGE=static %, %if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP> %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_Ci2                  %, %if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP> %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_Ci2 -DSTORAGE=static %, %if-tgt-host<C|Ci>,ICCi,ICCiF,ICCiCrFP,%if-tgt-host<ICCo|ICiCrFP>,CCi,%if-tgt-host<CCo|CiCrFP> %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_Co0                  %, %if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_Co0 -DSTORAGE=static %, %if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_Co1                  %, %if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_Co1 -DSTORAGE=static %, %if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_Co2                  %, %if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_Co2 -DSTORAGE=static %, %if-tgt-host<C,ICCi,ICCiF,ICCiCrFP,ICCo,CCi,CCo|Co,ICCo,CCo,CoCrP>                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_F                    %, F,ICCiF,ICCiCrFP,ICiCrFP,CiCrFP,IF                                                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_F   -DSTORAGE=static %, F,ICCiF,ICCiCrFP,ICiCrFP,CiCrFP,IF                                                             %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_P                    %, P,%if-tgt-host<CoCrP,|>ICCiCrFP,ICiCrFP,CiCrFP                                                 %) && \
+// DEFINE:   %{acc-check-exe-fn}( -DMODE=MODE_P   -DSTORAGE=static %, P,%if-tgt-host<CoCrP,|>ICCiCrFP,ICiCrFP,CiCrFP                                                 %)
 
-// RUN: %for directives {
-// RUN:   %for dmps {
-// RUN:     %acc-check-dmp{                                                    \
-// RUN:       clang-args: -DMODE=%[mode] %[dir-cflags];                        \
-// RUN:       fc-args:    ;                                                    \
-// RUN:       fc-pres:    %[pre]}
-// RUN:   }
-// RUN:   %for prts {
-// RUN:     %acc-check-prt{                                                    \
-// RUN:       clang-args: -DMODE=%[mode] %[dir-cflags];                        \
-// RUN:       fc-args:    ;                                                    \
-// RUN:       fc-pres:    %[pre]}
-// RUN:   }
-// RUN:   %for exes {
-// RUN:     %acc-check-exe{                                                    \
-// RUN:       clang-args: -DMODE=%[mode] %[dir-cflags] %[cflags];              \
-// RUN:       exe-args:   ;                                                    \
-// RUN:       fc-args:    ;                                                    \
-// RUN:       fc-pres:    %[pre]}
-// RUN:   }
-// RUN: }
+// REDEFINE: %{all:clang:args-stable} =
+//      RUN: %{check}( PAR %)
+// REDEFINE: %{all:clang:args-stable} = -DADD_LOOP_TO_PAR
+//      RUN: %{check}( PARLOOP %)
 
 // Check that variables aren't passed to the outlined function in the case of
 // the private clause.  However, for acc parallel loop, the private clause is
@@ -110,15 +85,13 @@
 // sometimes variables are passed to the outlined function, so don't test that
 // case.
 //
-// RUN: %data llvm {
-// RUN:   (mode=MODE_P  cflags=                )
-// RUN:   (mode=MODE_P  cflags=-DSTORAGE=static)
-// RUN: }
-// RUN: %for llvm {
-// RUN:   %if-exe-host %clang -Xclang -verify -fopenacc -S -emit-llvm \
-// RUN:     -o %t.llvm -DMODE=%[mode] %[cflags] %s
-// RUN:   %if-exe-host FileCheck -input-file %t.llvm -check-prefixes=LLVM %s
-// RUN: }
+// DEFINE: %{check-llvm}( CFLAGS %) =                                          \
+// DEFINE:   %if-exe-host %clang -Xclang -verify -fopenacc -S -emit-llvm       \
+// DEFINE:     -o %t.llvm %{CFLAGS} %s &&                                      \
+// DEFINE:   %if-exe-host FileCheck -input-file %t.llvm -check-prefixes=LLVM %s
+//
+// RUN: %{check-llvm}( -DMODE=MODE_P                  %)
+// RUN: %{check-llvm}( -DMODE=MODE_P -DSTORAGE=static %)
 //
 // LLVM: define internal void @.omp_outlined.
 // LLVM-SAME: (i{{[0-9]+}}* {{[a-z ]+}} %{{[^, )]*}},

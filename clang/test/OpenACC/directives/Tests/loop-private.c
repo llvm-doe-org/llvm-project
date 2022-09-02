@@ -13,9 +13,9 @@
 // gang loop partitionings checks, which would nearly double the size of the
 // test file.
 
-// RUN: %acc-check-dmp{}
-// RUN: %acc-check-prt{}
-// RUN: %acc-check-exe{}
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

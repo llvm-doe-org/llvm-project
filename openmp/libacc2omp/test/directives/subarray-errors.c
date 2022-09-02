@@ -7,39 +7,59 @@
 // create, which we just cycle through across the various subarray extension
 // cases.
 
-//      # "acc parallel loop" should be about the same as "acc parallel", so a
-//      # few cases are probably sufficient for it.
-// RUN: %data cases {
-// RUN:   (case=caseDataSubarrayPresent          not-crash-if-fail=                         )
-// RUN:   (case=caseDataSubarrayDisjoint         not-crash-if-fail=                         )
-// RUN:   (case=caseDataSubarrayOverlapStart     not-crash-if-fail='%if-host(,%not --crash)')
-// RUN:   (case=caseDataSubarrayOverlapEnd       not-crash-if-fail='%if-host(,%not --crash)')
-// RUN:   (case=caseDataSubarrayConcat2          not-crash-if-fail='%if-host(,%not --crash)')
-// RUN:   (case=caseDataSubarrayNonSubarray      not-crash-if-fail='%if-host(,%not --crash)')
-// RUN:   (case=caseParallelSubarrayPresent      not-crash-if-fail=                         )
-// RUN:   (case=caseParallelSubarrayDisjoint     not-crash-if-fail=                         )
-// RUN:   (case=caseParallelSubarrayOverlapStart not-crash-if-fail='%if-host(,%not --crash)')
-// RUN:   (case=caseParallelSubarrayOverlapEnd   not-crash-if-fail='%if-host(,%not --crash)')
-// RUN:   (case=caseParallelSubarrayConcat2      not-crash-if-fail='%if-host(,%not --crash)')
-// RUN:   (case=caseParallelSubarrayNonSubarray  not-crash-if-fail='%if-host(,%not --crash)')
-// RUN: }
-// RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
-// RUN: %for cases {
-// RUN:   echo '  Macro(%[case]) \' >> %t-cases.h
-// RUN: }
-// RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
-
-// Check execution with normal compilation.
+// Redefine this to specify how %{check-cases} expands for each case.
 //
+// - CASE = the case name used in the enum and as a command line argument.
+// - NOT_CRASH_IF_FAIL = 'not --crash' if the case is expected to fail at run
+//   time, or the empty string otherwise.
+//
+// DEFINE: %{check-case}( CASE %, NOT_CRASH_IF_FAIL %) =
+
+// Substitution to run %{check-case} for each case.
+//
+// If a case is listed here but is not covered in the code, that case will fail.
+// If a case is covered in the code but not listed here, the code will not
+// compile because this list produces the enum used by the code.
+//
+// "acc parallel loop" should be about the same as "acc parallel", so a few
+// cases are probably sufficient for it.
+//
+// DEFINE: %{check-cases} =                                                                   \
+//                          CASE                                NOT_CRASH_IF_FAIL
+// DEFINE:   %{check-case}( caseDataSubarrayPresent          %,                         %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayDisjoint         %,                         %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayOverlapStart     %, %if-host<|%not --crash> %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayOverlapEnd       %, %if-host<|%not --crash> %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayConcat2          %, %if-host<|%not --crash> %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayNonSubarray      %, %if-host<|%not --crash> %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayPresent      %,                         %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayDisjoint     %,                         %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayOverlapStart %, %if-host<|%not --crash> %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayOverlapEnd   %, %if-host<|%not --crash> %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayConcat2      %, %if-host<|%not --crash> %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayNonSubarray  %, %if-host<|%not --crash> %)
+
+// Generate the enum of cases.
+//
+//      RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
+// REDEFINE: %{check-case}( CASE %, NOT_CRASH_IF_FAIL %) = \
+// REDEFINE: echo '  Macro(%{CASE}) \' >> %t-cases.h
+//      RUN: %{check-cases}
+//      RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
+
+// Try all cases with normal compilation.
+//
+// REDEFINE: %{check-case}( CASE %, NOT_CRASH_IF_FAIL %) =                     \
+// REDEFINE:   : '---------- CASE: %{CASE} ----------' &&                      \
+// REDEFINE:   %{NOT_CRASH_IF_FAIL} %t.exe %{CASE} > %t.out 2>&1 &&            \
+// REDEFINE:   FileCheck -input-file %t.out %s                                 \
+// REDEFINE:     -match-full-lines -allow-empty                                \
+// REDEFINE:     -check-prefixes=EXE,EXE-%{CASE}                               \
+// REDEFINE:     -check-prefixes=EXE-%if-host<HOST|OFF>                        \
+// REDEFINE:     -check-prefixes=EXE-%{CASE}-%if-host<HOST|OFF>
+
 // RUN: %clang-acc -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
-// RUN: %for cases {
-// RUN:   %[not-crash-if-fail] %t.exe %[case] > %t.out 2>&1
-// RUN:   FileCheck -input-file %t.out %s \
-// RUN:     -match-full-lines -allow-empty \
-// RUN:     -check-prefixes=EXE,EXE-%[case] \
-// RUN:     -check-prefixes=EXE-%if-host(HOST,OFF) \
-// RUN:     -check-prefixes=EXE-%[case]-%if-host(HOST,OFF)
-// RUN: }
+// RUN: %{check-cases}
 
 // END.
 

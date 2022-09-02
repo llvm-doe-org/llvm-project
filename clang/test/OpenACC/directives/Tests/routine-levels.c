@@ -3,9 +3,9 @@
 // Check that each is translated properly.  Check that specifying each on
 // multiple different routine directives for the same function is ok.
 
-// RUN: %acc-check-dmp{}
-// RUN: %acc-check-prt{}
-// RUN: %acc-check-exe{}
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

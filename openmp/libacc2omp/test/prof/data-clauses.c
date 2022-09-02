@@ -8,21 +8,19 @@
 // - Runtime errors from "present": The Clang OpenACC test suite checks this.
 // - Data types and subarray cases: The Clang OpenACC test suite checks this.
 
-// RUN: %data directives {
-// RUN:   (directive=data     data-or-par=DATA)
-// RUN:   (directive=parallel data-or-par=PAR )
-// RUN: }
-// RUN: %for directives {
-// RUN:   %clang-acc %s -o %t.exe -DDIRECTIVE=%'directive'
-// RUN:   %t.exe > %t.out 2> %t.err
-// RUN:   FileCheck -input-file %t.err -allow-empty %s \
-// RUN:     -check-prefixes=ERR
-// RUN:   FileCheck -input-file %t.out %s \
-// RUN:     -match-full-lines -strict-whitespace -allow-empty \
-// RUN:     -implicit-check-not=acc_ev_ \
-// RUN:     -check-prefixes=OUT,OUT-%if-host(HOST,OFF),OUT-%[data-or-par] \
-// RUN:     -check-prefixes=OUT-%if-host(HOST,OFF)-%[data-or-par]
-// RUN: }
+// DEFINE: %{check}( DIRECTIVE %, DATA_OR_PAR %) =                             \
+// DEFINE:   %clang-acc %s -o %t.exe -DDIRECTIVE=%{DIRECTIVE} &&               \
+// DEFINE:   %t.exe > %t.out 2> %t.err &&                                      \
+// DEFINE:   FileCheck -input-file %t.err -allow-empty %s                      \
+// DEFINE:     -check-prefixes=ERR &&                                          \
+// DEFINE:   FileCheck -input-file %t.out %s                                   \
+// DEFINE:     -match-full-lines -strict-whitespace -allow-empty               \
+// DEFINE:     -implicit-check-not=acc_ev_                                     \
+// DEFINE:     -check-prefixes=OUT,OUT-%if-host<HOST|OFF>,OUT-%{DATA_OR_PAR}   \
+// DEFINE:     -check-prefixes=OUT-%if-host<HOST|OFF>-%{DATA_OR_PAR}
+// 
+// RUN: %{check}( data     %, DATA %)
+// RUN: %{check}( parallel %, PAR  %)
 //
 // END.
 

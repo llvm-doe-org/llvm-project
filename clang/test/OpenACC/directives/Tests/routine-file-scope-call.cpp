@@ -2,9 +2,9 @@
 // the OpenACC routine directive analysis assumed functions are called only
 // within other functions, as in C.
 //
-// RUN: %acc-check-dmp-cxx{}
-// RUN: %acc-check-prt-cxx{}
-// RUN: %acc-check-exe-cxx{}
+// RUN: %{acc-check-dmp-cxx}
+// RUN: %{acc-check-prt-cxx}
+// RUN: %{acc-check-exe-cxx}
 //
 // END.
 

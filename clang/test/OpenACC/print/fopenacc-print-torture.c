@@ -15,24 +15,22 @@
 // RUN: echo '   comment */' >> %t-acc.c
 // RUN: echo 'int foobar; // end-of-line comment' >> %t-acc.c
 
-// RUN: %data cpps {
-// RUN:   (cpp=      )
-// RUN:   (cpp=-DERRS)
-// RUN: }
-// RUN: %data prt-args {
-// RUN:   (prt-arg=acc     prt-chk=PRT,PRT-A,PRT-AA)
-// RUN:   (prt-arg=omp     prt-chk=PRT,PRT-O,PRT-OO)
-// RUN:   (prt-arg=acc-omp prt-chk=PRT,PRT-A,PRT-AO)
-// RUN:   (prt-arg=omp-acc prt-chk=PRT,PRT-O,PRT-OA)
-// RUN: }
-// RUN: %for cpps {
-// RUN:   %for prt-args {
-// RUN:     %clang -Xclang -verify -fopenacc-print=%[prt-arg] %[cpp] %t-acc.c \
-// RUN:            -Wno-openacc-omp-ext \
-// RUN:     | FileCheck -check-prefixes=%[prt-chk] -match-full-lines \
-// RUN:                 -strict-whitespace %s
-// RUN:   }
-// RUN: }
+// DEFINE: %{check-prt-arg}( PRT_ARG %, PRT_CHK %, CPP %) =                    \
+// DEFINE:   : '---------- -fopenacc-print=%{PRT_ARG} %{CPP} ----------' &&    \
+// DEFINE:   %clang -Xclang -verify -fopenacc-print=%{PRT_ARG} %{CPP} %t-acc.c \
+// DEFINE:          -Wno-openacc-omp-ext |                                     \
+// DEFINE:     FileCheck -check-prefixes=%{PRT_CHK} -match-full-lines          \
+// DEFINE:               -strict-whitespace %s
+//
+// DEFINE: %{check-prt-args}( CPP %) =                                         \
+//                             PRT_ARG    PRT_CHK             CPP
+// DEFINE:   %{check-prt-arg}( acc     %, PRT,PRT-A,PRT-AA %, %{CPP} %) &&     \
+// DEFINE:   %{check-prt-arg}( omp     %, PRT,PRT-O,PRT-OO %, %{CPP} %) &&     \
+// DEFINE:   %{check-prt-arg}( acc-omp %, PRT,PRT-A,PRT-AO %, %{CPP} %) &&     \
+// DEFINE:   %{check-prt-arg}( omp-acc %, PRT,PRT-O,PRT-OA %, %{CPP} %)
+//
+// RUN: %{check-prt-args}(        %)
+// RUN: %{check-prt-args}( -DERRS %)
 
 // END.
 

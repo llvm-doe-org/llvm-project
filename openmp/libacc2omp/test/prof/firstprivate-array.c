@@ -17,47 +17,55 @@
 // we continue to test with a preceding kernel, and we test both const and
 // non-const cases.
 
-//      # Large firstprivates are not packed, so they exercise a different OMPT
-//      # code path.  Packing multiple (small) firstprivates means we cannot
-//      # provide a single var_name, so currently it's set to a null pointer.
-// RUN: %data packing-cases {
-// RUN:   (arr0-size=64   pack0-name=arr0     pack0-size=64   pack0=PACK0
-// RUN:    arr1-size=0    pack1-name=         pack1-size=0    pack1=NO_PACK1)
-// RUN:   (arr0-size=2048 pack0-name=arr0     pack0-size=2048 pack0=ARR0
-// RUN:    arr1-size=0    pack1-name=         pack1-size=0    pack1=NO_PACK1)
-// RUN:   (arr0-size=64   pack0-name='(null)' pack0-size=128  pack0=PACK0
-// RUN:    arr1-size=64   pack1-name=         pack1-size=0    pack1=NO_PACK1)
-// RUN:   (arr0-size=2048 pack0-name=arr0     pack0-size=2048 pack0=ARR0
-// RUN:    arr1-size=64   pack1-name=arr1     pack1-size=64   pack1=PACK1   )
-// RUN: }
-// RUN: %data const-cases {
-// RUN:   (const=     )
-// RUN:   (const=const)
-// RUN: }
-// RUN: %for packing-cases {
-// RUN:   %for const-cases {
-// RUN:     %clang-acc %s -o %t.exe -DCONST=%[const] \
-// RUN:       -DARR0_SIZE=%[arr0-size] -DARR1_SIZE=%[arr1-size] \
-// RUN:       -DTGT_%dev-type-0-omp
-// RUN:     %t.exe > %t.out 2> %t.err
-// RUN:     FileCheck -input-file %t.err %s \
-// RUN:       -allow-empty -check-prefixes=ERR
-// RUN:     FileCheck -input-file %t.out %s \
-// RUN:       -match-full-lines -strict-whitespace \
-// RUN:       -implicit-check-not=acc_ev_ \
-// RUN:       -check-prefixes=CHECK,TGT-%dev-type-0-omp,%if-host(HOST,OFF) \
-// RUN:       -check-prefixes=CHECK-%[pack0],%if-host(HOST,OFF)-%[pack0] \
-// RUN:       -check-prefixes=CHECK-%[pack1],%if-host(HOST,OFF)-%[pack1] \
-// RUN:       -DACC_DEVICE=acc_device_%dev-type-0-acc -DVERSION=%acc-version \
-// RUN:       -DHOST_DEV=%acc-host-dev -DOFF_DEV=0 -DTHREAD_ID=0 \
-// RUN:       -DASYNC_QUEUE=-1 -DSRC_FILE=%s \
-// RUN:       -DLINE_NO0=20000 -DEND_LINE_NO0=20001 \
-// RUN:       -DLINE_NO1=30000 -DEND_LINE_NO1=40000 \
-// RUN:       -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=50000 \
-// RUN:       -DPACK0_NAME=%[pack0-name] -D#PACK0_SIZE=%[pack0-size] \
-// RUN:       -DPACK1_NAME=%[pack1-name] -D#PACK1_SIZE=%[pack1-size]
-// RUN:   }
-// RUN: }
+// DEFINE: %{check-const-case}(                                                \
+// DEFINE:     CONST %, ARR0_SIZE %, PACK0_NAME %, PACK0_SIZE %, PACK0 %,      \
+// DEFINE:              ARR1_SIZE %, PACK1_NAME %, PACK1_SIZE %, PACK1 %) =    \
+// DEFINE:   : '--------------------' &&                                       \
+// DEFINE:   : 'ARR0_SIZE: %{ARR0_SIZE}' &&                                    \
+// DEFINE:   : 'ARR1_SIZE: %{ARR1_SIZE}' &&                                    \
+// DEFINE:   : 'CONST: %{CONST}' &&                                            \
+// DEFINE:   : '--------------------' &&                                       \
+// DEFINE:   %clang-acc %s -o %t.exe -DCONST=%{CONST}                          \
+// DEFINE:     -DARR0_SIZE=%{ARR0_SIZE} -DARR1_SIZE=%{ARR1_SIZE}               \
+// DEFINE:     -DTGT_%dev-type-0-omp &&                                        \
+// DEFINE:   %t.exe > %t.out 2> %t.err &&                                      \
+// DEFINE:   FileCheck -input-file %t.err %s                                   \
+// DEFINE:     -allow-empty -check-prefixes=ERR &&                             \
+// DEFINE:   FileCheck -input-file %t.out %s                                   \
+// DEFINE:     -match-full-lines -strict-whitespace                            \
+// DEFINE:     -implicit-check-not=acc_ev_                                     \
+// DEFINE:     -check-prefixes=CHECK,TGT-%dev-type-0-omp,%if-host<HOST|OFF>    \
+// DEFINE:     -check-prefixes=CHECK-%{PACK0},%if-host<HOST|OFF>-%{PACK0}      \
+// DEFINE:     -check-prefixes=CHECK-%{PACK1},%if-host<HOST|OFF>-%{PACK1}      \
+// DEFINE:     -DACC_DEVICE=acc_device_%dev-type-0-acc -DVERSION=%acc-version  \
+// DEFINE:     -DHOST_DEV=%acc-host-dev -DOFF_DEV=0 -DTHREAD_ID=0              \
+// DEFINE:     -DASYNC_QUEUE=-1 -DSRC_FILE=%s                                  \
+// DEFINE:     -DLINE_NO0=20000 -DEND_LINE_NO0=20001                           \
+// DEFINE:     -DLINE_NO1=30000 -DEND_LINE_NO1=40000                           \
+// DEFINE:     -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=50000                   \
+// DEFINE:     -DPACK0_NAME=%{PACK0_NAME} -D#PACK0_SIZE=%{PACK0_SIZE}          \
+// DEFINE:     -DPACK1_NAME=%{PACK1_NAME} -D#PACK1_SIZE=%{PACK1_SIZE}
+
+// DEFINE: %{check-const-cases}( ARR0_SIZE %, PACK0_NAME %, PACK0_SIZE %, PACK0 %,                         \
+// DEFINE:                       ARR1_SIZE %, PACK1_NAME %, PACK1_SIZE %, PACK1 %) =                       \
+// DEFINE:   %{check-const-case}(       %, %{ARR0_SIZE} %, %{PACK0_NAME} %, %{PACK0_SIZE}%, %{PACK0} %,    \
+// DEFINE:                                 %{ARR1_SIZE} %, %{PACK1_NAME} %, %{PACK1_SIZE}%, %{PACK1} %) && \
+// DEFINE:   %{check-const-case}( const %, %{ARR0_SIZE} %, %{PACK0_NAME} %, %{PACK0_SIZE}%, %{PACK0} %,    \
+// DEFINE:                                 %{ARR1_SIZE} %, %{PACK1_NAME} %, %{PACK1_SIZE}%, %{PACK1} %)
+
+// Large firstprivates are not packed, so they exercise a different OMPT code
+// path.  Packing multiple (small) firstprivates means we cannot provide a
+// single var_name, so currently it's set to a null pointer.
+//                            ARR0_SIZE    PACK0_NAME    PACK0_SIZE    PACK0
+//                            ARR1_SIZE    PACK1_NAME    PACK1_SIZE    PACK1
+// RUN: %{check-const-cases}( 64        %, arr0       %, 64         %, PACK0    %,      \
+// RUN:                       0         %,            %, 0          %, NO_PACK1 %)
+// RUN: %{check-const-cases}( 2048      %, arr0       %, 2048       %, ARR0     %,      \
+// RUN:                       0         %,            %, 0          %, NO_PACK1 %)
+// RUN: %{check-const-cases}( 64        %, (null)     %, 128        %, PACK0    %,      \
+// RUN:                       64        %,            %, 0          %, NO_PACK1 %)
+// RUN: %{check-const-cases}( 2048      %, arr0       %, 2048       %, ARR0     %,      \
+// RUN:                       64        %, arr1       %, 64         %, PACK1    %)
 //
 // END.
 

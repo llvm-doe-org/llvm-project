@@ -1,4 +1,5 @@
-// Check "acc update" with different values of -fopenacc-update-present-omp.
+// Check "acc update" with different values of -fopenacc-update-present-omp and
+// sometimes with if_present.
 //
 // Diagnostics about the present motion modifier in the translation are checked
 // in diagnostics/warn-acc-omp-update-present.c.  Diagnostics about bad
@@ -6,66 +7,116 @@
 // diagnostics/fopenacc-update-present-omp.c.  The "if" clause is checked in
 // update-if.c.
 //
+// We include print checking on only a few representative cases, which should be
+// more than sufficient to show it's working for the update directive.
+
+// Redefine this to specify how %{check-cases} expands for each case.
+//
+// - CASE = the case name used in the enum and as a command line argument.
+// - NOT_CRASH_IF_FAIL = 'not --crash' if the case is expected to fail a
+//   presence check, and the empty string otherwise.
+// - NOT_IF_FAIL = same as NOT_CRASH_IF_FAIL except without the '--crash'.
+//
+// DEFINE: %{check-case}( CASE %, NOT_CRASH_IF_FAIL %, NOT_IF_FAIL %) =
+
+// Substitution to run %{check-case} for each case.
+//
+// - NOT_CRASH_IF_PRESENT = 'not --crash' if presence checks are generally
+//   enabled, and the empty string otherwise.  Each case will use this if it is
+//   expected to fail a presence check.
+// - NOT_IF_PRESENT = same as NOT_CRASH_IF_PRESENT except without the '--crash'.
+//
+// If a case is listed here but is not covered in the code, that case will fail.
+// If a case is covered in the code but not listed here, the code will not
+// compile because this list produces the enum used by the code.
+//
 // The various cases covered here should be kept consistent with present.c,
 // no-create.c, and subarray-errors.c (the last is located in
 // openmp/libacc2omp/test/directives).  For example, a subarray that extends a
 // subarray already present is consistently considered not present, so the
 // present clause produces a runtime error and the no_create clause doesn't
 // allocate.
-
-// RUN: %data present-opts {
-// RUN:   (present-opt='-DIF_PRESENT=                                                  ' present='present: ' if-present=NOT_IF_PRESENT not-if-present=not not-crash-if-present='not --crash')
-// RUN:   (present-opt='-DIF_PRESENT=           -fopenacc-update-present-omp=present   ' present='present: ' if-present=NOT_IF_PRESENT not-if-present=not not-crash-if-present='not --crash')
-// RUN:   (present-opt='-DIF_PRESENT=           -fopenacc-update-present-omp=no-present' present=            if-present=NOT_IF_PRESENT not-if-present=    not-crash-if-present=             )
-// RUN:   (present-opt='-DIF_PRESENT=if_present'                                         present=            if-present=IF_PRESENT     not-if-present=    not-crash-if-present=             )
-// RUN:   (present-opt='-DIF_PRESENT=if_present -fopenacc-update-present-omp=no-present' present=            if-present=IF_PRESENT     not-if-present=    not-crash-if-present=             )
-// RUN: }
-// RUN: %data cases {
-// RUN:   (case=caseNoParentPresent      not-if-fail=                                 not-crash-if-fail=                                      )
-// RUN:   (case=caseNoParentAbsent       not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
-// RUN:   (case=caseScalarPresent        not-if-fail=                                 not-crash-if-fail=                                      )
-// RUN:   (case=caseScalarAbsent         not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
-// RUN:   (case=caseStructPresent        not-if-fail=                                 not-crash-if-fail=                                      )
-// RUN:   (case=caseStructAbsent         not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
-// RUN:   (case=caseArrayPresent         not-if-fail=                                 not-crash-if-fail=                                      )
-// RUN:   (case=caseArrayAbsent          not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
-// RUN:   (case=caseSubarrayPresent      not-if-fail=                                 not-crash-if-fail=                                      )
-// RUN:   (case=caseSubarrayPresent2     not-if-fail=                                 not-crash-if-fail=                                      )
-// RUN:   (case=caseSubarrayDisjoint     not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
-// RUN:   (case=caseSubarrayOverlapStart not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
-// RUN:   (case=caseSubarrayOverlapEnd   not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
-// RUN:   (case=caseSubarrayConcat2      not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
-// RUN:   (case=caseSubarrayNonSubarray  not-if-fail=%if-tgt-host<|%[not-if-present]> not-crash-if-fail=%if-tgt-host<|%[not-crash-if-present]>)
-// RUN: }
-// RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
-// RUN: %for cases {
-// RUN:   echo '  Macro(%[case]) \' >> %t-cases.h
-// RUN: }
-// RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
-
-// We include print checking on only a few representative cases, which should be
-// more than sufficient to show it's working for the update directive.
 //
-// RUN: %for present-opts {
-// RUN:   %acc-check-dmp{                                                      \
-// RUN:     clang-args: -DCASES_HEADER='"%t-cases.h"' %[present-opt];          \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[if-present]}
-// RUN:   %acc-check-prt{                                                      \
-// RUN:     clang-args: -DCASES_HEADER='"%t-cases.h"' %[present-opt];          \
-// RUN:     fc-args:    -DPRESENT='%[present]'}
-// RUN:   %acc-check-exe-compile{                                              \
-// RUN:     clang-args: -DCASES_HEADER='"%t-cases.h"' %[present-opt]           \
-// RUN:                 -gline-tables-only}
-// RUN:   %for cases {
-// RUN:     %acc-check-exe-run{                                                \
-// RUN:       exe-args:  %[case];                                              \
-// RUN:       cmd-start: %[not-crash-if-fail]}
-// RUN:     %acc-check-exe-filecheck{                                          \
-// RUN:       fc-args: -strict-whitespace;                                     \
-// RUN:       fc-pres: %[case],%[not-if-fail]PASS,%[case]-%[not-if-fail]PASS}
-// RUN:   }
-// RUN: }
+// DEFINE: %{check-cases}( NOT_CRASH_IF_PRESENT %, NOT_IF_PRESENT %) =                                                                   \
+//                          CASE                        NOT_CRASH_IF_FAIL                         NOT_IF_FAIL
+// DEFINE:   %{check-case}( caseNoParentPresent      %,                                        %,                                  %) && \
+// DEFINE:   %{check-case}( caseNoParentAbsent       %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
+// DEFINE:   %{check-case}( caseScalarPresent        %,                                        %,                                  %) && \
+// DEFINE:   %{check-case}( caseScalarAbsent         %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
+// DEFINE:   %{check-case}( caseStructPresent        %,                                        %,                                  %) && \
+// DEFINE:   %{check-case}( caseStructAbsent         %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
+// DEFINE:   %{check-case}( caseArrayPresent         %,                                        %,                                  %) && \
+// DEFINE:   %{check-case}( caseArrayAbsent          %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
+// DEFINE:   %{check-case}( caseSubarrayPresent      %,                                        %,                                  %) && \
+// DEFINE:   %{check-case}( caseSubarrayPresent2     %,                                        %,                                  %) && \
+// DEFINE:   %{check-case}( caseSubarrayDisjoint     %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
+// DEFINE:   %{check-case}( caseSubarrayOverlapStart %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
+// DEFINE:   %{check-case}( caseSubarrayOverlapEnd   %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
+// DEFINE:   %{check-case}( caseSubarrayConcat2      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
+// DEFINE:   %{check-case}( caseSubarrayNonSubarray  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %)
+
+// Generate the enum of cases.
+//
+//      RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
+// REDEFINE: %{check-case}( CASE %, NOT_CRASH_IF_FAIL %, NOT_IF_FAIL %) =      \
+// REDEFINE: echo '  Macro(%{CASE}) \' >> %t-cases.h
+//      RUN: %{check-cases}( %, %)
+//      RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
+
+// Prepare substitutions for trying all cases many times while varying the
+// value of -fopenacc-update-present-omp and whether if_present is specified.
+//
+// REDEFINE: %{all:clang:args-stable} = \
+// REDEFINE:   -DCASES_HEADER='"%t-cases.h"' -gline-tables-only
+// REDEFINE: %{exe:fc:args-stable} = -strict-whitespace
+// REDEFINE: %{check-case}( CASE %, NOT_CRASH_IF_FAIL %, NOT_IF_FAIL %) =                                 \
+// REDEFINE:   : '----------------- CASE: %{CASE} -----------------'                                   && \
+// REDEFINE:   %{acc-check-exe-run-fn}( %{NOT_CRASH_IF_FAIL} %, %{CASE} %)                             && \
+// REDEFINE:   %{acc-check-exe-filecheck-fn}( %{CASE},%{NOT_IF_FAIL}PASS,%{CASE}-%{NOT_IF_FAIL}PASS %)
+//   DEFINE: %{check-present} =                                                \
+//   DEFINE:   %{acc-check-dmp}                                             && \
+//   DEFINE:   %{acc-check-prt}                                             && \
+//   DEFINE:   %{acc-check-exe-compile}                                     && \
+//   DEFINE:   %{check-cases}( not --crash %, not %)
+//   DEFINE: %{check-no-present} =                                             \
+//   DEFINE:   %{acc-check-dmp}                                             && \
+//   DEFINE:   %{acc-check-prt}                                             && \
+//   DEFINE:   %{acc-check-exe-compile}                                     && \
+//   DEFINE:   %{check-cases}( %, %)
+
+// REDEFINE: %{all:clang:args} = -DIF_PRESENT=
+// REDEFINE: %{dmp:fc:pres} = NOT_IF_PRESENT
+// REDEFINE: %{prt:fc:args} = -DPRESENT='present: '
+//      RUN: %{check-present}
+
+// REDEFINE: %{all:clang:args} =                                               \
+// REDEFINE:   -DIF_PRESENT= -fopenacc-update-present-omp=present
+// REDEFINE: %{dmp:fc:pres} = NOT_IF_PRESENT
+// REDEFINE: %{prt:fc:args} = -DPRESENT='present: '
+//      RUN: %{check-present}
+
+// REDEFINE: %{all:clang:args} =                                               \
+// REDEFINE:   -DIF_PRESENT= -fopenacc-update-present-omp=no-present
+// REDEFINE: %{dmp:fc:pres} = NOT_IF_PRESENT
+// REDEFINE: %{prt:fc:args} = -DPRESENT=
+//      RUN: %{check-no-present}
+
+// REDEFINE: %{all:clang:args} = -DIF_PRESENT=if_present
+// REDEFINE: %{dmp:fc:pres} = IF_PRESENT
+// REDEFINE: %{prt:fc:args} = -DPRESENT=
+//      RUN: %{check-no-present}
+
+// REDEFINE: %{all:clang:args} =                                               \
+// REDEFINE:   -DIF_PRESENT=if_present -fopenacc-update-present-omp=present
+// REDEFINE: %{dmp:fc:pres} = IF_PRESENT
+// REDEFINE: %{prt:fc:args} = -DPRESENT=
+//      RUN: %{check-no-present}
+
+// REDEFINE: %{all:clang:args} =                                               \
+// REDEFINE:   -DIF_PRESENT=if_present -fopenacc-update-present-omp=no-present
+// REDEFINE: %{dmp:fc:pres} = IF_PRESENT
+// REDEFINE: %{prt:fc:args} = -DPRESENT=
+//      RUN: %{check-no-present}
 
 // END.
 

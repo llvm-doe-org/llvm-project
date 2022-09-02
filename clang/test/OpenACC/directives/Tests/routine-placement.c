@@ -3,17 +3,23 @@
 //
 // Implicit "acc routine seq" is more thoroughly checked in routine-implicit.c.
 
-// RUN: %acc-check-dmp{                                                        \
-// RUN:   clang-args: ;                                                        \
-// RUN:   fc-args:    -implicit-check-not=ACCRoutineDeclAttr                   \
-// RUN:               -implicit-check-not=OMPDeclareTargetDeclAttr}
-// RUN: %acc-check-prt{}
+// REDEFINE: %{dmp:fc:args} = -implicit-check-not=ACCRoutineDeclAttr \
+// REDEFINE:                  -implicit-check-not=OMPDeclareTargetDeclAttr
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
 //
-// RUN: %acc-check-exe-compile-c{base-name: main}
-// RUN: %acc-check-exe-compile-c{base-name: other; clang-args: -DCOMPILE_OTHER}
-// RUN: %acc-check-exe-link{clang-args: main.o other.o}
-// RUN: %acc-check-exe-run{}
-// RUN: %acc-check-exe-filecheck{fc-args: -strict-whitespace}
+// REDEFINE: %{exe:base-name} = main
+// RUN: %{acc-check-exe-compile-c}
+//
+// REDEFINE: %{exe:base-name} = other
+// REDEFINE: %{all:clang:args} = -DCOMPILE_OTHER
+// RUN: %{acc-check-exe-compile-c}
+
+// REDEFINE: %{all:clang:args} = main.o other.o
+// REDEFINE: %{exe:fc:args} = -strict-whitespace
+// RUN: %{acc-check-exe-link}
+// RUN: %{acc-check-exe-run}
+// RUN: %{acc-check-exe-filecheck}
 
 // END.
 

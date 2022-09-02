@@ -6,18 +6,16 @@
 // Strip comments and blank lines so checking -fopenacc-print output is easier.
 // RUN: grep -v '^ *\(//.*\)\?$' %s | sed 's,//.*,,' > %t-acc.c
 
-// RUN: %data prt-args {
-// RUN:   (prt-arg=acc     prt-chk=PRT,PRT-A        prt-ver=noerrs)
-// RUN:   (prt-arg=omp     prt-chk=PRT,PRT-O        prt-ver=expected)
-// RUN:   (prt-arg=acc-omp prt-chk=PRT,PRT-A,PRT-AO prt-ver=expected)
-// RUN:   (prt-arg=omp-acc prt-chk=PRT,PRT-O,PRT-OA prt-ver=expected)
-// RUN: }
-// RUN: %for prt-args {
-// RUN:   %clang -Xclang -verify=%[prt-ver] -fopenacc-print=%[prt-arg] \
-// RUN:          -Wno-openacc-omp-ext -ferror-limit=100 %t-acc.c \
-// RUN:   | FileCheck -check-prefixes=%[prt-chk] -match-full-lines \
-// RUN:               -strict-whitespace %s
-// RUN: }
+// DEFINE: %{check}( PRT_ARG %, PRT_CHK %, PRT_VER %) =                        \
+// DEFINE:   %clang -Xclang -verify=%{PRT_VER} -fopenacc-print=%{PRT_ARG}      \
+// DEFINE:          -Wno-openacc-omp-ext -ferror-limit=100 %t-acc.c |          \
+// DEFINE:   FileCheck -check-prefixes=%{PRT_CHK} -match-full-lines            \
+// DEFINE:             -strict-whitespace %s
+
+// RUN: %{check}( acc     %, PRT,PRT-A        %, noerrs   %)
+// RUN: %{check}( omp     %, PRT,PRT-O        %, expected %)
+// RUN: %{check}( acc-omp %, PRT,PRT-A,PRT-AO %, expected %)
+// RUN: %{check}( omp-acc %, PRT,PRT-O,PRT-OA %, expected %)
 
 // END.
 

@@ -6,31 +6,24 @@
 // When ADD_LOOP_TO_PAR is set, it adds "loop seq" and a for loop to those "acc
 // parallel" directives in order to check gang-redundant mode for combined "acc
 // parallel loop" directives.
-//
-// RUN: %data directives {
-// RUN:   (dir=PAR     dir-cflags=                 )
-// RUN:   (dir=PARLOOP dir-cflags=-DADD_LOOP_TO_PAR)
-// RUN: }
 
 // FIXME: amdgcn doesn't yet support printf in a kernel.  Unfortunately, that
 // means our execution checks on amdgcn don't verify much except that nothing
 // crashes.
-//
-// RUN: %for directives {
-// RUN:   %acc-check-dmp{                                                      \
-// RUN:     clang-args: %[dir-cflags];                                         \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[dir]}
-// RUN:   %acc-check-prt{                                                      \
-// RUN:     clang-args: %[dir-cflags];                                         \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[dir]}
-// RUN:   %acc-check-exe{                                                      \
-// RUN:     clang-args: %[dir-cflags];                                         \
-// RUN:     exe-args:   2;                                                     \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[dir]}
-// RUN: }
+
+// REDEFINE: %{exe:args} = 2
+
+// REDEFINE: %{all:clang:args} = 
+// REDEFINE: %{all:fc:pres} = PAR
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
+
+// REDEFINE: %{all:clang:args} = -DADD_LOOP_TO_PAR
+// REDEFINE: %{all:fc:pres} = PARLOOP
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

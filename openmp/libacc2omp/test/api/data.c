@@ -1,101 +1,131 @@
 // Check data and memory management routines.
 
-// RUN: %data run-envs {
-// RUN:   (run-env=                                  host-or-off='%if-host(HOST, OFF)' not-if-host='%if-host(%not --crash,)' not-if-off='%if-host(, %not --crash)')
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off=HOST                  not-if-host='%not --crash'            not-if-off=                          )
-// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        host-or-off=HOST                  not-if-host='%not --crash'            not-if-off=                          )
-// RUN: }
-// RUN: %data cases {
-// RUN:   (case=caseDeviceptrSuccess           not-if-fail=              )
-// RUN:   (case=caseHostptrSuccess             not-if-fail=              )
-// RUN:   (case=caseIsPresentSuccess           not-if-fail=              )
-// RUN:   (case=caseEnterExitRoutinesSuccess   not-if-fail=              )
-// RUN:   (case=caseCopyinExtendsAfter         not-if-fail=%[not-if-off] )
-// RUN:   (case=caseCopyinExtendsBefore        not-if-fail=%[not-if-off] )
-// RUN:   (case=caseCopyinSubsumes             not-if-fail=%[not-if-off] )
-// RUN:   (case=caseCopyinConcat2              not-if-fail=%[not-if-off] )
-// RUN:   (case=caseCreateExtendsAfter         not-if-fail=%[not-if-off] )
-// RUN:   (case=caseCreateExtendsBefore        not-if-fail=%[not-if-off] )
-// RUN:   (case=caseCreateSubsumes             not-if-fail=%[not-if-off] )
-// RUN:   (case=caseCreateConcat2              not-if-fail=%[not-if-off] )
-// RUN:   (case=caseUpdateRoutinesSuccess      not-if-fail=              )
-// RUN:   (case=caseUpdateDeviceAbsent         not-if-fail=%[not-if-off] )
-// RUN:   (case=caseUpdateDeviceExtendsAfter   not-if-fail=%[not-if-off] )
-// RUN:   (case=caseUpdateDeviceExtendsBefore  not-if-fail=%[not-if-off] )
-// RUN:   (case=caseUpdateDeviceSubsumes       not-if-fail=%[not-if-off] )
-// RUN:   (case=caseUpdateDeviceConcat2        not-if-fail=%[not-if-off] )
-// RUN:   (case=caseUpdateSelfAbsent           not-if-fail=%[not-if-off] )
-// RUN:   (case=caseUpdateSelfExtendsAfter     not-if-fail=%[not-if-off] )
-// RUN:   (case=caseUpdateSelfExtendsBefore    not-if-fail=%[not-if-off] )
-// RUN:   (case=caseUpdateSelfSubsumes         not-if-fail=%[not-if-off] )
-// RUN:   (case=caseUpdateSelfConcat2          not-if-fail=%[not-if-off] )
-// RUN:   (case=caseMallocFreeSuccess          not-if-fail=              )
-// RUN:   (case=caseMapUnmapSuccess            not-if-fail=%[not-if-host])
-// RUN:   (case=caseMapBytesZero               not-if-fail=              )
-// RUN:   (case=caseMapSameHostAsStructured    not-if-fail='%not --crash')
-// RUN:   (case=caseMapSameHostAsDynamic       not-if-fail='%not --crash')
-// RUN:   (case=caseMapSame                    not-if-fail='%not --crash')
-// RUN:   (case=caseMapSameHost                not-if-fail='%not --crash')
-// RUN:   (case=caseMapHostExtendsAfter        not-if-fail='%not --crash')
-// RUN:   (case=caseMapHostExtendsBefore       not-if-fail='%not --crash')
-// RUN:   (case=caseMapHostSubsumes            not-if-fail='%not --crash')
-// RUN:   (case=caseMapHostIsSubsumed          not-if-fail='%not --crash')
-// RUN:   (case=caseMapHostNull                not-if-fail='%not --crash')
-// RUN:   (case=caseMapDevNull                 not-if-fail='%not --crash')
-// RUN:   (case=caseMapBothNull                not-if-fail='%not --crash')
-// RUN:   (case=caseUnmapNull                  not-if-fail='%not --crash')
-// RUN:   (case=caseUnmapUnmapped              not-if-fail='%not --crash')
-// RUN:   (case=caseUnmapAfterOnlyStructured   not-if-fail='%not --crash')
-// RUN:   (case=caseUnmapAfterOnlyDynamic      not-if-fail='%not --crash')
-// RUN:   (case=caseUnmapAfterMapAndStructured not-if-fail='%not --crash')
-// RUN:   (case=caseUnmapAfterAllThree         not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpySuccess              not-if-fail=              )
-// RUN:   (case=caseMemcpyToDeviceDestNull     not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyToDeviceSrcNull      not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyToDeviceBothNull     not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyFromDeviceDestNull   not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyFromDeviceSrcNull    not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyFromDeviceBothNull   not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyDeviceDestNull       not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyDeviceSrcNull        not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyDeviceBothNull       not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyD2dDestNull          not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyD2dSrcNull           not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyD2dBothNull          not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyD2dDestDevInvalid    not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyD2dDestDevInvalidNeg not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyD2dSrcDevInvalid     not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyD2dSrcDevInvalidNeg  not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyD2dBothDevInvalid    not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyD2dSameDevInvalid    not-if-fail='%not --crash')
-// RUN:   (case=caseMemcpyD2dDestAbsent        not-if-fail=%[not-if-off] )
-// RUN:   (case=caseMemcpyD2dSrcAbsent         not-if-fail=%[not-if-off] )
-// RUN:   (case=caseMemcpyD2dDestExtendsAfter  not-if-fail=%[not-if-off] )
-// RUN:   (case=caseMemcpyD2dSrcExtendsAfter   not-if-fail=%[not-if-off] )
-// RUN:   (case=caseMemcpyD2dDestExtendsBefore not-if-fail=%[not-if-off] )
-// RUN:   (case=caseMemcpyD2dSrcExtendsBefore  not-if-fail=%[not-if-off] )
-// RUN:   (case=caseMemcpyD2dDestSubsumes      not-if-fail=%[not-if-off] )
-// RUN:   (case=caseMemcpyD2dSrcSubsumes       not-if-fail=%[not-if-off] )
-// RUN:   (case=caseMemcpyD2dDestConcat2       not-if-fail=%[not-if-off] )
-// RUN:   (case=caseMemcpyD2dSrcConcat2        not-if-fail=%[not-if-off] )
-// RUN: }
-// RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
-// RUN: %for cases {
-// RUN:   echo '  Macro(%[case]) \' >> %t-cases.h
-// RUN: }
-// RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
-// RUN: %clang-acc -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
-// RUN: %for run-envs {
-// RUN:   %for cases {
-// RUN:     %[run-env] %[not-if-fail] %t.exe %[case] %[host-or-off] \
-// RUN:       > %t.out 2> %t.err
-// RUN:     FileCheck -input-file %t.out %s -match-full-lines -allow-empty \
-// RUN:       -check-prefixes=OUT,OUT-%[case],OUT-%[case]-%[host-or-off]
-// RUN:     FileCheck -input-file %t.err %s -match-full-lines -allow-empty \
-// RUN:       -check-prefixes=ERR,ERR-%[case],ERR-%[case]-%[host-or-off]
-// RUN:   }
-// RUN: }
+// Redefine this to specify how %{check-cases} expands for each case.
 //
+// - CASE = the case name used in the enum and as a command line argument.
+// - NOT_IF_FAIL = 'not --crash' if the case is expected to fail at run time,
+//   and the empty string otherwise.
+// - RUN_ENV = an "env" command to set run-time environment variables, or the
+//   empty string if none.
+// - HOST_OR_OFF = 'HOST' if compute regions will not be offloaded, or 'OFF' if
+//   they will.
+//
+// DEFINE: %{check-case}( CASE %, NOT_IF_FAIL %, RUN_ENV %, HOST_OR_OFF %) =
+
+// Substitution to run %{check-case} for each case.
+//
+// - RUN_ENV = an "env" command to set run-time environment variables, or the
+//   empty string if none.
+// - HOST_OR_OFF = 'HOST' if compute regions will not be offloaded, or 'OFF' if
+//   they will.
+// - NOT_IF_HOST = 'not --crash' if HOST_OR_OFF is 'HOST'.
+// - NOT_IF_OFF = 'not --crash' if HOST_OR_OFF is 'OFF'.
+//
+// If a case is listed here but is not covered in the code, that case will fail.
+// If a case is covered in the code but not listed here, the code will not
+// compile because this list produces the enum used by the code.
+//
+// DEFINE: %{check-cases}( RUN_ENV %, HOST_OR_OFF %, NOT_IF_HOST %, NOT_IF_OFF %) =                                \
+//                          CASE                              NOT_IF_FAIL       RUN_ENV       HOST_OR_OFF
+// DEFINE:   %{check-case}( caseDeviceptrSuccess           %,                %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseHostptrSuccess             %,                %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseIsPresentSuccess           %,                %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseEnterExitRoutinesSuccess   %,                %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseCopyinExtendsAfter         %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseCopyinExtendsBefore        %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseCopyinSubsumes             %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseCopyinConcat2              %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseCreateExtendsAfter         %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseCreateExtendsBefore        %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseCreateSubsumes             %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseCreateConcat2              %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUpdateRoutinesSuccess      %,                %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUpdateDeviceAbsent         %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUpdateDeviceExtendsAfter   %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUpdateDeviceExtendsBefore  %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUpdateDeviceSubsumes       %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUpdateDeviceConcat2        %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUpdateSelfAbsent           %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUpdateSelfExtendsAfter     %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUpdateSelfExtendsBefore    %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUpdateSelfSubsumes         %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUpdateSelfConcat2          %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMallocFreeSuccess          %,                %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMapUnmapSuccess            %, %{NOT_IF_HOST} %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMapBytesZero               %,                %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMapSameHostAsStructured    %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMapSameHostAsDynamic       %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMapSame                    %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMapSameHost                %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMapHostExtendsAfter        %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMapHostExtendsBefore       %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMapHostSubsumes            %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMapHostIsSubsumed          %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMapHostNull                %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMapDevNull                 %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMapBothNull                %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUnmapNull                  %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUnmapUnmapped              %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUnmapAfterOnlyStructured   %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUnmapAfterOnlyDynamic      %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUnmapAfterMapAndStructured %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseUnmapAfterAllThree         %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpySuccess              %,                %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyToDeviceDestNull     %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyToDeviceSrcNull      %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyToDeviceBothNull     %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyFromDeviceDestNull   %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyFromDeviceSrcNull    %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyFromDeviceBothNull   %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyDeviceDestNull       %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyDeviceSrcNull        %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyDeviceBothNull       %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dDestNull          %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dSrcNull           %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dBothNull          %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dDestDevInvalid    %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dDestDevInvalidNeg %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dSrcDevInvalid     %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dSrcDevInvalidNeg  %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dBothDevInvalid    %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dSameDevInvalid    %, %not --crash   %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dDestAbsent        %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dSrcAbsent         %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dDestExtendsAfter  %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dSrcExtendsAfter   %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dDestExtendsBefore %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dSrcExtendsBefore  %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dDestSubsumes      %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dSrcSubsumes       %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dDestConcat2       %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
+// DEFINE:   %{check-case}( caseMemcpyD2dSrcConcat2        %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %)
+
+// Generate the enum of cases.
+//
+//      RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
+// REDEFINE: %{check-case}( CASE %, NOT_IF_FAIL %, RUN_ENV %, HOST_OR_OFF %) = \
+// REDEFINE: echo '  Macro(%{CASE}) \' >> %t-cases.h
+//      RUN: %{check-cases}(%,%,%,%)
+//      RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
+
+// Try all cases multiple times while varying the run-time environment.
+//
+// REDEFINE: %{check-case}( CASE %, NOT_IF_FAIL %, RUN_ENV %, HOST_OR_OFF %) = \
+// REDEFINE:   : '---------- RUN_ENV: %{RUN_ENV}; CASE: %{CASE} ----------' && \
+// REDEFINE:   %{RUN_ENV} %{NOT_IF_FAIL} %t.exe %{CASE} %{HOST_OR_OFF}         \
+// REDEFINE:     > %t.out 2> %t.err &&                                         \
+// REDEFINE:   FileCheck -input-file %t.out %s -match-full-lines -allow-empty  \
+// REDEFINE:     -check-prefixes=OUT,OUT-%{CASE},OUT-%{CASE}-%{HOST_OR_OFF} && \
+// REDEFINE:   FileCheck -input-file %t.err %s -match-full-lines -allow-empty  \
+// REDEFINE:     -check-prefixes=ERR,ERR-%{CASE},ERR-%{CASE}-%{HOST_OR_OFF}
+//
+// RUN: %clang-acc -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
+//
+//                      RUN_ENV                            HOST_OR_OFF           NOT_IF_HOST                NOT_IF_OFF
+// RUN: %{check-cases}(                                 %, %if-host<HOST|OFF> %, %if-host<%not --crash|> %, %if-host<|%not --crash> %)
+// RUN: %{check-cases}( env OMP_TARGET_OFFLOAD=disabled %, HOST               %, %not --crash            %,                         %)
+// RUN: %{check-cases}( env ACC_DEVICE_TYPE=host        %, HOST               %, %not --crash            %,                         %)
+
 // END.
 
 // expected-no-diagnostics

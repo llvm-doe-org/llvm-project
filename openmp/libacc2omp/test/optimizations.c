@@ -7,25 +7,25 @@
 // empty "acc parallel" construct at -O2 or above for offloading to nvptx64
 // (from x86_64 or ppc64le).  Building these libraries fixed the failures.
 
-// RUN: %data opts {
-// RUN:   (opt=-O0)
-// RUN:   (opt=-O1)
-// RUN:   (opt=-O2)
-// RUN:   (opt=-O3)
-// RUN:   (opt=-Ofast)
-// RUN: }
-// RUN: %data run-envs {
-// RUN:   (run-env=                                 )
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled')
-// RUN:   (run-env='env ACC_DEVICE_TYPE=host'       )
-// RUN: }
-// RUN: %for opts {
-// RUN:   %clang-acc %[opt] %s -o %t.exe
-// RUN:   %for run-envs {
-// RUN:     %[run-env] %t.exe > %t.out 2>&1
-// RUN:     FileCheck -match-full-lines -input-file %t.out %s
-// RUN:   }
-// RUN: }
+// DEFINE: %{check-run-env}( RUN_ENV %) =                                      \
+// DEFINE:   : '---------- RUN_ENV: %{RUN_ENV} ----------'                  && \
+// DEFINE:   %{RUN_ENV} %t.exe > %t.out 2>&1                                && \
+// DEFINE:   FileCheck -match-full-lines -input-file=%t.out %s
+
+// DEFINE: %{check-run-envs} =                                                 \
+// DEFINE:   %{check-run-env}(                                 %)           && \
+// DEFINE:   %{check-run-env}( env OMP_TARGET_OFFLOAD=disabled %)           && \
+// DEFINE:   %{check-run-env}( env ACC_DEVICE_TYPE=host        %)
+
+// DEFINE: %{check-opt}( OPT %) =                                              \
+// DEFINE:   %clang-acc %{OPT} %s -o %t.exe                                 && \
+// DEFINE:   %{check-run-envs}
+
+// RUN: %{check-opt}( -O0    %)
+// RUN: %{check-opt}( -O1    %)
+// RUN: %{check-opt}( -O2    %)
+// RUN: %{check-opt}( -O3    %)
+// RUN: %{check-opt}( -Ofast %)
 //
 // END.
 

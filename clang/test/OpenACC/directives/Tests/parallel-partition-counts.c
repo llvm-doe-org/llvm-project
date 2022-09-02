@@ -2,9 +2,10 @@
 // "acc parallel loop".  Correct usage of num_gangs is checked in parallel.c
 // and loop-part-imp-data.c.
 
-// RUN: %acc-check-dmp{}
-// RUN: %acc-check-prt{}
-// RUN: %acc-check-exe{clang-args: ; exe-args: 2}
+// REDEFINE: %{exe:args} = 2
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

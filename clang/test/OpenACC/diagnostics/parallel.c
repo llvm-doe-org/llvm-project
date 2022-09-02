@@ -7,37 +7,31 @@
 // parallel" directives in order to check the same diagnostics but for combined
 // "acc parallel loop" directives.
 
-// RUN: %data {
-// RUN:   (cflags=-DERR=ERR_ACC)
-// RUN:   (cflags=-DERR=ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_AP)
-// RUN:   (cflags=-DERR=ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_PP)
-// RUN: }
+// DEFINE: %{check}( CFLAGS %) =                                               \
 
-// OpenACC disabled
-// RUN: %for {
-// RUN:   %clang_cc1 -verify=noacc,expected-noacc -Wchar-subscripts %[cflags] \
-// RUN:              %s
-// RUN:   %clang_cc1 -verify=noacc,expected-noacc -Wchar-subscripts %[cflags] \
-// RUN:              -DADD_LOOP_TO_PAR %s
-// RUN: }
+//           # OpenACC disabled
+// DEFINE:   %clang_cc1 -verify=noacc,expected-noacc -Wchar-subscripts         \
+// DEFINE:      %{CFLAGS} %s &&                                                \
+// DEFINE:   %clang_cc1 -verify=noacc,expected-noacc -Wchar-subscripts         \
+// DEFINE:      %{CFLAGS} -DADD_LOOP_TO_PAR %s &&                              \
 
-// OpenACC enabled
-// RUN: %for {
-// RUN:   %clang_cc1 \
-// RUN:     -verify=par,acc-ignore,expected,expected-noacc,char-subscripts \
-// RUN:     -fopenacc -Wchar-subscripts %[cflags] %s
-// RUN:   %clang_cc1 \
-// RUN:     -verify=parloop,acc-ignore,expected,expected-noacc,char-subscripts \
-// RUN:     -fopenacc -Wchar-subscripts %[cflags] -DADD_LOOP_TO_PAR %s
-// RUN: }
+//           # OpenACC enabled
+// DEFINE:   %clang_cc1 \
+// DEFINE:     -verify=par,acc-ignore,expected,expected-noacc,char-subscripts  \
+// DEFINE:     -fopenacc -Wchar-subscripts %{CFLAGS} %s &&                     \
+// DEFINE:   %clang_cc1 \
+// DEFINE:     -verify=parloop,acc-ignore,expected,expected-noacc,char-subscripts \
+// DEFINE:     -fopenacc -Wchar-subscripts %{CFLAGS} -DADD_LOOP_TO_PAR %s &&   \
 
-// OpenACC enabled but optional warnings disabled
-// RUN: %for {
-// RUN:   %clang_cc1 -verify=par,expected,expected-noacc -fopenacc \
-// RUN:              -Wno-openacc-ignored-clause %[cflags] %s
-// RUN:   %clang_cc1 -verify=parloop,expected,expected-noacc -fopenacc \
-// RUN:              -Wno-openacc-ignored-clause %[cflags] -DADD_LOOP_TO_PAR %s
-// RUN: }
+//           # OpenACC enabled but optional warnings disabled
+// DEFINE:   %clang_cc1 -verify=par,expected,expected-noacc -fopenacc          \
+// DEFINE:      -Wno-openacc-ignored-clause %{CFLAGS} %s &&                    \
+// DEFINE:   %clang_cc1 -verify=parloop,expected,expected-noacc -fopenacc      \
+// DEFINE:      -Wno-openacc-ignored-clause %{CFLAGS} -DADD_LOOP_TO_PAR %s
+
+// RUN: %{check}( -DERR=ERR_ACC                                 %)
+// RUN: %{check}( -DERR=ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_AP %)
+// RUN: %{check}( -DERR=ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_PP %)
 
 // END.
 

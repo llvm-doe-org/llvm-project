@@ -5,9 +5,9 @@
 // using "ompx_hold".  exit-data-uninit.c checks the case where "acc exit data"
 // occurs before runtime initialization.
 
-// RUN: %acc-check-dmp{}
-// RUN: %acc-check-prt{}
-// RUN: %acc-check-exe{}
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

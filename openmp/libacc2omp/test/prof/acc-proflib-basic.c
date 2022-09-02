@@ -4,14 +4,9 @@
 // and thus acc_register_library executes, so it seems worthwhile to make sure
 // ACC_PROFLIB works in all offload cases.
 
-// RUN: %data proflibs {
-// RUN:   (cpp=-DPROG=PROG_PROFLIB_BAD  file=%t.proflib-bad )
-// RUN:   (cpp=-DPROG=PROG_PROFLIB_GOOD file=%t.proflib-good)
-// RUN: }
-// RUN: %for proflibs {
-// RUN:   %clang-lib %[cpp] %s -o %[file]
-// RUN: }
-// RUN: %clang-acc -DPROG=PROG_APP -DTGT_USE_STDIO=%if-tgt-stdio(1,0) %s \
+// RUN: %clang-lib -DPROG=PROG_PROFLIB_BAD  -o %t.proflib-bad  %s
+// RUN: %clang-lib -DPROG=PROG_PROFLIB_GOOD -o %t.proflib-good %s
+// RUN: %clang-acc -DPROG=PROG_APP -DTGT_USE_STDIO=%if-tgt-stdio<1|0> %s \
 // RUN:   -o %t.exe
 //
 //      # Check diagnostic if library doesn't exist.
@@ -32,8 +27,8 @@
 // RUN: FileCheck -allow-empty -check-prefix=EMPTY %s < %t.err
 // RUN: FileCheck -input-file %t.out -match-full-lines %s \
 // RUN:   -implicit-check-not=acc_ev_ \
-// RUN:   -check-prefixes=CHECK,%if-host(HOST,OFF) \
-// RUN:   -check-prefixes=%if-tgt-stdio(TGT-USE-STDIO,NO-TGT-USE-STDIO)
+// RUN:   -check-prefixes=CHECK,%if-host<HOST|OFF> \
+// RUN:   -check-prefixes=%if-tgt-stdio<TGT-USE-STDIO|NO-TGT-USE-STDIO>
 //
 // END.
 

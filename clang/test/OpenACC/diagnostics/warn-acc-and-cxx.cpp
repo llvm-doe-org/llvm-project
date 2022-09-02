@@ -1,29 +1,33 @@
-// RUN: %data stds {
-// RUN:   (std=          )
-// RUN:   (std=-std=c++98)
-// RUN:   (std=-std=c++20)
-// RUN: }
-// RUN: %data accs {
-// RUN:   (acc=-fopenacc                  )
-// RUN:   (acc=-fopenacc-ast-print=acc    )
-// RUN:   (acc=-fopenacc-ast-print=omp    )
-// RUN:   (acc=-fopenacc-ast-print=acc-omp)
-// RUN:   (acc=-fopenacc-ast-print=omp-acc)
-// RUN:   (acc=-fopenacc-print=acc        )
-// RUN:   (acc=-fopenacc-print=omp        )
-// RUN:   (acc=-fopenacc-print=acc-omp    )
-// RUN:   (acc=-fopenacc-print=omp-acc    )
-// RUN: }
-// RUN: %for stds {
-// RUN:   %clang %[std] -o %t %s 2>&1 | FileCheck -allow-empty %s
-// RUN:   %for accs {
-// RUN:     not %clang %[std] %[acc] %s 2>&1 | FileCheck --check-prefix=ERROR %s
-// RUN:     %clang -Wno-error=openacc-and-cxx %[std] %[acc] %s 2>&1 | \
-// RUN:         FileCheck --check-prefix=WARN %s
-// RUN:     %clang -Wno-openacc-and-cxx %[std] %[acc] %s 2>&1 | \
-// RUN:         FileCheck -allow-empty %s
-// RUN:   }
-// RUN: }
+// DEFINE: %{check}( NOT %, CFLAGS %, FC_OPTS %, EXTRA_CFLAGS %) =             \
+// DEFINE:   : '----------- CFLAGS: %{CFLAGS} ------------'                 && \
+// DEFINE:   %{NOT} %clang %{CFLAGS} %{EXTRA_CFLAGS} %s > %t.out 2>&1       && \
+// DEFINE:   FileCheck %{FC_OPTS} %s -input-file=%t.out
+
+// DEFINE: %{check-warn-opts}( CFLAGS %) =                                                         \
+//                     NOT    CFLAGS                                   FC_OPTS
+// DEFINE:   %{check}( not %, %{CFLAGS}                            %, -check-prefix=ERROR %, %) && \
+// DEFINE:   %{check}(     %, %{CFLAGS} -Wno-error=openacc-and-cxx %, -check-prefix=WARN  %, %) && \
+// DEFINE:   %{check}(     %, %{CFLAGS} -Wno-openacc-and-cxx       %, -allow-empty        %, %)
+
+// DEFINE: %{check-acc-opts}( CFLAGS %) =                                      \
+// DEFINE:   %{check-warn-opts}( %{CFLAGS} -fopenacc                   %)   && \
+// DEFINE:   %{check-warn-opts}( %{CFLAGS} -fopenacc-ast-print=acc     %)   && \
+// DEFINE:   %{check-warn-opts}( %{CFLAGS} -fopenacc-ast-print=omp     %)   && \
+// DEFINE:   %{check-warn-opts}( %{CFLAGS} -fopenacc-ast-print=acc-omp %)   && \
+// DEFINE:   %{check-warn-opts}( %{CFLAGS} -fopenacc-ast-print=omp-acc %)   && \
+// DEFINE:   %{check-warn-opts}( %{CFLAGS} -fopenacc-print=acc         %)   && \
+// DEFINE:   %{check-warn-opts}( %{CFLAGS} -fopenacc-print=omp         %)   && \
+// DEFINE:   %{check-warn-opts}( %{CFLAGS} -fopenacc-print=acc-omp     %)   && \
+// DEFINE:   %{check-warn-opts}( %{CFLAGS} -fopenacc-print=omp-acc     %)
+
+// DEFINE: %{check-std}( CFLAGS %) =                                           \
+// DEFINE:   %{check}( %, %{CFLAGS} %, -allow-empty %, -o %t.exe %)         && \
+// DEFINE:   %{check-acc-opts}( %{CFLAGS} %)
+
+// RUN: %{check-std}(            %)
+// RUN: %{check-std}( -std=c++98 %)
+// RUN: %{check-std}( -std=c++20 %)
+
 // END.
 
 // Braces prevent these directives from matching themselves when printing.

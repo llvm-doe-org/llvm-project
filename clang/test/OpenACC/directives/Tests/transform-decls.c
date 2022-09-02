@@ -12,8 +12,10 @@
 // We check printing of the computed OpenMP source as any easy way to see if any
 // components of the declarations are lost by the transformations.
 //
-// RUN: %acc-check-prt{clang-args: ; fc-args: -match-full-lines}
-// RUN: %acc-check-exe{clang-args: ; exe-args: ; fc-args: -match-full-lines}
+// REDEFINE: %{prt:fc:args} = -match-full-lines
+// REDEFINE: %{exe:fc:args} = -match-full-lines
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

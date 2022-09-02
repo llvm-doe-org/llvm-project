@@ -1,28 +1,49 @@
 // Check that acc_ev_device_init_start and acc_ev_device_init_end callbacks
 // specify the right OpenACC Runtime Library API routine.
+
+// Redefine this to specify how %{check-cases} expands for each case.
 //
-// RUN: %data cases {
-// RUN:   (case=acc_malloc args='size'     )
-// RUN:   (case=acc_copyin args='arr, size')
-// RUN:   (case=acc_create args='arr, size')
-// RUN: }
-// RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
-// RUN: %for cases {
-// RUN:   echo '  Macro(%[case], %[args]) \' >> %t-cases.h
-// RUN: }
-// RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
+// - CASE = the case name used in the enum and as a command line argument.
+// - ARGS = the arguments to pass to the function identified by CASE.
+//
+// DEFINE: %{check-case}( CASE %, ARGS %) =
+
+// Substitution to run %{check-case} for each case.
+//
+// If a case is listed here but is not covered in the code, that case will fail.
+// If a case is covered in the code but not listed here, the code will not
+// compile because this list produces the enum used by the code.
+//
+// DEFINE: %{check-cases} =                                                    \
+// DEFINE:   %{check-case}( acc_malloc %, size      %)                      && \
+// DEFINE:   %{check-case}( acc_copyin %, arr, size %)                      && \
+// DEFINE:   %{check-case}( acc_create %, arr, size %)
+
+// Generate the enum of cases.
+//
+//      RUN: echo '#define FOREACH_CASE(Macro) \' > %t-cases.h
+// REDEFINE: %{check-case}( CASE %, ARGS %) =                                  \
+// REDEFINE: echo '  Macro(%{CASE}, %{ARGS}) \' >> %t-cases.h
+//      RUN: %{check-cases}
+//      RUN: echo '  /*end of FOREACH_CASE*/' >> %t-cases.h
+
+// Try all cases.
+//
+// REDEFINE: %{check-case}( CASE %, ARGS %) =                                  \
+// REDEFINE:   : '---------- CASE: %{CASE} ----------' &&                      \
+// REDEFINE:   %t.exe %{CASE} > %t.out 2> %t.err &&                            \
+// REDEFINE:   FileCheck -input-file %t.err -allow-empty -check-prefixes=ERR   \
+// REDEFINE:              %s &&                                                \
+// REDEFINE:   FileCheck -input-file %t.out %s                                 \
+// REDEFINE:     -check-prefixes=OUT,OUT-%if-host<host|OFF>                    \
+// REDEFINE:     -match-full-lines -strict-whitespace                          \
+// REDEFINE:     -DACC_DEVICE=acc_device_%dev-type-0-acc                       \
+// REDEFINE:     -DVERSION=%acc-version -DHOST_DEV=%acc-host-dev -DOFF_DEV=0   \
+// REDEFINE:     -DTHREAD_ID=0 -DASYNC_QUEUE=-1 -DROUTINE=%{CASE}
+//
 // RUN: %clang-acc -DCASES_HEADER='"%t-cases.h"' -o %t.exe %s
-// RUN: %for cases {
-// RUN:   %t.exe %[case] > %t.out 2> %t.err
-// RUN:   FileCheck -input-file %t.err -allow-empty -check-prefixes=ERR %s
-// RUN:   FileCheck -input-file %t.out %s \
-// RUN:     -check-prefixes=OUT,OUT-%if-host(host,OFF) \
-// RUN:     -match-full-lines -strict-whitespace \
-// RUN:     -DACC_DEVICE=acc_device_%dev-type-0-acc -DVERSION=%acc-version \
-// RUN:     -DHOST_DEV=%acc-host-dev -DOFF_DEV=0 -DTHREAD_ID=0 \
-// RUN:     -DASYNC_QUEUE=-1 -DROUTINE=%[case]
-// RUN: }
-//
+// RUN: %{check-cases}
+
 // END.
 
 // expected-no-diagnostics

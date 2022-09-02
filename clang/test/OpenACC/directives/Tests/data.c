@@ -5,9 +5,10 @@
 // extension errors are checked in subarray-errors.c, and other runtime errors
 // from data clauses are checked in no-create.c and present.c.
 
-// RUN: %acc-check-dmp{}
-// RUN: %acc-check-prt{}
-// RUN: %acc-check-exe{clang-args: ; exe-args: ; fc-args: -strict-whitespace}
+// REDEFINE: %{exe:fc:args} = -strict-whitespace
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

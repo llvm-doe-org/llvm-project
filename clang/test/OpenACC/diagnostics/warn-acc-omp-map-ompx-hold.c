@@ -5,44 +5,42 @@
 // data clauses for different values of -fopenacc-structured-ref-count-omp is
 // checked in directives/Tests/fopenacc-structured-ref-count-omp.c.
 
-// RUN: %data prt-opts {
-//        # Default is error.
-// RUN:   (prt-opt=-fopenacc-ast-print=omp     none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-ast-print=acc-omp none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-ast-print=omp-acc none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-print=omp         none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-print=acc-omp     none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-print=omp-acc     none=error warn=error noerr=warn)
-//        # Default is no warning.
-// RUN:   (prt-opt=-fopenacc-ast-print=acc     none=none  warn=warn  noerr=none)
-// RUN:   (prt-opt=-fopenacc-print=acc         none=none  warn=warn  noerr=none)
-// RUN:   (prt-opt='-c -fopenacc'              none=none  warn=warn  noerr=none)
-// RUN: }
-// RUN: %data warn-opts {
-// RUN:   (warn-opt=                                     hold=%[none] )
-// RUN:   (warn-opt=-Wopenacc-omp-map-ompx-hold          hold=%[warn] )
-// RUN:   (warn-opt=-Wopenacc-omp-ext                    hold=%[warn] )
-// RUN:   (warn-opt=-Wno-error=openacc-omp-map-ompx-hold hold=%[noerr])
-// RUN:   (warn-opt=-Wno-error=openacc-omp-ext           hold=%[noerr])
-// RUN:   (warn-opt=-Werror=openacc-omp-map-ompx-hold    hold=error   )
-// RUN:   (warn-opt=-Werror=openacc-omp-ext              hold=error   )
-// RUN:   (warn-opt=-Wno-openacc-omp-map-ompx-hold       hold=none    )
-// RUN:   (warn-opt=-Wno-openacc-omp-ext                 hold=none    )
-// RUN: }
-// RUN: %data ref-count-opts {
-// RUN:   (ref-count-opt=                                                verify=%[hold])
-// RUN:   (ref-count-opt=-fopenacc-structured-ref-count-omp=ompx-hold    verify=%[hold])
-// RUN:   (ref-count-opt=-fopenacc-structured-ref-count-omp=no-ompx-hold verify=none   )
-// RUN: }
-// RUN: %for prt-opts {
-// RUN:   %for warn-opts {
-// RUN:     %for ref-count-opts {
-// RUN:       %clang %[prt-opt] %[warn-opt] %[ref-count-opt] %s \
-// RUN:              -Xclang -verify=%[verify] -Wno-openacc-omp-map-present \
-// RUN:              -Wno-openacc-omp-map-ompx-no-alloc
-// RUN:     }
-// RUN:   }
-// RUN: }
+// DEFINE: %{check-ref-count-opt}( CFLAGS %, VERIFY %) =                       \
+// DEFINE:   : '------ VERIFY=%{VERIFY}; CFLAGS=%{CFLAGS} -------'          && \
+// DEFINE:   %clang %{CFLAGS} -Xclang -verify=%{VERIFY} %s > /dev/null         \
+// DEFINE:       -Wno-openacc-omp-map-present -Wno-openacc-omp-map-ompx-no-alloc
+
+// DEFINE: %{check-ref-count-opts}( CFLAGS %, HOLD %) =                                                         \
+//                                   CFLAGS                                                       VERIFY
+// DEFINE:   %{check-ref-count-opt}( %{CFLAGS}                                                 %, %{HOLD} %) && \
+// DEFINE:   %{check-ref-count-opt}( %{CFLAGS} -fopenacc-structured-ref-count-omp=ompx-hold    %, %{HOLD} %) && \
+// DEFINE:   %{check-ref-count-opt}( %{CFLAGS} -fopenacc-structured-ref-count-omp=no-ompx-hold %, none    %)
+
+// DEFINE: %{check-warn-opts}( CFLAGS %, NONE %, WARN %, NOERR %) =                                    \
+//                                    CFLAGS                                            HOLD
+// DEFINE:   %{check-ref-count-opts}( %{CFLAGS}                                      %, %{NONE}  %) && \
+// DEFINE:   %{check-ref-count-opts}( %{CFLAGS} -Wopenacc-omp-map-ompx-hold          %, %{WARN}  %) && \
+// DEFINE:   %{check-ref-count-opts}( %{CFLAGS} -Wopenacc-omp-ext                    %, %{WARN}  %) && \
+// DEFINE:   %{check-ref-count-opts}( %{CFLAGS} -Wno-error=openacc-omp-map-ompx-hold %, %{NOERR} %) && \
+// DEFINE:   %{check-ref-count-opts}( %{CFLAGS} -Wno-error=openacc-omp-ext           %, %{NOERR} %) && \
+// DEFINE:   %{check-ref-count-opts}( %{CFLAGS} -Werror=openacc-omp-map-ompx-hold    %, error    %) && \
+// DEFINE:   %{check-ref-count-opts}( %{CFLAGS} -Werror=openacc-omp-ext              %, error    %) && \
+// DEFINE:   %{check-ref-count-opts}( %{CFLAGS} -Wno-openacc-omp-map-ompx-hold       %, none     %) && \
+// DEFINE:   %{check-ref-count-opts}( %{CFLAGS} -Wno-openacc-omp-ext                 %, none     %)
+
+//                          CFLAGS                          NONE      WARN      NOERR
+// Default is error.
+// RUN: %{check-warn-opts}( -fopenacc-ast-print=omp      %, error  %, error  %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-ast-print=acc-omp  %, error  %, error  %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-ast-print=omp-acc  %, error  %, error  %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-print=omp          %, error  %, error  %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-print=acc-omp      %, error  %, error  %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-print=omp-acc      %, error  %, error  %, warn %)
+//
+// Default is no warning.
+// RUN: %{check-warn-opts}( -fopenacc-ast-print=acc      %, none   %, warn   %, none %)
+// RUN: %{check-warn-opts}( -fopenacc-print=acc          %, none   %, warn   %, none %)
+// RUN: %{check-warn-opts}( -c -fopenacc                 %, none   %, warn   %, none %)
 
 // END.
 

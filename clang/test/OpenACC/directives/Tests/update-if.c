@@ -7,9 +7,10 @@
 // We include print checking on only a few representative cases, which should be
 // more than sufficient to show it's working for the "if" clause.
 //
-// RUN: %acc-check-dmp{}
-// RUN: %acc-check-prt{}
-// RUN: %acc-check-exe{clang-args: ; exe-args: ; fc-args: -strict-whitespace}
+// REDEFINE: %{exe:fc:args} = -strict-whitespace
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

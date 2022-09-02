@@ -9,13 +9,13 @@
 // though there's no data synchronization: acc_ev_compute_construct_end occurs
 // after the kernel terminates.
 
-// RUN: %clang-acc %s -o %t.exe -DTGT_USE_STDIO=%if-tgt-stdio(1, 0)
+// RUN: %clang-acc %s -o %t.exe -DTGT_USE_STDIO=%if-tgt-stdio<1|0>
 // RUN: %t.exe > %t.out 2>&1
 // RUN: FileCheck -input-file %t.out %s \
 // RUN:   -match-full-lines -strict-whitespace \
 // RUN:   -implicit-check-not=acc_ev_ \
-// RUN:   -check-prefixes=CHECK,%if-host(HOST, OFF) \
-// RUN:   -check-prefixes=%if-tgt-stdio(TGT-USE-STDIO,NO-TGT-USE-STDIO)
+// RUN:   -check-prefixes=CHECK,%if-host<HOST|OFF> \
+// RUN:   -check-prefixes=%if-tgt-stdio<TGT-USE-STDIO|NO-TGT-USE-STDIO>
 //
 // END.
 

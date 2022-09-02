@@ -1,172 +1,212 @@
 // Check that all callbacks are dispatched in the correct order with the
 // correct data for a simple program.
-//
-// Check the following cases:
-// - An enter data and exit data directive pair (-DDIR=DIR_ENTER_EXIT_DATA)
-// - A data construct by itself (-DDIR=DIR_DATA)
-// - A parallel construct by itself (-DDIR=DIR_PAR)
-// - A parallel construct and update directive nested within data constructs
-//   (-DDIR=DIR_DATAPAR)
 
-// RUN: %data dirs {
-// RUN:   (dir-cflags=-DDIR=DIR_ENTER_EXIT_DATA dir-fc1=DATA dir-fc2=NOPAR dir-fc3=NODATAPAR
-// RUN:    arr-enter-construct=enter_data arr-exit-construct=exit_data
-// RUN:    arr0-enter-line-no=20000       arr0-enter-end-line-no=20000
-// RUN:    arr0-exit-line-no=30000        arr0-exit-end-line-no=30000
-// RUN:    arr1-enter-line-no=20000       arr1-enter-end-line-no=20000
-// RUN:    arr1-exit-line-no=30000        arr1-exit-end-line-no=30000
-// RUN:    kern-line-no=                  kern-end-line-no=
-// RUN:    update0-line-no=               update1-line-no=            )
-// RUN:   (dir-cflags=-DDIR=DIR_DATA dir-fc1=DATA dir-fc2=NOPAR dir-fc3=NODATAPAR
-// RUN:    arr-enter-construct=data arr-exit-construct=data
-// RUN:    arr0-enter-line-no=40000 arr0-enter-end-line-no=50000
-// RUN:    arr0-exit-line-no=40000  arr0-exit-end-line-no=50000
-// RUN:    arr1-enter-line-no=40000 arr1-enter-end-line-no=50000
-// RUN:    arr1-exit-line-no=40000  arr1-exit-end-line-no=50000
-// RUN:    kern-line-no=            kern-end-line-no=
-// RUN:    update0-line-no=         update1-line-no=            )
-// RUN:   (dir-cflags=-DDIR=DIR_PAR dir-fc1=PAR dir-fc2=HASPAR dir-fc3=NODATAPAR
-// RUN:    arr-enter-construct=parallel arr-exit-construct=parallel
-// RUN:    arr0-enter-line-no=60000     arr0-enter-end-line-no=100000
-// RUN:    arr0-exit-line-no=60000      arr0-exit-end-line-no=100000
-// RUN:    arr1-enter-line-no=60000     arr1-enter-end-line-no=100000
-// RUN:    arr1-exit-line-no=60000      arr1-exit-end-line-no=100000
-// RUN:    kern-line-no=60000           kern-end-line-no=100000
-// RUN:    update0-line-no=             update1-line-no=             )
-// RUN:   (dir-cflags=-DDIR=DIR_DATAPAR dir-fc1=DATAPAR dir-fc2=HASPAR dir-fc3=HASDATAPAR
-// RUN:    arr-enter-construct=data arr-exit-construct=data
-// RUN:    arr0-enter-line-no=70000 arr0-enter-end-line-no=140000
-// RUN:    arr0-exit-line-no=70000  arr0-exit-end-line-no=140000
-// RUN:    arr1-enter-line-no=80000 arr1-enter-end-line-no=130000
-// RUN:    arr1-exit-line-no=80000  arr1-exit-end-line-no=130000
-// RUN:    kern-line-no=90000       kern-end-line-no=100000
-// RUN:    update0-line-no=110000   update1-line-no=120000       )
-// RUN: }
-//      # Check offloading compilation both with and without offloading at run
-//      # time.  This is important because some runtime calls that must be
-//      # instrumented with some callback data are not exercised in both cases.
-//      # Also check the case when host is selected but there are non-host
-//      # devices and offload is not disabled.  That affects the OpenMP device
-//      # number for host and thus might inadvertently affect profiling data if
-//      # the implementation has a bug.
-// RUN: %data run-envs {
-// RUN:   (run-env=
-// RUN:    env-fc='%if-host(HOST,OFF),%if-host(HOST,OFF)-%[dir-fc1],%if-host(HOST,OFF)-%[dir-fc2],%if-host(HOST,OFF)-%[dir-fc3],TGT-%dev-type-0-omp,TGT-%dev-type-0-omp-%[dir-fc1],TGT-%dev-type-0-omp-%[dir-fc2],TGT-%dev-type-0-omp-%[dir-fc3],%if-host(HOST,OFF)-BEFORE-ENV,%if-host(HOST,OFF)-BEFORE-ENV-%[dir-fc2]')
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled'
-// RUN:    env-fc='HOST,HOST-%[dir-fc1],HOST-%[dir-fc2],%if-host(HOST,OFF)-BEFORE-ENV,%if-host(HOST,OFF)-BEFORE-ENV-%[dir-fc2]')
-// RUN:   (run-env='env ACC_DEVICE_TYPE=host'
-// RUN:    env-fc='HOST,HOST-%[dir-fc1],HOST-%[dir-fc2],%if-host(HOST,OFF)-BEFORE-ENV,%if-host(HOST,OFF)-BEFORE-ENV-%[dir-fc2]')
-// RUN: }
-//      # Check both traditional compilation mode and source-to-source mode
-//      # followed by OpenMP compilation.  This is important because, in the
-//      # latter case, some profiling data that depends on OMPT extensions is
-//      # currently available only when debug info is turned.
-// RUN: %for dirs {
-// RUN:   %clang-acc-prt-omp %s -DTGT_%dev-type-0-omp %[dir-cflags] > %t-omp.c
-//        # With debug info.
-// RUN:   %clang-omp %t-omp.c -DTGT_%dev-type-0-omp %[dir-cflags] -I%S \
-// RUN:     -gline-tables-only -o %t.exe
-// RUN:   %for run-envs {
-// RUN:     %[run-env] %t.exe > %t.out 2> %t.err
-// RUN:     FileCheck -input-file %t.err %s \
-// RUN:       -allow-empty -check-prefixes=ERR
-// RUN:     FileCheck -input-file %t.out %s \
-// RUN:       -match-full-lines -strict-whitespace \
-// RUN:       -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2] \
-// RUN:       -check-prefixes=CHECK-%[dir-fc3],%[env-fc] \
-// RUN:       -DACC_DEVICE=acc_device_%dev-type-0-acc \
-// RUN:       -DVERSION=%acc-version \
-// RUN:       -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
-// RUN:       -DARR_ENTER_CONSTRUCT=%[arr-enter-construct] \
-// RUN:       -DARR_EXIT_CONSTRUCT=%[arr-exit-construct] \
-// RUN:       -DDATA_CONSTRUCT='data' -DPARALLEL_CONSTRUCT='parallel' \
-// RUN:       -DUPDATE_CONSTRUCT='update' \
-// RUN:       -DIMPLICIT_FOR_DIRECTIVE=0 -DSRC_FILE='%t-omp.c' \
-// RUN:       -DFUNC_NAME=main -DARR0_ENTER_LINE_NO=%[arr0-enter-line-no] \
-// RUN:       -DARR0_ENTER_END_LINE_NO=%[arr0-enter-end-line-no] \
-// RUN:       -DARR0_EXIT_LINE_NO=%[arr0-exit-line-no] \
-// RUN:       -DARR0_EXIT_END_LINE_NO=%[arr0-exit-end-line-no] \
-// RUN:       -DARR1_ENTER_LINE_NO=%[arr1-enter-line-no] \
-// RUN:       -DARR1_ENTER_END_LINE_NO=%[arr1-enter-end-line-no] \
-// RUN:       -DARR1_EXIT_LINE_NO=%[arr1-exit-line-no] \
-// RUN:       -DARR1_EXIT_END_LINE_NO=%[arr1-exit-end-line-no] \
-// RUN:       -DKERN_LINE_NO=%[kern-line-no] \
-// RUN:       -DKERN_END_LINE_NO=%[kern-end-line-no] \
-// RUN:       -DUPDATE0_LINE_NO=%[update0-line-no] \
-// RUN:       -DUPDATE1_LINE_NO=%[update1-line-no] \
-// RUN:       -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=150000 \
-// RUN:       -DARR0_VAR_NAME=arr0 -DARR1_VAR_NAME='arr1[0:5]'
-// RUN:   }
-//        # Without debug info.
-// RUN:   %clang-omp %t-omp.c -DTGT_%dev-type-0-omp %[dir-cflags] -I%S -o %t.exe
-// RUN:   %for run-envs {
-// RUN:     %[run-env] %t.exe > %t.out 2> %t.err
-// RUN:     FileCheck -input-file %t.err %s \
-// RUN:       -allow-empty -check-prefixes=ERR
-// RUN:     FileCheck -input-file %t.out %s \
-// RUN:       -match-full-lines -strict-whitespace \
-// RUN:       -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2] \
-// RUN:       -check-prefixes=CHECK-%[dir-fc3],%[env-fc] \
-// RUN:       -DACC_DEVICE=acc_device_%dev-type-0-acc \
-// RUN:       -DVERSION=%acc-version \
-// RUN:       -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
-// RUN:       -DARR_ENTER_CONSTRUCT='runtime_api' \
-// RUN:       -DARR_EXIT_CONSTRUCT='runtime_api' \
-// RUN:       -DDATA_CONSTRUCT='runtime_api' \
-// RUN:       -DPARALLEL_CONSTRUCT='runtime_api' \
-// RUN:       -DUPDATE_CONSTRUCT='runtime_api' \
-// RUN:       -DIMPLICIT_FOR_DIRECTIVE=1 \
-//            # FIXME: These should be nullified instead of 'unknown' in
-//            # order to distinguish from actual files or functions by that
-//            # name.  The use of 'unknown' is inherited from upstream's
-//            # LLVM OpenMP implementation, which uses 'unknown' in many
-//            # cases of a default ident_t.
-// RUN:       -DSRC_FILE='unknown'     -DFUNC_NAME='unknown' \
-// RUN:       -DARR0_ENTER_LINE_NO=0   -DARR0_ENTER_END_LINE_NO=0 \
-// RUN:       -DARR0_EXIT_LINE_NO=0    -DARR0_EXIT_END_LINE_NO=0 \
-// RUN:       -DARR1_ENTER_LINE_NO=0   -DARR1_ENTER_END_LINE_NO=0 \
-// RUN:       -DARR1_EXIT_LINE_NO=0    -DARR1_EXIT_END_LINE_NO=0 \
-// RUN:       -DKERN_LINE_NO=0         -DKERN_END_LINE_NO=0 \
-// RUN:       -DUPDATE0_LINE_NO=0      -DUPDATE1_LINE_NO=0 \
-// RUN:       -DFUNC_LINE_NO=0         -DFUNC_END_LINE_NO=0 \
-// RUN:       -DARR0_VAR_NAME='(null)' -DARR1_VAR_NAME='(null)'
-// RUN:   }
-// RUN: }
-// RUN: %for dirs {
-// RUN:   %clang-acc -DTGT_%dev-type-0-omp %[dir-cflags] -o %t.exe %s
-// RUN:   %for run-envs {
-// RUN:     %[run-env] %t.exe > %t.out 2> %t.err
-// RUN:     FileCheck -input-file %t.err %s \
-// RUN:       -allow-empty -check-prefixes=ERR
-// RUN:     FileCheck -input-file %t.out %s \
-// RUN:       -match-full-lines -strict-whitespace \
-// RUN:       -check-prefixes=CHECK,CHECK-%[dir-fc1],CHECK-%[dir-fc2] \
-// RUN:       -check-prefixes=CHECK-%[dir-fc3],%[env-fc] \
-// RUN:       -DACC_DEVICE=acc_device_%dev-type-0-acc \
-// RUN:       -DVERSION=%acc-version \
-// RUN:       -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 \
-// RUN:       -DARR_ENTER_CONSTRUCT=%[arr-enter-construct] \
-// RUN:       -DARR_EXIT_CONSTRUCT=%[arr-exit-construct] \
-// RUN:       -DDATA_CONSTRUCT='data' -DPARALLEL_CONSTRUCT='parallel' \
-// RUN:       -DUPDATE_CONSTRUCT='update' \
-// RUN:       -DIMPLICIT_FOR_DIRECTIVE=0 -DSRC_FILE='%s' -DFUNC_NAME=main \
-// RUN:       -DARR0_ENTER_LINE_NO=%[arr0-enter-line-no] \
-// RUN:       -DARR0_ENTER_END_LINE_NO=%[arr0-enter-end-line-no] \
-// RUN:       -DARR0_EXIT_LINE_NO=%[arr0-exit-line-no] \
-// RUN:       -DARR0_EXIT_END_LINE_NO=%[arr0-exit-end-line-no] \
-// RUN:       -DARR1_ENTER_LINE_NO=%[arr1-enter-line-no] \
-// RUN:       -DARR1_ENTER_END_LINE_NO=%[arr1-enter-end-line-no] \
-// RUN:       -DARR1_EXIT_LINE_NO=%[arr1-exit-line-no] \
-// RUN:       -DARR1_EXIT_END_LINE_NO=%[arr1-exit-end-line-no] \
-// RUN:       -DKERN_LINE_NO=%[kern-line-no] \
-// RUN:       -DKERN_END_LINE_NO=%[kern-end-line-no] \
-// RUN:       -DUPDATE0_LINE_NO=%[update0-line-no] \
-// RUN:       -DUPDATE1_LINE_NO=%[update1-line-no] \
-// RUN:       -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=150000 \
-// RUN:       -DARR0_VAR_NAME=arr0 -DARR1_VAR_NAME='arr1[0:5]'
-// RUN:   }
-// RUN: }
+// Parameters used throughout substitutions below.
 //
+// DEFINE: %{DIR_CFLAGS} =
+// DEFINE: %{DIR_FC1} =
+// DEFINE: %{DIR_FC2} =
+// DEFINE: %{DIR_FC3} =
+// DEFINE: %{ARR_ENTER_CONSTRUCT} =
+// DEFINE: %{ARR_EXIT_CONSTRUCT} =
+// DEFINE: %{ARR0_ENTER_LINE_NO} =
+// DEFINE: %{ARR0_ENTER_END_LINE_NO} =
+// DEFINE: %{ARR0_EXIT_LINE_NO} =
+// DEFINE: %{ARR0_EXIT_END_LINE_NO} =
+// DEFINE: %{ARR1_ENTER_LINE_NO} =
+// DEFINE: %{ARR1_ENTER_END_LINE_NO} =
+// DEFINE: %{ARR1_EXIT_LINE_NO} =
+// DEFINE: %{ARR1_EXIT_END_LINE_NO} =
+// DEFINE: %{KERN_LINE_NO} =
+// DEFINE: %{KERN_END_LINE_NO} =
+// DEFINE: %{UPDATE0_LINE_NO} =
+// DEFINE: %{UPDATE1_LINE_NO} =
+
+// DEFINE: %{check-run-env-start}( EXE %, RUN_ENV %, ENV_FC %) =               \
+// DEFINE:   %{RUN_ENV} %{EXE} > %t.out 2> %t.err &&                           \
+// DEFINE:   FileCheck -input-file %t.err %s                                   \
+// DEFINE:     -allow-empty -check-prefixes=ERR &&                             \
+// DEFINE:   FileCheck -input-file %t.out %s                                   \
+// DEFINE:     -match-full-lines -strict-whitespace                            \
+// DEFINE:     -check-prefixes=CHECK,CHECK-%{DIR_FC1},CHECK-%{DIR_FC2}         \
+// DEFINE:     -check-prefixes=CHECK-%{DIR_FC3},%{ENV_FC}                      \
+// DEFINE:     -DACC_DEVICE=acc_device_%dev-type-0-acc                         \
+// DEFINE:     -DVERSION=%acc-version                                          \
+// DEFINE:     -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1
+
+// DEFINE: %{check-run-env-dbg}( EXE %, SRC_FILE %, RUN_ENV %, ENV_FC %) =     \
+// DEFINE:   %{check-run-env-start}( %{EXE} %, %{RUN_ENV} %, %{ENV_FC} %)      \
+// DEFINE:     -DARR_ENTER_CONSTRUCT=%{ARR_ENTER_CONSTRUCT}                    \
+// DEFINE:     -DARR_EXIT_CONSTRUCT=%{ARR_EXIT_CONSTRUCT}                      \
+// DEFINE:     -DDATA_CONSTRUCT=data                                           \
+// DEFINE:     -DPARALLEL_CONSTRUCT=parallel                                   \
+// DEFINE:     -DUPDATE_CONSTRUCT=update                                       \
+// DEFINE:     -DIMPLICIT_FOR_DIRECTIVE=0                                      \
+// DEFINE:     -DSRC_FILE='%{SRC_FILE}'                                        \
+// DEFINE:     -DFUNC_NAME=main                                                \
+// DEFINE:     -DARR0_ENTER_LINE_NO=%{ARR0_ENTER_LINE_NO}                      \
+// DEFINE:     -DARR0_ENTER_END_LINE_NO=%{ARR0_ENTER_END_LINE_NO}              \
+// DEFINE:     -DARR0_EXIT_LINE_NO=%{ARR0_EXIT_LINE_NO}                        \
+// DEFINE:     -DARR0_EXIT_END_LINE_NO=%{ARR0_EXIT_END_LINE_NO}                \
+// DEFINE:     -DARR1_ENTER_LINE_NO=%{ARR1_ENTER_LINE_NO}                      \
+// DEFINE:     -DARR1_ENTER_END_LINE_NO=%{ARR1_ENTER_END_LINE_NO}              \
+// DEFINE:     -DARR1_EXIT_LINE_NO=%{ARR1_EXIT_LINE_NO}                        \
+// DEFINE:     -DARR1_EXIT_END_LINE_NO=%{ARR1_EXIT_END_LINE_NO}                \
+// DEFINE:     -DKERN_LINE_NO=%{KERN_LINE_NO}                                  \
+// DEFINE:     -DKERN_END_LINE_NO=%{KERN_END_LINE_NO}                          \
+// DEFINE:     -DUPDATE0_LINE_NO=%{UPDATE0_LINE_NO}                            \
+// DEFINE:     -DUPDATE1_LINE_NO=%{UPDATE1_LINE_NO}                            \
+// DEFINE:     -DFUNC_LINE_NO=10000                                            \
+// DEFINE:     -DFUNC_END_LINE_NO=150000                                       \
+// DEFINE:     -DARR0_VAR_NAME=arr0                                            \
+// DEFINE:     -DARR1_VAR_NAME='arr1[0:5]'             
+
+// DEFINE: %{check-run-env-nodbg}(EXE %, SRC_FILE %, RUN_ENV %, ENV_FC %) =    \
+// DEFINE:   %{check-run-env-start}( %{EXE} %, %{RUN_ENV} %, %{ENV_FC} %)      \
+// DEFINE:     -DARR_ENTER_CONSTRUCT=runtime_api                               \
+// DEFINE:     -DARR_EXIT_CONSTRUCT=runtime_api                                \
+// DEFINE:     -DDATA_CONSTRUCT=runtime_api                                    \
+// DEFINE:     -DPARALLEL_CONSTRUCT=runtime_api                                \
+// DEFINE:     -DUPDATE_CONSTRUCT=runtime_api                                  \
+// DEFINE:     -DIMPLICIT_FOR_DIRECTIVE=1                                      \
+//             # FIXME: These should be nullified instead of 'unknown' in order
+//             # to distinguish from actual files or functions by that name.
+//             # The use of 'unknown' is inherited from upstream LLVM's OpenMP
+//             # implementation, which uses 'unknown' in many cases of a default
+//             # ident_t.
+// DEFINE:     -DSRC_FILE=unknown                                              \
+// DEFINE:     -DFUNC_NAME=unknown                                             \
+// DEFINE:     -DARR0_ENTER_LINE_NO=0                                          \
+// DEFINE:     -DARR0_ENTER_END_LINE_NO=0                                      \
+// DEFINE:     -DARR0_EXIT_LINE_NO=0                                           \
+// DEFINE:     -DARR0_EXIT_END_LINE_NO=0                                       \
+// DEFINE:     -DARR1_ENTER_LINE_NO=0                                          \
+// DEFINE:     -DARR1_ENTER_END_LINE_NO=0                                      \
+// DEFINE:     -DARR1_EXIT_LINE_NO=0                                           \
+// DEFINE:     -DARR1_EXIT_END_LINE_NO=0                                       \
+// DEFINE:     -DKERN_LINE_NO=0                                                \
+// DEFINE:     -DKERN_END_LINE_NO=0                                            \
+// DEFINE:     -DUPDATE0_LINE_NO=0                                             \
+// DEFINE:     -DUPDATE1_LINE_NO=0                                             \
+// DEFINE:     -DFUNC_LINE_NO=0                                                \
+// DEFINE:     -DFUNC_END_LINE_NO=0                                            \
+// DEFINE:     -DARR0_VAR_NAME='(null)'                                        \
+// DEFINE:     -DARR1_VAR_NAME='(null)'
+
+// Check with and without offloading at run time.  This is important because
+// some runtime calls that must be instrumented with some callback data are not
+// exercised in both cases.  Also check the case when host is selected but there
+// are non-host devices and offload is not disabled.  That affects the OpenMP
+// device number for host and thus might inadvertently affect profiling data if
+// the implementation has a bug.
+//
+// DEFINE: %{check-run-envs}( CHECK_RUN_ENV %, EXE %, SRC_FILE %) = \
+//                             EXE       SRC_FILE       RUN_ENV                            ENV_FC
+// DEFINE:   %{CHECK_RUN_ENV}( %{EXE} %, %{SRC_FILE} %,                                 %, %if-host<HOST|OFF>,%if-host<HOST|OFF>-%{DIR_FC1},%if-host<HOST|OFF>-%{DIR_FC2},%if-host<HOST|OFF>-%{DIR_FC3},TGT-%dev-type-0-omp,TGT-%dev-type-0-omp-%{DIR_FC1},TGT-%dev-type-0-omp-%{DIR_FC2},TGT-%dev-type-0-omp-%{DIR_FC3},%if-host<HOST|OFF>-BEFORE-ENV,%if-host<HOST|OFF>-BEFORE-ENV-%{DIR_FC2} %) && \
+// DEFINE:   %{CHECK_RUN_ENV}( %{EXE} %, %{SRC_FILE} %, env OMP_TARGET_OFFLOAD=disabled %, HOST,HOST-%{DIR_FC1},HOST-%{DIR_FC2},%if-host<HOST|OFF>-BEFORE-ENV,%if-host<HOST|OFF>-BEFORE-ENV-%{DIR_FC2} %) && \
+// DEFINE:   %{CHECK_RUN_ENV}( %{EXE} %, %{SRC_FILE} %, env ACC_DEVICE_TYPE=host        %, HOST,HOST-%{DIR_FC1},HOST-%{DIR_FC2},%if-host<HOST|OFF>-BEFORE-ENV,%if-host<HOST|OFF>-BEFORE-ENV-%{DIR_FC2} %)
+
+// Check both traditional compilation mode and source-to-source mode followed by
+// OpenMP compilation.  This is important because, in the latter case, some
+// profiling data that depends on OMPT extensions is currently available only
+// when debug info is turned on.
+//
+// DEFINE: %{check-dir} =                                                                 \
+// DEFINE:   %clang-acc-prt-omp -DTGT_%dev-type-0-omp %{DIR_CFLAGS} %s > %t-omp.c &&      \
+// DEFINE:   %clang-omp -DTGT_%dev-type-0-omp %{DIR_CFLAGS} -I%S %t-omp.c                 \
+// DEFINE:     -o %t-omp.exe -gline-tables-only &&                                        \
+// DEFINE:   %clang-omp -DTGT_%dev-type-0-omp %{DIR_CFLAGS} -I%S %t-omp.c                 \
+// DEFINE:     -o %t-omp-nodbg.exe &&                                                     \
+// DEFINE:   %clang-acc -DTGT_%dev-type-0-omp %{DIR_CFLAGS} -o %t-acc.exe %s &&           \
+//                              CHECK_RUN_ENV             EXE                 SRC_FILE
+// DEFINE:   %{check-run-envs}( %{check-run-env-dbg}   %, %t-omp.exe       %, %t-omp.c %) && \
+// DEFINE:   %{check-run-envs}( %{check-run-env-nodbg} %, %t-omp-nodbg.exe %, unknown  %) && \
+// DEFINE:   %{check-run-envs}( %{check-run-env-dbg}   %, %t-acc.exe       %, %s       %)
+
+// An enter data and exit data directive pair.
+// REDEFINE: %{DIR_CFLAGS}=-DDIR=DIR_ENTER_EXIT_DATA 
+// REDEFINE: %{DIR_FC1}=DATA
+// REDEFINE: %{DIR_FC2}=NOPAR
+// REDEFINE: %{DIR_FC3}=NODATAPAR
+// REDEFINE: %{ARR_ENTER_CONSTRUCT}=enter_data
+// REDEFINE: %{ARR_EXIT_CONSTRUCT}=exit_data
+// REDEFINE: %{ARR0_ENTER_LINE_NO}=20000
+// REDEFINE: %{ARR0_ENTER_END_LINE_NO}=20000
+// REDEFINE: %{ARR0_EXIT_LINE_NO}=30000 
+// REDEFINE: %{ARR0_EXIT_END_LINE_NO}=30000
+// REDEFINE: %{ARR1_ENTER_LINE_NO}=20000
+// REDEFINE: %{ARR1_ENTER_END_LINE_NO}=20000
+// REDEFINE: %{ARR1_EXIT_LINE_NO}=30000
+// REDEFINE: %{ARR1_EXIT_END_LINE_NO}=30000
+// REDEFINE: %{KERN_LINE_NO}=
+// REDEFINE: %{KERN_END_LINE_NO}=
+// REDEFINE: %{UPDATE0_LINE_NO}=
+// REDEFINE: %{UPDATE1_LINE_NO}=
+// RUN: %{check-dir}
+
+// A data construct by itself.
+// REDEFINE: %{DIR_CFLAGS}=-DDIR=DIR_DATA
+// REDEFINE: %{DIR_FC1}=DATA
+// REDEFINE: %{DIR_FC2}=NOPAR
+// REDEFINE: %{DIR_FC3}=NODATAPAR
+// REDEFINE: %{ARR_ENTER_CONSTRUCT}=data
+// REDEFINE: %{ARR_EXIT_CONSTRUCT}=data
+// REDEFINE: %{ARR0_ENTER_LINE_NO}=40000
+// REDEFINE: %{ARR0_ENTER_END_LINE_NO}=50000
+// REDEFINE: %{ARR0_EXIT_LINE_NO}=40000
+// REDEFINE: %{ARR0_EXIT_END_LINE_NO}=50000
+// REDEFINE: %{ARR1_ENTER_LINE_NO}=40000
+// REDEFINE: %{ARR1_ENTER_END_LINE_NO}=50000
+// REDEFINE: %{ARR1_EXIT_LINE_NO}=40000
+// REDEFINE: %{ARR1_EXIT_END_LINE_NO}=50000
+// REDEFINE: %{KERN_LINE_NO}=
+// REDEFINE: %{KERN_END_LINE_NO}=
+// REDEFINE: %{UPDATE0_LINE_NO}=
+// REDEFINE: %{UPDATE1_LINE_NO}=
+// RUN: %{check-dir}
+
+// A parallel construct by itself.
+// REDEFINE: %{DIR_CFLAGS}=-DDIR=DIR_PAR
+// REDEFINE: %{DIR_FC1}=PAR
+// REDEFINE: %{DIR_FC2}=HASPAR
+// REDEFINE: %{DIR_FC3}=NODATAPAR
+// REDEFINE: %{ARR_ENTER_CONSTRUCT}=parallel
+// REDEFINE: %{ARR_EXIT_CONSTRUCT}=parallel
+// REDEFINE: %{ARR0_ENTER_LINE_NO}=60000
+// REDEFINE: %{ARR0_ENTER_END_LINE_NO}=100000
+// REDEFINE: %{ARR0_EXIT_LINE_NO}=60000
+// REDEFINE: %{ARR0_EXIT_END_LINE_NO}=100000
+// REDEFINE: %{ARR1_ENTER_LINE_NO}=60000
+// REDEFINE: %{ARR1_ENTER_END_LINE_NO}=100000
+// REDEFINE: %{ARR1_EXIT_LINE_NO}=60000
+// REDEFINE: %{ARR1_EXIT_END_LINE_NO}=100000
+// REDEFINE: %{KERN_LINE_NO}=60000
+// REDEFINE: %{KERN_END_LINE_NO}=100000
+// REDEFINE: %{UPDATE0_LINE_NO}=
+// REDEFINE: %{UPDATE1_LINE_NO}=
+// RUN: %{check-dir}
+
+// A parallel construct and update directive nested within data constructs.
+// REDEFINE: %{DIR_CFLAGS}=-DDIR=DIR_DATAPAR
+// REDEFINE: %{DIR_FC1}=DATAPAR
+// REDEFINE: %{DIR_FC2}=HASPAR
+// REDEFINE: %{DIR_FC3}=HASDATAPAR
+// REDEFINE: %{ARR_ENTER_CONSTRUCT}=data
+// REDEFINE: %{ARR_EXIT_CONSTRUCT}=data
+// REDEFINE: %{ARR0_ENTER_LINE_NO}=70000
+// REDEFINE: %{ARR0_ENTER_END_LINE_NO}=140000
+// REDEFINE: %{ARR0_EXIT_LINE_NO}=70000
+// REDEFINE: %{ARR0_EXIT_END_LINE_NO}=140000
+// REDEFINE: %{ARR1_ENTER_LINE_NO}=80000
+// REDEFINE: %{ARR1_ENTER_END_LINE_NO}=130000
+// REDEFINE: %{ARR1_EXIT_LINE_NO}=80000
+// REDEFINE: %{ARR1_EXIT_END_LINE_NO}=130000
+// REDEFINE: %{KERN_LINE_NO}=90000
+// REDEFINE: %{KERN_END_LINE_NO}=100000
+// REDEFINE: %{UPDATE0_LINE_NO}=110000
+// REDEFINE: %{UPDATE1_LINE_NO}=120000
+// RUN: %{check-dir}
+
 // END.
 
 // expected-no-diagnostics

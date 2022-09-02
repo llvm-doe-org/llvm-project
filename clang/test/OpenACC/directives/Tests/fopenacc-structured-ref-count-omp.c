@@ -18,22 +18,26 @@
 // utilize the OpenACC Profiling Interface, which we usually only exercise in
 // the runtime test suite.
 
-// RUN: %data ref-count-opts {
-// RUN:   (ref-count-opt=                                                hold-comma='ompx_hold,' hold-or-no-hold=HOLD   )
-// RUN:   (ref-count-opt=-fopenacc-structured-ref-count-omp=ompx-hold    hold-comma='ompx_hold,' hold-or-no-hold=HOLD   )
-// RUN:   (ref-count-opt=-fopenacc-structured-ref-count-omp=no-ompx-hold hold-comma=             hold-or-no-hold=NO-HOLD)
-// RUN: }
-// RUN: %for ref-count-opts {
-// RUN:   %acc-check-dmp{clang-args: %[ref-count-opt]}
-// RUN:   %acc-check-prt{                                                      \
-// RUN:     clang-args: %[ref-count-opt];                                      \
-// RUN:     fc-args:    -DHOLD='%[hold-comma]'}
-// RUN:   %acc-check-exe{                                                      \
-// RUN:     clang-args: %[ref-count-opt];                                      \
-// RUN:     exe-args:   ;                                                      \
-// RUN:     fc-args:    -match-full-lines -allow-empty;                        \
-// RUN:     fc-pres:    %[hold-or-no-hold]}
-// RUN: }
+// REDEFINE: %{exe:fc:args-stable} = -match-full-lines -allow-empty
+
+// REDEFINE: %{all:clang:args} =
+// REDEFINE: %{prt:fc:args} = -DHOLD='ompx_hold,'
+// REDEFINE: %{exe:fc:pres} = HOLD
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
+
+// REDEFINE: %{all:clang:args} = -fopenacc-structured-ref-count-omp=ompx-hold
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
+
+// REDEFINE: %{all:clang:args} = -fopenacc-structured-ref-count-omp=no-ompx-hold
+// REDEFINE: %{prt:fc:args} = -DHOLD=
+// REDEFINE: %{exe:fc:pres} = NO-HOLD
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

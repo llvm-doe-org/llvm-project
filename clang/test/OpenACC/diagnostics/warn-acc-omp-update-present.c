@@ -5,43 +5,41 @@
 // directive for different values of -fopenacc-update-present-omp is checked in
 // directives/Tests/update.c.
 
-// RUN: %data prt-opts {
-//        # Default is error.
-// RUN:   (prt-opt=-fopenacc-ast-print=omp     none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-ast-print=acc-omp none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-ast-print=omp-acc none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-print=omp         none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-print=acc-omp     none=error warn=error noerr=warn)
-// RUN:   (prt-opt=-fopenacc-print=omp-acc     none=error warn=error noerr=warn)
-//        # Default is no warning.
-// RUN:   (prt-opt=-fopenacc-ast-print=acc     none=none  warn=warn  noerr=none)
-// RUN:   (prt-opt=-fopenacc-print=acc         none=none  warn=warn  noerr=none)
-// RUN:   (prt-opt='-c -fopenacc'              none=none  warn=warn  noerr=none)
-// RUN: }
-// RUN: %data warn-opts {
-// RUN:   (warn-opt=                                      present=%[none] )
-// RUN:   (warn-opt=-Wopenacc-omp-update-present          present=%[warn] )
-// RUN:   (warn-opt=-Wopenacc-omp-ext                     present=%[warn] )
-// RUN:   (warn-opt=-Wno-error=openacc-omp-update-present present=%[noerr])
-// RUN:   (warn-opt=-Wno-error=openacc-omp-ext            present=%[noerr])
-// RUN:   (warn-opt=-Werror=openacc-omp-update-present    present=error   )
-// RUN:   (warn-opt=-Werror=openacc-omp-ext               present=error   )
-// RUN:   (warn-opt=-Wno-openacc-omp-update-present       present=none    )
-// RUN:   (warn-opt=-Wno-openacc-omp-ext                  present=none    )
-// RUN: }
-// RUN: %data present-opts {
-// RUN:   (present-opt=                                        verify=%[present])
-// RUN:   (present-opt=-fopenacc-update-present-omp=present    verify=%[present])
-// RUN:   (present-opt=-fopenacc-update-present-omp=no-present verify=none      )
-// RUN: }
-// RUN: %for prt-opts {
-// RUN:   %for warn-opts {
-// RUN:     %for present-opts {
-// RUN:       %clang %[prt-opt] %[warn-opt] %[present-opt] %s \
-// RUN:              -Xclang -verify=%[verify]
-// RUN:     }
-// RUN:   }
-// RUN: }
+// DEFINE: %{check-present-opt}( CFLAGS %, VERIFY %) =                         \
+// DEFINE:   : '------ VERIFY=%{VERIFY}; CFLAGS=%{CFLAGS} -------'          && \
+// DEFINE:   %clang %{CFLAGS} -Xclang -verify=%{VERIFY} %s > /dev/null
+
+// DEFINE: %{check-present-opts}( CFLAGS %, PRESENT %) =                                                 \
+//                                 CFLAGS                                               VERIFY
+// DEFINE:   %{check-present-opt}( %{CFLAGS}                                         %, %{PRESENT} %) && \
+// DEFINE:   %{check-present-opt}( %{CFLAGS} -fopenacc-update-present-omp=present    %, %{PRESENT} %) && \
+// DEFINE:   %{check-present-opt}( %{CFLAGS} -fopenacc-update-present-omp=no-present %, none       %)
+
+// DEFINE: %{check-warn-opts}( CFLAGS %, NONE %, WARN %, NOERR %) =                                   \
+//                                  CFLAGS                                             PRESENT
+// DEFINE:   %{check-present-opts}( %{CFLAGS}                                       %, %{NONE}  %) && \
+// DEFINE:   %{check-present-opts}( %{CFLAGS} -Wopenacc-omp-update-present          %, %{WARN}  %) && \
+// DEFINE:   %{check-present-opts}( %{CFLAGS} -Wopenacc-omp-ext                     %, %{WARN}  %) && \
+// DEFINE:   %{check-present-opts}( %{CFLAGS} -Wno-error=openacc-omp-update-present %, %{NOERR} %) && \
+// DEFINE:   %{check-present-opts}( %{CFLAGS} -Wno-error=openacc-omp-ext            %, %{NOERR} %) && \
+// DEFINE:   %{check-present-opts}( %{CFLAGS} -Werror=openacc-omp-update-present    %, error    %) && \
+// DEFINE:   %{check-present-opts}( %{CFLAGS} -Werror=openacc-omp-ext               %, error    %) && \
+// DEFINE:   %{check-present-opts}( %{CFLAGS} -Wno-openacc-omp-update-present       %, none     %) && \
+// DEFINE:   %{check-present-opts}( %{CFLAGS} -Wno-openacc-omp-ext                  %, none     %)
+
+//                          CFLAGS                         NONE     WARN     NOERR
+// Default is error.
+// RUN: %{check-warn-opts}( -fopenacc-ast-print=omp     %, error %, error %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-ast-print=acc-omp %, error %, error %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-ast-print=omp-acc %, error %, error %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-print=omp         %, error %, error %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-print=acc-omp     %, error %, error %, warn %)
+// RUN: %{check-warn-opts}( -fopenacc-print=omp-acc     %, error %, error %, warn %)
+//
+// Default is no warning.
+// RUN: %{check-warn-opts}( -fopenacc-ast-print=acc     %, none  %, warn  %, none %)
+// RUN: %{check-warn-opts}( -fopenacc-print=acc         %, none  %, warn  %, none %)
+// RUN: %{check-warn-opts}( -c -fopenacc                %, none  %, warn  %, none %)
 
 // END.
 

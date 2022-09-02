@@ -1,31 +1,32 @@
 // Check registration/unregistration scenarios involving OpenACC events that
 // share ompt_callback_target.
 
-// RUN: %data events {
-// RUN:   (event=NONE                    host-event=NONE                   )
-// RUN:   (event=ENTER_DATA_START        host-event=NONE                   )
-// RUN:   (event=ENTER_DATA_END          host-event=NONE                   )
-// RUN:   (event=EXIT_DATA_START         host-event=NONE                   )
-// RUN:   (event=EXIT_DATA_END           host-event=NONE                   )
-// RUN:   (event=COMPUTE_CONSTRUCT_START host-event=COMPUTE_CONSTRUCT_START)
-// RUN:   (event=COMPUTE_CONSTRUCT_END   host-event=COMPUTE_CONSTRUCT_END  )
-// RUN:   (event=ENQUEUE_LAUNCH_START    host-event=ENQUEUE_LAUNCH_START   )
-// RUN:   (event=ENQUEUE_LAUNCH_END      host-event=ENQUEUE_LAUNCH_END     )
-// RUN: }
 // RUN: %clang-acc -o %t.exe %s
-// RUN: %for events {
-// RUN:   env EVENT=%[event] %t.exe > %t.out 2> %t.err
-// RUN:   FileCheck -input-file %t.err -allow-empty -check-prefixes=ERR %s
-// RUN:   FileCheck -input-file %t.out %s \
-// RUN:     -match-full-lines -strict-whitespace -allow-empty \
-// RUN:     -implicit-check-not=acc_ev_ \
-// RUN:     -check-prefixes=%if-host(%[host-event],%[event]) \
-// RUN:     -DACC_DEVICE=acc_device_%dev-type-0-acc -DVERSION=%acc-version \
-// RUN:     -DOFF_DEV=0 -DTHREAD_ID=0 -DASYNC_QUEUE=-1 -DSRC_FILE=%s \
-// RUN:     -DLINE_NO=20000 -DEND_LINE_NO=20002 \
-// RUN:     -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=30000
-// RUN: }
-//
+
+// DEFINE: %{check}(EVENT %, HOST_EVENT %) =                                   \
+// DEFINE:   env EVENT=%{EVENT} %t.exe > %t.out 2> %t.err &&                   \
+// DEFINE:   FileCheck -input-file %t.err -allow-empty -check-prefixes=ERR     \
+// DEFINE:             %s &&                                                   \
+// DEFINE:   FileCheck -input-file %t.out %s                                   \
+// DEFINE:     -match-full-lines -strict-whitespace -allow-empty               \
+// DEFINE:     -implicit-check-not=acc_ev_                                     \
+// DEFINE:     -check-prefixes=%if-host<%{HOST_EVENT}|%{EVENT}>                \
+// DEFINE:     -DACC_DEVICE=acc_device_%dev-type-0-acc                         \
+// DEFINE:     -DVERSION=%acc-version -DOFF_DEV=0 -DTHREAD_ID=0                \
+// DEFINE:     -DASYNC_QUEUE=-1 -DSRC_FILE=%s                                  \
+// DEFINE:     -DLINE_NO=20000 -DEND_LINE_NO=20002                             \
+// DEFINE:     -DFUNC_LINE_NO=10000 -DFUNC_END_LINE_NO=30000
+
+// RUN: %{check}( NONE                    %, NONE                    %)
+// RUN: %{check}( ENTER_DATA_START        %, NONE                    %)
+// RUN: %{check}( ENTER_DATA_END          %, NONE                    %)
+// RUN: %{check}( EXIT_DATA_START         %, NONE                    %)
+// RUN: %{check}( EXIT_DATA_END           %, NONE                    %)
+// RUN: %{check}( COMPUTE_CONSTRUCT_START %, COMPUTE_CONSTRUCT_START %)
+// RUN: %{check}( COMPUTE_CONSTRUCT_END   %, COMPUTE_CONSTRUCT_END   %)
+// RUN: %{check}( ENQUEUE_LAUNCH_START    %, ENQUEUE_LAUNCH_START    %)
+// RUN: %{check}( ENQUEUE_LAUNCH_END      %, ENQUEUE_LAUNCH_END      %)
+
 // END.
 
 // expected-no-diagnostics

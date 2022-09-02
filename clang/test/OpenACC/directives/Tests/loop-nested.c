@@ -12,27 +12,23 @@
 // and they repeat them for orphaned loops, which we then assume will work fine
 // for the additional cases in this test file.
 //
-// RUN: %data cmbs {
-// RUN:   (cmb-cflags=      cmb=SEP)
-// RUN:   (cmb-cflags=-DCMB cmb=CMB)
-// RUN: }
-
 // FIXME: amdgcn doesn't yet support printf in a kernel.  Unfortunately, that
 // means our execution checks on amdgcn don't verify much except that nothing
 // crashes.
-//
-// RUN: %for cmbs {
-// RUN:   %acc-check-dmp{                                                      \
-// RUN:     clang-args: %[cmb-cflags];                                         \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[cmb]}
-// RUN:   %acc-check-prt{                                                      \
-// RUN:     clang-args: %[cmb-cflags];                                         \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[cmb]}
-// RUN:   %acc-check-exe{                                                      \
-// RUN:     clang-args: %[cmb-cflags]}
-// RUN: }
+
+// REDEFINE: %{all:clang:args} =
+// REDEFINE: %{dmp:fc:pres} = SEP
+// REDEFINE: %{prt:fc:pres} = SEP
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
+
+// REDEFINE: %{all:clang:args} = -DCMB
+// REDEFINE: %{dmp:fc:pres} = CMB
+// REDEFINE: %{prt:fc:pres} = CMB
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

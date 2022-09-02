@@ -17,18 +17,13 @@
 // and thus acc_register_library executes, so it seems worthwhile to make sure
 // ACC_PROFLIB works in all offload cases.
 
-// RUN: %data proflibs {
-// RUN:   (cpp=-DPROG=PROG_PROFLIB1 file=%t.proflib1)
-// RUN:   (cpp=-DPROG=PROG_PROFLIB2 file=%t.proflib2)
-// RUN: }
-// RUN: %for proflibs {
-// RUN:   %clang-lib %[cpp] %s -o %[file]
-// RUN: }
+// RUN: %clang-lib -DPROG=PROG_PROFLIB1 -o %t.proflib1 %s
+// RUN: %clang-lib -DPROG=PROG_PROFLIB2 -o %t.proflib2 %s
 // RUN: %clang-acc -DPROG=PROG_APP %s -o %t.exe
 // RUN: env ACC_PROFLIB='%t.proflib1;%t.proflib2' %t.exe > %t.out 2>&1
 // RUN: FileCheck -input-file %t.out %s \
 // RUN:   -match-full-lines -strict-whitespace \
-// RUN:   -check-prefixes=CHECK,%if-host(HOST,OFF)
+// RUN:   -check-prefixes=CHECK,%if-host<HOST|OFF>
 //
 // END.
 

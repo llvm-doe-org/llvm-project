@@ -2,9 +2,9 @@
 // of the pre-OpenMP-3.1 predetermined shared attribute for variables with
 // const-qualified type having no mutable members.
 
-// RUN: %acc-check-dmp{}
-// RUN: %acc-check-prt{}
-// RUN: %acc-check-exe{}
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

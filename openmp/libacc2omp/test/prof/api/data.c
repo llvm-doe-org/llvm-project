@@ -1,23 +1,23 @@
 // Check that all callbacks are dispatched in the correct order with the
 // correct data for the OpenACC Runtime Library API's data and memory management
 // routines.
-//
-// RUN: %data run-envs {
-// RUN:   (run-env=                                  host-or-off='%if-host(HOST,OFF)' copy=COPY-%dev-type-0-copy)
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' host-or-off=HOST                 copy=COPY-direct          )
-// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        host-or-off=HOST                 copy=COPY-direct          )
-// RUN: }
+
 // RUN: %clang-acc -o %t.exe %s
-// RUN: %for run-envs {
-// RUN:   %[run-env] %t.exe %[host-or-off] > %t.out 2> %t.err
-// RUN:   FileCheck -input-file %t.err -allow-empty -check-prefixes=ERR %s
-// RUN:   FileCheck -input-file %t.out %s \
-// RUN:     -match-full-lines -strict-whitespace \
-// RUN:     -implicit-check-not=acc_ev_ \
-// RUN:     -check-prefixes=CHECK,%[host-or-off],%[copy] \
-// RUN:     -DACC_DEVICE=acc_device_%dev-type-0-acc -DVERSION=%acc-version \
-// RUN:     -DTHREAD_ID=0 -DASYNC_QUEUE=-1
-// RUN: }
+
+// DEFINE: %{check}( RUN_ENV %, HOST_OR_OFF %, COPY %) =                       \
+// DEFINE:   %{RUN_ENV} %t.exe %{HOST_OR_OFF} > %t.out 2> %t.err &&            \
+// DEFINE:   FileCheck -input-file %t.err -allow-empty -check-prefixes=ERR     \
+// DEFINE:             %s &&                                                   \
+// DEFINE:   FileCheck -input-file %t.out %s                                   \
+// DEFINE:     -match-full-lines -strict-whitespace                            \
+// DEFINE:     -implicit-check-not=acc_ev_                                     \
+// DEFINE:     -check-prefixes=CHECK,%{HOST_OR_OFF},%{COPY}                    \
+// DEFINE:     -DACC_DEVICE=acc_device_%dev-type-0-acc -DVERSION=%acc-version  \
+// DEFINE:     -DTHREAD_ID=0 -DASYNC_QUEUE=-1
+
+// RUN: %{check}(                                 %, %if-host<HOST|OFF> %, COPY-%dev-type-0-copy %)
+// RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled %, HOST               %, COPY-direct           %)
+// RUN: %{check}( env ACC_DEVICE_TYPE=host        %, HOST               %, COPY-direct           %)
 //
 // END.
 

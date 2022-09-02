@@ -3,26 +3,27 @@
 // The diagnostics should be the same regardless of the enclosing OpenACC
 // construct.  We check all possible enclosing OpenACC constructs, and the test
 // is still quite fast.
-// RUN: %data {
-// RUN:   (cflags=-DOUTER_DIR=OUTER_DIR_NONE         )
-// RUN:   (cflags=-DOUTER_DIR=OUTER_DIR_DATA         )
-// RUN:   (cflags=-DOUTER_DIR=OUTER_DIR_PARALLEL     )
-// RUN:   (cflags=-DOUTER_DIR=OUTER_DIR_LOOP         )
-// RUN:   (cflags=-DOUTER_DIR=OUTER_DIR_PARALLEL_LOOP)
-// RUN:   (cflags=-DOUTER_DIR=OUTER_DIR_ROUTINE      )
-// RUN: }
-// RUN: %for {
-//        # OpenACC disabled
-// RUN:   %clang_cc1 -verify=noacc,expected-noacc %s %[cflags]
+
+// DEFINE: %{check}(CFLAGS%) =                                                 \
 //
-//        # OpenACC enabled
-// RUN:   %clang_cc1 -verify=expected,expected-noacc -fopenacc %s %[cflags]
+//           # OpenACC disabled
+// DEFINE:   %clang_cc1 -verify=noacc,expected-noacc %s %{CFLAGS} &&           \
 //
-//        # OpenACC enabled, but just repeat update clause tests while leaving
-//        # update implicit.
-// RUN:   %clang_cc1 -verify=expected,expected-noacc -fopenacc \
-// RUN:              -DCHECK_IMPLICIT_UPDATE %s %[cflags]
-// RUN: }
+//           # OpenACC enabled
+// DEFINE:   %clang_cc1 -verify=expected,expected-noacc -fopenacc %s           \
+// DEFINE:              %{CFLAGS} && \
+//
+//           # OpenACC enabled, but just repeat update clause tests while
+//           # leaving update implicit.
+// DEFINE:   %clang_cc1 -verify=expected,expected-noacc -fopenacc              \
+// DEFINE:              -DCHECK_IMPLICIT_UPDATE %s %{CFLAGS}
+
+// RUN: %{check}( -DOUTER_DIR=OUTER_DIR_NONE          %)
+// RUN: %{check}( -DOUTER_DIR=OUTER_DIR_DATA          %)
+// RUN: %{check}( -DOUTER_DIR=OUTER_DIR_PARALLEL      %)
+// RUN: %{check}( -DOUTER_DIR=OUTER_DIR_LOOP          %)
+// RUN: %{check}( -DOUTER_DIR=OUTER_DIR_PARALLEL_LOOP %)
+// RUN: %{check}( -DOUTER_DIR=OUTER_DIR_ROUTINE       %)
 
 // END.
 

@@ -5,27 +5,30 @@
 // When independent and gang are omitted, they're usually implicit.  Thus, test
 // code is almost identical across these cases, so it's easier to parameterize
 // the test code instead of repeat it entirely with minor differences.
-// RUN: %data extra-clauses {
-// RUN:   (independent=independent gang=gang fc-pres=IND,GANG      )
-// RUN:   (independent=            gang=gang fc-pres=NO-IND,GANG   )
-// RUN:   (independent=independent gang=     fc-pres=IND,NO-GANG   )
-// RUN:   (independent=            gang=     fc-pres=NO-IND,NO-GANG)
-// RUN: }
-// RUN: %for extra-clauses {
-// RUN:   %acc-check-dmp{                                                      \
-// RUN:     clang-args: -DINDEPENDENT=%[independent] -DGANG=%[gang];           \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[fc-pres]}
-// RUN:   %acc-check-prt{                                                      \
-// RUN:     clang-args: -DINDEPENDENT=%[independent] -DGANG=%[gang];           \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[fc-pres]}
-// RUN:   %acc-check-exe{                                                      \
-// RUN:     clang-args: -DINDEPENDENT=%[independent] -DGANG=%[gang];           \
-// RUN:     exe-args:   ;                                                      \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[fc-pres]}
-// RUN: }
+
+// REDEFINE: %{all:clang:args} = -DINDEPENDENT=independent -DGANG=gang
+// REDEFINE: %{all:fc:pres} = IND,GANG
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
+
+// REDEFINE: %{all:clang:args} = -DINDEPENDENT= -DGANG=gang
+// REDEFINE: %{all:fc:pres} = NO-IND,GANG
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
+
+// REDEFINE: %{all:clang:args} = -DINDEPENDENT=independent -DGANG=
+// REDEFINE: %{all:fc:pres} = IND,NO-GANG
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
+
+// REDEFINE: %{all:clang:args} = -DINDEPENDENT= -DGANG=
+// REDEFINE: %{all:fc:pres} = NO-IND,NO-GANG
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

@@ -4,11 +4,11 @@
 // different kinds of loops and how they dump and print, so here we just focus
 // on behavior of loops for a few representative cases.
 
-// RUN: %clang-acc %s -o %t.exe -DTGT_USE_STDIO=%if-tgt-stdio(1, 0) \
+// RUN: %clang-acc %s -o %t.exe -DTGT_USE_STDIO=%if-tgt-stdio<1|0> \
 // RUN:            -DTGT_%dev-type-0-OMP
 // RUN: %t.exe > %t.out 2>&1
 // RUN: FileCheck -input-file %t.out %s \
-// RUN:   -check-prefixes=EXE,EXE-%if-tgt-stdio(,NO-)TGT-USE-STDIO
+// RUN:   -check-prefixes=EXE,EXE-%if-tgt-stdio<|NO->TGT-USE-STDIO
 
 // END.
 

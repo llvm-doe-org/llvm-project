@@ -5,9 +5,9 @@
 // codegen.  We do not attempt to check every alias in every scenario as that
 // would make the test much slower and more difficult to maintain.
 
-// RUN: %acc-check-dmp{}
-// RUN: %acc-check-prt{}
-// RUN: %acc-check-exe{}
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

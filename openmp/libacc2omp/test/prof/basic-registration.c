@@ -6,7 +6,7 @@
 // RUN:   -match-full-lines -strict-whitespace -check-prefix=ERR
 // RUN: FileCheck -input-file %t.out %s \
 // RUN:   -match-full-lines -strict-whitespace \
-// RUN:   -implicit-check-not=acc_ev_ -check-prefixes=CHECK,%if-host(HOST,OFF)
+// RUN:   -implicit-check-not=acc_ev_ -check-prefixes=CHECK,%if-host<HOST|OFF>
 //
 // END.
 

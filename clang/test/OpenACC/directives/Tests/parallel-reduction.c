@@ -6,27 +6,20 @@
 // When ADD_LOOP_TO_PAR is set, it adds "loop" and a for loop to those "acc
 // parallel" directives in order to check gang reductions for combined "acc
 // parallel loop" directives.
-//
-// RUN: %data directives {
-// RUN:   (dir=PAR     dir-cflags=                  dir-loop=           )
-// RUN:   (dir=PARLOOP dir-cflags=-DADD_LOOP_TO_PAR dir-loop=' loop seq')
-// RUN: }
 
-// RUN: %for directives {
-// RUN:   %acc-check-dmp{                                                      \
-// RUN:     clang-args: %[dir-cflags];                                         \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[dir]}
-// RUN:   %acc-check-prt{                                                      \
-// RUN:     clang-args: %[dir-cflags];                                         \
-// RUN:     fc-args:    -DLOOP=%'dir-loop';                                    \
-// RUN:     fc-pres:    %[dir]}
-// RUN:   %acc-check-exe{                                                      \
-// RUN:     clang-args: %[dir-cflags];                                         \
-// RUN:     exe-args:   ;                                                      \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[dir]}
-// RUN: }
+// REDEFINE: %{all:clang:args} = 
+// REDEFINE: %{all:fc:pres} = PAR
+// REDEFINE: %{prt:fc:args} = -DLOOP=
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
+
+// REDEFINE: %{all:clang:args} = -DADD_LOOP_TO_PAR
+// REDEFINE: %{all:fc:pres} = PARLOOP
+// REDEFINE: %{prt:fc:args} = -DLOOP=' loop seq'
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

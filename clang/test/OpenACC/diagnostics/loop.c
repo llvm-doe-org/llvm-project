@@ -17,32 +17,30 @@
 // aliases we just run the entire test case once for each.  That seems the
 // easiest way to maintain this without losing cases.
 
-// RUN: %data {
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=present'           )
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=copy'              )
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=pcopy'             )
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=present_or_copy'   )
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=copyin'            )
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=pcopyin'           )
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=present_or_copyin' )
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=copyout'           )
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=pcopyout'          )
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=present_or_copyout')
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=create'            )
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=pcreate'           )
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=present_or_create' )
-// RUN:   (cflags='-DERR=ERR_ACC -DDATA=no_create'         )
-// RUN:   (cflags=-DERR=ERR_OMP_INIT                       )
-// RUN:   (cflags=-DERR=ERR_OMP_COND                       )
-// RUN:   (cflags=-DERR=ERR_OMP_INC                        )
-// RUN:   (cflags=-DERR=ERR_OMP_INC0                       )
-// RUN:   (cflags=-DERR=ERR_OMP_VAR                        )
-// RUN: }
-// RUN: %for {
-// RUN:   %clang_cc1 -fopenacc %[cflags] %s -verify=expected,orph,orph-sep        -DPARENT=PARENT_ORPHANED
-// RUN:   %clang_cc1 -fopenacc %[cflags] %s -verify=expected,sep,orph-sep,sep-cmb -DPARENT=PARENT_SEPARATE
-// RUN:   %clang_cc1 -fopenacc %[cflags] %s -verify=expected,cmb,sep-cmb          -DPARENT=PARENT_COMBINED
-// RUN: }
+// DEFINE: %{check}( CFLAGS %) =                                                                                 \
+// DEFINE:   %clang_cc1 -fopenacc %{CFLAGS} %s -verify=expected,orph,orph-sep        -DPARENT=PARENT_ORPHANED && \
+// DEFINE:   %clang_cc1 -fopenacc %{CFLAGS} %s -verify=expected,sep,orph-sep,sep-cmb -DPARENT=PARENT_SEPARATE && \
+// DEFINE:   %clang_cc1 -fopenacc %{CFLAGS} %s -verify=expected,cmb,sep-cmb          -DPARENT=PARENT_COMBINED
+
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=present            %)
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=copy               %)
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=pcopy              %)
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=present_or_copy    %)
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=copyin             %)
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=pcopyin            %)
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=present_or_copyin  %)
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=copyout            %)
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=pcopyout           %)
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=present_or_copyout %)
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=create             %)
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=pcreate            %)
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=present_or_create  %)
+// RUN: %{check}( -DERR=ERR_ACC -DDATA=no_create          %)
+// RUN: %{check}( -DERR=ERR_OMP_INIT                      %)
+// RUN: %{check}( -DERR=ERR_OMP_COND                      %)
+// RUN: %{check}( -DERR=ERR_OMP_INC                       %)
+// RUN: %{check}( -DERR=ERR_OMP_INC0                      %)
+// RUN: %{check}( -DERR=ERR_OMP_VAR                       %)
 //
 // END.
 

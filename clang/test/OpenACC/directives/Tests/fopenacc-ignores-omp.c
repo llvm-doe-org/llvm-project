@@ -10,10 +10,13 @@
 // means most of our execution checks on amdgcn don't verify much except that
 // nothing crashes.
 //
-// RUN: %acc-check-dmp{clang-args: -Wsource-uses-openmp}
-// RUN: %acc-check-prt{clang-args: -Wsource-uses-openmp}
-// RUN: %acc-check-prt{clang-args: -Wsource-uses-openmp -DONLY_IN_ACC}
-// RUN: %acc-check-exe-no-s2s{clang-args: -Wsource-uses-openmp}
+// REDEFINE: %{all:clang:args} = -Wsource-uses-openmp
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe-no-s2s}
+//
+// REDEFINE: %{all:clang:args} = -Wsource-uses-openmp -DONLY_IN_ACC
+// RUN: %{acc-check-prt}
 
 // END.
 

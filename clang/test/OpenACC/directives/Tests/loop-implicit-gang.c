@@ -9,12 +9,10 @@
 // means our execution checks on amdgcn don't verify much except that nothing
 // crashes.
 //
-// RUN: %acc-check-dmp{}
-// RUN: %acc-check-prt{}
-// RUN: %acc-check-exe{                                                        \
-// RUN:   clang-args: ;                                                        \
-// RUN:   exe-args:   ;                                                        \
-// RUN:   fc-args:    -match-full-lines}
+// REDEFINE: %{exe:fc:args-stable} = -match-full-lines
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

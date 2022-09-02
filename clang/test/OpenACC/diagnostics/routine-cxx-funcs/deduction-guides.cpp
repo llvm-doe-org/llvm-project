@@ -2,15 +2,13 @@
 //
 // C++14 is currently the default.  C++17 is required to recognize C++ template
 // argument deduction guides.
-//
-// RUN: %data {
-// RUN:   (opts='-std=c++14 -verify=expected,cxx14')
-// RUN:   (opts='-std=c++17 -verify=expected,cxx17')
-// RUN: }
-// RUN: %for {
-// RUN:   %clang_cc1 -fopenacc -Wno-openacc-and-cxx %[opts] %s \
-// RUN:       -fexceptions -fcxx-exceptions -Wno-unevaluated-expression
-// RUN: }
+
+// DEFINE: %{check}( OPTS %) =                                                 \
+// DEFINE:   %clang_cc1 -fopenacc -Wno-openacc-and-cxx %{OPTS} %s              \
+// DEFINE:       -fexceptions -fcxx-exceptions -Wno-unevaluated-expression
+
+// RUN:%{check}( -std=c++14 -verify=expected,cxx14 %)
+// RUN:%{check}( -std=c++17 -verify=expected,cxx17 %)
 //
 // END.
 

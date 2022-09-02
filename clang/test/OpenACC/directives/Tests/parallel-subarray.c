@@ -8,27 +8,33 @@
 // However, we can test that mapped elements can be written without crashing
 // and whether the written elements are copied back out.
 
-// RUN: %data clauses {
-// RUN:   (accc=copy    ompmt=ompx_hold,tofrom fc=C )
-// RUN:   (accc=copyin  ompmt=ompx_hold,to     fc=CI)
-// RUN:   (accc=copyout ompmt=ompx_hold,from   fc=CO)
-// RUN:   (accc=create  ompmt=ompx_hold,alloc  fc=CR)
-// RUN: }
+// REDEFINE: %{all:clang:args} = -DACCC=copy
+// REDEFINE: %{all:fc:pres} = C
+// REDEFINE: %{prt:fc:args} = -DACCC=copy -DOMPMT=ompx_hold,tofrom
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
-// RUN: %for clauses {
-// RUN:   %acc-check-dmp{                                                      \
-// RUN:     clang-args: -DACCC=%[accc];                                        \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[fc]}
-// RUN:   %acc-check-prt{                                                      \
-// RUN:     clang-args: -DACCC=%[accc];                                        \
-// RUN:     fc-args:    -DACCC=%[accc] -DOMPMT=%[ompmt]}
-// RUN:   %acc-check-exe{                                                      \
-// RUN:     clang-args: -DACCC=%[accc];                                        \
-// RUN:     exe-args:   ;                                                      \
-// RUN:     fc-args:    ;                                                      \
-// RUN:     fc-pres:    %[fc]}
-// RUN: }
+// REDEFINE: %{all:clang:args} = -DACCC=copyin
+// REDEFINE: %{all:fc:pres} = CI
+// REDEFINE: %{prt:fc:args} = -DACCC=copyin -DOMPMT=ompx_hold,to
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
+
+// REDEFINE: %{all:clang:args} = -DACCC=copyout
+// REDEFINE: %{all:fc:pres} = CO
+// REDEFINE: %{prt:fc:args} = -DACCC=copyout -DOMPMT=ompx_hold,from
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
+
+// REDEFINE: %{all:clang:args} = -DACCC=create
+// REDEFINE: %{all:fc:pres} = CR
+// REDEFINE: %{prt:fc:args} = -DACCC=create -DOMPMT=ompx_hold,alloc
+// RUN: %{acc-check-dmp}
+// RUN: %{acc-check-prt}
+// RUN: %{acc-check-exe}
 
 // END.
 

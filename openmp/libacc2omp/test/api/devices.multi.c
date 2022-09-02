@@ -5,20 +5,20 @@
 // these routines are correct as checked here, so don't use those environment
 // variables here.
 
-// RUN: %data run-envs {
-// RUN:   (run-env=                                  nd-x86_64=%x86_64-num-devs nd-ppc64le=%ppc64le-num-devs nd-nvptx64=%nvptx64-num-devs nd-amdgcn=%amdgcn-num-devs dev-type-init=%dev-type-0-acc nd-dev-type-init=%dev-type-0-num-devs)
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' nd-x86_64=0                nd-ppc64le=0                 nd-nvptx64=0                 nd-amdgcn=0                dev-type-init=host            nd-dev-type-init=1                   )
-// RUN: }
+// DEFINE: %{check}( RUN_ENV %, ND_X86_64 %, ND_PPC64LE %, ND_NVPTX64 %,       \
+// DEFINE:           ND_AMDGCN %, DEV_TYPE_INIT %, ND_DEV_TYPE_INIT %) =       \
+// DEFINE:   %{RUN_ENV} %t.exe > %t.out 2>&1 &&                                \
+// DEFINE:   FileCheck -input-file %t.out %s                                   \
+// DEFINE:     -strict-whitespace -match-full-lines                            \
+// DEFINE:     -DDEV_TYPE_INIT=acc_device_%{DEV_TYPE_INIT} -D#DEV_NUM_INIT=0   \
+// DEFINE:     -D#ND_DEV_TYPE_INIT=%{ND_DEV_TYPE_INIT}                         \
+// DEFINE:     -D#ND_NVIDIA=%{ND_NVPTX64} -D#ND_RADEON=%{ND_AMDGCN}            \
+// DEFINE:     -D#ND_X86_64=%{ND_X86_64} -D#ND_PPC64LE=%{ND_PPC64LE}
+
 // RUN: %clang-acc -o %t.exe %s
-// RUN: %for run-envs {
-// RUN:   %[run-env] %t.exe > %t.out 2>&1
-// RUN:   FileCheck -input-file %t.out %s \
-// RUN:     -strict-whitespace -match-full-lines \
-// RUN:     -DDEV_TYPE_INIT=acc_device_%[dev-type-init] -D#DEV_NUM_INIT=0 \
-// RUN:     -D#ND_DEV_TYPE_INIT=%[nd-dev-type-init] \
-// RUN:     -D#ND_NVIDIA=%[nd-nvptx64] -D#ND_RADEON=%[nd-amdgcn] \
-// RUN:     -D#ND_X86_64=%[nd-x86_64] -D#ND_PPC64LE=%[nd-ppc64le]
-// RUN: }
+//                RUN_ENV                            ND_X86_64           ND_PPC64LE           ND_NVPTX64           ND_AMDGCN           DEV_TYPE_INIT      ND_DEV_TYPE_INIT
+// RUN: %{check}(                                 %, %x86_64-num-devs %, %ppc64le-num-devs %, %nvptx64-num-devs %, %amdgcn-num-devs %, %dev-type-0-acc %, %dev-type-0-num-devs %)
+// RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled %, 0                %, 0                 %, 0                 %, 0                %, host            %, 1                    %)
 //
 // END.
 

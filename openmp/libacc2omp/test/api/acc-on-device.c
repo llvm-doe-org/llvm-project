@@ -12,37 +12,38 @@
 // RUN:   -DACC2OMP_ENUM_VARIANTS_SUPPORTED=0 %s
 
 // Check successful cases.
+// 
+// DEFINE: %{check-exe}( CONST_EXPR %, RUN_ENV %, OFF_TYPE %, EXE %, RUN_IF %) = \
+// DEFINE:   : '--------------------' &&                                         \
+// DEFINE:   : 'RUN_ENV: %{RUN_ENV}'  &&                                         \
+// DEFINE:   : 'EXE: %{EXE}'          &&                                         \
+// DEFINE:   : '--------------------' &&                                         \
+// DEFINE:   %{RUN_IF} %{RUN_ENV} %{EXE} > %t.out 2>&1 &&                        \
+// DEFINE:   %{RUN_IF} FileCheck -input-file=%t.out -match-full-lines %s         \
+// DEFINE:     -check-prefixes=CHECK,CHECK-%{OFF_TYPE}                           \
+// DEFINE:     -check-prefixes=CHECK-%{CONST_EXPR}                               \
+// DEFINE:     -check-prefixes=CHECK-%{CONST_EXPR}-%{OFF_TYPE}
 //
-// RUN: %data contexts {
-// RUN:   (context-cflags=                                                         const-expr=CONST-EXPR   )
-// RUN:   (context-cflags=-DACC2OMP_ENUM_VARIANTS_SUPPORTED=1                      const-expr=CONST-EXPR   )
-// RUN:   (context-cflags='-DACC2OMP_ENUM_VARIANTS_SUPPORTED=0 -DSKIP_CONST_EXPRS' const-expr=NO-CONST-EXPR)
-// RUN: }
-// RUN: %data run-envs {
-// RUN:   (run-env=                                  off-type=%dev-type-0-omp)
-// RUN:   (run-env='env OMP_TARGET_OFFLOAD=disabled' off-type=host           )
-// RUN:   (run-env='env ACC_DEVICE_TYPE=host'        off-type=host           )
-// RUN: }
-// RUN: %data exes {
-// RUN:   (exe=%t-noacc.exe run-if='%if-host(,:)')
-// RUN:   (exe=%t-s2s.exe   run-if=              )
-// RUN:   (exe=%t-trad.exe  run-if=              )
-// RUN: }
-// RUN: %for contexts {
-// RUN:   %if-host(,:) %clang-noacc %[context-cflags] -o %t-noacc.exe %s
-// RUN:   %clang-acc-prt-omp %[context-cflags] %s > %t-prt-omp.c
-// RUN:   %clang-omp %[context-cflags] -o %t-s2s.exe %t-prt-omp.c
-// RUN:   %clang-acc %[context-cflags] -o %t-trad.exe %s
-// RUN:   %for run-envs {
-// RUN:     %for exes {
-// RUN:       %[run-if] %[run-env] %[exe] > %t.out 2>&1
-// RUN:       %[run-if] FileCheck -input-file %t.out %s -match-full-lines \
-// RUN:         -check-prefixes=CHECK,CHECK-%[off-type] \
-// RUN:         -check-prefixes=CHECK-%[const-expr] \
-// RUN:         -check-prefixes=CHECK-%[const-expr]-%[off-type]
-// RUN:     }
-// RUN:   }
-// RUN: }
+// DEFINE: %{check-exes}( CONST_EXPR %, RUN_ENV %, OFF_TYPE %) =                                            \
+// DEFINE:   %{check-exe}( %{CONST_EXPR} %, %{RUN_ENV} %, %{OFF_TYPE} %, %t-noacc.exe %, %if-host<|:> %) && \
+// DEFINE:   %{check-exe}( %{CONST_EXPR} %, %{RUN_ENV} %, %{OFF_TYPE} %, %t-s2s.exe   %,              %) && \
+// DEFINE:   %{check-exe}( %{CONST_EXPR} %, %{RUN_ENV} %, %{OFF_TYPE} %, %t-trad.exe  %,              %)
+//
+// DEFINE: %{check-run-envs}( CONST_EXPR %) =                                                         \
+// DEFINE:   %{check-exes}( %{CONST_EXPR} %,                                 %, %dev-type-0-omp %) && \
+// DEFINE:   %{check-exes}( %{CONST_EXPR} %, env OMP_TARGET_OFFLOAD=disabled %, host            %) && \
+// DEFINE:   %{check-exes}( %{CONST_EXPR} %, env ACC_DEVICE_TYPE=host        %, host            %)
+//
+// DEFINE: %{check-context}( CONTEXT_CFLAGS %, CONST_EXPR %) =                 \
+// DEFINE:   %if-host<|:> %clang-noacc %{CONTEXT_CFLAGS} -o %t-noacc.exe %s && \
+// DEFINE:   %clang-acc-prt-omp %{CONTEXT_CFLAGS} %s > %t-prt-omp.c         && \
+// DEFINE:   %clang-omp %{CONTEXT_CFLAGS} -o %t-s2s.exe %t-prt-omp.c        && \
+// DEFINE:   %clang-acc %{CONTEXT_CFLAGS} -o %t-trad.exe %s                 && \
+// DEFINE:   %{check-run-envs}( %{CONST_EXPR} %)
+//
+// RUN: %{check-context}(                                                        %, CONST-EXPR    %)
+// RUN: %{check-context}( -DACC2OMP_ENUM_VARIANTS_SUPPORTED=1                    %, CONST-EXPR    %)
+// RUN: %{check-context}( -DACC2OMP_ENUM_VARIANTS_SUPPORTED=0 -DSKIP_CONST_EXPRS %, NO-CONST-EXPR %)
 
 // END.
 

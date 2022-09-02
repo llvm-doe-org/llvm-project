@@ -1,24 +1,20 @@
 // Check diagnostics for "acc routine".
 
-// RUN: %data {
-// RUN:   (cflags=-DCASE=CASE_WITHOUT_TRANSFORM)
-// RUN:   (cflags=-DCASE=CASE_WITH_TRANSFORM_0)
-// RUN:   (cflags=-DCASE=CASE_WITH_TRANSFORM_1)
-// RUN:   (cflags=-DCASE=CASE_WITH_TRANSFORM_2)
-// RUN:   (cflags=-DCASE=CASE_WITH_TRANSFORM_3)
-// RUN: }
+// DEFINE: %{check}( CFLAGS %) =                                               \
+//
+//           # OpenACC disabled
+// DEFINE:   %clang_cc1 -verify=noacc,expected-noacc                           \
+// DEFINE:       -Wno-gnu-alignof-expression %{CFLAGS} %s &&                   \
 
-// OpenACC disabled
-// RUN: %for {
-// RUN:   %clang_cc1 -verify=noacc,expected-noacc -Wno-gnu-alignof-expression \
-// RUN:     %[cflags] %s
-// RUN: }
+//           # OpenACC enabled
+// DEFINE:   %clang_cc1 -verify=expected,expected-noacc -fopenacc              \
+// DEFINE:     -Wno-gnu-alignof-expression %{CFLAGS} %s
 
-// OpenACC enabled
-// RUN: %for {
-// RUN:   %clang_cc1 -verify=expected,expected-noacc -fopenacc \
-// RUN:     -Wno-gnu-alignof-expression %[cflags] %s
-// RUN: }
+// RUN: %{check}( -DCASE=CASE_WITHOUT_TRANSFORM %)
+// RUN: %{check}( -DCASE=CASE_WITH_TRANSFORM_0  %)
+// RUN: %{check}( -DCASE=CASE_WITH_TRANSFORM_1  %)
+// RUN: %{check}( -DCASE=CASE_WITH_TRANSFORM_2  %)
+// RUN: %{check}( -DCASE=CASE_WITH_TRANSFORM_3  %)
 
 // END.
 
