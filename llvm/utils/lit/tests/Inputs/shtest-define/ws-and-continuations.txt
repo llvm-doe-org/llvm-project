@@ -63,6 +63,24 @@
 # CHECK:'Hello World'
 # CHECK:'<a b c> <d e>'
 
+# '%~' can be used to prevent whitespace trimming in the value or an actual arg.
+#
+#                                                v~~ intentional whitespace
+# DEFINE: %{non-trimmed-ws} = %~  abc    def   %~   
+#                                                      v~ intentional whitespace
+# DEFINE: %{non-trimmed-ws-fn}( P0 %) = %~   %{P0}   %~  
+# RUN: echo "'%{non-trimmed-ws}'"
+# RUN: echo "'%{non-trimmed-ws-fn}( %~  arg  %~ %)'"
+# CHECK:'  abc    def   '
+# CHECK:'     arg     '
+#
+# REDEFINE: %{non-trimmed-ws} =%~ Hello World %~
+# REDEFINE: %{non-trimmed-ws-fn}(P0%) =%~ %{P0} %~
+# RUN: echo "'%{non-trimmed-ws}'"
+# RUN: echo "'%{non-trimmed-ws-fn}(%~ arg %~%)'"
+# CHECK:' Hello World '
+# CHECK:'  arg  '
+
 # Line continuations in the value are permitted and collapse whitespace.
 #
 # DEFINE: %{value-continue} = abc\
@@ -79,6 +97,19 @@
 # REDEFINE: def
 # RUN: echo "'%{value-continue}'"
 # CHECK:'abc def'
+
+# '%~' can be used to prevent a '\' from indicating a line continuation so it
+# can be the last character in the value.
+#
+# DEFINE: %{ends-in-backslash} = \%~
+# RUN: echo "'%{ends-in-backslash}'"
+# CHECK:'\'
+#
+# REDEFINE: %{ends-in-backslash} = %~ \-\ \
+# REDEFINE:                           \_\ \
+# REDEFINE:                           \-\ %~
+# RUN: echo "'%{ends-in-backslash}'"
+# CHECK:' \-\ \_\ \-\ '
 
 # Line continuations in formal parameters and actual arguments are permitted.
 #

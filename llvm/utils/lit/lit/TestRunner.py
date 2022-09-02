@@ -1473,7 +1473,8 @@ def applySubstitutions(script, substitutions, recursion_limit=None):
                 # can come from preamble_commands
                 assert isinstance(dir, str)
                 line = dir
-            output.append(unescape(process(line)))
+            line = _caching_re_compile('%~').sub('', escape(process(line)))
+            output.append(unescape(line))
 
     return output
 

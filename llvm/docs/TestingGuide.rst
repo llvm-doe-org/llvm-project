@@ -619,6 +619,12 @@ RUN lines:
   immediately in ``RUN:``, ``DEFINE:``, and ``REDEFINE:`` directives.
   Occurrences in substitutions defined elsewhere are never expanded.
 
+``%~``
+
+  Replaced by the empty string after all substitution expansions have
+  completed. This can be used, for example, in ``DEFINE:`` and ``REDEFINE:``
+  directives to prevent whitespace from being trimmed from substitution values.
+
 **LLVM-specific substitutions:**
 
 ``%shlibext``
@@ -806,6 +812,12 @@ directives:
   and removes any other whitespace that is now adjacent to that space.  A
   continuation can be continued in the same manner.  A continuation containing
   only whitespace after its ``:`` is an error.
+- **Empty string substitution**: The directive treats the predefined
+  substitution ``%~`` as non-whitespace even though it ultimately expands to the
+  empty string.  Thus, ``%~`` can be placed before leading whitespace or after
+  trailing whitespace in the value to prevent them from being trimmed.  It can
+  also be placed after ``\`` so that ``\`` becomes the last character in the
+  value instead of specifying a line continuation.
 
 **Function substitutions:**
 
@@ -932,7 +944,9 @@ apply in the case of function substitutions:
   whitespace around a formal parameter name in the directive or around an actual
   argument in a use is optional and discarded.  If only whitespace is provided
   for an actual argument, the argument is the empty string.  This behavior
-  facilitates formatting parameter lists and argument lists for readability.
+  facilitates formatting parameter lists and argument lists for readability.  As
+  described in the previous section, the empty string substitution, ``%~``, can
+  be used to prevent whitespace trimming.
 - **Line continuations**: Line continuations are permitted in both formal
   parameter lists and actual argument lists.  This is because the text in a
   ``RUN:``, ``DEFINE:``, or ``REDEFINE:`` directive is not parsed until all line
