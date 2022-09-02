@@ -1223,6 +1223,7 @@ class SubstDirective(ScriptDirective):
         super().__init__(start_line_number, end_line_number, keyword)
         self.body = line
         self.name = None
+        self.params = None
         self.value = None
         self._parse_body()
     def add_continuation(self, line_number, keyword, line):
@@ -1249,7 +1250,7 @@ class SubstDirective(ScriptDirective):
         parts = self.body.split('=', 1)
         if len(parts) == 1:
             raise ValueError("Substitution's definition does not contain '='")
-        self.name = parts[0].strip()
+        lhs = parts[0].strip()
         self.value = parts[1].strip()
 
         # Check the substitution's name.
@@ -1267,15 +1268,98 @@ class SubstDirective(ScriptDirective):
         #
         # Actually, '{' and '}' are special if they contain only digits possibly
         # separated by a comma.  Requiring a leading letter avoids that.
-        if not re.fullmatch(r'%{[a-zA-Z][-_:0-9a-zA-Z]*}', self.name):
+        name_match = re.match(r'^%{[a-zA-Z][-_:0-9a-zA-Z]*}', lhs)
+        if not name_match:
             raise ValueError(
                 "Substitution name '{name}' is malformed as it must start with "
                 "'%{{', it must end with '}}', and the rest must must start "
                 "with a letter and contain only alphanumeric characters, "
                 "hyphens, underscores, and colons"
-                .format(name=self.name))
+                .format(name=lhs))
+        self.name = name_match.group(0)
+        param_list = lhs[name_match.end():]
+
+        # Parse any parameter list.
+        if not param_list:
+            return
+        if param_list[0] != '(':
+            raise ValueError(
+                "Substitution name '{name}' must be followed by '=' (possibly "
+                "with intervening whitespace) or by '(' (without intervening "
+                "whitespace)".format(name=self.name))
+        if param_list[-2:] != '%)':
+            raise ValueError("Parameter list of substitution '{name}' must end "
+                             "with '%)'".format(name=self.name))
+        self.params = param_list[1:-2].strip()
+        if not self.params:
+            raise ValueError(
+                "Substitution '{name}' must be defined with no parameter "
+                "list or at least one parameter".format(name=self.name))
+        self.params = self.params.split('%,')
+        for i, param in enumerate(self.params):
+            self.params[i] = param = param.strip()
+            notes = ''
+            # Parameter names must be valid python identifiers so we can use
+            # '(?P<param_name>...)' to match them.
+            if not re.fullmatch('[_a-zA-Z][_0-9a-zA-Z]*', param):
+                if re.search('[,\s]', param):
+                    notes += "\nParameter names must be separated by '%,'"
+                raise ValueError(
+                    "Parameter {i} of substitution '{name}' is malformed as it "
+                    "must be one or more alphanumeric characters and "
+                    "underscores not starting with a digit\n"
+                    "Parameter {i} is: {param}{notes}"
+                    .format(i=i+1, name=self.name, param=param, notes=notes))
     def adjust_substitutions(self, substitutions):
+        call_re = self.name
         value_repl = self.value.replace('\\', '\\\\')
+        if self.params:
+            params_re = ''
+            for param in self.params:
+                # Trailing empty actual arguments are *not* optional for a
+                # reason.  Imagine the behavior if they were optional and you
+                # accidentally typed ',' instead of '%,'.  That and the next
+                # intended actual argument would become part of the previous
+                # actual argument, and any additional actual arguments would map
+                # to the wrong formal parameters.  The result would be a
+                # confusing expansion.  However, because actual arguments are
+                # not optional, the effect instead is that the substitution
+                # doesn't expand, making it clearer that you simply botched the
+                # substitution syntax (or the expansion order is insufficient).
+                # The minor inconvenience of extra '%,' seems worth the improved
+                # debugability.
+                #
+                # Don't expand the substitution if an argument contains a call
+                # to another function-like substitution.  The problem is
+                # python's re is not powerful enough to balance parentheses, so
+                # we have no way to prevent the outer call from terminating at
+                # the end of the inner call or vice-versa.  Instead, we just
+                # prevent arguments from containing either the start or end of a
+                # call, and thus the inner call must expand first.  Substitution
+                # order or recursiveExpansionLimit might have to be adjusted in
+                # order for the outer call to then expand.
+                if params_re:
+                    params_re += '%,'
+                params_re += '\s*' # trim leading ws to facilitate formatting
+                params_re += '(?!\s)' # can't be followed by ws, or might have
+                                      # catastrophic backtracking
+                params_re += '(?P<' + param + '>' # start actual arg
+                params_re +=   '(?:'
+                params_re +=     '(?:'
+                params_re +=       '[^%]' # char that doesn't start an escape
+                params_re +=       '|%[^{,)]' # escape not special in arg list
+                params_re +=       '|%{(?![^}]+}\()' # '%{' but not '%{...}('
+                params_re +=     ')+' # require non-empty arg
+                params_re +=     '(?<!\s)' # non-empty arg can't end in ws, or
+                                           # might have catastrophic
+                                           # backtracking
+                params_re +=   ')?' # if no non-empty arg, skip previous assert,
+                                    # or it's impossible for arg to be only ws
+                params_re += ')'
+                params_re += '\s*' # trim trailing ws to facilitate formatting
+                value_repl = value_repl.replace('%{' + param + '}',
+                                                '\\g<' + param + '>')
+            call_re += '\(' + params_re + '%\)'
         existing = [i for i, subst in enumerate(substitutions)
                     if self.name in subst[0]]
         existing_res = ''.join("\nExisting pattern: " + substitutions[i][0]
@@ -1288,7 +1372,7 @@ class SubstDirective(ScriptDirective):
                     "{existing}"
                     .format(name=self.name, key=self.keyword,
                             loc=self.get_location(), existing=existing_res))
-            substitutions.insert(0, (self.name, value_repl))
+            substitutions.insert(0, (call_re, value_repl))
             return
         assert self.keyword == 'REDEFINE:'
         if len(existing) > 1:
@@ -1304,7 +1388,7 @@ class SubstDirective(ScriptDirective):
                 "directive {loc}"
                 .format(name=self.name, key=self.keyword,
                         loc=self.get_location()))
-        if substitutions[existing[0]][0] != self.name:
+        if substitutions[existing[0]][0] != call_re:
             raise ValueError(
                 "Existing substitution whose pattern contains '{name}' does "
                 "not have the pattern specified by '{key}' directive "
@@ -1312,9 +1396,9 @@ class SubstDirective(ScriptDirective):
                 "Expected pattern: {expected}"
                 "{existing}"
                 .format(name=self.name, key=self.keyword,
-                        loc=self.get_location(), expected=self.name,
+                        loc=self.get_location(), expected=call_re,
                         existing=existing_res))
-        substitutions[existing[0]] = (self.name, value_repl)
+        substitutions[existing[0]] = (call_re, value_repl)
 
 
 def applySubstitutions(script, substitutions, recursion_limit=None):
@@ -1918,9 +2002,13 @@ class PdataPforState(object):
                                                text)
                 else:
                     assert(isinstance(dir, SubstDirective))
+                    dir_body = dir.name
+                    if dir.params:
+                        dir_body += '(' + '%, '.join(dir.params) + '%)'
+                    dir_body += '=' + text
                     dir_new = SubstDirective(dir.start_line_number,
                                              dir.end_line_number, dir.keyword,
-                                             dir.name + '=' + text)
+                                             dir_body)
                 if len(self.pfors) > 1:
                     self.pfors[-2].output.append(dir_new)
                 else:

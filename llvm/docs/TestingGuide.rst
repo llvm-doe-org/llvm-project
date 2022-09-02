@@ -807,6 +807,174 @@ directives:
   continuation can be continued in the same manner.  A continuation containing
   only whitespace after its ``:`` is an error.
 
+**Function substitutions:**
+
+In the example from the previous section, notice that there are
+multiple blocks, one per triple, and each has a pair of uses of
+``%{check}``, one with and one without ``-fopenmp-simd``.  The test
+would be easier to read and maintain if that pair were encapsulated in
+another substitution.  However, that pair contains ``REDEFINE:``
+directives, and there is no way to place ``DEFINE:`` or ``REDEFINE:``
+directives in the value of a substitution.
+
+Lit supports function substitutions to address this use case.  For example, if
+we define ``%{check}`` as a function substitution, we can define a
+``%{check-triple}`` substitution that uses it multiple times with different
+parameters.  Unless we are using ``recursiveExpansionLimit``, we must be careful
+to define ``%{check}`` before ``%{check-triple}`` in order for both to expand as
+expected:
+
+.. code-block:: llvm
+
+    ; DEFINE: %{triple} =
+
+    ; DEFINE: %{check}( CFLAGS %, FC_PREFIX %) =                          \
+    ; DEFINE:   %clang_cc1 -verify -fopenmp -fopenmp-version=51 %{CFLAGS} \
+    ; DEFINE:              -triple %{triple} -emit-llvm -o - %s |         \
+    ; DEFINE:     FileCheck -check-prefix=%{FC_PREFIX} %s
+
+    ; DEFINE: %{check-triple} =                                           \
+    ; DEFINE:   %{check}(               %, CHECK %) &&                    \
+    ; DEFINE:   %{check}( -fopenmp-simd %, SIMD  %)
+
+    ; REDEFINE: %{triple} = x86_64-apple-darwin10.6.0
+    ; RUN: %{check-triple}
+
+    ; REDEFINE: %{triple} = x86_64-unknown-linux-gnu
+    ; RUN: %{check-triple}
+
+Notice that ``%{check}`` has two kinds of parameters now:
+``%{CFLAGS}`` and ``%{FC_PREFIX}`` are function parameters, but
+``%{triple}`` is still a standalone parameter substitution that must
+be initially defined before ``%{check}`` unless we are using
+``recursiveExpansionLimit``.
+
+Because function substitutions are usually more composable, you might
+decide that any parameterized substitution is best written as a
+function substitution.  For example, ``%{check-triple}`` above could
+be converted to a function substitution as well:
+
+.. code-block:: llvm
+
+    ; DEFINE: %{check}( TRIPLE %, CFLAGS %, FC_PREFIX %) =                \
+    ; DEFINE:   %clang_cc1 -verify -fopenmp -fopenmp-version=51 %{CFLAGS} \
+    ; DEFINE:              -triple %{TRIPLE} -emit-llvm -o - %s |         \
+    ; DEFINE:     FileCheck -check-prefix=%{FC_PREFIX} %s
+
+    ; DEFINE: %{check-triple}( TRIPLE %) =                                \
+    ; DEFINE:   %{check}( %{TRIPLE} %,               %, CHECK %) &&       \
+    ; DEFINE:   %{check}( %{TRIPLE} %, -fopenmp-simd %, SIMD  %)
+
+    ; RUN: %{check-triple}( x86_64-apple-darwin10.6.0 %)
+    ; RUN: %{check-triple}( x86_64-unknown-linux-gnu  %)
+
+For a complex substitution with a long list of parameters, it is
+sometimes more readable if at least some of its parameters remain as
+standalone substitutions.  As in the original example from the
+previous section, actual arguments are then optional, and they are
+recognized by their formal parameter names instead of by their
+positions in a long sequence of actual arguments.
+
+If you end up with too many levels of substitutions, debugging test
+failures can be challenging because the only location information lit
+reports in the test output is for the ``RUN:`` line.  ``%(line)``
+substitutions can improve this scenario.  For example, because
+``%(line)`` expands immediately within a ``DEFINE:``, ``REDEFINE:``,
+or ``RUN:`` directive, it can be used to gather location information
+at every level of the expansion, and that information can then be
+reported with a command like ``echo``:
+
+.. code-block:: llvm
+
+    ; DEFINE: %{check}( LOC %, TRIPLE %, CFLAGS %, FC_PREFIX %) =         \
+    ; DEFINE:   echo 'At test lines %{LOC}, %(line)' &&                   \
+    ; DEFINE:   %clang_cc1 -verify -fopenmp -fopenmp-version=51 %{CFLAGS} \
+    ; DEFINE:              -triple %{TRIPLE} -emit-llvm -o - %s |         \
+    ; DEFINE:     FileCheck -check-prefix=%{FC_PREFIX} %s
+
+    ; DEFINE: %{check-triple}( LOC %, TRIPLE %) =                                      \
+    ; DEFINE:   %{check}( %{LOC}, %(line) %, %{TRIPLE} %,               %, CHECK %) && \
+    ; DEFINE:   %{check}( %{LOC}, %(line) %, %{TRIPLE} %, -fopenmp-simd %, SIMD  %)
+
+    ; RUN: %{check-triple}( %(line) %, x86_64-apple-darwin10.6.0 %)
+    ; RUN: %{check-triple}( %(line) %, x86_64-unknown-linux-gnu  %)
+
+If your test suite is configured to use lit's internal shell, you can
+portably replace ``echo`` with the ``:`` command so that the location
+information is reported only when lit prints the command and not again
+when lit executes the command.
+
+As a modification of the rules presented in the previous section for
+``DEFINE:`` and ``REDEFINE:`` directives, the following properties
+apply in the case of function substitutions:
+
+- **Structural syntax**: In the directive, ``%{name}`` must be followed
+  immediately by ``(`` without intervening whitespace.  That is, ``%{name}(`` is
+  a single token.  The same is true in uses of the substitution.  Formal
+  parameter names in the directive appear after ``%{name}(`` and must be
+  separated by ``%,`` and terminated by ``%)``.  The same is true for actual
+  arguments in uses.  In the directive, there must be at least one formal
+  parameter.  If either ``%,`` or ``%)`` must occur in an actual argument, it
+  can be escaped as ``%%,`` or ``%%)``.  However, ``,`` and ``)`` need not be
+  otherwise escaped.  For example, an actual argument can easily contain a
+  comma-delimited list of FileCheck prefixes, or it can contain parenthesized
+  expressions.
+- **Parameter names**: Each parameter name must be one or more alphanumeric
+  characters and underscores not starting with a digit.  Parameter names do not
+  have the same set of constraints as substitution names because parameter names
+  must be valid python identifiers in order to be used in the substitution's
+  pattern.  In the formal parameter list in the directive, parameters are
+  spelled without the enclosing ``%{`` and ``}`` for the sake of conciseness and
+  readability.  However, they must include those when referenced in the
+  substitution's value.
+- **Whitespace**: In the directive, whitespace before the ``%{name}(`` and
+  between the ``%)`` and ``=`` is optional and discarded.  Leading and trailing
+  whitespace around a formal parameter name in the directive or around an actual
+  argument in a use is optional and discarded.  If only whitespace is provided
+  for an actual argument, the argument is the empty string.  This behavior
+  facilitates formatting parameter lists and argument lists for readability.
+- **Line continuations**: Line continuations are permitted in both formal
+  parameter lists and actual argument lists.  This is because the text in a
+  ``RUN:``, ``DEFINE:``, or ``REDEFINE:`` directive is not parsed until all line
+  continuations have been appended.
+- **Invalid syntax**: Lit diagnoses invalid parameter list syntax in the
+  directive.  However, lit does not diagnose invalid actual argument list syntax
+  in uses.  Instead, if the syntax for a use is not followed, the substitution's
+  pattern simply does not match, and so the substitution does not expand, just
+  like any other substitution.
+- **Required actual arguments**: All arguments must appear in a use, or the
+  substitution does not expand.  This behavior facilitates debugging expansions
+  by making it clear which substitution needs to be investigated.  In contrast,
+  imagine the behavior if trailing arguments were optional and you accidentally
+  type ``,`` instead of ``%,``.  All remaining actual arguments would map to the
+  wrong formal parameters, and the only clue as to the problem would likely be a
+  corrupt ``RUN:`` line.
+- **Substitution name conflicts**: As discussed in the previous section,
+  ``DEFINE:`` and ``REDEFINE:`` are careful to make sure ``%{name}`` doesn't
+  appear in any other substitution's pattern.  For function substitutions, the
+  parameter list is not included in this check.  That is, the ``%{name}`` alone
+  is enough to create a conflict.  As a result, overloading functions is not
+  possible.  This restriction facilitates debugging in the same way as requiring
+  all arguments.
+- **Parameter name conflicts**: When ``REDEFINE:`` searches the substitution
+  list for the substitution to actually redefine, it does check the parameters.
+  It will fail even if a parameter name changes.  That is, the parameter names
+  are part of the substitution's pattern, and the pattern must be identical.
+- **Function substitution use in argument**: A use of a function substitution,
+  such as ``%{outer}``, will initially fail to expand if an argument contains
+  text, such as ``%{inner}(``, that lexically looks like the start of a function
+  substitution use.  The problem is python's ``re`` package is not powerful
+  enough to balance parentheses in a single pattern match.  Thus, a function
+  substitution's pattern is designed to require the use of ``%{inner}`` to
+  expand first, and then the use of ``%{outer}`` can expand later, achieving
+  parentheses balancing via multiple pattern matches.  However, by default, this
+  means the ``DEFINE:`` directive order must be ``%{outer}`` before
+  ``%{inner}``.  That might be hard to remember, so it is probably best to use
+  ``recursiveExpansionLimit`` if you plan to use one function substitution in
+  the argument of another.  A more powerful regular expression engine for python
+  that is capable of recursion appears to be in development, so this limitation
+  might one day be eliminated.
+
 Options
 -------
 

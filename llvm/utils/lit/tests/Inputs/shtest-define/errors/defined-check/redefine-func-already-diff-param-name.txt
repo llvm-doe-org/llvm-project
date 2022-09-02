@@ -1,0 +1,10 @@
+# DEFINE: %{foo}( PARAM0 %) = %{PARAM0}
+# REDEFINE: %{foo}( PARAM1 %) = %{PARAM1}
+# RUN: echo %{foo}
+
+#      CHECK: ValueError: Existing substitution whose pattern contains '%{foo}' does not have the pattern specified by '{{REDEFINE}}:' directive at line [[#@LINE-3]]
+# CHECK-NEXT: Expected pattern: %{foo}\({{.*PARAM1.*}}\)
+# CHECK-NEXT: Existing pattern: %{foo}\({{.*PARAM0.*}}\)
+#  CHECK-NOT: Existing pattern:
+
+# CHECK: Unresolved: 1

@@ -1,0 +1,11 @@
+# A parameter name must be a valid python identifier for the function
+# substitution's pattern to work, and leading digits are not permitted.
+
+# DEFINE: %{foo}( 0PARAM %) = %{0PARAM}
+# RUN: echo %{foo}
+
+#      CHECK: Parameter 1 of substitution '%{foo}' is malformed as {{.*}}
+# CHECK-NEXT: Parameter 1 is: 0PARAM
+# CHECK-NEXT: in {{DEFINE}}: directive on test line [[#@LINE-5]]
+
+# CHECK: Unresolved: 1

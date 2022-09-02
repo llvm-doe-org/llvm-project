@@ -4,46 +4,99 @@
 # DEFINE: %{empty}=
 # RUN: echo "'%{empty}'"
 # CHECK:''
+#
+# REDEFINE: %{empty}=
+# RUN: echo "'%{empty}'"
+# CHECK:''
+
+# A value consisting only of whitespace is trimmed to the empty string.
+#
+#               v~~ intentional whitespace
+# DEFINE: %{ws}=   
+# RUN: echo "'%{ws}'"
+# CHECK:''
+#
+#                 v intentional whitespace
+# REDEFINE: %{ws}= 
+# RUN: echo "'%{ws}'"
+# CHECK:''
 
 # White space is not required around the name or value.
 #
-# DEFINE:%{no-whitespace}=abc
-# RUN: echo "'%{no-whitespace}'"
+# DEFINE:%{non-ws}=abc
+# RUN: echo "'%{non-ws}'"
 # CHECK:'abc'
 #
-# REDEFINE:%{no-whitespace}=HelloWorld
-# RUN: echo "'%{no-whitespace}'"
+# REDEFINE:%{non-ws}=HelloWorld
+# RUN: echo "'%{non-ws}'"
 # CHECK:'HelloWorld'
 
-# Exact white space is preserved within the value, but whitespace enclosing the
-# name or value is discarded.  ('%{' and '}' are part of the name, and
-# whitespace in between isn't permitted.)
+# White space is not required around formal parameters or arguments.
 #
-#                                       v~~ intentional whitespace
-# DEFINE:   %{whitespace}  =  abc    def   
-# RUN: echo "'%{whitespace}'"
+# DEFINE:%{non-ws-fn}(P0%,P1%,P2%)=non-ws-fn(%{P0},%{P1},%{P2})
+# RUN: echo "'%{non-ws-fn}(a%,b%,c%)'"
+# CHECK:'non-ws-fn(a,b,c)'
+#
+# REDEFINE:%{non-ws-fn}(P0%,P1%,P2%)=non-ws-fn(%{P2},%{P1},%{P0})
+# RUN: echo "'%{non-ws-fn}(a%,b%,c%)'"
+# CHECK:'non-ws-fn(c,b,a)'
+
+# Exact white space is preserved within the value or an actual arg, but
+# whitespace enclosing the name, the value, a formal parameter, or an actual arg
+# is discarded.  ('%{' and '}' are part of the name, and whitespace in between
+# isn't permitted.)
+#
+#                                      v~~ intentional whitespace
+# DEFINE:   %{ws-non-ws}  =  abc    def   
+#                                                                v~ intentional whitespace
+# DEFINE:   %{ws-non-ws-fn}(  P0 %, P1  %)  =  <%{P0}>    <%{P1}>  
+# RUN: echo "'%{ws-non-ws}'"
+# RUN: echo "'%{ws-non-ws-fn}(      abc  def     %,    ghi     jkl         %)'"
 # CHECK:'abc    def'
-#                                      v intentional whitespace
-# REDEFINE: %{whitespace} = Hello World 
-# RUN: echo "'%{whitespace}'"
+# CHECK:'<abc  def>    <ghi     jkl>'
+#                                     v intentional whitespace
+# REDEFINE: %{ws-non-ws} = Hello World 
+#                                                         v intentional whitespace
+# REDEFINE: %{ws-non-ws-fn}( P0 %, P1 %) = <%{P0}> <%{P1}> 
+# RUN: echo "'%{ws-non-ws}'"
+# RUN: echo "'%{ws-non-ws-fn}( a b c %, d e %)'"
 # CHECK:'Hello World'
+# CHECK:'<a b c> <d e>'
 
 # Line continuations in the value are permitted and collapse whitespace.
 #
-# DEFINE: %{continue} = abc\
+# DEFINE: %{value-continue} = abc\
 # DEFINE:def \
 # DEFINE:ghi\
 # DEFINE: jkl \
 # DEFINE: mno  \
 # DEFINE:  pqr 
 #             ^ intentional whitespace
-# RUN: echo "'%{continue}'"
+# RUN: echo "'%{value-continue}'"
 # CHECK:'abc def ghi jkl mno pqr'
 #
-# REDEFINE: %{continue} =  abc  \
+# REDEFINE: %{value-continue} =  abc  \
 # REDEFINE: def
-# RUN: echo "'%{continue}'"
+# RUN: echo "'%{value-continue}'"
 # CHECK:'abc def'
+
+# Line continuations in formal parameters and actual arguments are permitted.
+#
+# DEFINE: %{params-continue}(                                                  \
+# DEFINE:                     PARAM0 %, PARAM1 %, PARAM2  %, PARAM3  %,        \
+# DEFINE:                     PARAM4 %, PARAM5 %, PARAM6  %, PARAM7  %,        \
+# DEFINE:                     PARAM8 %, PARAM9 %, PARAM10 %, PARAM11 %) =      \
+# DEFINE:   %{PARAM0} %{PARAM1} %{PARAM2} %{PARAM3}                            \
+# DEFINE:   %{PARAM4} %{PARAM5} %{PARAM6} %{PARAM7}                            \
+# DEFINE:   %{PARAM8} %{PARAM9} %{PARAM10} %{PARAM11}
+# RUN: echo "'%{params-continue}(          \
+# RUN:                           a %, b %, \
+# RUN:                           c %, d %, \
+# RUN:                           e %, f %, \
+# RUN:                           g %, h %, \
+# RUN:                           i %, j %, \
+# RUN:                           k %, l %)'"
+# CHECK:'a b c d e f g h i j k l'
 
 # Whitespace at the end of the line after a '\' is ignored, and it's treated as
 # a line continuation.  Otherwise, the behavior would be hard to understand

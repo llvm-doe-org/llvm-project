@@ -1,0 +1,84 @@
+# Check that expansion only happens with the correct number of actual arguments
+# and that empty arguments are fine.
+
+# DEFINE: %{f1}( p0             %) = f1('%{p0}')
+# DEFINE: %{f2}( p0 %, p1       %) = f2('%{p0}', '%{p1}')
+# DEFINE: %{f3}( p0 %, p1 %, p2 %) = f3('%{p0}', '%{p1}', '%{p2}')
+
+# RUN: echo "%{f1}(%)"
+# RUN: echo "%{f1}(f%)"
+# RUN: echo "%{f1}(fgh%)"
+# RUN: echo "%{f1}(%,)"
+# RUN: echo "%{f1}(f%,)"
+# RUN: echo "%{f1}(f%,g)"
+# RUN: echo "%{f1}(f%,g%,h)"
+# CHECK: f1('')
+# CHECK: f1('f')
+# CHECK: f1('fgh')
+# CHECK: %{f1}(%,)
+# CHECK: %{f1}(f%,)
+# CHECK: %{f1}(f%,g)
+# CHECK: %{f1}(f%,g%,h)
+
+# RUN: echo "%{f2}(%)"
+# RUN: echo "%{f2}(f%)"
+# RUN: echo "%{f2}(%,%)"
+# RUN: echo "%{f2}(f%,%)"
+# RUN: echo "%{f2}(%,g%)"
+# RUN: echo "%{f2}(f%,g%)"
+# RUN: echo "%{f2}(fgh%,ghi%)"
+# RUN: echo "%{f2}(%,%,%)"
+# RUN: echo "%{f2}(f%,%,%)"
+# RUN: echo "%{f2}(f%,g%,%)"
+# RUN: echo "%{f2}(f%,g%,h%)"
+# RUN: echo "%{f2}(f%,g%,h%,i%)"
+# CHECK: %{f2}(%)
+# CHECK: %{f2}(f%)
+# CHECK: f2('', '')
+# CHECK: f2('f', '')
+# CHECK: f2('', 'g')
+# CHECK: f2('f', 'g')
+# CHECK: f2('fgh', 'ghi')
+# CHECK: %{f2}(%,%,%)
+# CHECK: %{f2}(f%,%,%)
+# CHECK: %{f2}(f%,g%,%)
+# CHECK: %{f2}(f%,g%,h%)
+# CHECK: %{f2}(f%,g%,h%,i%)
+
+# RUN: echo "%{f3}(%)"
+# RUN: echo "%{f3}(%,%)"
+# RUN: echo "%{f3}(f%,g%)"
+# RUN: echo "%{f3}(%,%,%)"
+# RUN: echo "%{f3}(%,%,%)"
+# RUN: echo "%{f3}(f%,%,%)"
+# RUN: echo "%{f3}(%,g%,%)"
+# RUN: echo "%{f3}(%,%,h%)"
+# RUN: echo "%{f3}(f%,g%,%)"
+# RUN: echo "%{f3}(f%,%,h%)"
+# RUN: echo "%{f3}(%,g%,h%)"
+# RUN: echo "%{f3}(f%,g%,h%)"
+# RUN: echo "%{f3}(fgh%,ghi%,hij%)"
+# RUN: echo "%{f3}(%,%,%,%)"
+# RUN: echo "%{f3}(f%,%,%,%)"
+# RUN: echo "%{f3}(f%,g%,%,%)"
+# RUN: echo "%{f3}(f%,g%,h%,%)"
+# RUN: echo "%{f3}(f%,g%,h%,i%)"
+# CHECK: %{f3}(%)
+# CHECK: %{f3}(%,%)
+# CHECK: %{f3}(f%,g%)
+# CHECK: f3('', '', '')
+# CHECK: f3('f', '', '')
+# CHECK: f3('', 'g', '')
+# CHECK: f3('', '', 'h')
+# CHECK: f3('f', 'g', '')
+# CHECK: f3('f', '', 'h')
+# CHECK: f3('', 'g', 'h')
+# CHECK: f3('f', 'g', 'h')
+# CHECK: f3('fgh', 'ghi', 'hij')
+# CHECK: %{f3}(%,%,%,%)
+# CHECK: %{f3}(f%,%,%,%)
+# CHECK: %{f3}(f%,g%,%,%)
+# CHECK: %{f3}(f%,g%,h%,%)
+# CHECK: %{f3}(f%,g%,h%,i%)
+
+# CHECK: Passed: 1

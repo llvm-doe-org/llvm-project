@@ -1,4 +1,4 @@
-# DEFINE: %{name}:=value
+# DEFINE: %{name} ( PARAM %) = value
 # RUN: echo %{name}
 
 #      CHECK: Substitution name '%{name}' must be followed by '=' (possibly with intervening whitespace) or by '(' (without intervening whitespace)

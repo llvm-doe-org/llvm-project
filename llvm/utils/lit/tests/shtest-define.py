@@ -15,11 +15,35 @@
 # DEFINE:     FileCheck -match-full-lines %{fc-args} %{my-inputs}/%{test}
 # DEFINE: %{run-and-record-test} = %{run-test} && %{record-test}
 
+# REDEFINE: %{test} = actual-arg-catastrophic-backtracking.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = actual-arg-count.txt
+# RUN: %{run-and-record-test}
+
+# REDEFINE: %{test} = actual-arg-special-chars.txt
+#
+# REDEFINE: %{fc-args} = -check-prefixes=CHECK,CHECK-NON-RECUR
+# RUN: %{run-test}
+#
+# REDEFINE: %{lit-args} = -Drecur=2
+# REDEFINE: %{fc-args} = -check-prefixes=CHECK,CHECK-RECUR
+# RUN: %{run-test}
+#
+# RUN: %{record-test}
+# REDEFINE: %{lit-args} =
+# REDEFINE: %{fc-args} =
+
 # REDEFINE: %{lit-pre} = not
 #
+# REDEFINE: %{test} = errors/assignment/bare-comma.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/assignment/bare-rparen.txt
+# RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/assignment/before-name.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/assignment/between-name-equals.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/assignment/between-name-lparen.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/assignment/braces-empty.txt
 # RUN: %{run-and-record-test}
@@ -35,9 +59,23 @@
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/assignment/empty.txt
 # RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/assignment/no-comma.txt
+# RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/assignment/no-equals.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/assignment/no-name.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/assignment/no-rparen.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/assignment/param-list-is-empty-string.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/assignment/param-list-is-ws.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/assignment/param-name-leading-digit.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/assignment/param-name-with-braces.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/assignment/param-name-with-dash.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/assignment/ws-only.txt
 # RUN: %{run-and-record-test}
@@ -71,21 +109,39 @@
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/defined-check/define-already-by-test.txt
 # RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/defined-check/define-func-already-diff-param-count.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/defined-check/define-func-already-diff-param-name.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/defined-check/define-func-already-non-func.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/defined-check/define-func-already.txt
+# RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/defined-check/define-inside-pattern.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/defined-check/define-multiple-exact.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/defined-check/define-multiple-once-exact.txt
 # RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/defined-check/define-non-func-already-func.txt
+# RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/defined-check/define-prefixes-pattern.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/defined-check/define-suffixes-pattern.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/defined-check/redefine-func-already-diff-param-count.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/defined-check/redefine-func-already-diff-param-name.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/defined-check/redefine-func-already-non-func.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/defined-check/redefine-inside-pattern.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/defined-check/redefine-multiple-exact.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/defined-check/redefine-multiple-once-exact.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/defined-check/redefine-non-func-already-func.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/defined-check/redefine-none.txt
 # RUN: %{run-and-record-test}
@@ -100,6 +156,12 @@
 #
 # REDEFINE: %{lit-pre} =
 
+# REDEFINE: %{test} = examples/function-subst-with-locs.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = examples/function-subst.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = examples/param-and-function-subst.txt
+# RUN: %{run-and-record-test}
 # REDEFINE: %{test} = examples/param-subst.txt
 # RUN: %{run-and-record-test}
 

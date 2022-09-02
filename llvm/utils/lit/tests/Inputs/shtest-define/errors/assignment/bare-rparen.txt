@@ -1,0 +1,7 @@
+# DEFINE: %{name}(PARAM1) = value
+# RUN: echo %{name}
+
+#      CHECK: Parameter list of substitution '%{name}' must end with '%)'
+# CHECK-NEXT: in {{DEFINE}}: directive on test line 1
+
+# CHECK: Unresolved: 1

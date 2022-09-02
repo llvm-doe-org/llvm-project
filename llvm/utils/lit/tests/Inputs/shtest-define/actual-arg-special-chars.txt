@@ -1,0 +1,107 @@
+# Check that various sequences that are or look relevant to function
+# substitutions behave correctly within actual arguments:
+#
+# - {name}(
+# - (
+# - ,
+# - )
+# - %{name}(
+# - %(
+# - %,
+# - %)
+# - %%{name}(
+# - %%(
+# - %%,
+# - %%)
+
+# %{fn}, %{call-a-b}, and substitutions defined before and after them.
+#
+# DEFINE: %{expand-last-fn}(p0 %, p1%) = expand-last-fn(%{p0},%{p1})
+# DEFINE: %{expand-last-str} = Goodbye world
+# DEFINE: %{fn}(p0 %, p1 %, p2%)=fn('%{p0}', '%{p1}', '%{p2}')
+# DEFINE: %{call-a-b}( FUNC %) = %{FUNC}( a %, b %)
+# DEFINE: %{expand-first-fn}(p0 %, p1%) = expand-first-fn(%{p0},%{p1})
+# DEFINE: %{expand-first-str} = Hello world
+
+# Try each of these sequences in args: {name}( ( , )
+#
+# RUN: echo "%{fn}( {expand-first-fn}(foo, bar)%, (foo,%, ,bar)%)"
+# CHECK: fn('{expand-first-fn}(foo, bar)', '(foo,', ',bar)')
+
+# Make sure non-function substitutions are always fine in an arg.  However,
+# sorry, before they expand, they prevent expansion of the actual function use
+# if they lexically look like function uses too: %{name}(
+#
+# RUN: echo "%{fn}( %{expand-first-str}() %, %{expand-first-str}( %, %) %, %)"
+# RUN: echo "%{fn}( %{expand-last-str}() %, %{expand-last-str}( %, %) %, %)"
+#           CHECK: fn('Hello world()', 'Hello world(', '') %, %)
+# CHECK-NON-RECUR: %{fn}( Goodbye world() %, Goodbye world( %, %) %, %)
+#     CHECK-RECUR: fn('Goodbye world()', 'Goodbye world(', '') %, %)
+
+# '%(' is not special.  '%{name}%(' does not look like a function use.
+#
+# RUN: echo "%{fn}( %{expand-first-str}%() %, %{expand-first-str}%( %, %) %, %)"
+# RUN: echo "%{fn}( %{expand-last-str}%() %, %{expand-last-str}%( %, %) %, %)"
+# CHECK: fn('Hello world%()', 'Hello world%(', '') %, %)
+# CHECK: fn('Goodbye world%()', 'Goodbye world%(', '') %, %)
+
+# Try each of these sequences in args: %%{name}( %%( %%, %%)
+# Can we use those to fully escape a function substitution use within an arg?
+#
+# RUN: echo "%{fn}( %%{expand-first-fn}(a%%,b%%) %, %%{expand-first-fn}%%(a%%,b%%) %, %)"
+# RUN: echo "%{fn}( %%{expand-last-fn}(a%%,b%%) %, %%{expand-last-fn}%%(a%%,b%%) %, %)"
+# CHECK: fn('%{expand-first-fn}(a%,b%)', '%{expand-first-fn}%(a%,b%)', '')
+# CHECK: fn('%{expand-last-fn}(a%,b%)', '%{expand-last-fn}%(a%,b%)', '')
+
+# In an arg of %{fn}, try to use %{expand-first-fn}.  Both expand.
+#
+# RUN: echo "%{fn}( %, %{expand-first-fn}(a%,b%) %, %)"
+# CHECK: fn('', 'expand-first-fn(a,b)', '')
+
+# In an arg of %{fn}, try to use %{expand-last-fn}.  First, the use of %{fn}
+# fails to expand because of the appearance of '%{expand-last-fn}(' in its arg.
+# That's good because python's re package cannot balance parentheses, and we
+# don't want to match the wrong '%)' after '%{fn}(' (without the restriction
+# against a function use in the arg, that match would have been possible at the
+# first '%)' because the correct number of remaining '%,' for %{fn} appear
+# before it).  Next, the use of %{expand-last-fn} expands.  If
+# recursiveExpansionLimit were >=2, the use of %{fn} would then expand.
+#
+# RUN: echo "%{fn}( %, %{expand-last-fn}(a%,b%) %, %)"
+# CHECK-NON-RECUR: %{fn}( %, expand-last-fn(a,b) %, %)
+#     CHECK-RECUR: fn('', 'expand-last-fn(a,b)', '')
+
+# What happens when a function substitution is used in its own arg?  Again, we
+# must make sure the inner use expands first.  Otherwise, the outer use would
+# close at the inner uses's '%)'.  We need recursiveExpansionLimit>=2 to expand
+# the outer use.
+#
+# RUN: echo "%{fn}( %{fn}(a %, b %, c %) %, %, %)"
+# CHECK-NON-RECUR: %{fn}( fn('a', 'b', 'c') %, %, %)
+#     CHECK-RECUR: fn('fn('a', 'b', 'c')', '', '')
+
+# Make sure we always match the first '%)'.  In this case, the second arg in the
+# use of %{expand-first-fn} would extend to the '%)' that pairs with '%{fn}(',
+# but it doesn't because we don't permit '%)' in an argument.
+#
+# RUN: echo "%{fn}( %, %, %{expand-first-fn}(a%,b%) %)"
+# RUN: echo "%{fn}( %, %, %{expand-last-fn}(a%,b%) %)"
+#           CHECK: fn('', '', 'expand-first-fn(a,b)')
+# CHECK-NON-RECUR: %{fn}( %, %, expand-last-fn(a,b) %)
+#     CHECK-RECUR: fn('', '', 'expand-last-fn(a,b)')
+
+# In an arg, can we use a function substitution's name without arguments?  The
+# latter shouldn't expand.
+#
+# RUN: echo "%{fn}(%{expand-first-fn} %, %{expand-last-fn} %, %{fn} %)"
+# CHECK: fn('%{expand-first-fn}', '%{expand-last-fn}', '%{fn}')
+
+# That means we can effectively pass around function pointers.
+#
+# RUN: echo "%{call-a-b}( %{expand-last-fn} %)"
+# RUN: echo "%{call-a-b}( %{expand-first-fn} %)"
+#           CHECK: expand-last-fn(a,b)
+# CHECK-NON-RECUR: %{expand-first-fn}( a %, b %)
+#     CHECK-RECUR: expand-first-fn(a,b)
+
+# CHECK: Passed: 1

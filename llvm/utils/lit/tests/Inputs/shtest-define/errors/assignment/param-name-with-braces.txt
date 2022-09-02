@@ -1,0 +1,10 @@
+# For conciseness, parameter names are unbraced in the formal parameter list.
+
+# DEFINE: %{foo}( %{PARAM} %) = %{PARAM}
+# RUN: echo %{foo}
+
+#      CHECK: Parameter 1 of substitution '%{foo}' is malformed as {{.*}}
+# CHECK-NEXT: Parameter 1 is: %{PARAM}
+# CHECK-NEXT: in {{DEFINE}}: directive on test line [[#@LINE-5]]
+
+# CHECK: Unresolved: 1

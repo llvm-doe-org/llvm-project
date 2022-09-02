@@ -1,0 +1,9 @@
+# DEFINE: %{name}( PARAM1%, PARAM2, PARAM3%, PARAM4 %) = value
+# RUN: echo %{name}
+
+#      CHECK: Parameter 2 of substitution '%{name}' is malformed as {{.*}}
+# CHECK-NEXT: Parameter 2 is: PARAM2, PARAM3
+# CHECK-NEXT: Parameter names must be separated by '%,'
+# CHECK-NEXT: in {{DEFINE}}: directive on test line [[#@LINE-6]]
+
+# CHECK: Unresolved: 1

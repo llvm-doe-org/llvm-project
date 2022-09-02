@@ -1,0 +1,65 @@
+# Make sure two few arguments don't lead to catastrophic backtracking in
+# python's regex engine.  This can occur because it's tempting to write the
+# regex for an actual argument and its leading/trailing whitespace as
+# '\s*(?P<param>...)\s*' where '...' is a regex that accepts any series of
+# leading/trailing whitespace as well.
+#
+# No substitution expansion should actually occur because there are two few
+# arguments.  White space is collapsed in CHECK directives here just because
+# we're not using FileCheck's -strict-whitespace.
+
+# DEFINE: %{f}(A%, B%, C%, D%, E%) = hello world
+
+# Check when each arg is only whitespace.
+#
+# RUN: echo '%{f}(\
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                                                      %, \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                                                      %, \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                                                      %, \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                                                      %)'
+#
+# CHECK: %{f}( %, %, %, %)
+
+# Check when each arg has non-whitespace with leading and trailing whitespace.
+#
+# RUN: echo '%{f}(\
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                    a                                    \
+# RUN:                                                                         \
+# RUN:                                                                      %, \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                    b                                    \
+# RUN:                                                                         \
+# RUN:                                                                      %, \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                    c                                    \
+# RUN:                                                                         \
+# RUN:                                                                      %, \
+# RUN:                                                                         \
+# RUN:                                                                         \
+# RUN:                                    d                                    \
+# RUN:                                                                         \
+# RUN:                                                                      %)'
+#
+# CHECK: %{f}( a %, b %, c %, d %)
+
+# CHECK: Passed: 1

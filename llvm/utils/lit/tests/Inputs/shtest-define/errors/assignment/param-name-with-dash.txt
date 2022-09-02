@@ -1,0 +1,11 @@
+# A parameter name must be a valid python identifier for the function
+# substitution's pattern to work, and dashes are not permitted.
+
+# DEFINE: %{foo}( MY-PARAM %) = %{MY-PARAM}
+# RUN: echo %{foo}
+
+#      CHECK: Parameter 1 of substitution '%{foo}' is malformed as {{.*}}
+# CHECK-NEXT: Parameter 1 is: MY-PARAM
+# CHECK-NEXT: in {{DEFINE}}: directive on test line [[#@LINE-5]]
+
+# CHECK: Unresolved: 1
