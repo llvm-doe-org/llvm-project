@@ -1492,9 +1492,8 @@ class PdataPforState(object):
     # or False (at other lines, including within a %for block).  In the first
     # two cases, the returned output fully integrates any new output from
     # line.  In the last case, the line must still be parsed by the caller.
-    def parseAnyDirective(self, line_number, line, output):
-        line_continued = output and isinstance(output[-1], CommandDirective) \
-                         and output[-1].command[-1] == '\\'
+    def parseRunDirective(self, line_number, line, output):
+        line_continued = output and output[-1].needs_continuation()
         if self.context == self.IN_RUN:
             if line.find("%data") != -1:
                 self.parsePdataOpenLine(line_number, line, line_continued)
@@ -1516,7 +1515,33 @@ class PdataPforState(object):
             self.parseInPdataIteration(line_number, line, 0)
             return output
         if self.context == self.IN_FOR:
-            return self.parseInPfor(line_number, line, output)
+            return self.parseInPfor(line_number, line, output, False)
+        assert False, "unhandled parsing context"
+
+    # Returns the original output (at the opening line of a %for), a new version
+    # of output (at the closing line of a %for), or False (at other lines,
+    # including within a %for block).  In the first two cases, the returned
+    # output fully integrates any new output from line.  In the last case, the
+    # line must still be parsed by the caller.
+    def parseSubstDirective(self, line_number, subst_keyword, line, output):
+        line_continued = output and output[-1].needs_continuation()
+        if self.context == self.IN_RUN:
+            match = re.search(self.REF_RE, line)
+            if match:
+                raise ValueError("Outside %for, {ref} is undefined"
+                                 .format(ref=match.group(0)))
+            return False
+        assert not line_continued, \
+               "continued line expected to be reported at %data or %for open"
+        if self.context == self.IN_PDATA or \
+           self.context == self.IN_PDATA_ITERATION:
+            raise ValueError("In %data '{pdata_id}' opened on line {line}, "
+                             "found {key} directive".format(
+                                 pdata_id=self.pdata_id, line=pdata.line_number,
+                                 key=subst_keyword))
+            return output
+        if self.context == self.IN_FOR:
+            return self.parseInPfor(line_number, line, output, True)
         assert False, "unhandled parsing context"
 
     def parsePdataOpenLine(self, line_number, line, line_continued):
@@ -1554,7 +1579,7 @@ class PdataPforState(object):
         self.pfors.append(self.Pfor(pfor_id, line_number))
 
     def parsePdirOpenLine(self, pdir, line_number, line, line_continued):
-        assert pdir[0:1] == '%', "directive expected to start with %"
+        assert pdir[0:1] == '%', "%-directive expected to start with %"
         match = re.match('\\s*(%{tk})'.format(tk=self.ID_RE), line)
         if not match or match.group(1) != pdir:
             raise ValueError("In line containing '{pdir}', '{pdir}' expected "
@@ -1580,7 +1605,8 @@ class PdataPforState(object):
                              "end of line".format(pdir=pdir, pdir_id=pdir_id))
         if line_continued:
             raise ValueError("{pdir} '{pdir_id}' opened after unterminated "
-                             "run line".format(pdir=pdir, pdir_id=pdir_id))
+                             "run or subst directive".format(pdir=pdir,
+                                                             pdir_id=pdir_id))
         return pdir_id
 
     def parseInPdata(self, line_number, line):
@@ -1786,24 +1812,24 @@ class PdataPforState(object):
                                  pdata_id=self.pdata_id, itr=self.itr_count,
                                  field=self.field, seq=self.line[start:]))
 
-    def parseInPfor(self, line_number, line, output):
+    def parseInPfor(self, line_number, line, output, is_subst):
         pfor = self.pfors[-1]
-        if line.find("%data") != -1:
+        if not is_subst and line.find("%data") != -1:
             raise ValueError("In %for '{pfor_id}' opened on line {line}, "
                              "found nested %data".format(
                                  pfor_id=pfor.id, line=pfor.line_number))
-        line_continued = pfor.output and pfor.output[-1].command[-1] == '\\'
-        if line.find("%for") != -1:
+        line_continued = pfor.output and pfor.output[-1].needs_continuation()
+        if not is_subst and line.find("%for") != -1:
             self.parsePforOpenLine(line_number, line, line_continued)
             return output
         match = re.match('\\s*}', line)
         if not match:
-            return False # just a run line
+            return False # just a run/subst line
         # found %for closing line
         if not re.compile('\\s*$').match(line, match.end()):
             raise ValueError("After %for '{pfor_id}' closing '}}', expected "
                              "end of line".format(pfor_id=pfor.id))
-        if not pfor.output:
+        if not any(isinstance(cmd, CommandDirective) for cmd in pfor.output):
             raise ValueError("%for '{pfor_id}' has no run lines"
                              .format(pfor_id=pfor.id))
         # Within a %for block, we do not consider a line starting with '}' to
@@ -1814,8 +1840,8 @@ class PdataPforState(object):
         # potentially much later in the file and likely be harder to
         # understand.
         if line_continued:
-            raise ValueError("%for '{pfor_id}' has unterminated run lines "
-                             "(with '\\')".format(pfor_id=pfor.id))
+            raise ValueError("%for '{pfor_id}' has unterminated run or subst "
+                             "lines (with '\\')".format(pfor_id=pfor.id))
         assert not output or not isinstance(output[-1], CommandDirective) or \
                output[-1].command[-1] != '\\', \
                "continued line expected to be reported at %for open"
@@ -1828,24 +1854,32 @@ class PdataPforState(object):
         # field references with their values
         for itr in pdata.iterations:
             for dir in pfor.output:
-                cmd = dir.command
-                match = re.match(kPdbgRegex, cmd)
-                assert match, \
-                       "expected to find %dbg(ARG) at start of run pipeline"
-                pdbg_arg = match.group(1)
-                match = re.match("{keyword} at line (\d+)"
-                                 "(, data at lines? \d+(?:, \d+)*)?$".format(
-                                     keyword=self.keyword),
-                                 pdbg_arg)
-                assert match, "expected specific format for ARG of %dbg(ARG)"
-                cmd_line = match.group(1)
-                data_msg = match.group(2)
-                if not data_msg:
-                    msg = ", data at line {line})".format(line=itr.line_number)
-                    cmd = re.sub("\)", msg, cmd, 1)
+                if isinstance(dir, CommandDirective):
+                    text = dir.command
+                    match = re.match(kPdbgRegex, text)
+                    assert match, \
+                           "expected to find %dbg(ARG) at start of run pipeline"
+                    pdbg_arg = match.group(1)
+                    match = re.match("{keyword} at line (\d+)(, data at lines? "
+                                     "\d+(?:, \d+)*)?$".format(
+                                         keyword=self.keyword),
+                                     pdbg_arg)
+                    assert match, \
+                           "expected specific format for ARG of %dbg(ARG)"
+                    start_line = match.group(1)
+                    data_msg = match.group(2)
+                    if not data_msg:
+                        msg = ", data at line {line})".format(
+                            line=itr.line_number)
+                        text = re.sub("\)", msg, text, 1)
+                    else:
+                        msg = "data at lines {line},".format(
+                            line=itr.line_number)
+                        text = re.sub("data at lines?", msg, text, 1)
                 else:
-                    msg = "data at lines {line},".format(line=itr.line_number)
-                    cmd = re.sub("data at lines?", msg, cmd, 1)
+                    assert(isinstance(dir, SubstDirective))
+                    text = dir.value
+                    start_line = dir.start_line_number
                 def replace_field_ref(match):
                     ref = match.group(0)
                     quote = ref[1]
@@ -1854,19 +1888,19 @@ class PdataPforState(object):
                         if len(self.pfors) > 1:
                             return ref # let the parent %for look it up
                         raise ValueError("In command pipeline starting on "
-                                         "line {cmd_line}, {ref} is undefined"
-                                         .format(cmd_line=cmd_line, ref=ref))
+                                         "line {line}, {ref} is undefined"
+                                         .format(line=start_line, ref=ref))
                     for pfor_par in reversed(self.pfors[:-1]):
                         pdata_par = self.pdatas[pfor_par.id]
                         if field in pdata_par.iterations[0].fields:
                             raise ValueError(
                                 "In command pipeline starting on line "
-                                "{cmd_line}, {ref} is ambiguous\n"
+                                "{line}, {ref} is ambiguous\n"
                                 "defined in %data '{id0}' opened on line "
                                 "{line0}\n"
                                 "defined in %data '{id1}' opened on line "
                                 "{line1}"
-                                .format(cmd_line=cmd_line, ref=ref,
+                                .format(line=start_line, ref=ref,
                                         id0=pfor.id,
                                         line0=pdata.line_number,
                                         id1=pfor_par.id,
@@ -1877,10 +1911,16 @@ class PdataPforState(object):
                     if quote == "'":
                         return "'" + re.sub("'", "'\\''", value) + "'"
                     assert False, "unexpected %data value quoting style"
-                cmd = re.sub(self.REF_RE, replace_field_ref, cmd)
-                dir_new = CommandDirective(dir.start_line_number,
-                                           dir.end_line_number, dir.keyword,
-                                           cmd)
+                text = re.sub(self.REF_RE, replace_field_ref, text)
+                if isinstance(dir, CommandDirective):
+                    dir_new = CommandDirective(dir.start_line_number,
+                                               dir.end_line_number, dir.keyword,
+                                               text)
+                else:
+                    assert(isinstance(dir, SubstDirective))
+                    dir_new = SubstDirective(dir.start_line_number,
+                                             dir.end_line_number, dir.keyword,
+                                             dir.name + '=' + text)
                 if len(self.pfors) > 1:
                     self.pfors[-2].output.append(dir_new)
                 else:
@@ -1898,7 +1938,8 @@ class IntegratedTestKeywordParser(object):
     parser: A custom parser. This value may only be specified with
             ParserKind.CUSTOM.
     """
-    def __init__(self, keyword, kind, parser=None, initial_value=None):
+    def __init__(self, keyword, kind, parser=None, initial_value=None,
+                 pdata_pfor_state=None):
         allowedSuffixes = ParserKind.allowedKeywordSuffixes(kind)
         if len(keyword) == 0 or keyword[-1] not in allowedSuffixes:
             if len(allowedSuffixes) == 1:
@@ -1919,7 +1960,8 @@ class IntegratedTestKeywordParser(object):
         self.parsed_lines = []
         self.value = initial_value
         self.parser = parser
-        self.pdata_pfor_state = PdataPforState(keyword)
+        self.pdata_pfor_state = pdata_pfor_state if pdata_pfor_state \
+                                else PdataPforState(keyword)
 
         if kind == ParserKind.COMMAND:
             self.parser = lambda line_number, line, output: \
@@ -1941,7 +1983,8 @@ class IntegratedTestKeywordParser(object):
         elif kind == ParserKind.SUBST:
             self.parser = lambda line_number, line, output: \
                                  self._handleSubst(line_number, line, output,
-                                                   self.keyword)
+                                                   self.keyword,
+                                                   self.pdata_pfor_state)
         else:
             raise ValueError("Unknown kind '%s'" % kind)
 
@@ -1978,7 +2021,7 @@ class IntegratedTestKeywordParser(object):
                        pdata_pfor_state):
         """A helper for parsing COMMAND type keywords"""
         # Parse any %data or %for lines
-        output_buf = pdata_pfor_state.parseAnyDirective(line_number, line,
+        output_buf = pdata_pfor_state.parseRunDirective(line_number, line,
                                                         output)
         if output_buf is not False:
             return output_buf
@@ -2051,15 +2094,22 @@ class IntegratedTestKeywordParser(object):
         return output
 
     @classmethod
-    def _handleSubst(cls, line_number, line, output, keyword):
+    def _handleSubst(cls, line_number, line, output, keyword, pdata_pfor_state):
         """A parser for SUBST type keywords"""
+        output_buf = pdata_pfor_state.parseSubstDirective(line_number, keyword,
+                                                          line, output)
+        if output_buf is not False:
+            return output_buf
         line = cls._substituteLineNumbers(line_number, line)
+        output_orig = output
+        if pdata_pfor_state.context == PdataPforState.IN_FOR:
+            output = pdata_pfor_state.pfors[-1].output
         if output and output[-1].add_continuation(line_number, keyword, line):
-            return output
+            return output_orig
         if output is None:
             output = []
         output.append(SubstDirective(line_number, line_number, keyword, line))
-        return output
+        return output_orig
 
 
 def _parseKeywords(sourcepath, additional_parsers=[],
@@ -2076,17 +2126,22 @@ def _parseKeywords(sourcepath, additional_parsers=[],
     """
     # Install the built-in keyword parsers.
     script = []
+    pdata_pfor_state = PdataPforState("RUN:")
     builtin_parsers = [
-        IntegratedTestKeywordParser('RUN:', ParserKind.COMMAND, initial_value=script),
+        IntegratedTestKeywordParser('RUN:', ParserKind.COMMAND,
+                                    initial_value=script,
+                                    pdata_pfor_state=pdata_pfor_state),
         IntegratedTestKeywordParser('XFAIL:', ParserKind.BOOLEAN_EXPR),
         IntegratedTestKeywordParser('REQUIRES:', ParserKind.BOOLEAN_EXPR),
         IntegratedTestKeywordParser('UNSUPPORTED:', ParserKind.BOOLEAN_EXPR),
         IntegratedTestKeywordParser('ALLOW_RETRIES:', ParserKind.INTEGER),
         IntegratedTestKeywordParser('END.', ParserKind.TAG),
         IntegratedTestKeywordParser('DEFINE:', ParserKind.SUBST,
-                                    initial_value=script),
+                                    initial_value=script,
+                                    pdata_pfor_state=pdata_pfor_state),
         IntegratedTestKeywordParser('REDEFINE:', ParserKind.SUBST,
-                                    initial_value=script)
+                                    initial_value=script,
+                                    pdata_pfor_state=pdata_pfor_state)
     ]
     keyword_parsers = {p.keyword: p for p in builtin_parsers}
 

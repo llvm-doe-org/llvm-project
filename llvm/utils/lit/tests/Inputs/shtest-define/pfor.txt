@@ -1,0 +1,12 @@
+#      RUN: %data {
+#      RUN:   (x=10 y=20)
+#      RUN:   (x=11 y=21)
+#      RUN: }
+#   DEFINE: %{foo}=
+#      RUN: %for {
+# REDEFINE:   %{foo}=echo %[x] %[y]
+#      RUN:   %{foo}
+#      RUN: }
+
+# CHECK: 10 20
+# CHECK: 11 21

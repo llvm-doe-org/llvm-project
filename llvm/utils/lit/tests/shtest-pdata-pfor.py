@@ -245,11 +245,11 @@
 
 
 # CHECK-LABEL: UNRESOLVED: shtest-pdata-pfor :: in-pfor-err3-first-unterm.txt
-# CHECK:      %for 'foo' has unterminated run lines (with '\')
+# CHECK:      %for 'foo' has unterminated run or subst lines (with '\')
 # CHECK-NEXT: in RUN: directive on test line 6
 
 # CHECK-LABEL: UNRESOLVED: shtest-pdata-pfor :: in-pfor-err3-later-unterm.txt
-# CHECK:      %for 'foo' has unterminated run lines (with '\')
+# CHECK:      %for 'foo' has unterminated run or subst lines (with '\')
 # CHECK-NEXT: in RUN: directive on test line 9
 
 
@@ -351,11 +351,11 @@
 
 
 # CHECK-LABEL: UNRESOLVED: shtest-pdata-pfor :: pdata-open-err4-earlier-line-unterm.txt
-# CHECK:      %data 'foo' opened after unterminated run line
+# CHECK:      %data 'foo' opened after unterminated run or subst directive
 # CHECK-NEXT: in RUN: directive on test line 5
 
 # CHECK-LABEL: UNRESOLVED: shtest-pdata-pfor :: pdata-open-err4-prev-line-unterm.txt
-# CHECK:      %data 'foo' opened after unterminated run line
+# CHECK:      %data 'foo' opened after unterminated run or subst directive
 # CHECK-NEXT: in RUN: directive on test line 2
 
 
@@ -449,11 +449,11 @@
 
 
 # CHECK-LABEL: UNRESOLVED: shtest-pdata-pfor :: pfor-open-err4-earlier-line-unterm.txt
-# CHECK:      %for 'foo' opened after unterminated run line
+# CHECK:      %for 'foo' opened after unterminated run or subst directive
 # CHECK-NEXT: in RUN: directive on test line 11
 
 # CHECK-LABEL: UNRESOLVED: shtest-pdata-pfor :: pfor-open-err4-prev-line-unterm.txt
-# CHECK:      %for 'foo' opened after unterminated run line
+# CHECK:      %for 'foo' opened after unterminated run or subst directive
 # CHECK-NEXT: in RUN: directive on test line 7
 
 

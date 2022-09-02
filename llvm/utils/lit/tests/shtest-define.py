@@ -109,6 +109,9 @@
 # REDEFINE: %{test} = line-number-substitutions.txt
 # RUN: %{run-and-record-test}
 
+# REDEFINE: %{test} = pfor.txt
+# RUN: %{run-and-record-test}
+
 # REDEFINE: %{test} = recursiveExpansionLimit.txt
 #
 # REDEFINE: %{fc-args} = -check-prefix=CHECK-NON-RECUR
