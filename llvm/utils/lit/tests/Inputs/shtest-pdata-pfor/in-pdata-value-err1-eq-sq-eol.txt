@@ -1,5 +1,0 @@
-// RUN: %data foo {
-// RUN:   (a='"'foo'"' b='"foo"')
-// RUN:   (a='
-// RUN:       "'bar'"' b='"bar"')
-// RUN: }

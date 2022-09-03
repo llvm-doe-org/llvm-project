@@ -1,3 +1,0 @@
-# RUN: %data foo { %data bar {
-# RUN:   (a=1) (a=2) }
-# RUN: }

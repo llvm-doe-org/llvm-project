@@ -1,5 +1,0 @@
-# RUN: %data bar {
-# RUN:   (a=1 b=2)
-# RUN:   (b
-# RUN:    )
-# RUN: }
