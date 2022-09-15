@@ -366,6 +366,8 @@ Run-Time Environment Variables
 * Lexical context
     * Appearing at file scope is supported.
     * Appearing within a function definition is not yet supported.
+    * Appearing within the bodies of classes, namespaces, or other C++
+      constructs is not yet supported.
 * Supported level-of-parallelism clauses
     * `gang`
     * `worker`
@@ -377,17 +379,19 @@ Run-Time Environment Variables
       diagnostic is produced.
     * A compile-time error diagnostic is produced if a function's level of
       parallelism is incompatible with the calling context (e.g., `loop`
-      construct or enclosing function).  An incompatible level of parallelism is
-      not diagnosed if a function's address is stored and called later.
-    * A special case of the previous diagnostic is produced if a function's
-      level of parallelism is `gang`, `worker`, or `vector` and if a call to it
-      appears in host-only code.
-        * In C, host-only code is any code outside of any compute or loop
-          construct and within a function that has no `routine` directive.
-        * In C++, host-only code also includes code executed at file scope.
-        * In these cases, the call site can execute only outside compute
-          regions, but the called function requires execution modes
-          (gang-redundant, etc.) that are impossible outside compute regions.
+      construct or enclosing function).
+        * An incompatible level of parallelism is not diagnosed if a function's
+          address is stored and called later.
+        * A special case of this diagnostic is produced if a function's level of
+          parallelism is `gang`, `worker`, or `vector` and if a call to it
+          appears in host-only code.
+            * In C, host-only code is any code outside of any compute or loop
+              construct and within a function that has no `routine` directive.
+            * In C++, host-only code also includes code executed at file scope.
+            * In these cases, the call site can execute only outside compute
+              regions, but the called function requires execution modes
+              (gang-redundant, etc.) that are impossible outside compute
+              regions.
 * Other clauses
     * No other clauses are supported yet.
     * Specifying a name is not yet supported, so an immediately
@@ -432,6 +436,18 @@ Run-Time Environment Variables
       except for C++ lambdas, but nvc 21.11 computes them.
       Clarifications are under discussion among the OpenACC technical
       committee for inclusion in the OpenACC spec after 3.2.
+* C++ function uses and calls
+    * For all behavior described above for function uses and calls, both
+      explicit and implicit function calls in C++ are included.
+    * Examples of implicit function calls include:
+        * A local variable definition's implicit calls to a default constructor
+          and destructor.
+        * An implicit default constructor definition's call to a base class's
+          constructor.
+        * An explicit constructor definition's implicit call to a base class's
+          constructor.
+        * A `new` expression's calls to a `new` operator, constructor, and
+          `delete` operator.
 
 Subarrays
 ---------
