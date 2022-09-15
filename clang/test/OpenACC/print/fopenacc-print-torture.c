@@ -55,9 +55,9 @@ int non_const_expr = 2;
 int var, i;
 const int *ptr = 0;
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive only rewrite, not nested.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void dirOnlyRewriteNotNested() {
 void dirOnlyRewriteNotNested() {
@@ -118,9 +118,9 @@ void dirOnlyRewriteNotNested() {
   #undef MAC
 }// PRT-NEXT:}
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive only rewrite, nested.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void dirOnlyRewriteNested() {
 void dirOnlyRewriteNested() {
@@ -204,9 +204,9 @@ void dirOnlyRewriteNested() {
     ;
 }// PRT-NEXT:}
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive only rewrite, but directive discarded.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void dirOnlyRewriteDirDiscard() {
 void dirOnlyRewriteDirDiscard() {
@@ -241,7 +241,17 @@ void dirOnlyRewriteDirDiscard() {
       ;
 }// PRT-NEXT:}
 
-//--------------------------------------------------
+// PRT-NEXT:void dirOnlyRewriteDirDiscard_routine_user() {
+void dirOnlyRewriteDirDiscard_routine_user() {
+  // PRT-AA-NEXT:  #pragma acc routine seq
+  // PRT-AO-NEXT:  #pragma acc routine seq // discarded in OpenMP translation
+  // PRT-OA-NEXT:  // #pragma acc routine seq // discarded in OpenMP translation
+  //    PRT-NEXT:  void dirOnlyRewriteDirDiscard_routine();
+  #pragma acc routine seq
+  void dirOnlyRewriteDirDiscard_routine();
+}// PRT-NEXT:}
+
+//------------------------------------------------------------------------------
 // Directive and associate rewrite, outer directive only.
 //
 // Check for corruption due to the way Clang records the end location of a
@@ -256,7 +266,7 @@ void dirOnlyRewriteDirDiscard() {
 //
 // FIXME: In the cases of macro expansions within associated statements, the
 // OpenMP version is fully expanded.  Eventually, we'd like to prevent that.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void fullRewriteOuterDirOnly() {
 void fullRewriteOuterDirOnly() {
@@ -922,9 +932,9 @@ MAC2}
 #undef MAC1
 #undef MAC2
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive and associate rewrite, inner directive only.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void fullRewriteInnerDirOnly() {
 void fullRewriteInnerDirOnly() {
@@ -1282,9 +1292,9 @@ void fullRewriteInnerDirOnly() {
   }
 }// PRT-NEXT:}
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive and associate rewrite, outer and inner directive.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void fullRewriteOuterAndInnerDir() {
 void fullRewriteOuterAndInnerDir() {
@@ -1423,9 +1433,9 @@ void fullRewriteOuterAndInnerDir() {
       ;
 }// PRT-NEXT:}
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive and associate rewrite with discarded directive.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void fullRewriteDirDiscard() {
 void fullRewriteDirDiscard() {
@@ -1491,12 +1501,12 @@ void fullRewriteDirDiscard() {
     var = non_const_expr;
 }// PRT-NEXT:}
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // cpp macro expansion in clauses.
 //
 // FIXME: The OpenMP version is fully expanded.  Eventually, we'd like to
 // prevent that.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void macroInClauses() {
 void macroInClauses() {
@@ -1539,14 +1549,14 @@ void macroInClauses() {
   #undef MAC
 }// PRT-NEXT:}
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // _Pragma form forces rewrite of directive and associate.
 //
 // If _Pragma were in a macro expansion, the rewrite would just fail with a
 // diagnostic.  FIXME: However, when outside a macro expansion, the end
 // location Clang assigns the _Pragma is unusable unfortunately, so a full
 // rewrite is required.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void pragmaFormForcesFullRewrite() {
 void pragmaFormForcesFullRewrite() {
@@ -1608,12 +1618,13 @@ void pragmaFormForcesFullRewrite() {
     ;
 }// PRT-NEXT:}
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Line continuations.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void lineContinuations() {
 void lineContinuations() {
+  //............................................................................
   // Adequate indentation, which is reused in commented OpenACC.
 
   //  PRT-A-NEXT:  #pragma acc parallel \
@@ -1627,6 +1638,17 @@ void lineContinuations() {
           num_gangs(5)
   ;
 
+  //  PRT-A-NEXT:  #pragma acc routine \
+  // PRT-AA-NEXT:    seq
+  // PRT-AO-NEXT:    seq // discarded in OpenMP translation
+  // PRT-OA-NEXT:  // #pragma acc routine \
+  // PRT-OA-NEXT:  //   seq // discarded in OpenMP translation
+  //    PRT-NEXT:  void lineContinuations_routineDiscardAdequateIndent();
+  #pragma acc routine \
+    seq
+  void lineContinuations_routineDiscardAdequateIndent();
+
+  //............................................................................
   // Inadequate indentation, which is extended in commented OpenACC.
 
   //  PRT-A-NEXT:  #pragma acc parallel \
@@ -1639,8 +1661,20 @@ void lineContinuations() {
   #pragma acc parallel \
  num_gangs(5)
   ;
+
+  //  PRT-A-NEXT:  #pragma acc routine \
+  // PRT-AA-NEXT: seq
+  // PRT-AO-NEXT: seq // discarded in OpenMP translation
+  // PRT-OA-NEXT:  // #pragma acc routine \
+  // PRT-OA-NEXT:  // seq // discarded in OpenMP translation
+  //    PRT-NEXT:  void lineContinuations_routineDiscardInadequateIndent();
+  #pragma acc routine \
+ seq
+  void lineContinuations_routineDiscardInadequateIndent();
+
 }// PRT-NEXT:}
 
+//..............................................................................
 // Adequate indentation, which is reused in commented OpenACC.
 
 //  PRT-A-NEXT: #pragma acc routine \
@@ -1656,6 +1690,7 @@ void lineContinuations() {
              seq
 void lineContinuations_routineAdequateIndent();
 
+//..............................................................................
 // Inadequate indentation, which is extended in commented OpenACC.
 
 //  PRT-A-NEXT: #pragma acc routine \
@@ -1671,9 +1706,9 @@ void lineContinuations_routineAdequateIndent();
 seq
 void lineContinuations_routineInadequateIndent();
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Associated statement inadequate indentation extended in commented OpenACC.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void associateInadequateIndentation() {
 void associateInadequateIndentation() {
@@ -1722,9 +1757,9 @@ for (i = 0; i < 5; ++i) {
 }
 }// PRT-NEXT:}
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive only rewrite, comment after.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void commentAfterDirOnlyRewrite() {
 void commentAfterDirOnlyRewrite() {
@@ -1746,6 +1781,24 @@ void commentAfterDirOnlyRewrite() {
   #pragma acc parallel /*multi-line
                          comment*/
   ;
+
+  // PRT-AA-NEXT:  #pragma acc routine seq /*comment*/
+  // PRT-AO-NEXT:  #pragma acc routine seq /*comment*/ // discarded in OpenMP translation
+  // PRT-OA-NEXT:  // #pragma acc routine seq /*comment*/ // discarded in OpenMP translation
+  //    PRT-NEXT:  void commentAfterDirOnlyRewrite_routineDiscard();
+  #pragma acc routine seq /*comment*/
+  void commentAfterDirOnlyRewrite_routineDiscard();
+
+  // PRT-AA-NEXT:  #pragma acc routine seq /*multi-line
+  // PRT-AA-NEXT:                            comment*/
+  // PRT-AO-NEXT:  #pragma acc routine seq /*multi-line
+  // PRT-AO-NEXT:                            comment*/ // discarded in OpenMP translation
+  // PRT-OA-NEXT:  // #pragma acc routine seq /*multi-line
+  // PRT-OA-NEXT:  //                           comment*/ // discarded in OpenMP translation
+  //    PRT-NEXT:  void commentAfterDirOnlyRewrite_routineDiscardMultiline();
+  #pragma acc routine seq /*multi-line
+                            comment*/
+  void commentAfterDirOnlyRewrite_routineDiscardMultiline();
 }// PRT-NEXT:}
 
 //  PRT-A-NEXT:#pragma acc routine seq /*comment*/
@@ -1771,9 +1824,9 @@ void commentAfterDirOnlyRewrite_routine();
                           comment*/
 void commentAfterDirOnlyRewrite_routineMultiline();
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive and associate rewrite, trailing text.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void trailingTextAfterFullRewrite() {
 void trailingTextAfterFullRewrite() {
@@ -1920,11 +1973,11 @@ void trailingTextAfterFullRewrite() {
  void trailingTextAfterFullRewrite_routineDefWs(){
  }  // comment stripped by a RUN command, but it shows intended whitespace
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // After an error, all translation of OpenACC subtrees to OpenMP is
 // suppressed, so RewriteOpenACC has nothing to do.  Make sure it's handled
 // gracefully, in nested directives and subsequent directives.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void afterError() {
 void afterError() {

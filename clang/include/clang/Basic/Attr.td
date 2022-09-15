@@ -647,10 +647,21 @@ class ACCDeclAttr : InheritableAttr {
     /// When constructing attributes while reading AST files or while inheriting
     /// attributes, it is easier to store the kind than to find the address of
     /// the actual OpenMP attribute, which might not be constructed until later.
-    OMPDeclAttrArgument<"OMPNodeKind", /*opt=*/1, /*fake=*/1>
+    OMPDeclAttrArgument<"OMPNodeKind", /*opt=*/1, /*fake=*/1>,
+    /// If \c OMPNodeKind is \c attr::UnknownAttr, then either the OpenACC
+    /// directive hasn't been translated, the translation failed, or the
+    /// translation merely discarded the directive.  \c DirectiveDiscardedForOMP
+    /// is true only in the last case.
+    BoolArgument<"DirectiveDiscardedForOMP", /*opt=*/1, /*fake=*/1>
   ];
   code ACCDeclAttrAdditionalMembers = [{
-    void setOMPNodeKind(attr::Kind V) { oMPNodeKind = V; checkOMPNodeKind(); }
+    void setOMPNodeKind(attr::Kind K, bool D = false) {
+      assert((K == attr::UnknownAttr || !D) &&
+             "expected discarding a directive to mean it becomes UnknownAttr");
+      oMPNodeKind = K;
+      checkOMPNodeKind();
+      directiveDiscardedForOMP = D;
+    }
   }];
 }
 

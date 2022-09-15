@@ -19,6 +19,7 @@
 // REDEFINE: %{all:clang:args} = main.o other.o
 // RUN: %{acc-check-exe-link}
 // RUN: %{acc-check-exe-run}
+// RUN: %{acc-check-exe-filecheck}
 
 // REDEFINE: %{all:clang:args} = -DUSE_ADDR
 // RUN: %{acc-check-dmp}
@@ -27,6 +28,7 @@
 // REDEFINE: %{all:clang:args} = main.o other.o
 // RUN: %{acc-check-exe-link}
 // RUN: %{acc-check-exe-run}
+// RUN: %{acc-check-exe-filecheck}
 
 // END.
 
@@ -92,9 +94,9 @@ typedef struct {
 // EXE: start
 void start() { printf("start\n"); }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Host use doesn't imply routine directive.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 //     DMP: FunctionDecl {{.*}} hostUseBeforeDef 'void (Result *)'
 // DMP-NOT:   ACCRoutineDeclAttr
@@ -201,18 +203,18 @@ void hostUseRecur_run() {
   PRINT_RESULT(hostUseRecur, Res);
 }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Parallel construct use implies routine directive.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 //     DMP: FunctionDecl {{.*}} parUseBeforeDef 'void (Result *)'
 // DMP-NOT: FunctionDecl
-//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 // DMP-NOT:   OMPDeclareTargetDeclAttr
 //     DMP: FunctionDecl {{.*}} parUseBeforeDef_run 'void ()'
 //     DMP: FunctionDecl {{.*}} parUseBeforeDef 'void (Result *)'
 // DMP-NOT: FunctionDecl
-//     DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Implicit Seq OMPNodeKind=unknown{{$}}
+//     DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 // DMP-NOT:   OMPDeclareTargetDeclAttr
 //
 // PRT-NEXT: void parUseBeforeDef(Result *Res);
@@ -232,9 +234,36 @@ void parUseBeforeDef_run() {
 }
 void parUseBeforeDef(Result *Res) { WRITE_RESULT(Res); }
 
+//     DMP: FunctionDecl {{.*}} parUseOfLocalBeforeDef_run 'void ()'
+//     DMP:   FunctionDecl {{.*}} parUseOfLocalBeforeDef 'void (Result *)'
+// DMP-NOT:   FunctionDecl
+//     DMP:     ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
+// DMP-NOT:     OMPDeclareTargetDeclAttr
+//     DMP: FunctionDecl {{.*}} parUseOfLocalBeforeDef 'void (Result *)'
+// DMP-NOT: FunctionDecl
+//     DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
+// DMP-NOT:   OMPDeclareTargetDeclAttr
+//
+// PRT-NEXT: void parUseOfLocalBeforeDef_run() {
+// PRT-NEXT:   void parUseOfLocalBeforeDef(Result *Res);
+//      PRT: }{{$}}
+// PRT-NEXT: void parUseOfLocalBeforeDef(Result *Res) {
+//      PRT: }{{$}}
+//
+// EXE-HOST-NEXT: parUseOfLocalBeforeDef: host=1, not_host=0
+//  EXE-OFF-NEXT: parUseOfLocalBeforeDef: host=0, not_host=1
+void parUseOfLocalBeforeDef_run() {
+  void parUseOfLocalBeforeDef(Result *Res);
+  Result Res;
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  USE1(parUseOfLocalBeforeDef, &Res);
+  PRINT_RESULT(parUseOfLocalBeforeDef, Res);
+}
+void parUseOfLocalBeforeDef(Result *Res) { WRITE_RESULT(Res); }
+
 //     DMP: FunctionDecl {{.*}} parUseAfterDef 'void (Result *)'
 // DMP-NOT: FunctionDecl
-//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 // DMP-NOT:   OMPDeclareTargetDeclAttr
 //     DMP: FunctionDecl {{.*}} parUseAfterDef_run 'void ()'
 //
@@ -253,9 +282,35 @@ void parUseAfterDef_run() {
   PRINT_RESULT(parUseAfterDef, Res);
 }
 
+//     DMP: FunctionDecl {{.*}} parUseOfLocalAfterDef 'void (Result *)'
+// DMP-NOT:   ACCRoutineDeclAttr
+// DMP-NOT:   OMPDeclareTargetDeclAttr
+//     DMP: FunctionDecl {{.*}} parUseOfLocalAfterDef_run 'void ()'
+//     DMP:   FunctionDecl {{.*}} parUseOfLocalAfterDef 'void (Result *)'
+// DMP-NOT:   FunctionDecl
+//     DMP:     ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
+// DMP-NOT:     OMPDeclareTargetDeclAttr
+//
+// PRT-NEXT: void parUseOfLocalAfterDef(Result *Res) {
+//      PRT: }{{$}}
+// PRT-NEXT: void parUseOfLocalAfterDef_run() {
+// PRT-NEXT:   void parUseOfLocalAfterDef(Result *Res);
+//      PRT: }{{$}}
+//
+// EXE-HOST-NEXT: parUseOfLocalAfterDef: host=1, not_host=0
+//  EXE-OFF-NEXT: parUseOfLocalAfterDef: host=0, not_host=1
+void parUseOfLocalAfterDef(Result *Res) { WRITE_RESULT(Res); }
+void parUseOfLocalAfterDef_run() {
+  void parUseOfLocalAfterDef(Result *Res);
+  Result Res;
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  USE1(parUseOfLocalAfterDef, &Res);
+  PRINT_RESULT(parUseOfLocalAfterDef, Res);
+}
+
 //     DMP: FunctionDecl {{.*}} parUseNoDef 'void (Result *)'
 // DMP-NOT: FunctionDecl
-//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 // DMP-NOT:   OMPDeclareTargetDeclAttr
 //     DMP: FunctionDecl {{.*}} parUseNoDef_run 'void ()'
 //
@@ -273,18 +328,38 @@ void parUseNoDef_run() {
   PRINT_RESULT(parUseNoDef, Res);
 }
 
+//     DMP: FunctionDecl {{.*}} parUseOfLocalNoDef_run 'void ()'
+//     DMP:   FunctionDecl {{.*}} parUseOfLocalNoDef 'void (Result *)'
+// DMP-NOT:   FunctionDecl
+//     DMP:     ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
+// DMP-NOT:     OMPDeclareTargetDeclAttr
+//
+// PRT-NEXT: void parUseOfLocalNoDef_run() {
+// PRT-NEXT:   void parUseOfLocalNoDef(Result *Res);
+//      PRT: }{{$}}
+//
+// EXE-HOST-NEXT: parUseOfLocalNoDef: host=1, not_host=0
+//  EXE-OFF-NEXT: parUseOfLocalNoDef: host=0, not_host=1
+void parUseOfLocalNoDef_run() {
+  void parUseOfLocalNoDef(Result *Res);
+  Result Res;
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  USE1(parUseOfLocalNoDef, &Res);
+  PRINT_RESULT(parUseOfLocalNoDef, Res);
+}
+
 //     DMP: FunctionDecl {{.*}} parUsesMultiple_fn1 'void (Result *)'
 // DMP-NOT: FunctionDecl
-//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 // DMP-NOT:   OMPDeclareTargetDeclAttr
 //     DMP: FunctionDecl {{.*}} parUsesMultiple_fn2 'void (Result *)'
 // DMP-NOT: FunctionDecl
-//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 // DMP-NOT:   OMPDeclareTargetDeclAttr
 //     DMP: FunctionDecl {{.*}} parUsesMultiple_run 'void ()'
 //     DMP: FunctionDecl {{.*}} parUsesMultiple_fn2 'void (Result *)'
 // DMP-NOT: FunctionDecl
-//     DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Implicit Seq OMPNodeKind=unknown{{$}}
+//     DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 // DMP-NOT:   OMPDeclareTargetDeclAttr
 //
 // PRT-NEXT: void parUsesMultiple_fn1(Result *Res) {
@@ -315,14 +390,14 @@ void parUsesMultiple_run() {
 }
 void parUsesMultiple_fn2(Result *Res) { WRITE_RESULT(Res); }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Use from offload function with explicit routine directive implies routine
 // directive.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 //      DMP: FunctionDecl {{.*}} expOffFnUseAfterDef 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} expOffFnUseAfterDef_use 'void (Result *)'
 //      DMP: FunctionDecl {{.*}} expOffFnUseAfterDef_run 'void ()'
@@ -351,15 +426,77 @@ void expOffFnUseAfterDef_run() {
   PRINT_RESULT(expOffFnUseAfterDef, Res);
 }
 
+// FIXME: Strangely, this case works in traditional compilation mode but not in
+// source-to-source mode followed by OpenMP compilation.  The generated OpenMP
+// looks as we expect, but somehow Clang fails to see the implicit
+// 'omp declare target' at the definition of expOffFnUseOfLocalAfterDef.
+// Hopefully this usage is obscure enough in practice that we don't really need
+// to fix it.
+//
+//      DMP: FunctionDecl {{.*}} expOffFnUseOfLocalAfterDef 'void (Result *)'
+//  DMP-NOT:   ACCRoutineDeclAttr
+//  DMP-NOT:   OMPDeclareTargetDeclAttr
+//      DMP: FunctionDecl {{.*}} expOffFnUseOfLocalAfterDef_use 'void (Result *)'
+//      DMP:   FunctionDecl {{.*}} expOffFnUseOfLocalAfterDef 'void (Result *)'
+//  DMP-NOT:   FunctionDecl
+//      DMP:     ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
+//  DMP-NOT:     OMPDeclareTargetDeclAttr
+//      DMP:   ACCRoutineDeclAttr
+// DMP-NEXT:   OMPDeclareTargetDeclAttr
+//      DMP: FunctionDecl {{.*}} expOffFnUseOfLocalAfterDef_run 'void ()'
+//
+// PRT-SRC-NEXT: #if !EXE_S2S_PRT
+//     PRT-NEXT: void expOffFnUseOfLocalAfterDef(Result *Res) {
+//          PRT: }{{$}}
+//          PRT: void expOffFnUseOfLocalAfterDef_use(Result *Res) {
+//     PRT-NEXT:   void expOffFnUseOfLocalAfterDef(Result *Res);
+//          PRT: }{{$}}
+//          PRT: void expOffFnUseOfLocalAfterDef_run() {
+//          PRT: }{{$}}
+// PRT-SRC-NEXT: #else
+//      PRT-SRC: #endif
+//
+//      EXE-NEXT: expOffFnUseOfLocalAfterDef: host=1, not_host=0
+// EXE-HOST-NEXT: expOffFnUseOfLocalAfterDef: host=1, not_host=0
+//  EXE-OFF-NEXT: expOffFnUseOfLocalAfterDef: host=0, not_host=1
+#if !EXE_S2S_PRT
+void expOffFnUseOfLocalAfterDef(Result *Res) { WRITE_RESULT(Res); }
+#pragma acc routine seq
+void expOffFnUseOfLocalAfterDef_use(Result *Res) {
+  void expOffFnUseOfLocalAfterDef(Result *Res);
+  USE1(expOffFnUseOfLocalAfterDef, Res);
+}
+void expOffFnUseOfLocalAfterDef_run() {
+  Result Res;
+  expOffFnUseOfLocalAfterDef_use(&Res);
+  PRINT_RESULT(expOffFnUseOfLocalAfterDef, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  expOffFnUseOfLocalAfterDef_use(&Res);
+  PRINT_RESULT(expOffFnUseOfLocalAfterDef, Res);
+}
+#else
+void expOffFnUseOfLocalAfterDef_run() {
+  Result Res;
+  Res.Host = 1;
+  Res.NotHost = 0;
+  PRINT_RESULT(expOffFnUseOfLocalAfterDef, Res);
+# if !TGT_HOST
+  Res.Host = 0;
+  Res.NotHost = 1;
+# endif
+  PRINT_RESULT(expOffFnUseOfLocalAfterDef, Res);
+}
+#endif
+
 //      DMP: FunctionDecl {{.*}} expOffFnUseBeforeDef 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} expOffFnUseBeforeDef_use 'void (Result *)'
 //      DMP: FunctionDecl {{.*}} expOffFnUseBeforeDef_run 'void ()'
 //      DMP: FunctionDecl {{.*}} expOffFnUseBeforeDef 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //
 // PRT-NEXT: void expOffFnUseBeforeDef(Result *Res);
@@ -388,9 +525,48 @@ void expOffFnUseBeforeDef_run() {
 }
 void expOffFnUseBeforeDef(Result *Res) { WRITE_RESULT(Res); }
 
+//      DMP: FunctionDecl {{.*}} expOffFnUseOfLocalBeforeDef_use 'void (Result *)'
+//      DMP:   FunctionDecl {{.*}} expOffFnUseOfLocalBeforeDef 'void (Result *)'
+//  DMP-NOT:   FunctionDecl
+//      DMP:     ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
+//  DMP-NOT:     OMPDeclareTargetDeclAttr
+//      DMP:   ACCRoutineDeclAttr
+// DMP-NEXT:   OMPDeclareTargetDeclAttr
+//      DMP: FunctionDecl {{.*}} expOffFnUseOfLocalBeforeDef_run 'void ()'
+//      DMP: FunctionDecl {{.*}} expOffFnUseOfLocalBeforeDef 'void (Result *)'
+//  DMP-NOT: FunctionDecl
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
+//  DMP-NOT:   OMPDeclareTargetDeclAttr
+//
+//      PRT: void expOffFnUseOfLocalBeforeDef_use(Result *Res) {
+// PRT-NEXT:   void expOffFnUseOfLocalBeforeDef(Result *Res);
+//      PRT: }{{$}}
+//      PRT: void expOffFnUseOfLocalBeforeDef_run() {
+//      PRT: }{{$}}
+// PRT-NEXT: void expOffFnUseOfLocalBeforeDef(Result *Res) {
+//      PRT: }{{$}}
+//
+//      EXE-NEXT: expOffFnUseOfLocalBeforeDef: host=1, not_host=0
+// EXE-HOST-NEXT: expOffFnUseOfLocalBeforeDef: host=1, not_host=0
+//  EXE-OFF-NEXT: expOffFnUseOfLocalBeforeDef: host=0, not_host=1
+#pragma acc routine seq
+void expOffFnUseOfLocalBeforeDef_use(Result *Res) {
+  void expOffFnUseOfLocalBeforeDef(Result *Res);
+  USE1(expOffFnUseOfLocalBeforeDef, Res);
+}
+void expOffFnUseOfLocalBeforeDef_run() {
+  Result Res;
+  expOffFnUseOfLocalBeforeDef_use(&Res);
+  PRINT_RESULT(expOffFnUseOfLocalBeforeDef, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  expOffFnUseOfLocalBeforeDef_use(&Res);
+  PRINT_RESULT(expOffFnUseOfLocalBeforeDef, Res);
+}
+void expOffFnUseOfLocalBeforeDef(Result *Res) { WRITE_RESULT(Res); }
+
 //      DMP: FunctionDecl {{.*}} expOffFnUseNoDef 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} expOffFnUseNoDef_use 'void (Result *)'
 //      DMP: FunctionDecl {{.*}} expOffFnUseNoDef_run 'void ()'
@@ -418,19 +594,51 @@ void expOffFnUseNoDef_run() {
   PRINT_RESULT(expOffFnUseNoDef, Res);
 }
 
+//      DMP: FunctionDecl {{.*}} expOffFnUseOfLocalNoDef_use 'void (Result *)'
+//      DMP:   FunctionDecl {{.*}} expOffFnUseOfLocalNoDef 'void (Result *)'
+//  DMP-NOT:   FunctionDecl
+//      DMP:     ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
+//  DMP-NOT:     OMPDeclareTargetDeclAttr
+//      DMP:   ACCRoutineDeclAttr
+// DMP-NEXT:   OMPDeclareTargetDeclAttr
+//      DMP: FunctionDecl {{.*}} expOffFnUseOfLocalNoDef_run 'void ()'
+//
+//      PRT: void expOffFnUseOfLocalNoDef_use(Result *Res) {
+// PRT-NEXT:   void expOffFnUseOfLocalNoDef(Result *Res);
+//      PRT: }{{$}}
+//      PRT: void expOffFnUseOfLocalNoDef_run() {
+//      PRT: }{{$}}
+//
+//      EXE-NEXT: expOffFnUseOfLocalNoDef: host=1, not_host=0
+// EXE-HOST-NEXT: expOffFnUseOfLocalNoDef: host=1, not_host=0
+//  EXE-OFF-NEXT: expOffFnUseOfLocalNoDef: host=0, not_host=1
+#pragma acc routine seq
+void expOffFnUseOfLocalNoDef_use(Result *Res) {
+  void expOffFnUseOfLocalNoDef(Result *Res);
+  USE1(expOffFnUseOfLocalNoDef, Res);
+}
+void expOffFnUseOfLocalNoDef_run() {
+  Result Res;
+  expOffFnUseOfLocalNoDef_use(&Res);
+  PRINT_RESULT(expOffFnUseOfLocalNoDef, Res);
+  #pragma acc parallel num_gangs(1) copyout(Res)
+  expOffFnUseOfLocalNoDef_use(&Res);
+  PRINT_RESULT(expOffFnUseOfLocalNoDef, Res);
+}
+
 //      DMP: FunctionDecl {{.*}} expOffFnUsesMultiple_fn1 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} expOffFnUsesMultiple_fn2 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} expOffFnUsesMultiple_use 'void (Result *, Result *)'
 //      DMP: FunctionDecl {{.*}} expOffFnUsesMultiple_run 'void ()'
 //      DMP: FunctionDecl {{.*}} expOffFnUsesMultiple_fn1 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //
 // PRT-NEXT: void expOffFnUsesMultiple_fn1(Result *Res);
@@ -471,7 +679,7 @@ void expOffFnUsesMultiple_fn1(Result *Res) { WRITE_RESULT(Res); }
 //      DMP: FunctionDecl {{.*}} expOffFnUseEarlierDir_use 'void (Result *)'
 //      DMP: FunctionDecl {{.*}} expOffFnUseEarlierDir 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} expOffFnUseEarlierDir_use 'void (Result *)'
 //      DMP: FunctionDecl {{.*}} expOffFnUseEarlierDir_run 'void ()'
@@ -502,33 +710,33 @@ void expOffFnUseEarlierDir_run() {
   PRINT_RESULT(expOffFnUseEarlierDir, Res);
 }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Use from offload function with implicit routine directive implies routine
 // directive.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 //      DMP: FunctionDecl {{.*}} impOffFnUse_fn5 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} impOffFnUse_fn4 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} impOffFnUse_fn3 'void (Result *, Result *)'
 //  DMP-NOT:   ACCRoutineDeclAttr
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} impOffFnUse_fn2 'void (Result *, Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} impOffFnUse_fn1 'void (Result *, Result *, Result *, Result *, Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} impOffFnUse_fn3 'void (Result *, Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} impOffFnUse_use 'void (Result *, Result *, Result *, Result *, Result *)'
 //      DMP: FunctionDecl {{.*}} impOffFnUse_run 'void ()'
@@ -614,11 +822,11 @@ void impOffFnUse_run() {
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} impOffFnUseMutual_fn2 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} impOffFnUseMutual_fn1 'void (Result *, Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} impOffFnUseMutual_use 'void (Result *, Result *)'
 //      DMP: FunctionDecl {{.*}} impOffFnUseMutual_run 'void ()'
@@ -679,7 +887,7 @@ void impOffFnUseMutual_run() {
 
 //      DMP: FunctionDecl {{.*}} impOffFnUseRecur 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} impOffFnUseRecur_use 'void (Result *)'
 //      DMP: FunctionDecl {{.*}} impOffFnUseRecur_run 'void ()'
@@ -724,13 +932,13 @@ void impOffFnUseRecur_run() {
   PRINT_RESULT(impOffFnUseRecur, Res);
 }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Multiple offload uses for same function.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 //      DMP: FunctionDecl {{.*}} multipleOffUse 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} multipleOffUse_use 'void (Result *)'
 //      DMP: FunctionDecl {{.*}} multipleOffUse_run 'void ()'
@@ -764,16 +972,16 @@ void multipleOffUse_run() {
   PRINT_RESULT(multipleOffUse, Res);
 }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Host use before offload use doesn't suppress routine directive.
 //
 // At one point during development, no routine directive was implied here
 // because all uses after the first use were skipped.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 //     DMP: FunctionDecl {{.*}} hostUseOffUse 'void (Result *)'
 // DMP-NOT: FunctionDecl
-//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 // DMP-NOT:   OMPDeclareTargetDeclAttr
 //     DMP: FunctionDecl {{.*}} hostUseOffUse_run 'void ()'
 //
@@ -795,13 +1003,13 @@ void hostUseOffUse_run() {
   PRINT_RESULT(hostUseOffUse, Res);
 }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Offload use before host use works too.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 //     DMP: FunctionDecl {{.*}} offUseHostUse 'void (Result *)'
 // DMP-NOT: FunctionDecl
-//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//     DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 // DMP-NOT:   OMPDeclareTargetDeclAttr
 //     DMP: FunctionDecl {{.*}} offUseHostUse_run 'void ()'
 //
@@ -823,9 +1031,9 @@ void offUseHostUse_run() {
   PRINT_RESULT(offUseHostUse, Res);
 }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Reference that is not a use does not imply routine directive.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 //     DMP: FunctionDecl {{.*}} refNotUseInPar 'void ()'
 // DMP-NOT:   ACCRoutineDeclAttr
@@ -904,12 +1112,18 @@ int main(int argc, char *argv[]) {
   hostUseNoDef_run();
   hostUseRecur_run();
   parUseBeforeDef_run();
+  parUseOfLocalBeforeDef_run();
   parUseAfterDef_run();
+  parUseOfLocalAfterDef_run();
   parUseNoDef_run();
+  parUseOfLocalNoDef_run();
   parUsesMultiple_run();
   expOffFnUseAfterDef_run();
+  expOffFnUseOfLocalAfterDef_run();
   expOffFnUseBeforeDef_run();
+  expOffFnUseOfLocalBeforeDef_run();
   expOffFnUseNoDef_run();
+  expOffFnUseOfLocalNoDef_run();
   expOffFnUsesMultiple_run();
   expOffFnUseEarlierDir_run();
   impOffFnUse_run();
@@ -935,6 +1149,12 @@ void hostUseNoDef(Result *Res) { WRITE_RESULT(Res); }
 void parUseNoDef(Result *Res) { WRITE_RESULT(Res); }
 
 #pragma acc routine seq
+void parUseOfLocalNoDef(Result *Res) { WRITE_RESULT(Res); }
+
+#pragma acc routine seq
 void expOffFnUseNoDef(Result *Res) { WRITE_RESULT(Res); }
+
+#pragma acc routine seq
+void expOffFnUseOfLocalNoDef(Result *Res) { WRITE_RESULT(Res); }
 
 #endif

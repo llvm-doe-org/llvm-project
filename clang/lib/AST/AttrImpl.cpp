@@ -238,12 +238,12 @@ void OMPDeclareVariantAttr::printPrettyPragma(
   }
 }
 
-void ACCDeclAttr::setOMPNodeKind(attr::Kind K) {
+void ACCDeclAttr::setOMPNodeKind(attr::Kind K, bool DirectiveDiscardedForOMP) {
   switch (getKind()) {
 #define ATTR(X)
 #define ACC_DECL_ATTR(X)                                                       \
   case attr::X:                                                                \
-    cast<X##Attr>(this)->setOMPNodeKind(K);                                    \
+    cast<X##Attr>(this)->setOMPNodeKind(K, DirectiveDiscardedForOMP);          \
     break;
 #include "clang/Basic/AttrList.inc"
   default:
@@ -263,26 +263,42 @@ attr::Kind ACCDeclAttr::getOMPNodeKind() const {
   }
 }
 
-void ACCDeclAttr::setOMPNode(Decl *D, InheritableAttr *OMPNode) {
-  attr::Kind OMPNodeKind = OMPNode->getKind();
-  setOMPNodeKind(OMPNodeKind);
+bool ACCDeclAttr::getDirectiveDiscardedForOMP() const {
+  switch (getKind()) {
+#define ATTR(X)
+#define ACC_DECL_ATTR(X)                                                       \
+  case attr::X:                                                                \
+    return cast<X##Attr>(this)->getDirectiveDiscardedForOMP();
+#include "clang/Basic/AttrList.inc"
+  default:
+    llvm_unreachable("expected ACCDeclAttr kind");
+  }
+}
+
+void ACCDeclAttr::setOMPNode(Decl *D, InheritableAttr *OMPNode,
+                             bool DirectiveDiscardedForOMP) {
+  attr::Kind OMPNodeKind = OMPNode ? OMPNode->getKind() : attr::UnknownAttr;
 #ifndef NDEBUG
+  assert(!hasOMPNode() && !directiveDiscardedForOMP() &&
+         "expected not to have OpenMP translation already");
+  assert(!OMPNode == DirectiveDiscardedForOMP &&
+         "expected no OMPNode if and only if translation discards directive");
   assert(D->getAttr(getKind()) == this &&
          "expected D to be the Decl on which this ACCDeclAttr appears");
-  OMPDeclAttr *OMPAttr = cast<OMPDeclAttr>(D->getAttr(OMPNodeKind));
+  OMPDeclAttr *OMPAttr = cast_or_null<OMPDeclAttr>(D->getAttr(OMPNodeKind));
   assert(OMPNode == OMPAttr &&
          "expected D to be the Decl on which OMPNode appears");
-  assert(OMPAttr->getIsOpenACCTranslation() &&
+  assert((!OMPAttr || OMPAttr->getIsOpenACCTranslation()) &&
          "expected OMPNode to be marked as an OpenACC translation");
 #endif
+  setOMPNodeKind(OMPNodeKind, DirectiveDiscardedForOMP);
 }
 
 InheritableAttr *ACCDeclAttr::getOMPNode(Decl *D) const {
+  assert(hasOMPNode() && "expected to have OpenMP node");
   assert(D->getAttr(getKind()) == this &&
          "expected D to be the Decl on which this ACCDeclAttr appears");
   attr::Kind OMPNodeKind = getOMPNodeKind();
-  if (OMPNodeKind == attr::UnknownAttr)
-    return nullptr;
   OMPDeclAttr *OMPAttr = cast<OMPDeclAttr>(D->getAttr(OMPNodeKind));
   assert(OMPAttr->getIsOpenACCTranslation() &&
          "expected ACCDeclAttr's OpenMP node to be marked as such");

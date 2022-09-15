@@ -343,7 +343,7 @@ maintains between OpenACC and OpenMP declarative directives.
 In some cases, `TransformACCToOMP` determines that an OpenACC
 declarative directive should simply be discarded when translating to
 OpenMP.  In this case, an `ACCDeclAttr` has no corresponding
-`OMPDeclAttr`, and its `getOMPNode` member function returns `NULL`.
+`OMPDeclAttr`, and its `directiveDiscardedForOMP` member function returns true.
 
 If an OpenACC declarative directive is syntactically attached to a
 declaration, then the directive's `ACCDeclAttr` and any `OMPDeclAttr`
@@ -1933,18 +1933,44 @@ Routine Directive
 Clacc's current mapping of an `acc routine` directive and its clauses
 to OpenMP is as follows:
 
-* *exp* `acc routine` -> `omp declare target` plus an `omp end declare
-  target` following the associated function declaration.
-* The translation discards *exp* `gang`|`worker`|`vector`|`seq`.
+* When appearing in a function definition at the statement level (as opposed to,
+  for example, appearing at the member-list level of a type definition within
+  that function definition), the translation discards *exp* `acc routine`.
   Notes:
-    * These clauses appear to have no counterpart in OpenMP.
-    * OpenACC uses them to verify compatibility of a function with its
-      uses.
+    * Clang currently does not support *exp* `omp declare target` in a function
+      definition at the statement level, so there appears to be no other choice.
+    * Let *f* be the function in whose definition the `acc routine` directive
+      appears, and let *g* be the function to which the `acc routine` directive
+      applies.  There are three purposes an *exp* `omp declare target` might
+      have served:
+        * For readability in source-to-source mode.  That is, the OpenMP source
+          would more closely match the OpenACC source.
+        * For a use of *g* in a compute region that is in the scope of the
+          `acc routine` directive.  Fortunately, a use of *g* in a compute
+          region already produces an *imp* `omp declare target`, so the *exp*
+          `omp declare target` is not actually needed for this purpose.
+        * For a definition of *g* in the scope of the `acc routine` directive.
+          Unfortunately, this case is addressed only when a compute region use
+          of *g* produces an *imp* `omp declare target`.  Even then, that *imp*
+          `omp declare target` is sometimes not visible at the definition of *g*
+          due to obscure issues in Clang's handling of multiple declarations of
+          a function.  However, because Clacc does not yet support C++ lambdas
+          or the nested function definition extension for C, the definition of
+          *g* is necessarily outside *f*, so this purpose falls under the caveat
+          documented in `README-OpenACC-status.md` about the limited visibility
+          of an `acc routine` directive.
+* Elsewhere:
+    * *exp* `acc routine` -> `omp declare target` plus an
+      `omp end declare target` following the associated function declaration.
+    * The translation discards *exp* `gang`|`worker`|`vector`|`seq`.
+      Notes:
+        * These clauses appear to have no counterpart in OpenMP.
+        * OpenACC uses them to verify compatibility of a function with its uses.
 * The translation discards *imp* `acc routine seq`.  Notes:
     * OpenACC and OpenMP rules for implicitly determining that a
-      function must be compiled for offload appear to be the same
-      (basically, the function is used in offload code), so it seems
-      unnecessary to translate *imp* `acc routine seq` to OpenMP.
+      function must be compiled for offload appear to be compatible (basically,
+      the function is used in offload code), so it seems unnecessary to
+      translate *imp* `acc routine seq` to OpenMP.
     * Translating *imp* `acc routine seq` to OpenMP would sometimes
       require seriously cluttering the application source.  Moreover,
       it is not clear how to handle a function, such as `printf`, used

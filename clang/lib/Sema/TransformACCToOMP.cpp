@@ -767,7 +767,7 @@ public:
       StmtResult Res = getDerived().TransformStmt(CS);
       EnclosingCompoundStmt.finalize(Res);
       if (!Res.isInvalid())
-        D->setOMPNode(Res.get(), true);
+        D->setOMPNode(Res.get(), /*DirectiveDiscardedForOMP=*/true);
       return Res;
     }
 
@@ -1371,26 +1371,46 @@ public:
     return getSema().ActOnOpenMPCompareClause(L.LocStart, L.LocEnd);
   }
 
-  InheritableAttr *TransformACCAttrToOMP(ACCDeclAttr *ACCAttr,
-                                         FunctionDecl *FD) {
+  using InheritableAttrResult = ActionResult<InheritableAttr *>;
+  inline InheritableAttrResult InheritableAttrEmpty() {
+    return InheritableAttrResult(false);
+  }
+  inline InheritableAttrResult InheritableAttrError() {
+    return InheritableAttrResult(true);
+  }
+
+  InheritableAttrResult TransformACCAttrToOMP(ACCDeclAttr *ACCAttr,
+                                              FunctionDecl *FD) {
     if (!ACCAttr)
-      return nullptr;
+      return InheritableAttrError();
     switch (ACCAttr->getKind()) {
     case attr::ACCRoutineDecl:
       return getDerived().TransformACCRoutineDeclAttrToOMP(
           cast<ACCRoutineDeclAttr>(ACCAttr), FD);
     default:
       llvm_unreachable("expected OpenACC attribute");
-      return nullptr;
+      return InheritableAttrError();
     }
   }
 
-  InheritableAttr *TransformACCRoutineDeclAttrToOMP(ACCRoutineDeclAttr *ACCAttr,
-                                                    FunctionDecl *FD) {
+  InheritableAttrResult
+  TransformACCRoutineDeclAttrToOMP(ACCRoutineDeclAttr *ACCAttr,
+                                   FunctionDecl *FD) {
     assert(FD->getAttr<ACCRoutineDeclAttr>() == ACCAttr &&
            "expected Attr to be attached to FunctionDecl");
     if (ACCAttr->isImplicit())
-      return nullptr;
+      return InheritableAttrEmpty();
+    // Clang currently doesn't support 'omp declare target' at the statement
+    // level of a function.  Where FD is used in a compute region, 'omp declare
+    // target' is implied anyway.
+    // TODO: If FD is defined in this compilation unit within the scope of the
+    // 'acc routine' directive, that definition might not be compiled for the
+    // target device as it should, but the OpenACC programmer would likely have
+    // placed the ACCAttr on FD's definition rather than bury it in a different
+    // function's definition anyway.  See the Clang OpenACC design document for
+    // a more detailed discussion.
+    if (FD->getLexicalDeclContext()->isFunctionOrMethod())
+      return InheritableAttrEmpty();
     ASTContext &Context = getSema().getASTContext();
     OMPDeclareTargetDeclAttr *OMPAttr = OMPDeclareTargetDeclAttr::Create(
         Context, OMPDeclareTargetDeclAttr::MT_To,
@@ -1412,9 +1432,16 @@ bool Sema::transformACCToOMP(ACCDirectiveStmt *D) {
 }
 
 void Sema::transformACCToOMP(ACCDeclAttr *ACCAttr, FunctionDecl *FD) {
-  if (InheritableAttr *OMPAttr =
-          TransformACCToOMP(*this).TransformACCAttrToOMP(ACCAttr, FD)) {
-    FD->addAttr(OMPAttr);
-    ACCAttr->setOMPNode(FD, OMPAttr);
+  TransformACCToOMP::InheritableAttrResult OMPAttrResult =
+      TransformACCToOMP(*this).TransformACCAttrToOMP(ACCAttr, FD);
+  if (OMPAttrResult.isInvalid())
+    return;
+  if (OMPAttrResult.isUnset()) {
+    ACCAttr->setOMPNode(FD, /*OMPNode=*/nullptr,
+                        /*DirectiveDiscardedForOMP=*/true);
+    return;
   }
+  FD->addAttr(OMPAttrResult.get());
+  ACCAttr->setOMPNode(FD, OMPAttrResult.get(),
+                      /*DirectiveDiscardedForOMP=*/false);
 }

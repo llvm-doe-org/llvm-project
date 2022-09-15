@@ -98,6 +98,47 @@ class RewriteOpenACC : public ASTConsumer,
     return SemiLoc;
   }
 
+  // Replace text in the range \p RewriteRange with \p RewriteString.  If
+  // \p RewriteString is the empty string and that would leave a blank line
+  // (nothing but whitespace) enclosing it, remove that line.
+  void replaceTextWithoutBlankLine(SourceRange RewriteRange,
+                                   const std::string &RewriteString) {
+    if (!RewriteString.empty()) {
+      Rewrite.ReplaceText(CharSourceRange::getCharRange(RewriteRange),
+                          RewriteString);
+      return;
+    }
+    SourceManager &SM = Context->getSourceManager();
+    FileID File = SM.getFileID(RewriteRange.getBegin());
+    StringRef Buffer = SM.getBufferData(File);
+    bool LineBlank = true;
+    const char *RewriteBeg = SM.getCharacterData(RewriteRange.getBegin());
+    const char *LineBeg = RewriteBeg;
+    const char *BufferBeg = Buffer.data();
+    for (; LineBeg != BufferBeg && *(LineBeg - 1) != '\n'; --LineBeg) {
+      if (!std::isspace(*(LineBeg - 1))) {
+        LineBlank = false;
+        break;
+      }
+    }
+    if (LineBlank) {
+      const char *RewriteEnd = SM.getCharacterData(RewriteRange.getEnd());
+      const char *LineEnd = RewriteEnd;
+      for (const char *BufferEnd = BufferBeg + Buffer.size();
+           LineEnd != BufferEnd && *(LineEnd - 1) != '\n'; ++LineEnd) {
+        if (!std::isspace(*LineEnd)) {
+          LineBlank = false;
+          break;
+        }
+      }
+      if (LineBlank) {
+        RewriteRange.setBegin(SM.getComposedLoc(File, LineBeg - BufferBeg));
+        RewriteRange.setEnd(SM.getComposedLoc(File, LineEnd - BufferBeg));
+      }
+    }
+    Rewrite.RemoveText(CharSourceRange::getCharRange(RewriteRange));
+  }
+
 public:
   RewriteOpenACC(StringRef InFileName, std::unique_ptr<raw_ostream> OS,
                  CompilerInstance &CI)
@@ -375,42 +416,7 @@ public:
     RewriteString.erase(0, RewriteString.find_first_not_of(" "));
 
     // Perform the replacement.
-    if (!RewriteString.empty())
-      Rewrite.ReplaceText(CharSourceRange::getCharRange(RewriteRange),
-                          RewriteString);
-    else {
-      // If the line will end up blank, expand the range to include the entire
-      // line.
-      FileID File = SM.getFileID(RewriteRange.getBegin());
-      StringRef Buffer = SM.getBufferData(File);
-      bool LineBlank = true;
-      const char *RewriteBeg = SM.getCharacterData(RewriteRange.getBegin());
-      const char *LineBeg = RewriteBeg;
-      const char *BufferBeg = Buffer.data();
-      for (; LineBeg != BufferBeg && *(LineBeg - 1) != '\n'; --LineBeg) {
-        if (!std::isspace(*(LineBeg-1))) {
-          LineBlank = false;
-          break;
-        }
-      }
-      if (LineBlank) {
-        const char *RewriteEnd = SM.getCharacterData(RewriteRange.getEnd());
-        const char *LineEnd = RewriteEnd;
-        for (const char *BufferEnd = BufferBeg + Buffer.size();
-             LineEnd != BufferEnd && *(LineEnd - 1) != '\n';
-             ++LineEnd) {
-          if (!std::isspace(*LineEnd)) {
-            LineBlank = false;
-            break;
-          }
-        }
-        if (LineBlank) {
-          RewriteRange.setBegin(SM.getComposedLoc(File, LineBeg-BufferBeg));
-          RewriteRange.setEnd(SM.getComposedLoc(File, LineEnd-BufferBeg));
-        }
-      }
-      Rewrite.RemoveText(CharSourceRange::getCharRange(RewriteRange));
-    }
+    replaceTextWithoutBlankLine(RewriteRange, RewriteString);
 
     // Recurse to children if we didn't print the OpenACC and OpenMP
     // associated statements separately.
@@ -429,19 +435,23 @@ public:
     ACCDeclAttr *ACCAttr = FD->getAttr<ACCRoutineDeclAttr>();
     if (!ACCAttr)
       return true;
-    InheritableAttr *OMPAttr = ACCAttr->getOMPNode(FD);
-    if (!OMPAttr)
-      return true;
-    assert(ACCAttr->isInherited() == OMPAttr->isInherited() &&
+
+    // We cannot rewrite if the OpenMP node failed to be constructed.
+    if (!ACCAttr->hasOMPNode() && !ACCAttr->directiveDiscardedForOMP())
+      return false;
+
+    // We don't print or rewrite inherited or implicit attributes.
+    assert((!ACCAttr->hasOMPNode() ||
+            ACCAttr->isInherited() == ACCAttr->getOMPNode(FD)->isInherited()) &&
            "expected OpenACC attribute and its OpenMP translation to either "
            "both be inherited or neither");
-    if (ACCAttr->isInherited())
-      return true;
-    assert(!ACCAttr->isImplicit() &&
+    assert((!ACCAttr->isImplicit() || !ACCAttr->hasOMPNode()) &&
            "expected that implicit ACCDeclAttr has no OMPDeclAttr");
-    assert(!OMPAttr->isImplicit() &&
+    assert((!ACCAttr->hasOMPNode() || !ACCAttr->getOMPNode(FD)->isImplicit()) &&
            "expected that explicit ACCDeclAttr is never translated to "
            "implicit OMPDeclAttr");
+    if (ACCAttr->isInherited() || ACCAttr->isImplicit())
+      return true;
 
     // Can we rewrite the directive?
     //
@@ -488,50 +498,63 @@ public:
     // Generate new text.
     PrintingPolicy PolicyOMP(LO);
     PolicyOMP.OpenACCPrint = OpenACCPrint_OMP;
-    RewriteEndStream << '\n' << IndentText;
+    if (!ACCAttr->directiveDiscardedForOMP())
+      RewriteEndStream << '\n' << IndentText;
     switch (OpenACCPrint) {
     case OpenACCPrint_ACC:
     case OpenACCPrint_OMP_HEAD:
       llvm_unreachable("unexpected OpenACC print kind while rewriting input");
     case OpenACCPrint_OMP:
-      OMPAttr->printPretty(RewriteBeginStream, PolicyOMP);
+      if (ACCAttr->hasOMPNode())
+        ACCAttr->getOMPNode(FD)->printPretty(RewriteBeginStream, PolicyOMP);
       break;
     case OpenACCPrint_OMP_ACC: {
-      OMPAttr->printPretty(RewriteBeginStream, PolicyOMP);
-      clang::commented_raw_ostream ComStream(RewriteBeginStream, IndentWidth,
-                                             /*IndentPreReuses=*/true,
-                                             /*IndentPost=*/1,
-                                             /*ComStart=*/true);
+      if (ACCAttr->hasOMPNode())
+        ACCAttr->getOMPNode(FD)->printPretty(RewriteBeginStream, PolicyOMP);
+      clang::commented_raw_ostream ComStream(
+          RewriteBeginStream, IndentWidth, /*IndentPreReuses=*/true,
+          /*IndentPost=*/1, /*ComStart=*/ACCAttr->hasOMPNode());
+      if (!ACCAttr->hasOMPNode())
+        ComStream << "// ";
       ComStream << Rewrite.getRewrittenText(
           CharSourceRange::getCharRange(DirectiveRange));
+      if (ACCAttr->directiveDiscardedForOMP())
+        RewriteBeginStream << " // discarded in OpenMP translation";
       break;
     }
     case OpenACCPrint_ACC_OMP: {
       RewriteBeginStream << Rewrite.getRewrittenText(
           CharSourceRange::getCharRange(DirectiveRange));
-      RewriteBeginStream << '\n' << IndentText;
-      clang::commented_raw_ostream ComStream(RewriteBeginStream, IndentWidth,
-                                             /*IndentPreReuses=*/false,
-                                             /*IndentPost=*/1,
-                                             /*ComStart=*/false);
-      ComStream << "// ";
-      OMPAttr->printPretty(ComStream, PolicyOMP);
-      RewriteEndStream << "// ";
+      if (ACCAttr->directiveDiscardedForOMP())
+        RewriteBeginStream << " // discarded in OpenMP translation";
+      if (ACCAttr->hasOMPNode()) {
+        RewriteBeginStream << '\n' << IndentText;
+        clang::commented_raw_ostream ComStream(RewriteBeginStream, IndentWidth,
+                                               /*IndentPreReuses=*/false,
+                                               /*IndentPost=*/1,
+                                               /*ComStart=*/false);
+        ComStream << "// ";
+        ACCAttr->getOMPNode(FD)->printPretty(ComStream, PolicyOMP);
+      }
+      if (!ACCAttr->directiveDiscardedForOMP())
+        RewriteEndStream << "// ";
       break;
     }
     }
-    RewriteEndStream << "#pragma omp end declare target";
-    // We previously asserted that FDEnd is either ';' or '}'.  The next
-    // character comes after that token.  If the rest of the line isn't blank,
-    // insert a newline at the end directive.  Otherwise, don't or you'll create
-    // a blank line.
-    FileID File = SM.getFileID(FDEnd);
-    StringRef Buffer = SM.getBufferData(File);
-    for (const char *P = SM.getCharacterData(FDEnd) + 1;
-         P != Buffer.end() && *P != '\n'; ++P) {
-      if (!std::isspace(*P)) {
-        RewriteEndStream << '\n';
-        break;
+    if (!ACCAttr->directiveDiscardedForOMP()) {
+      RewriteEndStream << "#pragma omp end declare target";
+      // We previously asserted that FDEnd is either ';' or '}'.  The next
+      // character comes after that token.  If the rest of the line isn't blank,
+      // insert a newline at the end directive.  Otherwise, don't or you'll
+      // create a blank line.
+      FileID File = SM.getFileID(FDEnd);
+      StringRef Buffer = SM.getBufferData(File);
+      for (const char *P = SM.getCharacterData(FDEnd) + 1;
+           P != Buffer.end() && *P != '\n'; ++P) {
+        if (!std::isspace(*P)) {
+          RewriteEndStream << '\n';
+          break;
+        }
       }
     }
     RewriteBeginStream.flush();
@@ -543,8 +566,7 @@ public:
       RewriteBeginString.pop_back();
 
     // Perform replacement.
-    Rewrite.ReplaceText(CharSourceRange::getCharRange(DirectiveRange),
-                        RewriteBeginString);
+    replaceTextWithoutBlankLine(DirectiveRange, RewriteBeginString);
     Rewrite.InsertTextAfterToken(FDEnd, RewriteEndString);
     return true;
   }

@@ -3339,11 +3339,18 @@ void Sema::ActOnOpenACCRoutineDirective(ArrayRef<ACCClause *> Clauses,
     ACCAttr->setInherited(false);
     ACCAttr->setImplicit(false);
     ACCAttr->setRange(SourceRange(StartLoc, EndLoc));
-    if (InheritableAttr *OMPAttr = ACCAttr->getOMPNode(FD)) {
-      OMPAttr->setInherited(false);
-      OMPAttr->setImplicit(false);
-      OMPAttr->setRange(SourceRange(StartLoc, EndLoc));
+    // Retranslate because, in different contexts, the translation might differ
+    // (e.g., the directive might simply be dropped).
+    if (InheritableAttr *OMPNode = ACCAttr->unsetOMPNode(FD)) {
+      AttrVec &Attrs = FD->getAttrs();
+      for (auto I = Attrs.begin(), E = Attrs.end(); I != E; ++I) {
+        if (*I == OMPNode) {
+          FD->getAttrs().erase(I);
+          break;
+        }
+      }
     }
+    transformACCToOMP(ACCAttr, FD);
   }
 }
 

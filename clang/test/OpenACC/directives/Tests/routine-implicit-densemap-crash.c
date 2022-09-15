@@ -22,7 +22,7 @@
 
 //      DMP: FunctionDecl {{.*}} f 'int ()'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} g00 'void ()'
 //
@@ -92,7 +92,7 @@ void h() { g00(); }
 
 //      DMP: FunctionDecl {{.*}} f 'int ()'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Inherited Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //      DMP: FunctionDecl {{.*}} main 'int ()'
 //

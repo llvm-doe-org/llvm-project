@@ -501,6 +501,20 @@ void inFuncOutFuncOutFuncParLevelConflict();
 #pragma acc routine gang
 void inFuncOutFuncOutFuncParLevelConflict();
 
+// Not a likely use case, but it should behave sanely.
+// expected-note@+1 {{previous '#pragma acc routine' for function 'inOwnFuncParLevelConflict' appears here}}
+#pragma acc routine gang
+void inOwnFuncParLevelConflict() {
+  // expected-error@+1 {{for function 'inOwnFuncParLevelConflict', '#pragma acc routine worker' conflicts with previous '#pragma acc routine gang'}}
+  #pragma acc routine worker
+  void inOwnFuncParLevelConflict();
+}
+#pragma acc routine gang
+void inOwnFuncNoParLevelConflict() {
+  #pragma acc routine gang
+  void inOwnFuncNoParLevelConflict();
+}
+
 //..............................................................................
 // Conflicting clauses between explicit directive and previously implied
 // directive for the same function.  These necessarily include errors that the
@@ -904,6 +918,15 @@ void UNIQUE_NAME() {
 // expected-error@+1 {{first '#pragma acc routine' for function 'defBeforeInFunc' not in scope at definition}}
 #pragma acc routine seq // Should note only the first routine directive.
 void defBeforeInFunc();
+
+// Make sure definition check isn't skipped at a routine directive within the
+// function it applies to.
+// expected-note@+1 {{definition of function 'inOwnDef' appears here}}
+void inOwnDef() {
+  // expected-error@+1 {{first '#pragma acc routine' for function 'inOwnDef' not in scope at definition}}
+  #pragma acc routine seq
+  void inOwnDef();
+}
 
 // Use errors shouldn't suppress/break later definition errors.
 void useDefBefore();

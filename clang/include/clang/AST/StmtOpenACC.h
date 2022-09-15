@@ -143,38 +143,37 @@ public:
   /// Set the statement to which this directive has been translated for OpenMP.
   /// In most cases, it's an OpenMP directive.  In some cases, it's a compound
   /// statement that contains an OpenMP directive.  If the OpenACC directive
-  /// was discarded rather than translated to an OpenMP directive, set
-  /// DirectiveDiscardedForOMP to true.
-  ///
-  /// \param OMPNode The statement.
-  /// \param DirectiveDiscardedForOMP Whether the OpenACC directive was simply
-  ///        discarded for translation to OpenMP.
+  /// was discarded rather than translated to an OpenMP directive,
+  /// \p DirectiveDiscardedForOMP must be true.  Fails an assertion if
+  /// \c hasOMPNode (and possibly \c directiveDiscardedForOMP) already returns
+  /// true.
   void setOMPNode(Stmt *OMPNode, bool DirectiveDiscardedForOMP = false) {
-    assert(this->OMPNode == nullptr && !this->DirectiveDiscardedForOMP &&
-           "expected OMPNode not to be set already");
+    assert(!hasOMPNode() && !directiveDiscardedForOMP() &&
+           "expected not to have OpenMP translation already");
     assert(OMPNode != nullptr && "expected OMPNode");
-    assert((!DirectiveDiscardedForOMP || !isa<OMPExecutableDirective>(OMPNode)) &&
-           "expected OMPNode not to be an OpenMP directive when OpenMP"
-           " directive discarded");
+    assert(
+        (!DirectiveDiscardedForOMP || !isa<OMPExecutableDirective>(OMPNode)) &&
+        "expected OMPNode not to be an OpenMP directive when translation "
+        "discards directive");
     this->OMPNode = OMPNode;
     this->DirectiveDiscardedForOMP = DirectiveDiscardedForOMP;
   }
 
-  /// Has this directive been translated to OpenMP?
+  /// Has this directive been translated to an OpenMP directive?  If false, then
+  /// either the translation has not yet been performed, the translation failed,
+  /// or \c setOMPNode hasn't been called yet.
   bool hasOMPNode() const { return OMPNode; }
 
   /// Get the statement to which this directive has been translated for OpenMP.
+  /// Never returns nullptr.  Fails an assertion if \c hasOMPNode returns false.
   Stmt *getOMPNode() const {
-    assert(OMPNode && "expected to have OMPNode already");
+    assert(hasOMPNode() && "expected to have OpenMP translation already");
     return OMPNode;
   }
 
   /// Was the OpenACC directive discarded rather than translated to an OpenMP
   /// directive?
-  bool directiveDiscardedForOMP() const {
-    assert(OMPNode && "expected to have OMPNode already");
-    return DirectiveDiscardedForOMP;
-  }
+  bool directiveDiscardedForOMP() const { return DirectiveDiscardedForOMP; }
 
   // Are the OpenACC and OpenMP versions of an OpenACC construct different
   // enough that, when printing both versions, the associated statements must

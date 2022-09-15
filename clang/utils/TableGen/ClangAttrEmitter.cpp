@@ -1575,7 +1575,8 @@ writePrettyPrintFunction(const Record &R,
 
     if (Variety == "Pragma") {
       OS << "    printPrettyPragma(OS, Policy);\n";
-      OS << "    OS << \"\\n\";";
+      OS << "    if (Policy.IncludeNewlines)\n";
+      OS << "      OS << \"\\n\";\n";
       OS << "    break;\n";
       OS << "  }\n";
       continue;

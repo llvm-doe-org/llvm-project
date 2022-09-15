@@ -262,39 +262,63 @@ void DeclPrinter::prettyPrintPragmas(Decl *D) {
     AttrVec &Attrs = D->getAttrs();
     for (auto *A : Attrs) {
       if (ACCDeclAttr *ACCAttr = dyn_cast<ACCDeclAttr>(A)) {
-        InheritableAttr *OMPAttr = ACCAttr->getOMPNode(D);
         // If the OpenACC attribute is inherited or implicit, it didn't appear
         // in the original source, so don't print it.
         if (ACCAttr->isInherited())
           continue;
         if (ACCAttr->isImplicit()) {
-          assert(!OMPAttr &&
+          assert(ACCAttr->directiveDiscardedForOMP() &&
                  "expected that implicit ACCDeclAttr has no OMPDeclAttr");
           continue;
         }
-        if (!OMPAttr)
-          continue; // there must have been an error during the translation
-        assert(!OMPAttr->isImplicit() &&
-               "expected that explicit ACCDeclAttr is never translated to "
-               "implicit OMPDeclAttr");
+        // If translation failed, then just print the original OpenACC.
+        if (!ACCAttr->hasOMPNode() && !ACCAttr->directiveDiscardedForOMP()) {
+          ACCAttr->printPretty(Out, Policy);
+          Indent();
+          continue;
+        }
         switch (Policy.OpenACCPrint) {
         case OpenACCPrint_ACC:
           ACCAttr->printPretty(Out, Policy);
+          Indent();
           break;
         case OpenACCPrint_OMP:
         case OpenACCPrint_OMP_HEAD:
-          OMPAttr->printPretty(Out, Policy);
+          if (ACCAttr->hasOMPNode()) {
+            ACCAttr->getOMPNode(D)->printPretty(Out, Policy);
+            Indent();
+          }
           break;
-        case OpenACCPrint_ACC_OMP:
-          ACCAttr->printPretty(Out, Policy);
+        case OpenACCPrint_ACC_OMP: {
+          PrintingPolicy PolicyNoNewlines(Policy);
+          PolicyNoNewlines.IncludeNewlines = false;
+          ACCAttr->printPretty(Out, PolicyNoNewlines);
+          if (ACCAttr->directiveDiscardedForOMP())
+            Out << " // discarded in OpenMP translation";
+          Out << '\n';
+          Indent();
+          if (ACCAttr->hasOMPNode()) {
+            Out << "// ";
+            ACCAttr->getOMPNode(D)->printPretty(Out, Policy);
+            Indent();
+          }
+          break;
+        }
+        case OpenACCPrint_OMP_ACC: {
+          if (ACCAttr->hasOMPNode()) {
+            ACCAttr->getOMPNode(D)->printPretty(Out, Policy);
+            Indent();
+          }
           Out << "// ";
-          OMPAttr->printPretty(Out, Policy);
+          PrintingPolicy PolicyNoNewlines(Policy);
+          PolicyNoNewlines.IncludeNewlines = false;
+          ACCAttr->printPretty(Out, PolicyNoNewlines);
+          if (ACCAttr->directiveDiscardedForOMP())
+            Out << " // discarded in OpenMP translation";
+          Out << '\n';
+          Indent();
           break;
-        case OpenACCPrint_OMP_ACC:
-          OMPAttr->printPretty(Out, Policy);
-          Out << "// ";
-          ACCAttr->printPretty(Out, Policy);
-          break;
+        }
         }
         continue;
       }
@@ -544,7 +568,7 @@ void DeclPrinter::VisitDeclContext(DeclContext *DC, bool Indent) {
       // prints it to avoid merge conflicts in tests.  TODO: However, we need
       // to come to terms with why inherited attributes should be printed as
       // that seems to indicate they weren't specified in the original source.
-      // See related todo in DeclPrinter::printPrettyPragmas.
+      // See related todo in DeclPrinter::prettyPrintPragmas.
       OpenACCPrintKind PrintMode = OpenACCPrint_OMP;
       if (Attr->getIsOpenACCTranslation())
         PrintMode =

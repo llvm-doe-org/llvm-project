@@ -242,14 +242,18 @@ public:
 
 class ACCDeclAttr : public InheritableAttr {
   ///@{
-  /// These functions are needed specifically for (1) reading and writing an AST
-  /// file, (2) derived classes' clone member functions, which are called for
+  /// These functions are intended to be called only by public member functions
+  /// of this class, such as \c setOMPNode.  These functions merely dispatch to
+  /// derived class functions that have the same names.  Those derived class
+  /// functions are needed specifically for (1) reading and writing an AST file,
+  /// (2) derived classes' clone member functions, which are called for
   /// attribute inheritance, and (3) AST dumps.  In these cases, the OpenMP
   /// attribute might not have been created yet or might be difficult to store
-  /// or access.  In other cases, use \c getOMPNode and \c setOMPNode, which
-  /// have more careful assertions.
-  void setOMPNodeKind(attr::Kind K);
+  /// or access.  In all other cases, instead use this class's public member
+  /// functions, which have more careful assertions.
+  void setOMPNodeKind(attr::Kind K, bool DirectiveDiscardedForOMP);
   attr::Kind getOMPNodeKind() const;
+  bool getDirectiveDiscardedForOMP() const;
   ///@}
 
 protected:
@@ -261,15 +265,47 @@ protected:
 
 public:
   virtual ~ACCDeclAttr() {}
-  ///@{
-  /// Set or get the OpenMP attribute to which this OpenACC attribute was
-  /// translated, both of which must already have been attached to \a D, and
+
+  /// Set the OpenMP attribute to which this OpenACC attribute has been
+  /// translated, both of which must already have been attached to \p D, and
   /// \c getIsOpenACCTranslation() must already return true for the OpenMP
-  /// attribute.  Return \c nullptr if this OpenACC attribute has not been
-  /// translated or the translation relies on implicit OpenMP behavior.
+  /// attribute.  \p OMPNode must be \c nullptr if and only if
+  /// \p DirectiveDiscardedForOMP is true.  That indicates the translation
+  /// merely discarded the attribute and thus relies on implicit OpenMP
+  /// behavior.  Fails an assertion if \c hasOMPNode or
+  /// \c directiveDiscardedForOMP already returns true.
+  void setOMPNode(Decl *D, InheritableAttr *OMPNode,
+                  bool DirectiveDiscardedForOMP);
+
+  /// Undo any previous \c setOMPNode call so it can be called again, and return
+  /// the \c OMPNode (possibly a \c nullptr) that was passed to that call.  The
+  /// caller is responsible for removing the returned OpenMP attribute, if not
+  /// \c nullptr, from \c D.  Fails an assertion if \c setOMPNode was not
+  /// called for \p D or if \c unsetOMPNode has been called since then.
+  InheritableAttr *unsetOMPNode(Decl *D) {
+    assert((hasOMPNode() || directiveDiscardedForOMP()) &&
+           "expected to have OpenMP translation already");
+    InheritableAttr *OMPNode = hasOMPNode() ? getOMPNode(D) : nullptr;
+    setOMPNodeKind(attr::UnknownAttr, /*DirectiveDiscardedForOMP=*/false);
+    return OMPNode;
+  }
+
+  /// Has this attribute been translated to an OpenMP attribute?  If false, then
+  /// either the translation has not yet been performed, the translation failed,
+  /// the translation merely discarded the attribute
+  /// (\c directiveDiscardedForOMP returns true), or \c setOMPNode hasn't been
+  /// called yet.
+  bool hasOMPNode() const { return getOMPNodeKind() != attr::UnknownAttr; }
+
+  /// Get the OpenMP attribute to which this attribute was translated.  Never
+  /// returns nullptr.  Fails an assertion if \c hasOMPNode returns false.
   InheritableAttr *getOMPNode(Decl *D) const;
-  void setOMPNode(Decl *D, InheritableAttr *OMPNode);
-  ///@}
+
+  /// Has this attribute been translated to OpenMP, and did the translation
+  /// merely discard it and thus relies on implicit OpenMP behavior?
+  bool directiveDiscardedForOMP() const {
+    return getDirectiveDiscardedForOMP();
+  }
 
   // Implement isa/cast/dyncast/etc.
   static bool classof(const Attr *A) {

@@ -37,8 +37,8 @@ int main() {
   // OpenMP without OpenACC
   //--------------------------------------------------
 
-  // DMP-NOT: OMP{{.*}}Directive
-  // DMP-NOT: OMP{{.*}}Clause
+  // DMP-NOT: OMP{{[^ ]*}}Directive
+  // DMP-NOT: OMP{{[^ ]*}}Clause
   //
   // PRT-SRC:      {{^ *}}#if !ONLY_IN_ACC
   // PRT-SRC-NEXT: {{^ *}}  /* noacc-

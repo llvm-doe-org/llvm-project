@@ -365,9 +365,14 @@ Run-Time Environment Variables
 
 * Lexical context
     * Appearing at file scope is supported.
-    * Appearing within a function definition is not yet supported.
-    * Appearing within the bodies of classes, namespaces, or other C++
-      constructs is not yet supported.
+    * Appearing within another function's definition is supported.  There are
+      currently some obscure inconsistencies in the visibility of the `routine`
+      directive outside that function definition, as described under "Scope of
+      the directive" below, but these should not affect most users.
+    * Appearing within the member list of a class, namespace, or other C++
+      construct is not yet supported.
+    * Appearing within any OpenACC construct besides `atomic` is supported.
+    * Appearing outside any OpenACC construct is supported.
 * Supported level-of-parallelism clauses
     * `gang`
     * `worker`
@@ -402,23 +407,37 @@ Run-Time Environment Variables
     * A declaration containing multiple declarators is not supported.
       For example, `void foo(), bar();`.
 * Scope of the directive
-    * A `routine` directive's scope starts at the `routine` directive
-      and ends at the end of the compilation unit.
+    * A `routine` directive's scope starts at the `routine` directive and ends
+      at the end of the compilation unit.  Of course, its visibility is only
+      useful where the function to which it applies is also visible.  Caveat:
+        * Unlike many other kinds of declarations (e.g., local variables), the
+          visibility of a `routine` directive should extend to the end of the
+          compilation unit even if the `routine` directive appears within
+          another function's definition.
+        * However, the visibility of `routine` directives is limited in a subtle
+          manner by some obscure issues in Clang's general handling of multiple
+          declarations of a function and by limitations in Clang's OpenMP
+          support.
+        * As a general rule thumb, if replacing a `routine` directive with
+          another kind of declaration would not make the latter declaration
+          visible in some other scope, then it is best to assume the `routine`
+          directive's visibility in that other scope is currently unreliable.
+          Such usage is confusing anyway and appears to be uncommon.
     * A definition or use of any function must appear within the scope
       of at least one explicit and applying `routine` directive if
       there is any within the compilation unit.  Otherwise, a
       compile-time error diagnostic is produced.  Uses include host
       uses and accelerator uses but only if they're evaluated (e.g., a
       reference in `sizeof` is not a use).
-    * OpenACC 3.2 is not clear about the required locations of
-      definitions and uses of a function relative to applying
-      `routine` directives.  Clarifications are under discussion among
-      the OpenACC technical committee for inclusion in the OpenACC
-      spec after 3.2.
+    * OpenACC 3.2 is not clear about the required locations of definitions and
+      uses of a function relative to applying `routine` directives.
+      Clarifications consistent with the above rules (except the caveat) are
+      under discussion among the OpenACC technical committee for inclusion in
+      the OpenACC spec after 3.2.
 * Body of the associated function's definition
     * Appearance of any OpenACC directive other than an orphaned `loop`
-      construct or an `atomic` construct produces a compile-time error
-      diagnostic.
+      construct, an `atomic` construct, or a `routine` directive produces a
+      compile-time error diagnostic.
     * Appearance of an orphaned `loop` construct with an incompatible level of
       parallelism produces a compile-time error diagnostic.
     * Declaration of a static local variable produces a compile-time
@@ -428,10 +447,16 @@ Run-Time Environment Variables
       a `routine seq` directive is implied for it by any use of the
       function within a compute construct or within another function
       with a `routine` directive (whether implicit or explicit).
-    * An implicit `routine seq` directive has scope throughout the
-      compilation unit and thus triggers the above diagnostics for the
-      function definition's body as long it's in the same compilation
-      unit.
+    * An implicit `routine seq` directive has scope throughout the compilation
+      unit and thus triggers the above diagnostics for the function definition's
+      body as long it's in the same compilation unit.  Caveat:
+        * If the function to which an implicit `routine` directive applies is
+          prototyped within the same function in which the implying use appears,
+          the visibility of the implicit `routine` directive might be limited in
+          the manner discussed above for an explicit `routine` directive within
+          a function.
+        * As for the explicit `routine` directive, such usage is confusing
+          anyway and appears to be uncommon.
     * OpenACC 3.2 does not specify implicit `routine` directives
       except for C++ lambdas, but nvc 21.11 computes them.
       Clarifications are under discussion among the OpenACC technical

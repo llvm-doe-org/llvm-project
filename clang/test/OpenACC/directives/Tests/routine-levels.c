@@ -2,6 +2,9 @@
 //
 // Check that each is translated properly.  Check that specifying each on
 // multiple different routine directives for the same function is ok.
+//
+// Level-of-parallelism clauses for "acc routine" within a function are checked
+// in routine-in-func.c.
 
 // RUN: %{acc-check-dmp}
 // RUN: %{acc-check-prt}
@@ -75,7 +78,7 @@ void gang(Result *Res) { WRITE_RESULT(Res); }
 void gang(Result *Res);
 
 //--------------------------------------------------
-// worker clause.  Prototype before defintiion.
+// worker clause.  Prototype before definition.
 //--------------------------------------------------
 
 //      DMP: FunctionDecl {{.*}} worker 'void (Result *)'

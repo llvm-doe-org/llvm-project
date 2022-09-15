@@ -1,6 +1,9 @@
 // Check that "acc routine seq" behaves correctly when placed on a function
 // prototype, definition, neither, or both and in different orders.
 //
+// routine-in-func.c checks some of these cases for "acc routine" within a
+// function.
+// 
 // Implicit "acc routine seq" is more thoroughly checked in routine-implicit.c.
 
 // REDEFINE: %{dmp:fc:args} = -implicit-check-not=ACCRoutineDeclAttr \
@@ -12,10 +15,10 @@
 // RUN: %{acc-check-exe-compile-c}
 //
 // REDEFINE: %{exe:base-name} = other
-// REDEFINE: %{all:clang:args} = -DCOMPILE_OTHER
+// REDEFINE: %{exe:clang:args} = -DCOMPILE_OTHER
 // RUN: %{acc-check-exe-compile-c}
 
-// REDEFINE: %{all:clang:args} = main.o other.o
+// REDEFINE: %{exe:clang:args} = main.o other.o
 // REDEFINE: %{exe:fc:args} = -strict-whitespace
 // RUN: %{acc-check-exe-link}
 // RUN: %{acc-check-exe-run}
@@ -50,7 +53,7 @@ int PrtStart;
 
 //      DMP: FunctionDecl {{.*}} decl 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //
 // PRT-NEXT: void decl(Result *);
@@ -58,7 +61,7 @@ void decl(Result *);
 
 //      DMP: FunctionDecl {{.*}} def 'void (Result *)'
 //  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown{{$}}
+//      DMP:   ACCRoutineDeclAttr {{.*}}> Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP{{$}}
 //  DMP-NOT:   OMPDeclareTargetDeclAttr
 //
 // PRT-NEXT: void def(Result *Res) {
@@ -382,8 +385,8 @@ struct fnDeclAddsType *fnDeclAddsType(Result *Res) { // type isn't new so has no
 int main(int argc, char *argv[]) {
   Result Res;
   //      EXE:           decl: host=1, not_host=0
-  //      EXE:            def: host=1, not_host=0
-  //      EXE:         onDecl: host=1, not_host=0
+  // EXE-NEXT:            def: host=1, not_host=0
+  // EXE-NEXT:         onDecl: host=1, not_host=0
   // EXE-NEXT:          onDef: host=1, not_host=0
   // EXE-NEXT:     onDeclDecl: host=1, not_host=0
   // EXE-NEXT:      onDeclDef: host=1, not_host=0
