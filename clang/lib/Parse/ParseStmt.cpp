@@ -413,8 +413,7 @@ Retry:
     return ParseOpenMPDeclarativeOrExecutableDirective(StmtCtx);
 
   case tok::annot_pragma_openacc:
-    ProhibitAttributes(Attrs);
-    return ParseOpenACCDirectiveStmt(StmtCtx);
+    return ParseOpenACCDirectiveStmt(Attrs, StmtCtx);
 
   case tok::annot_pragma_ms_pointers_to_members:
     ProhibitAttributes(Attrs);

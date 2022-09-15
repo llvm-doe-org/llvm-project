@@ -3354,11 +3354,22 @@ public:
   // OpenACC: Directives and clauses.
 
   /// Parses declarative OpenACC directives.
-  DeclGroupPtrTy ParseOpenACCDeclarativeDirective();
+  DeclGroupPtrTy ParseOpenACCDeclarativeDirective(DeclaratorContext Context,
+                                                  ParsedAttributes &Attrs);
+  /// Parses declarative OpenACC directives except the starting
+  /// \c annot_pragma_openacc (whose location is \p StartLoc) and directive
+  /// kind (\p DKind) have already been parsed.  Stores the location of the
+  /// declaration's last token (semicolon) in \p EndLoc.
+  DeclGroupPtrTy ParseOpenACCDeclarativeDirective(DeclaratorContext Context,
+                                                  ParsedAttributes &Attrs,
+                                                  SourceLocation StartLoc,
+                                                  OpenACCDirectiveKind DKind,
+                                                  SourceLocation &EndLoc);
   /// Parses OpenACC executable directives or constructs.
   ///
   /// \param StmtCtx The context in which we're parsing the directive.
-  StmtResult ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx);
+  StmtResult ParseOpenACCDirectiveStmt(ParsedAttributes &Attrs,
+                                       ParsedStmtContext StmtCtx);
   /// Parses clauses for directive of kind \a Kind.
   ///
   /// \param DKind Kind of current directive.

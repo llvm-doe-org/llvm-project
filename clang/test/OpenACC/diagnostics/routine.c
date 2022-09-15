@@ -53,16 +53,10 @@ void UNIQUE_NAME();
 // Any one of those clauses is sufficient to suppress that diagnostic.
 #pragma acc routine gang
 void UNIQUE_NAME();
-
-// Any one of those clauses is sufficient to suppress that diagnostic.
 #pragma acc routine worker
 void UNIQUE_NAME();
-
-// Any one of those clauses is sufficient to suppress that diagnostic.
 #pragma acc routine vector
 void UNIQUE_NAME();
-
-// Any one of those clauses is sufficient to suppress that diagnostic.
 #pragma acc routine seq
 void UNIQUE_NAME();
 
@@ -292,6 +286,22 @@ void UNIQUE_NAME();
 #pragma acc routine seq gang worker vector seq gang worker vector
 void UNIQUE_NAME();
 
+// Try one case where the routine directive is inside another function.
+void UNIQUE_NAME() {
+  // expected-error@+10 {{unexpected OpenACC clause 'worker', 'gang' is specified already}}
+  // expected-error@+9 {{unexpected OpenACC clause 'vector', 'gang' is specified already}}
+  // expected-error@+8 {{unexpected OpenACC clause 'vector', 'worker' is specified already}}
+  // expected-error@+7 {{unexpected OpenACC clause 'seq', 'gang' is specified already}}
+  // expected-error@+6 {{unexpected OpenACC clause 'seq', 'worker' is specified already}}
+  // expected-error@+5 {{unexpected OpenACC clause 'seq', 'vector' is specified already}}
+  // expected-error@+4 {{directive '#pragma acc routine' cannot contain more than one 'gang' clause}}
+  // expected-error@+3 {{directive '#pragma acc routine' cannot contain more than one 'worker' clause}}
+  // expected-error@+2 {{directive '#pragma acc routine' cannot contain more than one 'vector' clause}}
+  // expected-error@+1 {{directive '#pragma acc routine' cannot contain more than one 'seq' clause}}
+  #pragma acc routine gang worker vector seq gang worker vector seq
+  void UNIQUE_NAME();
+}
+
 //..............................................................................
 // Conflicting clauses on different explicit directives for the same function.
 
@@ -408,6 +418,89 @@ void declDefConflict();
 #pragma acc routine worker
 void declDefConflict() {}
 
+// Both routine directives are within the same function.
+void UNIQUE_NAME() {
+  #pragma acc routine gang
+  void inFuncNoParLevelConflict();
+  #pragma acc routine gang
+  void inFuncNoParLevelConflict();
+
+  // expected-note@+1 {{previous '#pragma acc routine' for function 'inFuncParLevelConflict' appears here}}
+  #pragma acc routine gang
+  void inFuncParLevelConflict();
+  // expected-error@+1 {{for function 'inFuncParLevelConflict', '#pragma acc routine worker' conflicts with previous '#pragma acc routine gang'}}
+  #pragma acc routine worker
+  void inFuncParLevelConflict();
+}
+
+// Routine directives are in different functions.
+void UNIQUE_NAME() {
+  #pragma acc routine gang
+  void inFuncInFuncNoParLevelConflict();
+  // expected-note@+1 {{previous '#pragma acc routine' for function 'inFuncInFuncParLevelConflict' appears here}}
+  #pragma acc routine gang
+  void inFuncInFuncParLevelConflict();
+}
+void UNIQUE_NAME() {
+  #pragma acc routine gang
+  void inFuncInFuncNoParLevelConflict();
+  // expected-error@+1 {{for function 'inFuncInFuncParLevelConflict', '#pragma acc routine seq' conflicts with previous '#pragma acc routine gang'}}
+  #pragma acc routine seq
+  void inFuncInFuncParLevelConflict();
+}
+
+// Only first routine directive is inside a function.
+void UNIQUE_NAME() {
+  #pragma acc routine worker
+  void inFuncOutFuncNoParLevelConflict();
+  // expected-note@+1 {{previous '#pragma acc routine' for function 'inFuncOutFuncParLevelConflict' appears here}}
+  #pragma acc routine worker
+  void inFuncOutFuncParLevelConflict();
+}
+#pragma acc routine worker
+void inFuncOutFuncNoParLevelConflict();
+// expected-error@+1 {{for function 'inFuncOutFuncParLevelConflict', '#pragma acc routine gang' conflicts with previous '#pragma acc routine worker'}}
+#pragma acc routine gang
+void inFuncOutFuncParLevelConflict();
+
+// Only second routine directive is inside a function.
+#pragma acc routine vector
+void outFuncInFuncNoParLevelConflict();
+// expected-note@+1 {{previous '#pragma acc routine' for function 'outFuncInFuncParLevelConflict' appears here}}
+#pragma acc routine vector
+void outFuncInFuncParLevelConflict();
+void UNIQUE_NAME() {
+  #pragma acc routine vector
+  void outFuncInFuncNoParLevelConflict();
+  // expected-error@+1 {{for function 'outFuncInFuncParLevelConflict', '#pragma acc routine seq' conflicts with previous '#pragma acc routine vector'}}
+  #pragma acc routine seq
+  void outFuncInFuncParLevelConflict();
+}
+
+// Routine directive is not seen due to earlier function prototype at file
+// scope.  TODO: This doesn't follow the OpenACC spec.  It's due to the way
+// Clang merges function prototypes.  Hopefully it's obscure enough that we
+// don't really need to fix it.
+void outFuncInFuncOutFuncParLevelConflict();
+void UNIQUE_NAME() {
+  #pragma acc routine worker
+  void outFuncInFuncOutFuncParLevelConflict();
+}
+#pragma acc routine gang
+void outFuncInFuncOutFuncParLevelConflict();
+
+// Function prototype at file scope doesn't hide routine directive inside an
+// earlier function because the prototype inherits the routine directive.
+void UNIQUE_NAME() {
+  // expected-note@+1 {{previous '#pragma acc routine' for function 'inFuncOutFuncOutFuncParLevelConflict' appears here}}
+  #pragma acc routine worker
+  void inFuncOutFuncOutFuncParLevelConflict();
+}
+void inFuncOutFuncOutFuncParLevelConflict();
+// expected-error@+1 {{for function 'inFuncOutFuncOutFuncParLevelConflict', '#pragma acc routine gang' conflicts with previous '#pragma acc routine worker'}}
+#pragma acc routine gang
+void inFuncOutFuncOutFuncParLevelConflict();
+
 //..............................................................................
 // Conflicting clauses between explicit directive and previously implied
 // directive for the same function.  These necessarily include errors that the
@@ -464,75 +557,105 @@ void impSeqExpSeq_use() {
 #pragma acc routine seq
 void impSeqExpSeq();
 
+void UNIQUE_NAME() {
+  void impSeqExpInSameFunc0();
+
+  #pragma acc parallel
+  {
+    // expected-note@+1 {{use of function 'impSeqExpInSameFunc0' appears here}}
+    impSeqExpInSameFunc0();
+    void impSeqExpInSameFunc1();
+    // expected-note@+1 {{use of function 'impSeqExpInSameFunc1' appears here}}
+    impSeqExpInSameFunc1();
+  }
+
+  // expected-error@+1 {{first '#pragma acc routine' for function 'impSeqExpInSameFunc0' not in scope at some uses}}
+  #pragma acc routine seq
+  void impSeqExpInSameFunc0();
+
+  // expected-error@+1 {{first '#pragma acc routine' for function 'impSeqExpInSameFunc1' not in scope at some uses}}
+  #pragma acc routine seq
+  void impSeqExpInSameFunc1();
+}
+
+void impSeqExpInDifferentFunc_use() {
+  #pragma acc parallel
+  {
+    void impSeqExpInDifferentFunc();
+    // expected-note@+1 {{use of function 'impSeqExpInDifferentFunc' appears here}}
+    impSeqExpInDifferentFunc();
+  }
+}
+void impSeqExpInDifferentFunc_routine() {
+  // expected-error@+1 {{first '#pragma acc routine' for function 'impSeqExpInDifferentFunc' not in scope at some uses}}
+  #pragma acc routine seq
+  void impSeqExpInDifferentFunc();
+}
+
 //------------------------------------------------------------------------------
 // Context not permitted.
 //------------------------------------------------------------------------------
 
-void withinFunction() {
+struct UNIQUE_NAME {
   // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
   #pragma acc routine seq
-  void foo();
-  struct WithinStruct {
+  void (*fp)();
+};
+
+union UNIQUE_NAME {
+  // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
+  #pragma acc routine seq
+  void (*fp)();
+};
+
+void UNIQUE_NAME() {
+  struct UNIQUE_NAME {
     // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
     #pragma acc routine seq
-    int i;
+    void (*fp)();
   };
-  #pragma acc parallel
-  {
+  union UNIQUE_NAME {
     // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
     #pragma acc routine seq
-    void foo();
+    void (*fp)();
+  };
+};
+
+// Make sure permitted cases have no diagnostics.
+void UNIQUE_NAME() {
+  #pragma acc routine seq
+  void UNIQUE_NAME();
+  #pragma acc data copy(i)
+  {
+    #pragma acc routine seq
+    void UNIQUE_NAME();
   }
   #pragma acc parallel
   {
+    #pragma acc routine seq
+    void UNIQUE_NAME();
     #pragma acc loop
-    for (int i = 0; i < 8; ++i) {
-      // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
+    for (int i = 0; i < 5; ++i) {
       #pragma acc routine seq
-      void foo();
-    }
-  }
-  #pragma acc parallel
-  {
-    #pragma acc loop
-    for (int i = 0; i < 8; ++i) {
-      #pragma acc loop
-      for (int j = 0; j < 8; ++j) {
-        // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
-        #pragma acc routine seq
-        void foo();
-      }
+      void UNIQUE_NAME();
     }
   }
   #pragma acc parallel loop
-  for (int i = 0; i < 8; ++i) {
-    // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
+  for (int i = 0; i < 5; ++i) {
     #pragma acc routine seq
-    void foo();
-  }
-  #pragma acc data copy(i)
-  {
-    // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
-    #pragma acc routine seq
-    void foo();
+    void UNIQUE_NAME();
   }
 }
-
 #pragma acc routine seq
-void withinOrphanedLoop() {
-  #pragma acc loop seq
-  for (int i = 0; i < 8; ++i) {
-    // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
+void UNIQUE_NAME() {
+  #pragma acc loop
+  for (int i = 0; i < 5; ++i) {
     #pragma acc routine seq
-    void foo();
+    void UNIQUE_NAME();
   }
-}
-
-struct WithinStruct {
-  // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
   #pragma acc routine seq
-  int i;
-};
+  void UNIQUE_NAME();
+}
 
 //------------------------------------------------------------------------------
 // Bad associated declaration.
@@ -560,6 +683,11 @@ int i;
 struct AssociatedDeclIsType {
   int i;
 };
+
+// Null statement.
+// expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
+#pragma acc routine seq
+;
 
 //------------------------------------------------------------------------------
 // Restrictions on location of function definition and uses.
@@ -651,6 +779,72 @@ void useBeforeOnDef_accUses() { useBeforeOnDef(); }
 // expected-error@+1 {{first '#pragma acc routine' for function 'useBeforeOnDef' not in scope at some uses}}
 #pragma acc routine seq
 void useBeforeOnDef() {}
+#pragma acc routine seq // Should note only the first routine directive.
+void useBeforeOnDef();
+
+// Make sure use checks aren't skipped at a routine directive within another
+// function.
+void useBeforeInFunc();
+// expected-note@+1 2 {{use of function 'useBeforeInFunc' appears here}}
+void useBeforeInFunc_hostUses() { useBeforeInFunc(); }
+// expected-note@+2 2 {{use of function 'useBeforeInFunc' appears here}}
+#pragma acc routine seq
+void useBeforeInFunc_accUses() { useBeforeInFunc(); }
+void UNIQUE_NAME() {
+  // expected-error@+1 {{first '#pragma acc routine' for function 'useBeforeInFunc' not in scope at some uses}}
+  #pragma acc routine seq
+  void useBeforeInFunc();
+}
+// The diagnostic is repeated because the previous routine directive is not
+// seen here due to the earlier function prototype at file scope.  TODO: That
+// shouldn't happen.  It's due to the way Clang merges function prototypes.
+// expected-error@+1 {{first '#pragma acc routine' for function 'useBeforeInFunc' not in scope at some uses}}
+#pragma acc routine seq // Should note only the first routine directive.
+void useBeforeInFunc();
+
+// First routine directive is not seen due to earlier function prototype at file
+// scope.  TODO: This doesn't follow the OpenACC spec.  It's due to the way
+// Clang merges function prototypes.  Hopefully it's obscure enough that we
+// don't really need to fix it.
+void useAfterHiddenInFunc();
+void UNIQUE_NAME() {
+  #pragma acc routine seq
+  void useAfterHiddenInFunc();
+}
+// expected-note@+1 {{use of function 'useAfterHiddenInFunc' appears here}}
+void useAfterHiddenInFunc_hostUses() { useAfterHiddenInFunc(); }
+// expected-note@+2 {{use of function 'useAfterHiddenInFunc' appears here}}
+#pragma acc routine seq
+void useAfterHiddenInFunc_accUses() { useAfterHiddenInFunc(); }
+// expected-error@+1 {{first '#pragma acc routine' for function 'useAfterHiddenInFunc' not in scope at some uses}}
+#pragma acc routine seq
+void useAfterHiddenInFunc();
+
+// Function prototype at file scope doesn't hide routine directive inside an
+// earlier function because the prototype inherits the routine directive.
+void UNIQUE_NAME() {
+  #pragma acc routine seq
+  void useAfterNotHiddenInFunc();
+}
+void useAfterNotHiddenInFunc();
+void useAfterNotHiddenInFunc_hostUses() { useAfterNotHiddenInFunc(); }
+#pragma acc routine seq
+void useAfterNotHiddenInFunc_accUses() { useAfterNotHiddenInFunc(); }
+
+// Check case where uses and routine directive are in the same function.
+void UNIQUE_NAME() {
+  void useInSameFunc();
+  // expected-note@+2 {{use of function 'useInSameFunc' appears here}}
+  #pragma acc parallel
+  useInSameFunc();
+  // expected-note@+1 {{use of function 'useInSameFunc' appears here}}
+  useInSameFunc();
+  // expected-error@+1 {{first '#pragma acc routine' for function 'useInSameFunc' not in scope at some uses}}
+  #pragma acc routine seq
+  void useInSameFunc();
+  #pragma acc routine seq // Should note only the first routine directive.
+  void useInSameFunc();
+}
 
 // Unevaluated uses should not trigger an error.
 void unevaluatedUseBefore();
@@ -695,6 +889,22 @@ void defBefore();
 #pragma acc routine seq // Should note only the first routine directive.
 void defBefore();
 
+// Make sure definition check isn't skipped at a routine directive within
+// another function.
+// expected-note@+1 2 {{definition of function 'defBeforeInFunc' appears here}}
+void defBeforeInFunc() {}
+void UNIQUE_NAME() {
+  // expected-error@+1 {{first '#pragma acc routine' for function 'defBeforeInFunc' not in scope at definition}}
+  #pragma acc routine seq
+  void defBeforeInFunc();
+}
+// The diagnostic is repeated because the previous routine directive is not
+// seen here due to the earlier function prototype at file scope.  TODO: That
+// shouldn't happen.  It's due to the way Clang merges function prototypes.
+// expected-error@+1 {{first '#pragma acc routine' for function 'defBeforeInFunc' not in scope at definition}}
+#pragma acc routine seq // Should note only the first routine directive.
+void defBeforeInFunc();
+
 // Use errors shouldn't suppress/break later definition errors.
 void useDefBefore();
 // expected-note@+1 {{use of function 'useDefBefore' appears here}}
@@ -732,6 +942,27 @@ void useDefBetween() {} // def
 void useDefBetween();
 #pragma acc routine seq
 void useDefBetween();
+void UNIQUE_NAME() {
+  #pragma acc routine seq
+  void useDefBetween();
+}
+
+// Try that again where the initial routine directive is in a function.
+void UNIQUE_NAME() {
+  #pragma acc routine seq
+  void useDefBetweenFirstInFunc();
+}
+void useDefBetweenFirstInFunc();
+void useDefBetweenFirstInFunc_hostUses() { useDefBetweenFirstInFunc(); }
+#pragma acc routine seq
+void useDefBetweenFirstInFunc_accUses() { useDefBetweenFirstInFunc(); }
+void useDefBetweenFirstInFunc() {} // def
+#pragma acc routine seq
+void useDefBetweenFirstInFunc();
+void UNIQUE_NAME() {
+  #pragma acc routine seq
+  void useDefBetweenFirstInFunc();
+}
 
 // Some uses appear within broken and discarded sections of the AST, and some
 // don't, but Clang reports them all.  In the past, Clang reported only the
@@ -851,6 +1082,23 @@ void onDeclDef() {
     ;
 }
 
+// Does the definition check see the routine directive on the preceding decl if
+// the latter is within another function?
+void UNIQUE_NAME() {
+  // expected-note@+1 2 {{'#pragma acc routine' for function 'onDeclInFuncDef' appears here}}
+  #pragma acc routine seq
+  void onDeclInFuncDef();
+}
+void onDeclInFuncDef() {
+  // expected-error@+1 {{static local variable 's' is not permitted within function 'onDeclInFuncDef' because the latter is attributed with '#pragma acc routine'}}
+  static int s;
+  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'onDeclInFuncDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc update device(i)
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+
 // Does the definition check see the routine directive on the following decl?
 // No, that's an error.
 // expected-note@+1 {{definition of function 'defOnDecl' appears here}}
@@ -869,12 +1117,32 @@ void defOnDecl();
 // Do we avoid repeated diagnostics and note the most recent routine directive?
 #pragma acc routine seq
 void onDeclOnDef();
+void UNIQUE_NAME() {
+  #pragma acc routine seq
+  void onDeclOnDef();
+}
 // expected-note@+1 2 {{'#pragma acc routine' for function 'onDeclOnDef' appears here}}
 #pragma acc routine seq
 void onDeclOnDef() {
   // expected-error@+1 {{static local variable 's' is not permitted within function 'onDeclOnDef' because the latter is attributed with '#pragma acc routine'}}
   static int s;
   // expected-error@+1 {{'#pragma acc update' is not permitted within function 'onDeclOnDef' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc update device(i)
+  #pragma acc loop seq
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+
+// Do we avoid repeated diagnostics and note the most recent routine directive?
+#pragma acc routine seq
+void onDeclOnDeclDef();
+// expected-note@+1 2 {{'#pragma acc routine' for function 'onDeclOnDeclDef' appears here}}
+#pragma acc routine seq
+void onDeclOnDeclDef();
+void onDeclOnDeclDef() {
+  // expected-error@+1 {{static local variable 's' is not permitted within function 'onDeclOnDeclDef' because the latter is attributed with '#pragma acc routine'}}
+  static int s;
+  // expected-error@+1 {{'#pragma acc update' is not permitted within function 'onDeclOnDeclDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc update device(i)
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
@@ -895,6 +1163,10 @@ void onDefOnDecl() {
 }
 #pragma acc routine seq
 void onDefOnDecl();
+void UNIQUE_NAME() {
+  #pragma acc routine seq
+  void onDefOnDecl();
+}
 
 // When checking directives in a function body, an assert in Clang used to
 // assume that any lexically attached routine directive was the active routine
@@ -1228,8 +1500,8 @@ void impOffFnUseAfterDef_use() {
   impOffFnUseAfterDef();
 }
 
-//// Repeat that but discover multiple implicit routine directives at once in a
-//// chain.
+// Repeat that but discover multiple implicit routine directives at once in a
+// chain.
 void chainedImpOffFnUseAfterDef() {
   // expected-error@+1 {{static local variable 's' is not permitted within function 'chainedImpOffFnUseAfterDef' because the latter is attributed with '#pragma acc routine'}}
   static int s;
@@ -2096,6 +2368,57 @@ void useeHasAny_orphanedPartLoopUser() {
   }
 }
 
+// Check that level of parallelism is checked when usee's routine directive is
+// in same function.
+void UNIQUE_NAME() {
+  // expected-note@+1 {{'#pragma acc routine' for function 'useeHasGangInUser' appears here}}
+  #pragma acc routine gang
+  void useeHasGangInUser();
+  // expected-note@+1 {{enclosing '#pragma acc parallel loop' here}}
+  #pragma acc parallel loop worker
+  for (int i = 0; i < 5; ++i)
+    // expected-error@+1 {{'#pragma acc parallel loop worker' construct calls function 'useeHasGangInUser', which has '#pragma acc routine gang'}}
+    useeHasGangInUser();
+}
+// expected-note@+1 {{'#pragma acc routine' for function 'useeHasWorkerInUser_user' appears here}}
+#pragma acc routine vector
+void useeHasWorkerInUser_user() {
+  // expected-note@+1 {{'#pragma acc routine' for function 'useeHasWorkerInUser' appears here}}
+  #pragma acc routine worker
+  void useeHasWorkerInUser();
+  // expected-error@+1 {{function 'useeHasWorkerInUser_user' has '#pragma acc routine vector' but calls function 'useeHasWorkerInUser', which has '#pragma acc routine worker}}
+  useeHasWorkerInUser();
+}
+
+// Check that level of parallelism is checked when usee's routine directive is
+// in a different function.
+void UNIQUE_NAME() {
+  // expected-note@+1 {{'#pragma acc routine' for function 'useeHasVectorInDiffFunc' appears here}}
+  #pragma acc routine vector
+  void useeHasVectorInDiffFunc();
+}
+void UNIQUE_NAME() {
+  // expected-note@+1 {{enclosing '#pragma acc parallel loop' here}}
+  #pragma acc parallel loop vector
+  for (int i = 0; i < 5; ++i) {
+    void useeHasVectorInDiffFunc();
+    // expected-error@+1 {{'#pragma acc parallel loop vector' construct calls function 'useeHasVectorInDiffFunc', which has '#pragma acc routine vector'}}
+    useeHasVectorInDiffFunc();
+  }
+}
+void UNIQUE_NAME() {
+  // expected-note@+1 {{'#pragma acc routine' for function 'useeHasGangInDiffFunc' appears here}}
+  #pragma acc routine gang
+  void useeHasGangInDiffFunc();
+}
+// expected-note@+1 {{'#pragma acc routine' for function 'useeHasGangInDiffFunc_user' appears here}}
+#pragma acc routine vector
+void useeHasGangInDiffFunc_user() {
+  void useeHasGangInDiffFunc();
+  // expected-error@+1 {{function 'useeHasGangInDiffFunc_user' has '#pragma acc routine vector' but calls function 'useeHasGangInDiffFunc', which has '#pragma acc routine gang}}
+  useeHasGangInDiffFunc();
+}
+
 // For these function calls at file scope, Clang used to fail an assertion
 // because the OpenACC routine directive analysis incorrectly assumed the call
 // would already be discarded because it's not permitted in C.
@@ -2408,29 +2731,41 @@ void useeIsOrphanedLoop_seqUser() {
     ;
 }
 
+void UNIQUE_NAME() {
+  // expected-note@+1 {{'#pragma acc routine' for function 'useeIsOrphanedLoop_userDirInFunc' appears here}}
+  #pragma acc routine seq
+  void useeIsOrphanedLoop_userDirInFunc();
+}
+void useeIsOrphanedLoop_userDirInFunc() {
+  // expected-error@+1 {{function 'useeIsOrphanedLoop_userDirInFunc' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  #pragma acc loop gang
+  for (int i = 0; i < 5; ++i)
+    ;
+}
+
 //------------------------------------------------------------------------------
 // Missing declaration possibly within bad context.
 //------------------------------------------------------------------------------
 
-void missingDeclarationWithinFunctionOnce() {
-  // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
+void UNIQUE_NAME() {
+  // expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
   #pragma acc routine seq
 }
 
-void missingDeclarationWithinFunctionTwice() {
-  // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
+void UNIQUE_NAME() {
+  // expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
   #pragma acc routine seq
-  // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
+  // expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
   #pragma acc routine seq
 }
 
-struct MissingDeclarationWithinStructOnce {
+struct UNIQUE_NAME {
   int i;
   // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
   #pragma acc routine seq
 };
 
-struct MissingDeclarationWithinStructTwice {
+union UNIQUE_NAME {
   int i;
   // expected-error@+1 {{unexpected OpenACC directive '#pragma acc routine'}}
   #pragma acc routine seq
@@ -2438,11 +2773,31 @@ struct MissingDeclarationWithinStructTwice {
   #pragma acc routine seq
 };
 
-// Check at end of file (after preprocessing).
-// expected-error@+4 {{'#pragma acc routine' cannot be nested within '#pragma acc routine'}}
-// expected-note@+2 {{enclosing '#pragma acc routine' here}}
 // expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
 #pragma acc routine seq
+#pragma acc routine seq
+void UNIQUE_NAME();
+
+void UNIQUE_NAME() {
+  // expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
+  #pragma acc routine seq
+  {
+    #pragma acc routine seq
+    void UNIQUE_NAME();
+  }
+}
+
+// expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
+#pragma acc routine seq
+// expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
+#pragma acc routine seq
+#pragma acc routine seq
+void UNIQUE_NAME();
+
+// Check at end of file (after preprocessing).
+// expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
+#pragma acc routine seq
+// expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
 #pragma acc routine seq
 
 //##############################################################################

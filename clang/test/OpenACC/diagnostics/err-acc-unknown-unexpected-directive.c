@@ -21,8 +21,6 @@ int main() {
   ;
 #pragma acc foobar // expected-error {{unknown or unsupported OpenACC directive}}
   ;
-#pragma acc routine seq // expected-error {{unexpected OpenACC directive '#pragma acc routine'}}
-  ;
 #pragma acc declare copy(i) // expected-error {{unknown or unsupported OpenACC directive}}
   ;
   return 0;

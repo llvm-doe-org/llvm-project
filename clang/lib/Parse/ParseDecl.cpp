@@ -4409,8 +4409,9 @@ void Parser::ParseStructUnionBody(SourceLocation RecordLoc,
     }
 
     if (Tok.is(tok::annot_pragma_openacc)) {
+      ParsedAttributes Attrs(AttrFactory);
       // Result can be ignored, because it must be always empty.
-      (void)ParseOpenACCDeclarativeDirective();
+      (void)ParseOpenACCDeclarativeDirective(DeclaratorContext::Member, Attrs);
       continue;
     }
 

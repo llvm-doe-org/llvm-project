@@ -1030,9 +1030,11 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
           << getOpenACCName(RealDKind) << NameForDiag(*this, CurFnDecl);
       return Err;
     }
-    assert((RealDKind == ACCD_loop || RealDKind == ACCD_atomic) &&
-           "expected only orphaned loop or atomic construct to be permitted in "
-           "function with routine directive");
+    assert((RealDKind == ACCD_loop || RealDKind == ACCD_atomic ||
+            RealDKind == ACCD_routine) &&
+           "expected orphaned loop construct, atomic construct, and routine "
+           "directive to be the only permitted OpenACC directives in function "
+           "with routine directive");
     // Proposed text for OpenACC after 3.2:
     // "A procedure definition containing an orphaned loop construct must be in
     // the scope of an explicit and applying routine directive."
@@ -1044,8 +1046,11 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
     return false;
   }
   if (!isAllowedParentForDirective(RealDKind, ParentDKind)) {
+    // The following diagnostic does not make sense for the case that the
+    // current OpenACC directive isn't permitted without a parent directive.
     assert(ParentDKind != ACCD_unknown &&
-           "expected only loop construct to require parent construct");
+           "expected every OpenACC directive to be permitted without a "
+           "lexically enclosing OpenACC directive");
     Diag(StartLoc, diag::err_acc_directive_bad_nesting)
         << getOpenACCName(ParentDKind) << getOpenACCName(RealDKind);
     Diag(ParentLoc, diag::note_acc_enclosing_directive)

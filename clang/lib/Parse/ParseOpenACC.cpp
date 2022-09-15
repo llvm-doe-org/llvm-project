@@ -99,12 +99,21 @@ void Parser::ParseOpenACCClauses(OpenACCDirectiveKind DKind) {
 ///   routine-directive:
 ///     annot_pragma_openacc 'routine' 'seq' annot_pragma_openacc_end
 ///     <function declaration/definition>
-Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
+Parser::DeclGroupPtrTy
+Parser::ParseOpenACCDeclarativeDirective(DeclaratorContext Context,
+                                         ParsedAttributes &Attrs) {
   assert(Tok.is(tok::annot_pragma_openacc) && "Not an OpenACC directive!");
-  ParenBraceBracketBalancer BalancerRAIIObj(*this);
-  SmallVector<ACCClause *, 5> Clauses;
   SourceLocation StartLoc = ConsumeAnnotationToken();
   OpenACCDirectiveKind DKind = parseOpenACCDirectiveKind(*this);
+  SourceLocation EndLoc;
+  return ParseOpenACCDeclarativeDirective(Context, Attrs, StartLoc, DKind,
+                                          EndLoc);
+}
+Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective(
+    DeclaratorContext Context, ParsedAttributes &Attrs, SourceLocation StartLoc,
+    OpenACCDirectiveKind DKind, SourceLocation &EndLoc) {
+  ParenBraceBracketBalancer BalancerRAIIObj(*this);
+  SmallVector<ACCClause *, 5> Clauses;
   switch (DKind) {
   case ACCD_update:
   case ACCD_enter_data:
@@ -119,7 +128,8 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
     SkipUntil(tok::annot_pragma_openacc_end);
     break;
   case ACCD_routine: {
-    if (!Actions.getCurLexicalContext()->isFileContext()) {
+    if (!Actions.getCurLexicalContext()->isFileContext() &&
+        !Actions.getCurLexicalContext()->isFunctionOrMethod()) {
       Diag(StartLoc, diag::err_acc_unexpected_directive)
           << getOpenACCName(DKind);
       SkipUntil(tok::annot_pragma_openacc_end);
@@ -135,10 +145,31 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
     // Consume final annot_pragma_openacc_end.
     ConsumeAnnotationToken();
     DeclGroupPtrTy Group;
-    // We've seen a routine directive, so there should be no more imports.
-    // TODO: Is that right?  Revisit when OpenACC C++ support is enabled.
-    Sema::ModuleImportState IS = Sema::ModuleImportState::ImportFinished;
-    ParseTopLevelDecl(Group, IS);
+    // Parse the function declaration.
+    //
+    // If another OpenACC directive follows immediately, that's not an
+    // immediately following function declaration, so don't try to parse it as
+    // one.  Instead complain that there's no function declaration.  That's
+    // particularly important if that following directive is a routine
+    // directive.  If we tried to parse that as a function declaration, we'd be
+    // able to accept a series of routine directives as if they all apply to a
+    // single function declaration following them all.
+    //
+    // As a special error recovery case, if the next token is ';', '{', or '}'
+    // (so that the routine directive was mistakenly used syntactically like a
+    // compute construct or an executable directive), don't try to parse a
+    // declaration because the parser would produce redundant complaints about
+    // the ';' or discard the '{' or '}' and then potentially get confused
+    // thinking braces are unbalanced.  Instead, just leave the ';', '{', or
+    // '}', complain there's no function declaration, and let the parser later
+    // complain about the '{' or '}' if it has no match.
+    //
+    // Likewise, if we're at EOF, we don't need two complaints that there's no
+    // declaration, so don't try to parse one, and complain once that there
+    // isn't one.
+    if (!isEofOrEom() && !Tok.isOneOf(tok::annot_pragma_openacc, tok::l_brace,
+                                      tok::r_brace, tok::semi))
+      Group = ParseDeclaration(Context, EndLoc, Attrs);
     Actions.ActOnOpenACCRoutineDirective(ACC_EXPLICIT, Group.get());
     Actions.EndOpenACCDirectiveAndAssociate(DKind);
     return Group;
@@ -159,14 +190,15 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective() {
 ///     | 'parallel loop' | 'atomic'
 ///     {clause}
 ///     annot_pragma_openacc_end
-StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
+StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedAttributes &Attrs,
+                                             ParsedStmtContext StmtCtx) {
   assert(Tok.is(tok::annot_pragma_openacc) && "Not an OpenACC directive!");
   ParenBraceBracketBalancer BalancerRAIIObj(*this);
   unsigned ScopeFlags =
       Scope::FnScope | Scope::DeclScope | Scope::OpenACCDirectiveScope;
   SourceLocation StartLoc = ConsumeAnnotationToken();
   OpenACCDirectiveKind DKind = parseOpenACCDirectiveKind(*this);
-  StmtResult Directive = StmtError();
+  StmtResult Result = StmtError();
   bool HasAssociatedStatement = true;
 
   switch (DKind) {
@@ -197,6 +229,7 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
   case ACCD_loop:
   case ACCD_parallel_loop:
   case ACCD_atomic: {
+    ProhibitAttributes(Attrs);
     if (isOpenACCLoopDirective(DKind))
       ScopeFlags |= Scope::OpenACCLoopDirectiveScope;
     ParseScope ACCDirectiveScope(this, ScopeFlags);
@@ -213,7 +246,7 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
     if (HasAssociatedStatement)
       AssociatedStmt = ParseStatement();
     ErrorFound |= Actions.EndOpenACCAssociatedStatement();
-    Directive = Actions.ActOnOpenACCDirectiveStmt(AssociatedStmt.get());
+    Result = Actions.ActOnOpenACCDirectiveStmt(AssociatedStmt.get());
 
     // Exit scope.
     Actions.EndOpenACCDirectiveAndAssociate(DKind);
@@ -222,25 +255,29 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedStmtContext StmtCtx) {
     // might end up with redundant diagnostics, some of which might mention
     // OpenMP.
     if (!Actions.getDiagnostics().hasErrorOccurred()) {
-      assert(!Directive.isInvalid()
-             && "Invalid OpenACC directive without diagnostic");
-      if (Actions.transformACCToOMP(cast<ACCDirectiveStmt>(Directive.get())))
+      assert(!Result.isInvalid() &&
+             "Invalid OpenACC directive without diagnostic");
+      if (Actions.transformACCToOMP(cast<ACCDirectiveStmt>(Result.get())))
         ErrorFound = true;
     }
     if (ErrorFound)
-      Directive = StmtError();
+      Result = StmtError();
     break;
   }
-  case ACCD_routine:
-    Diag(Tok, diag::err_acc_unexpected_directive) << getOpenACCName(DKind);
-    SkipUntil(tok::annot_pragma_openacc_end);
+  case ACCD_routine: {
+    SourceLocation EndLoc;
+    DeclGroupPtrTy Group = ParseOpenACCDeclarativeDirective(
+        DeclaratorContext::Block, Attrs, StartLoc, DKind, EndLoc);
+    if (Group)
+      Result = Actions.ActOnDeclStmt(Group, StartLoc, EndLoc);
     break;
+  }
   case ACCD_unknown:
     Diag(Tok, diag::err_acc_unknown_directive);
     SkipUntil(tok::annot_pragma_openacc_end);
     break;
   }
-  return Directive;
+  return Result;
 }
 
 ///  Parsing of OpenACC clauses.
