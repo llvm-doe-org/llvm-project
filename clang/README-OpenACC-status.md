@@ -413,7 +413,8 @@ Run-Time Environment Variables
       spec after 3.2.
 * Body of the associated function's definition
     * Appearance of any OpenACC directive other than an orphaned `loop`
-      construct produces a compile-time error diagnostic.
+      construct or an `atomic` construct produces a compile-time error
+      diagnostic.
     * Appearance of an orphaned `loop` construct with an incompatible level of
       parallelism produces a compile-time error diagnostic.
     * Declaration of a static local variable produces a compile-time
