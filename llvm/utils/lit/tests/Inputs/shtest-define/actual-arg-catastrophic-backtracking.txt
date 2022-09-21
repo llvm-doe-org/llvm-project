@@ -5,7 +5,7 @@
 # leading/trailing whitespace as well.
 #
 # No substitution expansion should actually occur because there are two few
-# arguments.  White space is collapsed in CHECK directives here just because
+# arguments.  Whitespace is collapsed in CHECK directives here just because
 # we're not using FileCheck's -strict-whitespace.
 
 # DEFINE: %{f}(A%, B%, C%, D%, E%) = hello world

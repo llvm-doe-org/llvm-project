@@ -1186,8 +1186,19 @@ def _memoize(f):
 def _caching_re_compile(r):
     return re.compile(r)
 
+class ExpandableScriptDirective(object):
+    """
+    Common interface for lit directives for which any lit substitutions must be
+    expanded to produce the shell script.  It includes directives (e.g., 'RUN:')
+    specifying shell commands that might have lit substitutions to be expanded.
+    It also includes lit directives (e.g., 'DEFINE:') that adjust substitutions.
 
-class ScriptDirective(object):
+    start_line_number: The directive's starting line number.
+    end_line_number: The directive's ending line number, which is
+        start_line_number if the directive has no line continuations.
+    keyword: The keyword that specifies the directive.  For example, 'RUN:'.
+    """
+
     def __init__(self, start_line_number, end_line_number, keyword):
         # Input line number where the directive starts.
         self.start_line_number = start_line_number
@@ -1195,53 +1206,113 @@ class ScriptDirective(object):
         self.end_line_number = end_line_number
         # The keyword used to indicate the directive.
         self.keyword = keyword
-    def add_continuation(self, keyword, line):
-        assert False, "expected method to be called on derived class"
-    def needs_continuation(self):
-        assert False, "expected method to be called on derived class"
-    def get_location(self):
-        if (self.start_line_number == self.end_line_number):
-            return 'at line {line}'.format(line=self.start_line_number)
-        return 'from line {start} to {end}'.format(start=self.start_line_number,
-                                                   end=self.end_line_number)
 
-class CommandDirective(ScriptDirective):
-    def __init__(self, start_line_number, end_line_number, keyword, command):
+    def add_continuation(self, line_number, keyword, line):
+        """
+        Add a continuation line to this directive and return True, or do nothing
+        and return False if the specified line is not a continuation for this
+        directive (e.g., previous line does not end in '\', or keywords do not
+        match).
+
+        line_number: The line number for the continuation line.
+        keyword: The keyword that specifies the continuation line.  For example,
+            'RUN:'.
+        line: The content of the continuation line after the keyword.
+        """
+        assert False, "expected method to be called on derived class"
+
+    def needs_continuation(self):
+        """
+        Does this directive require a continuation line?
+
+        '\' is documented as indicating a line continuation even if whitespace
+        separates it from the newline.  It looks like a line continuation, and
+        it would be confusing if it didn't behave as one.
+        """
+        assert False, "expected method to be called on derived class"
+
+    def get_location(self):
+        """
+        Get a phrase describing the line or range of lines so far included by
+        this directive and any line continuations.
+        """
+        if self.start_line_number == self.end_line_number:
+            return f'at line {self.start_line_number}'
+        return f'from line {self.start_line_number} to {self.end_line_number}'
+
+class CommandDirective(ExpandableScriptDirective):
+    """
+    A lit directive taking a shell command line.  For example,
+    'RUN: echo hello world'.
+
+    command: The content accumulated so far from the directive and its
+        continuation lines.
+    """
+
+    def __init__(self, start_line_number, end_line_number, keyword, line):
         super().__init__(start_line_number, end_line_number, keyword)
-        self.command = command
+        self.command = line.rstrip()
+
     def add_continuation(self, line_number, keyword, line):
         if keyword != self.keyword or not self.needs_continuation():
             return False
-        self.command = self.command[:-1] + line
+        self.command = self.command[:-1] + line.rstrip()
         self.end_line_number = line_number
         return True
+
     def needs_continuation(self):
+        # Trailing whitespace is stripped immediately when each line is added,
+        # so '\' is never hidden here.
         return self.command[-1] == '\\'
 
-class SubstDirective(ScriptDirective):
-    def __init__(self, start_line_number, end_line_number, keyword, line):
+class SubstDirective(ExpandableScriptDirective):
+    """
+    A lit directive taking a substitution definition or redefinition.  For
+    example, 'DEFINE: %{name} = value'.
+
+    new_subst: True if this directive defines a new substitution.  False if it
+        redefines an existing substitution.
+    body: The unparsed content accumulated so far from the directive and its
+        continuation lines.
+    name: The substitution's name, or None if more continuation lines are still
+        required.
+    params: The substitution's parameter name list, or None if more continuation
+        lines are still required.
+    value: The substitution's value, or None if more continuation lines are
+        still required.
+    """
+
+    def __init__(self, start_line_number, end_line_number, keyword, new_subst,
+                 line):
         super().__init__(start_line_number, end_line_number, keyword)
+        self.new_subst = new_subst
         self.body = line
         self.name = None
         self.params = None
         self.value = None
         self._parse_body()
+
     def add_continuation(self, line_number, keyword, line):
         if keyword != self.keyword or not self.needs_continuation():
             return False
         if not line.strip():
             raise ValueError("Substitution's continuation is empty")
-        # Append line.  Replace the '\' and adjacent space with a single space.
+        # Append line.  Replace the '\' and any adjacent whitespace with a
+        # single space.
         self.body = self.body.rstrip()[:-1].rstrip() + ' ' + line.lstrip()
         self.end_line_number = line_number
         self._parse_body()
         return True
+
     def needs_continuation(self):
-        # '\' is documented as indicating a line continuation even if whitespace
-        # separates it from the newline.  It looks like a line continuation, and
-        # it would be confusing if it didn't behave as one.
         return self.body.rstrip()[-1:] == '\\'
+
     def _parse_body(self):
+        """
+        If no more line continuations are required, parse all the directive's
+        accumulated lines in order to identify the substitution's name, any
+        parameters, and value, and raise an exception if invalid.
+        """
         if self.needs_continuation():
             return
 
@@ -1268,14 +1339,13 @@ class SubstDirective(ScriptDirective):
         #
         # Actually, '{' and '}' are special if they contain only digits possibly
         # separated by a comma.  Requiring a leading letter avoids that.
-        name_match = re.match(r'^%{[a-zA-Z][-_:0-9a-zA-Z]*}', lhs)
+        name_match = re.match(r'^%{[_a-zA-Z][-_:0-9a-zA-Z]*}', lhs)
         if not name_match:
             raise ValueError(
-                "Substitution name '{name}' is malformed as it must start with "
-                "'%{{', it must end with '}}', and the rest must must start "
-                "with a letter and contain only alphanumeric characters, "
-                "hyphens, underscores, and colons"
-                .format(name=lhs))
+                f"Substitution name '{lhs}' is malformed as it must start with "
+                f"'%{{', it must end with '}}', and the rest must start with a "
+                f"letter or underscore and contain only alphanumeric "
+                f"characters, hyphens, underscores, and colons")
         self.name = name_match.group(0)
         param_list = lhs[name_match.end():]
 
@@ -1284,17 +1354,17 @@ class SubstDirective(ScriptDirective):
             return
         if param_list[0] != '(':
             raise ValueError(
-                "Substitution name '{name}' must be followed by '=' (possibly "
-                "with intervening whitespace) or by '(' (without intervening "
-                "whitespace)".format(name=self.name))
+                f"Substitution name '{self.name}' must be followed by '=' "
+                f"(possibly with intervening whitespace) or by '(' (without "
+                f"intervening whitespace)")
         if param_list[-2:] != '%)':
-            raise ValueError("Parameter list of substitution '{name}' must end "
-                             "with '%)'".format(name=self.name))
+            raise ValueError(f"Parameter list of substitution '{self.name}' "
+                             f"must end with '%)'")
         self.params = param_list[1:-2].strip()
         if not self.params:
             raise ValueError(
-                "Substitution '{name}' must be defined with no parameter "
-                "list or at least one parameter".format(name=self.name))
+                f"Substitution '{self.name}' must be defined with no parameter "
+                f"list or at least one parameter")
         self.params = self.params.split('%,')
         for i, param in enumerate(self.params):
             self.params[i] = param = param.strip()
@@ -1305,12 +1375,18 @@ class SubstDirective(ScriptDirective):
                 if re.search('[,\s]', param):
                     notes += "\nParameter names must be separated by '%,'"
                 raise ValueError(
-                    "Parameter {i} of substitution '{name}' is malformed as it "
-                    "must be one or more alphanumeric characters and "
-                    "underscores not starting with a digit\n"
-                    "Parameter {i} is: {param}{notes}"
-                    .format(i=i+1, name=self.name, param=param, notes=notes))
+                    f"Parameter {i+1} of substitution '{self.name}' is "
+                    f"malformed as it must be one or more alphanumeric "
+                    f"characters and underscores not starting with a digit\n"
+                    f"Parameter {i+1} is: {param}"
+                    f"{notes}")
+
     def adjust_substitutions(self, substitutions):
+        """
+        Modify the specified substitution list as specified by this directive.
+        """
+        assert not self.needs_continuation(), \
+               "expected directive continuations to be parsed before applying"
         call_re = self.name
         value_repl = self.value.replace('\\', '\\\\')
         if self.params:
@@ -1364,40 +1440,32 @@ class SubstDirective(ScriptDirective):
                     if self.name in subst[0]]
         existing_res = ''.join("\nExisting pattern: " + substitutions[i][0]
                                for i in existing)
-        if self.keyword == 'DEFINE:':
+        if self.new_subst:
             if existing:
                 raise ValueError(
-                    "Substitution whose pattern contains '{name}' is already "
-                    "defined before '{key}' directive {loc}"
-                    "{existing}"
-                    .format(name=self.name, key=self.keyword,
-                            loc=self.get_location(), existing=existing_res))
+                    f"Substitution whose pattern contains '{self.name}' is "
+                    f"already defined before '{self.keyword}' directive "
+                    f"{self.get_location()}"
+                    f"{existing_res}")
             substitutions.insert(0, (call_re, value_repl))
             return
-        assert self.keyword == 'REDEFINE:'
         if len(existing) > 1:
             raise ValueError(
-                "Multiple substitutions whose patterns contain '{name}' are "
-                "defined before '{key}' directive {loc}"
-                "{existing}"
-                .format(name=self.name, key=self.keyword,
-                        loc=self.get_location(), existing=existing_res))
+                f"Multiple substitutions whose patterns contain '{self.name}' "
+                f"are defined before '{self.keyword}' directive "
+                f"{self.get_location()}"
+                f"{existing_res}")
         if not existing:
             raise ValueError(
-                "No substitution for '{name}' is defined before '{key}' "
-                "directive {loc}"
-                .format(name=self.name, key=self.keyword,
-                        loc=self.get_location()))
+                f"No substitution for '{self.name}' is defined before "
+                f"'{self.keyword}' directive {self.get_location()}")
         if substitutions[existing[0]][0] != call_re:
             raise ValueError(
-                "Existing substitution whose pattern contains '{name}' does "
-                "not have the pattern specified by '{key}' directive "
-                "{loc}\n"
-                "Expected pattern: {expected}"
-                "{existing}"
-                .format(name=self.name, key=self.keyword,
-                        loc=self.get_location(), expected=call_re,
-                        existing=existing_res))
+                f"Existing substitution whose pattern contains '{self.name}' "
+                f"does not have the pattern specified by '{self.keyword}' "
+                f"directive {self.get_location()}\n"
+                f"Expected pattern: {call_re}"
+                f"{existing_res}")
         substitutions[existing[0]] = (call_re, value_repl)
 
 
@@ -1461,18 +1529,17 @@ def applySubstitutions(script, substitutions, recursion_limit=None):
         return processed
 
     process = processLine if recursion_limit is None else processLineToFixedPoint
-
     output = []
-    for dir in script:
-        if isinstance(dir, SubstDirective):
-            dir.adjust_substitutions(substitutions)
+    for directive in script:
+        if isinstance(directive, SubstDirective):
+            directive.adjust_substitutions(substitutions)
         else:
-            if isinstance(dir, CommandDirective):
-                line = dir.command
+            if isinstance(directive, CommandDirective):
+                line = directive.command
             else:
-                # can come from preamble_commands
-                assert isinstance(dir, str)
-                line = dir
+                # Can come from preamble_commands.
+                assert isinstance(directive, str)
+                line = directive
             line = _caching_re_compile('%~').sub('', escape(process(line)))
             output.append(unescape(line))
 
@@ -1491,8 +1558,10 @@ class ParserKind(object):
         boolean expressions. Ex 'XFAIL:'
     INTEGER: A keyword taking a single integer. Ex 'ALLOW_RETRIES:'
     CUSTOM: A keyword with custom parsing semantics.
-    SUBST: A keyword taking a LIT substitution definition.  Ex
+    DEFINE: A keyword taking a new lit substitution definition. Ex
         'DEFINE: %{name}=value'
+    REDEFINE: A keyword taking a lit substitution redefinition. Ex
+        'REDEFINE: %{name}=value'
     """
     TAG = 0
     COMMAND = 1
@@ -1500,7 +1569,8 @@ class ParserKind(object):
     BOOLEAN_EXPR = 3
     INTEGER = 4
     CUSTOM = 5
-    SUBST = 6
+    DEFINE = 6
+    REDEFINE = 7
 
     @staticmethod
     def allowedKeywordSuffixes(value):
@@ -1510,7 +1580,8 @@ class ParserKind(object):
                  ParserKind.BOOLEAN_EXPR: [':'],
                  ParserKind.INTEGER:      [':'],
                  ParserKind.CUSTOM:       [':', '.'],
-                 ParserKind.SUBST:        [':']
+                 ParserKind.DEFINE:       [':'],
+                 ParserKind.REDEFINE:     [':']
                } [value]
 
     @staticmethod
@@ -1521,7 +1592,8 @@ class ParserKind(object):
                  ParserKind.BOOLEAN_EXPR: 'BOOLEAN_EXPR',
                  ParserKind.INTEGER:      'INTEGER',
                  ParserKind.CUSTOM:       'CUSTOM',
-                 ParserKind.SUBST:        'SUBST'
+                 ParserKind.DEFINE:       'DEFINE',
+                 ParserKind.REDEFINE:     'REDEFINE'
                } [value]
 
 
@@ -1571,10 +1643,15 @@ class IntegratedTestKeywordParser(object):
             if parser is None:
                 raise ValueError("ParserKind.CUSTOM requires a custom parser")
             self.parser = parser
-        elif kind == ParserKind.SUBST:
+        elif kind == ParserKind.DEFINE:
             self.parser = lambda line_number, line, output: \
                                  self._handleSubst(line_number, line, output,
-                                                   self.keyword)
+                                                   self.keyword, new_subst=True)
+        elif kind == ParserKind.REDEFINE:
+            self.parser = lambda line_number, line, output: \
+                                 self._handleSubst(line_number, line, output,
+                                                   self.keyword,
+                                                   new_subst=False)
         else:
             raise ValueError("Unknown kind '%s'" % kind)
 
@@ -1583,10 +1660,8 @@ class IntegratedTestKeywordParser(object):
             self.parsed_lines += [(line_number, line)]
             self.value = self.parser(line_number, line, self.value)
         except ValueError as e:
-            raise ValueError(
-                "{err}\n"
-                "in {keyword} directive on test line {line}".format(
-                    err=e, keyword=self.keyword, line=line_number))
+            raise ValueError(str(e) + ("\nin %s directive on test line %d" %
+                                       (self.keyword, line_number)))
 
     def getValue(self):
         return self.value
@@ -1609,10 +1684,7 @@ class IntegratedTestKeywordParser(object):
     @classmethod
     def _handleCommand(cls, line_number, line, output, keyword):
         """A helper for parsing COMMAND type keywords"""
-        # Trim trailing whitespace.
-        line = line.rstrip()
-
-        # Substitute line number expressions
+        # Substitute line number expressions.
         line = cls._substituteLineNumbers(line_number, line)
 
         # Collapse lines with trailing '\\', or add line with line number to
@@ -1671,14 +1743,15 @@ class IntegratedTestKeywordParser(object):
         return output
 
     @classmethod
-    def _handleSubst(cls, line_number, line, output, keyword):
-        """A parser for SUBST type keywords"""
+    def _handleSubst(cls, line_number, line, output, keyword, new_subst):
+        """A parser for DEFINE and REDEFINE type keywords"""
         line = cls._substituteLineNumbers(line_number, line)
         if output and output[-1].add_continuation(line_number, keyword, line):
             return output
         if output is None:
             output = []
-        output.append(SubstDirective(line_number, line_number, keyword, line))
+        output.append(SubstDirective(line_number, line_number, keyword,
+                                     new_subst, line))
         return output
 
 
@@ -1697,16 +1770,15 @@ def _parseKeywords(sourcepath, additional_parsers=[],
     # Install the built-in keyword parsers.
     script = []
     builtin_parsers = [
-        IntegratedTestKeywordParser('RUN:', ParserKind.COMMAND,
-                                    initial_value=script),
+        IntegratedTestKeywordParser('RUN:', ParserKind.COMMAND, initial_value=script),
         IntegratedTestKeywordParser('XFAIL:', ParserKind.BOOLEAN_EXPR),
         IntegratedTestKeywordParser('REQUIRES:', ParserKind.BOOLEAN_EXPR),
         IntegratedTestKeywordParser('UNSUPPORTED:', ParserKind.BOOLEAN_EXPR),
         IntegratedTestKeywordParser('ALLOW_RETRIES:', ParserKind.INTEGER),
         IntegratedTestKeywordParser('END.', ParserKind.TAG),
-        IntegratedTestKeywordParser('DEFINE:', ParserKind.SUBST,
+        IntegratedTestKeywordParser('DEFINE:', ParserKind.DEFINE,
                                     initial_value=script),
-        IntegratedTestKeywordParser('REDEFINE:', ParserKind.SUBST,
+        IntegratedTestKeywordParser('REDEFINE:', ParserKind.REDEFINE,
                                     initial_value=script)
     ]
     keyword_parsers = {p.keyword: p for p in builtin_parsers}
@@ -1731,8 +1803,8 @@ def _parseKeywords(sourcepath, additional_parsers=[],
             break
 
     # Verify the script contains a run line.
-    if require_script and not any(isinstance(dir, CommandDirective)
-                                  for dir in script):
+    if require_script and not any(isinstance(directive, CommandDirective)
+                                  for directive in script):
         raise ValueError("Test has no 'RUN:' line")
 
     # Check for unterminated run or subst lines.
@@ -1741,11 +1813,11 @@ def _parseKeywords(sourcepath, additional_parsers=[],
     # 'DEFINE:', 'REDEFINE:') in script, the next directive in script is a
     # different kind, then the '\\' remains on the former, and we report it
     # here.
-    for dir in script:
-        if dir.needs_continuation():
-            raise ValueError("Test has unterminated '{key}' directive "
-                             "(with '\\') {loc}".format(
-                                 key=dir.keyword, loc=dir.get_location()))
+    for directive in script:
+        if directive.needs_continuation():
+            raise ValueError(f"Test has unterminated '{directive.keyword}' "
+                             f"directive (with '\\') "
+                             f"{directive.get_location()}")
 
     # Check boolean expressions for unterminated lines.
     for key in keyword_parsers:

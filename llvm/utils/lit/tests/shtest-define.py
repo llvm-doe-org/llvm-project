@@ -8,11 +8,12 @@
 # DEFINE: %{lit-pre} =
 # DEFINE: %{lit-args} =
 # DEFINE: %{fc-args} =
-# DEFINE: %{record-test} =                                                     \
-# DEFINE:   echo '  shtest-define :: %{test}' >> %t.tests.actual.txt
 # DEFINE: %{run-test} =                                                        \
 # DEFINE:   %{lit-pre} %{lit} -va  %{lit-args} %{my-inputs}/%{test} 2>&1 |     \
-# DEFINE:     FileCheck -match-full-lines %{fc-args} %{my-inputs}/%{test}
+# DEFINE:     FileCheck -match-full-lines %{fc-args} %{my-inputs}/%{test}      \
+# DEFINE:               -dump-input-filter=all -vv -color
+# DEFINE: %{record-test} =                                                     \
+# DEFINE:   echo '  shtest-define :: %{test}' >> %t.tests.actual.txt
 # DEFINE: %{run-and-record-test} = %{run-test} && %{record-test}
 
 # REDEFINE: %{test} = actual-arg-catastrophic-backtracking.txt
@@ -85,6 +86,8 @@
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/continuation/unterminated-define-bad-redefine.txt
 # RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/continuation/unterminated-define-continuation.txt
+# RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/continuation/unterminated-define-redefine.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/continuation/unterminated-define-run.txt
@@ -92,6 +95,8 @@
 # REDEFINE: %{test} = errors/continuation/unterminated-define.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/continuation/unterminated-redefine-bad-define.txt
+# RUN: %{run-and-record-test}
+# REDEFINE: %{test} = errors/continuation/unterminated-redefine-continuation.txt
 # RUN: %{run-and-record-test}
 # REDEFINE: %{test} = errors/continuation/unterminated-redefine-define.txt
 # RUN: %{run-and-record-test}
@@ -171,6 +176,9 @@
 # REDEFINE: %{test} = line-number-substitutions.txt
 # RUN: %{run-and-record-test}
 
+# REDEFINE: %{test} = name-chars.txt
+# RUN: %{run-and-record-test}
+
 # REDEFINE: %{test} = recursiveExpansionLimit.txt
 #
 # REDEFINE: %{fc-args} = -check-prefix=CHECK-NON-RECUR
@@ -205,6 +213,9 @@
 # REDEFINE: %{test} = shared-substs-1.txt
 # RUN: %{record-test}
 
+# REDEFINE: %{test} = value-equals.txt
+# RUN: %{run-and-record-test}
+
 # REDEFINE: %{test} = value-escaped.txt
 # RUN: %{run-and-record-test}
 
@@ -216,4 +227,4 @@
 # Make sure we didn't forget to run something.
 #
 # RUN: %{lit} --show-tests %{my-inputs} > %t.tests.expected.txt
-# RUN: diff -u %t.tests.expected.txt %t.tests.actual.txt
+# RUN: diff -u -w %t.tests.expected.txt %t.tests.actual.txt

@@ -1,4 +1,4 @@
-# Redefine the parameter of %{global:echo} before using it: %{global:greeting}.
+# Redefine the %{global:greeting} parameter of %{global:echo} before using it.
 # The necessary expansion order was established in the test suite config
 # (%{global:echo} before %{global:greeting}), and redefining the parameter
 # doesn't change that expansion order.  That order would be reversed if

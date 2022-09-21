@@ -1,35 +1,34 @@
 ; This example originally appeared in TestingGuide.rst except here we've added
 ; echo to the clang/FileCheck command line to be executed.
 
-; DEFINE: %{triple} =
 ; DEFINE: %{cflags} =
-; DEFINE: %{fc-prefix} =
+; DEFINE: %{fcflags} =
+
 ; DEFINE: %{check} =                                                           \
 ; DEFINE:   echo '                                                             \
 ; DEFINE:   %clang_cc1 -verify -fopenmp -fopenmp-version=51 %{cflags}          \
-; DEFINE:              -triple %{triple} -emit-llvm -o - %s |                  \
-; DEFINE:     FileCheck -check-prefix=%{fc-prefix} %s                          \
+; DEFINE:              -emit-llvm -o - %s |                                    \
+; DEFINE:     FileCheck %{fcflags} %s                                          \
 ; DEFINE:   '
 
-; REDEFINE: %{triple} = x86_64-apple-darwin10.6.0
-; REDEFINE: %{fc-prefix} = CHECK
+; REDEFINE: %{cflags} = -triple x86_64-apple-darwin10.6.0 -fopenmp-simd
+; REDEFINE: %{fcflags} = -check-prefix=SIMD
 ; RUN: %{check}
-; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -triple x86_64-apple-darwin10.6.0 -emit-llvm -o - {{.*}} | FileCheck -check-prefix=CHECK {{.*}}
-;
-; REDEFINE: %{cflags} = -fopenmp-simd
-; REDEFINE: %{fc-prefix} = SIMD
-; RUN: %{check}
-; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -fopenmp-simd -triple x86_64-apple-darwin10.6.0 -emit-llvm -o - {{.*}} | FileCheck -check-prefix=SIMD {{.*}}
+; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -triple x86_64-apple-darwin10.6.0 -fopenmp-simd -emit-llvm -o - {{.*}} | FileCheck -check-prefix=SIMD {{.*}}
 
-; REDEFINE: %{triple} = x86_64-unknown-linux-gnu
-; REDEFINE: %{cflags} =
-; REDEFINE: %{fc-prefix} = CHECK
+; REDEFINE: %{cflags} = -triple x86_64-unknown-linux-gnu -fopenmp-simd
+; REDEFINE: %{fcflags} = -check-prefix=SIMD
 ; RUN: %{check}
-; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -triple x86_64-unknown-linux-gnu -emit-llvm -o - {{.*}} | FileCheck -check-prefix=CHECK {{.*}}
-;
-; REDEFINE: %{cflags} = -fopenmp-simd
-; REDEFINE: %{fc-prefix} = SIMD
-; RUN: %{check}
-; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -fopenmp-simd -triple x86_64-unknown-linux-gnu -emit-llvm -o - {{.*}} | FileCheck -check-prefix=SIMD {{.*}}
+; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -triple x86_64-unknown-linux-gnu -fopenmp-simd -emit-llvm -o - {{.*}} | FileCheck -check-prefix=SIMD {{.*}}
 
-# CHECK: Passed: 1
+; REDEFINE: %{cflags} = -triple x86_64-apple-darwin10.6.0
+; REDEFINE: %{fcflags} = -check-prefix=NO-SIMD
+; RUN: %{check}
+; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -triple x86_64-apple-darwin10.6.0 -emit-llvm -o - {{.*}} | FileCheck -check-prefix=NO-SIMD {{.*}}
+
+; REDEFINE: %{cflags} = -triple x86_64-unknown-linux-gnu
+; REDEFINE: %{fcflags} = -check-prefix=NO-SIMD
+; RUN: %{check}
+; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -triple x86_64-unknown-linux-gnu -emit-llvm -o - {{.*}} | FileCheck -check-prefix=NO-SIMD {{.*}}
+
+; CHECK: Passed: 1

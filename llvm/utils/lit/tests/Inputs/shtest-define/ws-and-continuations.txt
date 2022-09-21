@@ -21,7 +21,7 @@
 # RUN: echo "'%{ws}'"
 # CHECK:''
 
-# White space is not required around the name or value.
+# Whitespace is not required around the name or value.
 #
 # DEFINE:%{non-ws}=abc
 # RUN: echo "'%{non-ws}'"
@@ -31,7 +31,19 @@
 # RUN: echo "'%{non-ws}'"
 # CHECK:'HelloWorld'
 
-# White space is not required around formal parameters or arguments.
+# Whitespace is not required between substitutions in a value.
+#
+# DEFINE: %{adjacent0} = foo
+# DEFINE: %{adjacent1} = bar
+# DEFINE: %{has-adjacent-substs} = %{adjacent0}%{adjacent1}
+# RUN: echo "'%{has-adjacent-substs}'"
+# CHECK:'foobar'
+#
+# REDEFINE: %{has-adjacent-substs} = %{adjacent0}%{adjacent1}%{adjacent0}
+# RUN: echo "'%{has-adjacent-substs}'"
+# CHECK:'foobarfoo'
+
+# Whitespace is not required around formal parameters or arguments.
 #
 # DEFINE:%{non-ws-fn}(P0%,P1%,P2%)=non-ws-fn(%{P0},%{P1},%{P2})
 # RUN: echo "'%{non-ws-fn}(a%,b%,c%)'"
@@ -41,7 +53,7 @@
 # RUN: echo "'%{non-ws-fn}(a%,b%,c%)'"
 # CHECK:'non-ws-fn(c,b,a)'
 
-# Exact white space is preserved within the value or an actual arg, but
+# Exact whitespace is preserved within the value or an actual arg, but
 # whitespace enclosing the name, the value, a formal parameter, or an actual arg
 # is discarded.  ('%{' and '}' are part of the name, and whitespace in between
 # isn't permitted.)
@@ -135,18 +147,22 @@
 #
 #                                   v~~~~~~~~~~~ intentional whitespace
 # DEFINE: %{ws-after-continue}=foo \            
-# DEFINE: bar
+# DEFINE: bar                      \ 
+#                                   ^ intentional whitespace
+# DEFINE: baz
 # RUN: echo "'%{ws-after-continue}'"
-# CHECK:'foo bar'
+# CHECK:'foo bar baz'
 #
 #                                     v intentional whitespace
 # REDEFINE: %{ws-after-continue}=foo \ 
-# REDEFINE: bar
+# REDEFINE: bar                      \            
+#                                     ^~~~~~~~~~~~ intentional whitespace
+# REDEFINE: baz
 # RUN: echo "'%{ws-after-continue}'"
-# CHECK:'foo bar'
+# CHECK:'foo bar baz'
 
-# A line continuation is permitted anywhere... that whitespace is permitted
-# because it reduces to a single space.
+# A line continuation is recognized anywhere.  It should be used only where
+# whitespace is permitted because it reduces to a single space.
 #
 # Directives with at least one non-whitespace character (could be '\') are
 # permitted even if they contribute nothing to the value.  There might be no

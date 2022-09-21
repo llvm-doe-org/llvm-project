@@ -1,28 +1,30 @@
 ; This example originally appeared in TestingGuide.rst except here we've added
 ; echo to the clang/FileCheck command line to be executed.
 
-; DEFINE: %{check}( LOC %, TRIPLE %, CFLAGS %, FC_PREFIX %) =                  \
+; DEFINE: %{check}( LOC %, TRIPLE %, CFLAGS %, FCFLAGS %) =                    \
 ; DEFINE:   echo 'At test lines %{LOC}, %(line)' &&                            \
 ; DEFINE:   echo '                                                             \
 ; DEFINE:   %clang_cc1 -verify -fopenmp -fopenmp-version=51 %{CFLAGS}          \
 ; DEFINE:              -triple %{TRIPLE} -emit-llvm -o - %s |                  \
-; DEFINE:     FileCheck -check-prefix=%{FC_PREFIX} %s                          \
+; DEFINE:     FileCheck %{FCFLAGS} %s                                          \
 ; DEFINE:   '
 
-; DEFINE: %{check-triple}( LOC %, TRIPLE %) =                                      \
-; DEFINE:   %{check}( %{LOC}, %(line) %, %{TRIPLE} %,               %, CHECK %) && \
-; DEFINE:   %{check}( %{LOC}, %(line) %, %{TRIPLE} %, -fopenmp-simd %, SIMD  %)
+; DEFINE: %{check-triples}( LOC %, CFLAGS %, FCFLAGS %) =                      \
+; DEFINE:   %{check}( %{LOC}, %(line) %, x86_64-apple-darwin10.6.0 %,          \
+; DEFINE:             %{CFLAGS} %, %{FCFLAGS} %) &&                            \
+; DEFINE:   %{check}( %{LOC}, %(line) %, x86_64-unknown-linux-gnu %,           \
+; DEFINE:             %{CFLAGS} %, %{FCFLAGS} %)
 
-; RUN: %{check-triple}( %(line) %, x86_64-apple-darwin10.6.0 %)
-; CHECK: At test lines [[#@LINE-1]], [[#@LINE-4]], [[#@LINE-12]]
-; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -triple x86_64-apple-darwin10.6.0 -emit-llvm -o - {{.*}} | FileCheck -check-prefix=CHECK {{.*}}
-; CHECK: At test lines [[#@LINE-3]], [[#@LINE-5]], [[#@LINE-14]]
+; RUN: %{check-triples}( %(line) %, -fopenmp-simd %, -check-prefix=SIMD %)
+; CHECK: At test lines [[#@LINE-1]], [[#@LINE-6]], [[#@LINE-14]]
 ; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -fopenmp-simd -triple x86_64-apple-darwin10.6.0 -emit-llvm -o - {{.*}} | FileCheck -check-prefix=SIMD {{.*}}
-
-; RUN: %{check-triple}( %(line) %, x86_64-unknown-linux-gnu  %)
-; CHECK: At test lines [[#@LINE-1]], [[#@LINE-10]], [[#@LINE-18]]
-; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -triple x86_64-unknown-linux-gnu -emit-llvm -o - {{.*}} | FileCheck -check-prefix=CHECK {{.*}}
-; CHECK: At test lines [[#@LINE-3]], [[#@LINE-11]], [[#@LINE-20]]
+; CHECK: At test lines [[#@LINE-3]], [[#@LINE-6]], [[#@LINE-16]]
 ; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -fopenmp-simd -triple x86_64-unknown-linux-gnu -emit-llvm -o - {{.*}} | FileCheck -check-prefix=SIMD {{.*}}
+
+; RUN: %{check-triples}( %(line) %, %, -check-prefix=NO-SIMD %)
+; CHECK: At test lines [[#@LINE-1]], [[#@LINE-12]], [[#@LINE-20]]
+; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -triple x86_64-apple-darwin10.6.0 -emit-llvm -o - {{.*}} | FileCheck -check-prefix=NO-SIMD {{.*}}
+; CHECK: At test lines [[#@LINE-3]], [[#@LINE-12]], [[#@LINE-22]]
+; CHECK: %clang_cc1 -verify -fopenmp -fopenmp-version=51 -triple x86_64-unknown-linux-gnu -emit-llvm -o - {{.*}} | FileCheck -check-prefix=NO-SIMD {{.*}}
 
 ; CHECK: Passed: 1

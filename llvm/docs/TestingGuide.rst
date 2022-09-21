@@ -618,6 +618,8 @@ RUN lines:
   optional integer offset.  These expand only if they appear
   immediately in ``RUN:``, ``DEFINE:``, and ``REDEFINE:`` directives.
   Occurrences in substitutions defined elsewhere are never expanded.
+  For example, this can be used in tests with multiple RUN lines,
+  which reference the test file's line numbers.
 
 ``%~``
 
@@ -670,34 +672,35 @@ RUN lines:
    output affects test results.  It's usually easy to tell: just look for
    redirection or piping of the ``FileCheck`` call's stdout or stderr.
 
+.. _Test-specific substitutions:
+
 **Test-specific substitutions:**
 
 Additional substitutions can be defined as follows:
 
-- Lit configuration files (e.g., ``test/lit.cfg`` or ``lit.local.cfg``) can
-  define substitutions for all tests in a test directory.  They do so by
-  extending the substitution list, ``config.substitutions``.  Each item in the
-  list is a tuple consisting of a pattern and its replacement, which lit applies
-  using python's ``re.sub`` function.
+- Lit configuration files (e.g., ``lit.cfg`` or ``lit.local.cfg``) can define
+  substitutions for all tests in a test directory.  They do so by extending the
+  substitution list, ``config.substitutions``.  Each item in the list is a tuple
+  consisting of a pattern and its replacement, which lit applies using python's
+  ``re.sub`` function.
 - To define substitutions within a single test file, lit supports the
   ``DEFINE:`` and ``REDEFINE:`` directives, described in detail below.  So that
   they have no effect on other test files, these directives modify a copy of the
   substitution list that is produced by lit configuration files.
 
 For example, the following directives can be inserted into a test file to define
-a ``%{check}`` substitution as well as empty default values for substitutions
-that serve as the parameters of ``%{check}``:
+``%{cflags}`` and ``%{fcflags}`` substitutions with empty initial values, which
+serve as the parameters of another newly defined ``%{check}`` substitution:
 
 .. code-block:: llvm
 
-    ; DEFINE: %{triple} =
     ; DEFINE: %{cflags} =
-    ; DEFINE: %{fc-prefix} =
+    ; DEFINE: %{fcflags} =
 
     ; DEFINE: %{check} =                                                  \
     ; DEFINE:   %clang_cc1 -verify -fopenmp -fopenmp-version=51 %{cflags} \
-    ; DEFINE:              -triple %{triple} -emit-llvm -o - %s |         \
-    ; DEFINE:     FileCheck -check-prefix=%{fc-prefix} %s
+    ; DEFINE:              -emit-llvm -o - %s |                           \
+    ; DEFINE:     FileCheck %{fcflags} %s
 
 Alternatively, the above substitutions can be defined in a lit configuration
 file to be shared with other test files.  Either way, the test file can then
@@ -706,28 +709,28 @@ desired before each use of ``%{check}`` in a ``RUN:`` line:
 
 .. code-block:: llvm
 
-    ; REDEFINE: %{triple} = x86_64-apple-darwin10.6.0
-    ; REDEFINE: %{fc-prefix} = CHECK
-    ; RUN: %{check}
-    ;
-    ; REDEFINE: %{cflags} = -fopenmp-simd
-    ; REDEFINE: %{fc-prefix} = SIMD
+    ; REDEFINE: %{cflags} = -triple x86_64-apple-darwin10.6.0 -fopenmp-simd
+    ; REDEFINE: %{fcflags} = -check-prefix=SIMD
     ; RUN: %{check}
 
-    ; REDEFINE: %{triple} = x86_64-unknown-linux-gnu
-    ; REDEFINE: %{cflags} =
-    ; REDEFINE: %{fc-prefix} = CHECK
-    ; RUN: %{check}
-    ;
-    ; REDEFINE: %{cflags} = -fopenmp-simd
-    ; REDEFINE: %{fc-prefix} = SIMD
+    ; REDEFINE: %{cflags} = -triple x86_64-unknown-linux-gnu -fopenmp-simd
+    ; REDEFINE: %{fcflags} = -check-prefix=SIMD
     ; RUN: %{check}
 
-Besides providing default values, the initial empty definitions of the parameter
-substitutions in the above example serve a second purpose: they establish the
-substitution order so that both ``%{check}`` and its parameters expand as
-desired.  There's a simple way to remember the required definition order in a
-test file: define a substitution before you refer to it.
+    ; REDEFINE: %{cflags} = -triple x86_64-apple-darwin10.6.0
+    ; REDEFINE: %{fcflags} = -check-prefix=NO-SIMD
+    ; RUN: %{check}
+
+    ; REDEFINE: %{cflags} = -triple x86_64-unknown-linux-gnu
+    ; REDEFINE: %{fcflags} = -check-prefix=NO-SIMD
+    ; RUN: %{check}
+
+Besides providing initial values, the initial ``DEFINE:`` directives for the
+parameter substitutions in the above example serve a second purpose: they
+establish the substitution order so that both ``%{check}`` and its parameters
+expand as desired.  There's a simple way to remember the required definition
+order in a test file: define a substitution before any substitution that might
+refer to it.
 
 In general, substitution expansion behaves as follows:
 
@@ -739,21 +742,17 @@ In general, substitution expansion behaves as follows:
 - When expanding substitutions in a ``RUN:`` line, lit makes only one pass
   through the substitution list by default.  In this case, a substitution must
   have been inserted earlier in the substitution list than any substitution
-  appearing in its value in order for the latter to expand.
+  appearing in its value in order for the latter to expand.  (For greater
+  flexibility, you can enable multiple passes through the substitution list by
+  setting `recursiveExpansionLimit`_ in a lit configuration file.)
 - While lit configuration files can insert anywhere in the substitution list,
   the insertion behavior of the ``DEFINE:`` and ``REDEFINE:`` directives is
   specified below and is designed specifically for the use case presented in the
   example above.
-- If you find that the substitution expansion order is confusing or otherwise
-  insufficient for your test suite, consider specifying
-  ``recursiveExpansionLimit`` in a lit configuration file to enable multiple
-  passes through the substitution list, as documented in
-  :doc:`CommandGuide/lit`.
 - Defining a substitution in terms of itself, whether directly or via other
-  substitutions, usually produces an infinitely recursive definition that cannot
-  be fully expanded regardless of ``recursiveExpansionLimit``.  It does *not*
-  define the substitution in terms of its previous value, even when using
-  ``REDEFINE:``.
+  substitutions, should be avoided.  It usually produces an infinitely recursive
+  definition that cannot be fully expanded.  It does *not* define the
+  substitution in terms of its previous value, even when using ``REDEFINE:``.
 
 The relationship between the ``DEFINE:`` and ``REDEFINE:`` directive is
 analogous to the relationship between a variable declaration and variable
@@ -764,11 +763,11 @@ assignment in many programming languages:
    This directive assigns the specified value to a new substitution whose
    pattern is ``%{name}``, or it reports an error if there is already a
    substitution whose pattern contains ``%{name}`` because that could produce
-   confusing expansions.  The new substitution is inserted at the start of the
-   substitution list so that it will expand first.  Thus, even if
-   ``recursiveExpansionLimit`` is not used, this substitution's value can
-   contain any substitution previously defined, whether in the same test file or
-   in a lit configuration file, and both will expand.
+   confusing expansions (e.g., a lit configuration file might define a
+   substitution with the pattern ``%{name}\[0\]``).  The new substitution is
+   inserted at the start of the substitution list so that it will expand first.
+   Thus, its value can contain any substitution previously defined, whether in
+   the same test file or in a lit configuration file, and both will expand.
 
 - ``REDEFINE: %{name} = value``
 
@@ -784,9 +783,9 @@ directives:
 
 - **Substitution name**: In the directive, whitespace immediately before or
   after ``%{name}`` is optional and discarded.  ``%{name}`` must start with
-  ``%{``, it must end with ``}``, and the rest must start with a letter and
-  contain only alphanumeric characters, hyphens, underscores, and colons.  This
-  syntax has a few advantages:
+  ``%{``, it must end with ``}``, and the rest must start with a letter or
+  underscore and contain only alphanumeric characters, hyphens, underscores, and
+  colons.  This syntax has a few advantages:
 
     - It is impossible for ``%{name}`` to contain sequences that are special in
       python's ``re.sub`` patterns.  Otherwise, attempting to specify
@@ -794,9 +793,9 @@ directives:
       produce confusing expansions.
     - The braces help avoid the possibility that another substitution's pattern
       will match part of ``%{name}`` or vice-versa, producing confusing
-      expansions.  However, the patterns of substitutions not defined by these
-      directives are not restricted to this form, so overlaps are still
-      theoretically possible.
+      expansions.  However, the patterns of substitutions defined by lit
+      configuration files and by lit itself are not restricted to this form, so
+      overlaps are still theoretically possible.
 
 - **Substitution value**: The value includes all text from the first
   non-whitespace character after ``=`` to the last non-whitespace character.  If
@@ -819,73 +818,128 @@ directives:
   also be placed after ``\`` so that ``\`` becomes the last character in the
   value instead of specifying a line continuation.
 
+.. _recursiveExpansionLimit:
+
+**recursiveExpansionLimit:**
+
+As described in the previous section, when expanding substitutions in a ``RUN:``
+line, lit makes only one pass through the substitution list by default.  Thus,
+if substitutions are not defined in the proper order, some will remain in the
+``RUN:`` line unexpanded.  For example, the following directives refer to
+``%{inner}`` within ``%{outer}`` but do not define ``%{inner}`` until after
+``%{outer}``:
+
+.. code-block:: llvm
+
+    ; By default, this definition order does not enable full expansion.
+
+    ; DEFINE: %{outer} = %{inner}
+    ; DEFINE: %{inner} = expanded
+
+    ; RUN: echo '%{outer}'
+
+``DEFINE:`` inserts substitutions at the start of the substitution list, so
+``%{inner}`` expands first but has no effect because the original ``RUN:`` line
+does not contain ``%{inner}``.  Next, ``%{outer}`` expands, and the output of
+the ``echo`` command becomes:
+
+.. code-block:: shell
+
+    %{inner}
+
+Of course, one way to fix this simple case is to reverse the definitions of
+``%{outer}`` and ``%{inner}``.  However, if a test has a complex set of
+substitutions that can all reference each other, there might not exist a
+sufficient substitution order.
+
+To address such use cases, lit configuration files support
+``config.recursiveExpansionLimit``, which can be set to a non-negative integer
+to specify the maximum number of passes through the substitution list.  Thus, in
+the above example, setting the limit to 2 would cause lit to make a second pass
+that expands ``%{inner}`` in the ``RUN:`` line, and the output from the ``echo``
+command when then be:
+
+.. code-block:: shell
+
+    expanded
+
+To improve performance, lit will stop making passes when it notices the ``RUN:``
+line has stopped changing.  In the above example, setting the limit higher than
+2 is thus harmless.
+
+To facilitate debugging, after reaching the limit, lit will make one extra pass
+and report an error if the ``RUN:`` line changes again.  In the above example,
+setting the limit to 1 will thus cause lit to report an error instead of
+producing incorrect output.
+
 **Function substitutions:**
 
-In the example from the previous section, notice that there are
-multiple blocks, one per triple, and each has a pair of uses of
-``%{check}``, one with and one without ``-fopenmp-simd``.  The test
-would be easier to read and maintain if that pair were encapsulated in
-another substitution.  However, that pair contains ``REDEFINE:``
-directives, and there is no way to place ``DEFINE:`` or ``REDEFINE:``
-directives in the value of a substitution.
+In the example from `Test-specific substitutions`_, notice that there are two
+dimensions being tested: the triple, and whether OpenMP simd mode is enabled.
+The test would be easier to read and maintain if the iteration over one of those
+dimensions, say the triple, were encapsulated in another substitution, say
+``%{check-triples}``, to be used at each point along the other dimension.
+However, there is no way to place ``DEFINE:`` or ``REDEFINE:`` directives in the
+value of a substitution, so how can ``%{check-triples}`` set the triple before
+each of its uses of ``%{check}``?
 
-Lit supports function substitutions to address this use case.  For example, if
-we define ``%{check}`` as a function substitution, we can define a
-``%{check-triple}`` substitution that uses it multiple times with different
-parameters.  Unless we are using ``recursiveExpansionLimit``, we must be careful
-to define ``%{check}`` before ``%{check-triple}`` in order for both to expand as
-expected:
-
-.. code-block:: llvm
-
-    ; DEFINE: %{triple} =
-
-    ; DEFINE: %{check}( CFLAGS %, FC_PREFIX %) =                          \
-    ; DEFINE:   %clang_cc1 -verify -fopenmp -fopenmp-version=51 %{CFLAGS} \
-    ; DEFINE:              -triple %{triple} -emit-llvm -o - %s |         \
-    ; DEFINE:     FileCheck -check-prefix=%{FC_PREFIX} %s
-
-    ; DEFINE: %{check-triple} =                                           \
-    ; DEFINE:   %{check}(               %, CHECK %) &&                    \
-    ; DEFINE:   %{check}( -fopenmp-simd %, SIMD  %)
-
-    ; REDEFINE: %{triple} = x86_64-apple-darwin10.6.0
-    ; RUN: %{check-triple}
-
-    ; REDEFINE: %{triple} = x86_64-unknown-linux-gnu
-    ; RUN: %{check-triple}
-
-Notice that ``%{check}`` has two kinds of parameters now:
-``%{CFLAGS}`` and ``%{FC_PREFIX}`` are function parameters, but
-``%{triple}`` is still a standalone parameter substitution that must
-be initially defined before ``%{check}`` unless we are using
-``recursiveExpansionLimit``.
-
-Because function substitutions are usually more composable, you might
-decide that any parameterized substitution is best written as a
-function substitution.  For example, ``%{check-triple}`` above could
-be converted to a function substitution as well:
+Lit supports function substitutions to address this use case.  That is, if we
+define ``%{check}`` as a function substitution that takes the triple as an
+argument, ``%{check-triples}`` can then use it once for each triple.  Unless we
+are using ``recursiveExpansionLimit``, we must be careful to define ``%{check}``
+before ``%{check-triples}`` in order for both to expand as expected:
 
 .. code-block:: llvm
 
-    ; DEFINE: %{check}( TRIPLE %, CFLAGS %, FC_PREFIX %) =                \
+    ; DEFINE: %{cflags} =
+    ; DEFINE: %{fcflags} =
+
+    ; DEFINE: %{check}( TRIPLE %) =                                       \
+    ; DEFINE:   %clang_cc1 -verify -fopenmp -fopenmp-version=51 %{cflags} \
+    ; DEFINE:              -triple %{TRIPLE} -emit-llvm -o - %s |         \
+    ; DEFINE:     FileCheck %{fcflags} %s
+
+    ; DEFINE: %{check-triples} =                                          \
+    ; DEFINE:   %{check}( x86_64-apple-darwin10.6.0 %) &&                 \
+    ; DEFINE:   %{check}( x86_64-unknown-linux-gnu  %)
+
+    ; REDEFINE: %{cflags} = -fopenmp-simd
+    ; REDEFINE: %{fcflags} = -check-prefix=SIMD
+    ; RUN: %{check-triples}
+
+    ; REDEFINE: %{cflags} =
+    ; REDEFINE: %{fcflags} = -check-prefix=NO-SIMD
+    ; RUN: %{check-triples}
+
+Notice that ``%{check}`` has two kinds of parameters now: ``%{TRIPLE}`` is now a
+function parameter, but ``%{cflags}`` and ``%{fcflags}`` are still standalone
+parameter substitutions that must be initially defined before ``%{check}``
+unless we are using ``recursiveExpansionLimit``.
+
+Because function substitutions are usually more composable, you might decide
+that any parameterized substitution is best written as a function substitution.
+For example, ``%{check-triples}`` above could be converted to a function
+substitution as well:
+
+.. code-block:: llvm
+
+    ; DEFINE: %{check}( TRIPLE %, CFLAGS %, FCFLAGS %) =                  \
     ; DEFINE:   %clang_cc1 -verify -fopenmp -fopenmp-version=51 %{CFLAGS} \
     ; DEFINE:              -triple %{TRIPLE} -emit-llvm -o - %s |         \
-    ; DEFINE:     FileCheck -check-prefix=%{FC_PREFIX} %s
+    ; DEFINE:     FileCheck %{FCFLAGS} %s
 
-    ; DEFINE: %{check-triple}( TRIPLE %) =                                \
-    ; DEFINE:   %{check}( %{TRIPLE} %,               %, CHECK %) &&       \
-    ; DEFINE:   %{check}( %{TRIPLE} %, -fopenmp-simd %, SIMD  %)
+    ; DEFINE: %{check-triples}( CFLAGS %, FCFLAGS %) =                               \
+    ; DEFINE:   %{check}( x86_64-apple-darwin10.6.0 %, %{CFLAGS} %, %{FCFLAGS} %) && \
+    ; DEFINE:   %{check}( x86_64-unknown-linux-gnu  %, %{CFLAGS} %, %{FCFLAGS} %)
 
-    ; RUN: %{check-triple}( x86_64-apple-darwin10.6.0 %)
-    ; RUN: %{check-triple}( x86_64-unknown-linux-gnu  %)
+    ; RUN: %{check-triples}( -fopenmp-simd %, -check-prefix=SIMD    %)
+    ; RUN: %{check-triples}(               %, -check-prefix=NO-SIMD %)
 
-For a complex substitution with a long list of parameters, it is
-sometimes more readable if at least some of its parameters remain as
-standalone substitutions.  As in the original example from the
-previous section, actual arguments are then optional, and they are
-recognized by their formal parameter names instead of by their
-positions in a long sequence of actual arguments.
+For a complex substitution with a long list of parameters, it is sometimes more
+readable if at least some of its parameters remain as standalone substitutions.
+As in the original example from `Test-specific substitutions`_, actual arguments
+are then optional, and they are recognized by their formal parameter names
+instead of by their positions in a long sequence of actual arguments.
 
 If you end up with too many levels of substitutions, debugging test
 failures can be challenging because the only location information lit
@@ -898,18 +952,18 @@ reported with a command like ``echo``:
 
 .. code-block:: llvm
 
-    ; DEFINE: %{check}( LOC %, TRIPLE %, CFLAGS %, FC_PREFIX %) =         \
+    ; DEFINE: %{check}( LOC %, TRIPLE %, CFLAGS %, FCFLAGS %) =           \
     ; DEFINE:   echo 'At test lines %{LOC}, %(line)' &&                   \
     ; DEFINE:   %clang_cc1 -verify -fopenmp -fopenmp-version=51 %{CFLAGS} \
     ; DEFINE:              -triple %{TRIPLE} -emit-llvm -o - %s |         \
-    ; DEFINE:     FileCheck -check-prefix=%{FC_PREFIX} %s
+    ; DEFINE:     FileCheck %{FCFLAGS} %s
 
-    ; DEFINE: %{check-triple}( LOC %, TRIPLE %) =                                      \
-    ; DEFINE:   %{check}( %{LOC}, %(line) %, %{TRIPLE} %,               %, CHECK %) && \
-    ; DEFINE:   %{check}( %{LOC}, %(line) %, %{TRIPLE} %, -fopenmp-simd %, SIMD  %)
+    ; DEFINE: %{check-triples}( LOC %, CFLAGS %, FCFLAGS %) =                                           \
+    ; DEFINE:   %{check}( %{LOC}, %(line) %, x86_64-apple-darwin10.6.0 %, %{CFLAGS} %, %{FCFLAGS} %) && \
+    ; DEFINE:   %{check}( %{LOC}, %(line) %, x86_64-unknown-linux-gnu  %, %{CFLAGS} %, %{FCFLAGS} %)
 
-    ; RUN: %{check-triple}( %(line) %, x86_64-apple-darwin10.6.0 %)
-    ; RUN: %{check-triple}( %(line) %, x86_64-unknown-linux-gnu  %)
+    ; RUN: %{check-triples}( %(line) %, -fopenmp-simd %, -check-prefix=SIMD    %)
+    ; RUN: %{check-triples}( %(line) %,               %, -check-prefix=NO-SIMD %)
 
 If your test suite is configured to use lit's internal shell, you can
 portably replace ``echo`` with the ``:`` command so that the location
