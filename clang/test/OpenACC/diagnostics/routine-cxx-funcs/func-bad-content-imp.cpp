@@ -7,7 +7,8 @@
 // usee/user relationship are generally seen by Clang's OpenACC analysis.
 // Instead, the goal here is to make sure that various diagnostics that are
 // recorded in the bodies of various special C++ functions are reported
-// successfully later when the routine directives are implied.
+// successfully later when the routine directives are implied.  ../routine.cpp
+// checks various contexts in which routine directives can be implied.
 //
 // RUN: %clang_cc1 -fopenacc -Wno-openacc-and-cxx %s \
 // RUN:     -verify=funcBadContent,funcBadContentImp \
@@ -15,6 +16,7 @@
 //
 // END.
 
+#define USEE_ADD_DEF_IN_CLASS 0
 #define USEE_ROUTINE_DIR // no directive so that it's implied later
 #define USEE_BAD_CONTENT 1
 #include "usee-defs.inc" // diagnostics recorded

@@ -18,20 +18,23 @@ categories (e.g., default constructor, copy constructor, unary operator, binary
 operator, conversion operator), which are typically handled separately within
 Clang.
 
+Additional diagnostic checking for C++ appears in `../routine.cpp`.
+
 # Organization
 
 This directory contains the following files:
 
-* `*.cpp` files (e.g., `early-uses.cpp`, `call-par-level.cpp`) are the main
+* `*.cpp` files (e.g., `early-uses.cpp`, `call-par-level-*.cpp`) are the main
   test files, each of which checks a particular kind of diagnostic.  Many of
   those diagnostics concern user/usee relationship (typically one function
   calling another).  In that case, the corresponding test files include the
   `*.h` and `*.inc` files below, which provide a common set of usee/user cases
   to check.
 * `usee-decls.h` contains declarations of the functions that act as usees in
-  the tests.
-* `usee-defs.inc` contains definitions and `routine` directives for those
-  functions.
+  the tests.  If `USEE_ADD_DEF_IN_CLASS` is `1`, it also produces in-class
+  definitions and `routine` directives for those functions.
+* `usee-defs.inc` contains out-of-class definitions and `routine` directives for
+  those functions.
 * `users.inc` contains various uses of those functions.
 
 # Common Notes
@@ -82,7 +85,7 @@ destructor is actually called.  Should we then eliminate enforcement at foo's
 callers?  So far, we've discovered the following consequences from not
 eliminating enforcement there:
 
-* In the case of level-of-parallelism restrictions (`call-par-level.cpp`) for
+* In the case of level-of-parallelism restrictions (`call-par-level-*.cpp`) for
   the destructor's call, enforcement at foo's definition means the
   level-of-parallelism relationship must be foo's caller `>=` foo `>=`
   destructor, which already requires foo's caller `>=` destructor.  Thus,

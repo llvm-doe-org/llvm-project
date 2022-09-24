@@ -13,7 +13,12 @@
 // explicit routine directive error, then that use alone would have been
 // sufficient to cause the error.  That dimension of the logic is checked
 // thoroughly for C elsewhere.
+//
+// ../routine.cpp checks various cases where member function
+// prototypes/definitions/uses appear within or after the class.  Here, member
+// function definitions are always after the class.
 
+#define USEE_ADD_DEF_IN_CLASS 0
 #define USER_ROUTINE_DIR
 #define USER_USER_ROUTINE_DIR
 #define USER_LOOP_DIR _Pragma("acc loop vector")

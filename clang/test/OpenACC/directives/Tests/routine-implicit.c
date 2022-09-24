@@ -4,6 +4,9 @@
 // make sure there's no misprint or miscompilation when they're present.  We
 // specifically avoid the clutter of checking that explicit routine directives
 // dump and print correctly as that's checked in other routine-*.c.
+//
+// Implicit routine directives for C++ class member functions are checked as
+// part of routine-placement-for-class.cpp.
 
 // REDEFINE: %{exe:fc:args-stable} = -strict-whitespace
 

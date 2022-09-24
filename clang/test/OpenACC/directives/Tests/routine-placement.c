@@ -229,35 +229,6 @@ void onDeclOnDecl(Result *);
 #pragma acc routine seq
 void onDeclOnDecl(Result *);
 
-//      DMP: FunctionDecl [[#%#x,onDeclOnDecl:]] {{.*}} onDeclOnDecl 'void (Result *)'
-//  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
-// DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
-//      DMP: FunctionDecl {{.*}} prev [[#onDeclOnDecl]] {{.*}} onDeclOnDecl 'void (Result *)'
-//  DMP-NOT: FunctionDecl
-//      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}
-// DMP-NEXT:   OMPDeclareTargetDeclAttr {{.*}}> MT_To DT_Any [[#]] IsOpenACCTranslation{{$}}
-//
-//  PRT-A-NEXT: {{^ *}}#pragma acc routine seq{{$}}
-// PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
-//  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
-// PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDeclOnDecl(Result *);
-//  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
-// PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
-//
-//  PRT-A-NEXT: {{^ *}}#pragma acc routine seq{{$}}
-// PRT-AO-NEXT: {{^ *}}// #pragma omp declare target{{$}}
-//  PRT-O-NEXT: {{^ *}}#pragma omp declare target{{$}}
-// PRT-OA-NEXT: {{^ *}}// #pragma acc routine seq{{$}}
-//    PRT-NEXT: void onDeclOnDecl(Result *);
-//  PRT-O-NEXT: {{^ *}}#pragma omp end declare target{{$}}
-// PRT-AO-NEXT: {{^ *}}// #pragma omp end declare target{{$}}
-#pragma acc routine seq
-void onDeclOnDecl(Result *);
-#pragma acc routine seq
-void onDeclOnDecl(Result *);
-
 //      DMP: FunctionDecl [[#%#x,onDeclOnDef:]] {{.*}} onDeclOnDef 'void (Result *)'
 //  DMP-NOT: FunctionDecl
 //      DMP:   ACCRoutineDeclAttr {{.*}}> Seq OMPNodeKind=OMPDeclareTargetDecl{{$}}

@@ -1,5 +1,6 @@
 // Check accelerator routines called where they are not permitted due to their
-// levels of parallelism.
+// levels of parallelism.  Accelerator routine definitions appear after the
+// class.
 //
 // Additionally, because this test declares functions without routine
 // directives, then separately defines them with routine directives, and then
@@ -19,10 +20,11 @@
 //
 // END.
 
-// Include the the usee function definitions with their routine directives, and
-// then include the users so it will complain about incompatible levels of
+// Include the usee function definitions with their routine directives, and then
+// include the users so it will complain about incompatible levels of
 // parallelism (and not about late routine directives).
 
+#define USEE_ADD_DEF_IN_CLASS 0
 #define USEE_ROUTINE_DIR _Pragma("acc routine gang")
 #define USEE_BAD_CONTENT 0
 #include "usee-defs.inc" // usee routine directives specified here

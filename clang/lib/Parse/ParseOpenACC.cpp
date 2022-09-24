@@ -102,7 +102,7 @@ void Parser::ParseOpenACCClauses(OpenACCDirectiveKind DKind) {
 Parser::DeclGroupPtrTy
 Parser::ParseOpenACCDeclarativeDirective(DeclaratorContext Context,
                                          ParsedAttributes &Attrs) {
-  assert(Tok.is(tok::annot_pragma_openacc) && "Not an OpenACC directive!");
+  assert(Tok.is(tok::annot_pragma_openacc) && "expected an OpenACC directive");
   SourceLocation StartLoc = ConsumeAnnotationToken();
   OpenACCDirectiveKind DKind = parseOpenACCDirectiveKind(*this);
   SourceLocation EndLoc;
@@ -111,6 +111,26 @@ Parser::ParseOpenACCDeclarativeDirective(DeclaratorContext Context,
 }
 Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective(
     DeclaratorContext Context, ParsedAttributes &Attrs, SourceLocation StartLoc,
+    OpenACCDirectiveKind DKind, SourceLocation &EndLoc) {
+  return ParseOpenACCDeclarativeDirective(
+      Context, Attrs, AS_none, DeclSpec::TST_unspecified, /*Tag=*/nullptr,
+      StartLoc, DKind, EndLoc);
+}
+Parser::DeclGroupPtrTy
+Parser::ParseOpenACCDeclarativeDirective(ParsedAttributes &Attrs,
+                                         AccessSpecifier AS,
+                                         DeclSpec::TST TagType, Decl *Tag) {
+  assert(Tok.is(tok::annot_pragma_openacc) && "expected an OpenACC directive");
+  SourceLocation StartLoc = ConsumeAnnotationToken();
+  OpenACCDirectiveKind DKind = parseOpenACCDirectiveKind(*this);
+  SourceLocation EndLoc;
+  return ParseOpenACCDeclarativeDirective(DeclaratorContext::Member, Attrs, AS,
+                                          TagType, Tag, StartLoc, DKind,
+                                          EndLoc);
+}
+Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective(
+    DeclaratorContext Context, ParsedAttributes &Attrs, AccessSpecifier AS,
+    DeclSpec::TST TagType, Decl *Tag, SourceLocation StartLoc,
     OpenACCDirectiveKind DKind, SourceLocation &EndLoc) {
   ParenBraceBracketBalancer BalancerRAIIObj(*this);
   SmallVector<ACCClause *, 5> Clauses;
@@ -129,6 +149,7 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective(
     break;
   case ACCD_routine: {
     if (!Actions.getCurLexicalContext()->isFileContext() &&
+        (!Actions.getCurLexicalContext()->isRecord() || AS == AS_none) &&
         !Actions.getCurLexicalContext()->isFunctionOrMethod()) {
       Diag(StartLoc, diag::err_acc_unexpected_directive)
           << getOpenACCName(DKind);
@@ -168,8 +189,13 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective(
     // declaration, so don't try to parse one, and complain once that there
     // isn't one.
     if (!isEofOrEom() && !Tok.isOneOf(tok::annot_pragma_openacc, tok::l_brace,
-                                      tok::r_brace, tok::semi))
-      Group = ParseDeclaration(Context, EndLoc, Attrs);
+                                      tok::r_brace, tok::semi)) {
+      if (AS == AS_none)
+        Group = ParseDeclaration(Context, EndLoc, Attrs);
+      else
+        Group =
+            ParseCXXClassMemberDeclarationWithPragmas(AS, Attrs, TagType, Tag);
+    }
     Actions.ActOnOpenACCRoutineDirective(ACC_EXPLICIT, Group.get());
     Actions.EndOpenACCDirectiveAndAssociate(DKind);
     return Group;

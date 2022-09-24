@@ -4,6 +4,21 @@
 #ifndef FUNC_USEE_DECLS_INC
 #define FUNC_USEE_DECLS_INC
 
+#ifndef USEE_ADD_DEF_IN_CLASS
+# error USEE_ADD_DEF_IN_CLASS not defined
+# define USEE_ADD_DEF_IN_CLASS 1 // to pacify editors
+#endif
+
+#if USEE_ADD_DEF_IN_CLASS
+# ifndef USEE_ROUTINE_DIR
+#  error USEE_ROUTINE_DIR not defined
+#  define USEE_ROUTINE_DIR // to pacify editors
+# endif
+# define USEE_BODY(BODY) { BODY }
+#else
+# define USEE_BODY(BODY) ;
+#endif
+
 // File-scope function we check in the usee role.
 void fnUsee();
 
@@ -24,35 +39,103 @@ typedef int (*FnPtr)(int);
 
 // Class containing member functions we check in the usee role.
 struct MemberUsees {
-  MemberUsees(); // default ctor
-  MemberUsees(MemberUsees &); // non-trivial copy ctor
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_ctor_routine
+#endif
+  MemberUsees() USEE_BODY() // default ctor
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_ctorCopy_routine
+#endif
+  MemberUsees(MemberUsees &) USEE_BODY() // non-trivial copy ctor
   MemberUsees(CtorDelegator); // ctor delegator
-  MemberUsees(CtorInherited); // inherited ctor
-  ~MemberUsees(); // non-trivial dtor
-  void *operator new(unsigned long s); // new operator
-  void operator delete(void *p); // delete operator
-  int operator-() const; // unary operator
-  int operator+(int) const; // binary operator
-  int operator[](int) const; // subscript operator
-  int operator()() const; // call operator
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_ctorInherited_routine
+#endif
+  MemberUsees(CtorInherited) USEE_BODY() // inherited ctor
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_dtor_routine
+#endif
+  ~MemberUsees() USEE_BODY() // non-trivial dtor
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_new_routine
+#endif
+  void *operator new(unsigned long s) // new operator
+  USEE_BODY(return (void*)1;) // fake address that won't produce a warning
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_delete_routine
+#endif
+  void operator delete(void *p) USEE_BODY() // delete operator
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_opUnary_routine
+#endif
+  int operator-() const USEE_BODY(return -1;) // unary operator
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_opBinary_routine
+#endif
+  int operator+(int) const USEE_BODY(return 0;) // binary operator
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_opSubscript_routine
+#endif
+  int operator[](int) const USEE_BODY(return 0;) // subscript operator
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_opCall_routine
+#endif
+  int operator()() const USEE_BODY(return 0;) // call operator
   struct ArrowResult {
     struct ArrowResultInner {
       int x;
     } arrowResultInner;
-    ArrowResultInner *operator->(); // arrow operator
+#if USEE_ADD_DEF_IN_CLASS
+    USEE_ROUTINE_DIR // #MemberUsees_ArrowResult_opArrow_routine
+#endif
+    ArrowResultInner *operator->()
+    USEE_BODY(return &arrowResultInner;) // arrow operator
   } arrowResult;
-  ArrowResult operator->(); // chained arrow operator
-  operator int() const; // conversion operator
-  operator FnPtr() const; // conversion for surrogate call function
-  int *begin(); // begin for range-based for loop
-  int *end(); // end for range-based for loop
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_opArrow_routine
+#endif
+  ArrowResult operator->()
+  USEE_BODY(return arrowResult;) // chained arrow operator
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_opConvert_routine
+#endif
+  operator int() const USEE_BODY(return 0;) // conversion operator
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_opConvertSurrogate_routine
+#endif
+  operator FnPtr() const
+  USEE_BODY(return 0;) // conversion for surrogate call function
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_begin_routine
+#endif
+  int *begin() USEE_BODY(return nullptr;) // begin for range-based for loop
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUsees_end_routine
+#endif
+  int *end() USEE_BODY(return nullptr;) // end for range-based for loop
 };
 
 // Trivial class containing member functions we check in the usee role.
 struct [[clang::trivial_abi]] MemberUseesTrivial {
-  MemberUseesTrivial();
-  MemberUseesTrivial(MemberUseesTrivial &); // trivial copy ctor
-  ~MemberUseesTrivial(); // trivial dtor
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUseesTrivial_ctor_routine
+#endif
+  MemberUseesTrivial() USEE_BODY()
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUseesTrivial_ctorCopy_routine
+#endif
+  MemberUseesTrivial(MemberUseesTrivial &) USEE_BODY() // trivial copy ctor
+#if USEE_ADD_DEF_IN_CLASS
+  USEE_ROUTINE_DIR // #MemberUseesTrivial_dtor_routine
+#endif
+  ~MemberUseesTrivial() USEE_BODY() // trivial dtor
 };
+
+// This function is normally defined in usee-defs.inc, but that's not included
+// if USEE_ADD_DEF_IN_CLASS.
+#if USEE_ADD_DEF_IN_CLASS
+USEE_ROUTINE_DIR // #fnUsee_routine
+void fnUsee() {}
+#endif
 
 #endif

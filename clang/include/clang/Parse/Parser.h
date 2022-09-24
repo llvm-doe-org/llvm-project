@@ -3353,18 +3353,28 @@ public:
   //===--------------------------------------------------------------------===//
   // OpenACC: Directives and clauses.
 
-  /// Parses declarative OpenACC directives.
+  /// Parses declarative OpenACC directive not in C++ class member list.
   DeclGroupPtrTy ParseOpenACCDeclarativeDirective(DeclaratorContext Context,
                                                   ParsedAttributes &Attrs);
-  /// Parses declarative OpenACC directives except the starting
-  /// \c annot_pragma_openacc (whose location is \p StartLoc) and directive
-  /// kind (\p DKind) have already been parsed.  Stores the location of the
-  /// declaration's last token (semicolon) in \p EndLoc.
+  /// Parses declarative OpenACC directive not in C++ class member list, but the
+  /// starting \c annot_pragma_openacc (whose location is \p StartLoc) and
+  /// directive kind (\p DKind) have already been parsed.  Stores the location
+  /// of the declaration's last token (semicolon) in \p EndLoc.
   DeclGroupPtrTy ParseOpenACCDeclarativeDirective(DeclaratorContext Context,
                                                   ParsedAttributes &Attrs,
                                                   SourceLocation StartLoc,
                                                   OpenACCDirectiveKind DKind,
                                                   SourceLocation &EndLoc);
+  /// Parses declarative OpenACC directive in C++ class member list.
+  DeclGroupPtrTy ParseOpenACCDeclarativeDirective(ParsedAttributes &Attrs,
+                                                  AccessSpecifier AS,
+                                                  DeclSpec::TST TagType,
+                                                  Decl *Tag);
+  /// Used by the other \c ParseOpenACCDeclarativeDirective functions.
+  DeclGroupPtrTy ParseOpenACCDeclarativeDirective(
+      DeclaratorContext Context, ParsedAttributes &Attrs, AccessSpecifier AS,
+      DeclSpec::TST TagType, Decl *Tag, SourceLocation StartLoc,
+      OpenACCDirectiveKind DKind, SourceLocation &EndLoc);
   /// Parses OpenACC executable directives or constructs.
   ///
   /// \param StmtCtx The context in which we're parsing the directive.

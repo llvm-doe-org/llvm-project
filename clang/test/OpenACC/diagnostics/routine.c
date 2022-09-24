@@ -1,4 +1,8 @@
 // Check diagnostics for "acc routine".
+//
+// routine.cpp replicates some of these cases for C++ cases, and
+// routine-cxx-funcs checks some issues specific to C++'s variety of special
+// functions (e.g., constructors, destructors, operators).
 
 // DEFINE: %{check}( CFLAGS %) =                                               \
 //
@@ -34,6 +38,10 @@ float f;
 #define CASE_WITH_TRANSFORM_1  3
 #define CASE_WITH_TRANSFORM_2  4
 #define CASE_WITH_TRANSFORM_3  5
+#ifndef CASE
+# error undefined CASE
+# define CASE CASE_WITHOUT_TRANSFORM // to pacify editors
+#endif
 
 //##############################################################################
 // Diagnostic checks where it's fine that other diagnostics suppress all
@@ -517,10 +525,12 @@ void inOwnFuncNoParLevelConflict() {
 
 //..............................................................................
 // Conflicting clauses between explicit directive and previously implied
-// directive for the same function.  These necessarily include errors that the
-// explicit directives appear after uses.  Those errors are more thoroughly
-// tested separately later in this file, but we do vary the way they happen some
-// here to check for undesirable interactions between the errors.
+// directive for the same function.
+//
+// These necessarily include errors that the explicit directives appear after
+// uses.  Those errors are more thoroughly tested separately later in this file,
+// but we do vary the way they happen some here to check for undesirable
+// interactions between the errors.
 
 void impSeqExpGang();
 void impSeqExpGang_use() {

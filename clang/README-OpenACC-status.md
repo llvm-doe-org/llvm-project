@@ -364,13 +364,13 @@ Run-Time Environment Variables
 -------------------
 
 * Lexical context
-    * Appearing at file scope is supported.
+    * Appearing at file scope or within the member list of a C++ class is
+      supported.
     * Appearing within another function's definition is supported.  There are
       currently some obscure inconsistencies in the visibility of the `routine`
       directive outside that function definition, as described under "Scope of
       the directive" below, but these should not affect most users.
-    * Appearing within the member list of a class, namespace, or other C++
-      construct is not yet supported.
+    * Appearing within the member list of a C++ namespace is not yet supported.
     * Appearing within any OpenACC construct besides `atomic` is supported.
     * Appearing outside any OpenACC construct is supported.
 * Supported level-of-parallelism clauses
@@ -446,7 +446,14 @@ Run-Time Environment Variables
     * Unless a function has an explicit `routine` directive in scope,
       a `routine seq` directive is implied for it by any use of the
       function within a compute construct or within another function
-      with a `routine` directive (whether implicit or explicit).
+      with a `routine` directive (whether implicit or explicit).  Caveat:
+        * Currently, if a function *x* is defined in a compilation unit, if the
+          only use of *x* within that compilation unit appears in an inline
+          function *y* (e.g., *y* might be a member function defined within a
+          C++ class), and if *y* is not used in that compilation unit, then the
+          definition of *x* will not be compiled for accelerators as expected.
+          This behavior is inherited from Clang's current `omp declare target`
+          behavior, and Clacc currently does not diagnose it.
     * An implicit `routine seq` directive has scope throughout the compilation
       unit and thus triggers the above diagnostics for the function definition's
       body as long it's in the same compilation unit.  Caveat:
