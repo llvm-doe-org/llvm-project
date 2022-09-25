@@ -1,6 +1,6 @@
 // This test checks basic functionality of -fopenacc[-ast]-print.  Output is
-// thoroughly checked for more complex situations in directive-specific tests
-// in fopenacc-print-torture.c, and in fopenacc-ast-print-torture.c.
+// thoroughly checked for more complex situations in directive-specific tests,
+// in fopenacc-print-torture.c, and in fopenacc-ast-print-torture.{c,cpp}.
 
 // Define iterations over printing options and arguments.
 //

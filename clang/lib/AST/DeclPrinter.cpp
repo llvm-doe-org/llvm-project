@@ -575,12 +575,12 @@ void DeclPrinter::VisitDeclContext(DeclContext *DC, bool Indent) {
             Attr->isInherited() ? OpenACCPrint_ACC : Policy.OpenACCPrint;
       switch (PrintMode) {
       case OpenACCPrint_ACC_OMP:
-        Out << "// ";
-        LLVM_FALLTHROUGH;
+        this->Indent() << "// #pragma omp end declare target\n";
+        break;
       case OpenACCPrint_OMP:
       case OpenACCPrint_OMP_ACC:
       case OpenACCPrint_OMP_HEAD:
-        Out << "#pragma omp end declare target\n";
+        this->Indent() << "#pragma omp end declare target\n";
         break;
       case OpenACCPrint_ACC:
         break;
