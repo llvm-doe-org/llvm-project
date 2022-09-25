@@ -364,13 +364,12 @@ Run-Time Environment Variables
 -------------------
 
 * Lexical context
-    * Appearing at file scope or within the member list of a C++ class is
-      supported.
+    * Appearing at file scope or within the member list of a C++ class or
+      namespace is supported.
     * Appearing within another function's definition is supported.  There are
       currently some obscure inconsistencies in the visibility of the `routine`
       directive outside that function definition, as described under "Scope of
       the directive" below, but these should not affect most users.
-    * Appearing within the member list of a C++ namespace is not yet supported.
     * Appearing within any OpenACC construct besides `atomic` is supported.
     * Appearing outside any OpenACC construct is supported.
 * Supported level-of-parallelism clauses

@@ -31,10 +31,12 @@ This directory contains the following files:
   `*.h` and `*.inc` files below, which provide a common set of usee/user cases
   to check.
 * `usee-decls.h` contains declarations of the functions that act as usees in
-  the tests.  If `USEE_ADD_DEF_IN_CLASS` is `1`, it also produces in-class
-  definitions and `routine` directives for those functions.
-* `usee-defs.inc` contains out-of-class definitions and `routine` directives for
-  those functions.
+  the tests.  If `USEE_ADD_DEF_TO_DECL` is `1`, it also produces definitions
+  and `routine` directives for for those functions (under the assumption
+  `usee-defs.inc` will not be included later), and both appear within the
+  enclosing classes and namespace in the case of member functions.
+* `usee-defs.inc` contains out-of-class/namespace definitions and `routine`
+  directives for those functions (assuming `USEE_ADD_DEF_TO_DECL` is `0`).
 * `users.inc` contains various uses of those functions.
 
 # Common Notes

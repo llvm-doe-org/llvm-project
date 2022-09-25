@@ -15,10 +15,10 @@
 // thoroughly for C elsewhere.
 //
 // ../routine.cpp checks various cases where member function
-// prototypes/definitions/uses appear within or after the class.  Here, member
-// function definitions are always after the class.
+// prototypes/definitions/uses appear within or after the class/namespace.
+// Here, member function definitions are always after the class/namespace.
 
-#define USEE_ADD_DEF_IN_CLASS 0
+#define USEE_ADD_DEF_TO_DECL 0
 #define USER_ROUTINE_DIR
 #define USER_USER_ROUTINE_DIR
 #define USER_LOOP_DIR _Pragma("acc loop vector")

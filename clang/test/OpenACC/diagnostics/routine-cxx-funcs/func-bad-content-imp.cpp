@@ -16,7 +16,7 @@
 //
 // END.
 
-#define USEE_ADD_DEF_IN_CLASS 0
+#define USEE_ADD_DEF_TO_DECL 0
 #define USEE_ROUTINE_DIR // no directive so that it's implied later
 #define USEE_BAD_CONTENT 1
 #include "usee-defs.inc" // diagnostics recorded

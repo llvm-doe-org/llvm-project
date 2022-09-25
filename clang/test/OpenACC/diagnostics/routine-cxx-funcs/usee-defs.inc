@@ -11,6 +11,9 @@
 # error USEE_BAD_CONTENT not defined
 # define USEE_BAD_CONTENT 1 // to pacify editors
 #endif
+#if USEE_ADD_DEF_TO_DECL
+# error USEE_ADD_DEF_TO_DECL expected to be 0
+#endif
 
 // earlyUses-error@#MemberUsees_ctor_routine {{first '#pragma acc routine' for function 'MemberUsees::MemberUsees' not in scope at some uses}}
 // earlyUses-note@#Derived_ctorImpInit {{use of function 'MemberUsees::MemberUsees' appears here}}
@@ -632,6 +635,32 @@ void fnUsee() {
   // funcBadContentExp-error@+3 {{function 'fnUsee' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUsee_routine  {{'#pragma acc routine' for function 'fnUsee' appears here}}
   // funcBadContentImp-error@+1 {{function 'fnUsee' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  #pragma acc loop gang
+  for (int i = 0; i < 5; ++i)
+    ;
+#endif
+}
+
+// earlyUses-error@#NamespaceUsees_fn_routine {{first '#pragma acc routine' for function 'NamespaceUsees::fn' not in scope at some uses}}
+// earlyUses-note@#NamespaceUsees_outsideUser_call {{use of function 'NamespaceUsees::fn' appears here}}
+// earlyUses-note@#NamespaceUsees_user_call {{use of function 'NamespaceUsees::fn' appears here}}
+USEE_ROUTINE_DIR // #NamespaceUsees_fn_routine
+void NamespaceUsees::fn() {
+#if USEE_BAD_CONTENT
+  // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'NamespaceUsees::fn' because the latter is attributed with '#pragma acc routine'}}
+  // funcBadContentExp-note@#NamespaceUsees_fn_routine  {{'#pragma acc routine' for function 'NamespaceUsees::fn' appears here}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'NamespaceUsees::fn' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
+  static int x;
+  // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'NamespaceUsees::fn' because the latter is attributed with '#pragma acc routine'}}
+  // funcBadContentExp-note@#NamespaceUsees_fn_routine  {{'#pragma acc routine' for function 'NamespaceUsees::fn' appears here}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'NamespaceUsees::fn' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
+  #pragma acc parallel
+  ;
+  // funcBadContentExp-error@+3 {{function 'NamespaceUsees::fn' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-note@#NamespaceUsees_fn_routine  {{'#pragma acc routine' for function 'NamespaceUsees::fn' appears here}}
+  // funcBadContentImp-error@+1 {{function 'NamespaceUsees::fn' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;

@@ -659,3 +659,21 @@ USER_USER_ROUTINE_DIR // #templateFunc_user_routine
 void templateFunc_user() {
   templateFunc<fnUsee>(); // #templateFunc_call
 }
+
+// callParLevel-error@#NamespaceUsees_outsideUser_call {{function 'NamespaceUsees_outsideUser' has '#pragma acc routine worker' but calls function 'NamespaceUsees::fn', which has '#pragma acc routine gang'}}
+// callParLevel-note@#NamespaceUsees_outsideUser_routine {{'#pragma acc routine' for function 'NamespaceUsees_outsideUser' appears here}}
+// callParLevel-note@#NamespaceUsees_fn_routine {{'#pragma acc routine' for function 'NamespaceUsees::fn' appears here}}
+USER_ROUTINE_DIR // #NamespaceUsees_outsideUser_routine
+void NamespaceUsees_outsideUser() {
+  NamespaceUsees::fn(); // #NamespaceUsees_outsideUser_call
+}
+
+// callParLevel-error@#NamespaceUsees_user_call {{function 'NamespaceUsees::user' has '#pragma acc routine worker' but calls function 'NamespaceUsees::fn', which has '#pragma acc routine gang'}}
+// callParLevel-note@#NamespaceUsees_user_routine {{'#pragma acc routine' for function 'NamespaceUsees::user' appears here}}
+// callParLevel-note@#NamespaceUsees_fn_routine {{'#pragma acc routine' for function 'NamespaceUsees::fn' appears here}}
+USER_ROUTINE_DIR // #NamespaceUsees_user_routine
+namespace NamespaceUsees {
+  void user() {
+    NamespaceUsees::fn(); // #NamespaceUsees_user_call
+  }
+}

@@ -29,7 +29,7 @@ float f;
 
 // Generate unique function name based on the line number to make it easier to
 // avoid diagnostics about multiple routine directives for the same function.
-#define UNIQUE_NAME CONCAT2(unique_fn_, __LINE__)
+#define UNIQUE_NAME CONCAT2(unique_name_, __LINE__)
 #define CONCAT2(X, Y) CONCAT(X, Y)
 #define CONCAT(X, Y) X##Y
 
@@ -726,6 +726,9 @@ struct AssociatedDeclIsType {
 // (e.g., a reference in sizeof is not a use).
 //------------------------------------------------------------------------------
 
+//..............................................................................
+// Early uses.
+
 // Evaluated host uses.
 void hostUseBefore();
 void hostUseBefore_hostUses() {
@@ -904,7 +907,9 @@ void notAllUsesBefore_accUses() {
 #pragma acc routine seq
 void notAllUsesBefore();
 
-// Definition.
+//..............................................................................
+// Early definitions.
+
 // expected-note@+1 {{definition of function 'defBefore' appears here}}
 void defBefore() {}
 // expected-error@+1 {{first '#pragma acc routine' for function 'defBefore' not in scope at definition}}
@@ -937,6 +942,9 @@ void inOwnDef() {
   #pragma acc routine seq
   void inOwnDef();
 }
+
+//..............................................................................
+// Diagnostic combinations.
 
 // Use errors shouldn't suppress/break later definition errors.
 void useDefBefore();

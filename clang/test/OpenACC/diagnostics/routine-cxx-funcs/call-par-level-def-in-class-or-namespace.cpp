@@ -1,7 +1,9 @@
 // Check accelerator routines called where they are not permitted due to their
-// levels of parallelism.  Accelerator routine definitions appear in the class.
+// levels of parallelism.  Accelerator routine definitions appear in the class
+// or namespace.
 //
-// ../routine.cpp covers the case where users are in the same class.
+// ../routine.cpp covers the case where users are in the same class or
+// namespace.
 //
 // RUN: %clang_cc1 -fopenacc -Wno-openacc-and-cxx -verify=callParLevel %s \
 // RUN:     -fexceptions -fcxx-exceptions -Wno-unevaluated-expression
@@ -12,7 +14,7 @@
 // include the users so it will complain about incompatible levels of
 // parallelism (and not about late routine directives).
 
-#define USEE_ADD_DEF_IN_CLASS 1
+#define USEE_ADD_DEF_TO_DECL 1
 #define USEE_ROUTINE_DIR _Pragma("acc routine gang")
 #include "usee-decls.h" // usee routine directives specified here
 
