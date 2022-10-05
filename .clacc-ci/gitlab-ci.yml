@@ -46,6 +46,7 @@ stages:
   - config
   - build
   - test
+  - vv
   - cleanup
   - manual cleanup
 
@@ -61,7 +62,7 @@ stages:
   tags: [shell, leconte]
   variables:
     BUILD_ID: leconte
-    MODULES: cmake/3.19.2 gnu/9.2.0 nvhpc/22.2
+    MODULES: git cmake/3.19.2 gnu/9.2.0 nvhpc/22.2
     PATH_PREPEND:
       /opt/nvidia/hpc_sdk/Linux_ppc64le/22.2/cuda/11.6/bin
     CMAKE: cmake
@@ -97,12 +98,29 @@ stages:
       libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/api.c
       libomptarget :: nvptx64-nvidia-cuda-newDriver :: unified_shared_memory/api.c
       "
+    VV_COMP_LIT_XFAIL:
+      "
+      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1-c.test
+      "
+    VV_RUN_LIT_XFAIL:
+      "
+      External/openacc_vv/acc_map_data-c.test
+      External/openacc_vv/acc_unmap_data-c.test
+      External/openacc_vv/atomic_capture_bitand_equals-c.test
+      External/openacc_vv/atomic_minus_equals-c.test
+      External/openacc_vv/atomic_structured_assign_x_minus_expr-c.test
+      External/openacc_vv/atomic_update_minus_equals-c.test
+      External/openacc_vv/atomic_update_x_minus_expr-c.test
+      External/openacc_vv/atomic_x_minus_expr-c.test
+      External/openacc_vv/data_create-c.test
+      External/openacc_vv/parallel_copy-c.test
+      "
 
 .oswald02:
   tags: [shell, oswald02]
   variables:
     BUILD_ID: oswald02
-    MODULES: cmake gnu/11.1.0 nvhpc/22.7
+    MODULES: git cmake gnu/11.1.0 nvhpc/22.7
     PATH_PREPEND:
       /opt/nvidia/hpc_sdk/Linux_x86_64/22.7/cuda/11.7/bin
     CMAKE: cmake
@@ -122,12 +140,24 @@ stages:
       "
     LIT_XFAIL_NOT:
       ""
+    VV_COMP_LIT_XFAIL:
+      "
+      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1-c.test
+      "
+    VV_RUN_LIT_XFAIL:
+      "
+      External/openacc_vv/acc_map_data-c.test
+      External/openacc_vv/acc_unmap_data-c.test
+      External/openacc_vv/atomic_capture_bitand_equals-c.test
+      External/openacc_vv/data_create-c.test
+      External/openacc_vv/parallel_copy-c.test
+      "
 
 .explorer:
   tags: [shell, explorer]
   variables:
     BUILD_ID: explorer
-    MODULES: ""
+    MODULES: git
     PATH_PREPEND: ""
     CMAKE: cmake
     GCC_DIR: /usr
@@ -145,14 +175,29 @@ stages:
     GPU_TRIPLE: "amdgcn-amd-amdhsa"
     GPU_COUNT:  2
     LIT_NPROC_DIVISOR: 1
-    LIT_XFAIL: ""
-    LIT_XFAIL_NOT: ""
+    LIT_XFAIL:
+      ""
+    LIT_XFAIL_NOT:
+      ""
+    VV_COMP_LIT_XFAIL:
+      "
+      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1-c.test
+      "
+    VV_RUN_LIT_XFAIL:
+      "
+      External/openacc_vv/acc_map_data-c.test
+      External/openacc_vv/acc_unmap_data-c.test
+      External/openacc_vv/atomic_capture_bitand_equals-c.test
+      External/openacc_vv/atomic_capture_expr_plus_x-c.test
+      External/openacc_vv/data_create-c.test
+      External/openacc_vv/parallel_copy-c.test
+      "
 
 .excl-us:
   tags: [shell, excl-us]
   variables:
     BUILD_ID: excl-us
-    MODULES: gnu/11.1.0
+    MODULES: git gnu/11.1.0
     PATH_PREPEND: ""
     CMAKE: cmake3
     NINJA: ninja-build
@@ -166,6 +211,15 @@ stages:
       ""
     LIT_XFAIL_NOT:
       ""
+    VV_COMP_LIT_XFAIL:
+      ""
+    VV_RUN_LIT_XFAIL:
+      "
+      External/openacc_vv/acc_map_data-c.test
+      External/openacc_vv/acc_unmap_data-c.test
+      External/openacc_vv/atomic_capture_bitand_equals-c.test
+      External/openacc_vv/parallel_copy-c.test
+      "
 
 .no-asserts:
   extends: [.excl-us]
@@ -179,6 +233,15 @@ stages:
       "
     LIT_XFAIL_NOT:
       ""
+    VV_COMP_LIT_XFAIL:
+      ""
+    VV_RUN_LIT_XFAIL:
+      "
+      External/openacc_vv/acc_map_data-c.test
+      External/openacc_vv/acc_unmap_data-c.test
+      External/openacc_vv/atomic_capture_bitand_equals-c.test
+      External/openacc_vv/parallel_copy-c.test
+      "
 
 .debug:
   extends: [.excl-us]
@@ -195,6 +258,15 @@ stages:
       "
     LIT_XFAIL_NOT:
       ""
+    VV_COMP_LIT_XFAIL:
+      ""
+    VV_RUN_LIT_XFAIL:
+      "
+      External/openacc_vv/acc_map_data-c.test
+      External/openacc_vv/acc_unmap_data-c.test
+      External/openacc_vv/atomic_capture_bitand_equals-c.test
+      External/openacc_vv/parallel_copy-c.test
+      "
 
 # Not setup or cleanup.
 .non-utility:
@@ -299,11 +371,15 @@ leconte (cleanup):
   needs:
     - job: leconte (test)
       artifacts: false
+    - job: leconte (vv)
+      artifacts: false
 
 oswald02 (cleanup):
   extends: [.oswald02, .cleanup]
   needs:
     - job: oswald02 (test)
+      artifacts: false
+    - job: oswald02 (vv)
       artifacts: false
 
 explorer (cleanup):
@@ -311,11 +387,15 @@ explorer (cleanup):
   needs:
     - job: explorer (test)
       artifacts: false
+    - job: explorer (vv)
+      artifacts: false
 
 excl-us (cleanup):
   extends: [.excl-us, .cleanup]
   needs:
     - job: excl-us (test)
+      artifacts: false
+    - job: excl-us (vv)
       artifacts: false
 
 no-asserts (cleanup):
@@ -323,11 +403,15 @@ no-asserts (cleanup):
   needs:
     - job: no-asserts (test)
       artifacts: false
+    - job: no-asserts (vv)
+      artifacts: false
 
 debug (cleanup):
   extends: [.debug, .cleanup]
   needs:
     - job: debug (test)
+      artifacts: false
+    - job: debug (vv)
       artifacts: false
 
 leconte (manual cleanup):
@@ -390,6 +474,7 @@ z-cleanup-project-builds:
     - echo $LLVM_ENABLE_RUNTIMES
     - time $CMAKE -G Ninja
                   $CMAKE_BUILD_OPTS
+                  -DCMAKE_INSTALL_PREFIX=../install
                   -DLLVM_CCACHE_BUILD=ON
                   -DLLVM_USE_SPLIT_DWARF=true
                   -DLLVM_USE_LINKER=gold
@@ -456,6 +541,7 @@ debug (config):
     - echo $NINJA
     - $NINJA --version
     - time $NINJA -l `nproc` |& tee $CI_PROJECT_DIR/build-log.txt
+    - $NINJA -l `nproc` install
   artifacts:
     when: always
     paths: [build-log.txt]
@@ -497,7 +583,7 @@ debug (build):
       artifacts: false
 
 #-------------------------------------------------
-# tests
+# test
 #-------------------------------------------------
 
 .test:
@@ -636,6 +722,152 @@ no-asserts (test):
 
 debug (test):
   extends: [.debug, .test]
+  needs:
+    - job: debug (build)
+      artifacts: false
+
+#-------------------------------------------------
+# vv
+#
+# Clone llvm-test-suite.git and the OpenACC V&V suite, and run the latter via
+# the former.
+#-------------------------------------------------
+
+.vv:
+  extends: .non-utility
+  stage: vv
+  script:
+    - export VV_COMP_LIT_XFAIL=`
+        echo "$VV_COMP_LIT_XFAIL"
+        | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
+      `
+    - export VV_RUN_LIT_XFAIL=`
+        echo "$VV_RUN_LIT_XFAIL"
+        | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
+      `
+    - echo "$VV_COMP_LIT_XFAIL"
+    - echo "$VV_RUN_LIT_XFAIL"
+    - if test x"$GPU_TRIPLE" != x; then
+        export VV_CFLAGS="-fopenacc -fopenmp-targets=$GPU_TRIPLE -lm";
+      else
+        export VV_CFLAGS="-fopenacc -lm";
+      fi
+    - echo "$VV_CFLAGS"
+    - cd ..
+    - rm -rf openacc-vv
+    - mkdir openacc-vv
+    - cd openacc-vv
+    - git init llvm-test-suite
+    - cd llvm-test-suite
+    - git remote add origin https://github.com/llvm-doe-org/llvm-test-suite.git
+    # We exclude some very large directories from llvm-test-suite.git so it
+    # doesn't take so long to clone.
+    - git config core.sparseCheckout true
+    - echo '/*'              >> .git/info/sparse-checkout
+    - echo '!/ABI-Testsuite' >> .git/info/sparse-checkout
+    - echo '!/Bitcode'       >> .git/info/sparse-checkout
+    - echo '!/MultiSource'   >> .git/info/sparse-checkout
+    - git fetch --depth=1 --filter=blob:none origin pull/1/head:pr-1
+    - time git checkout pr-1
+    - cd ..
+    - time git clone https://github.com/OpenACCUserGroup/OpenACCV-V.git
+    - cd OpenACCV-V
+    - git checkout cf6f24e65a46c71b9ea505e80bd555862cd44526
+    # On explorer when using -fopenmp-targets=amdgcn-amd-amdhsa, Clang complains
+    # about the definition of false/true in acc_testsuite.h, and all tests fail
+    # as a result.  That's not an OpenACC-specific support issue, so we work
+    # around it to get meaningful OpenACC results.
+    - sed -i -e 's/typedef enum { false, true } bool;/#include <stdbool.h>/'
+          Tests/acc_testsuite.h
+    - cd ../llvm-test-suite
+    - mkdir build
+    - cd build
+    - time $CMAKE -G Ninja
+                  -DCMAKE_BUILD_TYPE=Release
+                  -DTEST_SUITE_OPENACCVV_ROOT=`pwd`/../../OpenACCV-V
+                  -DCMAKE_C_COMPILER=`pwd`/../../../install/bin/clang
+                  -DCMAKE_CXX_COMPILER=`pwd`/../../../install/bin/clang++
+                  -DTEST_SUITE_SUBDIRS=External/openacc_vv
+                  -DOpenACC_C_FLAGS="$VV_CFLAGS"
+                  -DOpenACC_CXX_FLAGS="$VV_CFLAGS"
+                  ..
+      |& tee $CI_PROJECT_DIR/openacc-vv-build-log.txt
+    # Some tests might fail to compile, but we don't want that to prevent
+    # compiling and running the rest of the tests, so we use -k with a large
+    # value we'll never reach.
+    - time $NINJA -l `nproc` -k 99999
+      |& tee -a $CI_PROJECT_DIR/openacc-vv-build-log.txt
+      || true
+    - if test x"$VV_COMP_LIT_XFAIL" = x; then
+        echo 'No compilation fails expected'
+          |& tee $CI_PROJECT_DIR/openacc-vv-log.txt;
+      else
+        echo 'Results for expected compilation fails:'
+          |& tee $CI_PROJECT_DIR/openacc-vv-log.txt &&
+        time for test in `echo "$VV_COMP_LIT_XFAIL" | sed -e 's/;/ /g'`; do
+          ../../../build/bin/llvm-lit -s -vv --timeout 2400 --ignore-fail
+                                      --filter="$test" .  >test-result 2>&1 &&
+          if grep -q 'Executable Missing'":"' *1$' test-result; then
+            echo "  expected compilation fail"':'" $test";
+          else
+            echo "  unexpected compilation pass"':'" $test";
+            cat test-result;
+          fi
+        done |& tee -a $CI_PROJECT_DIR/openacc-vv-log.txt;
+      fi
+    - NPROC=`nproc`
+    - echo "$NPROC"
+    - echo "$LIT_NPROC_DIVISOR"
+    - if test x"$VV_COMP_LIT_XFAIL" != x; then
+        export LIT_FILTER_OUT=`echo "$VV_COMP_LIT_XFAIL" | sed -e 's/;/|/g'`;
+      fi
+    - echo "$LIT_FILTER_OUT"
+    - time ../../../build/bin/llvm-lit
+        -s -vv --timeout 2400 -j `expr $NPROC / $LIT_NPROC_DIVISOR`
+        --ignore-fail --xunit-xml-output $CI_PROJECT_DIR/openacc-vv.xml
+        --show-xfail --xfail="$VV_RUN_LIT_XFAIL" .
+      |& tee -a $CI_PROJECT_DIR/openacc-vv-log.txt
+    - "! grep -c
+              \"'--ignore-fail' was specified\\|unexpected compilation pass\"
+              $CI_PROJECT_DIR/openacc-vv-log.txt"
+  artifacts:
+    when: always
+    paths: [openacc-vv-build-log.txt, openacc-vv-log.txt, openacc-vv.xml]
+    reports:
+      junit: openacc-vv.xml
+
+leconte (vv):
+  extends: [.leconte, .vv]
+  needs:
+    - job: leconte (build)
+      artifacts: false
+
+oswald02 (vv):
+  extends: [.oswald02, .vv]
+  needs:
+    - job: oswald02 (build)
+      artifacts: false
+
+explorer (vv):
+  extends: [.explorer, .vv]
+  needs:
+    - job: explorer (build)
+      artifacts: false
+
+excl-us (vv):
+  extends: [.excl-us, .vv]
+  needs:
+    - job: excl-us (build)
+      artifacts: false
+
+no-asserts (vv):
+  extends: [.no-asserts, .vv]
+  needs:
+    - job: no-asserts (build)
+      artifacts: false
+
+debug (vv):
+  extends: [.debug, .vv]
   needs:
     - job: debug (build)
       artifacts: false
