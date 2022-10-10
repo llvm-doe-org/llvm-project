@@ -39,7 +39,11 @@ variables:
   # upstream.  D121647 was supposed to fix it but what landed didn't fix it.
   # Until it gets fixed, work around it by running both.
   CHECK_TARGETS: check-all check-openmp
+  # The number of tests launched at once is `nproc` / $LIT_NPROC_DIVISOR.
   LIT_NPROC_DIVISOR: 1
+  # Which commits to use for OpenACC V&V testing.
+  VV_LLVM_TEST_SUITE_COMMIT: da5c250df731c259bd6f15f05ab93f3f7b902b63
+  VV_COMMIT: cf6f24e65a46c71b9ea505e80bd555862cd44526
 
 stages:
   - setup
@@ -100,20 +104,20 @@ stages:
       "
     VV_COMP_LIT_XFAIL:
       "
-      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1-c.test
+      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1.c.test
       "
     VV_RUN_LIT_XFAIL:
       "
-      External/openacc_vv/acc_map_data-c.test
-      External/openacc_vv/acc_unmap_data-c.test
-      External/openacc_vv/atomic_capture_bitand_equals-c.test
-      External/openacc_vv/atomic_minus_equals-c.test
-      External/openacc_vv/atomic_structured_assign_x_minus_expr-c.test
-      External/openacc_vv/atomic_update_minus_equals-c.test
-      External/openacc_vv/atomic_update_x_minus_expr-c.test
-      External/openacc_vv/atomic_x_minus_expr-c.test
-      External/openacc_vv/data_create-c.test
-      External/openacc_vv/parallel_copy-c.test
+      External/openacc_vv/acc_map_data.c.test
+      External/openacc_vv/acc_unmap_data.c.test
+      External/openacc_vv/atomic_capture_bitand_equals.c.test
+      External/openacc_vv/atomic_minus_equals.c.test
+      External/openacc_vv/atomic_structured_assign_x_minus_expr.c.test
+      External/openacc_vv/atomic_update_minus_equals.c.test
+      External/openacc_vv/atomic_update_x_minus_expr.c.test
+      External/openacc_vv/atomic_x_minus_expr.c.test
+      External/openacc_vv/data_create.c.test
+      External/openacc_vv/parallel_copy.c.test
       "
 
 .oswald02:
@@ -142,15 +146,15 @@ stages:
       ""
     VV_COMP_LIT_XFAIL:
       "
-      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1-c.test
+      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1.c.test
       "
     VV_RUN_LIT_XFAIL:
       "
-      External/openacc_vv/acc_map_data-c.test
-      External/openacc_vv/acc_unmap_data-c.test
-      External/openacc_vv/atomic_capture_bitand_equals-c.test
-      External/openacc_vv/data_create-c.test
-      External/openacc_vv/parallel_copy-c.test
+      External/openacc_vv/acc_map_data.c.test
+      External/openacc_vv/acc_unmap_data.c.test
+      External/openacc_vv/atomic_capture_bitand_equals.c.test
+      External/openacc_vv/data_create.c.test
+      External/openacc_vv/parallel_copy.c.test
       "
 
 .explorer:
@@ -181,16 +185,16 @@ stages:
       ""
     VV_COMP_LIT_XFAIL:
       "
-      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1-c.test
+      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1.c.test
       "
     VV_RUN_LIT_XFAIL:
       "
-      External/openacc_vv/acc_map_data-c.test
-      External/openacc_vv/acc_unmap_data-c.test
-      External/openacc_vv/atomic_capture_bitand_equals-c.test
-      External/openacc_vv/atomic_capture_expr_plus_x-c.test
-      External/openacc_vv/data_create-c.test
-      External/openacc_vv/parallel_copy-c.test
+      External/openacc_vv/acc_map_data.c.test
+      External/openacc_vv/acc_unmap_data.c.test
+      External/openacc_vv/atomic_capture_bitand_equals.c.test
+      External/openacc_vv/atomic_capture_expr_plus_x.c.test
+      External/openacc_vv/data_create.c.test
+      External/openacc_vv/parallel_copy.c.test
       "
 
 .excl-us:
@@ -215,10 +219,10 @@ stages:
       ""
     VV_RUN_LIT_XFAIL:
       "
-      External/openacc_vv/acc_map_data-c.test
-      External/openacc_vv/acc_unmap_data-c.test
-      External/openacc_vv/atomic_capture_bitand_equals-c.test
-      External/openacc_vv/parallel_copy-c.test
+      External/openacc_vv/acc_map_data.c.test
+      External/openacc_vv/acc_unmap_data.c.test
+      External/openacc_vv/atomic_capture_bitand_equals.c.test
+      External/openacc_vv/parallel_copy.c.test
       "
 
 .no-asserts:
@@ -237,10 +241,10 @@ stages:
       ""
     VV_RUN_LIT_XFAIL:
       "
-      External/openacc_vv/acc_map_data-c.test
-      External/openacc_vv/acc_unmap_data-c.test
-      External/openacc_vv/atomic_capture_bitand_equals-c.test
-      External/openacc_vv/parallel_copy-c.test
+      External/openacc_vv/acc_map_data.c.test
+      External/openacc_vv/acc_unmap_data.c.test
+      External/openacc_vv/atomic_capture_bitand_equals.c.test
+      External/openacc_vv/parallel_copy.c.test
       "
 
 .debug:
@@ -262,10 +266,10 @@ stages:
       ""
     VV_RUN_LIT_XFAIL:
       "
-      External/openacc_vv/acc_map_data-c.test
-      External/openacc_vv/acc_unmap_data-c.test
-      External/openacc_vv/atomic_capture_bitand_equals-c.test
-      External/openacc_vv/parallel_copy-c.test
+      External/openacc_vv/acc_map_data.c.test
+      External/openacc_vv/acc_unmap_data.c.test
+      External/openacc_vv/atomic_capture_bitand_equals.c.test
+      External/openacc_vv/parallel_copy.c.test
       "
 
 # Not setup or cleanup.
@@ -767,12 +771,14 @@ debug (test):
     - echo '!/ABI-Testsuite' >> .git/info/sparse-checkout
     - echo '!/Bitcode'       >> .git/info/sparse-checkout
     - echo '!/MultiSource'   >> .git/info/sparse-checkout
-    - git fetch --depth=1 --filter=blob:none origin pull/1/head:pr-1
-    - time git checkout pr-1
+    - echo $VV_LLVM_TEST_SUITE_COMMIT
+    - git fetch --depth=1 --filter=blob:none origin $VV_LLVM_TEST_SUITE_COMMIT
+    - time git checkout $VV_LLVM_TEST_SUITE_COMMIT
     - cd ..
     - time git clone https://github.com/OpenACCUserGroup/OpenACCV-V.git
     - cd OpenACCV-V
-    - git checkout cf6f24e65a46c71b9ea505e80bd555862cd44526
+    - echo $VV_COMMIT
+    - git checkout $VV_COMMIT
     # On explorer when using -fopenmp-targets=amdgcn-amd-amdhsa, Clang complains
     # about the definition of false/true in acc_testsuite.h, and all tests fail
     # as a result.  That's not an OpenACC-specific support issue, so we work
@@ -804,7 +810,8 @@ debug (test):
       else
         echo 'Results for expected compilation fails:'
           |& tee $CI_PROJECT_DIR/openacc-vv-log.txt &&
-        time for test in `echo "$VV_COMP_LIT_XFAIL" | sed -e 's/;/ /g'`; do
+        time for test in `echo "$VV_COMP_LIT_XFAIL" |
+                          sed -e 's/;/ /g' -e 's/\./\\./g'`; do
           ../../../build/bin/llvm-lit -s -vv --timeout 2400 --ignore-fail
                                       --filter="$test" .  >test-result 2>&1 &&
           if grep -q 'Executable Missing'":"' *1$' test-result; then
@@ -819,7 +826,8 @@ debug (test):
     - echo "$NPROC"
     - echo "$LIT_NPROC_DIVISOR"
     - if test x"$VV_COMP_LIT_XFAIL" != x; then
-        export LIT_FILTER_OUT=`echo "$VV_COMP_LIT_XFAIL" | sed -e 's/;/|/g'`;
+        export LIT_FILTER_OUT=`echo "$VV_COMP_LIT_XFAIL" |
+                               sed -e 's/;/|/g' -e 's/\./\\./g'`;
       fi
     - echo "$LIT_FILTER_OUT"
     - time ../../../build/bin/llvm-lit
