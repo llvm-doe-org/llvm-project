@@ -278,6 +278,7 @@ stages:
   variables:
     GIT_STRATEGY: none
   before_script:
+    - echo -e "\e[0Ksection_start:`date +%s`:prepare_for_job[collapsed=true]\r\e[0KPrepare for job"
     - echo $MODULES
     - if test x"$MODULES" != x; then module load $MODULES; fi
     - echo $PATH_PREPEND
@@ -291,10 +292,14 @@ stages:
     # plenty for any process.  The goal is simply not to let them stick around
     # forever.
     - ulimit -t 3600
+    - echo -e "\e[0Ksection_end:`date +%s`:prepare_for_job\r\e[0K"
   after_script:
+    - echo -e "\e[0Ksection_start:`date +%s`:show_stats[collapsed=true]\r\e[0KShow ccache and build statistics"
     - echo "$LLVM_CCACHE_PARAMS"
     - env $LLVM_CCACHE_PARAMS ccache -sp
     - du -hs $BUILD_DIR/build
+    - if test -e $BUILD_DIR/install; then du -hs $BUILD_DIR/install; fi
+    - echo -e "\e[0Ksection_end:`date +%s`:show_stats\r\e[0K"
 
 #-------------------------------------------------
 # setup
@@ -466,6 +471,7 @@ z-cleanup-project-builds:
   extends: .non-utility
   stage: config
   script:
+    - echo -e "\e[0Ksection_start:`date +%s`:cmake[collapsed=true]\r\e[0KRun cmake"
     - echo $CMAKE
     - $CMAKE --version
     - echo $CMAKE_BUILD_OPTS
@@ -494,6 +500,7 @@ z-cleanup-project-builds:
                   ../source/llvm
       |& tee $CI_PROJECT_DIR/cmake-log.txt
     - cp CMakeCache.txt $CI_PROJECT_DIR
+    - echo -e "\e[0Ksection_end:`date +%s`:cmake\r\e[0K"
   artifacts:
     when: always
     paths: [cmake-log.txt, CMakeCache.txt]
@@ -542,10 +549,12 @@ debug (config):
   extends: .non-utility
   stage: build
   script:
+    - echo -e "\e[0Ksection_start:`date +%s`:build[collapsed=true]\r\e[0KBuild"
     - echo $NINJA
     - $NINJA --version
     - time $NINJA -l `nproc` |& tee $CI_PROJECT_DIR/build-log.txt
     - $NINJA -l `nproc` install
+    - echo -e "\e[0Ksection_end:`date +%s`:build\r\e[0K"
   artifacts:
     when: always
     paths: [build-log.txt]
@@ -597,20 +606,15 @@ debug (build):
     - echo $CHECK_TARGETS
     - echo $NINJA
     - $NINJA --version
-    - export LIT_XFAIL=`
-        echo "$LIT_XFAIL"
-        | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
-      `
-    - export LIT_XFAIL_NOT=`
-        echo "$LIT_XFAIL_NOT"
-        | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
-      `
-    - echo "$LIT_XFAIL"
-    - echo "$LIT_XFAIL_NOT"
+    #...........................................................................
     # Build test suite before running it so we can time those steps separately.
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:build_regression_tests[collapsed=true]\r\e[0KBuild regression test suite"
     - time LIT_FILTER_OUT=. LIT_OPTS=--allow-empty-runs
       $NINJA -l `nproc` $CHECK_TARGETS
       |& tee $CI_PROJECT_DIR/check-all-build-log.txt
+    - echo -e "\e[0Ksection_end:`date +%s`:build_regression_tests\r\e[0K"
+    #...........................................................................
     # Check that no misconfiguration is quietly disabling key features and thus
     # tests.  For example, not adding the gitlab-runner account to the required
     # render/video groups quietly disables OpenMP offloading to AMD GPU.
@@ -623,6 +627,8 @@ debug (build):
     # items from executing unless we have the "|| false" after the "fi".  This
     # doesn't make sense to me, but it's how gitlab CI apparently works right
     # now.
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:check_regression_tests[collapsed=true]\r\e[0KCheck regression test suite config"
     - tl=$CI_PROJECT_DIR/check-all-show-tests.txt
     - LIT_OPTS=--show-tests $NINJA $CHECK_TARGETS > $tl 2>&1
     - echo "$CPU_TRIPLE" "$CPU_COUNT" &&
@@ -660,6 +666,8 @@ debug (build):
           done
         fi
       fi || false
+    - echo -e "\e[0Ksection_end:`date +%s`:check_regression_tests\r\e[0K"
+    #...........................................................................
     # Run the test suite.
     #
     # LIT_NPROC_DIVISOR is set to limit the number of tests launched at once so
@@ -674,6 +682,18 @@ debug (build):
     # invocation for openmp because it's in LLVM_ENABLE_RUNTIMES), use lit's
     # --ignore-fail so that all lit invocations actually run.  The count printed
     # by grep tells us how many test suite summaries we need to search for.
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:run_regression_tests[collapsed=true]\r\e[0KRun regression test suite"
+    - export LIT_XFAIL=`
+        echo "$LIT_XFAIL"
+        | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
+      `
+    - export LIT_XFAIL_NOT=`
+        echo "$LIT_XFAIL_NOT"
+        | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
+      `
+    - echo "$LIT_XFAIL"
+    - echo "$LIT_XFAIL_NOT"
     - NPROC=`nproc`
     - echo "$NPROC"
     - echo "$LIT_NPROC_DIVISOR"
@@ -685,6 +705,10 @@ debug (build):
       "
       $NINJA -l `nproc` $CHECK_TARGETS
       |& tee $CI_PROJECT_DIR/check-all-log.txt
+    - echo -e "\e[0Ksection_end:`date +%s`:run_regression_tests\r\e[0K"
+    #...........................................................................
+    # Check for regression test failure.
+    #...........................................................................
     - "! grep -c \"'--ignore-fail' was specified\"
                  $CI_PROJECT_DIR/check-all-log.txt"
   artifacts:
@@ -749,14 +773,10 @@ debug (test):
         echo "$VV_RUN_LIT_XFAIL"
         | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
       `
-    - echo "$VV_COMP_LIT_XFAIL"
-    - echo "$VV_RUN_LIT_XFAIL"
-    - if test x"$GPU_TRIPLE" != x; then
-        export VV_CFLAGS="-fopenacc -fopenmp-targets=$GPU_TRIPLE -lm";
-      else
-        export VV_CFLAGS="-fopenacc -lm";
-      fi
-    - echo "$VV_CFLAGS"
+    #...........................................................................
+    # Clone llvm-test-suite.git and the OpenACC V&V suite.
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:clone_vv_tests[collapsed=true]\r\e[0KClone llvm-test-suite.git and OpenACC V&V suite"
     - cd ..
     - rm -rf openacc-vv
     - mkdir openacc-vv
@@ -779,6 +799,11 @@ debug (test):
     - cd OpenACCV-V
     - echo $VV_COMMIT
     - git checkout $VV_COMMIT
+    - echo -e "\e[0Ksection_end:`date +%s`:clone_vv_tests\r\e[0K"
+    #...........................................................................
+    # Build the OpenACC V&V suite.
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:build_vv_tests[collapsed=true]\r\e[0KBuild OpenACC V&V suite"
     # On explorer when using -fopenmp-targets=amdgcn-amd-amdhsa, Clang complains
     # about the definition of false/true in acc_testsuite.h, and all tests fail
     # as a result.  That's not an OpenACC-specific support issue, so we work
@@ -788,6 +813,12 @@ debug (test):
     - cd ../llvm-test-suite
     - mkdir build
     - cd build
+    - if test x"$GPU_TRIPLE" != x; then
+        export VV_CFLAGS="-fopenacc -fopenmp-targets=$GPU_TRIPLE -lm";
+      else
+        export VV_CFLAGS="-fopenacc -lm";
+      fi
+    - echo "$VV_CFLAGS"
     - time $CMAKE -G Ninja
                   -DCMAKE_BUILD_TYPE=Release
                   -DTEST_SUITE_OPENACCVV_ROOT=`pwd`/../../OpenACCV-V
@@ -804,6 +835,12 @@ debug (test):
     - time $NINJA -l `nproc` -k 99999
       |& tee -a $CI_PROJECT_DIR/openacc-vv-build-log.txt
       || true
+    - echo -e "\e[0Ksection_end:`date +%s`:build_vv_tests\r\e[0K"
+    #...........................................................................
+    # Run OpenaCC V&V suite tests for which we expect compilation failures.
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:run_vv_tests_comp_xfails[collapsed=true]\r\e[0KRun OpenACC V&V suite expected compilation failures"
+    - echo "$VV_COMP_LIT_XFAIL"
     - if test x"$VV_COMP_LIT_XFAIL" = x; then
         echo 'No compilation fails expected'
           |& tee $CI_PROJECT_DIR/openacc-vv-log.txt;
@@ -822,6 +859,11 @@ debug (test):
           fi
         done |& tee -a $CI_PROJECT_DIR/openacc-vv-log.txt;
       fi
+    - echo -e "\e[0Ksection_end:`date +%s`:run_vv_tests_comp_xfails\r\e[0K"
+    #...........................................................................
+    # Run remaining OpenaCC V&V suite tests.
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:run_vv_tests[collapsed=true]\r\e[0KRun remaining OpenACC V&V suite tests"
     - NPROC=`nproc`
     - echo "$NPROC"
     - echo "$LIT_NPROC_DIVISOR"
@@ -830,11 +872,16 @@ debug (test):
                                sed -e 's/;/|/g' -e 's/\./\\./g'`;
       fi
     - echo "$LIT_FILTER_OUT"
+    - echo "$VV_RUN_LIT_XFAIL"
     - time ../../../build/bin/llvm-lit
         -s -vv --timeout 2400 -j `expr $NPROC / $LIT_NPROC_DIVISOR`
         --ignore-fail --xunit-xml-output $CI_PROJECT_DIR/openacc-vv.xml
         --show-xfail --xfail="$VV_RUN_LIT_XFAIL" .
       |& tee -a $CI_PROJECT_DIR/openacc-vv-log.txt
+    - echo -e "\e[0Ksection_end:`date +%s`:run_vv_tests\r\e[0K"
+    #...........................................................................
+    # Check for unexpected compilation or run results.
+    #...........................................................................
     - "! grep -c
               \"'--ignore-fail' was specified\\|unexpected compilation pass\"
               $CI_PROJECT_DIR/openacc-vv-log.txt"
