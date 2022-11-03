@@ -141,6 +141,8 @@ stages:
     LIT_XFAIL:
       "
       libomptarget :: nvptx64-nvidia-cuda :: offloading/info.c
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+      libomptarget :: nvptx64-nvidia-cuda-newDriver :: offloading/bug49334.cpp
       "
     LIT_XFAIL_NOT:
       ""
