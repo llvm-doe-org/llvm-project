@@ -4076,11 +4076,7 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // restriction.
     if (Type.isConstant(Context)) {
       Diag(ELoc, diag::err_acc_const_reduction_list_item) << ERange;
-      bool IsDecl = VD->isThisDeclarationADefinition(Context) ==
-                        VarDecl::DeclarationOnly;
-      Diag(VD->getLocation(),
-           IsDecl ? diag::note_previous_decl : diag::note_defined_here)
-          << VD;
+      Diag(VD->getLocation(), diag::note_acc_const) << VD;
       // Implicit reductions are copied from explicit reductions, which are
       // validated already.
       assert(Determination == ACC_EXPLICIT &&
@@ -4112,11 +4108,7 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     if (DiagN != diag::NUM_BUILTIN_SEMA_DIAGNOSTICS) {
       Diag(ELoc, DiagN)
           << ACCReductionClause::printReductionOperatorToString(ReductionId);
-      bool IsDecl = VD->isThisDeclarationADefinition(Context) ==
-                        VarDecl::DeclarationOnly;
-      Diag(VD->getLocation(),
-             IsDecl ? diag::note_previous_decl : diag::note_defined_here)
-          << VD;
+      Diag(VD->getLocation(), diag::note_acc_var_declared) << VD;
       continue;
     }
 

@@ -57,29 +57,27 @@ int main() {
   _Bool b;
   char c;
   enum { E1, E2 } e;
-  int i, jk, a[2], m[6][2], *p; // expected-note 9 {{'a' defined here}}
-                                // expected-note@-1 7 {{'p' defined here}}
+  int i, jk, a[2], m[6][2], *p; // expected-note 9 {{variable 'a' declared here}}
+                                // expected-note@-1 7 {{variable 'p' declared here}}
   int (*fp)();
   int (*ap)[];
-  float f; // expected-note 3 {{'f' defined here}}
-  double d; // expected-note 3 {{'d' defined here}}
-  float _Complex fc; // expected-note 5 {{'fc' defined here}}
-  double _Complex dc; // expected-note 5 {{'dc' defined here}}
-  // expected-note@+3 7 {{variable 'constI' declared const here}}
-  // expected-noacc-note@+2 3 {{variable 'constI' declared const here}}
-  // expected-note@+1 {{'constI' defined here}}
+  float f; // expected-note 3 {{variable 'f' declared here}}
+  double d; // expected-note 3 {{variable 'd' declared here}}
+  float _Complex fc; // expected-note 5 {{variable 'fc' declared here}}
+  double _Complex dc; // expected-note 5 {{variable 'dc' declared here}}
+  // expected-note@+2 8 {{variable 'constI' declared const here}}
+  // expected-noacc-note@+1 3 {{variable 'constI' declared const here}}
   const int constI = 5;
-  // expected-note@+3 7 {{variable 'constIDecl' declared const here}}
-  // expected-noacc-note@+2 3 {{variable 'constIDecl' declared const here}}
-  // expected-note@+1 {{'constIDecl' declared here}}
+  // expected-note@+2 8 {{variable 'constIDecl' declared const here}}
+  // expected-noacc-note@+1 3 {{variable 'constIDecl' declared const here}}
   const extern int constIDecl;
   // expected-noacc-note@+1 5 {{variable 'constA' declared const here}}
   const int constA[3];
   // expected-noacc-note@+1 4 {{variable 'constADecl' declared const here}}
   const extern int constADecl[3];
-  struct S { int i; } s; // expected-note 9 {{'s' defined here}}
-  union U { int i; } u; // expected-note 9 {{'u' defined here}}
-  extern union U uDecl; // expected-note 9 {{'uDecl' declared here}}
+  struct S { int i; } s; // expected-note 9 {{variable 's' declared here}}
+  union U { int i; } u; // expected-note 9 {{variable 'u' declared here}}
+  extern union U uDecl; // expected-note 9 {{variable 'uDecl' declared here}}
 
   //--------------------------------------------------
   // No clauses

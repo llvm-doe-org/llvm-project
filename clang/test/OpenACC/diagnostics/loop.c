@@ -95,19 +95,17 @@ int anotherGlobal;
 void fn(int param) {
   _Bool b;
   enum E { E0, E1 } e;
-  int i, jk, a[2], *p; // expected-note 9 {{'a' defined here}}
-                       // expected-note@-1 7 {{'p' defined here}}
-  float f; // expected-note 3 {{'f' defined here}}
-  double d; // expected-note 3 {{'d' defined here}}
-  float _Complex fc; // expected-note 5 {{'fc' defined here}}
-  double _Complex dc; // expected-note 5 {{'dc' defined here}}
-  const int constI = 5; // expected-note {{variable 'constI' declared const here}}
-                        // expected-note@-1 {{'constI' defined here}}
-  const extern int constIDecl; // expected-note {{variable 'constIDecl' declared const here}}
-                               // expected-note@-1 {{'constIDecl' declared here}}
-  struct S { int i; } s; // expected-note 9 {{'s' defined here}}
-  union U { int i; } u; // expected-note 9 {{'u' defined here}}
-  extern struct S sDecl; // expected-note 9 {{'sDecl' declared here}}
+  int i, jk, a[2], *p; // expected-note 9 {{variable 'a' declared here}}
+                       // expected-note@-1 7 {{variable 'p' declared here}}
+  float f; // expected-note 3 {{variable 'f' declared here}}
+  double d; // expected-note 3 {{variable 'd' declared here}}
+  float _Complex fc; // expected-note 5 {{variable 'fc' declared here}}
+  double _Complex dc; // expected-note 5 {{variable 'dc' declared here}}
+  const int constI = 5; // expected-note 2 {{variable 'constI' declared const here}}
+  const extern int constIDecl; // expected-note 2 {{variable 'constIDecl' declared const here}}
+  struct S { int i; } s; // expected-note 9 {{variable 's' declared here}}
+  union U { int i; } u; // expected-note 9 {{variable 'u' declared here}}
+  extern struct S sDecl; // expected-note 9 {{variable 'sDecl' declared here}}
 
   //--------------------------------------------------
   // No clauses

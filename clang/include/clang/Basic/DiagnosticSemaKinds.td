@@ -11014,6 +11014,8 @@ def err_acc_const_da : Error<
   "const variable cannot be %0 because initialization is impossible">;
 def note_acc_const : Note<
   "variable %0 declared const here">;
+def note_acc_var_declared : Note<
+  "variable %0 declared here">;
 def err_acc_clause_not_ice : Error<
   "argument to '%0' clause must be an integer constant expression">;
 def warn_acc_clause_ignored_not_ice : Warning<
