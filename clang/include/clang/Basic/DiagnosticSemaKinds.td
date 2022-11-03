@@ -10974,7 +10974,7 @@ def err_acc_incomplete_type : Error<
 def note_acc_clause_determination : Note<
   "'%1' clause %select{||predetermined |implied }0here">;
 def err_acc_unsupported_subarray : Error <
-  "subarray is not supported in '%0' clause">;
+  "in '%1' clause on '#pragma acc %0', subarray is not supported">;
 def err_acc_subarray_without_colon : Error<
   "subarray syntax must include ':'">;
 def err_acc_expected_var_name_or_subarray_expr : Error<

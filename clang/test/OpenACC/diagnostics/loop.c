@@ -2008,13 +2008,15 @@ void fn(int param) {
     #pragma acc CMB_PAR loop reduction(+ : (int)i)
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+2 {{expected variable name as base of subarray}}
-    // expected-error@+1 {{subarray is not supported in 'private' clause}}
+    // expected-error@+3 {{expected variable name as base of subarray}}
+    // orph-sep-error@+2 {{in 'private' clause on '#pragma acc loop', subarray is not supported}}
+    // cmb-error@+1 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
     #pragma acc CMB_PAR loop private(((int*)a)[0:2])
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+2 {{expected variable name as base of subarray}}
-    // expected-error@+1 {{subarray is not supported in 'reduction' clause}}
+    // expected-error@+3 {{expected variable name as base of subarray}}
+    // orph-sep-error@+2 {{in 'reduction' clause on '#pragma acc loop', subarray is not supported}}
+    // cmb-error@+1 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
     #pragma acc CMB_PAR loop reduction(*:((int*)a)[:2])
     for (int i = 0; i < 5; ++i)
       ;
@@ -2063,16 +2065,23 @@ void fn(int param) {
   #pragma acc parallel
 #endif
   {
-    // expected-error@+11 {{subarray syntax must include ':'}}
-    // expected-error@+17 {{subarray syntax must include ':'}}
-    // expected-error@+19 {{subarray syntax must include ':'}}
-    // expected-error@+7 {{subarray is not supported in 'private' clause}}
-    // expected-error@+9 {{subarray is not supported in 'private' clause}}
-    // expected-error@+9 {{subarray is not supported in 'private' clause}}
-    // expected-error@+9 {{subarray is not supported in 'private' clause}}
-    // expected-error@+9 {{subarray is not supported in 'private' clause}}
-    // expected-error@+9 {{subarray is not supported in 'private' clause}}
-    // expected-error@+11 {{subarray is not supported in 'private' clause}}
+    // expected-error@+18 {{subarray syntax must include ':'}}
+    // expected-error@+24 {{subarray syntax must include ':'}}
+    // expected-error@+26 {{subarray syntax must include ':'}}
+    // orph-sep-error@+14 {{in 'private' clause on '#pragma acc loop', subarray is not supported}}
+    // orph-sep-error@+16 {{in 'private' clause on '#pragma acc loop', subarray is not supported}}
+    // orph-sep-error@+16 {{in 'private' clause on '#pragma acc loop', subarray is not supported}}
+    // orph-sep-error@+16 {{in 'private' clause on '#pragma acc loop', subarray is not supported}}
+    // orph-sep-error@+16 {{in 'private' clause on '#pragma acc loop', subarray is not supported}}
+    // orph-sep-error@+16 {{in 'private' clause on '#pragma acc loop', subarray is not supported}}
+    // orph-sep-error@+18 {{in 'private' clause on '#pragma acc loop', subarray is not supported}}
+    // cmb-error@+7 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // cmb-error@+9 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // cmb-error@+9 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // cmb-error@+9 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // cmb-error@+9 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // cmb-error@+9 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // cmb-error@+11 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
     #pragma acc CMB_PAR loop vector private(a[9        \
                                                ]       \
                                                 ,      \
@@ -2088,17 +2097,30 @@ void fn(int param) {
                                                 [0:1]) gang
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+6 {{subarray is not supported in 'reduction' clause}}
-    // expected-error@+6 {{subarray syntax must include ':'}}
-    // expected-error@+5 {{subarray is not supported in 'reduction' clause}}
-    // expected-error@+5 {{subarray is not supported in 'reduction' clause}}
-    // expected-error@+5 {{subarray is not supported in 'reduction' clause}}
-    // expected-error@+5 {{subarray is not supported in 'reduction' clause}}
-    #pragma acc CMB_PAR loop vector reduction(*:a[3:5], \
-                                                a[10],  \
-                                                a[2:],  \
-                                                a[:9],  \
-                                                a[:]) worker
+    // expected-error@+18 {{subarray syntax must include ':'}}
+    // expected-error@+21 {{subarray syntax must include ':'}}
+    // expected-error@+21 {{subarray syntax must include ':'}}
+    // orph-sep-error@+14 {{in 'reduction' clause on '#pragma acc loop', subarray is not supported}}
+    // orph-sep-error@+14 {{in 'reduction' clause on '#pragma acc loop', subarray is not supported}}
+    // orph-sep-error@+14 {{in 'reduction' clause on '#pragma acc loop', subarray is not supported}}
+    // orph-sep-error@+14 {{in 'reduction' clause on '#pragma acc loop', subarray is not supported}}
+    // orph-sep-error@+14 {{in 'reduction' clause on '#pragma acc loop', subarray is not supported}}
+    // orph-sep-error@+14 {{in 'reduction' clause on '#pragma acc loop', subarray is not supported}}
+    // orph-sep-error@+14 {{in 'reduction' clause on '#pragma acc loop', subarray is not supported}}
+    // cmb-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // cmb-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // cmb-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // cmb-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // cmb-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // cmb-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // cmb-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
+    #pragma acc CMB_PAR loop vector reduction(*:a[3:5],    \
+                                                a[10],     \
+                                                a[2:],     \
+                                                a[:9],     \
+                                                a[:],      \
+                                                m[0:1][0], \
+                                                m[0][0:1]) worker
     for (int i = 0; i < 5; ++i)
       ;
   }

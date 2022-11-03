@@ -3415,10 +3415,10 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
   return Res;
 }
 
-static VarDecl *
-getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
-                      SourceLocation &ELoc, SourceRange &ERange,
-                      bool AllowSubarray = false) {
+static VarDecl *getVarDeclFromVarList(Sema &S, DirStackTy &DirStack,
+                                      OpenACCClauseKind CKind, Expr *&RefExpr,
+                                      SourceLocation &ELoc, SourceRange &ERange,
+                                      bool AllowSubarray = false) {
   ELoc = RefExpr->getExprLoc();
   ERange = RefExpr->getSourceRange();
   RefExpr = RefExpr->IgnoreParenImpCasts();
@@ -3434,6 +3434,7 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
         S.Diag(OASE->getRBracketLoc(), diag::err_acc_subarray_without_colon);
         if (!AllowSubarray)
           S.Diag(OASE->getExprLoc(), diag::err_acc_unsupported_subarray)
+              << getOpenACCName(DirStack.getRealDirective())
               << getOpenACCName(CKind) << OASE->getSourceRange();
         return nullptr;
       }
@@ -3447,6 +3448,7 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
     S.Diag(ASE->getRBracketLoc(), diag::err_acc_subarray_without_colon);
     if (!AllowSubarray)
       S.Diag(ASE->getExprLoc(), diag::err_acc_unsupported_subarray)
+          << getOpenACCName(DirStack.getRealDirective())
           << getOpenACCName(CKind) << ASE->getSourceRange();
     return nullptr;
   }
@@ -3459,6 +3461,7 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
       S.Diag(ELoc, diag::err_acc_expected_base_var_name) << ERange;
       if (!AllowSubarray)
         S.Diag(ELoc, diag::err_acc_unsupported_subarray)
+            << getOpenACCName(DirStack.getRealDirective())
             << getOpenACCName(CKind) << ERange;
     }
     else
@@ -3470,7 +3473,8 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
   // Complain if we found a subarray but it's not allowed.
   if (IsSubarray && !AllowSubarray) {
     S.Diag(ELoc, diag::err_acc_unsupported_subarray)
-        << getOpenACCName(CKind) << ERange;
+        << getOpenACCName(DirStack.getRealDirective()) << getOpenACCName(CKind)
+        << ERange;
     return nullptr;
   }
 
@@ -3522,14 +3526,16 @@ ACCClause *Sema::ActOnOpenACCNomapClause(ArrayRef<Expr *> VarList) {
 ACCClause *Sema::ActOnOpenACCPresentClause(
     ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
     SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC present clause.");
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_present, SimpleRefExpr,
-                                        ELoc, ERange, /*AllowSubarray=*/true);
+    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_present,
+                                        SimpleRefExpr, ELoc, ERange,
+                                        /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3562,6 +3568,7 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
     SourceLocation LParenLoc, SourceLocation EndLoc) {
   assert(ACCCopyClause::isClauseKind(Kind) &&
          "expected copy clause or alias");
+  DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
 
   for (auto &RefExpr : VarList) {
@@ -3569,8 +3576,8 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, Kind, SimpleRefExpr, ELoc,
-                                        ERange, /*AllowSubarray=*/true);
+    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
+                                        ELoc, ERange, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3602,6 +3609,7 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
     SourceLocation LParenLoc, SourceLocation EndLoc) {
   assert(ACCCopyinClause::isClauseKind(Kind) &&
          "expected copyin clause or alias");
+  DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
 
   for (auto &RefExpr : VarList) {
@@ -3609,8 +3617,8 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, Kind, SimpleRefExpr, ELoc,
-                                        ERange, /*AllowSubarray=*/true);
+    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
+                                        ELoc, ERange, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3642,6 +3650,7 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     SourceLocation LParenLoc, SourceLocation EndLoc) {
   assert(ACCCopyoutClause::isClauseKind(Kind) &&
          "expected copyout clause or alias");
+  DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
 
   for (auto &RefExpr : VarList) {
@@ -3649,8 +3658,8 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, Kind, SimpleRefExpr, ELoc,
-                                        ERange, /*AllowSubarray=*/true);
+    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
+                                        ELoc, ERange, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3694,6 +3703,7 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
     SourceLocation LParenLoc, SourceLocation EndLoc) {
   assert(ACCCreateClause::isClauseKind(Kind) &&
          "expected create clause or alias");
+  DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
 
   for (auto &RefExpr : VarList) {
@@ -3701,8 +3711,8 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, Kind, SimpleRefExpr, ELoc,
-                                        ERange, /*AllowSubarray=*/true);
+    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
+                                        ELoc, ERange, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3742,14 +3752,16 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
 ACCClause *Sema::ActOnOpenACCNoCreateClause(
     ArrayRef<Expr *> VarList, SourceLocation StartLoc, SourceLocation LParenLoc,
     SourceLocation EndLoc) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC no_create clause.");
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_no_create, SimpleRefExpr,
-                                        ELoc, ERange, /*AllowSubarray=*/true);
+    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_no_create,
+                                        SimpleRefExpr, ELoc, ERange,
+                                        /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3779,14 +3791,16 @@ ACCClause *Sema::ActOnOpenACCDeleteClause(ArrayRef<Expr *> VarList,
                                           SourceLocation StartLoc,
                                           SourceLocation LParenLoc,
                                           SourceLocation EndLoc) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC delete clause.");
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_delete, SimpleRefExpr, ELoc,
-                                        ERange, /*AllowSubarray=*/true);
+    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_delete,
+                                        SimpleRefExpr, ELoc, ERange,
+                                        /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3841,14 +3855,15 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
 ACCClause *Sema::ActOnOpenACCPrivateClause(
     ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
     SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC private clause.");
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_private, SimpleRefExpr,
-                                        ELoc, ERange);
+    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_private,
+                                        SimpleRefExpr, ELoc, ERange);
     if (!VD)
       continue;
 
@@ -3891,14 +3906,14 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
 ACCClause *Sema::ActOnOpenACCFirstprivateClause(
     ArrayRef<Expr *> VarList, OpenACCDetermination Determination,
     SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
-
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC firstprivate clause.");
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_firstprivate,
+    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_firstprivate,
                                         SimpleRefExpr, ELoc, ERange);
     if (!VD)
       continue;
@@ -4054,8 +4069,8 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_reduction, SimpleRefExpr,
-                                        ELoc, ERange);
+    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_reduction,
+                                        SimpleRefExpr, ELoc, ERange);
     if (!VD)
       continue;
 
@@ -4151,14 +4166,15 @@ ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
                                         SourceLocation StartLoc,
                                         SourceLocation LParenLoc,
                                         SourceLocation EndLoc) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC self clause.");
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, Kind, SimpleRefExpr, ELoc,
-                                        ERange, /*AllowSubarray=*/true);
+    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
+                                        ELoc, ERange, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -4197,14 +4213,16 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
                                           SourceLocation StartLoc,
                                           SourceLocation LParenLoc,
                                           SourceLocation EndLoc) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC device clause.");
     SourceLocation ELoc;
     SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, ACCC_device, SimpleRefExpr, ELoc,
-                                        ERange, /*AllowSubarray=*/true);
+    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_device,
+                                        SimpleRefExpr, ELoc, ERange,
+                                        /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
