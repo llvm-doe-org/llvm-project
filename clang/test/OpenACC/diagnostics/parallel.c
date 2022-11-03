@@ -842,10 +842,18 @@ int main() {
 
   // Array subscript not supported where subarray is permitted.
 
-  // expected-error@+2 {{subarray syntax must include ':'}}
-  // expected-error@+2 {{subarray syntax must include ':'}}
-  #pragma acc parallel LOOP present(a[0], \
-                                    m[0][0:2], \
+  // expected-error@+4 {{subarray syntax must include ':'}}
+  // expected-error@+6 {{subarray syntax must include ':'}}
+  // expected-error@+8 {{subarray syntax must include ':'}}
+  #pragma acc parallel LOOP present(a[0        \
+                                       ]       \
+                                       ,       \
+                                    m[0        \
+                                       ]       \
+                                       [0:2],  \
+                                    m[0:2][0   \
+                                            ]  \
+                                             , \
                                     a[0:1], m[0:2][0:2])
     FORLOOP
   // expected-error@+2 {{subarray syntax must include ':'}}

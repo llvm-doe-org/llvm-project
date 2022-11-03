@@ -95,8 +95,8 @@ int anotherGlobal;
 void fn(int param) {
   _Bool b;
   enum E { E0, E1 } e;
-  int i, jk, a[2], *p; // expected-note 9 {{variable 'a' declared here}}
-                       // expected-note@-1 7 {{variable 'p' declared here}}
+  int i, jk, a[2], m[6][2], *p; // expected-note 9 {{variable 'a' declared here}}
+                                // expected-note@-1 7 {{variable 'p' declared here}}
   float f; // expected-note 3 {{variable 'f' declared here}}
   double d; // expected-note 3 {{variable 'd' declared here}}
   float _Complex fc; // expected-note 5 {{variable 'fc' declared here}}
@@ -2063,17 +2063,29 @@ void fn(int param) {
   #pragma acc parallel
 #endif
   {
-    // expected-error@+6 {{subarray syntax must include ':'}}
-    // expected-error@+5 {{subarray is not supported in 'private' clause}}
-    // expected-error@+5 {{subarray is not supported in 'private' clause}}
-    // expected-error@+5 {{subarray is not supported in 'private' clause}}
-    // expected-error@+5 {{subarray is not supported in 'private' clause}}
-    // expected-error@+5 {{subarray is not supported in 'private' clause}}
-    #pragma acc CMB_PAR loop vector private(a[9],   \
-                                            a[0:1], \
-                                            a[0:],  \
-                                            a[:1],  \
-                                            a[:]) gang
+    // expected-error@+11 {{subarray syntax must include ':'}}
+    // expected-error@+17 {{subarray syntax must include ':'}}
+    // expected-error@+19 {{subarray syntax must include ':'}}
+    // expected-error@+7 {{subarray is not supported in 'private' clause}}
+    // expected-error@+9 {{subarray is not supported in 'private' clause}}
+    // expected-error@+9 {{subarray is not supported in 'private' clause}}
+    // expected-error@+9 {{subarray is not supported in 'private' clause}}
+    // expected-error@+9 {{subarray is not supported in 'private' clause}}
+    // expected-error@+9 {{subarray is not supported in 'private' clause}}
+    // expected-error@+11 {{subarray is not supported in 'private' clause}}
+    #pragma acc CMB_PAR loop vector private(a[9        \
+                                               ]       \
+                                                ,      \
+                                            a[0:1],    \
+                                            a[0:],     \
+                                            a[:1],     \
+                                            a[:],      \
+                                            m[0:1][0   \
+                                                    ]  \
+                                                     , \
+                                            m[0        \
+                                               ]       \
+                                                [0:1]) gang
     for (int i = 0; i < 5; ++i)
       ;
     // expected-error@+6 {{subarray is not supported in 'reduction' clause}}

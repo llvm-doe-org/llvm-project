@@ -20412,7 +20412,8 @@ ExprResult Sema::CheckPlaceholderExpr(Expr *E) {
   // Expressions of unknown type.
   case BuiltinType::OMPArraySection:
     if (getLangOpts().OpenACC)
-      Diag(E->getBeginLoc(), diag::err_acc_unexpected_subarray);
+      Diag(E->getBeginLoc(), diag::err_acc_unexpected_subarray)
+          << E->getSourceRange();
     else
       Diag(E->getBeginLoc(), diag::err_omp_array_section_use);
     return ExprError();

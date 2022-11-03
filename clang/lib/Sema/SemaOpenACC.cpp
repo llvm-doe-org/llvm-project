@@ -3431,8 +3431,7 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
     IsSubarray = true;
     do {
       if (OASE->getColonLocFirst().isInvalid()) {
-        S.Diag(OASE->getExprLoc(), diag::err_acc_subarray_without_colon)
-            << OASE->getSourceRange();
+        S.Diag(OASE->getRBracketLoc(), diag::err_acc_subarray_without_colon);
         if (!AllowSubarray)
           S.Diag(OASE->getExprLoc(), diag::err_acc_unsupported_subarray)
               << getOpenACCName(CKind) << OASE->getSourceRange();
@@ -3445,8 +3444,7 @@ getVarDeclFromVarList(Sema &S, OpenACCClauseKind CKind, Expr *&RefExpr,
   // Complain about any subscript, for which OpenACC 2.7 doesn't specify a
   // behavior.
   if (auto *ASE = dyn_cast_or_null<ArraySubscriptExpr>(RefExpr)) {
-    S.Diag(ASE->getExprLoc(), diag::err_acc_subarray_without_colon)
-        << ASE->getSourceRange();
+    S.Diag(ASE->getRBracketLoc(), diag::err_acc_subarray_without_colon);
     if (!AllowSubarray)
       S.Diag(ASE->getExprLoc(), diag::err_acc_unsupported_subarray)
           << getOpenACCName(CKind) << ASE->getSourceRange();
