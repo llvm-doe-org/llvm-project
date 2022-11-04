@@ -24,7 +24,8 @@ using namespace clang;
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Convenient way to stream a function name into a diagnostic.  For example:
+/// Convenient way to stream a variable or function name into a diagnostic.  For
+/// example:
 ///
 /// Diag(Loc, diag::err_acc_foobar)
 ///   << NameForDiag(*this, getCurFunctionDecl());
@@ -32,12 +33,17 @@ namespace {
 /// TODO: While convenient, it might be expensive, most notably if used before
 /// diagnostics are actually known to be needed.
 class NameForDiag {
-  SmallString<128> FnName;
+  SmallString<128> Name;
 
 public:
   NameForDiag(Sema &SemaRef, FunctionDecl *FD) {
-    llvm::raw_svector_ostream OS(FnName);
+    llvm::raw_svector_ostream OS(Name);
     FD->getNameForDiagnostic(OS, SemaRef.getPrintingPolicy(),
+                             /*Qualified=*/true);
+  }
+  NameForDiag(Sema &SemaRef, const VarDecl *VD) {
+    llvm::raw_svector_ostream OS(Name);
+    VD->getNameForDiagnostic(OS, SemaRef.getPrintingPolicy(),
                              /*Qualified=*/true);
   }
   friend const StreamingDiagnostic &operator<<(const StreamingDiagnostic &SD,
@@ -45,7 +51,7 @@ public:
 };
 const StreamingDiagnostic &operator<<(const StreamingDiagnostic &SD,
                                       const NameForDiag &NFD) {
-  return SD << NFD.FnName;
+  return SD << NFD.Name;
 }
 } // namespace
 
@@ -387,7 +393,7 @@ private:
         SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_reduction)
             << (DVar.ReductionId.getName() == ReductionId.getName())
             << ACCReductionClause::printReductionOperatorToString(ReductionId)
-            << VD;
+            << NameForDiag(SemaRef, VD);
         SemaRef.Diag(DVar.DSARefExpr->getExprLoc(),
                      diag::note_acc_previous_reduction)
             << ACCReductionClause::printReductionOperatorToString(
@@ -483,7 +489,7 @@ public:
     VD = VD->getCanonicalDecl();
     if (Expr *OldExpr = Itr->UpdateVarSet[VD]) {
       SemaRef.Diag(E->getExprLoc(), diag::err_acc_update_same_var)
-          << VD->getName() << E->getSourceRange();
+          << NameForDiag(SemaRef, VD) << E->getSourceRange();
       SemaRef.Diag(OldExpr->getExprLoc(), diag::note_acc_update_var)
           << OldExpr->getSourceRange();
       return true;
@@ -1584,7 +1590,8 @@ public:
       const VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
       DirStack.SemaRef.Diag(DRE->getExprLoc(),
                             diag::err_acc_loop_reduction_needs_data_clause)
-          << VD->getName() << getOpenACCName(DirStack.getRealDirective());
+          << NameForDiag(DirStack.SemaRef, VD)
+          << getOpenACCName(DirStack.getRealDirective());
       DirStack.SemaRef.Diag(DirStack.getDirectiveStartLoc(),
                             diag::note_acc_parent_compute_construct)
           << getOpenACCName(DirStack.getRealDirective());
@@ -1597,12 +1604,13 @@ public:
         DirStack.SemaRef.Diag(
             DirStack.getDirectiveStartLoc(),
             diag::note_acc_loop_reduction_suggest_firstprivate)
-            << VD->getName() << getOpenACCName(DirStack.getRealDirective());
+            << NameForDiag(DirStack.SemaRef, VD)
+            << getOpenACCName(DirStack.getRealDirective());
         continue;
       }
       DirStack.SemaRef.Diag(GangRedLoc,
                             diag::note_acc_loop_reduction_suggest_copy)
-          << VD->getName();
+          << NameForDiag(DirStack.SemaRef, VD);
     }
   }
 };
@@ -1786,7 +1794,7 @@ public:
                 << false
                 << ACCReductionClause::printReductionOperatorToString(
                        ReductionClause->getNameInfo())
-                << VD;
+                << NameForDiag(DirStack.SemaRef, VD);
             DirStack.SemaRef.Diag(EnclosingPrivate.RE->getExprLoc(),
                                   diag::note_acc_enclosing_reduction)
                 << ACCReductionClause::printReductionOperatorToString(
@@ -2027,9 +2035,9 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
       if (DVar.DSAKind == ACC_DSA_reduction) {
         Diag(DVar.DSARefExpr->getEndLoc(),
              diag::err_acc_reduction_on_loop_control_var)
-            << VD->getName() << DVar.DSARefExpr->getSourceRange();
+            << NameForDiag(*this, VD) << DVar.DSARefExpr->getSourceRange();
         Diag(RefExpr->getExprLoc(), diag::note_acc_loop_control_var)
-            << VD->getName() << RefExpr->getSourceRange();
+            << NameForDiag(*this, VD) << RefExpr->getSourceRange();
         ErrorFound = true;
         continue;
       }
@@ -2527,7 +2535,7 @@ void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
       if (VD->isStaticLocal()) {
         DiagIfRoutineDir(OpenACCData->ImplicitRoutineDirInfo, CurFn,
                          VD->getLocation(), diag::err_acc_routine_static_local)
-            << VD->getName() << NameForDiag(*this, CurFn);
+            << NameForDiag(*this, VD) << NameForDiag(*this, CurFn);
       }
     }
   }
@@ -3682,7 +3690,7 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     if (Type.isConstant(Context)) {
       Diag(ELoc, diag::err_acc_const_var_write)
           << getOpenACCName(Kind) << ERange;
-      Diag(VD->getLocation(), diag::note_acc_const) << VD;
+      Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
       continue;
     }
 
@@ -3733,7 +3741,7 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
     if (Type.isConstant(Context)) {
       Diag(ELoc, diag::err_acc_const_da)
           << getOpenACCName(ACCC_create) << ERange;
-      Diag(VD->getLocation(), diag::note_acc_const) << VD;
+      Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
       continue;
     }
 
@@ -3884,7 +3892,7 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
     if (Type.isConstant(Context)) {
       Diag(ELoc, diag::err_acc_const_da)
           << getOpenACCName(ACCC_private) << ERange;
-      Diag(VD->getLocation(), diag::note_acc_const) << VD;
+      Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
       // Implicit private is for loop control variables, which cannot be const.
       assert(Determination == ACC_EXPLICIT &&
              "unexpected const type for computed private");
@@ -4089,7 +4097,7 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // restriction.
     if (Type.isConstant(Context)) {
       Diag(ELoc, diag::err_acc_const_reduction_list_item) << ERange;
-      Diag(VD->getLocation(), diag::note_acc_const) << VD;
+      Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
       // Implicit reductions are copied from explicit reductions, which are
       // validated already.
       assert(Determination == ACC_EXPLICIT &&
@@ -4121,7 +4129,8 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     if (DiagN != diag::NUM_BUILTIN_SEMA_DIAGNOSTICS) {
       Diag(ELoc, DiagN)
           << ACCReductionClause::printReductionOperatorToString(ReductionId);
-      Diag(VD->getLocation(), diag::note_acc_var_declared) << VD;
+      Diag(VD->getLocation(), diag::note_acc_var_declared)
+          << NameForDiag(*this, VD);
       continue;
     }
 
@@ -4133,7 +4142,7 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
         !DirStack.hasPrivatizingDSAOnAncestorOrphanedLoop(VD) &&
         !VD->hasLocalStorage())
       Diag(ELoc, diag::err_acc_orphaned_loop_reduction_var_not_gang_private)
-          << VD->getName();
+          << NameForDiag(*this, VD);
 
     // Record reduction item.
     if (!DirStack.addDSA(VD, RefExpr->IgnoreParens(), ACC_DSA_reduction,
@@ -4194,7 +4203,7 @@ ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
     if (Type.isConstant(Context)) {
       Diag(ELoc, diag::err_acc_const_var_write)
           << getOpenACCName(Kind) << ERange;
-      Diag(VD->getLocation(), diag::note_acc_const) << VD;
+      Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
       continue;
     }
 
@@ -4242,7 +4251,7 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
     if (Type.isConstant(Context)) {
       Diag(ELoc, diag::err_acc_const_var_write)
           << getOpenACCName(ACCC_device) << ERange;
-      Diag(VD->getLocation(), diag::note_acc_const) << VD;
+      Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
       continue;
     }
 

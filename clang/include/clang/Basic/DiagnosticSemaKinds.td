@@ -11013,9 +11013,9 @@ def err_acc_const_var_write : Error<
 def err_acc_const_da : Error<
   "const variable cannot be %0 because initialization is impossible">;
 def note_acc_const : Note<
-  "variable %0 declared const here">;
+  "variable '%0' declared const here">;
 def note_acc_var_declared : Note<
-  "variable %0 declared here">;
+  "variable '%0' declared here">;
 def err_acc_clause_not_ice : Error<
   "argument to '%0' clause must be an integer constant expression">;
 def warn_acc_clause_ignored_not_ice : Warning<
@@ -11055,7 +11055,7 @@ def err_acc_reduction_on_loop_control_var : Error<
 def note_acc_loop_control_var : Note<
   "'%0' is an OpenACC loop control variable here">;
 def err_acc_conflicting_reduction : Error<
-  "%select{conflicting|redundant}0 '%1' reduction for variable %2">;
+  "%select{conflicting|redundant}0 '%1' reduction for variable '%2'">;
 def note_acc_previous_reduction : Note<
   "previous '%0' reduction here">;
 def note_acc_enclosing_reduction : Note<
