@@ -269,7 +269,7 @@ int main() {
   // expected-error@+2 {{expected variable name or subarray}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data present_or_copyin((int)i)
-  // expected-error@+2 {{expected variable name as base of subarray}}
+  // expected-error@+2 {{expected variable name or subarray}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
   #pragma acc exit data present_or_copyout((*(int(*)[3])a)[0:])
   // expected-error@+2 {{subscripted value is not an array or pointer}}

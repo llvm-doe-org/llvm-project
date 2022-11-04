@@ -195,7 +195,7 @@ int main() {
   // expected-error@+2 {{expected variable name or subarray}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update self((int)i)
-  // expected-error@+2 {{expected variable name as base of subarray}}
+  // expected-error@+2 {{expected variable name or subarray}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update host((*(int(*)[3])a)[0:])
   // expected-error@+2 {{subscripted value is not an array or pointer}}

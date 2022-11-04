@@ -3425,66 +3425,53 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
 
 static VarDecl *getVarDeclFromVarList(Sema &S, DirStackTy &DirStack,
                                       OpenACCClauseKind CKind, Expr *&RefExpr,
-                                      SourceLocation &ELoc, SourceRange &ERange,
                                       bool AllowSubarray = false) {
-  ELoc = RefExpr->getExprLoc();
-  ERange = RefExpr->getSourceRange();
-  RefExpr = RefExpr->IgnoreParenImpCasts();
+  bool HasError = false;
 
   // If it's a subarray, extract the base variable, and complain about any
   // subscript (masquerading as a subarray), for which OpenACC 2.7 doesn't
   // specify a behavior.
-  bool IsSubarray = false;
-  if (auto *OASE = dyn_cast_or_null<OMPArraySectionExpr>(RefExpr)) {
-    IsSubarray = true;
+  Expr *RefWithoutSubarray = RefExpr->IgnoreParenImpCasts();
+  if (auto *OASE = dyn_cast_or_null<OMPArraySectionExpr>(RefWithoutSubarray)) {
     do {
       if (OASE->getColonLocFirst().isInvalid()) {
+        HasError = true;
         S.Diag(OASE->getRBracketLoc(), diag::err_acc_subarray_without_colon);
-        if (!AllowSubarray)
-          S.Diag(OASE->getExprLoc(), diag::err_acc_unsupported_subarray)
-              << getOpenACCName(DirStack.getRealDirective())
-              << getOpenACCName(CKind) << OASE->getSourceRange();
-        return nullptr;
       }
-      RefExpr = OASE->getBase()->IgnoreParenImpCasts();
-    } while ((OASE = dyn_cast<OMPArraySectionExpr>(RefExpr)));
+      if (!AllowSubarray) {
+        HasError = true;
+        S.Diag(OASE->getExprLoc(), diag::err_acc_unsupported_subarray)
+            << getOpenACCName(DirStack.getRealDirective())
+            << getOpenACCName(CKind) << OASE->getSourceRange();
+      }
+      RefWithoutSubarray = OASE->getBase()->IgnoreParenImpCasts();
+    } while ((OASE = dyn_cast<OMPArraySectionExpr>(RefWithoutSubarray)));
   }
 
   // Complain about any subscript, for which OpenACC 2.7 doesn't specify a
   // behavior.
-  if (auto *ASE = dyn_cast_or_null<ArraySubscriptExpr>(RefExpr)) {
+  if (auto *ASE = dyn_cast<ArraySubscriptExpr>(RefWithoutSubarray)) {
+    HasError = true;
     S.Diag(ASE->getRBracketLoc(), diag::err_acc_subarray_without_colon);
-    if (!AllowSubarray)
+    if (!AllowSubarray) {
       S.Diag(ASE->getExprLoc(), diag::err_acc_unsupported_subarray)
           << getOpenACCName(DirStack.getRealDirective())
           << getOpenACCName(CKind) << ASE->getSourceRange();
-    return nullptr;
+    }
+    RefWithoutSubarray = ASE->getBase()->IgnoreParenImpCasts();
   }
 
   // Complain if we didn't find a base variable.
-  RefExpr = RefExpr->IgnoreParenImpCasts();
-  auto *DE = dyn_cast_or_null<DeclRefExpr>(RefExpr);
+  auto *DE = dyn_cast<DeclRefExpr>(RefWithoutSubarray);
   if (!DE || !isa<VarDecl>(DE->getDecl())) {
-    if (IsSubarray) {
-      S.Diag(ELoc, diag::err_acc_expected_base_var_name) << ERange;
-      if (!AllowSubarray)
-        S.Diag(ELoc, diag::err_acc_unsupported_subarray)
-            << getOpenACCName(DirStack.getRealDirective())
-            << getOpenACCName(CKind) << ERange;
-    }
-    else
-      S.Diag(ELoc, diag::err_acc_expected_var_name_or_subarray_expr)
-          << AllowSubarray << ERange;
-    return nullptr;
+    HasError = true;
+    S.Diag(RefWithoutSubarray->getBeginLoc(), diag::err_acc_expected_data_var)
+        << AllowSubarray << RefWithoutSubarray->getSourceRange();
   }
 
-  // Complain if we found a subarray but it's not allowed.
-  if (IsSubarray && !AllowSubarray) {
-    S.Diag(ELoc, diag::err_acc_unsupported_subarray)
-        << getOpenACCName(DirStack.getRealDirective()) << getOpenACCName(CKind)
-        << ERange;
+  // Stop if we found an error.
+  if (HasError)
     return nullptr;
-  }
 
   // Return the base variable.
   return cast<VarDecl>(DE->getDecl());
@@ -3538,12 +3525,9 @@ ACCClause *Sema::ActOnOpenACCPresentClause(
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC present clause.");
-    SourceLocation ELoc;
-    SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_present,
-                                        SimpleRefExpr, ELoc, ERange,
-                                        /*AllowSubarray=*/true);
+                                        SimpleRefExpr, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3555,7 +3539,7 @@ ACCClause *Sema::ActOnOpenACCPresentClause(
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_present,
                                OpenACCData->DirStack.getDirectiveStartLoc(),
-                               ELoc))
+                               RefExpr->getExprLoc()))
       continue;
 
     if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
@@ -3581,11 +3565,9 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
 
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC copy clause.");
-    SourceLocation ELoc;
-    SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
-                                        ELoc, ERange, /*AllowSubarray=*/true);
+                                        /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3597,7 +3579,7 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, Determination, Kind,
                                OpenACCData->DirStack.getDirectiveStartLoc(),
-                               ELoc))
+                               RefExpr->getExprLoc()))
       continue;
 
     if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_copy,
@@ -3622,11 +3604,9 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
 
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC copyin clause.");
-    SourceLocation ELoc;
-    SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
-                                        ELoc, ERange, /*AllowSubarray=*/true);
+                                        /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3638,7 +3618,7 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
                                OpenACCData->DirStack.getDirectiveStartLoc(),
-                               ELoc))
+                               RefExpr->getExprLoc()))
       continue;
 
     if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
@@ -3663,11 +3643,9 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
 
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC copyout clause.");
-    SourceLocation ELoc;
-    SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
-                                        ELoc, ERange, /*AllowSubarray=*/true);
+                                        /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3679,7 +3657,7 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
                                OpenACCData->DirStack.getDirectiveStartLoc(),
-                               ELoc))
+                               RefExpr->getExprLoc()))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
@@ -3688,8 +3666,8 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     // data, another directive might have initialized it), and the value has to
     // be written back to the host.
     if (Type.isConstant(Context)) {
-      Diag(ELoc, diag::err_acc_const_var_write)
-          << getOpenACCName(Kind) << ERange;
+      Diag(RefExpr->getExprLoc(), diag::err_acc_const_var_write)
+          << getOpenACCName(Kind) << RefExpr->getSourceRange();
       Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
       continue;
     }
@@ -3716,11 +3694,9 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
 
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC create clause.");
-    SourceLocation ELoc;
-    SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
-                                        ELoc, ERange, /*AllowSubarray=*/true);
+                                        /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3732,15 +3708,15 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
                                OpenACCData->DirStack.getDirectiveStartLoc(),
-                               ELoc))
+                               RefExpr->getExprLoc()))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const variable
     // cannot be create.  However, you can never initialize the device copy of
     // such a variable.
     if (Type.isConstant(Context)) {
-      Diag(ELoc, diag::err_acc_const_da)
-          << getOpenACCName(ACCC_create) << ERange;
+      Diag(RefExpr->getExprLoc(), diag::err_acc_const_da)
+          << getOpenACCName(ACCC_create) << RefExpr->getSourceRange();
       Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
       continue;
     }
@@ -3764,12 +3740,9 @@ ACCClause *Sema::ActOnOpenACCNoCreateClause(
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC no_create clause.");
-    SourceLocation ELoc;
-    SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_no_create,
-                                        SimpleRefExpr, ELoc, ERange,
-                                        /*AllowSubarray=*/true);
+                                        SimpleRefExpr, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3781,7 +3754,7 @@ ACCClause *Sema::ActOnOpenACCNoCreateClause(
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_no_create,
                                OpenACCData->DirStack.getDirectiveStartLoc(),
-                               ELoc))
+                               RefExpr->getExprLoc()))
       continue;
 
     if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
@@ -3803,12 +3776,9 @@ ACCClause *Sema::ActOnOpenACCDeleteClause(ArrayRef<Expr *> VarList,
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC delete clause.");
-    SourceLocation ELoc;
-    SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_delete,
-                                        SimpleRefExpr, ELoc, ERange,
-                                        /*AllowSubarray=*/true);
+                                        SimpleRefExpr, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -3820,7 +3790,7 @@ ACCClause *Sema::ActOnOpenACCDeleteClause(ArrayRef<Expr *> VarList,
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_delete,
                                OpenACCData->DirStack.getDirectiveStartLoc(),
-                               ELoc))
+                               RefExpr->getExprLoc()))
       continue;
 
     if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
@@ -3867,11 +3837,9 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC private clause.");
-    SourceLocation ELoc;
-    SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_private,
-                                        SimpleRefExpr, ELoc, ERange);
+    VarDecl *VD =
+        getVarDeclFromVarList(*this, DirStack, ACCC_private, SimpleRefExpr);
     if (!VD)
       continue;
 
@@ -3882,7 +3850,7 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
     // doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_private,
                                OpenACCData->DirStack.getDirectiveStartLoc(),
-                               ELoc))
+                               RefExpr->getExprLoc()))
       continue;
 
     // The OpenACC 2.5 spec doesn't say, as far as I know, that a const
@@ -3890,8 +3858,8 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
     // private version of such a variable, and OpenMP does have this
     // restriction.
     if (Type.isConstant(Context)) {
-      Diag(ELoc, diag::err_acc_const_da)
-          << getOpenACCName(ACCC_private) << ERange;
+      Diag(RefExpr->getExprLoc(), diag::err_acc_const_da)
+          << getOpenACCName(ACCC_private) << RefExpr->getSourceRange();
       Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
       // Implicit private is for loop control variables, which cannot be const.
       assert(Determination == ACC_EXPLICIT &&
@@ -3918,11 +3886,9 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC firstprivate clause.");
-    SourceLocation ELoc;
-    SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_firstprivate,
-                                        SimpleRefExpr, ELoc, ERange);
+                                        SimpleRefExpr);
     if (!VD)
       continue;
 
@@ -3933,7 +3899,7 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(
     // doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_firstprivate,
                                OpenACCData->DirStack.getDirectiveStartLoc(),
-                               ELoc))
+                               RefExpr->getExprLoc()))
       continue;
 
     if (!OpenACCData->DirStack.addDSA(VD, RefExpr->IgnoreParens(),
@@ -4070,15 +4036,13 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
   }
   }
 
-  bool FirstIter = true;
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "nullptr expr in OpenACC reduction clause.");
-    FirstIter = false;
-    SourceLocation ELoc;
-    SourceRange ERange;
+    SourceLocation ELoc = RefExpr->getExprLoc();
+    SourceRange ERange = RefExpr->getSourceRange();
     Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_reduction,
-                                        SimpleRefExpr, ELoc, ERange);
+    VarDecl *VD =
+        getVarDeclFromVarList(*this, DirStack, ACCC_reduction, SimpleRefExpr);
     if (!VD)
       continue;
 
@@ -4179,11 +4143,9 @@ ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC self clause.");
-    SourceLocation ELoc;
-    SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
-                                        ELoc, ERange, /*AllowSubarray=*/true);
+                                        /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -4194,15 +4156,15 @@ ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
     // have been allocated on the device copy if it didn't have a size.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
                                OpenACCData->DirStack.getDirectiveStartLoc(),
-                               ELoc))
+                               RefExpr->getExprLoc()))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
     // variable cannot be in a self clause, but updating it seems to be a
     // violation of const.
     if (Type.isConstant(Context)) {
-      Diag(ELoc, diag::err_acc_const_var_write)
-          << getOpenACCName(Kind) << ERange;
+      Diag(RefExpr->getExprLoc(), diag::err_acc_const_var_write)
+          << getOpenACCName(Kind) << RefExpr->getSourceRange();
       Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
       continue;
     }
@@ -4226,12 +4188,9 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
   SmallVector<Expr *, 8> Vars;
   for (auto &RefExpr : VarList) {
     assert(RefExpr && "NULL expr in OpenACC device clause.");
-    SourceLocation ELoc;
-    SourceRange ERange;
     Expr *SimpleRefExpr = RefExpr;
     VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_device,
-                                        SimpleRefExpr, ELoc, ERange,
-                                        /*AllowSubarray=*/true);
+                                        SimpleRefExpr, /*AllowSubarray=*/true);
     if (!VD)
       continue;
 
@@ -4242,15 +4201,15 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
     // have been allocated on the device copy if it didn't have a size.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_device,
                                OpenACCData->DirStack.getDirectiveStartLoc(),
-                               ELoc))
+                               RefExpr->getExprLoc()))
       continue;
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
     // variable cannot be in a device clause, but updating it seems to be a
     // violation of const.
     if (Type.isConstant(Context)) {
-      Diag(ELoc, diag::err_acc_const_var_write)
-          << getOpenACCName(ACCC_device) << ERange;
+      Diag(RefExpr->getExprLoc(), diag::err_acc_const_var_write)
+          << getOpenACCName(ACCC_device) << RefExpr->getSourceRange();
       Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
       continue;
     }

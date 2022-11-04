@@ -10977,10 +10977,8 @@ def err_acc_unsupported_subarray : Error <
   "in '%1' clause on '#pragma acc %0', subarray is not supported">;
 def err_acc_subarray_without_colon : Error<
   "subarray syntax must include ':'">;
-def err_acc_expected_var_name_or_subarray_expr : Error<
+def err_acc_expected_data_var : Error<
   "expected variable name%select{| or subarray}0">;
-def err_acc_expected_base_var_name : Error<
-  "expected variable name as base of subarray">;
 def err_acc_unexpected_subarray : Error<
   "OpenACC subarray is not allowed here">;
 def err_acc_typecheck_subarray_value : Error<

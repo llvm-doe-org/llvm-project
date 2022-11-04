@@ -672,59 +672,59 @@ int main() {
   #pragma acc parallel LOOP reduction(*:(int)i)
     FORLOOP
 
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP present(((int*)a)[1:1])
     FORLOOP
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP copy(((int*)a)[0:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP pcopy(((int*)a)[:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP present_or_copy((*(int(*)[3])a)[0:])
     FORLOOP
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP copyin((*((int(*)[3])a))[:])
     FORLOOP
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP pcopyin(((int*)a)[0:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP present_or_copyin(((int*)a)[:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP copyout(((int*)a)[0:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP pcopyout(((int*)a)[:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP present_or_copyout(((int*)a)[0:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP create(((int*)a)[0:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP pcreate(((int*)a)[:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP present_or_create(((int*)a)[0:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name as base of subarray}}
+  // expected-error@+1 {{expected variable name or subarray}}
   #pragma acc parallel LOOP no_create(((int*)a)[1:1])
     FORLOOP
-  // expected-error@+3 {{expected variable name as base of subarray}}
+  // expected-error-re@+3 {{expected variable name{{$}}}}
   // par-error@+2 {{in 'firstprivate' clause on '#pragma acc parallel', subarray is not supported}}
   // parloop-error@+1 {{in 'firstprivate' clause on '#pragma acc parallel loop', subarray is not supported}}
   #pragma acc parallel LOOP firstprivate(((int*)a)[:2])
     FORLOOP
-  // expected-error@+3 {{expected variable name as base of subarray}}
+  // expected-error-re@+3 {{expected variable name{{$}}}}
   // par-error@+2 {{in 'private' clause on '#pragma acc parallel', subarray is not supported}}
   // parloop-error@+1 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
   #pragma acc parallel LOOP private(((int*)a)[0:2])
     FORLOOP
-  // expected-error@+3 {{expected variable name as base of subarray}}
+  // expected-error-re@+3 {{expected variable name{{$}}}}
   // par-error@+2 {{in 'reduction' clause on '#pragma acc parallel', subarray is not supported}}
   // parloop-error@+1 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
   #pragma acc parallel LOOP reduction(*:((int*)a)[:2])
@@ -871,8 +871,9 @@ int main() {
                                   m[0:2][1], \
                                   a[0:], m[0:2][0:2])
     FORLOOP
-  // expected-error@+2 {{subarray syntax must include ':'}}
-  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+3 {{subarray syntax must include ':'}}
+  // expected-error@+3 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{expected variable name or subarray}}
   #pragma acc parallel LOOP present_or_copy(a[i], \
                                             m[0][1], \
                                             a[:1], m[0:2][0:2])
@@ -883,8 +884,9 @@ int main() {
                                    m[2:][1], \
                                    a[:], m[0:2][0:2])
     FORLOOP
-  // expected-error@+2 {{subarray syntax must include ':'}}
-  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+3 {{subarray syntax must include ':'}}
+  // expected-error@+3 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{expected variable name or subarray}}
   #pragma acc parallel LOOP pcopyin(a[b], \
                                     m[i][3], \
                                     a[0:2], m[0:2][0:2])
@@ -895,8 +897,9 @@ int main() {
                                               m[jk][:i], \
                                               a[1:], m[0:2][0:2])
     FORLOOP
-  // expected-error@+2 {{subarray syntax must include ':'}}
-  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+3 {{subarray syntax must include ':'}}
+  // expected-error@+3 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{expected variable name or subarray}}
   #pragma acc parallel LOOP copyout(a[0], \
                                     m[i][e], \
                                     a[0:2], m[0:2][0:2])
@@ -913,8 +916,9 @@ int main() {
                                                m[3][:], \
                                                a[1:1], m[0:2][0:2])
     FORLOOP
-  // expected-error@+2 {{subarray syntax must include ':'}}
-  // expected-error@+2 {{subarray syntax must include ':'}}
+  // expected-error@+3 {{subarray syntax must include ':'}}
+  // expected-error@+3 {{subarray syntax must include ':'}}
+  // expected-error@+2 {{expected variable name or subarray}}
   #pragma acc parallel LOOP create(a[0], \
                                    m[i][e], \
                                    a[0:2], m[0:2][0:2])
@@ -940,78 +944,78 @@ int main() {
 
   // Subarrays not permitted.
 
-  // expected-error@+17 {{subarray syntax must include ':'}}
   // expected-error@+21 {{subarray syntax must include ':'}}
   // expected-error@+21 {{subarray syntax must include ':'}}
+  // expected-error@+21 {{subarray syntax must include ':'}}
   // par-error@+14 {{in 'firstprivate' clause on '#pragma acc parallel', subarray is not supported}}
   // par-error@+14 {{in 'firstprivate' clause on '#pragma acc parallel', subarray is not supported}}
   // par-error@+14 {{in 'firstprivate' clause on '#pragma acc parallel', subarray is not supported}}
   // par-error@+14 {{in 'firstprivate' clause on '#pragma acc parallel', subarray is not supported}}
   // par-error@+14 {{in 'firstprivate' clause on '#pragma acc parallel', subarray is not supported}}
-  // par-error@+14 {{in 'firstprivate' clause on '#pragma acc parallel', subarray is not supported}}
-  // par-error@+14 {{in 'firstprivate' clause on '#pragma acc parallel', subarray is not supported}}
+  // par-error@+14 2 {{in 'firstprivate' clause on '#pragma acc parallel', subarray is not supported}}
+  // par-error@+14 2 {{in 'firstprivate' clause on '#pragma acc parallel', subarray is not supported}}
   // parloop-error@+7 {{in 'firstprivate' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+7 {{in 'firstprivate' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+7 {{in 'firstprivate' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+7 {{in 'firstprivate' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+7 {{in 'firstprivate' clause on '#pragma acc parallel loop', subarray is not supported}}
-  // parloop-error@+7 {{in 'firstprivate' clause on '#pragma acc parallel loop', subarray is not supported}}
-  // parloop-error@+7 {{in 'firstprivate' clause on '#pragma acc parallel loop', subarray is not supported}}
-  #pragma acc parallel LOOP firstprivate(a[0],      \
-                                         a[0:1],    \
+  // parloop-error@+7 2 {{in 'firstprivate' clause on '#pragma acc parallel loop', subarray is not supported}}
+  // parloop-error@+7 2 {{in 'firstprivate' clause on '#pragma acc parallel loop', subarray is not supported}}
+  #pragma acc parallel LOOP firstprivate(a[0:1],    \
                                          a[0:],     \
                                          a[:1],     \
                                          a[:],      \
+                                         a[0],      \
                                          m[0:1][0], \
                                          m[0][0:1])
     FORLOOP
-  // expected-error@+18 {{subarray syntax must include ':'}}
   // expected-error@+21 {{subarray syntax must include ':'}}
   // expected-error@+21 {{subarray syntax must include ':'}}
+  // expected-error@+21 {{subarray syntax must include ':'}}
   // par-error@+14 {{in 'private' clause on '#pragma acc parallel', subarray is not supported}}
   // par-error@+14 {{in 'private' clause on '#pragma acc parallel', subarray is not supported}}
   // par-error@+14 {{in 'private' clause on '#pragma acc parallel', subarray is not supported}}
   // par-error@+14 {{in 'private' clause on '#pragma acc parallel', subarray is not supported}}
   // par-error@+14 {{in 'private' clause on '#pragma acc parallel', subarray is not supported}}
-  // par-error@+14 {{in 'private' clause on '#pragma acc parallel', subarray is not supported}}
-  // par-error@+14 {{in 'private' clause on '#pragma acc parallel', subarray is not supported}}
+  // par-error@+14 2 {{in 'private' clause on '#pragma acc parallel', subarray is not supported}}
+  // par-error@+14 2 {{in 'private' clause on '#pragma acc parallel', subarray is not supported}}
   // parloop-error@+7 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+7 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+7 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+7 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+7 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
-  // parloop-error@+7 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
-  // parloop-error@+7 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
+  // parloop-error@+7 2 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
+  // parloop-error@+7 2 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
   #pragma acc parallel LOOP private(a[3:5],    \
-                                    a[10],     \
                                     a[0:],     \
                                     a[:1],     \
                                     a[:],      \
+                                    a[10],     \
                                     m[0:1][0], \
                                     m[0][0:1])
     FORLOOP
-  // expected-error@+17 {{subarray syntax must include ':'}}
   // expected-error@+21 {{subarray syntax must include ':'}}
   // expected-error@+21 {{subarray syntax must include ':'}}
+  // expected-error@+21 {{subarray syntax must include ':'}}
   // par-error@+14 {{in 'reduction' clause on '#pragma acc parallel', subarray is not supported}}
   // par-error@+14 {{in 'reduction' clause on '#pragma acc parallel', subarray is not supported}}
   // par-error@+14 {{in 'reduction' clause on '#pragma acc parallel', subarray is not supported}}
   // par-error@+14 {{in 'reduction' clause on '#pragma acc parallel', subarray is not supported}}
   // par-error@+14 {{in 'reduction' clause on '#pragma acc parallel', subarray is not supported}}
-  // par-error@+14 {{in 'reduction' clause on '#pragma acc parallel', subarray is not supported}}
-  // par-error@+14 {{in 'reduction' clause on '#pragma acc parallel', subarray is not supported}}
+  // par-error@+14 2 {{in 'reduction' clause on '#pragma acc parallel', subarray is not supported}}
+  // par-error@+14 2 {{in 'reduction' clause on '#pragma acc parallel', subarray is not supported}}
   // parloop-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
-  // parloop-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
-  // parloop-error@+7 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
-  #pragma acc parallel LOOP reduction(min:a[23],     \
-                                          a[0:10],   \
+  // parloop-error@+7 2 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
+  // parloop-error@+7 2 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
+  #pragma acc parallel LOOP reduction(min:a[0:10],   \
                                           a[0:],     \
                                           a[:1],     \
                                           a[:],      \
+                                          a[23],     \
                                           m[0:1][0], \
                                           m[0][0:1])
     FORLOOP

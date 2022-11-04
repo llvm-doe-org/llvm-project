@@ -174,7 +174,7 @@ int main() {
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data present_or_copyin((int)i)
     ;
-  // expected-error@+2 {{expected variable name as base of subarray}}
+  // expected-error@+2 {{expected variable name or subarray}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data copyout((*(int(*)[3])a)[0:])
     ;
@@ -224,7 +224,7 @@ int main() {
     ;
   #pragma acc data pcopy(constI, constIDecl)
     ;
-  // expected-error@+1 {{const variable cannot be written by 'pcopyout'}}
+  // expected-error@+1 {{const variable cannot be written by 'pcopyout' clause}}
   #pragma acc data pcopyin(constADecl) pcopyout(constA)
   {
     // expected-noacc-error@+2 {{cannot assign to variable 'constA' with const-qualified type 'const int[3]'}}
