@@ -12,6 +12,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "ACCDataVar.h"
 #include "TransformContext.h"
 #include "clang/Basic/DiagnosticCategories.h"
 using namespace clang;
@@ -36,7 +37,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   struct DirStackEntry {
     /// Map from all variables with DAs on this OpenACC directive to those DAs.
     /// This is set before OpenACC clauses are translated.
-    llvm::DenseMap<VarDecl *, DAVarData> DAMap;
+    llvm::DenseMap<ACCDataVar, DAVarData> DAMap;
     /// TransformACC*Clause functions set this to true to indicate that a
     /// defaultmap(tofrom:scalar) is required on the OpenMP directive, and
     /// transformACCClauses creates that clause afterward.
@@ -75,8 +76,8 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
 
       // Collect DAs from clauses on D.
       DAVarData ClauseDAs;
-      auto RecordClauseDAs = [&](Expr *E, VarDecl *VD) {
-        DAVarData &VarDAs = DirEntry.DAMap[VD];
+      auto RecordClauseDAs = [&](Expr *E, const ACCDataVar &Var) {
+        DAVarData &VarDAs = DirEntry.DAMap[Var];
         if (ClauseDAs.DMAKind != ACC_DMA_unknown) {
           assert(VarDAs.DMAKind == ACC_DMA_unknown &&
                  "expected at most one DMA per variable");
@@ -122,9 +123,9 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
 
       // Collect visible DMAs from parent directive.
       for (auto ParentEntry : ParentDirEntry.DAMap) {
-        VarDecl *VD = ParentEntry.first;
+        const ACCDataVar &Var = ParentEntry.first;
         const DAVarData &ParentDAs = ParentEntry.second;
-        DAVarData &DAs = DirEntry.DAMap[VD];
+        DAVarData &DAs = DirEntry.DAMap[Var];
         if (DAs.VisibleDMAKind == ACC_DMA_unknown)
           DAs.VisibleDMAKind = ParentDAs.VisibleDMAKind;
       }
@@ -224,14 +225,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   bool iterateACCVarList(ACCVarListClause<Derived> *C,
                          OperationType Operation) {
     for (Expr *RefExpr : C->varlists()) {
-      Expr *Base = RefExpr;
-      while (auto *OASE = dyn_cast<OMPArraySectionExpr>(Base))
-        Base = OASE->getBase()->IgnoreParenImpCasts();
-      while (auto *ASE = dyn_cast<ArraySubscriptExpr>(Base))
-        Base = ASE->getBase()->IgnoreParenImpCasts();
-      VarDecl *VD =
-          cast<VarDecl>(cast<DeclRefExpr>(Base)->getDecl())->getCanonicalDecl();
-      if (Operation(RefExpr, VD))
+      if (Operation(RefExpr, ACCDataVar(RefExpr)))
         return true;
     }
     return false;
@@ -239,26 +233,26 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
 
   template <typename Derived>
   bool transformACCVarList(ACCDirectiveStmt *D, ACCVarListClause<Derived> *C,
-                           const llvm::DenseSet<const VarDecl *> &SkipVars,
+                           const llvm::DenseSet<ACCDataVar> &SkipVars,
                            llvm::SmallVector<Expr *, 16> &Vars) {
     Vars.reserve(C->varlist_size());
-    return iterateACCVarList(C, [&SkipVars, &Vars, this](Expr *RefExpr,
-                                                         VarDecl *VD) {
-      if (SkipVars.count(VD))
-        return false;
-      ExprResult EVar = getDerived().TransformExpr(RefExpr);
-      if (EVar.isInvalid())
-        return true;
-      Vars.push_back(EVar.get());
-      return false;
-    });
+    return iterateACCVarList(
+        C, [&SkipVars, &Vars, this](Expr *RefExpr, ACCDataVar Var) {
+          if (SkipVars.count(Var))
+            return false;
+          ExprResult EVar = getDerived().TransformExpr(RefExpr);
+          if (EVar.isInvalid())
+            return true;
+          Vars.push_back(EVar.get());
+          return false;
+        });
   }
 
   template <typename Derived, typename RebuilderType>
   OMPClauseResult
   transformACCVarListClause(ACCDirectiveStmt *D, ACCVarListClause<Derived> *C,
                             OpenMPClauseKind TCKind,
-                            const llvm::DenseSet<const VarDecl *> &SkipVars,
+                            const llvm::DenseSet<ACCDataVar> &SkipVars,
                             RebuilderType Rebuilder) {
     OpenMPStartEndClauseRAII ClauseRAII(getSema(), TCKind);
     llvm::SmallVector<Expr *, 16> Vars;
@@ -274,8 +268,8 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   OMPClauseResult
   transformACCVarListClause(ACCDirectiveStmt *D, ACCVarListClause<Derived> *C,
                             OpenMPClauseKind TCKind, RebuilderType Rebuilder) {
-    return transformACCVarListClause(
-        D, C, TCKind, llvm::DenseSet<const VarDecl *>(), Rebuilder);
+    return transformACCVarListClause(D, C, TCKind, llvm::DenseSet<ACCDataVar>(),
+                                     Rebuilder);
   }
 
   class OMPVarListClauseRebuilder {
@@ -751,8 +745,8 @@ public:
       }
       for (ACCPrivateClause *C : D->getClausesOfKind<ACCPrivateClause>()) {
         for (Expr *VR : C->varlists()) {
-          VarDecl *VD = cast<VarDecl>(cast<DeclRefExpr>(VR)->getDecl())
-                        ->getCanonicalDecl();
+          ACCDataVar Var(VR, /*AllowSubarray=*/false);
+          VarDecl *VD = Var.getReferencedDecl()->getCanonicalDecl();
           if (AddScopeWithAllPrivates || LCVSet.count(VD))
             EnclosingCompoundStmt.addPrivatizingDecl(VR->getBeginLoc(),
                                                      VR->getEndLoc(), VD);
@@ -940,13 +934,13 @@ public:
       NoCreateOMPNoAlloc = false;
       break;
     }
-    llvm::DenseSet<const VarDecl *> SkipVars;
-    iterateACCVarList(C, [&](Expr *RefExpr, VarDecl *VD) {
-      const DAVarData &VarDAs = DirStack.back().DAMap[VD];
+    llvm::DenseSet<ACCDataVar> SkipVars;
+    iterateACCVarList(C, [&](Expr *RefExpr, ACCDataVar Var) {
+      const DAVarData &VarDAs = DirStack.back().DAMap[Var];
       assert(VarDAs.DMAKind == ACC_DMA_nomap &&
              "expected nomap clauses to record ACC_DMA_nomap");
       if (VarDAs.DSAKind == ACC_DSA_shared && DirStack.size() > 1 &&
-          (DirStack.rbegin() + 1)->DAMap[VD].VisibleDMAKind ==
+          (DirStack.rbegin() + 1)->DAMap[Var].VisibleDMAKind ==
               ACC_DMA_no_create &&
           NoCreateOMPNoAlloc) {
         getSema().Diag(D->getEndLoc(),
@@ -954,8 +948,8 @@ public:
             << getOpenACCName(C->getClauseKind());
         return false;
       }
-      SkipVars.insert(VD);
-      if (VarDAs.DSAKind == ACC_DSA_shared && VD->getType()->isScalarType())
+      SkipVars.insert(Var);
+      if (VarDAs.DSAKind == ACC_DSA_shared && Var.getType()->isScalarType())
         DirStack.back().NeedsDefaultmapForScalars = true;
       return false;
     });
@@ -1174,7 +1168,7 @@ public:
     // loop.  So that the OpenACC implementation doesn't have to replicate the
     // OpenMP implementation for that computation, we instead omit the linear
     // clause.
-    llvm::DenseSet<const VarDecl *> SkipVars;
+    llvm::DenseSet<ACCDataVar> SkipVars;
     if (isOpenMPSimdDirective(TDKind)) {
       ACCLoopDirective *LD = dyn_cast_or_null<ACCLoopDirective>(D);
       assert(LD && "expected omp simd directive to translate from acc loop"

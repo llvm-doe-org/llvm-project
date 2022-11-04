@@ -12,6 +12,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "ACCDataVar.h"
 #include "UsedDeclVisitor.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/StmtVisitor.h"
@@ -41,10 +42,10 @@ public:
     FD->getNameForDiagnostic(OS, SemaRef.getPrintingPolicy(),
                              /*Qualified=*/true);
   }
-  NameForDiag(Sema &SemaRef, const VarDecl *VD) {
+  NameForDiag(Sema &SemaRef, ACCDataVar Var) {
     llvm::raw_svector_ostream OS(Name);
-    VD->getNameForDiagnostic(OS, SemaRef.getPrintingPolicy(),
-                             /*Qualified=*/true);
+    Var.getReferencedDecl()->getNameForDiagnostic(
+        OS, SemaRef.getPrintingPolicy(), /*Qualified=*/true);
   }
   friend const StreamingDiagnostic &operator<<(const StreamingDiagnostic &SD,
                                                const NameForDiag &NFD);
@@ -109,11 +110,12 @@ public:
 
 private:
   struct DirStackEntryTy final {
-    llvm::DenseMap<VarDecl *, DAVarData> DAMap;
-    llvm::DenseMap<VarDecl *, Expr *> UpdateVarSet;
+    /// Map from a variable to its DA data.
+    llvm::DenseMap<ACCDataVar, DAVarData> DAMap;
+    llvm::DenseMap<ACCDataVar, Expr *> UpdateVarSet;
     llvm::SmallVector<Expr *, 4> ReductionVarsOnEffectiveOrCombined;
-    llvm::DenseSet<VarDecl *> LCVSet;
-    llvm::SmallVector<std::pair<Expr *, VarDecl *>, 4> LCVVec;
+    llvm::DenseSet<ACCDataVar> LCVSet;
+    llvm::SmallVector<Expr *, 4> LCVExprs;
     /// The real directive kind.  In the case of a combined directive, there
     /// are two consecutive entries: the outer has RealDKind as the combined
     /// directive kind, the inner has RealDKind has ACCD_unknown, and both
@@ -238,33 +240,35 @@ public:
   /// Register the given expression as a loop control variable reference in an
   /// assignment but not a declaration in a for loop init associated with the
   /// current acc loop directive.
-  void addLoopControlVariable(DeclRefExpr *DRE) {
+  void addLoopControlVariable(Expr *E) {
     assert(!Stack.empty() && "expected non-empty directive stack");
     assert(isOpenACCLoopDirective(getEffectiveDirective()) &&
            "expected loop control variable to be added to loop directive");
-    auto *VD = dyn_cast<VarDecl>(DRE->getDecl());
-    assert(VD && "expected loop control variable to have a VarDecl");
-    VD = VD->getCanonicalDecl();
-    Stack.back().LCVSet.insert(VD);
-    Stack.back().LCVVec.emplace_back(DRE, VD);
+    // It should not be possible to receive a subarray here.
+    ACCDataVar Var(E, /*AllowSubarray=*/false, &SemaRef, /*Quiet=*/true);
+    // Drop invalid loop control variables for now.  Loop form validation will
+    // catch them later.
+    if (Var.isValid()) {
+      Stack.back().LCVSet.insert(Var);
+      Stack.back().LCVExprs.emplace_back(E);
+    }
   }
   /// Is the specified variable a loop control variable that is assigned but
   /// not declared in the init of a for loop associated with the current
   /// directive?
-  bool hasLoopControlVariable(VarDecl *VD) const {
+  bool hasLoopControlVariable(ACCDataVar Var) const {
     assert(!Stack.empty() && "expected non-empty directive stack");
-    return Stack.back().LCVSet.count(VD->getCanonicalDecl());
+    return Stack.back().LCVSet.count(Var);
   }
   /// Get the loop control variables that are assigned but not declared in the
   /// inits of the for loops associated with the current directive, or return
   /// an empty list if none.
   ///
-  /// Each item in the list is a pair consisting of (a) the expression that
-  /// references the variable in the assignment and (b) the canonical
-  /// declaration for the variable.
-  ArrayRef<std::pair<Expr *, VarDecl *>> getLoopControlVariables() const {
+  /// Each item in the list is the expression that references the variable in
+  /// the assignment.
+  ArrayRef<Expr *> getLoopControlVariables() const {
     assert(!Stack.empty() && "expected non-empty directive stack");
-    return Stack.back().LCVVec;
+    return Stack.back().LCVExprs;
   }
   /// Register loop partitioning for the current loop directive if
   /// \a ForCurrentDir or for a function call otherwise.
@@ -365,16 +369,15 @@ private:
       assert(ReductionId.getName().isEmpty() &&
              "expected reduction ID for and only for reduction");
     }
-    static bool checkReductionConflict(
-        Sema &SemaRef, VarDecl *VD, Expr *E, OpenACCDMAKind K, DAVarData DVar,
-        const DeclarationNameInfo &ReductionId) {
+    static bool checkReductionConflict(Sema &SemaRef, ACCDataVar Var, Expr *E,
+                                       OpenACCDMAKind K, DAVarData VarData,
+                                       const DeclarationNameInfo &ReductionId) {
       return false;
     }
     static void setReductionFields(bool AddHere, OpenACCDMAKind K,
                                    DirStackEntryTy &StackEntry,
-                                   DAVarData &DVar, Expr *RefExpr,
-                                   const DeclarationNameInfo &ReductionId) {
-    }
+                                   DAVarData &VarData, Expr *RefExpr,
+                                   const DeclarationNameInfo &ReductionId) {}
   };
   struct DSATraits {
     typedef OpenACCDSAKind KindTy;
@@ -386,39 +389,40 @@ private:
       assert(((K == ACC_DSA_reduction) == !ReductionId.getName().isEmpty()) &&
              "expected reduction ID for and only for reduction");
     }
-    static bool checkReductionConflict(
-        Sema &SemaRef, VarDecl *VD, Expr *E, OpenACCDSAKind K, DAVarData DVar,
-        const DeclarationNameInfo &ReductionId) {
-      if (K == ACC_DSA_reduction && Kind(DVar) == ACC_DSA_reduction) {
+    static bool checkReductionConflict(Sema &SemaRef, ACCDataVar Var, Expr *E,
+                                       OpenACCDSAKind K, DAVarData VarData,
+                                       const DeclarationNameInfo &ReductionId) {
+      if (K == ACC_DSA_reduction && Kind(VarData) == ACC_DSA_reduction) {
         SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_reduction)
-            << (DVar.ReductionId.getName() == ReductionId.getName())
+            << (VarData.ReductionId.getName() == ReductionId.getName())
             << ACCReductionClause::printReductionOperatorToString(ReductionId)
-            << NameForDiag(SemaRef, VD);
-        SemaRef.Diag(DVar.DSARefExpr->getExprLoc(),
+            << NameForDiag(SemaRef, Var);
+        SemaRef.Diag(VarData.DSARefExpr->getExprLoc(),
                      diag::note_acc_previous_reduction)
             << ACCReductionClause::printReductionOperatorToString(
-                DVar.ReductionId);
+                   VarData.ReductionId);
         return true;
       }
       return false;
     }
     static void setReductionFields(bool AddHere, OpenACCDSAKind K,
                                    DirStackEntryTy &StackEntry,
-                                   DAVarData &DVar, Expr *RefExpr,
+                                   DAVarData &VarData, Expr *RefExpr,
                                    const DeclarationNameInfo &ReductionId) {
       if (K != ACC_DSA_reduction)
         return;
       if (AddHere)
-        DVar.ReductionId = ReductionId;
+        VarData.ReductionId = ReductionId;
       StackEntry.ReductionVarsOnEffectiveOrCombined.push_back(RefExpr);
     }
   };
   /// Encapsulates commonalities between implement addDMA and addDSA.  Each
   /// of DA and OtherDA is one of DMATraits or DSATraits.
   template <typename DA, typename OtherDA>
-  bool addDA(VarDecl *VD, Expr *E, typename DA::KindTy DAKind,
+  bool addDA(ACCDataVar Var, Expr *E, typename DA::KindTy DAKind,
              OpenACCDetermination Determination,
              const DeclarationNameInfo &ReductionId = DeclarationNameInfo());
+
 public:
   ///@{
   /// For the given variable and given DA, selects the innermost effective
@@ -447,14 +451,14 @@ public:
   /// combined directive) is at the top of the stack.
   ///
   /// The given DA must not be ACC_DMA_unknown or ACC_DSA_unknown.
-  bool addDMA(VarDecl *VD, Expr *E, OpenACCDMAKind DMAKind,
+  bool addDMA(ACCDataVar Var, Expr *E, OpenACCDMAKind DMAKind,
               OpenACCDetermination Determination) {
-    return addDA<DMATraits, DSATraits>(VD, E, DMAKind, Determination);
+    return addDA<DMATraits, DSATraits>(Var, E, DMAKind, Determination);
   }
-  bool addDSA(VarDecl *VD, Expr *E, OpenACCDSAKind DSAKind,
+  bool addDSA(ACCDataVar Var, Expr *E, OpenACCDSAKind DSAKind,
               OpenACCDetermination Determination,
               const DeclarationNameInfo &ReductionId = DeclarationNameInfo()) {
-    return addDA<DSATraits, DMATraits>(VD, E, DSAKind, Determination,
+    return addDA<DSATraits, DMATraits>(Var, E, DSAKind, Determination,
                                        ReductionId);
   }
   ///@}
@@ -462,12 +466,12 @@ public:
   /// Returns data attributes from top of the stack for the specified
   /// declaration.  (Predetermined and implicitly determined data attributes
   /// usually have not been computed yet.)
-  DAVarData getTopDA(VarDecl *VD);
+  DAVarData getTopDA(ACCDataVar Var);
 
   /// Returns true if the declaration has a DMA anywhere on the stack.
   /// (Predetermined and implicitly determined data attributes usually have not
   /// been computed yet.)
-  bool hasVisibleDMA(VarDecl *VD);
+  bool hasVisibleDMA(ACCDataVar Var);
 
   /// Returns true if the declaration has a privatizing DSA on any loop
   /// construct on the stack beyond the current stack entry.
@@ -478,23 +482,22 @@ public:
   /// Checks for explicit DSAs and predetermined DSAs except in the case of
   /// local variable declarations, which must be checked separately.  Loop
   /// constructs have no implicitly determined DSAs.
-  bool hasPrivatizingDSAOnAncestorOrphanedLoop(VarDecl *VD);
+  bool hasPrivatizingDSAOnAncestorOrphanedLoop(ACCDataVar Var);
 
   /// Records a variable appearing in an update directive clause and returns
   /// false, or complains and returns true if it already appeared in one for
   /// the current directive.
-  bool addUpdateVar(VarDecl *VD, Expr *E) {
+  bool addUpdateVar(ACCDataVar Var, Expr *E) {
     assert(!Stack.empty() && "expected non-empty directive stack");
     auto Itr = Stack.rbegin();
-    VD = VD->getCanonicalDecl();
-    if (Expr *OldExpr = Itr->UpdateVarSet[VD]) {
+    if (Expr *OldExpr = Itr->UpdateVarSet[Var]) {
       SemaRef.Diag(E->getExprLoc(), diag::err_acc_update_same_var)
-          << NameForDiag(SemaRef, VD) << E->getSourceRange();
+          << NameForDiag(SemaRef, Var) << E->getSourceRange();
       SemaRef.Diag(OldExpr->getExprLoc(), diag::note_acc_update_var)
           << OldExpr->getSourceRange();
       return true;
     }
-    Itr->UpdateVarSet[VD] = E;
+    Itr->UpdateVarSet[Var] = E;
     return false;
   }
 
@@ -613,10 +616,9 @@ public:
 } // namespace
 
 template <typename DA, typename OtherDA>
-bool DirStackTy::addDA(VarDecl *VD, Expr *E, typename DA::KindTy DAKind,
+bool DirStackTy::addDA(ACCDataVar Var, Expr *E, typename DA::KindTy DAKind,
                        OpenACCDetermination Determination,
                        const DeclarationNameInfo &ReductionId) {
-  VD = VD->getCanonicalDecl();
   assert(!Stack.empty() && "expected non-empty directive stack");
   assert(DAKind != DA::KindUnknown && "expected known DA");
   DA::checkReductionIdArg(DAKind, ReductionId);
@@ -626,7 +628,7 @@ bool DirStackTy::addDA(VarDecl *VD, Expr *E, typename DA::KindTy DAKind,
   // directives for the current combined directive.
   bool Added = false;
   for (auto Itr = Stack.rbegin(), End = Stack.rend(); Itr != End; ++Itr) {
-    DAVarData &DVar = Itr->DAMap[VD];
+    DAVarData &VarData = Itr->DAMap[Var];
     // Complain for conflict with existing DA.
     //
     // See the section "Basic Data Attributes" in the Clang OpenACC design
@@ -634,32 +636,33 @@ bool DirStackTy::addDA(VarDecl *VD, Expr *E, typename DA::KindTy DAKind,
     //
     // Some DAs should be suppressed by rather than conflict with existing DAs,
     // but addDMA and addDSA have preconditions to avoid those scenarios.
-    if (DA::Kind(DVar) != DA::KindUnknown) {
-      if (DA::checkReductionConflict(SemaRef, VD, E, DAKind, DVar,
+    if (DA::Kind(VarData) != DA::KindUnknown) {
+      if (DA::checkReductionConflict(SemaRef, Var, E, DAKind, VarData,
                                      ReductionId))
         return true;
       SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_da)
-          << (DA::Kind(DVar) == DAKind) << getOpenACCName(DA::Kind(DVar))
+          << (DA::Kind(VarData) == DAKind) << getOpenACCName(DA::Kind(VarData))
           << Determination << getOpenACCName(DAKind);
-      SemaRef.Diag(DA::RefExpr(DVar)->getExprLoc(), diag::note_acc_explicit_da)
-          << getOpenACCName(DA::Kind(DVar));
+      SemaRef.Diag(DA::RefExpr(VarData)->getExprLoc(),
+                   diag::note_acc_explicit_da)
+          << getOpenACCName(DA::Kind(VarData));
       return true;
     }
-    if (!isAllowedDSAForDMA(DAKind, OtherDA::Kind(DVar))) {
+    if (!isAllowedDSAForDMA(DAKind, OtherDA::Kind(VarData))) {
       SemaRef.Diag(E->getExprLoc(), diag::err_acc_conflicting_da)
-          << false << getOpenACCName(OtherDA::Kind(DVar))
-          << Determination << getOpenACCName(DAKind);
-      SemaRef.Diag(OtherDA::RefExpr(DVar)->getExprLoc(),
+          << false << getOpenACCName(OtherDA::Kind(VarData)) << Determination
+          << getOpenACCName(DAKind);
+      SemaRef.Diag(OtherDA::RefExpr(VarData)->getExprLoc(),
                    diag::note_acc_explicit_da)
-          << getOpenACCName(OtherDA::Kind(DVar));
+          << getOpenACCName(OtherDA::Kind(VarData));
       return true;
     }
     // Complain for conflict with directive.
     if (isAllowedDAForDirective(Itr->EffectiveDKind, DAKind)) {
-      DA::setReductionFields(!Added, DAKind, *Itr, DVar, E, ReductionId);
+      DA::setReductionFields(!Added, DAKind, *Itr, VarData, E, ReductionId);
       if (!Added) {
-        DA::Kind(DVar) = DAKind;
-        DA::RefExpr(DVar) = E;
+        DA::Kind(VarData) = DAKind;
+        DA::RefExpr(VarData) = E;
         Added = true;
         if (Determination == ACC_IMPLICIT)
           // Stop climbing or there might be spurious diagnostics about
@@ -689,35 +692,32 @@ bool DirStackTy::addDA(VarDecl *VD, Expr *E, typename DA::KindTy DAKind,
   return false;
 }
 
-DirStackTy::DAVarData DirStackTy::getTopDA(VarDecl *VD) {
-  VD = VD->getCanonicalDecl();
+DirStackTy::DAVarData DirStackTy::getTopDA(ACCDataVar Var) {
   assert(!Stack.empty() && "expected non-empty directive stack");
   auto I = Stack.rbegin();
-  auto DAItr = I->DAMap.find(VD);
+  auto DAItr = I->DAMap.find(Var);
   if (DAItr != I->DAMap.end())
     return DAItr->second;
   return DAVarData();
 }
 
-bool DirStackTy::hasVisibleDMA(VarDecl *VD) {
-  VD = VD->getCanonicalDecl();
+bool DirStackTy::hasVisibleDMA(ACCDataVar Var) {
   assert(!Stack.empty() && "expected non-empty directive stack");
   for (auto I = Stack.rbegin(), E = Stack.rend(); I != E; ++I) {
-    auto DAItr = I->DAMap.find(VD);
+    auto DAItr = I->DAMap.find(Var);
     if (DAItr != I->DAMap.end() && DAItr->second.DMAKind != ACC_DMA_unknown)
       return true;
   }
   return false;
 }
 
-bool DirStackTy::hasPrivatizingDSAOnAncestorOrphanedLoop(VarDecl *VD) {
-  VD = VD->getCanonicalDecl();
+bool DirStackTy::hasPrivatizingDSAOnAncestorOrphanedLoop(ACCDataVar Var) {
   assert(!Stack.empty() && "expected non-empty directive stack");
   for (auto I = std::next(Stack.rbegin()), E = Stack.rend(); I != E; ++I) {
     assert(
         (I->EffectiveDKind == ACCD_loop || I->EffectiveDKind == ACCD_routine) &&
         "expected all ancestor constructs to be orphaned loop constructs");
-    auto DAItr = I->DAMap.find(VD);
+    auto DAItr = I->DAMap.find(Var);
     if (DAItr != I->DAMap.end()) {
       switch (DAItr->second.DSAKind) {
       case clang::ACC_DSA_unknown:
@@ -730,7 +730,7 @@ bool DirStackTy::hasPrivatizingDSAOnAncestorOrphanedLoop(VarDecl *VD) {
         llvm_unreachable("unexpected firstprivate on loop construct");
       }
     }
-    if (I->LCVSet.count(VD->getCanonicalDecl()))
+    if (I->LCVSet.count(Var))
       return true;
   }
   return false;
@@ -1227,12 +1227,12 @@ class ImplicitDATable {
 public:
   struct Implier {
     /// The referencing expression that produced the implicit DA.
-    DeclRefExpr *DRE;
+    Expr *E;
     /// The reduction clause that produced the implicit DA, or nullptr if the
     /// implicit DA is not a reduction.
     ACCReductionClause *ReductionClause;
-    Implier(DeclRefExpr *DRE, ACCReductionClause *C = nullptr)
-      : DRE(DRE), ReductionClause(C) {}
+    Implier(Expr *E, ACCReductionClause *C = nullptr)
+        : E(E), ReductionClause(C) {}
   };
   typedef std::list<Implier> ImpliersTy;
 
@@ -1276,14 +1276,14 @@ public:
       Table->getImpliers(DSAKind).erase(DSAImplier);
       DSAKind = ACC_DSA_unknown;
     }
-    void setDMA(OpenACCDMAKind Kind, DeclRefExpr *E) {
+    void setDMA(OpenACCDMAKind Kind, Expr *E) {
       assert(DMAKind == ACC_DMA_unknown && "expected unset DMA");
       DMAKind = Kind;
       ImpliersTy &Impliers = Table->getImpliers(DMAKind);
       Impliers.emplace_back(E);
       DMAImplier = std::prev(Impliers.end());
     }
-    void setDSA(OpenACCDSAKind Kind, DeclRefExpr *E,
+    void setDSA(OpenACCDSAKind Kind, Expr *E,
                 ACCReductionClause *ReductionClause = nullptr) {
       assert(DSAKind == ACC_DSA_unknown && "expected unset DSA");
       assert((Kind == ACC_DSA_reduction) == (ReductionClause != nullptr) &&
@@ -1296,11 +1296,11 @@ public:
   };
 
 private:
-  llvm::DenseMap<VarDecl *, Entry> Map;
+  llvm::DenseMap<ACCDataVar, Entry> Map;
 
 public:
-  Entry &lookup(VarDecl *VD) {
-    return Map.try_emplace(VD, Entry(this)).first->second;
+  Entry &lookup(ACCDataVar Var) {
+    return Map.try_emplace(Var, Entry(this)).first->second;
   }
   ImpliersTy &getImpliers(OpenACCDMAKind DMAKind) {
     switch (DMAKind) {
@@ -1335,7 +1335,7 @@ public:
   bool buildRefList(DAKindTy DAKind, SmallVectorImpl<Expr *> &ExprVec) {
     ExprVec.clear();
     for (auto I : getImpliers(DAKind))
-      ExprVec.push_back(I.DRE);
+      ExprVec.push_back(I.E);
     return !ExprVec.empty();
   }
 };
@@ -1346,34 +1346,35 @@ class ImplicitDAAdder : public StmtVisitor<ImplicitDAAdder> {
   typedef StmtVisitor<ImplicitDAAdder> BaseVisitor;
   DirStackTy &DirStack;
   ImplicitDATable &ImplicitDAs;
-  llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
+  llvm::SmallVector<llvm::DenseSet<ACCDataVar>, 8> LocalDefinitions;
   size_t ACCDirectiveStmtCount;
-  std::list<const DeclRefExpr *> ScalarReductionVarDiags;
-  llvm::DenseMap<const VarDecl *, SourceLocation> ScalarGangReductionVarDiags;
+  std::list<Expr *> ScalarReductionVarDiags;
+  llvm::DenseMap<ACCDataVar, SourceLocation> ScalarGangReductionVarDiags;
 
 public:
   void VisitDeclStmt(DeclStmt *S) {
     for (auto I = S->decl_begin(), E = S->decl_end(); I != E; ++I)
-      LocalDefinitions.back().insert(*I);
+      LocalDefinitions.back().insert(ACCDataVar(*I));
     BaseVisitor::VisitDeclStmt(S);
   }
   void VisitDeclRefExpr(DeclRefExpr *E) {
-    if (auto *VD = dyn_cast<VarDecl>(E->getDecl())) {
+    if (isa<VarDecl>(E->getDecl())) {
+      ACCDataVar Var(E);
+
       // Skip variable if it is locally declared or privatized by a clause.
-      if (LocalDefinitions.back().count(VD))
+      if (LocalDefinitions.back().count(Var))
         return;
 
       // Skip variable if an implicit DA has already been computed.
-      ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(VD);
+      ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(Var);
       if (ImplicitDA.getDMAKind() != ACC_DMA_unknown ||
           ImplicitDA.getDSAKind() != ACC_DSA_unknown)
         return;
 
       // Get predetermined and explicit DAs.
-      const DirStackTy::DAVarData &DVar = DirStack.getTopDA(VD);
+      const DirStackTy::DAVarData &DVar = DirStack.getTopDA(Var);
 
       // Compute implicit DAs.
-      VD = VD->getCanonicalDecl();
       OpenACCDMAKind DMAKind = ACC_DMA_unknown;
       OpenACCDSAKind DSAKind = ACC_DSA_unknown;
       if (isOpenACCLoopDirective(DirStack.getEffectiveDirective())) {
@@ -1388,7 +1389,7 @@ public:
           // design document for the interpretation used here.
           // Sema::ActOnOpenACCDirectiveStmt handles the case without a seq
           // clause.
-          assert((!DirStack.hasLoopControlVariable(VD) ||
+          assert((!DirStack.hasLoopControlVariable(Var) ||
                   DirStack.getLoopPartitioning().hasSeqExplicit()) &&
                  "expected predetermined private for loop control variable "
                  "with explicit seq");
@@ -1397,10 +1398,10 @@ public:
           DSAKind = ACC_DSA_shared;
         }
       } else if (isOpenACCParallelDirective(DirStack.getEffectiveDirective())) {
-        if (DirStack.hasVisibleDMA(VD) || DVar.DSAKind != ACC_DSA_unknown) {
+        if (DirStack.hasVisibleDMA(Var) || DVar.DSAKind != ACC_DSA_unknown) {
           // There's a visible explicit DMA, or there's a predetermined or
           // explicit DSA, so there's no implicit DA other than the defaults.
-        } else if (!VD->getType()->isScalarType()) {
+        } else if (!Var.getType()->isScalarType()) {
           // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L830-833:
           //   "If there is no default(present) clause on the construct, an
           //   array or composite variable referenced in the parallel construct
@@ -1448,7 +1449,7 @@ public:
     // force a copy construct call here so that, if the vector is resized, the
     // pass-by-reference parameter isn't invalidated before it's copied.
     LocalDefinitions.emplace_back(
-        llvm::DenseSet<const Decl *>(LocalDefinitions.back()));
+        llvm::DenseSet<ACCDataVar>(LocalDefinitions.back()));
 
     // OpenACC 3.2 sec. 2.6.2 "Variables with Implicitly Determined Data
     // Attributes":
@@ -1491,24 +1492,23 @@ public:
       if (ScalarReductionRequiresDataClause &&
           C->getClauseKind() == ACCC_reduction) {
         for (Expr *VR : cast<ACCReductionClause>(C)->varlists()) {
-          DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
-          VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+          ACCDataVar Var(VR);
           // Skip variable if it is locally declared or privatized by a clause.
-          if (LocalDefinitions.back().count(VD))
+          if (LocalDefinitions.back().count(Var))
             continue;
           // Currently, Clang supports only scalar variables in OpenACC
           // reductions.
-          assert(VD->getType()->isScalarType() &&
+          assert(Var.getType()->isScalarType() &&
                  "expected reduction variable to be scalar");
           // If there's a visible explicit DMA or if there's an explicit DSA on
           // the compute construct, the restriction is satisfied.
-          DirStackTy::DAVarData DVar = DirStack.getTopDA(VD);
-          if (DirStack.hasVisibleDMA(VD) || DVar.DSAKind != ACC_DSA_unknown)
+          DirStackTy::DAVarData VarData = DirStack.getTopDA(Var);
+          if (DirStack.hasVisibleDMA(Var) || VarData.DSAKind != ACC_DSA_unknown)
             continue;
           // Record diagnostic.
-          ScalarReductionVarDiags.push_back(DRE);
+          ScalarReductionVarDiags.push_back(VR);
           if (IsGangReduction)
-            ScalarGangReductionVarDiags.try_emplace(VD, DRE->getExprLoc());
+            ScalarGangReductionVarDiags.try_emplace(Var, VR->getExprLoc());
         }
       }
 
@@ -1525,12 +1525,8 @@ public:
       // Record variables privatized by this directive as local definitions so
       // that they are skipped while computing DAs implied by nested
       // references.
-      for (const Expr *VR : getPrivateVarsFromClause(C)) {
-        const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
-        const VarDecl *VD =
-            cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
-        LocalDefinitions.back().insert(VD);
-      }
+      for (Expr *E : getPrivateVarsFromClause(C))
+        LocalDefinitions.back().insert(ACCDataVar(E));
     }
 
     // Recurse to children.
@@ -1565,20 +1561,19 @@ public:
     // here rather than in VisitDeclRefExpr.
     if (DirStack.getEffectiveDirective() == ACCD_parallel) {
       for (Expr *VR : DirStack.getReductionVars()) {
-        DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
-        VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
-        const DirStackTy::DAVarData &DVar = DirStack.getTopDA(VD);
-        if (DVar.DMAKind != ACC_DMA_unknown)
+        ACCDataVar Var(VR);
+        const DirStackTy::DAVarData &VarData = DirStack.getTopDA(Var);
+        if (VarData.DMAKind != ACC_DMA_unknown)
           continue;
-        ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(VD);
+        ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(Var);
         assert(ImplicitDA.getDMAKind() == ACC_DMA_unknown &&
                ImplicitDA.getDSAKind() == ACC_DSA_unknown &&
                "expected no implicit DA to be set yet");
-        ImplicitDA.setDMA(ACC_DMA_copy, DRE);
-        if (DVar.DSAKind == ACC_DSA_unknown)
-          ImplicitDA.setDSA(ACC_DSA_shared, DRE);
+        ImplicitDA.setDMA(ACC_DMA_copy, VR);
+        if (VarData.DSAKind == ACC_DSA_unknown)
+          ImplicitDA.setDSA(ACC_DSA_shared, VR);
         else
-          assert(DVar.DSAKind == ACC_DSA_reduction &&
+          assert(VarData.DSAKind == ACC_DSA_reduction &&
                  "expected any explicit DSA for reduction var to be "
                  "reduction");
       }
@@ -1586,16 +1581,16 @@ public:
     LocalDefinitions.emplace_back();
   }
   void reportDiags() const {
-    for (const DeclRefExpr *DRE : ScalarReductionVarDiags) {
-      const VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
-      DirStack.SemaRef.Diag(DRE->getExprLoc(),
+    for (Expr *E : ScalarReductionVarDiags) {
+      ACCDataVar Var(E);
+      DirStack.SemaRef.Diag(E->getExprLoc(),
                             diag::err_acc_loop_reduction_needs_data_clause)
-          << NameForDiag(DirStack.SemaRef, VD)
+          << NameForDiag(DirStack.SemaRef, Var)
           << getOpenACCName(DirStack.getRealDirective());
       DirStack.SemaRef.Diag(DirStack.getDirectiveStartLoc(),
                             diag::note_acc_parent_compute_construct)
           << getOpenACCName(DirStack.getRealDirective());
-      SourceLocation GangRedLoc = ScalarGangReductionVarDiags.lookup(VD);
+      SourceLocation GangRedLoc = ScalarGangReductionVarDiags.lookup(Var);
       // OpenACC compilers typically implicitly determine copy clauses for gang
       // reductions, which are not so useful otherwise, so suggest that if there
       // is a gang reduction for this variable.  Otherwise, suggest
@@ -1604,13 +1599,13 @@ public:
         DirStack.SemaRef.Diag(
             DirStack.getDirectiveStartLoc(),
             diag::note_acc_loop_reduction_suggest_firstprivate)
-            << NameForDiag(DirStack.SemaRef, VD)
+            << NameForDiag(DirStack.SemaRef, Var)
             << getOpenACCName(DirStack.getRealDirective());
         continue;
       }
       DirStack.SemaRef.Diag(GangRedLoc,
                             diag::note_acc_loop_reduction_suggest_copy)
-          << NameForDiag(DirStack.SemaRef, VD);
+          << NameForDiag(DirStack.SemaRef, Var);
     }
   }
 };
@@ -1633,12 +1628,12 @@ class ImplicitGangReductionAdder
   typedef StmtVisitor<ImplicitGangReductionAdder> BaseVisitor;
   DirStackTy &DirStack;
   ImplicitDATable &ImplicitDAs;
-  llvm::SmallVector<llvm::DenseSet<const Decl *>, 8> LocalDefinitions;
+  llvm::SmallVector<llvm::DenseSet<ACCDataVar>, 8> LocalDefinitions;
 
 public:
   void VisitDeclStmt(DeclStmt *S) {
     for (auto I = S->decl_begin(), E = S->decl_end(); I != E; ++I)
-      LocalDefinitions.back().insert(*I);
+      LocalDefinitions.back().insert(ACCDataVar(*I));
     BaseVisitor::VisitDeclStmt(S);
   }
   void VisitACCDirectiveStmt(ACCDirectiveStmt *D) {
@@ -1646,12 +1641,11 @@ public:
     if (isOpenACCLoopDirective(D->getDirectiveKind())) {
       for (ACCReductionClause *C : D->getClausesOfKind<ACCReductionClause>()) {
         for (Expr *VR : C->varlists()) {
-          DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
-          VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
+          ACCDataVar Var(VR);
 
           // Skip variable if it is declared locally in the acc parallel or if
           // it is privatized by an enclosing acc loop.
-          if (LocalDefinitions.back().count(VD))
+          if (LocalDefinitions.back().count(Var))
             continue;
 
           // Skip variable if it is gang-private at the acc loop due to an
@@ -1675,23 +1669,24 @@ public:
           // loop, so there's no implicit gang reduction, which makes the
           // variable gang-shared at the acc loop, so there is an implicit gang
           // reduction, and so on.
-          DirStackTy::DAVarData DVar = DirStack.getTopDA(VD);
-          ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(VD);
-          if (DVar.DSAKind == ACC_DSA_reduction ||
+          DirStackTy::DAVarData VarData = DirStack.getTopDA(Var);
+          ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(Var);
+          if (VarData.DSAKind == ACC_DSA_reduction ||
               ImplicitDA.getDSAKind() == ACC_DSA_reduction)
             continue;
 
           // The reduction can be added regardless of the DMA.
-          assert(isAllowedDSAForDMA(ACC_DSA_reduction, DVar.DMAKind) &&
-                 isAllowedDSAForDMA(ACC_DSA_reduction, ImplicitDA.getDMAKind())
-                 && "expected reduction not to conflict with DMA");
+          assert(
+              isAllowedDSAForDMA(ACC_DSA_reduction, VarData.DMAKind) &&
+              isAllowedDSAForDMA(ACC_DSA_reduction, ImplicitDA.getDMAKind()) &&
+              "expected reduction not to conflict with DMA");
 
           // If it's not privatized, then record the reduction.
           if (ImplicitDA.getDSAKind() == ACC_DSA_shared) {
-            assert(DVar.DSAKind == ACC_DSA_unknown &&
+            assert(VarData.DSAKind == ACC_DSA_unknown &&
                    "expected no implicit DSA with explicit/predetermined DSA");
             ImplicitDA.unsetDSA();
-            ImplicitDA.setDSA(ACC_DSA_reduction, DRE, C);
+            ImplicitDA.setDSA(ACC_DSA_reduction, VR, C);
           }
         }
       }
@@ -1701,7 +1696,7 @@ public:
     // force a copy construct call here so that, if the vector is resized, the
     // pass-by-reference parameter isn't invalidated before it's copied.
     LocalDefinitions.emplace_back(
-        llvm::DenseSet<const Decl *>(LocalDefinitions.back()));
+        llvm::DenseSet<ACCDataVar>(LocalDefinitions.back()));
 
     // Record variables privatized by this directive as local definitions so
     // that they are skipped while computing gang reductions implied by
@@ -1709,12 +1704,8 @@ public:
     for (ACCClause *C : D->clauses()) {
       if (!C)
         continue;
-      for (const Expr *VR : getPrivateVarsFromClause(C)) {
-        const DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
-        const VarDecl *VD =
-            cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
-        LocalDefinitions.back().insert(VD);
-      }
+      for (Expr *E : getPrivateVarsFromClause(C))
+        LocalDefinitions.back().insert(ACCDataVar(E));
     }
 
     // Recurse to children.
@@ -1746,14 +1737,14 @@ public:
 class NestedReductionChecker : public StmtVisitor<NestedReductionChecker> {
   struct ReductionVar {
     ACCReductionClause *ReductionClause;
-    DeclRefExpr *RE;
+    Expr *RE;
     ReductionVar() : ReductionClause(nullptr), RE(nullptr) {}
-    ReductionVar(ACCReductionClause *C, DeclRefExpr *RE)
+    ReductionVar(ACCReductionClause *C, Expr *RE)
         : ReductionClause(C), RE(RE) {}
   };
   typedef StmtVisitor<NestedReductionChecker> BaseVisitor;
   DirStackTy &DirStack;
-  llvm::SmallVector<llvm::DenseMap<VarDecl *, ReductionVar>, 8> Privates;
+  llvm::SmallVector<llvm::DenseMap<ACCDataVar, ReductionVar>, 8> Privates;
   bool Error = false;
 
 public:
@@ -1762,7 +1753,7 @@ public:
     // copy construct call here so that, if the vector is resized, the
     // pass-by-reference parameter isn't invalidated before it's copied.
     Privates.emplace_back(
-        llvm::DenseMap<VarDecl *, ReductionVar>(Privates.back()));
+        llvm::DenseMap<ACCDataVar, ReductionVar>(Privates.back()));
 
     // Record variables privatized by this directive, and complain for any
     // reduction conflicting with its immediately enclosing reduction.
@@ -1773,9 +1764,8 @@ public:
         ACCReductionClause *ReductionClause = cast<ACCReductionClause>(C);
         for (Expr *VR : ReductionClause->varlists()) {
           // Try to record this variable's reduction.
-          DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
-          VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
-          auto Insert = Privates.back().try_emplace(VD, ReductionClause, DRE);
+          ACCDataVar Var(VR);
+          auto Insert = Privates.back().try_emplace(Var, ReductionClause, VR);
 
           // If successfully recorded it because there was no enclosing clause
           // privatizing it, then there's nothing to compare against.
@@ -1789,12 +1779,12 @@ public:
               ReductionClause->getNameInfo().getName() !=
               EnclosingPrivate.ReductionClause->getNameInfo().getName()) {
             Error = true;
-            DirStack.SemaRef.Diag(DRE->getExprLoc(),
+            DirStack.SemaRef.Diag(VR->getExprLoc(),
                                   diag::err_acc_conflicting_reduction)
                 << false
                 << ACCReductionClause::printReductionOperatorToString(
                        ReductionClause->getNameInfo())
-                << NameForDiag(DirStack.SemaRef, VD);
+                << NameForDiag(DirStack.SemaRef, Var);
             DirStack.SemaRef.Diag(EnclosingPrivate.RE->getExprLoc(),
                                   diag::note_acc_enclosing_reduction)
                 << ACCReductionClause::printReductionOperatorToString(
@@ -1811,14 +1801,13 @@ public:
           // is compared against its immediately enclosing reduction rather
           // than the outermost reduction.  The diagnostics seem more intuitive
           // that way.
-          EnclosingPrivate = ReductionVar(ReductionClause, DRE);
+          EnclosingPrivate = ReductionVar(ReductionClause, VR);
         }
       } else {
         // Record variables privatized by clauses other than reductions.
-        for (Expr *VR : getPrivateVarsFromClause(C)) {
-          DeclRefExpr *DRE = cast<DeclRefExpr>(VR);
-          VarDecl *VD = cast<VarDecl>(DRE->getDecl())->getCanonicalDecl();
-          Privates.back()[VD] = ReductionVar();
+        for (Expr *E : getPrivateVarsFromClause(C)) {
+          ACCDataVar Var(E);
+          Privates.back()[Var] = ReductionVar();
         }
       }
     }
@@ -2022,22 +2011,20 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
 
     // Iterate acc loop control variables.
     llvm::SmallVector<Expr *, 8> PrePrivate;
-    for (std::pair<Expr *, VarDecl *> LCV :
-         DirStack.getLoopControlVariables()) {
-      Expr *RefExpr = LCV.first;
-      VarDecl *VD = LCV.second;
-      const DirStackTy::DAVarData &DVar = DirStack.getTopDA(VD);
+    for (Expr *RefExpr : DirStack.getLoopControlVariables()) {
+      ACCDataVar Var(RefExpr);
+      const DirStackTy::DAVarData &VarData = DirStack.getTopDA(Var);
 
       // Complain for any reduction.
       //
       // This restriction is not clearly specified in OpenACC 3.0.  See the
       // section "Loop Control Variables" in the Clang OpenACC design document.
-      if (DVar.DSAKind == ACC_DSA_reduction) {
-        Diag(DVar.DSARefExpr->getEndLoc(),
+      if (VarData.DSAKind == ACC_DSA_reduction) {
+        Diag(VarData.DSARefExpr->getEndLoc(),
              diag::err_acc_reduction_on_loop_control_var)
-            << NameForDiag(*this, VD) << DVar.DSARefExpr->getSourceRange();
+            << NameForDiag(*this, Var) << VarData.DSARefExpr->getSourceRange();
         Diag(RefExpr->getExprLoc(), diag::note_acc_loop_control_var)
-            << NameForDiag(*this, VD) << RefExpr->getSourceRange();
+            << NameForDiag(*this, Var) << RefExpr->getSourceRange();
         ErrorFound = true;
         continue;
       }
@@ -2055,7 +2042,7 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
       // skip any variable for which there's already an explicit private
       // clause.
       if (!DirStack.getLoopPartitioning().hasSeqExplicit() &&
-          DVar.DSAKind != ACC_DSA_private) {
+          VarData.DSAKind != ACC_DSA_private) {
         // OpenACC 3.0 sec. 2.6 "Data Environment" L1023-1024:
         //   "Variables with predetermined data attributes may not appear in a
         //   data clause that conflicts with that data attribute."
@@ -2063,7 +2050,7 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
         // conflict except with a DA on the parent effective directive in a
         // combined directive.  See the section "Basic Data Attributes" in the
         // Clang OpenACC design document for further discussion.
-        assert(DVar.DSAKind == ACC_DSA_unknown &&
+        assert(VarData.DSAKind == ACC_DSA_unknown &&
                "expected no explicit attribute when predetermined attribute");
         PrePrivate.push_back(RefExpr);
       }
@@ -2127,9 +2114,8 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
     }
     for (auto I : ImplicitDAs.getImpliers(ACC_DSA_reduction)) {
       ACCClause *Implicit = ActOnOpenACCReductionClause(
-          I.DRE, ACC_IMPLICIT, SourceLocation(), SourceLocation(),
-          SourceLocation(), SourceLocation(),
-          I.ReductionClause->getNameInfo());
+          I.E, ACC_IMPLICIT, SourceLocation(), SourceLocation(),
+          SourceLocation(), SourceLocation(), I.ReductionClause->getNameInfo());
       // Implicit reductions are copied from explicit reductions, which are
       // validated already.
       assert(Implicit && "expected successful implicit reduction");
@@ -2168,8 +2154,10 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
     break;
   case ACCD_loop: {
     SmallVector<VarDecl *, 5> LCVVars;
-    for (std::pair<Expr *, VarDecl *> LCV : DirStack.getLoopControlVariables())
-      LCVVars.push_back(LCV.second);
+    for (Expr *RefExpr : DirStack.getLoopControlVariables()) {
+      ACCDataVar Var(RefExpr);
+      LCVVars.push_back(Var.getReferencedDecl());
+    }
     Res = ActOnOpenACCLoopDirective(ComputedClauses, AStmt, LCVVars);
     break;
   }
@@ -2351,12 +2339,9 @@ void Sema::ActOnOpenACCLoopInitialization(SourceLocation ForLoc, Stmt *Init) {
       isOpenACCLoopDirective(DirStack.getEffectiveDirective())) {
     if (Expr *E = dyn_cast<Expr>(Init))
       Init = E->IgnoreParens();
-    if (auto *BO = dyn_cast<BinaryOperator>(Init)) {
-      if (BO->getOpcode() == BO_Assign) {
-        auto *LHS = BO->getLHS()->IgnoreParens();
-        if (auto *DRE = dyn_cast<DeclRefExpr>(LHS))
-          DirStack.addLoopControlVariable(DRE);
-      }
+    if (BinaryOperator *BO = dyn_cast<BinaryOperator>(Init)) {
+      if (BO->getOpcode() == BO_Assign)
+        DirStack.addLoopControlVariable(BO->getLHS()->IgnoreParens());
     }
     DirStack.incAssociatedLoopsParsed();
   }
@@ -3423,58 +3408,11 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
   return Res;
 }
 
-static VarDecl *getVarDeclFromVarList(Sema &S, DirStackTy &DirStack,
-                                      OpenACCClauseKind CKind, Expr *&RefExpr,
-                                      bool AllowSubarray = false) {
-  bool HasError = false;
-
-  // If it's a subarray, extract the base variable, and complain about any
-  // subscript (masquerading as a subarray), for which OpenACC 2.7 doesn't
-  // specify a behavior.
-  Expr *RefWithoutSubarray = RefExpr->IgnoreParenImpCasts();
-  if (auto *OASE = dyn_cast_or_null<OMPArraySectionExpr>(RefWithoutSubarray)) {
-    do {
-      if (OASE->getColonLocFirst().isInvalid()) {
-        HasError = true;
-        S.Diag(OASE->getRBracketLoc(), diag::err_acc_subarray_without_colon);
-      }
-      if (!AllowSubarray) {
-        HasError = true;
-        S.Diag(OASE->getExprLoc(), diag::err_acc_unsupported_subarray)
-            << getOpenACCName(DirStack.getRealDirective())
-            << getOpenACCName(CKind) << OASE->getSourceRange();
-      }
-      RefWithoutSubarray = OASE->getBase()->IgnoreParenImpCasts();
-    } while ((OASE = dyn_cast<OMPArraySectionExpr>(RefWithoutSubarray)));
-  }
-
-  // Complain about any subscript, for which OpenACC 2.7 doesn't specify a
-  // behavior.
-  if (auto *ASE = dyn_cast<ArraySubscriptExpr>(RefWithoutSubarray)) {
-    HasError = true;
-    S.Diag(ASE->getRBracketLoc(), diag::err_acc_subarray_without_colon);
-    if (!AllowSubarray) {
-      S.Diag(ASE->getExprLoc(), diag::err_acc_unsupported_subarray)
-          << getOpenACCName(DirStack.getRealDirective())
-          << getOpenACCName(CKind) << ASE->getSourceRange();
-    }
-    RefWithoutSubarray = ASE->getBase()->IgnoreParenImpCasts();
-  }
-
-  // Complain if we didn't find a base variable.
-  auto *DE = dyn_cast<DeclRefExpr>(RefWithoutSubarray);
-  if (!DE || !isa<VarDecl>(DE->getDecl())) {
-    HasError = true;
-    S.Diag(RefWithoutSubarray->getBeginLoc(), diag::err_acc_expected_data_var)
-        << AllowSubarray << RefWithoutSubarray->getSourceRange();
-  }
-
-  // Stop if we found an error.
-  if (HasError)
-    return nullptr;
-
-  // Return the base variable.
-  return cast<VarDecl>(DE->getDecl());
+static ACCDataVar getVarDeclFromVarList(Sema &S, DirStackTy &DirStack,
+                                        OpenACCClauseKind CKind, Expr *&RefExpr,
+                                        bool AllowSubarray) {
+  return ACCDataVar(RefExpr, AllowSubarray, &S, DirStack.getRealDirective(),
+                    CKind);
 }
 
 static bool RequireCompleteTypeACC(
@@ -3494,14 +3432,10 @@ static bool RequireCompleteTypeACC(
 
 ACCClause *Sema::ActOnOpenACCNomapClause(ArrayRef<Expr *> VarList) {
   SmallVector<Expr *, 8> Vars;
-  for (auto &RefExpr : VarList) {
-    assert(RefExpr && "NULL expr in OpenACC implicit nomap clause.");
-    auto *DE = dyn_cast_or_null<DeclRefExpr>(RefExpr->IgnoreParens());
-    assert(DE && "OpenACC implicit nomap clause for non-DeclRefExpr");
-    auto *VD = dyn_cast_or_null<VarDecl>(DE->getDecl());
-    assert(VD && "OpenACC implicit nomap clause for non-VarDecl");
-
-    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
+  for (Expr *RefExpr : VarList) {
+    assert(RefExpr && "unexpected nullptr in OpenACC implicit nomap clause");
+    ACCDataVar Var(RefExpr);
+    if (!OpenACCData->DirStack.addDMA(Var, RefExpr->IgnoreParens(),
                                       ACC_DMA_nomap, ACC_IMPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
     else
@@ -3511,10 +3445,8 @@ ACCClause *Sema::ActOnOpenACCNomapClause(ArrayRef<Expr *> VarList) {
       llvm_unreachable("implicit nomap clause unexpectedly generated for"
                        " variable in conflicting explicit data clause");
   }
-
   if (Vars.empty())
     return nullptr;
-
   return ACCNomapClause::Create(Context, Vars);
 }
 
@@ -3523,27 +3455,26 @@ ACCClause *Sema::ActOnOpenACCPresentClause(
     SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc) {
   DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
-  for (auto &RefExpr : VarList) {
-    assert(RefExpr && "NULL expr in OpenACC present clause.");
-    Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_present,
-                                        SimpleRefExpr, /*AllowSubarray=*/true);
-    if (!VD)
+  for (Expr *RefExpr : VarList) {
+    assert(RefExpr && "unexpected nullptr in OpenACC present clause");
+    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_present,
+                                           RefExpr, /*AllowSubarray=*/true);
+    if (!Var.isValid())
       continue;
 
-    QualType Type = VD->getType();
+    QualType Type = Var.getType();
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a variable
     // in a present clause must have a complete type.  However, without its
     // size, we cannot know if it's fully present.  Besides, it translates to
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_present,
-                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               DirStack.getDirectiveStartLoc(),
                                RefExpr->getExprLoc()))
       continue;
 
-    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
-                                      ACC_DMA_present, Determination))
+    if (!DirStack.addDMA(Var, RefExpr->IgnoreParens(), ACC_DMA_present,
+                         Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -3558,32 +3489,29 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
     OpenACCClauseKind Kind, ArrayRef<Expr *> VarList,
     OpenACCDetermination Determination, SourceLocation StartLoc,
     SourceLocation LParenLoc, SourceLocation EndLoc) {
-  assert(ACCCopyClause::isClauseKind(Kind) &&
-         "expected copy clause or alias");
+  assert(ACCCopyClause::isClauseKind(Kind) && "expected copy clause or alias");
   DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
-
-  for (auto &RefExpr : VarList) {
-    assert(RefExpr && "NULL expr in OpenACC copy clause.");
-    Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
-                                        /*AllowSubarray=*/true);
-    if (!VD)
+  for (Expr *RefExpr : VarList) {
+    assert(RefExpr && "unexpected nullptr in OpenACC copy clause");
+    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, Kind, RefExpr,
+                                           /*AllowSubarray=*/true);
+    if (!Var.isValid())
       continue;
 
-    QualType Type = VD->getType();
+    QualType Type = Var.getType();
 
     // The OpenACC 2.7 spec doesn't say, as far as I know, that a variable
     // in a copy clause must have a complete type.  However, you cannot copy
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, Determination, Kind,
-                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               DirStack.getDirectiveStartLoc(),
                                RefExpr->getExprLoc()))
       continue;
 
-    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(), ACC_DMA_copy,
-                                      Determination))
+    if (!DirStack.addDMA(Var, RefExpr->IgnoreParens(), ACC_DMA_copy,
+                         Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -3602,26 +3530,25 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
   DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
 
-  for (auto &RefExpr : VarList) {
-    assert(RefExpr && "NULL expr in OpenACC copyin clause.");
-    Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
-                                        /*AllowSubarray=*/true);
-    if (!VD)
+  for (Expr *RefExpr : VarList) {
+    assert(RefExpr && "unexpected nullptr in OpenACC copyin clause");
+    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, Kind, RefExpr,
+                                           /*AllowSubarray=*/true);
+    if (!Var.isValid())
       continue;
 
-    QualType Type = VD->getType();
+    QualType Type = Var.getType();
 
     // The OpenACC 2.7 spec doesn't say, as far as I know, that a variable
     // in a copyin clause must have a complete type.  However, you cannot copy
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               DirStack.getDirectiveStartLoc(),
                                RefExpr->getExprLoc()))
       continue;
 
-    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
+    if (!OpenACCData->DirStack.addDMA(Var, RefExpr->IgnoreParens(),
                                       ACC_DMA_copyin, ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
@@ -3640,16 +3567,14 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
          "expected copyout clause or alias");
   DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
-
-  for (auto &RefExpr : VarList) {
-    assert(RefExpr && "NULL expr in OpenACC copyout clause.");
-    Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
-                                        /*AllowSubarray=*/true);
-    if (!VD)
+  for (Expr *RefExpr : VarList) {
+    assert(RefExpr && "unexpected nullptr in OpenACC copyout clause");
+    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, Kind, RefExpr,
+                                           /*AllowSubarray=*/true);
+    if (!Var.isValid())
       continue;
 
-    QualType Type = VD->getType();
+    QualType Type = Var.getType();
 
     // The OpenACC 2.7 spec doesn't say, as far as I know, that a variable
     // in a copyout clause must have a complete type.  However, you cannot copy
@@ -3668,11 +3593,12 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     if (Type.isConstant(Context)) {
       Diag(RefExpr->getExprLoc(), diag::err_acc_const_var_write)
           << getOpenACCName(Kind) << RefExpr->getSourceRange();
-      Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
+      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_const)
+          << NameForDiag(*this, Var);
       continue;
     }
 
-    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
+    if (!OpenACCData->DirStack.addDMA(Var, RefExpr->IgnoreParens(),
                                       ACC_DMA_copyout, ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
@@ -3692,22 +3618,21 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
   DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
 
-  for (auto &RefExpr : VarList) {
-    assert(RefExpr && "NULL expr in OpenACC create clause.");
-    Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
-                                        /*AllowSubarray=*/true);
-    if (!VD)
+  for (Expr *RefExpr : VarList) {
+    assert(RefExpr && "unexpected nullptr in OpenACC create clause");
+    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, Kind, RefExpr,
+                                           /*AllowSubarray=*/true);
+    if (!Var.isValid())
       continue;
 
-    QualType Type = VD->getType();
+    QualType Type = Var.getType();
 
     // The OpenACC 2.7 spec doesn't say, as far as I know, that a variable in a
     // create clause must have a complete type.  However, you cannot allocate
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               DirStack.getDirectiveStartLoc(),
                                RefExpr->getExprLoc()))
       continue;
 
@@ -3717,12 +3642,13 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
     if (Type.isConstant(Context)) {
       Diag(RefExpr->getExprLoc(), diag::err_acc_const_da)
           << getOpenACCName(ACCC_create) << RefExpr->getSourceRange();
-      Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
+      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_const)
+          << NameForDiag(*this, Var);
       continue;
     }
 
-    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
-                                      ACC_DMA_create, ACC_EXPLICIT))
+    if (!DirStack.addDMA(Var, RefExpr->IgnoreParens(), ACC_DMA_create,
+                         ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -3738,15 +3664,14 @@ ACCClause *Sema::ActOnOpenACCNoCreateClause(
     SourceLocation EndLoc) {
   DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
-  for (auto &RefExpr : VarList) {
-    assert(RefExpr && "NULL expr in OpenACC no_create clause.");
-    Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_no_create,
-                                        SimpleRefExpr, /*AllowSubarray=*/true);
-    if (!VD)
+  for (Expr *RefExpr : VarList) {
+    assert(RefExpr && "unexpected nullptr in OpenACC no_create clause");
+    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_no_create,
+                                           RefExpr, /*AllowSubarray=*/true);
+    if (!Var.isValid())
       continue;
 
-    QualType Type = VD->getType();
+    QualType Type = Var.getType();
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a variable
     // in a no_create clause must have a complete type.  However, without its
@@ -3757,7 +3682,7 @@ ACCClause *Sema::ActOnOpenACCNoCreateClause(
                                RefExpr->getExprLoc()))
       continue;
 
-    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
+    if (!OpenACCData->DirStack.addDMA(Var, RefExpr->IgnoreParens(),
                                       ACC_DMA_no_create, ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
@@ -3774,26 +3699,25 @@ ACCClause *Sema::ActOnOpenACCDeleteClause(ArrayRef<Expr *> VarList,
                                           SourceLocation EndLoc) {
   DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
-  for (auto &RefExpr : VarList) {
-    assert(RefExpr && "NULL expr in OpenACC delete clause.");
-    Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_delete,
-                                        SimpleRefExpr, /*AllowSubarray=*/true);
-    if (!VD)
+  for (Expr *RefExpr : VarList) {
+    assert(RefExpr && "unexpected nullptr in OpenACC delete clause");
+    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_delete,
+                                           RefExpr, /*AllowSubarray=*/true);
+    if (!Var.isValid())
       continue;
 
-    QualType Type = VD->getType();
+    QualType Type = Var.getType();
 
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a variable
     // in a delete clause must have a complete type.  However, without its
     // size, we cannot know if it's fully present.  Besides, it translates to
     // an OpenMP map clause, which does require a complete type.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_delete,
-                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               DirStack.getDirectiveStartLoc(),
                                RefExpr->getExprLoc()))
       continue;
 
-    if (!OpenACCData->DirStack.addDMA(VD, RefExpr->IgnoreParens(),
+    if (!OpenACCData->DirStack.addDMA(Var, RefExpr->IgnoreParens(),
                                       ACC_DMA_delete, ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
@@ -3805,16 +3729,17 @@ ACCClause *Sema::ActOnOpenACCDeleteClause(ArrayRef<Expr *> VarList,
 }
 
 ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
-  for (auto &RefExpr : VarList) {
-    assert(RefExpr && "NULL expr in OpenACC implicit shared clause.");
-    auto *DE = dyn_cast_or_null<DeclRefExpr>(RefExpr->IgnoreParens());
-    assert(DE && "OpenACC implicit shared clause for non-DeclRefExpr");
-    auto *VD = dyn_cast_or_null<VarDecl>(DE->getDecl());
-    assert(VD && "OpenACC implicit shared clause for non-VarDecl");
-
-    if (!OpenACCData->DirStack.addDSA(VD, RefExpr->IgnoreParens(),
-                                      ACC_DSA_shared, ACC_IMPLICIT))
+  for (Expr *RefExpr : VarList) {
+    assert(RefExpr && "unexpected nullptr in OpenACC implicit shared clause");
+    // On compute constructs, the implicit shared clause is usually paired with
+    // DMAs, which permit subarrays.  We make it as flexible as a DMA.
+    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_shared,
+                                           RefExpr, /*AllowSubarray=*/true);
+    assert(Var.isValid() && "expected valid Expr for implicit shared clause");
+    if (!DirStack.addDSA(Var, RefExpr->IgnoreParens(), ACC_DSA_shared,
+                         ACC_IMPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
     else
       // Assert that the variable does not appear in an explicit data clause on
@@ -3823,10 +3748,8 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
       llvm_unreachable("implicit shared clause unexpectedly generated for"
                        " variable in conflicting explicit data clause");
   }
-
   if (Vars.empty())
     return nullptr;
-
   return ACCSharedClause::Create(Context, Vars);
 }
 
@@ -3835,21 +3758,20 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
     SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc) {
   DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
-  for (auto &RefExpr : VarList) {
-    assert(RefExpr && "NULL expr in OpenACC private clause.");
-    Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD =
-        getVarDeclFromVarList(*this, DirStack, ACCC_private, SimpleRefExpr);
-    if (!VD)
+  for (Expr *RefExpr : VarList) {
+    assert(RefExpr && "unexpected nullptr in OpenACC private clause");
+    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_private,
+                                           RefExpr, /*AllowSubarray=*/false);
+    if (!Var.isValid())
       continue;
 
-    QualType Type = VD->getType();
+    QualType Type = Var.getType();
 
     // The OpenACC 2.5 spec doesn't say, as far as I know, that a private
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_private,
-                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               DirStack.getDirectiveStartLoc(),
                                RefExpr->getExprLoc()))
       continue;
 
@@ -3860,14 +3782,15 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
     if (Type.isConstant(Context)) {
       Diag(RefExpr->getExprLoc(), diag::err_acc_const_da)
           << getOpenACCName(ACCC_private) << RefExpr->getSourceRange();
-      Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
+      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_const)
+          << NameForDiag(*this, Var);
       // Implicit private is for loop control variables, which cannot be const.
       assert(Determination == ACC_EXPLICIT &&
              "unexpected const type for computed private");
       continue;
     }
 
-    if (!OpenACCData->DirStack.addDSA(VD, RefExpr->IgnoreParens(),
+    if (!OpenACCData->DirStack.addDSA(Var, RefExpr->IgnoreParens(),
                                       ACC_DSA_private, Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
@@ -3884,32 +3807,29 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(
     SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc) {
   DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
-  for (auto &RefExpr : VarList) {
-    assert(RefExpr && "NULL expr in OpenACC firstprivate clause.");
-    Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_firstprivate,
-                                        SimpleRefExpr);
-    if (!VD)
+  for (Expr *RefExpr : VarList) {
+    assert(RefExpr && "unexpected nullptr in OpenACC firstprivate clause");
+    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_firstprivate,
+                                           RefExpr, /*AllowSubarray=*/false);
+    if (!Var.isValid())
       continue;
 
-    QualType Type = VD->getType();
+    QualType Type = Var.getType();
 
     // The OpenACC 2.5 spec doesn't say, as far as I know, that a private
     // variable must have a complete type.  However, you cannot copy data if it
     // doesn't have a size, and OpenMP does have this restriction.
     if (RequireCompleteTypeACC(*this, Type, Determination, ACCC_firstprivate,
-                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               DirStack.getDirectiveStartLoc(),
                                RefExpr->getExprLoc()))
       continue;
 
-    if (!OpenACCData->DirStack.addDSA(VD, RefExpr->IgnoreParens(),
+    if (!OpenACCData->DirStack.addDSA(Var, RefExpr->IgnoreParens(),
                                       ACC_DSA_firstprivate, Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
-
   if (Vars.empty())
     return nullptr;
-
   return ACCFirstprivateClause::Create(Context, Determination, StartLoc,
                                        LParenLoc, EndLoc, Vars);
 }
@@ -4037,16 +3957,15 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
   }
 
   for (Expr *RefExpr : VarList) {
-    assert(RefExpr && "nullptr expr in OpenACC reduction clause.");
+    assert(RefExpr && "unexpected nullptr in OpenACC reduction clause");
     SourceLocation ELoc = RefExpr->getExprLoc();
     SourceRange ERange = RefExpr->getSourceRange();
-    Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD =
-        getVarDeclFromVarList(*this, DirStack, ACCC_reduction, SimpleRefExpr);
-    if (!VD)
+    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_reduction,
+                                           RefExpr, /*AllowSubarray=*/false);
+    if (!Var.isValid())
       continue;
 
-    QualType Type = VD->getType();
+    QualType Type = Var.getType();
 
     // The OpenACC 2.6 spec doesn't say, as far as I know, that a private
     // variable must have a complete type.  However, you cannot copy data if
@@ -4061,7 +3980,8 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // restriction.
     if (Type.isConstant(Context)) {
       Diag(ELoc, diag::err_acc_const_reduction_list_item) << ERange;
-      Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
+      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_const)
+          << NameForDiag(*this, Var);
       // Implicit reductions are copied from explicit reductions, which are
       // validated already.
       assert(Determination == ACC_EXPLICIT &&
@@ -4093,8 +4013,8 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     if (DiagN != diag::NUM_BUILTIN_SEMA_DIAGNOSTICS) {
       Diag(ELoc, DiagN)
           << ACCReductionClause::printReductionOperatorToString(ReductionId);
-      Diag(VD->getLocation(), diag::note_acc_var_declared)
-          << NameForDiag(*this, VD);
+      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_var_declared)
+          << NameForDiag(*this, Var);
       continue;
     }
 
@@ -4103,13 +4023,13 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // must be private."
     if (DirStack.getEffectiveDirective() == ACCD_loop &&
         !isOpenACCComputeDirective(DirStack.isInComputeRegion()) &&
-        !DirStack.hasPrivatizingDSAOnAncestorOrphanedLoop(VD) &&
-        !VD->hasLocalStorage())
+        !DirStack.hasPrivatizingDSAOnAncestorOrphanedLoop(Var) &&
+        !Var.getReferencedDecl()->hasLocalStorage())
       Diag(ELoc, diag::err_acc_orphaned_loop_reduction_var_not_gang_private)
-          << NameForDiag(*this, VD);
+          << NameForDiag(*this, Var);
 
     // Record reduction item.
-    if (!DirStack.addDSA(VD, RefExpr->IgnoreParens(), ACC_DSA_reduction,
+    if (!DirStack.addDSA(Var, RefExpr->IgnoreParens(), ACC_DSA_reduction,
                          Determination, ReductionId))
       Vars.push_back(RefExpr);
   }
@@ -4141,21 +4061,20 @@ ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
                                         SourceLocation EndLoc) {
   DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
-  for (auto &RefExpr : VarList) {
-    assert(RefExpr && "NULL expr in OpenACC self clause.");
-    Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, Kind, SimpleRefExpr,
-                                        /*AllowSubarray=*/true);
-    if (!VD)
+  for (Expr *RefExpr : VarList) {
+    assert(RefExpr && "unexpected nullptr in OpenACC self clause");
+    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, Kind, RefExpr,
+                                           /*AllowSubarray=*/true);
+    if (!Var.isValid())
       continue;
 
-    QualType Type = VD->getType();
+    QualType Type = Var.getType();
 
     // The OpenACC 2.7 spec doesn't say, as far as I know, that a variable
     // in a self clause must have a complete type.  However, it could not
     // have been allocated on the device copy if it didn't have a size.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
-                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               DirStack.getDirectiveStartLoc(),
                                RefExpr->getExprLoc()))
       continue;
 
@@ -4165,11 +4084,12 @@ ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
     if (Type.isConstant(Context)) {
       Diag(RefExpr->getExprLoc(), diag::err_acc_const_var_write)
           << getOpenACCName(Kind) << RefExpr->getSourceRange();
-      Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
+      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_const)
+          << NameForDiag(*this, Var);
       continue;
     }
 
-    if (!OpenACCData->DirStack.addUpdateVar(VD, RefExpr->IgnoreParens()))
+    if (!DirStack.addUpdateVar(Var, RefExpr->IgnoreParens()))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -4186,21 +4106,20 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
                                           SourceLocation EndLoc) {
   DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
-  for (auto &RefExpr : VarList) {
-    assert(RefExpr && "NULL expr in OpenACC device clause.");
-    Expr *SimpleRefExpr = RefExpr;
-    VarDecl *VD = getVarDeclFromVarList(*this, DirStack, ACCC_device,
-                                        SimpleRefExpr, /*AllowSubarray=*/true);
-    if (!VD)
+  for (Expr *RefExpr : VarList) {
+    assert(RefExpr && "unexpected nullptr in OpenACC device clause");
+    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_device,
+                                           RefExpr, /*AllowSubarray=*/true);
+    if (!Var.isValid())
       continue;
 
-    QualType Type = VD->getType();
+    QualType Type = Var.getType();
 
     // The OpenACC 2.7 spec doesn't say, as far as I know, that a variable
     // in a device clause must have a complete type.  However, it could not
     // have been allocated on the device copy if it didn't have a size.
     if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, ACCC_device,
-                               OpenACCData->DirStack.getDirectiveStartLoc(),
+                               DirStack.getDirectiveStartLoc(),
                                RefExpr->getExprLoc()))
       continue;
 
@@ -4210,11 +4129,12 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
     if (Type.isConstant(Context)) {
       Diag(RefExpr->getExprLoc(), diag::err_acc_const_var_write)
           << getOpenACCName(ACCC_device) << RefExpr->getSourceRange();
-      Diag(VD->getLocation(), diag::note_acc_const) << NameForDiag(*this, VD);
+      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_const)
+          << NameForDiag(*this, Var);
       continue;
     }
 
-    if (!OpenACCData->DirStack.addUpdateVar(VD, RefExpr->IgnoreParens()))
+    if (!DirStack.addUpdateVar(Var, RefExpr->IgnoreParens()))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 

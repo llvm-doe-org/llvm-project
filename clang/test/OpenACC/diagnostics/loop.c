@@ -37,6 +37,7 @@
 // RUN: %{check}( -DERR=ERR_ACC -DDATA=present_or_create  %)
 // RUN: %{check}( -DERR=ERR_ACC -DDATA=no_create          %)
 // RUN: %{check}( -DERR=ERR_OMP_INIT                      %)
+// RUN: %{check}( -DERR=ERR_OMP_INIT_ASSIGN               %)
 // RUN: %{check}( -DERR=ERR_OMP_COND                      %)
 // RUN: %{check}( -DERR=ERR_OMP_INC                       %)
 // RUN: %{check}( -DERR=ERR_OMP_INC0                      %)
@@ -47,12 +48,13 @@
 #include <limits.h>
 #include <stdint.h>
 
-#define ERR_ACC       1
-#define ERR_OMP_INIT  2
-#define ERR_OMP_COND  3
-#define ERR_OMP_INC   4
-#define ERR_OMP_INC0  5
-#define ERR_OMP_VAR   6
+#define ERR_ACC             1
+#define ERR_OMP_INIT        2
+#define ERR_OMP_INIT_ASSIGN 3
+#define ERR_OMP_COND        4
+#define ERR_OMP_INC         5
+#define ERR_OMP_INC0        6
+#define ERR_OMP_VAR         7
 
 #define PARENT_ORPHANED 1
 #define PARENT_SEPARATE 2
@@ -3875,6 +3877,27 @@ void fn(int k) {
       ;
     #pragma acc CMB_PAR loop independent gang
     for (int i; i < 5; ++i) // expected-error {{initialization clause of OpenMP for loop is not in canonical form ('var = init' or 'T var = init')}}
+      ;
+  }
+}
+
+#elif ERR == ERR_OMP_INIT_ASSIGN
+
+#if PARENT == PARENT_ORPHANED
+#pragma acc routine gang
+#endif
+void fn(int k) {
+#if PARENT == PARENT_SEPARATE
+  #pragma acc parallel
+#endif
+  {
+    // This case is unique because Clang's OpenACC analysis must not choke on
+    // the invalid loop control variable expression "*p" (i.e., it's not the
+    // expected DeclRefExpr) before the OpenMP analysis reports the invalid loop
+    // form.
+    int *p;
+    #pragma acc CMB_PAR loop independent gang
+    for (*p = 0; *p < 5; ++*p) // expected-error {{initialization clause of OpenMP for loop is not in canonical form ('var = init' or 'T var = init')}}
       ;
   }
 }
