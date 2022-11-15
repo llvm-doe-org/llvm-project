@@ -3408,11 +3408,16 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
   return Res;
 }
 
-static ACCDataVar getVarDeclFromVarList(Sema &S, DirStackTy &DirStack,
-                                        OpenACCClauseKind CKind, Expr *&RefExpr,
-                                        bool AllowSubarray) {
-  return ACCDataVar(RefExpr, AllowSubarray, &S, DirStack.getRealDirective(),
-                    CKind);
+static ACCDataVar getVarFromDMAVarList(Sema &S, DirStackTy &DirStack,
+                                       OpenACCClauseKind CKind, Expr *RefExpr) {
+  return ACCDataVar(RefExpr, /*AllowSubarray=*/true, &S,
+                    DirStack.getRealDirective(), CKind);
+}
+
+static ACCDataVar getVarFromDSAVarList(Sema &S, DirStackTy &DirStack,
+                                       OpenACCClauseKind CKind, Expr *RefExpr) {
+  return ACCDataVar(RefExpr, /*AllowSubarray=*/false, &S,
+                    DirStack.getRealDirective(), CKind);
 }
 
 static bool RequireCompleteTypeACC(
@@ -3457,8 +3462,8 @@ ACCClause *Sema::ActOnOpenACCPresentClause(
   SmallVector<Expr *, 8> Vars;
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC present clause");
-    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_present,
-                                           RefExpr, /*AllowSubarray=*/true);
+    ACCDataVar Var =
+        getVarFromDMAVarList(*this, DirStack, ACCC_present, RefExpr);
     if (!Var.isValid())
       continue;
 
@@ -3494,8 +3499,7 @@ ACCClause *Sema::ActOnOpenACCCopyClause(
   SmallVector<Expr *, 8> Vars;
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC copy clause");
-    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, Kind, RefExpr,
-                                           /*AllowSubarray=*/true);
+    ACCDataVar Var = getVarFromDMAVarList(*this, DirStack, Kind, RefExpr);
     if (!Var.isValid())
       continue;
 
@@ -3532,8 +3536,7 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
 
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC copyin clause");
-    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, Kind, RefExpr,
-                                           /*AllowSubarray=*/true);
+    ACCDataVar Var = getVarFromDMAVarList(*this, DirStack, Kind, RefExpr);
     if (!Var.isValid())
       continue;
 
@@ -3548,8 +3551,8 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
                                RefExpr->getExprLoc()))
       continue;
 
-    if (!OpenACCData->DirStack.addDMA(Var, RefExpr->IgnoreParens(),
-                                      ACC_DMA_copyin, ACC_EXPLICIT))
+    if (!DirStack.addDMA(Var, RefExpr->IgnoreParens(), ACC_DMA_copyin,
+                         ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -3569,8 +3572,7 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
   SmallVector<Expr *, 8> Vars;
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC copyout clause");
-    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, Kind, RefExpr,
-                                           /*AllowSubarray=*/true);
+    ACCDataVar Var = getVarFromDMAVarList(*this, DirStack, Kind, RefExpr);
     if (!Var.isValid())
       continue;
 
@@ -3598,8 +3600,8 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
       continue;
     }
 
-    if (!OpenACCData->DirStack.addDMA(Var, RefExpr->IgnoreParens(),
-                                      ACC_DMA_copyout, ACC_EXPLICIT))
+    if (!DirStack.addDMA(Var, RefExpr->IgnoreParens(), ACC_DMA_copyout,
+                         ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -3620,8 +3622,7 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
 
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC create clause");
-    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, Kind, RefExpr,
-                                           /*AllowSubarray=*/true);
+    ACCDataVar Var = getVarFromDMAVarList(*this, DirStack, Kind, RefExpr);
     if (!Var.isValid())
       continue;
 
@@ -3666,8 +3667,8 @@ ACCClause *Sema::ActOnOpenACCNoCreateClause(
   SmallVector<Expr *, 8> Vars;
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC no_create clause");
-    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_no_create,
-                                           RefExpr, /*AllowSubarray=*/true);
+    ACCDataVar Var =
+        getVarFromDMAVarList(*this, DirStack, ACCC_no_create, RefExpr);
     if (!Var.isValid())
       continue;
 
@@ -3682,8 +3683,8 @@ ACCClause *Sema::ActOnOpenACCNoCreateClause(
                                RefExpr->getExprLoc()))
       continue;
 
-    if (!OpenACCData->DirStack.addDMA(Var, RefExpr->IgnoreParens(),
-                                      ACC_DMA_no_create, ACC_EXPLICIT))
+    if (!DirStack.addDMA(Var, RefExpr->IgnoreParens(), ACC_DMA_no_create,
+                         ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -3701,8 +3702,8 @@ ACCClause *Sema::ActOnOpenACCDeleteClause(ArrayRef<Expr *> VarList,
   SmallVector<Expr *, 8> Vars;
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC delete clause");
-    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_delete,
-                                           RefExpr, /*AllowSubarray=*/true);
+    ACCDataVar Var =
+        getVarFromDMAVarList(*this, DirStack, ACCC_delete, RefExpr);
     if (!Var.isValid())
       continue;
 
@@ -3717,8 +3718,8 @@ ACCClause *Sema::ActOnOpenACCDeleteClause(ArrayRef<Expr *> VarList,
                                RefExpr->getExprLoc()))
       continue;
 
-    if (!OpenACCData->DirStack.addDMA(Var, RefExpr->IgnoreParens(),
-                                      ACC_DMA_delete, ACC_EXPLICIT))
+    if (!DirStack.addDMA(Var, RefExpr->IgnoreParens(), ACC_DMA_delete,
+                         ACC_EXPLICIT))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -3735,8 +3736,8 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC implicit shared clause");
     // On compute constructs, the implicit shared clause is usually paired with
     // DMAs, which permit subarrays.  We make it as flexible as a DMA.
-    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_shared,
-                                           RefExpr, /*AllowSubarray=*/true);
+    ACCDataVar Var =
+        getVarFromDMAVarList(*this, DirStack, ACCC_shared, RefExpr);
     assert(Var.isValid() && "expected valid Expr for implicit shared clause");
     if (!DirStack.addDSA(Var, RefExpr->IgnoreParens(), ACC_DSA_shared,
                          ACC_IMPLICIT))
@@ -3760,8 +3761,8 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
   SmallVector<Expr *, 8> Vars;
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC private clause");
-    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_private,
-                                           RefExpr, /*AllowSubarray=*/false);
+    ACCDataVar Var =
+        getVarFromDSAVarList(*this, DirStack, ACCC_private, RefExpr);
     if (!Var.isValid())
       continue;
 
@@ -3790,8 +3791,8 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
       continue;
     }
 
-    if (!OpenACCData->DirStack.addDSA(Var, RefExpr->IgnoreParens(),
-                                      ACC_DSA_private, Determination))
+    if (!DirStack.addDSA(Var, RefExpr->IgnoreParens(), ACC_DSA_private,
+                         Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
 
@@ -3809,8 +3810,8 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(
   SmallVector<Expr *, 8> Vars;
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC firstprivate clause");
-    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_firstprivate,
-                                           RefExpr, /*AllowSubarray=*/false);
+    ACCDataVar Var =
+        getVarFromDSAVarList(*this, DirStack, ACCC_firstprivate, RefExpr);
     if (!Var.isValid())
       continue;
 
@@ -3824,8 +3825,8 @@ ACCClause *Sema::ActOnOpenACCFirstprivateClause(
                                RefExpr->getExprLoc()))
       continue;
 
-    if (!OpenACCData->DirStack.addDSA(Var, RefExpr->IgnoreParens(),
-                                      ACC_DSA_firstprivate, Determination))
+    if (!DirStack.addDSA(Var, RefExpr->IgnoreParens(), ACC_DSA_firstprivate,
+                         Determination))
       Vars.push_back(RefExpr->IgnoreParens());
   }
   if (Vars.empty())
@@ -3960,8 +3961,8 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     assert(RefExpr && "unexpected nullptr in OpenACC reduction clause");
     SourceLocation ELoc = RefExpr->getExprLoc();
     SourceRange ERange = RefExpr->getSourceRange();
-    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_reduction,
-                                           RefExpr, /*AllowSubarray=*/false);
+    ACCDataVar Var =
+        getVarFromDSAVarList(*this, DirStack, ACCC_reduction, RefExpr);
     if (!Var.isValid())
       continue;
 
@@ -4063,8 +4064,7 @@ ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
   SmallVector<Expr *, 8> Vars;
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC self clause");
-    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, Kind, RefExpr,
-                                           /*AllowSubarray=*/true);
+    ACCDataVar Var = getVarFromDMAVarList(*this, DirStack, Kind, RefExpr);
     if (!Var.isValid())
       continue;
 
@@ -4108,8 +4108,8 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
   SmallVector<Expr *, 8> Vars;
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC device clause");
-    ACCDataVar Var = getVarDeclFromVarList(*this, DirStack, ACCC_device,
-                                           RefExpr, /*AllowSubarray=*/true);
+    ACCDataVar Var =
+        getVarFromDMAVarList(*this, DirStack, ACCC_device, RefExpr);
     if (!Var.isValid())
       continue;
 
