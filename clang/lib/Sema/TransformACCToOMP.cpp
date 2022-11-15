@@ -231,14 +231,14 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     return false;
   }
 
-  template <typename Derived>
+  template <typename Derived, typename VarFilterType>
   bool transformACCVarList(ACCDirectiveStmt *D, ACCVarListClause<Derived> *C,
-                           const llvm::DenseSet<ACCDataVar> &SkipVars,
+                           VarFilterType VarFilter,
                            llvm::SmallVector<Expr *, 16> &Vars) {
     Vars.reserve(C->varlist_size());
     return iterateACCVarList(
-        C, [&SkipVars, &Vars, this](Expr *RefExpr, ACCDataVar Var) {
-          if (SkipVars.count(Var))
+        C, [&VarFilter, &Vars, this](Expr *RefExpr, const ACCDataVar &Var) {
+          if (!VarFilter(Var))
             return false;
           ExprResult EVar = getDerived().TransformExpr(RefExpr);
           if (EVar.isInvalid())
@@ -248,15 +248,14 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
         });
   }
 
-  template <typename Derived, typename RebuilderType>
+  template <typename Derived, typename VarFilterType, typename RebuilderType>
   OMPClauseResult
   transformACCVarListClause(ACCDirectiveStmt *D, ACCVarListClause<Derived> *C,
-                            OpenMPClauseKind TCKind,
-                            const llvm::DenseSet<ACCDataVar> &SkipVars,
+                            OpenMPClauseKind TCKind, VarFilterType VarFilter,
                             RebuilderType Rebuilder) {
     OpenMPStartEndClauseRAII ClauseRAII(getSema(), TCKind);
     llvm::SmallVector<Expr *, 16> Vars;
-    if (transformACCVarList(D, C, SkipVars, Vars))
+    if (transformACCVarList(D, C, VarFilter, Vars))
       return OMPClauseError();
     if (Vars.empty())
       return OMPClauseEmpty();
@@ -268,8 +267,8 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   OMPClauseResult
   transformACCVarListClause(ACCDirectiveStmt *D, ACCVarListClause<Derived> *C,
                             OpenMPClauseKind TCKind, RebuilderType Rebuilder) {
-    return transformACCVarListClause(D, C, TCKind, llvm::DenseSet<ACCDataVar>(),
-                                     Rebuilder);
+    return transformACCVarListClause(
+        D, C, TCKind, [](const ACCDataVar &) { return true; }, Rebuilder);
   }
 
   class OMPVarListClauseRebuilder {
@@ -934,27 +933,25 @@ public:
       NoCreateOMPNoAlloc = false;
       break;
     }
-    llvm::DenseSet<ACCDataVar> SkipVars;
-    iterateACCVarList(C, [&](Expr *RefExpr, ACCDataVar Var) {
-      const DAVarData &VarDAs = DirStack.back().DAMap[Var];
-      assert(VarDAs.DMAKind == ACC_DMA_nomap &&
-             "expected nomap clauses to record ACC_DMA_nomap");
-      if (VarDAs.DSAKind == ACC_DSA_shared && DirStack.size() > 1 &&
-          (DirStack.rbegin() + 1)->DAMap[Var].VisibleDMAKind ==
-              ACC_DMA_no_create &&
-          NoCreateOMPNoAlloc) {
-        getSema().Diag(D->getEndLoc(),
-                       diag::warn_acc_omp_map_ompx_no_alloc_from_visible)
-            << getOpenACCName(C->getClauseKind());
-        return false;
-      }
-      SkipVars.insert(Var);
-      if (VarDAs.DSAKind == ACC_DSA_shared && Var.getType()->isScalarType())
-        DirStack.back().NeedsDefaultmapForScalars = true;
-      return false;
-    });
     return transformACCVarListClause<ACCNomapClause>(
-        D, C, OMPC_map, SkipVars,
+        D, C, OMPC_map,
+        [&](const ACCDataVar &Var) {
+          const DAVarData &VarDAs = DirStack.back().DAMap[Var];
+          assert(VarDAs.DMAKind == ACC_DMA_nomap &&
+                 "expected nomap clauses to record ACC_DMA_nomap");
+          if (VarDAs.DSAKind == ACC_DSA_shared && DirStack.size() > 1 &&
+              (DirStack.rbegin() + 1)->DAMap[Var].VisibleDMAKind ==
+                  ACC_DMA_no_create &&
+              NoCreateOMPNoAlloc) {
+            getSema().Diag(D->getEndLoc(),
+                           diag::warn_acc_omp_map_ompx_no_alloc_from_visible)
+                << getOpenACCName(C->getClauseKind());
+            return true;
+          }
+          if (VarDAs.DSAKind == ACC_DSA_shared && Var.getType()->isScalarType())
+            DirStack.back().NeedsDefaultmapForScalars = true;
+          return false;
+        },
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
           SmallVector<SourceLocation, 1> MapModLocs;
           return getDerived().RebuildOMPMapClause(
@@ -1178,9 +1175,10 @@ public:
       SkipVars.insert(LCVArray.begin(), LCVArray.end());
     }
     return transformACCVarListClause<ACCPrivateClause>(
-        D, C, OMPC_private, SkipVars,
-        OMPVarListClauseRebuilder(
-            this, &TransformACCToOMP::RebuildOMPPrivateClause));
+        D, C, OMPC_private,
+        [&SkipVars](const ACCDataVar &Var) { return !SkipVars.count(Var); },
+        OMPVarListClauseRebuilder(this,
+                                  &TransformACCToOMP::RebuildOMPPrivateClause));
   }
 
   OMPClauseResult TransformACCFirstprivateClause(ACCDirectiveStmt *D,
