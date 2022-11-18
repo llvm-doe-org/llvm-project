@@ -168,8 +168,10 @@ public:
              OpenACCDirectiveKind RealDKind, OpenACCClauseKind CKind)
       : ACCDataVar(Ref, AllowSubarray, S, /*Quiet=*/false, RealDKind, CKind) {}
   /// If \c D is a variable declaration, construct a \c ACCDataVar for it.
-  /// Otherwise, construct a placeholder for an invalid variable.
-  ACCDataVar(Decl *D) {
+  /// Otherwise, construct a placeholder for an invalid variable.  Because of
+  /// the possibility of the latter case, it seems worthwhile to require this
+  /// conversion to be explicit.
+  explicit ACCDataVar(Decl *D) {
     ReferencedDecl = dyn_cast<VarDecl>(D);
     if (!ReferencedDecl)
       return; /*invalid*/

@@ -2520,7 +2520,7 @@ void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
       if (VD->isStaticLocal()) {
         DiagIfRoutineDir(OpenACCData->ImplicitRoutineDirInfo, CurFn,
                          VD->getLocation(), diag::err_acc_routine_static_local)
-            << NameForDiag(*this, VD) << NameForDiag(*this, CurFn);
+            << NameForDiag(*this, ACCDataVar(VD)) << NameForDiag(*this, CurFn);
       }
     }
   }

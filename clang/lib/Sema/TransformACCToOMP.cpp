@@ -1172,7 +1172,8 @@ public:
                    " directive");
       const ArrayRef<VarDecl *> &LCVArray = LD->getLoopControlVariables();
       SkipVars.reserve(LCVArray.size());
-      SkipVars.insert(LCVArray.begin(), LCVArray.end());
+      for (VarDecl *VD : LCVArray)
+        SkipVars.insert(ACCDataVar(VD));
     }
     return transformACCVarListClause<ACCPrivateClause>(
         D, C, OMPC_private,
