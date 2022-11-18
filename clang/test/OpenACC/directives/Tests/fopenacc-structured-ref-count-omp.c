@@ -18,6 +18,7 @@
 // utilize the OpenACC Profiling Interface, which we usually only exercise in
 // the runtime test suite.
 
+// REDEFINE: %{all:clang:args-stable} = -gline-tables-only
 // REDEFINE: %{exe:fc:args-stable} = -match-full-lines -allow-empty
 
 // REDEFINE: %{all:clang:args} =
@@ -145,14 +146,14 @@ int main() {
   // PRT-OA-SAME: {{^}} create(cr) no_create(nc){{$}}
   //
   // EXE-OFF-NEXT:acc_ev_enter_data_start
-  // EXE-OFF-NEXT:acc_ev_alloc var_name={{<null>|c}}
-  // EXE-OFF-NEXT:acc_ev_create var_name={{<null>|c}}
-  // EXE-OFF-NEXT:acc_ev_alloc var_name={{<null>|ci}}
-  // EXE-OFF-NEXT:acc_ev_create var_name={{<null>|ci}}
-  // EXE-OFF-NEXT:acc_ev_alloc var_name={{<null>|co}}
-  // EXE-OFF-NEXT:acc_ev_create var_name={{<null>|co}}
-  // EXE-OFF-NEXT:acc_ev_alloc var_name={{<null>|cr}}
-  // EXE-OFF-NEXT:acc_ev_create var_name={{<null>|cr}}
+  // EXE-OFF-NEXT:acc_ev_alloc var_name={{c}}
+  // EXE-OFF-NEXT:acc_ev_create var_name={{c}}
+  // EXE-OFF-NEXT:acc_ev_alloc var_name={{ci}}
+  // EXE-OFF-NEXT:acc_ev_create var_name={{ci}}
+  // EXE-OFF-NEXT:acc_ev_alloc var_name={{co}}
+  // EXE-OFF-NEXT:acc_ev_create var_name={{co}}
+  // EXE-OFF-NEXT:acc_ev_alloc var_name={{cr}}
+  // EXE-OFF-NEXT:acc_ev_create var_name={{cr}}
   // EXE-OFF-NEXT:acc_ev_enter_data_end
   #pragma acc data copy(c) copyin(ci) copyout(co) create(cr) no_create(nc)
   // PRT-NEXT: {
@@ -165,26 +166,26 @@ int main() {
     // PRT-OA-NEXT: // #pragma acc exit data copyout(c,ci,co) delete(cr){{$}}
     //
     //         EXE-OFF-NEXT:acc_ev_exit_data_start
-    // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{<null>|cr}}
-    // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{<null>|cr}}
-    // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{<null>|co}}
-    // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{<null>|co}}
-    // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{<null>|ci}}
-    // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{<null>|ci}}
-    // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{<null>|c}}
-    // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{<null>|c}}
+    // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{cr}}
+    // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{cr}}
+    // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{co}}
+    // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{co}}
+    // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{ci}}
+    // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{ci}}
+    // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{c}}
+    // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{c}}
     //         EXE-OFF-NEXT:acc_ev_exit_data_end
     #pragma acc exit data copyout(c,ci,co) delete(cr)
   } // PRT-NEXT: }
   //      EXE-OFF-NEXT:acc_ev_exit_data_start
-  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{<null>|cr}}
-  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{<null>|cr}}
-  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{<null>|co}}
-  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{<null>|co}}
-  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{<null>|ci}}
-  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{<null>|ci}}
-  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{<null>|c}}
-  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{<null>|c}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{cr}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{cr}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{co}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{co}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{ci}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{ci}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{c}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{c}}
   //      EXE-OFF-NEXT:acc_ev_exit_data_end
 
   //--------------------------------------------------
@@ -229,27 +230,27 @@ int main() {
   // PRT-OA-SAME: {{^}} create(cr) no_create(nc){{$}}
   //
   // EXE-OFF-NEXT:acc_ev_enter_data_start
-  // EXE-OFF-NEXT:acc_ev_alloc var_name={{<null>|c}}
-  // EXE-OFF-NEXT:acc_ev_create var_name={{<null>|c}}
-  // EXE-OFF-NEXT:acc_ev_alloc var_name={{<null>|ci}}
-  // EXE-OFF-NEXT:acc_ev_create var_name={{<null>|ci}}
-  // EXE-OFF-NEXT:acc_ev_alloc var_name={{<null>|co}}
-  // EXE-OFF-NEXT:acc_ev_create var_name={{<null>|co}}
-  // EXE-OFF-NEXT:acc_ev_alloc var_name={{<null>|cr}}
-  // EXE-OFF-NEXT:acc_ev_create var_name={{<null>|cr}}
+  // EXE-OFF-NEXT:acc_ev_alloc var_name={{c}}
+  // EXE-OFF-NEXT:acc_ev_create var_name={{c}}
+  // EXE-OFF-NEXT:acc_ev_alloc var_name={{ci}}
+  // EXE-OFF-NEXT:acc_ev_create var_name={{ci}}
+  // EXE-OFF-NEXT:acc_ev_alloc var_name={{co}}
+  // EXE-OFF-NEXT:acc_ev_create var_name={{co}}
+  // EXE-OFF-NEXT:acc_ev_alloc var_name={{cr}}
+  // EXE-OFF-NEXT:acc_ev_create var_name={{cr}}
   // EXE-OFF-NEXT:acc_ev_enter_data_end
   #pragma acc parallel copy(c) copyin(ci) copyout(co) create(cr) no_create(nc)
   // PRT: ;
   ;
   // EXE-OFF-NEXT:acc_ev_exit_data_start
-  // EXE-OFF-NEXT:acc_ev_delete var_name={{<null>|cr}}
-  // EXE-OFF-NEXT:acc_ev_free var_name={{<null>|cr}}
-  // EXE-OFF-NEXT:acc_ev_delete var_name={{<null>|co}}
-  // EXE-OFF-NEXT:acc_ev_free var_name={{<null>|co}}
-  // EXE-OFF-NEXT:acc_ev_delete var_name={{<null>|ci}}
-  // EXE-OFF-NEXT:acc_ev_free var_name={{<null>|ci}}
-  // EXE-OFF-NEXT:acc_ev_delete var_name={{<null>|c}}
-  // EXE-OFF-NEXT:acc_ev_free var_name={{<null>|c}}
+  // EXE-OFF-NEXT:acc_ev_delete var_name={{cr}}
+  // EXE-OFF-NEXT:acc_ev_free var_name={{cr}}
+  // EXE-OFF-NEXT:acc_ev_delete var_name={{co}}
+  // EXE-OFF-NEXT:acc_ev_free var_name={{co}}
+  // EXE-OFF-NEXT:acc_ev_delete var_name={{ci}}
+  // EXE-OFF-NEXT:acc_ev_free var_name={{ci}}
+  // EXE-OFF-NEXT:acc_ev_delete var_name={{c}}
+  // EXE-OFF-NEXT:acc_ev_free var_name={{c}}
   // EXE-OFF-NEXT:acc_ev_exit_data_end
 
   //--------------------------------------------------
@@ -274,10 +275,10 @@ int main() {
   // PRT-OA-NEXT: // #pragma acc data create(p,nc){{$}}
   //
   // EXE-OFF-NEXT:acc_ev_enter_data_start
-  // EXE-OFF-NEXT:acc_ev_alloc var_name={{<null>|p}}
-  // EXE-OFF-NEXT:acc_ev_create var_name={{<null>|p}}
-  // EXE-OFF-NEXT:acc_ev_alloc var_name={{<null>|nc}}
-  // EXE-OFF-NEXT:acc_ev_create var_name={{<null>|nc}}
+  // EXE-OFF-NEXT:acc_ev_alloc var_name={{p}}
+  // EXE-OFF-NEXT:acc_ev_create var_name={{p}}
+  // EXE-OFF-NEXT:acc_ev_alloc var_name={{nc}}
+  // EXE-OFF-NEXT:acc_ev_create var_name={{nc}}
   // EXE-OFF-NEXT:acc_ev_enter_data_end
   #pragma acc data create(p,nc)
   // PRT-NEXT: {
@@ -323,10 +324,10 @@ int main() {
       // PRT-OA-NEXT: // #pragma acc exit data copyout(p) delete(nc){{$}}
       //
       //         EXE-OFF-NEXT:acc_ev_exit_data_start
-      // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{<null>|nc}}
-      // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{<null>|nc}}
-      // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{<null>|p}}
-      // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{<null>|p}}
+      // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{nc}}
+      // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{nc}}
+      // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{p}}
+      // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{p}}
       //         EXE-OFF-NEXT:acc_ev_exit_data_end
       #pragma acc exit data copyout(p) delete(nc)
     } // PRT-NEXT: }
@@ -334,10 +335,10 @@ int main() {
     // EXE-OFF-NEXT:acc_ev_exit_data_end
   } // PRT-NEXT: }
   //      EXE-OFF-NEXT:acc_ev_exit_data_start
-  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{<null>|nc}}
-  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{<null>|nc}}
-  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{<null>|p}}
-  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{<null>|p}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{nc}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{nc}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{p}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{p}}
   //      EXE-OFF-NEXT:acc_ev_exit_data_end
 
   //--------------------------------------------------
@@ -360,10 +361,10 @@ int main() {
   // PRT-OA-NEXT: // #pragma acc data create(p,nc){{$}}
   //
   // EXE-OFF-NEXT:acc_ev_enter_data_start
-  // EXE-OFF-NEXT:acc_ev_alloc var_name={{<null>|p}}
-  // EXE-OFF-NEXT:acc_ev_create var_name={{<null>|p}}
-  // EXE-OFF-NEXT:acc_ev_alloc var_name={{<null>|nc}}
-  // EXE-OFF-NEXT:acc_ev_create var_name={{<null>|nc}}
+  // EXE-OFF-NEXT:acc_ev_alloc var_name={{p}}
+  // EXE-OFF-NEXT:acc_ev_create var_name={{p}}
+  // EXE-OFF-NEXT:acc_ev_alloc var_name={{nc}}
+  // EXE-OFF-NEXT:acc_ev_create var_name={{nc}}
   // EXE-OFF-NEXT:acc_ev_enter_data_end
   #pragma acc data create(p,nc)
   // PRT-NEXT: {
@@ -404,19 +405,19 @@ int main() {
       // PRT-OA-NEXT: // #pragma acc exit data copyout(p) delete(nc){{$}}
       //
       //         EXE-OFF-NEXT:acc_ev_exit_data_start
-      // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{<null>|nc}}
-      // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{<null>|nc}}
-      // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{<null>|p}}
-      // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{<null>|p}}
+      // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{nc}}
+      // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{nc}}
+      // EXE-OFF-NO-HOLD-NEXT:acc_ev_delete var_name={{p}}
+      // EXE-OFF-NO-HOLD-NEXT:acc_ev_free var_name={{p}}
       //         EXE-OFF-NEXT:acc_ev_exit_data_end
       #pragma acc exit data copyout(p) delete(nc)
     } // PRT-NEXT: }
   } // PRT-NEXT: }
   //      EXE-OFF-NEXT:acc_ev_exit_data_start
-  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{<null>|nc}}
-  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{<null>|nc}}
-  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{<null>|p}}
-  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{<null>|p}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{nc}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{nc}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_delete var_name={{p}}
+  // EXE-OFF-HOLD-NEXT:acc_ev_free var_name={{p}}
   //      EXE-OFF-NEXT:acc_ev_exit_data_end
 
   // PRT-NEXT: return 0;
