@@ -1391,10 +1391,9 @@ to OpenMP is as follows:
     * *exp* `self` -> *exp* `from` with a `present` motion modifier
     * *exp* `device` -> *exp* `to` with a `present` motion modifier
 * Notes:
-    * See the discussion of the `update` directive under "Supported
-      Features" in `README-OpenACC-status.md` for a description of
-      associated diagnostics and for an explanation of the impact of
-      this design on Clacc users.
+    * See the discussion of the `update` directive under "OpenMP Extensions" in
+      `README-OpenACC-status.md` for a description of associated diagnostics and
+      for an explanation of the impact of this design on Clacc users.
     * Clacc does not currently support translating to
       `omp_target_is_present` for the same reasons as discussed for
       the `present` clause under "Data Directives" below.
@@ -1436,10 +1435,10 @@ OpenMP is as follows:
             * The `ompx_hold` map type modifier specified below is
               omitted.
     * Notes:
-        * See the discussion of the `data` directive under "Supported
-          Features" in `README-OpenACC-status.md` for a description of
-          associated diagnostics and for an explanation of the impact
-          of this design on Clacc users.
+        * See the discussion of the `data` directive under "OpenMP Extensions"
+          in `README-OpenACC-status.md` for a description of associated
+          diagnostics and for an explanation of the impact of this design on
+          Clacc users.
 * *exp* `present` is translated according to the
   `-fopenacc-present-omp=KIND` command-line option:
     * `KIND` is one of:
@@ -1450,10 +1449,10 @@ OpenMP is as follows:
             * *exp* `present` -> *exp* `map` with a `ompx_hold,alloc`
               map type.
     * Notes:
-        * See the discussion of the `present` clause under "Supported
-          Features" in `README-OpenACC-status.md` for a description of
-          associated diagnostics and for an explanation of the impact
-          of this design on Clacc users.
+        * See the discussion of the `present` clause under "OpenMP Extensions"
+          in `README-OpenACC-status.md` for a description of associated
+          diagnostics and for an explanation of the impact of this design on
+          Clacc users.
         * Clacc does not currently support translating `present` to
           calls to `omp_target_is_present` for the following reasons:
             * `omp_target_is_present` is fine for checking that data
@@ -1503,10 +1502,10 @@ OpenMP is as follows:
     * Notes:
         * See the translation of *imp* `nomap` on `acc parallel` for
           an additional component of the `no_create` translation.
-        * See the discussion of the `no_create` clause under
-          "Supported Features" in `README-OpenACC-status.md` for a
-          description of associated diagnostics and for an explanation
-          of the impact of this design on Clacc users.
+        * See the discussion of the `no_create` clause under "OpenMP Extensions"
+          in `README-OpenACC-status.md` for a description of associated
+          diagnostics and for an explanation of the impact of this design on
+          Clacc users.
 
 Parallel Directives
 -------------------
