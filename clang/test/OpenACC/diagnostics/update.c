@@ -34,6 +34,8 @@ int main() {
   const extern int constADecl[3];
   struct S { int i; } s;
   union U { int i; } u;
+  struct S *ps;
+  struct SS { struct S s; } ss;
 
   //--------------------------------------------------
   // Missing clauses
@@ -192,10 +194,10 @@ int main() {
   #pragma acc update host(i jk)
   // expected-error@+1 {{expected expression}}
   #pragma acc update device(jk ,)
-  // expected-error@+2 {{expected variable name or subarray}}
+  // expected-error@+2 {{expected variable name or member expression or subarray}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update self((int)i)
-  // expected-error@+2 {{expected variable name or subarray}}
+  // expected-error@+2 {{expected variable name or member expression or subarray}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update host((*(int(*)[3])a)[0:])
   // expected-error@+2 {{subscripted value is not an array or pointer}}
@@ -231,6 +233,18 @@ int main() {
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update device(foo)
 
+  // Nested member expression not permitted.
+
+  // expected-error@+2 {{expected variable name}} // range is for ss.s
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update self(ss.s.i)
+  // expected-error@+2 {{expected variable name}} // range is for ss.s
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update host(ss.s.i)
+  // expected-error@+2 {{expected variable name}} // range is for ss.s
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update device(ss.s.i)
+
   // Array subscript not supported where subarray is permitted.
 
   // expected-error@+2 {{subarray syntax must include ':'}}
@@ -248,6 +262,23 @@ int main() {
   #pragma acc update device(a[jk], \
                             m[2:][1], \
                             a[:], m[0:2][0:2])
+
+  // Member expression plus subarray not permitted.
+
+  // expected-error@+3 {{OpenACC subarray is not allowed here}}
+  // expected-error@+2 {{expected variable name}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update self(ps[4:6].i)
+
+  // expected-error@+3 {{OpenACC subarray is not allowed here}}
+  // expected-error@+2 {{expected variable name}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update host(ps[4:6].i)
+
+  // expected-error@+3 {{OpenACC subarray is not allowed here}}
+  // expected-error@+2 {{expected variable name}}
+  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
+  #pragma acc update device(ps[4:6].i)
 
   // Variables of incomplete type.
 
@@ -325,16 +356,6 @@ int main() {
   // expected-note@+1 {{previously appeared here}}
   #pragma acc update self(a[0:2])  \
                      device(a[0:1])
-
-  // Member of struct.
-
-  // expected-error@+2 {{expected variable name or subarray}}
-  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
-  #pragma acc update self(s.i)
-
-  // expected-error@+2 {{expected variable name or subarray}}
-  // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
-  #pragma acc update device(s.i)
 
   //--------------------------------------------------
   // As immediate substatement

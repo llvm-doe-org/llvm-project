@@ -3,7 +3,12 @@
 // - The present clause is checked in present.c.
 // - The no_create clause is checked in no-create.c.
 // - The effect of an enclosing "acc data" is checked in "data.c".
-
+// - Member expressions are checked in parallel-da-member-expr.c and
+//   parallel-da-member-expr.cpp.
+//
+// TODO: This test is cryptic.  Find some way to refactor it into multiple tests
+// so it's easier to maintain.
+//
 // When ADD_LOOP_TO_PAR is not set, this file checks implicit and explicit
 // data attributes on "acc parallel" without "loop".
 //

@@ -1,4 +1,4 @@
-// Check various cases of subarray extension errors.
+// Check various cases of data extension errors.
 //
 // The various cases covered here should be kept consistent with present.c,
 // no-create.c, and update.c from clang/test/OpenACC/directives.  The present
@@ -26,12 +26,22 @@
 //
 // DEFINE: %{check-cases} =                                                                   \
 //                          CASE                                NOT_CRASH_IF_FAIL
+// DEFINE:   %{check-case}( caseDataMemberPresent            %,                         %) && \
+// DEFINE:   %{check-case}( caseDataMemberAbsent             %,                         %) && \
+// DEFINE:   %{check-case}( caseDataMembersDisjoint          %,                         %) && \
+// DEFINE:   %{check-case}( caseDataMembersConcat2           %, %if-host<|%not --crash> %) && \
+// DEFINE:   %{check-case}( caseDataMemberFullStruct         %, %if-host<|%not --crash> %) && \
 // DEFINE:   %{check-case}( caseDataSubarrayPresent          %,                         %) && \
 // DEFINE:   %{check-case}( caseDataSubarrayDisjoint         %,                         %) && \
 // DEFINE:   %{check-case}( caseDataSubarrayOverlapStart     %, %if-host<|%not --crash> %) && \
 // DEFINE:   %{check-case}( caseDataSubarrayOverlapEnd       %, %if-host<|%not --crash> %) && \
 // DEFINE:   %{check-case}( caseDataSubarrayConcat2          %, %if-host<|%not --crash> %) && \
 // DEFINE:   %{check-case}( caseDataSubarrayNonSubarray      %, %if-host<|%not --crash> %) && \
+// DEFINE:   %{check-case}( caseParallelMemberPresent        %,                         %) && \
+// DEFINE:   %{check-case}( caseParallelMemberAbsent         %,                         %) && \
+// DEFINE:   %{check-case}( caseParallelMembersDisjoint      %,                         %) && \
+// DEFINE:   %{check-case}( caseParallelMembersConcat2       %, %if-host<|%not --crash> %) && \
+// DEFINE:   %{check-case}( caseParallelMemberFullStruct     %, %if-host<|%not --crash> %) && \
 // DEFINE:   %{check-case}( caseParallelSubarrayPresent      %,                         %) && \
 // DEFINE:   %{check-case}( caseParallelSubarrayDisjoint     %,                         %) && \
 // DEFINE:   %{check-case}( caseParallelSubarrayOverlapStart %, %if-host<|%not --crash> %) && \
@@ -68,6 +78,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#define PRINT_VAR_INFO(Var) \
+  fprintf(stderr, "addr=%p, size=%ld\n", &(Var), sizeof (Var))
+
 #define PRINT_SUBARRAY_INFO(Arr, Start, Length) \
   fprintf(stderr, "addr=%p, size=%ld\n", &(Arr)[Start], \
           Length * sizeof (Arr[0]))
@@ -99,11 +112,78 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
+// EXE-caseDataMemberPresent-NOT: {{.}}
+CASE(caseDataMemberPresent) {
+  struct S { int x; int y; int z; };
+  struct S same, beg, mid, end;
+  #pragma acc data copy(same,beg,mid,end)
+  #pragma acc data copy(same.x,same.y,same.z,beg.x,mid.y,end.z)
+  ;
+  #pragma acc data copy(same.y,same.z,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+  #pragma acc data copy(same.y,same.z,beg.y,mid.y,end.y)
+  ;
+}
+
+// EXE-caseDataMemberAbsent-NOT: {{.}}
+CASE(caseDataMemberAbsent) {
+  struct S { int x; int y; int z; } s;
+  #pragma acc data copy(s.y)
+  ;
+}
+
+// EXE-caseDataMembersDisjoint-NOT: {{.}}
+CASE(caseDataMembersDisjoint) {
+  struct S { int x; int y; } s;
+  #pragma acc data copy(s.x)
+  #pragma acc data copyin(s.y)
+  ;
+}
+
+//      EXE-caseDataMembersConcat2-NOT: {{.}}
+//          EXE-caseDataMembersConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//     EXE-caseDataMembersConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+// EXE-caseDataMembersConcat2-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+// EXE-caseDataMembersConcat2-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
+// EXE-caseDataMembersConcat2-OFF-NEXT: Libomptarget error: Consult {{.*}}
+// EXE-caseDataMembersConcat2-OFF-NEXT: {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                                       # An abort message usually follows.
+//  EXE-caseDataMembersConcat2-OFF-NOT: Libomptarget
+CASE(caseDataMembersConcat2) {
+  struct S { int x; int y; } s;
+  PRINT_VAR_INFO(s.x);
+  PRINT_VAR_INFO(s);
+  #pragma acc data copyout(s.x)
+  #pragma acc data copy(s.y)
+  #pragma acc data copy(s)
+  ;
+}
+
+//      EXE-caseDataMemberFullStruct-NOT: {{.}}
+//          EXE-caseDataMemberFullStruct: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//     EXE-caseDataMemberFullStruct-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+// EXE-caseDataMemberFullStruct-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+// EXE-caseDataMemberFullStruct-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
+// EXE-caseDataMemberFullStruct-OFF-NEXT: Libomptarget error: Consult {{.*}}
+// EXE-caseDataMemberFullStruct-OFF-NEXT: {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                                           # An abort message usually follows.
+//  EXE-caseDataMemberFullStruct-OFF-NOT: Libomptarget
+CASE(caseDataMemberFullStruct) {
+  struct S { int x; int y; } s;
+  PRINT_VAR_INFO(s.x);
+  PRINT_VAR_INFO(s);
+  #pragma acc data copyin(s.x)
+  #pragma acc data copyin(s)
+  ;
+}
+
 // EXE-caseDataSubarrayPresent-NOT: {{.}}
 CASE(caseDataSubarrayPresent) {
-  int all[10], same[10], beg[10], mid[10], end[10];
-  #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-  #pragma acc data copy(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+  int same[10], beg[10], mid[10], end[10];
+  #pragma acc data copy(same,beg,mid,end)
+  #pragma acc data copy(same[0:10],beg[0:3],mid[3:3],end[8:2])
+  ;
+  #pragma acc data copy(same[3:6],beg[2:5],mid[1:8],end[0:5])
+  #pragma acc data copy(same[3:6],beg[2:2],mid[3:3],end[4:1])
   ;
 }
 
@@ -188,13 +268,96 @@ CASE(caseDataSubarrayNonSubarray) {
   ;
 }
 
+// EXE-caseParallelMemberPresent-NOT: {{.}}
+CASE(caseParallelMemberPresent) {
+  struct S { int x; int y; int z; };
+  struct S same, beg, mid, end;
+  #pragma acc data copy(same,beg,mid,end)
+  #pragma acc parallel copyout(same.x,same.y,same.z,beg.x,mid.y,end.z)
+  {
+    same.x = 1; beg.x = 1; mid.y = 1; end.z = 1;
+  }
+  #pragma acc data copy(same.y,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+  #pragma acc parallel copyout(same.y,beg.y,mid.y,end.y)
+  {
+    same.y = 1; beg.y = 1; mid.y = 1; end.y = 1;
+  }
+}
+
+// EXE-caseParallelMemberAbsent-NOT: {{.}}
+CASE(caseParallelMemberAbsent) {
+  struct S { int x; int y; int z; } s;
+  #pragma acc data copy(s.y)
+  s.y = 1;
+}
+
+// EXE-caseParallelMembersDisjoint-NOT: {{.}}
+CASE(caseParallelMembersDisjoint) {
+  struct S { int w; int x; int y; int z; } s;
+  int use = 0;
+  #pragma acc data copy(s.w, s.x)
+  #pragma acc parallel copyin(s.y, s.z)
+  if (use) s.y = 1;
+}
+
+//      EXE-caseParallelMembersConcat2-NOT: {{.}}
+//          EXE-caseParallelMembersConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//     EXE-caseParallelMembersConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+// EXE-caseParallelMembersConcat2-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+//                                           # FIXME: Names like getTargetPointer are meaningless to users.
+// EXE-caseParallelMembersConcat2-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
+// EXE-caseParallelMembersConcat2-OFF-NEXT: Libomptarget error: Call to targetDataBegin failed, abort target.
+// EXE-caseParallelMembersConcat2-OFF-NEXT: Libomptarget error: Failed to process data before launching the kernel.
+// EXE-caseParallelMembersConcat2-OFF-NEXT: Libomptarget error: Consult {{.*}}
+// EXE-caseParallelMembersConcat2-OFF-NEXT: {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                                           # An abort message usually follows.
+//  EXE-caseParallelMembersConcat2-OFF-NOT: Libomptarget
+CASE(caseParallelMembersConcat2) {
+  struct S { int x; int y; } s;
+  PRINT_VAR_INFO(s.x);
+  PRINT_VAR_INFO(s);
+  int use = 0;
+  #pragma acc data copyout(s.x)
+  #pragma acc data copy(s.y)
+  #pragma acc parallel copyout(s)
+  if (use) s.x = 1;
+}
+
+//      EXE-caseParallelMemberFullStruct-NOT: {{.}}
+//          EXE-caseParallelMemberFullStruct: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//     EXE-caseParallelMemberFullStruct-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+// EXE-caseParallelMemberFullStruct-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+//                                               # FIXME: Names like getTargetPointer are meaningless to users.
+// EXE-caseParallelMemberFullStruct-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
+// EXE-caseParallelMemberFullStruct-OFF-NEXT: Libomptarget error: Call to targetDataBegin failed, abort target.
+// EXE-caseParallelMemberFullStruct-OFF-NEXT: Libomptarget error: Failed to process data before launching the kernel.
+// EXE-caseParallelMemberFullStruct-OFF-NEXT: Libomptarget error: Consult {{.*}}
+// EXE-caseParallelMemberFullStruct-OFF-NEXT: {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                                               # An abort message usually follows.
+//  EXE-caseParallelMemberFullStruct-OFF-NOT: Libomptarget
+CASE(caseParallelMemberFullStruct) {
+  struct S { int x; int y; } s;
+  PRINT_VAR_INFO(s.y);
+  PRINT_VAR_INFO(s);
+  int use = 0;
+  #pragma acc data copy(s.y)
+  #pragma acc parallel copyout(s)
+  if (use) s.y = 1;
+  ;
+}
+
 // EXE-caseParallelSubarrayPresent-NOT: {{.}}
 CASE(caseParallelSubarrayPresent) {
-  int all[10], same[10], beg[10], mid[10], end[10];
-  #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-  #pragma acc parallel copyout(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+  int same[10], beg[10], mid[10], end[10];
+  #pragma acc data copy(same,beg,mid,end)
+  #pragma acc parallel copyout(same[0:10],beg[0:3],mid[3:3],end[8:2])
   {
-    all[0] = 1; same[3] = 1; beg[2] = 1; mid[3] = 1; end[4] = 1;
+    same[0] = 1; beg[0] = 1; mid[3] = 1; end[8] = 1;
+  }
+  #pragma acc data copy(same[3:6],beg[2:5],mid[1:8],end[0:5])
+  #pragma acc parallel copyout(same[3:6],beg[2:2],mid[3:3],end[4:1])
+  {
+    same[3] = 1; beg[2] = 1; mid[3] = 1; end[4] = 1;
   }
 }
 

@@ -35,7 +35,7 @@
 // compile because this list produces the enum used by the code.
 //
 // The various cases covered here should be kept consistent with no-create.c,
-// update.c, and subarray-errors.c (the last is located in
+// update.c, and data-extension-errors.c (the last is located in
 // openmp/libacc2omp/test/directives).  For example, a subarray that extends a
 // subarray already present is consistently considered not present, so the
 // present clause produces a runtime error and the no_create clause doesn't
@@ -58,8 +58,15 @@
 //                          LINE                CASE                                CONSTRUCT    NOT_CRASH_IF_FAIL                         NOT_IF_FAIL                         NOT_IF_PRESENT_FAIL                 NOT_IF_ARRAYEXT_FAIL
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataScalarPresent            %, data      %,                                        %,                                  %,                                  %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataScalarAbsent             %, data      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataStructPresent            %, data      %,                                        %,                                  %,                                  %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataStructAbsent             %, data      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataArrayPresent             %, data      %,                                        %,                                  %,                                  %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataArrayAbsent              %, data      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataMemberPresent            %, data      %,                                        %,                                  %,                                  %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataMemberAbsent             %, data      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataMembersDisjoint          %, data      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataMembersConcat2           %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataMemberFullStruct         %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayPresent          %, data      %,                                        %,                                  %,                                  %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayDisjoint         %, data      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayOverlapStart     %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
@@ -68,8 +75,15 @@
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayNonSubarray      %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelScalarPresent        %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelScalarAbsent         %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelStructPresent        %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelStructAbsent         %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelArrayPresent         %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelArrayAbsent          %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelMemberPresent        %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelMemberAbsent         %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelMembersDisjoint      %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelMembersConcat2       %, parallel  %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
+// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelMemberFullStruct     %, parallel  %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayPresent      %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayDisjoint     %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayOverlapStart %, parallel  %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
@@ -267,6 +281,52 @@ CASE(caseDataScalarAbsent) {
   USE_VAR(x = 1);
 }
 
+//   PRT-LABEL: {{.*}}caseDataStructPresent{{.*}} {
+//    PRT-NEXT:   struct S {
+//         PRT:   } s;
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copy(s){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: s){{$}}
+//  PRT-A-NEXT:   #pragma acc data present(s){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: s){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: s){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(s){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: s){{$}}
+// PRT-OA-NEXT:   // #pragma acc data present(s){{$}}
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseDataStructPresent) {
+  struct S { int i; int j; } s;
+  PRINT_VAR_INFO(s);
+  PRINT_VAR_INFO(s);
+  #pragma acc data copy(s)
+  #pragma acc data present(s)
+  USE_VAR(s.i = 1);
+}
+
+//   PRT-LABEL: {{.*}}caseDataStructAbsent{{.*}} {
+//    PRT-NEXT:   struct S {
+//         PRT:   } s;
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//  PRT-A-NEXT:   #pragma acc data present(s){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: s){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: s){{$}}
+// PRT-OA-NEXT:   // #pragma acc data present(s){{$}}
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseDataStructAbsent) {
+  struct S { int i; int j; } s;
+  PRINT_VAR_INFO(s);
+  PRINT_VAR_INFO(s);
+  #pragma acc data present(s)
+  USE_VAR(s.i = 1);
+}
+
 //   PRT-LABEL: {{.*}}caseDataArrayPresent{{.*}} {
 //    PRT-NEXT:   int arr[3];
 //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
@@ -311,33 +371,191 @@ CASE(caseDataArrayAbsent) {
   USE_VAR(arr[0] = 1);
 }
 
+//   PRT-LABEL: {{.*}}caseDataMemberPresent{{.*}} {
+//    PRT-NEXT:   struct S {
+//         PRT:   };
+//    PRT-NEXT:   struct S same, beg, mid, end;
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copy(same,beg,mid,end)
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: same,beg,mid,end)
+//  PRT-A-NEXT:   #pragma acc data present(same.x,same.y,same.z,beg.x,mid.y,end.z)
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: same.x,same.y,same.z,beg.x,mid.y,end.z)
+//
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: same,beg,mid,end)
+// PRT-OA-NEXT:   // #pragma acc data copy(same,beg,mid,end)
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: same.x,same.y,same.z,beg.x,mid.y,end.z)
+// PRT-OA-NEXT:   // #pragma acc data present(same.x,same.y,same.z,beg.x,mid.y,end.z)
+//
+//    PRT-NEXT:   {
+//    PRT-NEXT:     ;
+//    PRT-NEXT:   }
+
+//  PRT-A-NEXT:   #pragma acc data copy(same.y,same.z,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: same.y,same.z,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+//  PRT-A-NEXT:   #pragma acc data present(same.y,same.z,beg.y,mid.y,end.y)
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: same.y,same.z,beg.y,mid.y,end.y)
+//
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: same.y,same.z,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+// PRT-OA-NEXT:   // #pragma acc data copy(same.y,same.z,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: same.y,same.z,beg.y,mid.y,end.y)
+// PRT-OA-NEXT:   // #pragma acc data present(same.y,same.z,beg.y,mid.y,end.y)
+//
+//    PRT-NEXT:   {
+//    PRT-NEXT:     ;
+//    PRT-NEXT:   }
+//    PRT-NEXT: }
+CASE(caseDataMemberPresent) {
+  struct S { int x; int y; int z; };
+  struct S same, beg, mid, end;
+  PRINT_VAR_INFO(same);
+  PRINT_VAR_INFO(same);
+  #pragma acc data copy(same,beg,mid,end)
+  #pragma acc data present(same.x,same.y,same.z,beg.x,mid.y,end.z)
+  {
+    USE_VAR(same.x = 1; beg.x = 1; mid.y = 1; end.z = 1);
+  }
+  #pragma acc data copy(same.y,same.z,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+  #pragma acc data present(same.y,same.z,beg.y,mid.y,end.y)
+  {
+    USE_VAR(same.y = 1; beg.y = 1; mid.y = 1; end.y = 1);
+  }
+}
+
+//   PRT-LABEL: {{.*}}caseDataMemberAbsent{{.*}} {
+//    PRT-NEXT:   struct S {
+//         PRT:   } s;
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//  PRT-A-NEXT:   #pragma acc data present(s){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: s){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: s){{$}}
+// PRT-OA-NEXT:   // #pragma acc data present(s){{$}}
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseDataMemberAbsent) {
+  struct S { int x; int y; int z; } s;
+  PRINT_VAR_INFO(s);
+  PRINT_VAR_INFO(s);
+  #pragma acc data present(s)
+  USE_VAR(s.y = 1);
+}
+
+//   PRT-LABEL: {{.*}}caseDataMembersDisjoint{{.*}} {
+//    PRT-NEXT:   struct S {
+//         PRT:   } s;
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copy(s.x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: s.x){{$}}
+//  PRT-A-NEXT:   #pragma acc data present(s.y){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: s.y){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: s.x){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(s.x){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: s.y){{$}}
+// PRT-OA-NEXT:   // #pragma acc data present(s.y){{$}}
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseDataMembersDisjoint) {
+  struct S { int x; int y; } s;
+  PRINT_VAR_INFO(s.x);
+  PRINT_VAR_INFO(s.y);
+  #pragma acc data copy(s.x)
+  #pragma acc data present(s.y)
+  USE_VAR(s.y = 1);
+}
+
+//   PRT-LABEL: {{.*}}caseDataMembersConcat2{{.*}} {
+//    PRT-NEXT:   struct S {
+//         PRT:   } s;
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copyout(s.x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,from: s.x){{$}}
+//  PRT-A-NEXT:   #pragma acc data copy(s.y){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: s.y){{$}}
+//  PRT-A-NEXT:   #pragma acc data present(s){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: s){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,from: s.x){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copyout(s.x){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: s.y){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(s.y){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: s){{$}}
+// PRT-OA-NEXT:   // #pragma acc data present(s){{$}}
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+CASE(caseDataMembersConcat2) {
+  struct S { int x; int y; } s;
+  PRINT_VAR_INFO(s.x);
+  PRINT_VAR_INFO(s);
+  #pragma acc data copyout(s.x)
+  #pragma acc data copy(s.y)
+  #pragma acc data present(s)
+  USE_VAR(s.x = 1);
+}
+
+CASE(caseDataMemberFullStruct) {
+  struct S { int x; int y; int z; } s;
+  PRINT_VAR_INFO(s.y);
+  PRINT_VAR_INFO(s);
+  #pragma acc data copyin(s.y)
+  #pragma acc data present(s)
+  USE_VAR(s.y = 1);
+}
+
 //   PRT-LABEL: {{.*}}caseDataSubarrayPresent{{.*}} {
-//    PRT-NEXT:   int all[10], same[10], beg[10], mid[10], end[10];
+//    PRT-NEXT:   int same[10], beg[10], mid[10], end[10];
 //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
 //    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
 //
-//  PRT-A-NEXT:   #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-//  PRT-A-NEXT:   #pragma acc data present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
-// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+//  PRT-A-NEXT:   #pragma acc data copy(same,beg,mid,end)
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: same,beg,mid,end)
+//  PRT-A-NEXT:   #pragma acc data present(same[0:10],beg[0:3],mid[3:3],end[8:2])
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: same[0:10],beg[0:3],mid[3:3],end[8:2])
 //
-//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-// PRT-OA-NEXT:   // #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
-// PRT-OA-NEXT:   // #pragma acc data present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: same,beg,mid,end)
+// PRT-OA-NEXT:   // #pragma acc data copy(same,beg,mid,end)
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: same[0:10],beg[0:3],mid[3:3],end[8:2])
+// PRT-OA-NEXT:   // #pragma acc data present(same[0:10],beg[0:3],mid[3:3],end[8:2])
+//
+//    PRT-NEXT:   {
+//    PRT-NEXT:     ;
+//    PRT-NEXT:   }
+//
+//  PRT-A-NEXT:   #pragma acc data copy(same[3:6],beg[2:5],mid[1:8],end[0:5])
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: same[3:6],beg[2:5],mid[1:8],end[0:5])
+//  PRT-A-NEXT:   #pragma acc data present(same[3:6],beg[2:2],mid[3:3],end[4:1])
+// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: same[3:6],beg[2:2],mid[3:3],end[4:1])
+//
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: same[3:6],beg[2:5],mid[1:8],end[0:5])
+// PRT-OA-NEXT:   // #pragma acc data copy(same[3:6],beg[2:5],mid[1:8],end[0:5])
+//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: same[3:6],beg[2:2],mid[3:3],end[4:1])
+// PRT-OA-NEXT:   // #pragma acc data present(same[3:6],beg[2:2],mid[3:3],end[4:1])
 //
 //    PRT-NEXT:   {
 //    PRT-NEXT:     ;
 //    PRT-NEXT:   }
 //    PRT-NEXT: }
 CASE(caseDataSubarrayPresent) {
-  int all[10], same[10], beg[10], mid[10], end[10];
-  PRINT_VAR_INFO(all);
-  PRINT_VAR_INFO(all);
-  #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-  #pragma acc data present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+  int same[10], beg[10], mid[10], end[10];
+  PRINT_VAR_INFO(same);
+  PRINT_VAR_INFO(same);
+  #pragma acc data copy(same,beg,mid,end)
+  #pragma acc data present(same[0:10],beg[0:3],mid[3:3],end[8:2])
   {
-    USE_VAR(all[0] = 1; same[3] = 1; beg[2] = 1; mid[3] = 1; end[4] = 1);
+    USE_VAR(same[0] = 1; beg[0] = 1; mid[3] = 1; end[8] = 1);
+  }
+  #pragma acc data copy(same[3:6],beg[2:5],mid[1:8],end[0:5])
+  #pragma acc data present(same[3:6],beg[2:2],mid[3:3],end[4:1])
+  {
+    USE_VAR(same[3] = 1; beg[2] = 1; mid[3] = 1; end[4] = 1);
   }
 }
 
@@ -507,6 +725,23 @@ CASE(caseParallelScalarAbsent) {
   USE_VAR(x = 1);
 }
 
+CASE(caseParallelStructPresent) {
+  struct S { int i; int j; } s;
+  PRINT_VAR_INFO(s);
+  PRINT_VAR_INFO(s);
+  #pragma acc data copy(s)
+  #pragma acc parallel present(s)
+  USE_VAR(s.i = 1);
+}
+
+CASE(caseParallelStructAbsent) {
+  struct S { int i; int j; } s;
+  PRINT_VAR_INFO(s);
+  PRINT_VAR_INFO(s);
+  #pragma acc parallel present(s)
+  USE_VAR(s.i = 1);
+}
+
 CASE(caseParallelArrayPresent) {
   int arr[3];
   PRINT_VAR_INFO(arr);
@@ -524,14 +759,72 @@ CASE(caseParallelArrayAbsent) {
   USE_VAR(arr[0] = 1);
 }
 
-CASE(caseParallelSubarrayPresent) {
-  int all[10], same[10], beg[10], mid[10], end[10];
-  PRINT_VAR_INFO(all);
-  PRINT_VAR_INFO(all);
-  #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-  #pragma acc parallel present(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+CASE(caseParallelMemberPresent) {
+  struct S { int x; int y; int z; };
+  struct S same, beg, mid, end;
+  PRINT_VAR_INFO(same);
+  PRINT_VAR_INFO(same);
+  #pragma acc data copy(same,beg,mid,end)
+  #pragma acc parallel present(same.x,same.y,same.z,beg.x,mid.y,end.z)
   {
-    USE_VAR(all[0] = 1; same[3] = 1; beg[2] = 1; mid[3] = 1; end[4] = 1);
+    USE_VAR(same.x = 1; beg.x = 1; mid.y = 1; end.z = 1);
+  }
+  #pragma acc data copy(same.y,same.z,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+  #pragma acc parallel present(same.y,same.z,beg.y,mid.y,end.y)
+  {
+    USE_VAR(same.y = 1; beg.y = 1; mid.y = 1; end.y = 1);
+  }
+}
+
+CASE(caseParallelMemberAbsent) {
+  struct S { int x; int y; int z; } s;
+  PRINT_VAR_INFO(s);
+  PRINT_VAR_INFO(s);
+  #pragma acc parallel present(s)
+  USE_VAR(s.y = 1);
+}
+
+CASE(caseParallelMembersDisjoint) {
+  struct S { int x; int y; } s;
+  PRINT_VAR_INFO(s.x);
+  PRINT_VAR_INFO(s.y);
+  #pragma acc data copy(s.x)
+  #pragma acc parallel present(s.y)
+  USE_VAR(s.y = 1);
+}
+
+CASE(caseParallelMembersConcat2) {
+  struct S { int x; int y; } s;
+  PRINT_VAR_INFO(s.x);
+  PRINT_VAR_INFO(s);
+  #pragma acc data copyout(s.x)
+  #pragma acc data copy(s.y)
+  #pragma acc parallel present(s)
+  USE_VAR(s.x = 1);
+}
+
+CASE(caseParallelMemberFullStruct) {
+  struct S { int x; int y; int z; } s;
+  PRINT_VAR_INFO(s.y);
+  PRINT_VAR_INFO(s);
+  #pragma acc data copyin(s.y)
+  #pragma acc parallel present(s)
+  USE_VAR(s.y = 1);
+}
+
+CASE(caseParallelSubarrayPresent) {
+  int same[10], beg[10], mid[10], end[10];
+  PRINT_VAR_INFO(same);
+  PRINT_VAR_INFO(same);
+  #pragma acc data copy(same,beg,mid,end)
+  #pragma acc parallel present(same[0:10],beg[0:3],mid[3:3],end[8:2])
+  {
+    USE_VAR(same[0] = 1; beg[0] = 1; mid[3] = 1; end[8] = 1);
+  }
+  #pragma acc data copy(same[3:6],beg[2:5],mid[1:8],end[0:5])
+  #pragma acc parallel present(same[3:6],beg[2:2],mid[3:3],end[4:1])
+  {
+    USE_VAR(same[3] = 1; beg[2] = 1; mid[3] = 1; end[4] = 1);
   }
 }
 

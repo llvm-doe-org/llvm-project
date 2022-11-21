@@ -1,9 +1,11 @@
 // Check "acc data".
 //
 // Interactions with "acc enter data" and "acc exit data" are checked in
-// enter-exit-data.c and fopenacc-structured-ref-count-omp.c.  Subarray
-// extension errors are checked in subarray-errors.c, and other runtime errors
-// from data clauses are checked in no-create.c and present.c.
+// enter-exit-data.c and fopenacc-structured-ref-count-omp.c.  Data
+// extension errors are checked in data-extension-errors.c (in
+// openmp/libacc2omp/test/directives), and other runtime errors from data
+// clauses are checked in no-create.c and present.c.  Member expressions in
+// data clauses are checked in data-da-member-expr.c.
 
 // REDEFINE: %{exe:fc:args} = -strict-whitespace
 // RUN: %{acc-check-dmp}
@@ -22,7 +24,9 @@
 # define TGT_PRINTF(...)
 #endif
 
-struct T { int i; };
+// We use one member throughout these tests.  The presence of the other members
+// checks that we don't get, for example, data extension errors at run time.
+struct T { int before; int i; int after; };
 
 int pr;
 int prArr[1];
@@ -90,9 +94,9 @@ void test() {
   // EXE: start
   printf("start\n");
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Check acc data without statically nested directive.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
   {
@@ -187,9 +191,9 @@ void test() {
            pr, c, ci, co, cr, nc);
   } // PRT-NEXT: }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Check acc data with nested acc data.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
   {
@@ -290,14 +294,14 @@ void test() {
            c0, c1, c2);
   } // PRT-NEXT: }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Check that every data clause is accepted and suppresses data clauses on
   // nested acc parallel (and on its OpenMP translation).
   //
   // For clauses on acc data, check all clause aliases.
   // Check scalar types.
   // Check suppression of inner copy clause data transfers.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
   {
@@ -770,14 +774,14 @@ void test() {
            pr, c0, c1, c2, ci0, ci1, ci2, co0, co1, co2, cr0, cr1, cr2, nc);
   } // PRT-NEXT: }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Repeat except...
   //
   // Don't bother checking clause aliases again.
   // Check array types (including not adding defaultmap for scalars with
   // suppressed OpenACC implicit DAs).
   // Check suppression of inner copyin clause data transfers.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
   {
@@ -1079,24 +1083,24 @@ void test() {
            prArr[0], c[0], ci[0], co[0], cr[0], nc[0]);
   } // PRT-NEXT: }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Repeat except...
   //
   // Check struct types (including not adding defaultmap for scalars with
   // suppressed OpenACC implicit DAs).
   // Check suppression of inner copyout clause data transfers.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
   {
     // PRT-NEXT: prSet();
-    // PRT: nc = {50};
+    // PRT: nc = {999, 50};
     prSet();
-    struct T  c = {10};
-    struct T ci = {20};
-    struct T co = {30};
-    struct T cr = {40};
-    struct T nc = {50};
+    struct T  c = {999, 10};
+    struct T ci = {999, 20};
+    struct T co = {999, 30};
+    struct T cr = {999, 40};
+    struct T nc = {999, 50};
     // DMP:      ACCDataDirective
     // DMP-NEXT:   ACCPresentClause
     // DMP-NOT:      <implicit>
@@ -1390,10 +1394,10 @@ void test() {
            prStruct.i, c.i, ci.i, co.i, cr.i, nc.i);
   } // PRT-NEXT: }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Check that all data clauses from multiple enclosing acc data directives
   // suppress data clauses on nested acc parallel directives.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
   {
@@ -1599,10 +1603,10 @@ void test() {
            c, ci, co);
   } // PRT-NEXT: }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Check that a data clause for a subarray from an enclosing acc data
   // directive suppresses data clauses on nested acc parallel.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
   {
@@ -1775,9 +1779,9 @@ void test() {
            arr[1], arr[2], arr[3]);
   } // PRT-NEXT: }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Repeat that but with non-constant start/length subarray expressions.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
   {
@@ -1962,7 +1966,7 @@ void test() {
            arr[1], arr[2], arr[3]);
   } // PRT-NEXT: }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // What is mapped when two outer acc data directives specify different
   // (non-overlapping) subarrays and there is no data clause on the acc
   // parallel?
@@ -1979,7 +1983,7 @@ void test() {
   // evolves to conform to future versions of the OpenMP spec.  See the section
   // "Basic Data Attributes" in the Clang OpenACC design document for further
   // discussion.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
   {
@@ -2108,10 +2112,10 @@ void test() {
            arr0[0], arr1[0]);
   } // PRT-NEXT: }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // defaultmap for scalars with suppressed OpenACC implicit DAs: Check that an
   // inherited ompx_no_alloc prevents adding it.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
   {
@@ -2163,7 +2167,7 @@ void test() {
     printf("x=%d\n", x);
   } // PRT-NEXT: }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // defaultmap for scalars with suppressed OpenACC implicit DAs: Check that an
   // an explicit DSA prevents adding it.
   //
@@ -2172,7 +2176,7 @@ void test() {
   //
   // Cases where it isn't added because the variable is non-scalar are tested
   // above.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
   {
@@ -2195,11 +2199,11 @@ void test() {
     printf("x=%d\n", x);
   } // PRT-NEXT: }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // defaultmap for scalars with suppressed OpenACC implicit DAs: Check that the
   // record of the need for it doesn't accidentally persist to a sibling acc
   // parallel.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
   {
@@ -2234,12 +2238,12 @@ void test() {
     printf("x=%d, y=%d\n", x, y);
   } // PRT-NEXT: }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Inherited ompx_no_alloc: Check that an explicit DMA or DSA prevents it.
   //
   // The case where -fopenacc-no-create-omp=no-ompx-no-alloc prevents it is
   // checked in no-create.c.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
   {

@@ -34,6 +34,9 @@ using namespace sema;
 /// apply to the pointer as a scalar address or as a subarray, but there
 /// ultimately can be data attributes only for one or the other.
 ///
+/// An \c ACCDataVar for a class/struct/union member identifies both the
+/// class/struct/union instance and the member.
+///
 /// Some variables have multiple declarations.  The information stored here
 /// includes the declarations that were originally referenced when analyzing
 /// some data attribute for the variable.  However, \c DenseMapInfo<ACCDataVar>
@@ -47,22 +50,32 @@ class ACCDataVar final {
   ///@{
   /// This \c ACCDataVar identifies either:
   /// - Invalid variable:
+  ///   - \c CompositeDecl == \c nullptr.
   ///   - \c ReferencedDecl == \c nullptr.
+  /// - A data member of a class/struct/union instance:
+  ///   - \c CompositeDecl is the class/struct/union instance's declaration that
+  ///     was referenced by the original referencing expression.
+  ///   - \c ReferencedDecl is the data member's \c FieldDecl that was
+  ///     referenced by the original referencing expression.
   /// - Some other kind of variable declaration:
+  ///   - \c CompositeDecl == \c nullptr.
   ///   - \c ReferencedDecl is the variable's \c VarDecl that was referenced by
   ///     the original referencing expression.
-  VarDecl *ReferencedDecl;
+  ValueDecl *CompositeDecl;
+  ValueDecl *ReferencedDecl;
   ///@}
 
 public:
   /// Construct a placeholder for an invalid variable.
-  ACCDataVar() : ReferencedDecl(nullptr) {}
+  ACCDataVar() : CompositeDecl(nullptr), ReferencedDecl(nullptr) {}
   /// Construct an \c ACCDataVar from an expression referencing a variable for
   /// which Clang analyzes OpenACC data attributes.
   ///
   /// - \p Ref is valid if it is either a:
   ///   - \c DeclRefExpr that references a variable declaration.
-  ///   - \c OMPArraySection whose base is a \c DeclRefExpr except that, if
+  ///   - \c MemberExpr that references a class/struct/union data member except
+  ///     that, if \p AllowMemberExpr is false, such a \p Ref is invalid.
+  ///   - \c OMPArraySection whose base is one of the above except that, if
   ///     \p AllowSubarray is false, such a \p Ref is invalid.
   /// - If \p Ref is valid, then \p S, \p Quiet, \p RealDKind, and \p CKind are
   ///   ignored.  Thus, these can be omitted for a \p Ref that was previously
@@ -79,13 +92,14 @@ public:
   ///   - If \p Quiet is true, \p S is used just to build and discard the
   ///     diagnostics that would have been issued.
   /// - If \p Ref is already known to be valid, it is harmless to set
-  ///   \p AllowSubarray more permissively than necessary, but it might be
-  ///   worthwhile to set it strictly and set \p S to \c nullptr to assert that
-  ///   \p Ref really is valid.
-  ACCDataVar(Expr *Ref, bool AllowSubarray = true, Sema *S = nullptr,
-             bool Quiet = false, OpenACCDirectiveKind RealDKind = ACCD_unknown,
+  ///   \p AllowMemberExpr and \p AllowSubarray more permissively than
+  ///   necessary, but it might be worthwhile to set them strictly and set \p S
+  ///   to \c nullptr to assert that \p Ref really is valid.
+  ACCDataVar(Expr *Ref, bool AllowMemberExpr = true, bool AllowSubarray = true,
+             Sema *S = nullptr, bool Quiet = false,
+             OpenACCDirectiveKind RealDKind = ACCD_unknown,
              OpenACCClauseKind CKind = ACCC_unknown)
-      : ReferencedDecl(nullptr) {
+      : CompositeDecl(nullptr), ReferencedDecl(nullptr) {
     // After diagnosing an error in Ref, it's sometimes possible to recover and
     // diagnose additional errors in Ref, but make sure to construct an invalid
     // ACCDataVar in that case.
@@ -147,43 +161,100 @@ public:
       RefWithoutSubarray = ASE->getBase()->IgnoreParenImpCasts();
     }
 
+    // Check any member expression.
+    if (MemberExpr *ME = dyn_cast<MemberExpr>(RefWithoutSubarray)) {
+      if (!AllowMemberExpr) {
+        assert(S && "expected no MemberExpr");
+        Diag(ME->getBeginLoc(), diag::err_acc_unsupported_member_expr)
+            << getOpenACCName(RealDKind) << getOpenACCName(CKind)
+            << ME->getSourceRange();
+      }
+      Expr *BaseExpr = ME->getBase()->IgnoreParenImpCasts();
+      if (DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(BaseExpr)) {
+        CompositeDecl = dyn_cast<VarDecl>(DRE->getDecl());
+        if (!CompositeDecl) {
+          assert(S &&
+                 "expected VarDecl to be referenced by DeclRefExpr base of "
+                 "member expression");
+          // Base of member expr cannot be member expr or subarray.
+          Diag(BaseExpr->getBeginLoc(), diag::err_acc_expected_data_var)
+              << /*allowMemberExpr=*/false << /*allowSubarray=*/false
+              << BaseExpr->getSourceRange();
+          // TODO: We haven't found a way to reach this case.  If there is, is
+          // the above diagnostic clear?
+          llvm_unreachable("expected VarDecl to be referenced by DeclRefExpr "
+                           "serving as base of MemberExpr");
+        }
+      } else {
+        assert(S && "expected DeclRefExpr as base of member expression");
+        // Base of member expr cannot be member expr or subarray.
+        Diag(BaseExpr->getBeginLoc(), diag::err_acc_expected_data_var)
+            << /*allowMemberExpr=*/false << /*allowSubarray=*/false
+            << BaseExpr->getSourceRange();
+      }
+      ReferencedDecl = dyn_cast<FieldDecl>(ME->getMemberDecl());
+      if (!ReferencedDecl) {
+        assert(S && "expected FieldDecl member of member expression");
+        Diag(ME->getMemberLoc(), diag::err_acc_expected_data_member)
+            << ME->getSourceRange();
+      }
+      return; /*data member*/
+    }
+    if (CXXMemberCallExpr *ME =
+            dyn_cast<CXXMemberCallExpr>(RefWithoutSubarray)) {
+      assert(S && "expected no CXXMemberCallExpr");
+      if (!AllowMemberExpr) {
+        Diag(ME->getBeginLoc(), diag::err_acc_unsupported_member_expr)
+            << getOpenACCName(RealDKind) << getOpenACCName(CKind)
+            << ME->getSourceRange();
+      }
+      Diag(ME->getExprLoc(), diag::err_acc_expected_data_member)
+          << ME->getSourceRange();
+      return; /*invalid*/
+    }
+
     // Check any plain variable name.
     if (DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(RefWithoutSubarray)) {
       ReferencedDecl = dyn_cast<VarDecl>(DRE->getDecl());
       if (!ReferencedDecl) {
         assert(S && "expected VarDecl to be referenced by DeclRefExpr");
         Diag(RefWithoutSubarray->getBeginLoc(), diag::err_acc_expected_data_var)
-            << AllowSubarray << RefWithoutSubarray->getSourceRange();
+            << AllowMemberExpr << AllowSubarray
+            << RefWithoutSubarray->getSourceRange();
       }
       return; /*plain variable name*/
     }
 
     // We have an unexpected expression.
-    assert(S && "expected DeclRefExpr");
+    assert(S && "expected MemberExpr or DeclRefExpr");
     Diag(RefWithoutSubarray->getBeginLoc(), diag::err_acc_expected_data_var)
-        << AllowSubarray << RefWithoutSubarray->getSourceRange();
+        << AllowMemberExpr << AllowSubarray
+        << RefWithoutSubarray->getSourceRange();
     /*invalid*/
   }
-  ACCDataVar(Expr *Ref, bool AllowSubarray, Sema *S,
+  ACCDataVar(Expr *Ref, bool AllowMemberExpr, bool AllowSubarray, Sema *S,
              OpenACCDirectiveKind RealDKind, OpenACCClauseKind CKind)
-      : ACCDataVar(Ref, AllowSubarray, S, /*Quiet=*/false, RealDKind, CKind) {}
+      : ACCDataVar(Ref, AllowMemberExpr, AllowSubarray, S, /*Quiet=*/false,
+                   RealDKind, CKind) {}
   /// If \c D is a variable declaration, construct a \c ACCDataVar for it.
   /// Otherwise, construct a placeholder for an invalid variable.  Because of
   /// the possibility of the latter case, it seems worthwhile to require this
   /// conversion to be explicit.
-  explicit ACCDataVar(Decl *D) {
-    ReferencedDecl = dyn_cast<VarDecl>(D);
-    if (!ReferencedDecl)
-      return; /*invalid*/
-  }
+  explicit ACCDataVar(Decl *D)
+      : CompositeDecl(nullptr), ReferencedDecl(dyn_cast<VarDecl>(D)) {}
   /// Is this a valid variable?  If not, other member functions shouldn't be
   /// called.
   bool isValid() const { return ReferencedDecl; }
   /// Get variable's declaration that was referenced by the original referencing
   /// expression.  Fail an assertion if \c isValid would return false.
-  VarDecl *getReferencedDecl() const {
+  ValueDecl *getReferencedDecl() const {
     assert(isValid() && "expected valid ACCDataVar");
     return ReferencedDecl;
+  }
+  /// Is the variable a class/struct/union data member?
+  bool isMember() const {
+    assert(isValid() && "expected valid ACCDataVar");
+    return isa<FieldDecl>(ReferencedDecl);
   }
   /// Get this variable's type.  Fail an assertion if \c isValid would return
   /// false.
@@ -206,19 +277,25 @@ template <> struct DenseMapInfo<ACCDataVar> {
   }
   static inline ACCDataVar getEmptyKey() {
     ACCDataVar Key;
-    Key.ReferencedDecl = DenseMapInfo<VarDecl *>::getEmptyKey();
+    Key.CompositeDecl = DenseMapInfo<ValueDecl *>::getEmptyKey();
+    Key.ReferencedDecl = DenseMapInfo<ValueDecl *>::getEmptyKey();
     return Key;
   }
   static inline ACCDataVar getTombstoneKey() {
     ACCDataVar Key;
-    Key.ReferencedDecl = DenseMapInfo<VarDecl *>::getTombstoneKey();
+    Key.CompositeDecl = DenseMapInfo<ValueDecl *>::getTombstoneKey();
+    Key.ReferencedDecl = DenseMapInfo<ValueDecl *>::getTombstoneKey();
     return Key;
   }
   static unsigned getHashValue(ACCDataVar Var) {
     return DenseMapInfo<Decl *>::getHashValue(canonicalize(Var.ReferencedDecl));
+    return detail::combineHashValue(
+        DenseMapInfo<Decl *>::getHashValue(canonicalize(Var.CompositeDecl)),
+        DenseMapInfo<Decl *>::getHashValue(canonicalize(Var.ReferencedDecl)));
   }
   static bool isEqual(const ACCDataVar &LHS, const ACCDataVar &RHS) {
-    return canonicalize(LHS.ReferencedDecl) == canonicalize(RHS.ReferencedDecl);
+    return canonicalize(LHS.CompositeDecl) == canonicalize(RHS.CompositeDecl) &&
+           canonicalize(LHS.ReferencedDecl) == canonicalize(RHS.ReferencedDecl);
   }
 };
 } // end namespace llvm

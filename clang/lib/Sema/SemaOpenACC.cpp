@@ -244,10 +244,10 @@ public:
     assert(!Stack.empty() && "expected non-empty directive stack");
     assert(isOpenACCLoopDirective(getEffectiveDirective()) &&
            "expected loop control variable to be added to loop directive");
-    // It should not be possible to receive a subarray here.
-    ACCDataVar Var(E, /*AllowSubarray=*/false, &SemaRef, /*Quiet=*/true);
-    // Drop invalid loop control variables for now.  Loop form validation will
-    // catch them later.
+    // Drop invalid loop control variable expressions for now.  Loop form
+    // validation will diagnose them later.
+    ACCDataVar Var(E, /*AllowMemberExpr=*/false, /*AllowSubarray=*/false,
+                   &SemaRef, /*Quiet=*/true);
     if (Var.isValid()) {
       Stack.back().LCVSet.insert(Var);
       Stack.back().LCVExprs.emplace_back(E);
@@ -1350,6 +1350,103 @@ class ImplicitDAAdder : public StmtVisitor<ImplicitDAAdder> {
   size_t ACCDirectiveStmtCount;
   std::list<Expr *> ScalarReductionVarDiags;
   llvm::DenseMap<ACCDataVar, SourceLocation> ScalarGangReductionVarDiags;
+  /// Add any required implicit attributes for the variable referenced by the
+  /// expression \p E unless \p FinishOnly and the variable has no attributes
+  /// yet visible at the directive.
+  ///
+  /// Returns true if the variable now has all implicit attributes on the
+  /// directive as required by \p E.  Returns false otherwise (the only case is
+  /// that \p FinishOnly == \c true prevented adding attributes).
+  bool VisitVar(Expr *E, bool FinishOnly = false) {
+    ACCDataVar Var(E);
+
+    // Skip variable if it is locally declared or privatized by a clause.
+    if (LocalDefinitions.back().count(Var))
+      return true;
+
+    // Skip variable if an implicit DA has already been computed.
+    ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(Var);
+    if (ImplicitDA.getDMAKind() != ACC_DMA_unknown ||
+        ImplicitDA.getDSAKind() != ACC_DSA_unknown)
+      return true;
+
+    // Get predetermined and explicit DAs.
+    const DirStackTy::DAVarData &VarData = DirStack.getTopDA(Var);
+
+    // Compute implicit DAs.
+    OpenACCDMAKind DMAKind = ACC_DMA_unknown;
+    OpenACCDSAKind DSAKind = ACC_DSA_unknown;
+    if (isOpenACCLoopDirective(DirStack.getEffectiveDirective())) {
+      if (VarData.DSAKind != ACC_DSA_unknown) {
+        // There's a predetermined or explicit DSA, so there's no implicit DA.
+      } else if (FinishOnly) {
+        assert(VarData.DMAKind == ACC_DMA_unknown &&
+               "expected no DMA on loop directive");
+        return false;
+      } else {
+        // OpenACC 3.0 sec. 2.6.1 "Variables with Predetermined Data
+        // Attributes" L1038-1039:
+        //   "The loop variable in a C for statement [...] that is associated
+        //   with a loop directive is predetermined to be private to each
+        //   thread that will execute each iteration of the loop."
+        //
+        // See the section "Loop Control Variables" in the Clang OpenACC
+        // design document for the interpretation used here.
+        // Sema::ActOnOpenACCDirectiveStmt handles the case without a seq
+        // clause.
+        assert((!DirStack.hasLoopControlVariable(Var) ||
+                DirStack.getLoopPartitioning().hasSeqExplicit()) &&
+               "expected predetermined private for loop control variable "
+               "with explicit seq");
+        // See the section "Basic Data Attributes" in the Clang OpenACC
+        // design document for discussion of the shared data attribute.
+        DSAKind = ACC_DSA_shared;
+      }
+    } else if (isOpenACCParallelDirective(DirStack.getEffectiveDirective())) {
+      if (DirStack.hasVisibleDMA(Var) || VarData.DSAKind != ACC_DSA_unknown) {
+        // There's a visible explicit DMA, or there's a predetermined or
+        // explicit DSA, so there's no implicit DA other than the defaults.
+      } else if (FinishOnly) {
+        return false;
+      } else if (!Var.getType()->isScalarType()) {
+        // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L830-833:
+        //   "If there is no default(present) clause on the construct, an
+        //   array or composite variable referenced in the parallel construct
+        //   that does not appear in a data clause for the construct or any
+        //   enclosing data construct will be treated as if it appeared in a
+        //   copy clause for the parallel construct."
+        DMAKind = ACC_DMA_copy;
+      } else {
+        // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L835-838:
+        //   "A scalar variable referenced in the parallel construct that
+        //   does not appear in a data clause for the construct or any
+        //   enclosing data construct will be treated as if it appeared in a
+        //   firstprivate clause unless a reduction would otherwise imply a
+        //   copy clause for it."
+        // OpenACC 3.0 sec. 6 "Glossary" L3841-3845:
+        //   "Scalar datatype - an intrinsic or built-in datatype that is not
+        //   an array or aggregate datatype. [...] In C, scalar datatypes are
+        //   char (signed or unsigned), int (signed or unsigned, with
+        //   optional short, long or long long attribute), enum, float,
+        //   double, long double, _Complex (with optional float or long
+        //   attribute), or any pointer datatype."
+        DSAKind = ACC_DSA_firstprivate;
+      }
+      if (DMAKind == ACC_DMA_unknown && VarData.DMAKind == ACC_DMA_unknown)
+        DMAKind = ACC_DMA_nomap;
+      if (DSAKind == ACC_DSA_unknown && VarData.DSAKind == ACC_DSA_unknown)
+        DSAKind = ACC_DSA_shared;
+    } else {
+      llvm_unreachable("unexpected effective directive");
+    }
+
+    // Store implicit DAs for later conversion to clause objects.
+    if (DMAKind != ACC_DMA_unknown)
+      ImplicitDA.setDMA(DMAKind, E);
+    if (DSAKind != ACC_DSA_unknown)
+      ImplicitDA.setDSA(DSAKind, E);
+    return true;
+  }
 
 public:
   void VisitDeclStmt(DeclStmt *S) {
@@ -1357,90 +1454,24 @@ public:
       LocalDefinitions.back().insert(ACCDataVar(*I));
     BaseVisitor::VisitDeclStmt(S);
   }
-  void VisitDeclRefExpr(DeclRefExpr *E) {
-    if (isa<VarDecl>(E->getDecl())) {
-      ACCDataVar Var(E);
-
-      // Skip variable if it is locally declared or privatized by a clause.
-      if (LocalDefinitions.back().count(Var))
-        return;
-
-      // Skip variable if an implicit DA has already been computed.
-      ImplicitDATable::Entry &ImplicitDA = ImplicitDAs.lookup(Var);
-      if (ImplicitDA.getDMAKind() != ACC_DMA_unknown ||
-          ImplicitDA.getDSAKind() != ACC_DSA_unknown)
-        return;
-
-      // Get predetermined and explicit DAs.
-      const DirStackTy::DAVarData &DVar = DirStack.getTopDA(Var);
-
-      // Compute implicit DAs.
-      OpenACCDMAKind DMAKind = ACC_DMA_unknown;
-      OpenACCDSAKind DSAKind = ACC_DSA_unknown;
-      if (isOpenACCLoopDirective(DirStack.getEffectiveDirective())) {
-        if (DVar.DSAKind == ACC_DSA_unknown) {
-          // OpenACC 3.0 sec. 2.6.1 "Variables with Predetermined Data
-          // Attributes" L1038-1039:
-          //   "The loop variable in a C for statement [...] that is associated
-          //   with a loop directive is predetermined to be private to each
-          //   thread that will execute each iteration of the loop."
-          //
-          // See the section "Loop Control Variables" in the Clang OpenACC
-          // design document for the interpretation used here.
-          // Sema::ActOnOpenACCDirectiveStmt handles the case without a seq
-          // clause.
-          assert((!DirStack.hasLoopControlVariable(Var) ||
-                  DirStack.getLoopPartitioning().hasSeqExplicit()) &&
-                 "expected predetermined private for loop control variable "
-                 "with explicit seq");
-          // See the section "Basic Data Attributes" in the Clang OpenACC
-          // design document for discussion of the shared data attribute.
-          DSAKind = ACC_DSA_shared;
-        }
-      } else if (isOpenACCParallelDirective(DirStack.getEffectiveDirective())) {
-        if (DirStack.hasVisibleDMA(Var) || DVar.DSAKind != ACC_DSA_unknown) {
-          // There's a visible explicit DMA, or there's a predetermined or
-          // explicit DSA, so there's no implicit DA other than the defaults.
-        } else if (!Var.getType()->isScalarType()) {
-          // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L830-833:
-          //   "If there is no default(present) clause on the construct, an
-          //   array or composite variable referenced in the parallel construct
-          //   that does not appear in a data clause for the construct or any
-          //   enclosing data construct will be treated as if it appeared in a
-          //   copy clause for the parallel construct."
-          DMAKind = ACC_DMA_copy;
-        } else {
-          // OpenACC 3.0 sec. 2.5.1 "Parallel Construct" L835-838:
-          //   "A scalar variable referenced in the parallel construct that
-          //   does not appear in a data clause for the construct or any
-          //   enclosing data construct will be treated as if it appeared in a
-          //   firstprivate clause unless a reduction would otherwise imply a
-          //   copy clause for it."
-          // OpenACC 3.0 sec. 6 "Glossary" L3841-3845:
-          //   "Scalar datatype - an intrinsic or built-in datatype that is not
-          //   an array or aggregate datatype. [...] In C, scalar datatypes are
-          //   char (signed or unsigned), int (signed or unsigned, with
-          //   optional short, long or long long attribute), enum, float,
-          //   double, long double, _Complex (with optional float or long
-          //   attribute), or any pointer datatype."
-          DSAKind = ACC_DSA_firstprivate;
-        }
-        if (DMAKind == ACC_DMA_unknown && DVar.DMAKind == ACC_DMA_unknown)
-          DMAKind = ACC_DMA_nomap;
-        if (DSAKind == ACC_DSA_unknown && DVar.DSAKind == ACC_DSA_unknown)
-          DSAKind = ACC_DSA_shared;
-      } else
-        llvm_unreachable("unexpected effective directive");
-
-      // Store implicit DAs for later conversion to clause objects.
-      if (DMAKind != ACC_DMA_unknown)
-        ImplicitDA.setDMA(DMAKind, E);
-      if (DSAKind != ACC_DSA_unknown)
-        ImplicitDA.setDSA(DSAKind, E);
-    }
+  void VisitDeclRefExpr(DeclRefExpr *DRE) {
+    if (isa<VarDecl>(DRE->getDecl()))
+      VisitVar(DRE);
   }
-  void VisitMemberExpr(MemberExpr *E) {
-    Visit(E->getBase());
+  // So far in our experiments, a CXXMemberCallExpr has a MemberExpr child,
+  // which is handled properly here.
+  void VisitMemberExpr(MemberExpr *ME) {
+    // If ACCDataVar can handle ME, then ME might appear in an explicit data
+    // clause somewhere.  If so, finish its implicit attributes.  Otherwise,
+    // add implicit attributes for the base instead.
+    ACCDataVar MEVar(ME, /*AllowMemberExpr=*/true, /*AllowSubarray=*/true,
+                     &DirStack.SemaRef, /*Quiet=*/true);
+    if (MEVar.isValid() && VisitVar(ME, /*FinishOnly=*/true))
+      return;
+    // In the case of s.x, the following produces copy(s).  In the case of p->x,
+    // it produces firstprivate(p) because p is a scalar.  It's up to the
+    // programmer to get that right.
+    Visit(ME->getBase());
   }
   void VisitACCDirectiveStmt(ACCDirectiveStmt *D) {
     ++ACCDirectiveStmtCount;
@@ -2156,7 +2187,8 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
     SmallVector<VarDecl *, 5> LCVVars;
     for (Expr *RefExpr : DirStack.getLoopControlVariables()) {
       ACCDataVar Var(RefExpr);
-      LCVVars.push_back(Var.getReferencedDecl());
+      VarDecl *VD = cast<VarDecl>(Var.getReferencedDecl());
+      LCVVars.push_back(VD);
     }
     Res = ActOnOpenACCLoopDirective(ComputedClauses, AStmt, LCVVars);
     break;
@@ -3410,14 +3442,22 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
 
 static ACCDataVar getVarFromDMAVarList(Sema &S, DirStackTy &DirStack,
                                        OpenACCClauseKind CKind, Expr *RefExpr) {
-  return ACCDataVar(RefExpr, /*AllowSubarray=*/true, &S,
-                    DirStack.getRealDirective(), CKind);
+  return ACCDataVar(RefExpr, /*AllowMemberExpr=*/true, /*AllowSubarray=*/true,
+                    &S, DirStack.getRealDirective(), CKind);
 }
 
 static ACCDataVar getVarFromDSAVarList(Sema &S, DirStackTy &DirStack,
                                        OpenACCClauseKind CKind, Expr *RefExpr) {
-  return ACCDataVar(RefExpr, /*AllowSubarray=*/false, &S,
-                    DirStack.getRealDirective(), CKind);
+  // See the section "Basic Data Attributes" in the Clang OpenACC design
+  // document for a discussion of why we don't permit member expressions and
+  // subarrays for explicit DSAs.
+  //
+  // Except for an implicit 'shared' (which uses 'getVarFromDMAVarList' instead)
+  // associated with an explicit DMA, an implicit DSA is never computed for a
+  // member expression or array.  (If such an expression is used in a construct,
+  // an implicit DSA might be computed for the base of the expression instead.)
+  return ACCDataVar(RefExpr, /*AllowMemberExpr=*/false, /*AllowSubarray=*/false,
+                    &S, DirStack.getRealDirective(), CKind);
 }
 
 static bool RequireCompleteTypeACC(
@@ -3735,7 +3775,8 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC implicit shared clause");
     // On compute constructs, the implicit shared clause is usually paired with
-    // DMAs, which permit subarrays.  We make it as flexible as a DMA.
+    // DMAs, which permit member expressions and subarrays.  We make it as
+    // flexible as a DMA.
     ACCDataVar Var =
         getVarFromDMAVarList(*this, DirStack, ACCC_shared, RefExpr);
     assert(Var.isValid() && "expected valid Expr for implicit shared clause");
@@ -4022,10 +4063,16 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // OpenACC 3.2, sec. 2.9.11 "reduction clause", L2114:
     // "Every var in a reduction clause appearing on an orphaned loop construct
     // must be private."
+    // The getVarFromDSAVarList call above rejects member expressions in
+    // reduction clauses.
+    assert(!Var.isMember() &&
+           "expected reduction clause not to accept member expression");
+    bool hasLocalStorage =
+        cast<VarDecl>(Var.getReferencedDecl())->hasLocalStorage();
     if (DirStack.getEffectiveDirective() == ACCD_loop &&
         !isOpenACCComputeDirective(DirStack.isInComputeRegion()) &&
         !DirStack.hasPrivatizingDSAOnAncestorOrphanedLoop(Var) &&
-        !Var.getReferencedDecl()->hasLocalStorage())
+        !hasLocalStorage)
       Diag(ELoc, diag::err_acc_orphaned_loop_reduction_var_not_gang_private)
           << NameForDiag(*this, Var);
 

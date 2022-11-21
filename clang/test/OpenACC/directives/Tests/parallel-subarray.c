@@ -1,6 +1,7 @@
 // Check subarrays in clauses on "acc parallel" except the present and no_create
 // clauses are checked in present.c and no-create.c.  Subarray extension errors
-// are checked in subarray-errors.c.
+// are checked in data-extension-errors.c
+// (in openmp/libacc2omp/test/directives).
 //
 // We cannot access elements that aren't mapped without risking run-time
 // crashes, so we cannot check that those elements actually aren't mapped

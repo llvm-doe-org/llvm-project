@@ -9054,6 +9054,15 @@ public:
       for (auto &M : CurTypes)
         M |= OMP_MAP_OMPX_HOLD;
     }
+    // If all elements have the ompx_no_alloc modifier, then make sure the
+    // runtime uses it for the struct as a whole so that it won't allocate the
+    // struct unnecessarily.
+    if (CurTypes.end() ==
+        llvm::find_if(CurTypes, [](OpenMPOffloadMappingFlags Type) {
+          return !(Type & OMP_MAP_OMPX_NO_ALLOC);
+        })) {
+      CombinedInfo.Types.back() |= OMP_MAP_OMPX_NO_ALLOC;
+    }
 
     // All other current entries will be MEMBER_OF the combined entry
     // (except for PTR_AND_OBJ entries which do not have a placeholder value

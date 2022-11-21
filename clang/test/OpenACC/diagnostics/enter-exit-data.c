@@ -31,6 +31,9 @@ int main() {
   const int constA[3];
   // expected-note@+1 3 {{variable 'constADecl' declared const here}}
   const extern int constADecl[3];
+  struct S { int i; };
+  struct S *ps;
+  struct SS { struct S s; } ss;
 
   //--------------------------------------------------
   // Directive name parsing errors
@@ -266,10 +269,10 @@ int main() {
   #pragma acc enter data pcopyin(i jk)
   // expected-error@+1 {{expected expression}}
   #pragma acc exit data pcopyout(jk ,)
-  // expected-error@+2 {{expected variable name or subarray}}
+  // expected-error@+2 {{expected variable name or member expression or subarray}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data present_or_copyin((int)i)
-  // expected-error@+2 {{expected variable name or subarray}}
+  // expected-error@+2 {{expected variable name or member expression or subarray}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
   #pragma acc exit data present_or_copyout((*(int(*)[3])a)[0:])
   // expected-error@+2 {{subscripted value is not an array or pointer}}
@@ -327,6 +330,32 @@ int main() {
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
   #pragma acc exit data delete(foo)
 
+  // Nested member expression not permitted.
+
+  // expected-error@+7 {{expected variable name}} // range is for ss.s
+  // expected-error@+7 {{expected variable name}} // range is for ss.s
+  // expected-error@+7 {{expected variable name}} // range is for ss.s
+  // expected-error@+7 {{expected variable name}} // range is for ss.s
+  // expected-error@+7 {{expected variable name}} // range is for ss.s
+  // expected-error@+7 {{expected variable name}} // range is for ss.s
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
+  #pragma acc enter data copyin(ss.s.i)             \
+                         pcopyin(ss.s.i)            \
+                         present_or_copyin(ss.s.i)  \
+                         create(ss.s.i)             \
+                         pcreate(ss.s.i)            \
+                         present_or_create(ss.s.i)
+
+  // expected-error@+5 {{expected variable name}} // range is for ss.s
+  // expected-error@+5 {{expected variable name}} // range is for ss.s
+  // expected-error@+5 {{expected variable name}} // range is for ss.s
+  // expected-error@+5 {{expected variable name}} // range is for ss.s
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
+  #pragma acc exit data copyout(ss.s.i)            \
+                        pcopyout(ss.s.i)           \
+                        present_or_copyout(ss.s.i) \
+                        delete(ss.s.i)
+
   // Array subscript not supported where subarray is permitted.
 
   // expected-error@+2 {{subarray syntax must include ':'}}
@@ -379,6 +408,42 @@ int main() {
   #pragma acc exit data delete(a[jk], \
                                m[2:][1], \
                                a[:], m[0:2][0:2])
+
+  // Member expression plus subarray not permitted.
+
+  // expected-error@+13 {{OpenACC subarray is not allowed here}}
+  // expected-error@+13 {{OpenACC subarray is not allowed here}}
+  // expected-error@+13 {{OpenACC subarray is not allowed here}}
+  // expected-error@+13 {{OpenACC subarray is not allowed here}}
+  // expected-error@+13 {{OpenACC subarray is not allowed here}}
+  // expected-error@+13 {{OpenACC subarray is not allowed here}}
+  // expected-error@+7 {{expected variable name}}
+  // expected-error@+7 {{expected variable name}}
+  // expected-error@+7 {{expected variable name}}
+  // expected-error@+7 {{expected variable name}}
+  // expected-error@+7 {{expected variable name}}
+  // expected-error@+7 {{expected variable name}}
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
+  #pragma acc enter data copyin(ps[4:6].i)              \
+                         pcopyin(ps[5:7].i)             \
+                         present_or_copyin(ps[6:8].i)   \
+                         create(ps[10:12].i)            \
+                         pcreate(ps[11:13].i)           \
+                         present_or_create(ps[12:14].i)
+
+  // expected-error@+9 {{OpenACC subarray is not allowed here}}
+  // expected-error@+9 {{OpenACC subarray is not allowed here}}
+  // expected-error@+9 {{OpenACC subarray is not allowed here}}
+  // expected-error@+9 {{OpenACC subarray is not allowed here}}
+  // expected-error@+5 {{expected variable name}}
+  // expected-error@+5 {{expected variable name}}
+  // expected-error@+5 {{expected variable name}}
+  // expected-error@+5 {{expected variable name}}
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
+  #pragma acc exit data copyout(ps[4:6].i)             \
+                        pcopyout(ps[5:7].i)            \
+                        present_or_copyout(ps[6:8].i)  \
+                        delete(ps[10:12].i)
 
   // Variables of incomplete type.
 

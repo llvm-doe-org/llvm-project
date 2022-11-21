@@ -37,7 +37,8 @@
 // RUN: %{check}( -DERR=ERR_ACC -DDATA=present_or_create  %)
 // RUN: %{check}( -DERR=ERR_ACC -DDATA=no_create          %)
 // RUN: %{check}( -DERR=ERR_OMP_INIT                      %)
-// RUN: %{check}( -DERR=ERR_OMP_INIT_ASSIGN               %)
+// RUN: %{check}( -DERR=ERR_OMP_INIT_ASSIGN0              %)
+// RUN: %{check}( -DERR=ERR_OMP_INIT_ASSIGN1              %)
 // RUN: %{check}( -DERR=ERR_OMP_COND                      %)
 // RUN: %{check}( -DERR=ERR_OMP_INC                       %)
 // RUN: %{check}( -DERR=ERR_OMP_INC0                      %)
@@ -48,13 +49,14 @@
 #include <limits.h>
 #include <stdint.h>
 
-#define ERR_ACC             1
-#define ERR_OMP_INIT        2
-#define ERR_OMP_INIT_ASSIGN 3
-#define ERR_OMP_COND        4
-#define ERR_OMP_INC         5
-#define ERR_OMP_INC0        6
-#define ERR_OMP_VAR         7
+#define ERR_ACC              1
+#define ERR_OMP_INIT         2
+#define ERR_OMP_INIT_ASSIGN0 3
+#define ERR_OMP_INIT_ASSIGN1 4
+#define ERR_OMP_COND         5
+#define ERR_OMP_INC          6
+#define ERR_OMP_INC0         7
+#define ERR_OMP_VAR          8
 
 #define PARENT_ORPHANED 1
 #define PARENT_SEPARATE 2
@@ -108,6 +110,10 @@ void fn(int param) {
   struct S { int i; } s; // expected-note 9 {{variable 's' declared here}}
   union U { int i; } u; // expected-note 9 {{variable 'u' declared here}}
   extern struct S sDecl; // expected-note 9 {{variable 'sDecl' declared here}}
+  struct SS { struct S s; struct S *ps; } ss;
+  struct S *ps;
+  union U *pu;
+  struct SS *pss;
 
   //--------------------------------------------------
   // No clauses
@@ -2062,7 +2068,85 @@ void fn(int param) {
       ;
   }
 
-  // Subarrays not permitted.
+  // Member expression not permitted.
+#if PARENT == PARENT_SEPARATE
+  #pragma acc parallel
+#endif
+  {
+    // orph-sep-error@+8 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
+    // orph-sep-error@+8 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
+    // orph-sep-error@+8 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
+    // orph-sep-error@+8 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
+    // cmb-error@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // cmb-error@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // cmb-error@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // cmb-error@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
+    #pragma acc CMB_PAR loop vector private(s.i,   \
+                                            u.i,   \
+                                            ps->i, \
+                                            pu->i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // orph-sep-error@+8 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
+    // orph-sep-error@+8 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
+    // orph-sep-error@+8 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
+    // orph-sep-error@+8 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
+    // cmb-error@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // cmb-error@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // cmb-error@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // cmb-error@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
+    #pragma acc CMB_PAR loop worker reduction(+:s.i, \
+                                              u.i,   \
+                                              ps->i, \
+                                              pu->i)
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
+
+  // Nested member expression not permitted.
+#if PARENT == PARENT_SEPARATE
+  #pragma acc parallel
+#endif
+  {
+    // orph-sep-error@+12 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
+    // orph-sep-error@+12 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
+    // orph-sep-error@+12 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
+    // orph-sep-error@+12 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
+    // cmb-error@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // cmb-error@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // cmb-error@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // cmb-error@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // expected-error@+4 {{expected variable name}} // range is for ss.s
+    // expected-error@+4 {{expected variable name}} // range is for ss.ps
+    // expected-error@+4 {{expected variable name}} // range is for pss->s
+    // expected-error@+4 {{expected variable name}} // range is for pss->ps
+    #pragma acc CMB_PAR loop vector private(ss.s.i,     \
+                                            ss.ps->i,   \
+                                            pss->s.i,   \
+                                            pss->ps->i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // orph-sep-error@+12 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
+    // orph-sep-error@+12 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
+    // orph-sep-error@+12 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
+    // orph-sep-error@+12 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
+    // cmb-error@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // cmb-error@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // cmb-error@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // cmb-error@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // expected-error@+4 {{expected variable name}} // range is for ss.s
+    // expected-error@+4 {{expected variable name}} // range is for ss.ps
+    // expected-error@+4 {{expected variable name}} // range is for pss->s
+    // expected-error@+4 {{expected variable name}} // range is for pss->ps
+    #pragma acc CMB_PAR loop vector reduction(*:ss.s.i,   \
+                                              ss.ps->i,   \
+                                              pss->s.i,   \
+                                              pss->ps->i)
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
+
+  // Subarray not permitted.
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
 #endif
@@ -2129,6 +2213,33 @@ void fn(int param) {
                                                 a[10],     \
                                                 m[0:1][0], \
                                                 m[0][0:1]) worker
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
+
+  // Member expression plus subarray not permitted.
+#if PARENT == PARENT_SEPARATE
+  #pragma acc parallel
+#endif
+  {
+    // expected-error@+4 {{OpenACC subarray is not allowed here}}
+    // expected-error@+4 {{OpenACC subarray is not allowed here}}
+    // expected-error@+2 {{expected variable name}}
+    // expected-error@+2 {{expected variable name}}
+    #pragma acc CMB_PAR loop worker private(ps[0:1].i)       \
+                                    reduction(max:ps[1:2].i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // orph-sep-error@+8 {{in 'private' clause on '#pragma acc loop', subarray is not supported}}
+    // orph-sep-error@+8 {{in 'reduction' clause on '#pragma acc loop', subarray is not supported}}
+    // cmb-error@+6 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // cmb-error@+6 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
+    // orph-sep-error@+4 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
+    // orph-sep-error@+4 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
+    // cmb-error@+2 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // cmb-error@+2 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
+    #pragma acc CMB_PAR loop gang private(ss.ps[1:1])       \
+                                  reduction(max:ss.ps[0:2])
     for (int i = 0; i < 5; ++i)
       ;
   }
@@ -3881,7 +3992,7 @@ void fn(int k) {
   }
 }
 
-#elif ERR == ERR_OMP_INIT_ASSIGN
+#elif ERR == ERR_OMP_INIT_ASSIGN0
 
 #if PARENT == PARENT_ORPHANED
 #pragma acc routine gang
@@ -3891,13 +4002,34 @@ void fn(int k) {
   #pragma acc parallel
 #endif
   {
-    // This case is unique because Clang's OpenACC analysis must not choke on
-    // the invalid loop control variable expression "*p" (i.e., it's not the
-    // expected DeclRefExpr) before the OpenMP analysis reports the invalid loop
-    // form.
+    // For the invalid loop control variable expression "*p" (i.e., it's not the
+    // expected DeclRefExpr), Clang's OpenACC analysis must not choke (e.g.,
+    // produce a confusing diagnostic about an invalid implicit private clause
+    // for "*p") before the OpenMP analysis reports the invalid loop form.
     int *p;
     #pragma acc CMB_PAR loop independent gang
     for (*p = 0; *p < 5; ++*p) // expected-error {{initialization clause of OpenMP for loop is not in canonical form ('var = init' or 'T var = init')}}
+      ;
+  }
+}
+
+#elif ERR == ERR_OMP_INIT_ASSIGN1
+
+#if PARENT == PARENT_ORPHANED
+#pragma acc routine gang
+#endif
+void fn(int k) {
+#if PARENT == PARENT_SEPARATE
+  #pragma acc parallel
+#endif
+  {
+    // Same as previous case except Clang's OpenACC analysis must be careful not
+    // to accept a member expression as the loop control variable expression
+    // even though it accepts member expressions for some other OpenACC
+    // variables.
+    struct S { int i; } s;
+    #pragma acc CMB_PAR loop independent gang
+    for (s.i = 0; s.i < 5; ++s.i) // expected-error {{initialization clause of OpenMP for loop is not in canonical form ('var = init' or 'T var = init')}}
       ;
   }
 }

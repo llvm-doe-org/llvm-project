@@ -42,7 +42,7 @@
 // compile because this list produces the enum used by the code.
 //
 // The various cases covered here should be kept consistent with present.c,
-// update.c, and subarray-errors.c (the last is located in
+// update.c, and data-extension-errors.c (the last is located in
 // openmp/libacc2omp/test/directives).  For example, a subarray that extends a
 // subarray already present is consistently considered not present, so the
 // present clause produces a runtime error and the no_create clause doesn't
@@ -55,8 +55,15 @@
 //                          CASE                                NO_ALLOC_OR_ALLOC       NOT_CRASH_IF_FAIL
 // DEFINE:   %{check-case}( caseDataScalarPresent            %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
 // DEFINE:   %{check-case}( caseDataScalarAbsent             %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataStructPresent            %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataStructAbsent             %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
 // DEFINE:   %{check-case}( caseDataArrayPresent             %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
 // DEFINE:   %{check-case}( caseDataArrayAbsent              %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataMemberPresent            %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataMemberAbsent             %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataMembersDisjoint          %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataMembersConcat2           %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseDataMemberFullStruct         %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
 // DEFINE:   %{check-case}( caseDataSubarrayPresent          %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
 // DEFINE:   %{check-case}( caseDataSubarrayDisjoint         %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
 // DEFINE:   %{check-case}( caseDataSubarrayOverlapStart     %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
@@ -65,8 +72,15 @@
 // DEFINE:   %{check-case}( caseDataSubarrayNonSubarray      %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
 // DEFINE:   %{check-case}( caseParallelScalarPresent        %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
 // DEFINE:   %{check-case}( caseParallelScalarAbsent         %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelStructPresent        %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelStructAbsent         %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
 // DEFINE:   %{check-case}( caseParallelArrayPresent         %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
 // DEFINE:   %{check-case}( caseParallelArrayAbsent          %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelMemberPresent        %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelMemberAbsent         %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelMembersDisjoint      %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelMembersConcat2       %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseParallelMemberFullStruct     %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
 // DEFINE:   %{check-case}( caseParallelSubarrayPresent      %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
 // DEFINE:   %{check-case}( caseParallelSubarrayDisjoint     %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
 // DEFINE:   %{check-case}( caseParallelSubarrayOverlapStart %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
@@ -163,6 +177,9 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
   REG_CALLBACK(enter_data_start);
   REG_CALLBACK(exit_data_start);
 }
+
+#define PRINT_VAR_INFO(Var) \
+  fprintf(stderr, "addr=%p, size=%ld\n", &(Var), sizeof (Var))
 
 #define PRINT_SUBARRAY_INFO(Arr, Start, Length) \
   fprintf(stderr, "addr=%p, size=%ld\n", &(Arr)[Start], \
@@ -273,6 +290,64 @@ CASE(caseDataScalarAbsent) {
   ;
 }
 
+//   PRT-LABEL: {{.*}}caseDataStructPresent{{.*}} {
+//    PRT-NEXT:   struct S {
+//         PRT:   } s;
+//
+//  PRT-A-NEXT:   #pragma acc data copy(s){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: s){{$}}
+//  PRT-A-NEXT:   #pragma acc data no_create(s){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: s){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: s){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(s){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: s){{$}}
+// PRT-OA-NEXT:   // #pragma acc data no_create(s){{$}}
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+//
+//  EXE-OFF-caseDataStructPresent-NOT: {{.}}
+//      EXE-OFF-caseDataStructPresent: acc_ev_enter_data_start
+// EXE-OFF-caseDataStructPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataStructPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseDataStructPresent-NEXT:   acc_ev_enter_data_start
+// EXE-OFF-caseDataStructPresent-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseDataStructPresent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataStructPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataStructPresent-NEXT:   acc_ev_free
+//  EXE-OFF-caseDataStructPresent-NOT: {{.}}
+CASE(caseDataStructPresent) {
+  struct S { int i; int j; } s;
+  #pragma acc data copy(s)
+  #pragma acc data no_create(s)
+  ;
+}
+
+//   PRT-LABEL: {{.*}}caseDataStructAbsent{{.*}} {
+//    PRT-NEXT:   struct S {
+//         PRT:   } s;
+//  PRT-A-NEXT:   #pragma acc data no_create(s){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: s){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: s){{$}}
+// PRT-OA-NEXT:   // #pragma acc data no_create(s){{$}}
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+//
+//        EXE-OFF-caseDataStructAbsent-NOT: {{.}}
+//            EXE-OFF-caseDataStructAbsent: acc_ev_enter_data_start
+// EXE-OFF-caseDataStructAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataStructAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseDataStructAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataStructAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataStructAbsent-ALLOC-NEXT:   acc_ev_free
+//        EXE-OFF-caseDataStructAbsent-NOT: {{.}}
+CASE(caseDataStructAbsent) {
+  struct S { int i; int j; } s;
+  #pragma acc data no_create(s)
+  ;
+}
+
 //   PRT-LABEL: {{.*}}caseDataArrayPresent{{.*}} {
 //    PRT-NEXT:   int arr[3];
 //
@@ -329,26 +404,334 @@ CASE(caseDataArrayAbsent) {
   ;
 }
 
+//   PRT-LABEL: {{.*}}caseDataMemberPresent{{.*}} {
+//    PRT-NEXT:   struct S {
+//         PRT:   };
+//    PRT-NEXT:   struct S same, beg, mid, end;
+//
+//  PRT-A-NEXT:   #pragma acc data copy(same,beg,mid,end)
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: same,beg,mid,end)
+//  PRT-A-NEXT:   #pragma acc data no_create(same.x,same.y,same.z,beg.x,mid.y,end.z)
+// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: same.x,same.y,same.z,beg.x,mid.y,end.z)
+//
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: same,beg,mid,end)
+// PRT-OA-NEXT:   // #pragma acc data copy(same,beg,mid,end)
+//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: same.x,same.y,same.z,beg.x,mid.y,end.z)
+// PRT-OA-NEXT:   // #pragma acc data no_create(same.x,same.y,same.z,beg.x,mid.y,end.z)
+//
+//    PRT-NEXT:   ;
+//
+//  PRT-A-NEXT:   #pragma acc data copy(same.y,same.z,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: same.y,same.z,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+//  PRT-A-NEXT:   #pragma acc data no_create(same.y,same.z,beg.y,mid.y,end.y)
+// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: same.y,same.z,beg.y,mid.y,end.y)
+//
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: same.y,same.z,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+// PRT-OA-NEXT:   // #pragma acc data copy(same.y,same.z,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: same.y,same.z,beg.y,mid.y,end.y)
+// PRT-OA-NEXT:   // #pragma acc data no_create(same.y,same.z,beg.y,mid.y,end.y)
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+//
+//  EXE-OFF-caseDataMemberPresent-NOT: {{.}}
+//      EXE-OFF-caseDataMemberPresent: acc_ev_enter_data_start
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_enter_data_start
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseDataMemberPresent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseDataMemberPresent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_enter_data_start
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseDataMemberPresent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberPresent-NEXT:   acc_ev_free
+//  EXE-OFF-caseDataMemberPresent-NOT: {{.}}
+CASE(caseDataMemberPresent) {
+  struct S { int x; int y; int z; };
+  struct S same, beg, mid, end;
+  #pragma acc data copy(same,beg,mid,end)
+  #pragma acc data no_create(same.x,same.y,same.z,beg.x,mid.y,end.z)
+  ;
+  #pragma acc data copy(same.y,same.z,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+  #pragma acc data no_create(same.y,same.z,beg.y,mid.y,end.y)
+  ;
+}
+
+//  EXE-OFF-caseDataMemberAbsent-NOT: {{.}}
+//                EXE-caseDataMemberAbsent: allocations not expected
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//           EXE-caseDataMemberAbsent-NEXT: allocations expected
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_enter_data_start
+//       EXE-OFF-caseDataMemberAbsent-NEXT:   acc_ev_alloc
+//       EXE-OFF-caseDataMemberAbsent-NEXT:   acc_ev_create
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_exit_data_start
+//       EXE-OFF-caseDataMemberAbsent-NEXT:   acc_ev_delete
+//       EXE-OFF-caseDataMemberAbsent-NEXT:   acc_ev_free
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_enter_data_start
+//       EXE-OFF-caseDataMemberAbsent-NEXT:   acc_ev_alloc
+//       EXE-OFF-caseDataMemberAbsent-NEXT:   acc_ev_create
+//       EXE-OFF-caseDataMemberAbsent-NEXT: acc_ev_exit_data_start
+//       EXE-OFF-caseDataMemberAbsent-NEXT:   acc_ev_delete
+//       EXE-OFF-caseDataMemberAbsent-NEXT:   acc_ev_free
+//        EXE-OFF-caseDataMemberAbsent-NOT: {{.}}
+CASE(caseDataMemberAbsent) {
+  struct S { int x; int y; int z; } s;
+  fprintf(stderr, "allocations not expected\n");
+  #pragma acc data no_create(s.x)
+  ;
+  #pragma acc data no_create(s.y)
+  ;
+  #pragma acc data no_create(s.z)
+  ;
+  // Clang OpenMP codegen generates a map type entry for the struct as a whole
+  // when multiple members are specified, so we need to be sure the struct as a
+  // whole is handled as ompx_no_alloc.
+  #pragma acc data no_create(s.x) no_create(s.y)
+  ;
+  #pragma acc data no_create(s.y) no_create(s.z)
+  ;
+  #pragma acc data no_create(s.x) no_create(s.z)
+  ;
+  #pragma acc data no_create(s.x, s.y, s.z)
+  ;
+  fprintf(stderr, "allocations expected\n");
+  // If only some members have ompx_no_alloc, then the struct as a whole must
+  // *not* be handled as ompx_no_alloc.
+  #pragma acc data no_create(s.x) copy(s.y)
+  ;
+  #pragma acc data copy(s.x) no_create(s.y)
+  ;
+}
+
+//   PRT-LABEL: {{.*}}caseDataMembersDisjoint{{.*}} {
+//    PRT-NEXT:   struct S {
+//         PRT:   } s;
+//
+//  PRT-A-NEXT:   #pragma acc data copy(s.x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: s.x){{$}}
+//  PRT-A-NEXT:   #pragma acc data no_create(s.y){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: s.y){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: s.x){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(s.x){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: s.y){{$}}
+// PRT-OA-NEXT:   // #pragma acc data no_create(s.y){{$}}
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+//
+//        EXE-OFF-caseDataMembersDisjoint-NOT: {{.}}
+//            EXE-OFF-caseDataMembersDisjoint: acc_ev_enter_data_start
+//       EXE-OFF-caseDataMembersDisjoint-NEXT:   acc_ev_alloc
+//       EXE-OFF-caseDataMembersDisjoint-NEXT:   acc_ev_create
+//       EXE-OFF-caseDataMembersDisjoint-NEXT:   acc_ev_enter_data_start
+// EXE-OFF-caseDataMembersDisjoint-ALLOC-NEXT:     acc_ev_alloc
+// EXE-OFF-caseDataMembersDisjoint-ALLOC-NEXT:     acc_ev_create
+//       EXE-OFF-caseDataMembersDisjoint-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseDataMembersDisjoint-ALLOC-NEXT:     acc_ev_delete
+// EXE-OFF-caseDataMembersDisjoint-ALLOC-NEXT:     acc_ev_free
+//       EXE-OFF-caseDataMembersDisjoint-NEXT: acc_ev_exit_data_start
+//       EXE-OFF-caseDataMembersDisjoint-NEXT:   acc_ev_delete
+//       EXE-OFF-caseDataMembersDisjoint-NEXT:   acc_ev_free
+//        EXE-OFF-caseDataMembersDisjoint-NOT: {{.}}
+CASE(caseDataMembersDisjoint) {
+  struct S { int x; int y; } s;
+  #pragma acc data copy(s.x)
+  #pragma acc data no_create(s.y)
+  ;
+}
+
+//   PRT-LABEL: {{.*}}caseDataMembersConcat2{{.*}} {
+//    PRT-NEXT:   struct S {
+//         PRT:   } s;
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
+//
+//  PRT-A-NEXT:   #pragma acc data copyout(s.x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,from: s.x){{$}}
+//  PRT-A-NEXT:   #pragma acc data copy(s.y){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: s.y){{$}}
+//  PRT-A-NEXT:   #pragma acc data no_create(s){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: s){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,from: s.x){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copyout(s.x){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: s.y){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(s.y){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: s){{$}}
+// PRT-OA-NEXT:   // #pragma acc data no_create(s){{$}}
+//
+//    PRT-NEXT:   ;
+//    PRT-NEXT: }
+//
+//  EXE-HOST-caseDataMembersConcat2-NOT: {{.}}
+//      EXE-HOST-caseDataMembersConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+// EXE-HOST-caseDataMembersConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//
+//           EXE-OFF-caseDataMembersConcat2-NOT: {{.}}
+//               EXE-OFF-caseDataMembersConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//          EXE-OFF-caseDataMembersConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//          EXE-OFF-caseDataMembersConcat2-NEXT: acc_ev_enter_data_start
+//          EXE-OFF-caseDataMembersConcat2-NEXT:   acc_ev_alloc
+//          EXE-OFF-caseDataMembersConcat2-NEXT:   acc_ev_create
+//          EXE-OFF-caseDataMembersConcat2-NEXT:   acc_ev_enter_data_start
+//          EXE-OFF-caseDataMembersConcat2-NEXT:     acc_ev_alloc
+//          EXE-OFF-caseDataMembersConcat2-NEXT:     acc_ev_create
+//          EXE-OFF-caseDataMembersConcat2-NEXT:     acc_ev_enter_data_start
+//    EXE-OFF-caseDataMembersConcat2-ALLOC-NEXT:     Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+//    EXE-OFF-caseDataMembersConcat2-ALLOC-NEXT:     Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
+//    EXE-OFF-caseDataMembersConcat2-ALLOC-NEXT:     Libomptarget error: Consult {{.*}}
+//    EXE-OFF-caseDataMembersConcat2-ALLOC-NEXT:     {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                                                    # An abort message usually follows.
+//     EXE-OFF-caseDataMembersConcat2-ALLOC-NOT:     Libomptarget
+// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT:     acc_ev_exit_data_start
+// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT:     acc_ev_delete
+// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT:     acc_ev_free
+// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT:   acc_ev_free
+CASE(caseDataMembersConcat2) {
+  struct S { int x; int y; } s;
+  PRINT_VAR_INFO(s.x);
+  PRINT_VAR_INFO(s);
+  #pragma acc data copyout(s.x)
+  #pragma acc data copy(s.y)
+  #pragma acc data no_create(s)
+  ;
+}
+
+//  EXE-HOST-caseDataMemberFullStruct-NOT: {{.}}
+//      EXE-HOST-caseDataMemberFullStruct: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+// EXE-HOST-caseDataMemberFullStruct-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//
+//           EXE-OFF-caseDataMemberFullStruct-NOT: {{.}}
+//               EXE-OFF-caseDataMemberFullStruct: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//          EXE-OFF-caseDataMemberFullStruct-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//          EXE-OFF-caseDataMemberFullStruct-NEXT: acc_ev_enter_data_start
+//          EXE-OFF-caseDataMemberFullStruct-NEXT:   acc_ev_alloc
+//          EXE-OFF-caseDataMemberFullStruct-NEXT:   acc_ev_create
+//          EXE-OFF-caseDataMemberFullStruct-NEXT:   acc_ev_enter_data_start
+//    EXE-OFF-caseDataMemberFullStruct-ALLOC-NEXT:   Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+//    EXE-OFF-caseDataMemberFullStruct-ALLOC-NEXT:   Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
+//    EXE-OFF-caseDataMemberFullStruct-ALLOC-NEXT:   Libomptarget error: Consult {{.*}}
+//    EXE-OFF-caseDataMemberFullStruct-ALLOC-NEXT:   {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                                                      # An abort message usually follows.
+//     EXE-OFF-caseDataMemberFullStruct-ALLOC-NOT:   Libomptarget
+// EXE-OFF-caseDataMemberFullStruct-NO-ALLOC-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseDataMemberFullStruct-NO-ALLOC-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataMemberFullStruct-NO-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataMemberFullStruct-NO-ALLOC-NEXT:   acc_ev_free
+CASE(caseDataMemberFullStruct) {
+  struct S { int x; int y; int z; } s;
+  PRINT_VAR_INFO(s.y);
+  PRINT_VAR_INFO(s);
+  #pragma acc data copyin(s.y)
+  #pragma acc data no_create(s)
+  ;
+}
+
 //   PRT-LABEL: {{.*}}caseDataSubarrayPresent{{.*}} {
-//    PRT-NEXT:   int all[10], same[10], beg[10], mid[10], end[10];
+//    PRT-NEXT:   int same[10], beg[10], mid[10], end[10];
 //
-//  PRT-A-NEXT:   #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-//  PRT-A-NEXT:   #pragma acc data no_create(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
-// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+//  PRT-A-NEXT:   #pragma acc data copy(same,beg,mid,end)
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: same,beg,mid,end)
+//  PRT-A-NEXT:   #pragma acc data no_create(same[0:10],beg[0:3],mid[3:3],end[8:2])
+// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: same[0:10],beg[0:3],mid[3:3],end[8:2])
 //
-//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-// PRT-OA-NEXT:   // #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
-// PRT-OA-NEXT:   // #pragma acc data no_create(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: same,beg,mid,end)
+// PRT-OA-NEXT:   // #pragma acc data copy(same,beg,mid,end)
+//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: same[0:10],beg[0:3],mid[3:3],end[8:2])
+// PRT-OA-NEXT:   // #pragma acc data no_create(same[0:10],beg[0:3],mid[3:3],end[8:2])
+//
+//    PRT-NEXT:   ;
+//
+//  PRT-A-NEXT:   #pragma acc data copy(same[3:6],beg[2:5],mid[1:8],end[0:5])
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: same[3:6],beg[2:5],mid[1:8],end[0:5])
+//  PRT-A-NEXT:   #pragma acc data no_create(same[3:6],beg[2:2],mid[3:3],end[4:1])
+// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: same[3:6],beg[2:2],mid[3:3],end[4:1])
+//
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: same[3:6],beg[2:5],mid[1:8],end[0:5])
+// PRT-OA-NEXT:   // #pragma acc data copy(same[3:6],beg[2:5],mid[1:8],end[0:5])
+//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: same[3:6],beg[2:2],mid[3:3],end[4:1])
+// PRT-OA-NEXT:   // #pragma acc data no_create(same[3:6],beg[2:2],mid[3:3],end[4:1])
 //
 //    PRT-NEXT:   ;
 //    PRT-NEXT: }
 //
 //  EXE-OFF-caseDataSubarrayPresent-NOT: {{.}}
 //      EXE-OFF-caseDataSubarrayPresent: acc_ev_enter_data_start
-// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_alloc
-// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_create
 // EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_alloc
 // EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_create
 // EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_alloc
@@ -368,13 +751,34 @@ CASE(caseDataArrayAbsent) {
 // EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_free
 // EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_delete
 // EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseDataSubarrayPresent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_enter_data_start
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseDataSubarrayPresent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_free
 // EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_delete
 // EXE-OFF-caseDataSubarrayPresent-NEXT:   acc_ev_free
 //  EXE-OFF-caseDataSubarrayPresent-NOT: {{.}}
 CASE(caseDataSubarrayPresent) {
-  int all[10], same[10], beg[10], mid[10], end[10];
-  #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-  #pragma acc data no_create(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+  int same[10], beg[10], mid[10], end[10];
+  #pragma acc data copy(same,beg,mid,end)
+  #pragma acc data no_create(same[0:10],beg[0:3],mid[3:3],end[8:2])
+  ;
+  #pragma acc data copy(same[3:6],beg[2:5],mid[1:8],end[0:5])
+  #pragma acc data no_create(same[3:6],beg[2:2],mid[3:3],end[4:1])
   ;
 }
 
@@ -664,6 +1068,38 @@ CASE(caseParallelScalarAbsent) {
   if (use) x = 5;
 }
 
+//  EXE-OFF-caseParallelStructPresent-NOT: {{.}}
+//      EXE-OFF-caseParallelStructPresent: acc_ev_enter_data_start
+// EXE-OFF-caseParallelStructPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelStructPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseParallelStructPresent-NEXT:   acc_ev_enter_data_start
+// EXE-OFF-caseParallelStructPresent-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseParallelStructPresent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelStructPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelStructPresent-NEXT:   acc_ev_free
+//  EXE-OFF-caseParallelStructPresent-NOT: {{.}}
+CASE(caseParallelStructPresent) {
+  struct S { int i; int j; } s;
+  #pragma acc data copy(s)
+  #pragma acc parallel no_create(s)
+  s.i = 5;
+}
+
+//        EXE-OFF-caseParallelStructAbsent-NOT: {{.}}
+//            EXE-OFF-caseParallelStructAbsent: acc_ev_enter_data_start
+// EXE-OFF-caseParallelStructAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelStructAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseParallelStructAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelStructAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelStructAbsent-ALLOC-NEXT:   acc_ev_free
+//        EXE-OFF-caseParallelStructAbsent-NOT: {{.}}
+CASE(caseParallelStructAbsent) {
+  struct S { int i; int j; } s;
+  int use = 0;
+  #pragma acc parallel no_create(s)
+  if (use) s.i = 5;
+}
+
 //  EXE-OFF-caseParallelArrayPresent-NOT: {{.}}
 //      EXE-OFF-caseParallelArrayPresent: acc_ev_enter_data_start
 // EXE-OFF-caseParallelArrayPresent-NEXT:   acc_ev_alloc
@@ -696,10 +1132,250 @@ CASE(caseParallelArrayAbsent) {
   if (use) arr[0] = 5;
 }
 
+//  EXE-OFF-caseParallelMemberPresent-NOT: {{.}}
+//      EXE-OFF-caseParallelMemberPresent: acc_ev_enter_data_start
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_enter_data_start
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseParallelMemberPresent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseParallelMemberPresent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_enter_data_start
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseParallelMemberPresent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberPresent-NEXT:   acc_ev_free
+//  EXE-OFF-caseParallelMemberPresent-NOT: {{.}}
+CASE(caseParallelMemberPresent) {
+  struct S { int x; int y; int z; };
+  struct S same, beg, mid, end;
+  #pragma acc data copy(same,beg,mid,end)
+  #pragma acc parallel no_create(same.x,same.y,same.z,beg.x,mid.y,end.z)
+  {
+    same.x = 1; beg.x = 1; mid.y = 1; end.z = 1;
+  }
+  #pragma acc data copy(same.y,beg.y,beg.z,mid.x,mid.y,mid.z,end.x,end.y)
+  #pragma acc parallel no_create(same.y,beg.y,mid.y,end.y)
+  {
+    same.y = 1; beg.y = 1; mid.y = 1; end.y = 1;
+  }
+}
+
+//  EXE-OFF-caseParallelMemberAbsent-NOT: {{.}}
+//                EXE-caseParallelMemberAbsent: allocations not expected
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberAbsent-ALLOC-NEXT:   acc_ev_free
+//           EXE-caseParallelMemberAbsent-NEXT: allocations expected
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_enter_data_start
+//       EXE-OFF-caseParallelMemberAbsent-NEXT:   acc_ev_alloc
+//       EXE-OFF-caseParallelMemberAbsent-NEXT:   acc_ev_create
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_exit_data_start
+//       EXE-OFF-caseParallelMemberAbsent-NEXT:   acc_ev_delete
+//       EXE-OFF-caseParallelMemberAbsent-NEXT:   acc_ev_free
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_enter_data_start
+//       EXE-OFF-caseParallelMemberAbsent-NEXT:   acc_ev_alloc
+//       EXE-OFF-caseParallelMemberAbsent-NEXT:   acc_ev_create
+//       EXE-OFF-caseParallelMemberAbsent-NEXT: acc_ev_exit_data_start
+//       EXE-OFF-caseParallelMemberAbsent-NEXT:   acc_ev_delete
+//       EXE-OFF-caseParallelMemberAbsent-NEXT:   acc_ev_free
+//        EXE-OFF-caseParallelMemberAbsent-NOT: {{.}}
+CASE(caseParallelMemberAbsent) {
+  struct S { int x; int y; int z; } s;
+  int use = 0;
+  fprintf(stderr, "allocations not expected\n");
+  #pragma acc parallel no_create(s.x)
+  if (use) s.x = 1;
+  #pragma acc parallel no_create(s.y)
+  if (use) s.y = 1;
+  #pragma acc parallel no_create(s.z)
+  if (use) s.z = 1;
+  // Clang OpenMP codegen generates a map type entry for the struct as a whole
+  // when multiple members are specified, so we need to be sure the struct as a
+  // whole is handled as ompx_no_alloc.
+  #pragma acc parallel no_create(s.x) no_create(s.y)
+  if (use) s.x = 1;
+  #pragma acc parallel no_create(s.y) no_create(s.z)
+  if (use) s.y = 1;
+  #pragma acc parallel no_create(s.x) no_create(s.z)
+  if (use) s.z = 1;
+  #pragma acc parallel no_create(s.x, s.y, s.z)
+  if (use) s.y = 1;
+  fprintf(stderr, "allocations expected\n");
+  // If only some members have ompx_no_alloc, then the struct as a whole must
+  // *not* be handled as ompx_no_alloc.
+  #pragma acc parallel no_create(s.x) copy(s.y)
+  if (use) s.x = 1;
+  #pragma acc parallel copy(s.x) no_create(s.y)
+  if (use) s.y = 1;
+}
+
+//        EXE-OFF-caseParallelMembersDisjoint-NOT: {{.}}
+//            EXE-OFF-caseParallelMembersDisjoint: acc_ev_enter_data_start
+//       EXE-OFF-caseParallelMembersDisjoint-NEXT:   acc_ev_alloc
+//       EXE-OFF-caseParallelMembersDisjoint-NEXT:   acc_ev_create
+//       EXE-OFF-caseParallelMembersDisjoint-NEXT:   acc_ev_enter_data_start
+// EXE-OFF-caseParallelMembersDisjoint-ALLOC-NEXT:     acc_ev_alloc
+// EXE-OFF-caseParallelMembersDisjoint-ALLOC-NEXT:     acc_ev_create
+//       EXE-OFF-caseParallelMembersDisjoint-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseParallelMembersDisjoint-ALLOC-NEXT:     acc_ev_delete
+// EXE-OFF-caseParallelMembersDisjoint-ALLOC-NEXT:     acc_ev_free
+//       EXE-OFF-caseParallelMembersDisjoint-NEXT: acc_ev_exit_data_start
+//       EXE-OFF-caseParallelMembersDisjoint-NEXT:   acc_ev_delete
+//       EXE-OFF-caseParallelMembersDisjoint-NEXT:   acc_ev_free
+//        EXE-OFF-caseParallelMembersDisjoint-NOT: {{.}}
+CASE(caseParallelMembersDisjoint) {
+  struct S { int w; int x; int y; int z; } s;
+  int use = 0;
+  #pragma acc data copy(s.w, s.x)
+  #pragma acc parallel no_create(s.y, s.z)
+  if (use) s.y = 1;
+}
+
+//  EXE-HOST-caseParallelMembersConcat2-NOT: {{.}}
+//      EXE-HOST-caseParallelMembersConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+// EXE-HOST-caseParallelMembersConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//
+//           EXE-OFF-caseParallelMembersConcat2-NOT: {{.}}
+//               EXE-OFF-caseParallelMembersConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//          EXE-OFF-caseParallelMembersConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//          EXE-OFF-caseParallelMembersConcat2-NEXT: acc_ev_enter_data_start
+//          EXE-OFF-caseParallelMembersConcat2-NEXT:   acc_ev_alloc
+//          EXE-OFF-caseParallelMembersConcat2-NEXT:   acc_ev_create
+//          EXE-OFF-caseParallelMembersConcat2-NEXT:   acc_ev_enter_data_start
+//          EXE-OFF-caseParallelMembersConcat2-NEXT:     acc_ev_alloc
+//          EXE-OFF-caseParallelMembersConcat2-NEXT:     acc_ev_create
+//          EXE-OFF-caseParallelMembersConcat2-NEXT:     acc_ev_enter_data_start
+//    EXE-OFF-caseParallelMembersConcat2-ALLOC-NEXT:     Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+//                                                        # FIXME: Names like getTargetPointer are meaningless to users.
+//    EXE-OFF-caseParallelMembersConcat2-ALLOC-NEXT:     Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
+//    EXE-OFF-caseParallelMembersConcat2-ALLOC-NEXT:     Libomptarget error: Call to targetDataBegin failed, abort target.
+//    EXE-OFF-caseParallelMembersConcat2-ALLOC-NEXT:     Libomptarget error: Failed to process data before launching the kernel.
+//    EXE-OFF-caseParallelMembersConcat2-ALLOC-NEXT:     Libomptarget error: Consult {{.*}}
+//    EXE-OFF-caseParallelMembersConcat2-ALLOC-NEXT:     {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                                                        # An abort message usually follows.
+//     EXE-OFF-caseParallelMembersConcat2-ALLOC-NOT:     Libomptarget
+// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT:     acc_ev_exit_data_start
+// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT:     acc_ev_delete
+// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT:     acc_ev_free
+// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT:   acc_ev_free
+CASE(caseParallelMembersConcat2) {
+  struct S { int x; int y; } s;
+  PRINT_VAR_INFO(s.x);
+  PRINT_VAR_INFO(s);
+  int use = 0;
+  #pragma acc data copyout(s.x)
+  #pragma acc data copy(s.y)
+  #pragma acc parallel no_create(s)
+  if (use) s.x = 1;
+}
+
+//  EXE-HOST-caseParallelMemberFullStruct-NOT: {{.}}
+//      EXE-HOST-caseParallelMemberFullStruct: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+// EXE-HOST-caseParallelMemberFullStruct-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//
+//           EXE-OFF-caseParallelMemberFullStruct-NOT: {{.}}
+//               EXE-OFF-caseParallelMemberFullStruct: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//          EXE-OFF-caseParallelMemberFullStruct-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//          EXE-OFF-caseParallelMemberFullStruct-NEXT: acc_ev_enter_data_start
+//          EXE-OFF-caseParallelMemberFullStruct-NEXT:   acc_ev_alloc
+//          EXE-OFF-caseParallelMemberFullStruct-NEXT:   acc_ev_create
+//          EXE-OFF-caseParallelMemberFullStruct-NEXT:   acc_ev_enter_data_start
+//    EXE-OFF-caseParallelMemberFullStruct-ALLOC-NEXT:   Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+//                                                          # FIXME: Names like getTargetPointer are meaningless to users.
+//    EXE-OFF-caseParallelMemberFullStruct-ALLOC-NEXT:   Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
+//    EXE-OFF-caseParallelMemberFullStruct-ALLOC-NEXT:   Libomptarget error: Call to targetDataBegin failed, abort target.
+//    EXE-OFF-caseParallelMemberFullStruct-ALLOC-NEXT:   Libomptarget error: Failed to process data before launching the kernel.
+//    EXE-OFF-caseParallelMemberFullStruct-ALLOC-NEXT:   Libomptarget error: Consult {{.*}}
+//    EXE-OFF-caseParallelMemberFullStruct-ALLOC-NEXT:   {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                                                          # An abort message usually follows.
+//     EXE-OFF-caseParallelMemberFullStruct-ALLOC-NOT:   Libomptarget
+// EXE-OFF-caseParallelMemberFullStruct-NO-ALLOC-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseParallelMemberFullStruct-NO-ALLOC-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelMemberFullStruct-NO-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelMemberFullStruct-NO-ALLOC-NEXT:   acc_ev_free
+CASE(caseParallelMemberFullStruct) {
+  struct S { int x; int y; int z; } s;
+  PRINT_VAR_INFO(s.y);
+  PRINT_VAR_INFO(s);
+  int use = 0;
+  #pragma acc data copy(s.y)
+  #pragma acc parallel no_create(s)
+  if (use) s.y = 1;
+}
+
 //  EXE-OFF-caseParallelSubarrayPresent-NOT: {{.}}
 //      EXE-OFF-caseParallelSubarrayPresent: acc_ev_enter_data_start
-// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_alloc
-// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_create
 // EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_alloc
 // EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_create
 // EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_alloc
@@ -719,15 +1395,38 @@ CASE(caseParallelArrayAbsent) {
 // EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_free
 // EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_delete
 // EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseParallelSubarrayPresent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_create
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_enter_data_start
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseParallelSubarrayPresent-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_free
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_free
 // EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_delete
 // EXE-OFF-caseParallelSubarrayPresent-NEXT:   acc_ev_free
 //  EXE-OFF-caseParallelSubarrayPresent-NOT: {{.}}
 CASE(caseParallelSubarrayPresent) {
-  int all[10], same[10], beg[10], mid[10], end[10];
-  #pragma acc data copy(all,same[3:6],beg[2:5],mid[1:8],end[0:5])
-  #pragma acc parallel no_create(all[0:10],same[3:6],beg[2:2],mid[3:3],end[4:1])
+  int same[10], beg[10], mid[10], end[10];
+  #pragma acc data copy(same,beg,mid,end)
+  #pragma acc parallel no_create(same[0:10],beg[0:3],mid[3:3],end[8:2])
   {
-    all[0] = 1; same[3] = 1; beg[2] = 1; mid[3] = 1; end[4] = 1;
+    same[0] = 1; beg[0] = 1; mid[3] = 1; end[8] = 1;
+  }
+  #pragma acc data copy(same[3:6],beg[2:5],mid[1:8],end[0:5])
+  #pragma acc parallel no_create(same[3:6],beg[2:2],mid[3:3],end[4:1])
+  {
+    same[3] = 1; beg[2] = 1; mid[3] = 1; end[4] = 1;
   }
 }
 

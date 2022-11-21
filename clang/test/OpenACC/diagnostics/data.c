@@ -27,6 +27,9 @@ int main() {
   const int constA[3];
   // expected-noacc-note@+1 {{variable 'constADecl' declared const here}}
   const extern int constADecl[3];
+  struct S { int i; };
+  struct SS { struct S s; } ss;
+  struct S *ps;
 
   //--------------------------------------------------
   // No clauses
@@ -170,11 +173,11 @@ int main() {
   // expected-error@+1 {{expected expression}}
   #pragma acc data pcopyin(jk ,)
     ;
-  // expected-error@+2 {{expected variable name or subarray}}
+  // expected-error@+2 {{expected variable name or member expression or subarray}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data present_or_copyin((int)i)
     ;
-  // expected-error@+2 {{expected variable name or subarray}}
+  // expected-error@+2 {{expected variable name or member expression or subarray}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data copyout((*(int(*)[3])a)[0:])
     ;
@@ -212,11 +215,21 @@ int main() {
   // expected-error@+2 {{use of undeclared identifier 'foo'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data copy(foo)
+    ;
+  // expected-error@+2 {{expected variable name}} // range is for ss.s
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
+  #pragma acc data copy(ss.s.i)
+    ;
   // expected-error@+2 {{subarray syntax must include ':'}}
   // expected-error@+2 {{subarray syntax must include ':'}}
   #pragma acc data copyin(a[jk], \
                           m[2:][1], \
                           a[:], m[0:2][0:2])
+    ;
+  // expected-error@+3 {{OpenACC subarray is not allowed here}}
+  // expected-error@+2 {{expected variable name}}
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
+  #pragma acc data no_create(ps[0:1].i)
     ;
   // expected-error@+2 {{variable in 'copyout' clause cannot have incomplete type 'int[]'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}

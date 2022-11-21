@@ -31,7 +31,7 @@
 // compile because this list produces the enum used by the code.
 //
 // The various cases covered here should be kept consistent with present.c,
-// no-create.c, and subarray-errors.c (the last is located in
+// no-create.c, and data-extension-errors.c (the last is located in
 // openmp/libacc2omp/test/directives).  For example, a subarray that extends a
 // subarray already present is consistently considered not present, so the
 // present clause produces a runtime error and the no_create clause doesn't
@@ -47,6 +47,11 @@
 // DEFINE:   %{check-case}( caseStructAbsent         %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
 // DEFINE:   %{check-case}( caseArrayPresent         %,                                        %,                                  %) && \
 // DEFINE:   %{check-case}( caseArrayAbsent          %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
+// DEFINE:   %{check-case}( caseMemberPresent        %,                                        %,                                  %) && \
+// DEFINE:   %{check-case}( caseMemberAbsent         %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
+// DEFINE:   %{check-case}( caseMembersDisjoint      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
+// DEFINE:   %{check-case}( caseMembersConcat2       %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
+// DEFINE:   %{check-case}( caseMemberFullStruct     %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
 // DEFINE:   %{check-case}( caseSubarrayPresent      %,                                        %,                                  %) && \
 // DEFINE:   %{check-case}( caseSubarrayPresent2     %,                                        %,                                  %) && \
 // DEFINE:   %{check-case}( caseSubarrayDisjoint     %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
@@ -252,11 +257,11 @@ int main(int argc, char *argv[]) {
 // EXE-NEXT: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
 // EXE-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Check acc update not statically nested within another construct.
 //
 // Check with scalar type via subarray on pointer.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseNoParentPresent
 // PRT-LABEL: {{.*}}caseNoParentPresent{{.*}} {
@@ -314,13 +319,13 @@ CASE(caseNoParentAbsent) {
   printHostInt(d);
 }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Check acc update nested statically within acc data.
 //
 // Check that dumping and printing integrate correctly with the outer directive.
 //
 // Check with scalar type.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseScalarPresent
 // PRT-LABEL: {{.*}}caseScalarPresent{{.*}} {
@@ -435,17 +440,14 @@ CASE(caseScalarAbsent) {
   printHostInt(d);
 }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Check struct.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseStructPresent
 // PRT-LABEL: {{.*}}caseStructPresent{{.*}} {
 CASE(caseStructPresent) {
-  struct S {
-    int i;
-    int j;
-  } s, h, d;
+  struct S { int i; int j; } s, h, d;
   PRINT_VAR_INFO(s);
   PRINT_VAR_INFO(s);
 
@@ -521,10 +523,7 @@ CASE(caseStructPresent) {
 // DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseStructAbsent
 // PRT-LABEL: {{.*}}caseStructAbsent{{.*}} {
 CASE(caseStructAbsent) {
-  struct S {
-    int i;
-    int j;
-  } s, h, d;
+  struct S { int i; int j; } s, h, d;
   PRINT_VAR_INFO(h);
   PRINT_VAR_INFO(h);
 
@@ -555,9 +554,9 @@ CASE(caseStructAbsent) {
   printHostInt(d.j);
 }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Check array.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseArrayPresent
 // PRT-LABEL: {{.*}}caseArrayPresent{{.*}} {
@@ -673,13 +672,287 @@ CASE(caseArrayAbsent) {
   printHostInt(d[1]);
 }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
+// Check struct member not encompassing full struct.
+//------------------------------------------------------------------------------
+
+// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseMemberPresent
+// PRT-LABEL: {{.*}}caseMemberPresent{{.*}} {
+CASE(caseMemberPresent) {
+  struct S { int before; int i; int after; } s, h, d;
+  PRINT_VAR_INFO(s);
+  PRINT_VAR_INFO(s);
+
+  #pragma acc data create(s.i, h.i, d.i)
+  {
+    setHostInt(s.i, 10);
+    setHostInt(h.i, 20);
+    setHostInt(d.i, 30);
+    setDeviceInt(s.i, 11);
+    setDeviceInt(h.i, 21);
+    setDeviceInt(d.i, 31);
+
+    //                 DMP: ACCUpdateDirective
+    //            DMP-NEXT:   ACCSelfClause
+    //            DMP-NEXT:     MemberExpr {{.* .i .*}}
+    //            DMP-NEXT:       DeclRefExpr {{.*}} 's'
+    //            DMP-NEXT:   ACCSelfClause
+    //            DMP-NEXT:     MemberExpr {{.* .i .*}}
+    //            DMP-NEXT:       DeclRefExpr {{.*}} 'h'
+    //            DMP-NEXT:   ACCDeviceClause
+    //            DMP-NEXT:     MemberExpr {{.* .i .*}}
+    //            DMP-NEXT:       DeclRefExpr {{.*}} 'd'
+    // DMP-IF_PRESENT-NEXT:   ACCIfPresentClause
+    //            DMP-NEXT:   impl: OMPTargetUpdateDirective
+    //            DMP-NEXT:     OMPFromClause
+    //            DMP-NEXT:       MemberExpr {{.* .i .*}}
+    //            DMP-NEXT:         DeclRefExpr {{.*}} 's'
+    //            DMP-NEXT:     OMPFromClause
+    //            DMP-NEXT:       MemberExpr {{.* .i .*}}
+    //            DMP-NEXT:         DeclRefExpr {{.*}} 'h'
+    //            DMP-NEXT:     OMPToClause
+    //            DMP-NEXT:       MemberExpr {{.* .i .*}}
+    //            DMP-NEXT:         DeclRefExpr {{.*}} 'd'
+    //             DMP-NOT: OMP
+    //
+    //       PRT-A: {{^ *}}#pragma acc update self(s.i) host(h.i) device(d.i){{( IF_PRESENT| if_present)?$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target update from([[PRESENT]]s.i) from([[PRESENT]]h.i) to([[PRESENT]]d.i){{$}}
+    //       PRT-O: {{^ *}}#pragma omp target update from([[PRESENT]]s.i) from([[PRESENT]]h.i) to([[PRESENT]]d.i){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc update self(s.i) host(h.i) device(d.i){{( IF_PRESENT| if_present)?$}}
+    #pragma acc update self(s.i) host(h.i) device(d.i) IF_PRESENT
+
+    //  EXE-OFF-caseMemberPresent-NEXT:   host s.i=11{{$}}
+    //  EXE-OFF-caseMemberPresent-NEXT:   host h.i=21{{$}}
+    //  EXE-OFF-caseMemberPresent-NEXT:   host d.i=30{{$}}
+    // EXE-HOST-caseMemberPresent-NEXT:   host s.i=11{{$}}
+    // EXE-HOST-caseMemberPresent-NEXT:   host h.i=21{{$}}
+    // EXE-HOST-caseMemberPresent-NEXT:   host d.i=31{{$}}
+    //  EXE-OFF-caseMemberPresent-NEXT: device s.i=11{{$}}
+    //  EXE-OFF-caseMemberPresent-NEXT: device h.i=21{{$}}
+    //  EXE-OFF-caseMemberPresent-NEXT: device d.i=30{{$}}
+    // EXE-HOST-caseMemberPresent-NEXT: device s.i=11{{$}}
+    // EXE-HOST-caseMemberPresent-NEXT: device h.i=21{{$}}
+    // EXE-HOST-caseMemberPresent-NEXT: device d.i=31{{$}}
+    printHostInt(s.i);
+    printHostInt(h.i);
+    printHostInt(d.i);
+    printDeviceInt(s.i);
+    printDeviceInt(h.i);
+    printDeviceInt(d.i);
+  }
+}
+
+//------------------------------------------------------------------------------
+// Check when struct member is not present.
+//------------------------------------------------------------------------------
+
+// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseMemberAbsent
+// PRT-LABEL: {{.*}}caseMemberAbsent{{.*}} {
+CASE(caseMemberAbsent) {
+  struct S { int i; int j; } s, h, d;
+  PRINT_VAR_INFO(s.i);
+  PRINT_VAR_INFO(s.i);
+
+  setHostInt(s.i, 10);
+  setHostInt(s.j, 20);
+  setHostInt(h.i, 30);
+  setHostInt(h.j, 40);
+  setHostInt(d.i, 50);
+  setHostInt(d.j, 60);
+
+  // We need multiple directives here so we can control which clause produces
+  // the runtime error.  We vary which clause produces the runtime error
+  // across the various CASE_* that produce it.
+  #pragma acc update self(s.i) IF_PRESENT
+  #pragma acc update host(h.i) device(d.i) IF_PRESENT
+
+  // EXE-caseMemberAbsent-PASS-NEXT: host s.i=10{{$}}
+  // EXE-caseMemberAbsent-PASS-NEXT: host s.j=20{{$}}
+  // EXE-caseMemberAbsent-PASS-NEXT: host h.i=30{{$}}
+  // EXE-caseMemberAbsent-PASS-NEXT: host h.j=40{{$}}
+  // EXE-caseMemberAbsent-PASS-NEXT: host d.i=50{{$}}
+  // EXE-caseMemberAbsent-PASS-NEXT: host d.j=60{{$}}
+  printHostInt(s.i);
+  printHostInt(s.j);
+  printHostInt(h.i);
+  printHostInt(h.j);
+  printHostInt(d.i);
+  printHostInt(d.j);
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseMembersDisjoint
+// PRT-LABEL: {{.*}}caseMembersDisjoint{{.*}} {
+CASE(caseMembersDisjoint) {
+  struct S { int i; int j; } s, h, d;
+  PRINT_VAR_INFO(s.i);
+  PRINT_VAR_INFO(s.j);
+
+  #pragma acc data create(s.i, h.i, d.i)
+  {
+    setHostInt(s.i, 10);
+    setHostInt(s.j, 20);
+    setHostInt(h.i, 30);
+    setHostInt(h.j, 40);
+    setHostInt(d.i, 50);
+    setHostInt(d.j, 60);
+    setDeviceInt(s.i, 11);
+    setDeviceInt(h.i, 31);
+    setDeviceInt(d.i, 51);
+
+    // We need multiple directives here so we can control which clause
+    // produces the runtime error.  We vary which clause produces the runtime
+    // error across the various CASE_* that produce it.
+    #pragma acc update self(s.j) IF_PRESENT
+    #pragma acc update host(s.j) device(h.j) IF_PRESENT
+
+    //  EXE-OFF-caseMembersDisjoint-PASS-NEXT:   host s.i=10{{$}}
+    //  EXE-OFF-caseMembersDisjoint-PASS-NEXT:   host s.j=20{{$}}
+    //  EXE-OFF-caseMembersDisjoint-PASS-NEXT:   host h.i=30{{$}}
+    //  EXE-OFF-caseMembersDisjoint-PASS-NEXT:   host h.j=40{{$}}
+    //  EXE-OFF-caseMembersDisjoint-PASS-NEXT:   host d.i=50{{$}}
+    //  EXE-OFF-caseMembersDisjoint-PASS-NEXT:   host d.j=60{{$}}
+    // EXE-HOST-caseMembersDisjoint-PASS-NEXT:   host s.i=11{{$}}
+    // EXE-HOST-caseMembersDisjoint-PASS-NEXT:   host s.j=20{{$}}
+    // EXE-HOST-caseMembersDisjoint-PASS-NEXT:   host h.i=31{{$}}
+    // EXE-HOST-caseMembersDisjoint-PASS-NEXT:   host h.j=40{{$}}
+    // EXE-HOST-caseMembersDisjoint-PASS-NEXT:   host d.i=51{{$}}
+    // EXE-HOST-caseMembersDisjoint-PASS-NEXT:   host d.j=60{{$}}
+    //      EXE-caseMembersDisjoint-PASS-NEXT: device s.i=11{{$}}
+    //      EXE-caseMembersDisjoint-PASS-NEXT: device h.i=31{{$}}
+    //      EXE-caseMembersDisjoint-PASS-NEXT: device d.i=51{{$}}
+    printHostInt(s.i);
+    printHostInt(s.j);
+    printHostInt(h.i);
+    printHostInt(h.j);
+    printHostInt(d.i);
+    printHostInt(d.j);
+    printDeviceInt(s.i);
+    printDeviceInt(h.i);
+    printDeviceInt(d.i);
+  }
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseMembersConcat2
+// PRT-LABEL: {{.*}}caseMembersConcat2{{.*}} {
+CASE(caseMembersConcat2) {
+  struct S { int i; int j; } s, h, d;
+  PRINT_VAR_INFO(h.i);
+  PRINT_VAR_INFO(h);
+
+  #pragma acc data create(s.i, h.i, d.i)
+  #pragma acc data create(s.j, h.j, d.j)
+  {
+    setHostInt(s.i, 10);
+    setHostInt(s.j, 20);
+    setHostInt(h.i, 30);
+    setHostInt(h.j, 40);
+    setHostInt(d.i, 50);
+    setHostInt(d.j, 60);
+    setDeviceInt(s.i, 11);
+    setDeviceInt(s.j, 21);
+    setDeviceInt(h.i, 31);
+    setDeviceInt(h.j, 41);
+    setDeviceInt(d.i, 51);
+    setDeviceInt(d.j, 61);
+
+    // We need multiple directives here so we can control which clause
+    // produces the runtime error.  We vary which clause produces the runtime
+    // error across the various CASE_* that produce it.
+    #pragma acc update host(h) IF_PRESENT
+    #pragma acc update self(s) device(d) IF_PRESENT
+
+    //  EXE-OFF-caseMembersConcat2-PASS-NEXT:   host s.i=10{{$}}
+    //  EXE-OFF-caseMembersConcat2-PASS-NEXT:   host s.j=20{{$}}
+    //  EXE-OFF-caseMembersConcat2-PASS-NEXT:   host h.i=30{{$}}
+    //  EXE-OFF-caseMembersConcat2-PASS-NEXT:   host h.j=40{{$}}
+    //  EXE-OFF-caseMembersConcat2-PASS-NEXT:   host d.i=50{{$}}
+    //  EXE-OFF-caseMembersConcat2-PASS-NEXT:   host d.j=60{{$}}
+    // EXE-HOST-caseMembersConcat2-PASS-NEXT:   host s.i=11{{$}}
+    // EXE-HOST-caseMembersConcat2-PASS-NEXT:   host s.j=21{{$}}
+    // EXE-HOST-caseMembersConcat2-PASS-NEXT:   host h.i=31{{$}}
+    // EXE-HOST-caseMembersConcat2-PASS-NEXT:   host h.j=41{{$}}
+    // EXE-HOST-caseMembersConcat2-PASS-NEXT:   host d.i=51{{$}}
+    // EXE-HOST-caseMembersConcat2-PASS-NEXT:   host d.j=61{{$}}
+    //      EXE-caseMembersConcat2-PASS-NEXT: device s.i=11{{$}}
+    //      EXE-caseMembersConcat2-PASS-NEXT: device s.j=21{{$}}
+    //      EXE-caseMembersConcat2-PASS-NEXT: device h.i=31{{$}}
+    //      EXE-caseMembersConcat2-PASS-NEXT: device h.j=41{{$}}
+    //      EXE-caseMembersConcat2-PASS-NEXT: device d.i=51{{$}}
+    //      EXE-caseMembersConcat2-PASS-NEXT: device d.j=61{{$}}
+    printHostInt(s.i);
+    printHostInt(s.j);
+    printHostInt(h.i);
+    printHostInt(h.j);
+    printHostInt(d.i);
+    printHostInt(d.j);
+    printDeviceInt(s.i);
+    printDeviceInt(s.j);
+    printDeviceInt(h.i);
+    printDeviceInt(h.j);
+    printDeviceInt(d.i);
+    printDeviceInt(d.j);
+  }
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseMemberFullStruct
+// PRT-LABEL: {{.*}}caseMemberFullStruct{{.*}} {
+CASE(caseMemberFullStruct) {
+  struct S { int i; int j; } s, h, d;
+  PRINT_VAR_INFO(s.i);
+  PRINT_VAR_INFO(s);
+
+  #pragma acc data create(s.i, h.i, d.i)
+  {
+    setHostInt(s.i, 10);
+    setHostInt(s.j, 20);
+    setHostInt(h.i, 30);
+    setHostInt(h.j, 40);
+    setHostInt(d.i, 50);
+    setHostInt(d.j, 60);
+    setDeviceInt(s.i, 11);
+    setDeviceInt(h.i, 31);
+    setDeviceInt(d.i, 51);
+
+    // We need multiple directives here so we can control which clause
+    // produces the runtime error.  We vary which clause produces the runtime
+    // error across the various CASE_* that produce it.
+    #pragma acc update self(s) IF_PRESENT
+    #pragma acc update device(d) host(h) IF_PRESENT
+
+    //  EXE-OFF-caseMemberFullStruct-PASS-NEXT:   host s.i=10{{$}}
+    //  EXE-OFF-caseMemberFullStruct-PASS-NEXT:   host s.j=20{{$}}
+    //  EXE-OFF-caseMemberFullStruct-PASS-NEXT:   host h.i=30{{$}}
+    //  EXE-OFF-caseMemberFullStruct-PASS-NEXT:   host h.j=40{{$}}
+    //  EXE-OFF-caseMemberFullStruct-PASS-NEXT:   host d.i=50{{$}}
+    //  EXE-OFF-caseMemberFullStruct-PASS-NEXT:   host d.j=60{{$}}
+    // EXE-HOST-caseMemberFullStruct-PASS-NEXT:   host s.i=11{{$}}
+    // EXE-HOST-caseMemberFullStruct-PASS-NEXT:   host s.j=20{{$}}
+    // EXE-HOST-caseMemberFullStruct-PASS-NEXT:   host h.i=31{{$}}
+    // EXE-HOST-caseMemberFullStruct-PASS-NEXT:   host h.j=40{{$}}
+    // EXE-HOST-caseMemberFullStruct-PASS-NEXT:   host d.i=51{{$}}
+    // EXE-HOST-caseMemberFullStruct-PASS-NEXT:   host d.j=60{{$}}
+    //      EXE-caseMemberFullStruct-PASS-NEXT: device s.i=11{{$}}
+    //      EXE-caseMemberFullStruct-PASS-NEXT: device h.i=31{{$}}
+    //      EXE-caseMemberFullStruct-PASS-NEXT: device d.i=51{{$}}
+    printHostInt(s.i);
+    printHostInt(s.j);
+    printHostInt(h.i);
+    printHostInt(h.j);
+    printHostInt(d.i);
+    printHostInt(d.j);
+    printDeviceInt(s.i);
+    printDeviceInt(h.i);
+    printDeviceInt(d.i);
+  }
+}
+
+//------------------------------------------------------------------------------
 // Check subarray not encompassing full array.
 //
 // Subarrays are checked thoroughly for acc data and acc parallel in data.c
 // parallel-subarray.c.  Check just a few cases here to be sure it basically
 // works for acc update too.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseSubarrayPresent
 // PRT-LABEL: {{.*}}caseSubarrayPresent{{.*}} {
@@ -1022,9 +1295,9 @@ CASE(caseSubarrayPresent2) {
   }
 }
 
-//--------------------------------------------------
-// Check when data is not present.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
+// Check when subarray is not present.
+//------------------------------------------------------------------------------
 
 // DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseSubarrayDisjoint
 // PRT-LABEL: {{.*}}caseSubarrayDisjoint{{.*}} {

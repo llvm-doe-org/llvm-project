@@ -950,6 +950,24 @@ clarify these points in future versions of the OpenACC specification.
     * It assumes the host and device copies of the variable have
       different values and one must be updated from the other, but
       doing so would violate `const`.
+* It is an error to use member expressions in `firstprivate`, `private`, and
+  `reduction` clauses.  Notes:
+    * Clang currently doesn't accept member expressions in the corresponding
+      OpenMP clauses unless the member expression base is an implicit or
+      explicit C++ `this`.
+    * In some cases, Clacc's translation of an OpenACC `private` clause on a
+      `loop` construct achieves privatization by inserting a local variable
+      declaration.  However, the associated implementation (which uses
+      `TransformDecl` from `TreeTransform` to replace uses of the privatized
+      data) currently requires a single variable declaration (`Decl*`) and thus
+      cannot handle member expressions regardless of the base.
+    * One possible solution for the latter issue is a temporary variable naming
+      scheme to replace an entire member expression.  For example,
+      `__clang_acc_tmp_<LINE>_<COL>` where `<LINE>` and `<COL>` are for the
+      first reference to the member expression.
+    * Another solution for the latter case might be to use an `omp scope`
+      construct instead of a local variable declaration to achieve
+      privatization.
 * It is an error to specify subarrays with no `:` and one integer.
   Notes:
     * This notation is syntactically identical to an array subscript.
@@ -1053,6 +1071,8 @@ clarify these points in future versions of the OpenACC specification.
           `private` for a loop control variable and any *exp* data
           clause other than `private` or `reduction` on a combined
           directive.
+* Additional details about data attribute support for subarrays, member
+  expressions, and C++ `this` appear in `README-OpenACC-status.md`.
 
 ### Reductions ###
 
@@ -1526,8 +1546,8 @@ to OpenMP is as follows:
           `no_create`, then the full array is specified in the *exp*
           `map` here.
     * Otherwise, if the variable is *imp* `shared` on the
-      `acc parallel` and is a scalar, then -> *exp*
-      `defaultmap(tofrom:scalar)`.  This is generated only once per
+      `acc parallel` and is a scalar but not a class/struct/union member, then
+      -> *exp* `defaultmap(tofrom:scalar)`.  This is generated only once per
       `acc parallel`.
     * Otherwise, the translations discards *imp* `nomap`.
     * Notes:
@@ -1637,8 +1657,8 @@ to OpenMP is as follows:
               implement and maintain, and the OpenMP code produced by
               source-to-source mode could be significantly more
               challenging to read.
-        * In the case of a scalar when the suppressing DMA is not
-          `no_create`:
+        * In the case of a scalar that is not a class/struct/union member when
+          the suppressing DMA is not `no_create`:
             * The normal OpenMP *imp* DA is `firstprivate`, which
               obviously does not have the `shared` behavior required
               by OpenACC.
@@ -1650,13 +1670,20 @@ to OpenMP is as follows:
               of arrays, and so the OpenMP code produced by
               source-to-source mode would be more confusing to
               understand.
-        * When the suppressing DMA is not `no_create`, regardless of
-          the variable type, the variable should already be present on
-          the device due to the suppressing DMA, and so no new
-          allocation or data transfers are expected to be possible
-          regardless of the map type.  Because Clacc depends on the
-          implicit `tofrom` for non-scalars, Clacc chooses `tofrom`
-          for scalars for consistency.
+            * A scalar member of a class/struct/union is omitted for this case
+              because the OpenMP *imp* DA is for the class/struct/union not the
+              member.
+        * When the suppressing DMA is not `no_create`:
+            * Regardless of the variable type, the variable should already be
+              present on the device due to the suppressing DMA, and so no new
+              allocation or data transfers are expected to be possible
+              regardless of the map type.
+            * Because Clacc depends on the implicit `tofrom` for non-scalars,
+              Clacc chooses `tofrom` for scalars for consistency.
+            * If the variable is a class/struct/union member, the OpenMP *imp*
+              DA is for the class/struct/union not the member, but partial
+              presence counts as presence when an OpenMP DA is *imp*, as
+              discussed above for arrays.
         * When the variable is already present, including when the
           suppressing DMA is `no_create`, the `map` clauses will
           redundantly increment and decrement the variable's dynamic
@@ -1670,7 +1697,12 @@ to OpenMP is as follows:
 * All other DMAs are translated in the same manner as when appearing
   on an `acc data`.  *imp* `copy` is translated in the same manner as
   *exp* `copy`.
-* *imp* `shared` -> *exp* `shared`
+* If *v* is not a member expression, then *imp* `shared(`*v*`)` ->
+  *exp* `shared(`*v*`)`
+* Else, *imp* `shared(`*v*`)` -> *imp* `shared(`*v*`)`.  Notes:
+    * Clang does not support member expressions in OpenMP *exp* `shared`
+      clauses, so we must rely on OpenMP implicit data sharing rules for this
+      case.
 * *exp*|*imp* `reduction` -> *exp* `reduction`
 * *exp*|*imp* `firstprivate` -> *exp* `firstprivate`
 * *exp* `private` -> *exp* `private`
@@ -1827,11 +1859,13 @@ its clauses to OpenMP is as follows:
   constant-expression argument from ancestor `acc parallel` -> *exp*
   `simdlen`.
 * `collapse` -> `collapse`
-* If *exp* `worker`, then *imp* `shared` -> *exp* `shared`.
-* Else, *imp* `shared` -> *imp* `shared`.  Notes:
-    * This case must map to *imp* `shared` because `omp distribute` or
-      `omp simd` without `parallel for` does not support a `shared` clause, so
-      we must rely on OpenMP implicit data sharing rules then.
+* If *exp* `worker` and *v* is not a member expression, then *imp*
+  `shared(`*v*`)` -> *exp* `shared(`*v*`)`.
+* Else, *imp* `shared(`*v*`)` -> *imp* `shared(`*v*`)`.  Notes:
+    * `omp distribute` or `omp simd` without `parallel for` does not support a
+      `shared` clause, and Clang does not support member expressions in OpenMP
+       *exp* `shared` clauses, so we must rely on OpenMP implicit data sharing
+       rules for these cases.
 * *pre* `private` for a loop control variable that is declared in the
   init of the attached `for` loop -> *pre* `private`.  Notes:
     * Mapping to *exp* `private` would be erroneous because it would

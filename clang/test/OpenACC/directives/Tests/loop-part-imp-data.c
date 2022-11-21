@@ -2,6 +2,9 @@
 // "acc loop" within "acc parallel" or on effective "acc loop" from
 // "acc parallel loop".
 //
+// Implicit data attributes for member expressions are checked in
+// loop-da-member-expr.c and loop-da-member-expr.cpp.
+//
 // When independent and gang are omitted, they're usually implicit.  Thus, test
 // code is almost identical across these cases, so it's easier to parameterize
 // the test code instead of repeat it entirely with minor differences.

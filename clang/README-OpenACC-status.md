@@ -128,10 +128,8 @@ Run-Time Environment Variables
     * `if_present`
     * `self` and alias `host`
     * `device`
-* Subarrays specifying contiguous blocks are supported.
-* Multiple subarrays of the same array on the same directive are not
-  yet supported.
-* Members of structs or classes are not yet supported.
+    * See "Data Expressions in Clauses" below for details of their support in
+      these clauses.
 * See the section "OpenMP Extensions" below for caveats related to
   source-to-source mode.
 
@@ -145,7 +143,8 @@ Run-Time Environment Variables
     * `copyin` and aliases `pcopyin` and `present_or_copyin`
     * `create`
         * `zero` modifier is not yet supported.
-* Subarrays specifying contiguous blocks are supported.
+    * See "Data Expressions in Clauses" below for details of their support in
+      these clauses.
 
 `exit data` Directive
 ----------------------
@@ -156,7 +155,8 @@ Run-Time Environment Variables
 * Supported clauses
     * `copyout` and aliases `pcopyout` and `present_or_copyout`
     * `delete`
-* Subarrays specifying contiguous blocks are supported.
+    * See "Data Expressions in Clauses" below for details of their support in
+      these clauses.
 * When offloading, the `exit data` directive must not be the first
   OpenACC directive encountered at run time.  Otherwise, LLVM's OpenMP
   runtime will complain that the device is uninitialized.
@@ -178,7 +178,8 @@ Run-Time Environment Variables
     * `create` and aliases `pcreate` and `present_or_create`
         * `zero` modifier is not yet supported.
     * `no_create`
-* Subarrays specifying contiguous blocks are supported.
+    * See "Data Expressions in Clauses" below for details of their support in
+      these clauses.
 * See the section "OpenMP Extensions" below for caveats related to
   source-to-source mode.
 
@@ -190,8 +191,6 @@ Run-Time Environment Variables
     * Appearing within a `data` construct is supported.
 * Use without clauses is supported.
 * Supported data attributes and clauses
-    * Implicit `copy` for non-scalars
-    * Implicit `firstprivate` for scalars
     * For `present`, `copy`, `copyin`, `copyout`, `create`, and
       `no_create` clauses and their aliases, support is the same as
       for the `data` directive, as described above, including
@@ -208,6 +207,25 @@ Run-Time Environment Variables
           types and floating types except complex types) and pointer
           types.
         * `&`, `|`, and `^` support exactly C11's integer types.
+    * Implicit `copy` for uses of non-scalar variables in the associated
+      statement
+    * Implicit `firstprivate` for uses of scalar variables in the associated
+      statement
+    * Implicit data attributes are not yet computed for implicit or explicit
+      uses of C++ `this` in the associated statement.
+    * Implicit data attributes are computed for a member expression used in the
+      directive's associated statement as follows:
+        * If the full member expression (e.g., `s.x`) does not appear in a
+          visible data clause, then its base expression (e.g., `s`) is
+          considered for an implicit data attribute.  If the base expression is
+          also a member expression, then this process recurses.
+        * This behavior might be unexpected when the base expression is a
+          pointer variable (e.g., `p` in  `p->x`) and thus the implicit data
+          attribute for the base expression is `firstprivate`.  However, this
+          behavior is consistent with how an implicit data attribute is computed
+          for a pointer variable outside a member expression.
+    * See "Data Expressions in Clauses" below for details of their support in
+      explicit data clauses.
 * `num_gangs`, `num_workers`, `vector_length` clauses
     * The argument in all cases must be a positive integer expression.
     * The `vector_length` argument must also be a constant or Clacc
@@ -294,6 +312,8 @@ Run-Time Environment Variables
         * Various subtleties in the semantics of `reduction` clauses
           on `loop` directives are discussed in the "Semantic
           Clarifications" section in `README-OpenACC-design.md`.
+    * See "Data Expressions in Clauses" below for details of their support in
+      these clauses.
 * Detection of `break` statement for the associated loop
     * Compile error if implicit/explicit `independent`.
     * No error if `seq` or `auto`.
@@ -480,16 +500,35 @@ Run-Time Environment Variables
         * A `new` expression's calls to a `new` operator, constructor, and
           `delete` operator.
 
-Subarrays
----------
+Data Expressions in Clauses
+---------------------------
 
-* Subarrays specifying contiguous blocks are supported.
-* Subarrays specifying non-contiguous blocks in dynamic
-  multidimensional arrays are not yet supported.
-* Subarrays in `firstprivate`, `private`, and `reduction` clauses are
-  not yet supported.
-* Subarrays with no `:` and one integer (syntactically an array
-  subscript, such as `arr[5]`) are not yet supported.
+* Subarray and member expression support varies among clauses:
+    * Subarrays and member expressions are supported in the `self` and `device`
+      clauses of the `update` directive.
+    * Subarrays and member expressions are supported in the `present`, `copy`,
+      `copyin`, `copyout`, `create`, `no_create`, and `delete` clauses of the
+      `enter data`, `exit data`, `data`, and `parallel` directives.
+    * Subarrays and member expressions are not supported in the `firstprivate`,
+      `private`, and `reduction` clauses of the `parallel` and `loop`
+      directives.
+    * Support is the same among any clause and its aliases.
+* In clauses where subarrays are supported, the following constraints always
+  hold:
+    * Subarrays specifying contiguous blocks are supported.
+    * Subarrays specifying non-contiguous blocks in dynamic multidimensional
+      arrays are not supported.
+    * Subarrays with no `:` and one integer (syntactically an array subscript,
+      such as `arr[5]`) are not supported.
+    * Subarrays on member expressions (e.g., `s.arr[0:3]`) are supported.
+    * Multiple subarrays of the same array appearing multiple times on the same
+      directive are not supported.
+* In clauses where member expressions are supported, the following constraints
+  always hold:
+    * Member expressions on member expressions are not supported (e.g.,
+      `x.y.z`).
+    * Member expressions on subarrays are not supported (e.g., `arr[0:3].x`).
+* The appearance of C++ `this` in the above clauses is not yet supported.
 
 Device-Side Directives
 ----------------------

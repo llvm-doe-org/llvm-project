@@ -744,8 +744,17 @@ public:
       }
       for (ACCPrivateClause *C : D->getClausesOfKind<ACCPrivateClause>()) {
         for (Expr *VR : C->varlists()) {
-          ACCDataVar Var(VR, /*AllowSubarray=*/false);
-          VarDecl *VD = Var.getReferencedDecl()->getCanonicalDecl();
+          // SemaOpenACC.cpp reports an error for any member expression or
+          // subarray in a private clause on a loop, and the ACCDataVar
+          // constructor call below just asserts that VR is not one of those.
+          //
+          // See the section "Basic Data Attributes" in the Clang OpenACC design
+          // document for a discussion of how the following implementation is a
+          // reason we don't permit member expressions in private clauses.
+          ACCDataVar Var(VR, /*AllowMemberExpr=*/false,
+                         /*AllowSubarray=*/false);
+          VarDecl *VD =
+              cast<VarDecl>(Var.getReferencedDecl())->getCanonicalDecl();
           if (AddScopeWithAllPrivates || LCVSet.count(VD))
             EnclosingCompoundStmt.addPrivatizingDecl(VR->getBeginLoc(),
                                                      VR->getEndLoc(), VD);
@@ -923,7 +932,12 @@ public:
     // For each nomap shared variable:
     // - If it has a visible no_create at the parent directive and no_create
     //   maps to ompx_no_alloc, then add a ompx_no_alloc here for it.
-    // - Otherwise, if it's a scalar, a defaultmap for scalars is required here.
+    // - Otherwise, if it's a scalar and not a member expression, a defaultmap
+    //   for scalars is required here.
+    // - Otherwise, rely on the implicit map clause provided by OpenMP.  In the
+    //   case of a member expression, it will apply to the aggregate not the
+    //   member (that's why we skip defaultmap for scalars for member
+    //   expressions, as mentioned above).
     bool NoCreateOMPNoAlloc;
     switch (getSema().LangOpts.getOpenACCNoCreateOMP()) {
     case LangOptions::OpenACCNoCreateOMP_OmpxNoAlloc:
@@ -948,7 +962,8 @@ public:
                 << getOpenACCName(C->getClauseKind());
             return true;
           }
-          if (VarDAs.DSAKind == ACC_DSA_shared && Var.getType()->isScalarType())
+          if (VarDAs.DSAKind == ACC_DSA_shared &&
+              Var.getType()->isScalarType() && !Var.isMember())
             DirStack.back().NeedsDefaultmapForScalars = true;
           return false;
         },
@@ -1147,8 +1162,11 @@ public:
            && "Unexpected explicit OpenACC shared clause");
     return transformACCVarListClause<ACCSharedClause>(
         RequireImplicit ? nullptr : D, C, OMPC_shared,
-        OMPVarListClauseRebuilder(
-            this, &TransformACCToOMP::RebuildOMPSharedClause));
+        // Don't generate shared(s.x), or Clang's OpenMP support will complain
+        // as it doesn't support member expressions in shared clauses.
+        [](const ACCDataVar &Var) { return !Var.isMember(); },
+        OMPVarListClauseRebuilder(this,
+                                  &TransformACCToOMP::RebuildOMPSharedClause));
   }
 
   OMPClauseResult TransformACCPrivateClause(ACCDirectiveStmt *D,
