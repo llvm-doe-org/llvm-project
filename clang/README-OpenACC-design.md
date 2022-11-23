@@ -1582,81 +1582,64 @@ to OpenMP is as follows:
               clause, Clacc specifies the full array in the
               `ompx_no_alloc,alloc` map type.  This approach avoids
               the need to copy potentially non-constant subarray
-              bounds.  It works correctly because the
+              bounds expressions.  It works correctly because the
               `ompx_no_alloc,alloc` map type then sees the variable as
               not (fully) present and thus performs no action for it.
-        * In the case of an array when the suppressing DMA is not
-          `no_create`:
-            * Clacc does not override the *imp* `map` specified by
-              OpenMP 5.0 sec. 2.19.7 "Data-Mapping Attribute Rules,
-              Clauses, and Directives" p. 315 L5-6, which says:
+        * In the case of an array when the suppressing DMA is not `no_create`:
+            * Clacc does not override the *imp* `map` specified by OpenMP 5.2
+              sec. 5.8.1 "Implicit Data-Mapping Attribute Rules" p. 149 L4-5,
+              which says:
 
-                > If a variable is not a scalar then it is treated as
-                > if it had appeared in a map clause with a map-type
-                > of tofrom.
+                > If a variable is not a scalar then it is treated as if it had
+                > appeared in a map clause with a map-type of tofrom.
 
-            * It is unclear whether this *imp* `map` specifies the
-              entire array or some array section that is already
-              mapped.  It is our understanding that some clarification
-              in the direction of the latter will appear in OpenMP
-              5.1.
-            * If a subarray is specified for the array on the
-              enclosing `acc data`, and thus if an array section is
-              specified for the array on the corresponding `omp target
-              data`, then we must consider if this *imp* `map` on the
-              `omp target teams` violates OpenMP 5.0 sec. 2.19.7.1,
-              "map Clause", "Restrictions", p. 321 L9-12, which says:
+            * Even if only a subarray is specified for the array on the
+              enclosing `acc data`, and thus if only an array section is
+              specified for the array on the corresponding `omp target data`,
+              this *imp* `map` considers the array to already be sufficiently
+              present:
+                * OpenMP 5.2 sec. 5.8.3 "map Clause" p. 154 L18-21 clarifies
+                  the behavior for the *imp* `map` clause:
 
-                > If any part of the original storage of a list item
-                > with an explicit data-mapping attribute has
-                > corresponding storage in the device data environment
-                > prior to a task encountering the construct
-                > associated with the map clause, all of the original
-                > storage must have corresponding storage in the
-                > device data environment prior to the task
-                > encountering the construct.
+                    > If a single contiguous part of the original storage of a
+                    > list item with an implicit data-mapping attribute has
+                    > corresponding storage in the device data environment prior
+                    > to a task encountering the construct on which the map
+                    > clause appears, only that part of the original storage
+                    > will have corresponding storage in the device data
+                    > environment as a result of the map clause.
 
-            * It is our understanding that the phrase "with an
-              explicit data-mapping attribute" is intended to relax
-              this restriction in the case of this *imp* `map`, and so
-              the code that Clacc generates appears to conform to
-              OpenMP 5.0.
-            * At the time of this writing, Clang's OpenMP support
-              implements only the OpenMP 4.5 version of the above
-              restriction, which does not include the phrase "with an
-              explicit data-mapping attribute".  Thus, this *imp*
-              `map` clause normally produces a compile-time error
-              diagnostic.  However, apparently due to a bug, Clang
-              happens to suppress the diagnostic when *exp* `shared`
-              is specified for the array.  Fortunately, Clacc always
-              specifies *exp* `shared` here as the translation of the
-              *imp* `shared` from the `acc parallel`, so Clacc
-              effectively sees OpenMP 5.0 behavior.
-            * Neither OpenACC 3.0 nor OpenMP 5.0 appear to clarify how
-              references to an array in an `acc parallel` or `omp
-              target teams` are mapped if multiple enclosing `acc
-              data` or `omp target data` directives specify
-              conflicting array sections for the array.  It is our
-              understanding that some clarification will appear in
-              OpenMP 5.1.  Until OpenACC includes a similar
-              clarification, Clacc assumes the semantics of OpenMP.
-              See "Basic Data Attributes" above.
-            * As an alternative to depending on the *imp* `map`
-              clause, our related assumptions about the OpenMP 5.0
-              spec, and Clang's apparent bug in the case of *exp*
-              `shared`, Clacc could have attempted to copy any
-              subarray specification from the enclosing `acc data` to
-              an *exp* `map` clause here.  Again, the OpenACC spec
-              doesn't yet clarify which `acc data` would be
-              appropriate.  Moreover, if any expression in that
-              subarray specification were non-constant, Clacc would
-              have to extract it from the original subarray, store it
-              in a local variable, and reference that variable in both
-              array section specifications to guarantee the correct
-              value.  This approach would be more complicated to
-              implement and maintain, and the OpenMP code produced by
-              source-to-source mode could be significantly more
-              challenging to read.
+                * OpenMP 5.2 sec. 5.8.3 "map Clause" p. 156 L19-22 states the
+                  restriction that enables OpenMP runtime implementations to
+                  produce runtime errors for array extensions, but it states it
+                  only for *exp* `map` clauses, so it does not apply to this
+                  *imp* `map` clause:
+
+                    > If any part of the original storage of a list item with an
+                    > explicit data-mapping attribute has corresponding storage
+                    > in the device data environment prior to a task
+                    > encountering the construct associated with the map clause,
+                    > all of the original storage must have corresponding
+                    > storage in the device data environment prior to the task
+                    > encountering the construct.
+
+            * OpenACC 3.3 does not appear to clarify how references to an array
+              in an `acc parallel` are mapped if multiple enclosing `acc data`
+              directives specify conflicting subarrays for the array.  Until
+              OpenACC includes a clarification, Clacc assumes the semantics of
+              OpenMP.  See "Basic Data Attributes" above.
+            * As an alternative to depending on the *imp* `map` clause, Clacc
+              could have attempted to copy any subarray specification from the
+              enclosing `acc data` to an *exp* `map` clause here.  Again, the
+              OpenACC spec doesn't yet clarify which `acc data` would be
+              appropriate if there are more than one.  Moreover, if any
+              expression in that subarray specification were non-constant, Clacc
+              would have to extract it from the original subarray, store it in a
+              local variable, and reference that variable in both array section
+              specifications to guarantee the correct value.  This approach
+              would be more complicated to implement and maintain, and the
+              OpenMP code produced by source-to-source mode could be
+              significantly more challenging to read.
         * In the case of a scalar that is not a class/struct/union member when
           the suppressing DMA is not `no_create`:
             * The normal OpenMP *imp* DA is `firstprivate`, which
