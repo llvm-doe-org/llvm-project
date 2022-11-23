@@ -79,13 +79,13 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
 
       // Collect DAs from clauses on D.
       DAVarData ClauseDAs;
-      auto RecordClauseDAs = [&](Expr *E, const ACCDataVar &Var) {
-        DAVarData &VarDAs = DirEntry.DAMap[Var];
+      auto RecordClauseDAs = [&](Expr *RefExpr) {
+        DAVarData &VarDAs = DirEntry.DAMap[ACCDataVar(RefExpr)];
         if (ClauseDAs.DMAKind != ACC_DMA_unknown) {
           assert(VarDAs.DMAKind == ACC_DMA_unknown &&
                  "expected at most one DMA per variable");
           VarDAs.DMAKind = VarDAs.VisibleDMAKind = ClauseDAs.DMAKind;
-          VarDAs.VisibleDMARefExpr = E;
+          VarDAs.VisibleDMARefExpr = RefExpr;
         }
         if (ClauseDAs.DSAKind != ACC_DSA_unknown) {
           assert(VarDAs.DSAKind == ACC_DSA_unknown &&
@@ -231,7 +231,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   bool iterateACCVarList(ACCVarListClause<Derived> *C,
                          OperationType Operation) {
     for (Expr *RefExpr : C->varlists()) {
-      if (Operation(RefExpr, ACCDataVar(RefExpr)))
+      if (Operation(RefExpr))
         return true;
     }
     return false;
@@ -249,8 +249,8 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
                            llvm::SmallVector<Expr *, 16> &Vars) {
     Vars.reserve(C->varlist_size());
     return iterateACCVarList(
-        C, [&VarFilter, &Vars, this](Expr *RefExpr, const ACCDataVar &Var) {
-          VarAction Action = VarFilter(Var);
+        C, [&VarFilter, &Vars, this](Expr *RefExpr) {
+          VarAction Action = VarFilter(RefExpr);
           if (Action == VAR_DISCARD)
             return false;
           ExprResult EVar = getDerived().TransformExpr(RefExpr);
@@ -292,8 +292,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   transformACCVarListClause(ACCDirectiveStmt *D, ACCVarListClause<Derived> *C,
                             OpenMPClauseKind TCKind, RebuilderType Rebuilder) {
     return transformACCVarListClause(
-        D, C, TCKind, [](const ACCDataVar &) { return VAR_PRESERVE; },
-        Rebuilder);
+        D, C, TCKind, [](Expr *) { return VAR_PRESERVE; }, Rebuilder);
   }
 
   class OMPVarListClauseRebuilder {
@@ -978,7 +977,8 @@ public:
     }
     return transformACCVarListClause<ACCNomapClause>(
         D, C, OMPC_map,
-        [&](const ACCDataVar &Var) {
+        [&](Expr *RefExpr) {
+          ACCDataVar Var(RefExpr);
           const DAVarData &VarDAs = DirStack.back().DAMap[Var];
           assert(VarDAs.DMAKind == ACC_DMA_nomap &&
                  "expected nomap clauses to record ACC_DMA_nomap");
@@ -1199,8 +1199,8 @@ public:
         RequireImplicit ? nullptr : D, C, OMPC_shared,
         // Don't generate shared(s.x), or Clang's OpenMP support will complain
         // as it doesn't support member expressions in shared clauses.
-        [](const ACCDataVar &Var) {
-          return Var.isMember() ? VAR_DISCARD : VAR_PRESERVE;
+        [](Expr *RefExpr) {
+          return ACCDataVar(RefExpr).isMember() ? VAR_DISCARD : VAR_PRESERVE;
         },
         OMPVarListClauseRebuilder(this,
                                   &TransformACCToOMP::RebuildOMPSharedClause));
@@ -1232,8 +1232,9 @@ public:
     }
     return transformACCVarListClause<ACCPrivateClause>(
         D, C, OMPC_private,
-        [&SkipVars](const ACCDataVar &Var) {
-          return SkipVars.count(Var) ? VAR_DISCARD : VAR_PRESERVE;
+        [&SkipVars](Expr *RefExpr) {
+          return SkipVars.count(ACCDataVar(RefExpr)) ? VAR_DISCARD
+                                                     : VAR_PRESERVE;
         },
         OMPVarListClauseRebuilder(this,
                                   &TransformACCToOMP::RebuildOMPPrivateClause));
