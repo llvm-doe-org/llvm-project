@@ -31,6 +31,9 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     /// If no DMA is visible, then ACC_DMA_unknown.  Otherwise, not
     /// ACC_DMA_unknown.
     OpenACCDMAKind VisibleDMAKind = ACC_DMA_unknown;
+    /// If no DMA is visible, then \c nullptr.  Otherwise, the referencing
+    // expression appearing in the associated clause.
+    Expr *VisibleDMARefExpr = nullptr;
   };
 
   /// Data we store per effective OpenACC directive while transforming them.
@@ -82,6 +85,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
           assert(VarDAs.DMAKind == ACC_DMA_unknown &&
                  "expected at most one DMA per variable");
           VarDAs.DMAKind = VarDAs.VisibleDMAKind = ClauseDAs.DMAKind;
+          VarDAs.VisibleDMARefExpr = E;
         }
         if (ClauseDAs.DSAKind != ACC_DSA_unknown) {
           assert(VarDAs.DSAKind == ACC_DSA_unknown &&
@@ -126,8 +130,10 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
         const ACCDataVar &Var = ParentEntry.first;
         const DAVarData &ParentDAs = ParentEntry.second;
         DAVarData &DAs = DirEntry.DAMap[Var];
-        if (DAs.VisibleDMAKind == ACC_DMA_unknown)
+        if (DAs.VisibleDMAKind == ACC_DMA_unknown) {
           DAs.VisibleDMAKind = ParentDAs.VisibleDMAKind;
+          DAs.VisibleDMARefExpr = ParentDAs.VisibleDMARefExpr;
+        }
       }
 
       // Copy data from parent directive.
@@ -231,6 +237,12 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     return false;
   }
 
+  enum VarAction {
+    VAR_DISCARD,
+    VAR_PRESERVE,
+    VAR_ADD_ZERO_LENGTH_ARRAY_SECTION
+  };
+
   template <typename Derived, typename VarFilterType>
   bool transformACCVarList(ACCDirectiveStmt *D, ACCVarListClause<Derived> *C,
                            VarFilterType VarFilter,
@@ -238,11 +250,23 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     Vars.reserve(C->varlist_size());
     return iterateACCVarList(
         C, [&VarFilter, &Vars, this](Expr *RefExpr, const ACCDataVar &Var) {
-          if (!VarFilter(Var))
+          VarAction Action = VarFilter(Var);
+          if (Action == VAR_DISCARD)
             return false;
           ExprResult EVar = getDerived().TransformExpr(RefExpr);
           if (EVar.isInvalid())
             return true;
+          if (Action == VAR_ADD_ZERO_LENGTH_ARRAY_SECTION) {
+            SourceLocation Loc = RefExpr->getEndLoc();
+            ExprResult Zero = getSema().ActOnIntegerConstant(Loc, 0);
+            if (Zero.isInvalid())
+              return true;
+            EVar = getDerived().RebuildOMPArraySectionExpr(
+                EVar.get(), Loc, Zero.get(), Loc, SourceLocation(), Zero.get(),
+                nullptr, Loc);
+            if (EVar.isInvalid())
+              return true;
+          }
           Vars.push_back(EVar.get());
           return false;
         });
@@ -268,7 +292,8 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
   transformACCVarListClause(ACCDirectiveStmt *D, ACCVarListClause<Derived> *C,
                             OpenMPClauseKind TCKind, RebuilderType Rebuilder) {
     return transformACCVarListClause(
-        D, C, TCKind, [](const ACCDataVar &) { return true; }, Rebuilder);
+        D, C, TCKind, [](const ACCDataVar &) { return VAR_PRESERVE; },
+        Rebuilder);
   }
 
   class OMPVarListClauseRebuilder {
@@ -931,9 +956,13 @@ public:
                                           ACCNomapClause *C) {
     // For each nomap shared variable:
     // - If it has a visible no_create at the parent directive and no_create
-    //   maps to ompx_no_alloc, then add a ompx_no_alloc here for it.
-    // - Otherwise, if it's a scalar and not a member expression, a defaultmap
-    //   for scalars is required here.
+    //   maps to ompx_no_alloc, then add a ompx_no_alloc here for it.  If the
+    //   visible no_create is for a pointer-based subarray, then specify a
+    //   zero-length array section here instead of trying to copy the subarray
+    //   bounds, which might not be constants.
+    // - Otherwise, if it's a non-pointer scalar and not a member expression, a
+    //   defaultmap for scalars is required here.  (OpenMP handles pointers
+    //   separately from other scalars.)
     // - Otherwise, rely on the implicit map clause provided by OpenMP.  In the
     //   case of a member expression, it will apply to the aggregate not the
     //   member (that's why we skip defaultmap for scalars for member
@@ -953,19 +982,25 @@ public:
           const DAVarData &VarDAs = DirStack.back().DAMap[Var];
           assert(VarDAs.DMAKind == ACC_DMA_nomap &&
                  "expected nomap clauses to record ACC_DMA_nomap");
-          if (VarDAs.DSAKind == ACC_DSA_shared && DirStack.size() > 1 &&
-              (DirStack.rbegin() + 1)->DAMap[Var].VisibleDMAKind ==
-                  ACC_DMA_no_create &&
-              NoCreateOMPNoAlloc) {
-            getSema().Diag(D->getEndLoc(),
-                           diag::warn_acc_omp_map_ompx_no_alloc_from_visible)
-                << getOpenACCName(C->getClauseKind());
-            return true;
+          if (VarDAs.DSAKind == ACC_DSA_shared && DirStack.size() > 1) {
+            const DAVarData &VarParentDAs = (DirStack.rbegin() + 1)->DAMap[Var];
+            if (VarParentDAs.VisibleDMAKind == ACC_DMA_no_create &&
+                NoCreateOMPNoAlloc) {
+              getSema().Diag(D->getEndLoc(),
+                             diag::warn_acc_omp_map_ompx_no_alloc_from_visible)
+                  << getOpenACCName(C->getClauseKind());
+              if (Var.getType()->isPointerType() &&
+                  isa<OMPArraySectionExpr>(
+                      VarParentDAs.VisibleDMARefExpr->IgnoreParenImpCasts()))
+                return VAR_ADD_ZERO_LENGTH_ARRAY_SECTION;
+              return VAR_PRESERVE;
+            }
           }
           if (VarDAs.DSAKind == ACC_DSA_shared &&
-              Var.getType()->isScalarType() && !Var.isMember())
+              Var.getType()->isScalarType() &&
+              !Var.getType()->isPointerType() && !Var.isMember())
             DirStack.back().NeedsDefaultmapForScalars = true;
-          return false;
+          return VAR_DISCARD;
         },
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
           SmallVector<SourceLocation, 1> MapModLocs;
@@ -1164,7 +1199,9 @@ public:
         RequireImplicit ? nullptr : D, C, OMPC_shared,
         // Don't generate shared(s.x), or Clang's OpenMP support will complain
         // as it doesn't support member expressions in shared clauses.
-        [](const ACCDataVar &Var) { return !Var.isMember(); },
+        [](const ACCDataVar &Var) {
+          return Var.isMember() ? VAR_DISCARD : VAR_PRESERVE;
+        },
         OMPVarListClauseRebuilder(this,
                                   &TransformACCToOMP::RebuildOMPSharedClause));
   }
@@ -1195,7 +1232,9 @@ public:
     }
     return transformACCVarListClause<ACCPrivateClause>(
         D, C, OMPC_private,
-        [&SkipVars](const ACCDataVar &Var) { return !SkipVars.count(Var); },
+        [&SkipVars](const ACCDataVar &Var) {
+          return SkipVars.count(Var) ? VAR_DISCARD : VAR_PRESERVE;
+        },
         OMPVarListClauseRebuilder(this,
                                   &TransformACCToOMP::RebuildOMPPrivateClause));
   }

@@ -194,7 +194,15 @@ Run-Time Environment Variables
     * For `present`, `copy`, `copyin`, `copyout`, `create`, and
       `no_create` clauses and their aliases, support is the same as
       for the `data` directive, as described above, including
-      source-to-source mode caveats.
+      source-to-source mode caveats.  Notes:
+        * OpenACC 3.3 specifies that `no_create` causes device code to use a
+          variable's host memory address if it's not already present on the
+          device.  It's unclear if real code actually depends on that behavior,
+          but Clacc does not consistently support it.  Instead, all device uses
+          of a `no_create` variable must be unreachable if the variable is not
+          already present on the device.  See the discussion of `nomap` in the
+          "Parallel Directives" section in `README-OpenACC-design.md` for
+          related implementation details.
     * `firstprivate` clause
     * `private` clause
     * `reduction` clause

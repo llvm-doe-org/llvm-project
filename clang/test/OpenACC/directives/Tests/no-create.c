@@ -111,7 +111,7 @@
 // REDEFINE:   -DCASES_HEADER='"%t-cases.h"' -gline-tables-only
 // REDEFINE: %{exe:fc:args-stable} = -match-full-lines -allow-empty
 // REDEFINE: %{check-case}( CASE %, NO_ALLOC_OR_ALLOC %, NOT_CRASH_IF_FAIL %) =          \
-// REDEFINE:   : '----------------- CASE: %{CASE} -----------------'                  && \
+// REDEFINE:   : '------------ CASE: %{CASE}, %{NO_ALLOC_OR_ALLOC} ------------'      && \
 // REDEFINE:   %{acc-check-exe-run-fn}( %{NOT_CRASH_IF_FAIL} %, %{CASE} %)            && \
 // REDEFINE:   %{acc-check-exe-filecheck-fn}( %{CASE},%{CASE}-%{NO_ALLOC_OR_ALLOC} %)
 
@@ -1845,29 +1845,40 @@ CASE(caseInheritedAbsent) {
 }
 
 //            PRT-LABEL: {{.*}}caseInheritedSubarrayPresent{{.*}} {
+//             PRT-NEXT:   fprintf
 //             PRT-NEXT:   int arr[] =
+//             PRT-NEXT:   int arr2[] =
+//             PRT-NEXT:   int *p =
 //
-//           PRT-A-NEXT:   #pragma acc data create(arr){{$}}
-//          PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,alloc: arr){{$}}
-//           PRT-A-NEXT:   #pragma acc data no_create(arr[1:2]){{$}}
-//          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2]){{$}}
-//           PRT-A-NEXT:   #pragma acc parallel{{$}}
-// PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr) shared(arr){{$}}
-//    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams shared(arr){{$}}
+//           PRT-A-NEXT:   #pragma acc data copy(arr,p[0:5]){{$}}
+//          PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: arr,p[0:5]){{$}}
+//           PRT-A-NEXT:   #pragma acc data no_create(arr[1:2],p[2:1]){{$}}
+//          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1]){{$}}
+//           PRT-A-NEXT:   #pragma acc parallel num_gangs(1){{$}}
+// PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams num_teams(1) map([[INHERITED_NO_CREATE_MT]]: arr,p[0:0]) shared(arr,p){{$}}
+//    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams num_teams(1) shared(arr,p){{$}}
 //
-//           PRT-O-NEXT:   #pragma omp target data map(ompx_hold,alloc: arr){{$}}
-//          PRT-OA-NEXT:   // #pragma acc data create(arr){{$}}
-//           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2]){{$}}
-//          PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2]){{$}}
-//  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr) shared(arr){{$}}
-//     PRT-O-ALLOC-NEXT:   #pragma omp target teams shared(arr){{$}}
-//          PRT-OA-NEXT:   // #pragma acc parallel{{$}}
+//           PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: arr,p[0:5]){{$}}
+//          PRT-OA-NEXT:   // #pragma acc data copy(arr,p[0:5]){{$}}
+//           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1]){{$}}
+//          PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2],p[2:1]){{$}}
+//  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams num_teams(1) map([[INHERITED_NO_CREATE_MT]]: arr,p[0:0]) shared(arr,p){{$}}
+//     PRT-O-ALLOC-NEXT:   #pragma omp target teams num_teams(1) shared(arr,p){{$}}
+//          PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1){{$}}
 //
-//             PRT-NEXT:   arr[1] = 1;
+//             PRT-NEXT:   {
+//             PRT-NEXT:     arr[1] += 1;
+//             PRT-NEXT:     p[2] += 2;
+//             PRT-NEXT:   }
+//             PRT-NEXT:   fprintf
+//             PRT-NEXT:   fprintf
 //             PRT-NEXT: }
 //
-//  EXE-OFF-caseInheritedSubarrayPresent-NOT: {{.}}
-//      EXE-OFF-caseInheritedSubarrayPresent: acc_ev_enter_data_start
+//      EXE-caseInheritedSubarrayPresent-NOT: {{.}}
+//          EXE-caseInheritedSubarrayPresent: start
+// EXE-OFF-caseInheritedSubarrayPresent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseInheritedSubarrayPresent-NEXT:   acc_ev_alloc
+// EXE-OFF-caseInheritedSubarrayPresent-NEXT:   acc_ev_create
 // EXE-OFF-caseInheritedSubarrayPresent-NEXT:   acc_ev_alloc
 // EXE-OFF-caseInheritedSubarrayPresent-NEXT:   acc_ev_create
 // EXE-OFF-caseInheritedSubarrayPresent-NEXT:   acc_ev_enter_data_start
@@ -1877,37 +1888,59 @@ CASE(caseInheritedAbsent) {
 // EXE-OFF-caseInheritedSubarrayPresent-NEXT: acc_ev_exit_data_start
 // EXE-OFF-caseInheritedSubarrayPresent-NEXT:   acc_ev_delete
 // EXE-OFF-caseInheritedSubarrayPresent-NEXT:   acc_ev_free
-//  EXE-OFF-caseInheritedSubarrayPresent-NOT: {{.}}
+// EXE-OFF-caseInheritedSubarrayPresent-NEXT:   acc_ev_delete
+// EXE-OFF-caseInheritedSubarrayPresent-NEXT:   acc_ev_free
+//     EXE-caseInheritedSubarrayPresent-NEXT:   arr[1]: 21
+//     EXE-caseInheritedSubarrayPresent-NEXT:   p[2]: 32
+//      EXE-caseInheritedSubarrayPresent-NOT: {{.}}
 CASE(caseInheritedSubarrayPresent) {
+  fprintf(stderr, "start\n");
   int arr[] = {10, 20, 30, 40, 50};
-  #pragma acc data create(arr)
-  #pragma acc data no_create(arr[1:2])
-  #pragma acc parallel
-  arr[1] = 1;
+  int arr2[] = {10, 20, 30, 40, 50};
+  int *p = arr2;
+  #pragma acc data copy(arr,p[0:5])
+  #pragma acc data no_create(arr[1:2],p[2:1])
+  #pragma acc parallel num_gangs(1)
+  {
+    arr[1] += 1;
+    p[2] += 2;
+  }
+  fprintf(stderr, "arr[1]: %d\n", arr[1]);
+  fprintf(stderr, "p[2]: %d\n", p[2]);
 }
 
 //            PRT-LABEL: {{.*}}caseInheritedSubarrayAbsent{{.*}} {
+//             PRT-NEXT:   fprintf
 //             PRT-NEXT:   int arr[] =
+//             PRT-NEXT:   int arr2[] =
+//             PRT-NEXT:   int *p =
 //             PRT-NEXT:   int use = 0;
 //
-//           PRT-A-NEXT:   #pragma acc data no_create(arr[1:2]){{$}}
-//          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2]){{$}}
+//           PRT-A-NEXT:   #pragma acc data no_create(arr[1:2],p[2:1]){{$}}
+//          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1]){{$}}
 //           PRT-A-NEXT:   #pragma acc parallel{{$}}
-// PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr) shared(arr) firstprivate(use){{$}}
-//    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams shared(arr) firstprivate(use){{$}}
+// PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr,p[0:0]) shared(arr,p) firstprivate(use){{$}}
+//    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams shared(arr,p) firstprivate(use){{$}}
 //
-//           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2]){{$}}
-//          PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2]){{$}}
-//  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr) shared(arr) firstprivate(use){{$}}
-//     PRT-O-ALLOC-NEXT:   #pragma omp target teams shared(arr) firstprivate(use){{$}}
+//           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1]){{$}}
+//          PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2],p[2:1]){{$}}
+//  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr,p[0:0]) shared(arr,p) firstprivate(use){{$}}
+//     PRT-O-ALLOC-NEXT:   #pragma omp target teams shared(arr,p) firstprivate(use){{$}}
 //          PRT-OA-NEXT:   // #pragma acc parallel{{$}}
 //
-//             PRT-NEXT:   if (use)
+//             PRT-NEXT:   if (use) {
 //             PRT-NEXT:     arr[1] = 1;
+//             PRT-NEXT:     p[2] = 1;
+//             PRT-NEXT:   }
+//             PRT-NEXT:   fprintf
+//             PRT-NEXT:   fprintf
 //             PRT-NEXT: }
 //
-//        EXE-OFF-caseInheritedSubarrayAbsent-NOT: {{.}}
-//            EXE-OFF-caseInheritedSubarrayAbsent: acc_ev_enter_data_start
+//            EXE-caseInheritedSubarrayAbsent-NOT: {{.}}
+//                EXE-caseInheritedSubarrayAbsent: start
+//       EXE-OFF-caseInheritedSubarrayAbsent-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseInheritedSubarrayAbsent-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseInheritedSubarrayAbsent-ALLOC-NEXT:   acc_ev_create
 // EXE-OFF-caseInheritedSubarrayAbsent-ALLOC-NEXT:   acc_ev_alloc
 // EXE-OFF-caseInheritedSubarrayAbsent-ALLOC-NEXT:   acc_ev_create
 //       EXE-OFF-caseInheritedSubarrayAbsent-NEXT:   acc_ev_enter_data_start
@@ -1915,14 +1948,25 @@ CASE(caseInheritedSubarrayPresent) {
 //       EXE-OFF-caseInheritedSubarrayAbsent-NEXT: acc_ev_exit_data_start
 // EXE-OFF-caseInheritedSubarrayAbsent-ALLOC-NEXT:   acc_ev_delete
 // EXE-OFF-caseInheritedSubarrayAbsent-ALLOC-NEXT:   acc_ev_free
-//        EXE-OFF-caseInheritedSubarrayAbsent-NOT: {{.}}
+// EXE-OFF-caseInheritedSubarrayAbsent-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseInheritedSubarrayAbsent-ALLOC-NEXT:   acc_ev_free
+//           EXE-caseInheritedSubarrayAbsent-NEXT:   arr[1]: 20
+//           EXE-caseInheritedSubarrayAbsent-NEXT:   p[2]: 30
+//            EXE-caseInheritedSubarrayAbsent-NOT: {{.}}
 CASE(caseInheritedSubarrayAbsent) {
+  fprintf(stderr, "start\n");
   int arr[] = {10, 20, 30, 40, 50};
+  int arr2[] = {10, 20, 30, 40, 50};
+  int *p = arr2;
   int use = 0;
-  #pragma acc data no_create(arr[1:2])
+  #pragma acc data no_create(arr[1:2],p[2:1])
   #pragma acc parallel
-  if (use)
+  if (use) {
     arr[1] = 1;
+    p[2] = 1;
+  }
+  fprintf(stderr, "arr[1]: %d\n", arr[1]);
+  fprintf(stderr, "p[2]: %d\n", p[2]);
 }
 
 // EXE-HOST-NOT: {{.}}
