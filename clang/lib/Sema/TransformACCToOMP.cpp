@@ -248,28 +248,27 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
                            VarFilterType VarFilter,
                            llvm::SmallVector<Expr *, 16> &Vars) {
     Vars.reserve(C->varlist_size());
-    return iterateACCVarList(
-        C, [&VarFilter, &Vars, this](Expr *RefExpr) {
-          VarAction Action = VarFilter(RefExpr);
-          if (Action == VAR_DISCARD)
-            return false;
-          ExprResult EVar = getDerived().TransformExpr(RefExpr);
-          if (EVar.isInvalid())
-            return true;
-          if (Action == VAR_ADD_ZERO_LENGTH_ARRAY_SECTION) {
-            SourceLocation Loc = RefExpr->getEndLoc();
-            ExprResult Zero = getSema().ActOnIntegerConstant(Loc, 0);
-            if (Zero.isInvalid())
-              return true;
-            EVar = getDerived().RebuildOMPArraySectionExpr(
-                EVar.get(), Loc, Zero.get(), Loc, SourceLocation(), Zero.get(),
-                nullptr, Loc);
-            if (EVar.isInvalid())
-              return true;
-          }
-          Vars.push_back(EVar.get());
-          return false;
-        });
+    return iterateACCVarList(C, [&VarFilter, &Vars, this](Expr *RefExpr) {
+      VarAction Action = VarFilter(RefExpr);
+      if (Action == VAR_DISCARD)
+        return false;
+      ExprResult EVar = getDerived().TransformExpr(RefExpr);
+      if (EVar.isInvalid())
+        return true;
+      if (Action == VAR_ADD_ZERO_LENGTH_ARRAY_SECTION) {
+        SourceLocation Loc = RefExpr->getEndLoc();
+        ExprResult Zero = getSema().ActOnIntegerConstant(Loc, 0);
+        if (Zero.isInvalid())
+          return true;
+        EVar = getDerived().RebuildOMPArraySectionExpr(
+            EVar.get(), Loc, Zero.get(), Loc, SourceLocation(), Zero.get(),
+            nullptr, Loc);
+        if (EVar.isInvalid())
+          return true;
+      }
+      Vars.push_back(EVar.get());
+      return false;
+    });
   }
 
   template <typename Derived, typename VarFilterType, typename RebuilderType>
