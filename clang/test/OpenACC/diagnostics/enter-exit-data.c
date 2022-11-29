@@ -411,18 +411,12 @@ int main() {
 
   // Member expression plus subarray not permitted.
 
-  // expected-error@+13 {{OpenACC subarray is not allowed here}}
-  // expected-error@+13 {{OpenACC subarray is not allowed here}}
-  // expected-error@+13 {{OpenACC subarray is not allowed here}}
-  // expected-error@+13 {{OpenACC subarray is not allowed here}}
-  // expected-error@+13 {{OpenACC subarray is not allowed here}}
-  // expected-error@+13 {{OpenACC subarray is not allowed here}}
-  // expected-error@+7 {{expected variable name}}
-  // expected-error@+7 {{expected variable name}}
-  // expected-error@+7 {{expected variable name}}
-  // expected-error@+7 {{expected variable name}}
-  // expected-error@+7 {{expected variable name}}
-  // expected-error@+7 {{expected variable name}}
+  // expected-error@+7 {{OpenACC subarray is not allowed here}}
+  // expected-error@+7 {{OpenACC subarray is not allowed here}}
+  // expected-error@+7 {{OpenACC subarray is not allowed here}}
+  // expected-error@+7 {{OpenACC subarray is not allowed here}}
+  // expected-error@+7 {{OpenACC subarray is not allowed here}}
+  // expected-error@+7 {{OpenACC subarray is not allowed here}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data copyin(ps[4:6].i)              \
                          pcopyin(ps[5:7].i)             \
@@ -431,14 +425,10 @@ int main() {
                          pcreate(ps[11:13].i)           \
                          present_or_create(ps[12:14].i)
 
-  // expected-error@+9 {{OpenACC subarray is not allowed here}}
-  // expected-error@+9 {{OpenACC subarray is not allowed here}}
-  // expected-error@+9 {{OpenACC subarray is not allowed here}}
-  // expected-error@+9 {{OpenACC subarray is not allowed here}}
-  // expected-error@+5 {{expected variable name}}
-  // expected-error@+5 {{expected variable name}}
-  // expected-error@+5 {{expected variable name}}
-  // expected-error@+5 {{expected variable name}}
+  // expected-error@+5 {{OpenACC subarray is not allowed here}}
+  // expected-error@+5 {{OpenACC subarray is not allowed here}}
+  // expected-error@+5 {{OpenACC subarray is not allowed here}}
+  // expected-error@+5 {{OpenACC subarray is not allowed here}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
   #pragma acc exit data copyout(ps[4:6].i)             \
                         pcopyout(ps[5:7].i)            \

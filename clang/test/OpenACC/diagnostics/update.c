@@ -265,18 +265,15 @@ int main() {
 
   // Member expression plus subarray not permitted.
 
-  // expected-error@+3 {{OpenACC subarray is not allowed here}}
-  // expected-error@+2 {{expected variable name}}
+  // expected-error@+2 {{OpenACC subarray is not allowed here}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update self(ps[4:6].i)
 
-  // expected-error@+3 {{OpenACC subarray is not allowed here}}
-  // expected-error@+2 {{expected variable name}}
+  // expected-error@+2 {{OpenACC subarray is not allowed here}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update host(ps[4:6].i)
 
-  // expected-error@+3 {{OpenACC subarray is not allowed here}}
-  // expected-error@+2 {{expected variable name}}
+  // expected-error@+2 {{OpenACC subarray is not allowed here}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update device(ps[4:6].i)
 

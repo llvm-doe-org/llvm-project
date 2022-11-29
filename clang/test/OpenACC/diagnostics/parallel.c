@@ -1151,40 +1151,23 @@ int main() {
 
   // Member expression plus subarray not permitted.
 
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+34 {{OpenACC subarray is not allowed here}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
-  // expected-error@+17 {{expected variable name}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
+  // expected-error@+17 {{OpenACC subarray is not allowed here}}
   #pragma acc parallel LOOP present(ps[0:1].i)             \
                             copy(ps[1:2].i)                \
                             pcopy(ps[2:3].i)               \

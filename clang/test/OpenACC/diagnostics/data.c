@@ -226,8 +226,7 @@ int main() {
                           m[2:][1], \
                           a[:], m[0:2][0:2])
     ;
-  // expected-error@+3 {{OpenACC subarray is not allowed here}}
-  // expected-error@+2 {{expected variable name}}
+  // expected-error@+2 {{OpenACC subarray is not allowed here}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data no_create(ps[0:1].i)
     ;

@@ -2222,10 +2222,8 @@ void fn(int param) {
   #pragma acc parallel
 #endif
   {
-    // expected-error@+4 {{OpenACC subarray is not allowed here}}
-    // expected-error@+4 {{OpenACC subarray is not allowed here}}
-    // expected-error@+2 {{expected variable name}}
-    // expected-error@+2 {{expected variable name}}
+    // expected-error@+2 {{OpenACC subarray is not allowed here}}
+    // expected-error@+2 {{OpenACC subarray is not allowed here}}
     #pragma acc CMB_PAR loop worker private(ps[0:1].i)       \
                                     reduction(max:ps[1:2].i)
     for (int i = 0; i < 5; ++i)

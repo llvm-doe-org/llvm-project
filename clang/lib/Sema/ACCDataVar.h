@@ -225,11 +225,16 @@ public:
       return; /*plain variable name*/
     }
 
-    // We have an unexpected expression.
+    // We have an unexpected expression.  If it's a RecoveryExpr, then there was
+    // an error reported somewhere else, so don't risk a spurious diagnostic
+    // here.  Either way, do assert that an unexpected expression is encountered
+    // only while errors are being diagnosed or ignored (i.e., S != nullptr).
     assert(S && "expected MemberExpr or DeclRefExpr");
-    Diag(RefWithoutSubarray->getBeginLoc(), diag::err_acc_expected_data_var)
-        << AllowMemberExpr << AllowSubarray
-        << RefWithoutSubarray->getSourceRange();
+    if (!isa<RecoveryExpr>(RefWithoutSubarray)) {
+      Diag(RefWithoutSubarray->getBeginLoc(), diag::err_acc_expected_data_var)
+          << AllowMemberExpr << AllowSubarray
+          << RefWithoutSubarray->getSourceRange();
+    }
     /*invalid*/
   }
   ACCDataVar(Expr *Ref, bool AllowMemberExpr, bool AllowSubarray, Sema *S,
