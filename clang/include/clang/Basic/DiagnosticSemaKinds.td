@@ -10979,6 +10979,8 @@ def err_acc_subarray_without_colon : Error<
   "subarray syntax must include ':'">;
 def err_acc_unsupported_member_expr : Error <
   "in '%1' clause on '#pragma acc %0', member expression is not supported">;
+def err_acc_unsupported_member_expr_loop_control_variable : Error <
+  "as OpenACC loop control variable, member expression is not supported">;
 def err_acc_expected_data_var : Error<
   "expected variable name"
   "%select{| or member expression}0"

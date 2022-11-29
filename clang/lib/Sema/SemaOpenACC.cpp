@@ -244,10 +244,12 @@ public:
     assert(!Stack.empty() && "expected non-empty directive stack");
     assert(isOpenACCLoopDirective(getEffectiveDirective()) &&
            "expected loop control variable to be added to loop directive");
-    // Drop invalid loop control variable expressions for now.  Loop form
-    // validation will diagnose them later.
-    ACCDataVar Var(E, /*AllowMemberExpr=*/false, /*AllowSubarray=*/false,
+    // It should not be possible to receive a subarray here.  Member expressions
+    // will be diagnosed later, so accept them here.
+    ACCDataVar Var(E, /*AllowMemberExpr=*/true, /*AllowSubarray=*/false,
                    &SemaRef, /*Quiet=*/true);
+    // Drop invalid loop control variables for now.  Loop form validation will
+    // catch them later.
     if (Var.isValid()) {
       Stack.back().LCVSet.insert(Var);
       Stack.back().LCVExprs.emplace_back(E);
@@ -2056,6 +2058,19 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
             << NameForDiag(*this, Var) << VarData.DSARefExpr->getSourceRange();
         Diag(RefExpr->getExprLoc(), diag::note_acc_loop_control_var)
             << NameForDiag(*this, Var) << RefExpr->getSourceRange();
+        ErrorFound = true;
+        continue;
+      }
+
+      // Complain for member expression.
+      //
+      // ActOnOpenACCPrivateClause below would do this, but its diagnostic would
+      // talk about what's permitted in a private clause, which would be
+      // confusing because the private clause in this case is implicit.
+      if (Var.isMember()) {
+        Diag(RefExpr->getBeginLoc(),
+             diag::err_acc_unsupported_member_expr_loop_control_variable)
+            << RefExpr->getSourceRange();
         ErrorFound = true;
         continue;
       }
