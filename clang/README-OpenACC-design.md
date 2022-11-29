@@ -1548,9 +1548,16 @@ to OpenMP is as follows:
           enclosing `no_create`, then a zero-length array section is specified
           in the *exp* `map` here.
     * Otherwise, if the variable is *imp* `shared` on the
-      `acc parallel` and is a scalar but not a pointer or class/struct/union
-      member, then -> *exp* `defaultmap(tofrom:scalar)`.  This is generated only
-      once per `acc parallel`.
+      `acc parallel` and is a pointer (without a subarray specification), then
+      *imp* `nomap` -> *exp* `map` with an `alloc` map type.  Under the current
+      implementation, if at least one other variable on the same `acc parallel`
+      matches the previous condition and thus its *exp* `map` requires
+      `ompx_no_alloc`, then this variable's *exp* `map` also has
+      `ompx_no_alloc` even though not required.
+    * Otherwise, if the variable is *imp* `shared` on the
+      `acc parallel` and is a scalar but not class/struct/union member, then ->
+      *exp* `defaultmap(tofrom:scalar)`.  This is generated only once per
+      `acc parallel`.
     * Otherwise, the translations discards *imp* `nomap`.
     * Notes:
         * There is a discrepancy between the OpenACC and OpenMP
@@ -1609,6 +1616,37 @@ to OpenMP is as follows:
                   presence, as described above, does not support that behavior.
                   Morever, that behavior appears to violate the above assumption
                   that uses of such a non-present variable are unreachable.
+        * In the case of a pointer (without a subarray specification) when the
+          suppressing DMA is not `no_create`:
+            * The *imp* `map` specified by OpenMP does not achieve the desired
+              behavior in this case because it handles the pointer as the base
+              of an array section:
+                * OpenMP 5.2 sec. 5.8.1 "Implicit Data-Mapping Attribute Rules"
+                  p. 148 L29-31 specifies the *imp* `map` for the array section,
+                  but OpenACC does not specify any such mapping here:
+
+                    > A variable that is of type pointer, but is neither a
+                    > pointer to function nor (for C++) a pointer to a member
+                    > function, is treated as if it is the base pointer of a
+                    > zero-length array section that had appeared as a list item
+                    > in a map clause.
+
+                * OpenMP 5.2 sec. 5.1.1 "Variables Referenced in a Construct"
+                  p. 98 L2-4 then specifies *pre* `firstprivate` for the
+                  pointer, but OpenACC requires the pointer to be `shared`:
+
+                    > If a list item in a map clause on the target construct has
+                    > a base pointer, and the base pointer is a scalar variable
+                    > that does not appear in a map clause on the construct, the
+                    > base pointer is firstprivate.
+
+            * To override that behavior, the Clacc translation specifies the
+              `alloc` map type for the pointer.  Because the suppressing DMA
+              guarantees the pointer is already present, adding `ompx_no_alloc`
+              to that map type has no effect.  In the current implementation, it
+              is convenient to add `ompx_no_alloc` when another variable on the
+              same `acc parallel` requires `ompx_no_alloc` so that the variables
+              can be included in the same `map` clause.
         * In the case of an array when the suppressing DMA is not `no_create`:
             * Clacc does not override the *imp* `map` specified by OpenMP 5.2
               sec. 5.8.1 "Implicit Data-Mapping Attribute Rules" p. 149 L4-5,

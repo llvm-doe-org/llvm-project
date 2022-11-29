@@ -29,47 +29,64 @@
 struct T { int before; int i; int after; };
 
 int pr;
+int *prPtr;
 int prArr[1];
 struct T prStruct;
+int *basePtrCmp = prArr;
 
 void test();
 
 int main() {
   // This encloses all tests so we can check the effect of the present clause on
-  // statically nested directives without a runtime error.
+  // statically nested directives without a runtime error.  Moreover, it sets
+  // basePtrCmp on the device to be the same as on the host so it can act as a
+  // universal base for comparing the values of pointer variables.  (We could
+  // use nullptr as the base instead, but nullptr is too often the value a
+  // pointer has when it isn't copied properly.)
   //
   //      DMP: ACCDataDirective
   // DMP-NEXT:   ACCCreateClause
   //  DMP-NOT:     <implicit>
   // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'prPtr' 'int *'
   // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int[1]'
   // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
+  // DMP-NEXT:   ACCCopyinClause
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
   // DMP-NEXT:   impl: OMPTargetDataDirective
   // DMP-NEXT:     OMPMapClause
   //  DMP-NOT:       <implicit>
   // DMP-NEXT:       DeclRefExpr {{.*}} 'pr' 'int'
+  // DMP-NEXT:       DeclRefExpr {{.*}} 'prPtr' 'int *'
   // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int[1]'
   // DMP-NEXT:       DeclRefExpr {{.*}} 'prStruct' 'struct T'
-  #pragma acc data create(pr,prArr,prStruct)
+  // DMP-NEXT:     OMPMapClause
+  //  DMP-NOT:       <implicit>
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
+  #pragma acc data create(pr,prPtr,prArr,prStruct) copyin(basePtrCmp)
   test();
 }
 
+// We call this between tests to reset values on host and device.
 void prSet() {
   pr = 90;
+  prPtr = basePtrCmp + 90;
   prArr[0] = 90;
   prStruct.i = 90;
-  // We call this between tests.
-  //
   //      DMP: ACCParallelDirective
   // DMP-NEXT:   ACCNumGangsClause
   // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
   // DMP-NEXT:   ACCPresentClause
   //  DMP-NOT:     <implicit>
   // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'prPtr' 'int *'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
   // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int[1]'
   // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
   // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
   // DMP-NEXT:     DeclRefExpr {{.*}} 'pr' 'int'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'prPtr' 'int *'
+  // DMP-NEXT:     DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
   // DMP-NEXT:     DeclRefExpr {{.*}} 'prArr' 'int[1]'
   // DMP-NEXT:     DeclRefExpr {{.*}} 'prStruct' 'struct T'
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
@@ -78,11 +95,14 @@ void prSet() {
   // DMP-NEXT:     OMPMapClause
   //  DMP-NOT:       <implicit>
   // DMP-NEXT:       DeclRefExpr {{.*}} 'pr' 'int'
+  // DMP-NEXT:       DeclRefExpr {{.*}} 'prPtr' 'int *'
+  // DMP-NEXT:       DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
   // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int[1]'
   // DMP-NEXT:       DeclRefExpr {{.*}} 'prStruct' 'struct T'
-  #pragma acc parallel num_gangs(1) present(pr, prArr, prStruct)
+  #pragma acc parallel num_gangs(1) present(pr, prPtr, basePtrCmp, prArr, prStruct)
   {
     pr = 90;
+    prPtr = basePtrCmp + 90;
     prArr[0] = 90;
     prStruct.i = 90;
   }
@@ -299,7 +319,7 @@ void test() {
   // nested acc parallel (and on its OpenMP translation).
   //
   // For clauses on acc data, check all clause aliases.
-  // Check scalar types.
+  // Check non-pointer scalar types.
   // Check suppression of inner copy clause data transfers.
   //----------------------------------------------------------------------------
 
@@ -772,6 +792,712 @@ void test() {
            "  cr0=%4d, cr1=%4d, cr2=%4d\n"
            "   nc=%4d\n",
            pr, c0, c1, c2, ci0, ci1, ci2, co0, co1, co2, cr0, cr1, cr2, nc);
+  } // PRT-NEXT: }
+
+  //----------------------------------------------------------------------------
+  // Repeat except...
+  //
+  // Check pointer types (including not adding defaultmap for scalars with
+  // suppressed OpenACC implicit DAs).
+  // Check suppression of inner copy clause data transfers again.
+  //
+  // Check clause aliases again.  Currently, that check exercises a unique code
+  // path, as follows.  The TransformACCToOMP implementation must analyze
+  // visible OpenACC data clauses to determine whether they specify a pointer
+  // variable or a pointer-based subarray, and clause aliases must not be
+  // overlooked (e.g., present_or_copy).  Other cases where TransformACCToOMP
+  // must analyze visible clauses are only concerned with no_create, which has
+  // no aliases.
+  //----------------------------------------------------------------------------
+
+  // PRT-NEXT: {
+  {
+    // PRT-NEXT: prSet();
+    // PRT: nc = basePtrCmp + 50;
+    prSet();
+    int  *c0 = basePtrCmp + 10, * c1 = c0  + 1, * c2 = c0  + 2;
+    int *ci0 = basePtrCmp + 20, *ci1 = ci0 + 1, *ci2 = ci0 + 2;
+    int *co0 = basePtrCmp + 30, *co1 = co0 + 1, *co2 = co0 + 2;
+    int *cr0 = basePtrCmp + 40, *cr1 = cr0 + 1, *cr2 = cr0 + 2;
+    int *nc = basePtrCmp + 50;
+    // DMP:      ACCDataDirective
+    // DMP-NEXT:   ACCPresentClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'prPtr' 'int *'
+    // DMP-NEXT:   ACCCopyClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int *'
+    // DMP-NEXT:   ACCCopyClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'c1' 'int *'
+    // DMP-NEXT:   ACCCopyClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'c2' 'int *'
+    // DMP-NEXT:   ACCCopyinClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'ci0' 'int *'
+    // DMP-NEXT:   ACCCopyinClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'ci1' 'int *'
+    // DMP-NEXT:   ACCCopyinClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'ci2' 'int *'
+    // DMP-NEXT:   ACCCopyoutClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'co0' 'int *'
+    // DMP-NEXT:   ACCCopyoutClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'co1' 'int *'
+    // DMP-NEXT:   ACCCopyoutClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'co2' 'int *'
+    // DMP-NEXT:   ACCCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'cr0' 'int *'
+    // DMP-NEXT:   ACCCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'cr1' 'int *'
+    // DMP-NEXT:   ACCCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'cr2' 'int *'
+    // DMP-NEXT:   ACCNoCreateClause
+    // DMP-NOT:      <implicit>
+    // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int *'
+    // DMP-NEXT:   impl: OMPTargetDataDirective
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'prPtr' 'int *'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int *'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'c1' 'int *'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'c2' 'int *'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'ci0' 'int *'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'ci1' 'int *'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'ci2' 'int *'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'co0' 'int *'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'co1' 'int *'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'co2' 'int *'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'cr0' 'int *'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'cr1' 'int *'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'cr2' 'int *'
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int *'
+    // DMP-NOT:      OMP
+    //
+    //  PRT-A-NEXT: {{^ *}}#pragma acc data present(prPtr){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}copy(c0) pcopy(c1) present_or_copy(c2){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}copyin(ci0) pcopyin(ci1) present_or_copyin(ci2){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}copyout(co0) pcopyout(co1) present_or_copyout(co2){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}create(cr0) pcreate(cr1) present_or_create(cr2){{( *\\$[[:space:]])?}}
+    //  PRT-A-SAME: {{^ *}}no_create(nc){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(present,ompx_hold,alloc: prPtr)
+    // PRT-AO-SAME: {{^ *}}map(ompx_hold,tofrom: c0) map(ompx_hold,tofrom: c1) map(ompx_hold,tofrom: c2)
+    // PRT-AO-SAME: {{^ *}}map(ompx_hold,to: ci0) map(ompx_hold,to: ci1) map(ompx_hold,to: ci2)
+    // PRT-AO-SAME: {{^ *}}map(ompx_hold,from: co0) map(ompx_hold,from: co1) map(ompx_hold,from: co2)
+    // PRT-AO-SAME: {{^ *}}map(ompx_hold,alloc: cr0) map(ompx_hold,alloc: cr1) map(ompx_hold,alloc: cr2)
+    // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,ompx_hold,alloc: nc){{$}}
+    //
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(present,ompx_hold,alloc: prPtr)
+    //  PRT-O-SAME: {{^ *}}map(ompx_hold,tofrom: c0) map(ompx_hold,tofrom: c1) map(ompx_hold,tofrom: c2)
+    //  PRT-O-SAME: {{^ *}}map(ompx_hold,to: ci0) map(ompx_hold,to: ci1) map(ompx_hold,to: ci2)
+    //  PRT-O-SAME: {{^ *}}map(ompx_hold,from: co0) map(ompx_hold,from: co1) map(ompx_hold,from: co2)
+    //  PRT-O-SAME: {{^ *}}map(ompx_hold,alloc: cr0) map(ompx_hold,alloc: cr1) map(ompx_hold,alloc: cr2)
+    //  PRT-O-SAME: {{^ *}}map(ompx_no_alloc,ompx_hold,alloc: nc){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc data present(prPtr){{( *\\$[[:space:]] *//)?}}
+    // PRT-OA-SAME: {{^ *}}copy(c0) pcopy(c1) present_or_copy(c2){{( *\\$[[:space:]] *//)?}}
+    // PRT-OA-SAME: {{^ *}}copyin(ci0) pcopyin(ci1) present_or_copyin(ci2){{( *\\$[[:space:]] *//)?}}
+    // PRT-OA-SAME: {{^ *}}copyout(co0) pcopyout(co1) present_or_copyout(co2){{( *\\$[[:space:]] *//)?}}
+    // PRT-OA-SAME: {{^ *}}create(cr0) pcreate(cr1) present_or_create(cr2){{( *\\$[[:space:]] *//)?}}
+    // PRT-OA-SAME: {{^ *}}no_create(nc){{$}}
+    #pragma acc data present(prPtr)                                     \
+                     copy(c0) pcopy(c1) present_or_copy(c2)             \
+                     copyin(ci0) pcopyin(ci1) present_or_copyin(ci2)    \
+                     copyout(co0) pcopyout(co1) present_or_copyout(co2) \
+                     create(cr0) pcreate(cr1) present_or_create(cr2)    \
+                     no_create(nc)
+    // DMP: CompoundStmt
+    // PRT-NEXT: {
+    {
+      // PRT-NEXT: prPtr +=
+      // PRT: nc +=
+      prPtr += 100;
+         c0 += 100;  c1 += 100;  c2 += 100;
+        ci0 += 100; ci1 += 100; ci2 += 100;
+        co0 += 100; co1 += 100; co2 += 100;
+        cr0 += 100; cr1 += 100; cr2 += 100;
+         nc += 100;
+
+      // Check suppression of implicit data clauses.
+      //
+      //      DMP: ACCParallelDirective
+      // DMP-NEXT:   ACCNumGangsClause
+      // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:   ACCPresentClause
+      //  DMP-NOT:     <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
+      // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prPtr' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci2' 'int *'
+      // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prPtr' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci2' 'int *'
+      // DMP-NEXT:   impl: OMPTargetTeamsDirective
+      // DMP-NEXT:     OMPNum_teamsClause
+      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:     OMPMapClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
+      // DMP-NEXT:     OMPMapClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prPtr' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci2' 'int *'
+      // DMP-NEXT:     OMPSharedClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prPtr' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci2' 'int *'
+      //  DMP-NOT:     OMP
+      //
+      // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) present(basePtrCmp){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
+      // PRT-AO-SAME: {{^ *}}map(present,ompx_hold,alloc: basePtrCmp)
+      // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,alloc: co0,co1,co2,cr0,cr1,cr2,nc,prPtr,c0,c1,c2,ci0,ci1,ci2)
+      // PRT-AO-SAME: {{^ *}}shared(co0,basePtrCmp,co1,co2,cr0,cr1,cr2,nc,prPtr,c0,c1,c2,ci0,ci1,ci2){{$}}
+      //
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+      //  PRT-O-SAME: {{^ *}}map(present,ompx_hold,alloc: basePtrCmp)
+      //  PRT-O-SAME: {{^ *}}map(ompx_no_alloc,alloc: co0,co1,co2,cr0,cr1,cr2,nc,prPtr,c0,c1,c2,ci0,ci1,ci2)
+      //  PRT-O-SAME: {{^ *}}shared(co0,basePtrCmp,co1,co2,cr0,cr1,cr2,nc,prPtr,c0,c1,c2,ci0,ci1,ci2){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) present(basePtrCmp){{$}}
+      #pragma acc parallel num_gangs(1) present(basePtrCmp)
+      // DMP: CompoundStmt
+      // PRT-NEXT: {
+      {
+        // Don't use these uninitialized.
+        // PRT-NEXT: co0 =
+        // PRT: cr2 =
+        co0 = basePtrCmp + 35; co1 = basePtrCmp + 36; co2 = basePtrCmp + 37;
+        cr0 = basePtrCmp + 45; cr1 = basePtrCmp + 46; cr2 = basePtrCmp + 47;
+        // Reference nc to trigger any implicit attributes, but nc shouldn't be
+        // allocated, so don't actually access it at run time.
+        // PRT-NEXT: if
+        // PRT-NEXT: nc = basePtrCmp + 55;
+        if (!cr0)
+          nc = basePtrCmp + 55;
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
+        // PRT:      );
+        //     EXE-TGT-USE-STDIO-NEXT: In first acc parallel:
+        //              EXE-HOST-NEXT:   prPtr= 190
+        //              EXE-HOST-NEXT:      c0= 110,  c1= 111,  c2= 112
+        //              EXE-HOST-NEXT:     ci0= 120, ci1= 121, ci2= 122
+        //              EXE-HOST-NEXT:     co0=  35, co1=  36, co2=  37
+        //              EXE-HOST-NEXT:     cr0=  45, cr1=  46, cr2=  47
+        // EXE-OFF-TGT-USE-STDIO-NEXT:   prPtr=  90
+        // EXE-OFF-TGT-USE-STDIO-NEXT:      c0=  10,  c1=  11,  c2=  12
+        // EXE-OFF-TGT-USE-STDIO-NEXT:     ci0=  20, ci1=  21, ci2=  22
+        // EXE-OFF-TGT-USE-STDIO-NEXT:     co0=  35, co1=  36, co2=  37
+        // EXE-OFF-TGT-USE-STDIO-NEXT:     cr0=  45, cr1=  46, cr2=  47
+        TGT_PRINTF("In first acc parallel:\n"
+                   "  prPtr=%4lu\n"
+                   "     c0=%4lu,  c1=%4lu,  c2=%4lu\n"
+                   "    ci0=%4lu, ci1=%4lu, ci2=%4lu\n"
+                   "    co0=%4lu, co1=%4lu, co2=%4lu\n"
+                   "    cr0=%4lu, cr1=%4lu, cr2=%4lu\n",
+                   prPtr - basePtrCmp,
+                   c0 - basePtrCmp, c1 - basePtrCmp, c2 - basePtrCmp,
+                   ci0 - basePtrCmp, ci1 - basePtrCmp, ci2 - basePtrCmp,
+                   co0 - basePtrCmp, co1 - basePtrCmp, co2 - basePtrCmp,
+                   cr0 - basePtrCmp, cr1 - basePtrCmp, cr2 - basePtrCmp);
+        // PRT-NEXT: prPtr +=
+        // PRT: cr2 +=
+        prPtr += 1000;
+           c0 += 1000;  c1 += 1000;  c2 += 1000;
+          ci0 += 1000; ci1 += 1000; ci2 += 1000;
+          co0 += 1000; co1 += 1000; co2 += 1000;
+          cr0 += 1000; cr1 += 1000; cr2 += 1000;
+      } // PRT-NEXT: }
+
+      // PRT-NEXT: printf(
+      // PRT:      );
+      //      EXE-NEXT: After first acc parallel:
+      // EXE-HOST-NEXT:   prPtr=1190
+      // EXE-HOST-NEXT:      c0=1110,  c1=1111,  c2=1112
+      // EXE-HOST-NEXT:     ci0=1120, ci1=1121, ci2=1122
+      // EXE-HOST-NEXT:     co0=1035, co1=1036, co2=1037
+      // EXE-HOST-NEXT:     cr0=1045, cr1=1046, cr2=1047
+      // EXE-HOST-NEXT:      nc= 150
+      //  EXE-OFF-NEXT:   prPtr= 190
+      //  EXE-OFF-NEXT:      c0= 110,  c1= 111,  c2= 112
+      //  EXE-OFF-NEXT:     ci0= 120, ci1= 121, ci2= 122
+      //  EXE-OFF-NEXT:     co0= 130, co1= 131, co2= 132
+      //  EXE-OFF-NEXT:     cr0= 140, cr1= 141, cr2= 142
+      //  EXE-OFF-NEXT:      nc= 150
+      printf("After first acc parallel:\n"
+             "  prPtr=%4lu\n"
+             "     c0=%4lu,  c1=%4lu,  c2=%4lu \n"
+             "    ci0=%4lu, ci1=%4lu, ci2=%4lu \n"
+             "    co0=%4lu, co1=%4lu, co2=%4lu \n"
+             "    cr0=%4lu, cr1=%4lu, cr2=%4lu \n"
+             "     nc=%4lu\n",
+             prPtr - basePtrCmp,
+             c0 - basePtrCmp, c1 - basePtrCmp, c2 - basePtrCmp,
+             ci0 - basePtrCmp, ci1 - basePtrCmp, ci2 - basePtrCmp,
+             co0 - basePtrCmp, co1 - basePtrCmp, co2 - basePtrCmp,
+             cr0 - basePtrCmp, cr1 - basePtrCmp, cr2 - basePtrCmp,
+             nc - basePtrCmp);
+      // PRT-NEXT: prPtr +=
+      // PRT: nc +=
+      prPtr += 100;
+         c0 += 100;  c1 += 100;  c2 += 100;
+        ci0 += 100; ci1 += 100; ci2 += 100;
+        co0 += 100; co1 += 100; co2 += 100;
+        cr0 += 100; cr1 += 100; cr2 += 100;
+         nc += 100;
+
+      // Check suppression of explicit data clauses (only data transfers are
+      // suppressed except no_create suppresses nothing).
+      //
+      //      DMP: ACCParallelDirective
+      // DMP-NEXT:   ACCNumGangsClause
+      // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:   ACCPresentClause
+      //  DMP-NOT:     <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
+      // DMP-NEXT:   ACCCopyClause
+      //  DMP-NOT:     <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prPtr' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int *'
+      // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prPtr' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'nc' 'int *'
+      // DMP-NEXT:   impl: OMPTargetTeamsDirective
+      // DMP-NEXT:     OMPNum_teamsClause
+      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:     OMPMapClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
+      // DMP-NEXT:     OMPMapClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prPtr' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int *'
+      // DMP-NEXT:     OMPSharedClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prPtr' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int *'
+      //  DMP-NOT:     OMP
+      //
+      //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1) present(basePtrCmp)
+      //  PRT-A-SAME: {{^ *}}copy(prPtr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
+      // PRT-AO-SAME: {{^ *}}map(present,ompx_hold,alloc: basePtrCmp)
+      // PRT-AO-SAME: {{^ *}}map(ompx_hold,tofrom: prPtr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc)
+      // PRT-AO-SAME: {{^ *}}shared(prPtr,basePtrCmp,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc){{$}}
+      //
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+      //  PRT-O-SAME: {{^ *}}map(present,ompx_hold,alloc: basePtrCmp)
+      //  PRT-O-SAME: {{^ *}}map(ompx_hold,tofrom: prPtr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc)
+      //  PRT-O-SAME: {{^ *}}shared(prPtr,basePtrCmp,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) present(basePtrCmp)
+      // PRT-OA-SAME: {{^ *}}copy(prPtr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc){{$}}
+      #pragma acc parallel num_gangs(1) present(basePtrCmp) copy(prPtr,c0,c1,c2,ci0,ci1,ci2,co0,co1,co2,cr0,cr1,cr2,nc)
+      // DMP: CompoundStmt
+      // PRT-NEXT: {
+      {
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
+        // PRT:      );
+        //     EXE-TGT-USE-STDIO-NEXT: In second acc parallel:
+        //              EXE-HOST-NEXT:   prPtr=1290
+        //              EXE-HOST-NEXT:      c0=1210,  c1=1211,  c2=1212
+        //              EXE-HOST-NEXT:     ci0=1220, ci1=1221, ci2=1222
+        //              EXE-HOST-NEXT:     co0=1135, co1=1136, co2=1137
+        //              EXE-HOST-NEXT:     cr0=1145, cr1=1146, cr2=1147
+        //              EXE-HOST-NEXT:      nc= 250
+        // EXE-OFF-TGT-USE-STDIO-NEXT:   prPtr=1090
+        // EXE-OFF-TGT-USE-STDIO-NEXT:      c0=1010,  c1=1011,  c2=1012
+        // EXE-OFF-TGT-USE-STDIO-NEXT:     ci0=1020, ci1=1021, ci2=1022
+        // EXE-OFF-TGT-USE-STDIO-NEXT:     co0=1035, co1=1036, co2=1037
+        // EXE-OFF-TGT-USE-STDIO-NEXT:     cr0=1045, cr1=1046, cr2=1047
+        // EXE-OFF-TGT-USE-STDIO-NEXT:      nc= 250
+        TGT_PRINTF("In second acc parallel:\n"
+                   "  prPtr=%4lu\n"
+                   "     c0=%4lu,  c1=%4lu,  c2=%4lu \n"
+                   "    ci0=%4lu, ci1=%4lu, ci2=%4lu \n"
+                   "    co0=%4lu, co1=%4lu, co2=%4lu \n"
+                   "    cr0=%4lu, cr1=%4lu, cr2=%4lu \n"
+                   "     nc=%4lu\n",
+                   prPtr - basePtrCmp,
+                   c0 - basePtrCmp, c1 - basePtrCmp, c2 - basePtrCmp,
+                   ci0 - basePtrCmp, ci1 - basePtrCmp, ci2 - basePtrCmp,
+                   co0 - basePtrCmp, co1 - basePtrCmp, co2 - basePtrCmp,
+                   cr0 - basePtrCmp, cr1 - basePtrCmp, cr2 - basePtrCmp,
+                   nc - basePtrCmp);
+        // PRT-NEXT: prPtr +=
+        // PRT: nc +=
+        prPtr += 1000;
+           c0 += 1000;  c1 += 1000;  c2 += 1000;
+          ci0 += 1000; ci1 += 1000; ci2 += 1000;
+          co0 += 1000; co1 += 1000; co2 += 1000;
+          cr0 += 1000; cr1 += 1000; cr2 += 1000;
+           nc += 1000;
+      } // PRT-NEXT: }
+
+      // PRT-NEXT: printf(
+      // PRT:      );
+      //      EXE-NEXT: After second acc parallel:
+      // EXE-HOST-NEXT:   prPtr=2290
+      // EXE-HOST-NEXT:      c0=2210,  c1=2211,  c2=2212
+      // EXE-HOST-NEXT:     ci0=2220, ci1=2221, ci2=2222
+      // EXE-HOST-NEXT:     co0=2135, co1=2136, co2=2137
+      // EXE-HOST-NEXT:     cr0=2145, cr1=2146, cr2=2147
+      // EXE-HOST-NEXT:      nc=1250
+      //  EXE-OFF-NEXT:   prPtr= 290
+      //  EXE-OFF-NEXT:      c0= 210,  c1= 211,  c2= 212
+      //  EXE-OFF-NEXT:     ci0= 220, ci1= 221, ci2= 222
+      //  EXE-OFF-NEXT:     co0= 230, co1= 231, co2= 232
+      //  EXE-OFF-NEXT:     cr0= 240, cr1= 241, cr2= 242
+      //  EXE-OFF-NEXT:      nc=1250
+      printf("After second acc parallel:\n"
+             "  prPtr=%4lu\n"
+             "     c0=%4lu,  c1=%4lu,  c2=%4lu \n"
+             "    ci0=%4lu, ci1=%4lu, ci2=%4lu \n"
+             "    co0=%4lu, co1=%4lu, co2=%4lu \n"
+             "    cr0=%4lu, cr1=%4lu, cr2=%4lu \n"
+             "     nc=%4lu\n",
+             prPtr - basePtrCmp,
+             c0 - basePtrCmp, c1 - basePtrCmp, c2 - basePtrCmp,
+             ci0 - basePtrCmp, ci1 - basePtrCmp, ci2 - basePtrCmp,
+             co0 - basePtrCmp, co1 - basePtrCmp, co2 - basePtrCmp,
+             cr0 - basePtrCmp, cr1 - basePtrCmp, cr2 - basePtrCmp,
+             nc - basePtrCmp);
+      // PRT-NEXT: prPtr +=
+      // PRT: nc +=
+      prPtr += 100;
+         c0 += 100;  c1 += 100;  c2 += 100;
+        ci0 += 100; ci1 += 100; ci2 += 100;
+        co0 += 100; co1 += 100; co2 += 100;
+        cr0 += 100; cr1 += 100; cr2 += 100;
+         nc += 100;
+
+      // Check suppression of implicit data clauses when there's no no_create
+      // clause as that should mean none of the variables gets the now redundant
+      // ompx_no_alloc.
+      //
+      //      DMP: ACCParallelDirective
+      // DMP-NEXT:   ACCNumGangsClause
+      // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:   ACCPresentClause
+      //  DMP-NOT:     <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
+      // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prPtr' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci2' 'int *'
+      // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'co2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'cr2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'prPtr' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'c2' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci0' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci1' 'int *'
+      // DMP-NEXT:     DeclRefExpr {{.*}} 'ci2' 'int *'
+      // DMP-NEXT:   impl: OMPTargetTeamsDirective
+      // DMP-NEXT:     OMPNum_teamsClause
+      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:     OMPMapClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
+      // DMP-NEXT:     OMPMapClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prPtr' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci2' 'int *'
+      // DMP-NEXT:     OMPSharedClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'basePtrCmp' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prPtr' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c2' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci0' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci1' 'int *'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci2' 'int *'
+      //  DMP-NOT:     OMP
+      //
+      //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1) present(basePtrCmp){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
+      // PRT-AO-SAME: {{^ *}}map(present,ompx_hold,alloc: basePtrCmp)
+      // PRT-AO-SAME: {{^ *}}map(alloc: co0,co1,co2,cr0,cr1,cr2,prPtr,c0,c1,c2,ci0,ci1,ci2)
+      // PRT-AO-SAME: {{^ *}}shared(co0,basePtrCmp,co1,co2,cr0,cr1,cr2,prPtr,c0,c1,c2,ci0,ci1,ci2){{$}}
+      //
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+      //  PRT-O-SAME: {{^ *}}map(present,ompx_hold,alloc: basePtrCmp)
+      //  PRT-O-SAME: {{^ *}}map(alloc: co0,co1,co2,cr0,cr1,cr2,prPtr,c0,c1,c2,ci0,ci1,ci2)
+      //  PRT-O-SAME: {{^ *}}shared(co0,basePtrCmp,co1,co2,cr0,cr1,cr2,prPtr,c0,c1,c2,ci0,ci1,ci2){{$}}
+      // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) present(basePtrCmp){{$}}
+      #pragma acc parallel num_gangs(1) present(basePtrCmp)
+      // DMP: CompoundStmt
+      // PRT-NEXT: {
+      {
+        // Don't use these uninitialized.
+        // PRT-NEXT: co0 =
+        // PRT: cr2 =
+        co0 = basePtrCmp + 36; co1 = basePtrCmp + 37; co2 = basePtrCmp + 38;
+        cr0 = basePtrCmp + 46; cr1 = basePtrCmp + 47; cr2 = basePtrCmp + 48;
+        // PRT-NEXT: {{TGT_PRINTF|printf}}(
+        // PRT:      );
+        //     EXE-TGT-USE-STDIO-NEXT: In third acc parallel:
+        //              EXE-HOST-NEXT:   prPtr=2390
+        //              EXE-HOST-NEXT:      c0=2310,  c1=2311,  c2=2312
+        //              EXE-HOST-NEXT:     ci0=2320, ci1=2321, ci2=2322
+        //              EXE-HOST-NEXT:     co0=  36, co1=  37, co2=  38
+        //              EXE-HOST-NEXT:     cr0=  46, cr1=  47, cr2=  48
+        // EXE-OFF-TGT-USE-STDIO-NEXT:   prPtr=2090
+        // EXE-OFF-TGT-USE-STDIO-NEXT:      c0=2010,  c1=2011,  c2=2012
+        // EXE-OFF-TGT-USE-STDIO-NEXT:     ci0=2020, ci1=2021, ci2=2022
+        // EXE-OFF-TGT-USE-STDIO-NEXT:     co0=  36, co1=  37, co2=  38
+        // EXE-OFF-TGT-USE-STDIO-NEXT:     cr0=  46, cr1=  47, cr2=  48
+        TGT_PRINTF("In third acc parallel:\n"
+                   "  prPtr=%4lu\n"
+                   "     c0=%4lu,  c1=%4lu,  c2=%4lu \n"
+                   "    ci0=%4lu, ci1=%4lu, ci2=%4lu \n"
+                   "    co0=%4lu, co1=%4lu, co2=%4lu \n"
+                   "    cr0=%4lu, cr1=%4lu, cr2=%4lu \n",
+             prPtr - basePtrCmp,
+             c0 - basePtrCmp, c1 - basePtrCmp, c2 - basePtrCmp,
+             ci0 - basePtrCmp, ci1 - basePtrCmp, ci2 - basePtrCmp,
+             co0 - basePtrCmp, co1 - basePtrCmp, co2 - basePtrCmp,
+             cr0 - basePtrCmp, cr1 - basePtrCmp, cr2 - basePtrCmp);
+        // PRT-NEXT: prPtr +=
+        // PRT: cr2 +=
+        prPtr += 1000;
+           c0 += 1000;  c1 += 1000;  c2 += 1000;
+          ci0 += 1000; ci1 += 1000; ci2 += 1000;
+          co0 += 1000; co1 += 1000; co2 += 1000;
+          cr0 += 1000; cr1 += 1000; cr2 += 1000;
+      } // PRT-NEXT: }
+
+      // PRT-NEXT: printf(
+      // PRT:      );
+      //      EXE-NEXT: After third acc parallel:
+      // EXE-HOST-NEXT:   prPtr=3390
+      // EXE-HOST-NEXT:      c0=3310,  c1=3311,  c2=3312
+      // EXE-HOST-NEXT:     ci0=3320, ci1=3321, ci2=3322
+      // EXE-HOST-NEXT:     co0=1036, co1=1037, co2=1038
+      // EXE-HOST-NEXT:     cr0=1046, cr1=1047, cr2=1048
+      // EXE-HOST-NEXT:      nc=1350
+      //  EXE-OFF-NEXT:   prPtr= 390
+      //  EXE-OFF-NEXT:      c0= 310,  c1= 311,  c2= 312
+      //  EXE-OFF-NEXT:     ci0= 320, ci1= 321, ci2= 322
+      //  EXE-OFF-NEXT:     co0= 330, co1= 331, co2= 332
+      //  EXE-OFF-NEXT:     cr0= 340, cr1= 341, cr2= 342
+      //  EXE-OFF-NEXT:      nc=1350
+      printf("After third acc parallel:\n"
+             "  prPtr=%4lu\n"
+             "     c0=%4lu,  c1=%4lu,  c2=%4lu \n"
+             "    ci0=%4lu, ci1=%4lu, ci2=%4lu \n"
+             "    co0=%4lu, co1=%4lu, co2=%4lu \n"
+             "    cr0=%4lu, cr1=%4lu, cr2=%4lu \n"
+             "     nc=%4lu\n",
+             prPtr - basePtrCmp,
+             c0 - basePtrCmp, c1 - basePtrCmp, c2 - basePtrCmp,
+             ci0 - basePtrCmp, ci1 - basePtrCmp, ci2 - basePtrCmp,
+             co0 - basePtrCmp, co1 - basePtrCmp, co2 - basePtrCmp,
+             cr0 - basePtrCmp, cr1 - basePtrCmp, cr2 - basePtrCmp,
+             nc - basePtrCmp);
+      // PRT-NEXT: prPtr +=
+      // PRT: nc +=
+      prPtr += 100;
+         c0 += 100;  c1 += 100;  c2 += 100;
+        ci0 += 100; ci1 += 100; ci2 += 100;
+        co0 += 100; co1 += 100; co2 += 100;
+        cr0 += 100; cr1 += 100; cr2 += 100;
+         nc += 100;
+    } // PRT-NEXT: }
+
+    // PRT-NEXT: printf(
+    // PRT:      );
+    //      EXE-NEXT: After acc data:
+    // EXE-HOST-NEXT:   prPtr=3490
+    // EXE-HOST-NEXT:      c0=3410,  c1=3411,  c2=3412
+    // EXE-HOST-NEXT:     ci0=3420, ci1=3421, ci2=3422
+    // EXE-HOST-NEXT:     co0=1136, co1=1137, co2=1138
+    // EXE-HOST-NEXT:     cr0=1146, cr1=1147, cr2=1148
+    // EXE-HOST-NEXT:      nc=1450
+    //  EXE-OFF-NEXT:   prPtr= 490
+    //  EXE-OFF-NEXT:      c0=3010,  c1=3011,  c2=3012
+    //  EXE-OFF-NEXT:     ci0= 420, ci1= 421, ci2= 422
+    //  EXE-OFF-NEXT:     co0=1036, co1=1037, co2=1038
+    //  EXE-OFF-NEXT:     cr0= 440, cr1= 441, cr2= 442
+    //  EXE-OFF-NEXT:      nc=1450
+    printf("After acc data:\n"
+           "  prPtr=%4lu\n"
+           "     c0=%4lu,  c1=%4lu,  c2=%4lu \n"
+           "    ci0=%4lu, ci1=%4lu, ci2=%4lu \n"
+           "    co0=%4lu, co1=%4lu, co2=%4lu \n"
+           "    cr0=%4lu, cr1=%4lu, cr2=%4lu \n"
+           "     nc=%4lu\n",
+           prPtr - basePtrCmp,
+           c0 - basePtrCmp, c1 - basePtrCmp, c2 - basePtrCmp,
+           ci0 - basePtrCmp, ci1 - basePtrCmp, ci2 - basePtrCmp,
+           co0 - basePtrCmp, co1 - basePtrCmp, co2 - basePtrCmp,
+           cr0 - basePtrCmp, cr1 - basePtrCmp, cr2 - basePtrCmp,
+           nc - basePtrCmp);
   } // PRT-NEXT: }
 
   //----------------------------------------------------------------------------

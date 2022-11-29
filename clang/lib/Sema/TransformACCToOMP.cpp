@@ -95,7 +95,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
         return false;
       };
       for (ACCClause *C : D->clauses()) {
-        switch (C->getClauseKind()) {
+        switch (C->getClauseKindDealiased()) {
 #define OPENACC_DMA(Name, Class)                                        \
         case ACCC_##Name:                                               \
           ClauseDAs.DMAKind = ACC_DMA_##Name;                           \
@@ -953,19 +953,6 @@ public:
   OMPClauseResult TransformACCNomapClause(ACCDirectiveStmt *D,
                                           OpenMPDirectiveKind TDKind,
                                           ACCNomapClause *C) {
-    // For each nomap shared variable:
-    // - If it has a visible no_create at the parent directive and no_create
-    //   maps to ompx_no_alloc, then add a ompx_no_alloc here for it.  If the
-    //   visible no_create is for a pointer-based subarray, then specify a
-    //   zero-length array section here instead of trying to copy the subarray
-    //   bounds, which might not be constants.
-    // - Otherwise, if it's a non-pointer scalar and not a member expression, a
-    //   defaultmap for scalars is required here.  (OpenMP handles pointers
-    //   separately from other scalars.)
-    // - Otherwise, rely on the implicit map clause provided by OpenMP.  In the
-    //   case of a member expression, it will apply to the aggregate not the
-    //   member (that's why we skip defaultmap for scalars for member
-    //   expressions, as mentioned above).
     bool NoCreateOMPNoAlloc;
     switch (getSema().LangOpts.getOpenACCNoCreateOMP()) {
     case LangOptions::OpenACCNoCreateOMP_OmpxNoAlloc:
@@ -975,6 +962,7 @@ public:
       NoCreateOMPNoAlloc = false;
       break;
     }
+    SmallVector<OpenMPMapModifierKind, 1> MapMods;
     return transformACCVarListClause<ACCNomapClause>(
         D, C, OMPC_map,
         [&](Expr *RefExpr) {
@@ -984,8 +972,13 @@ public:
                  "expected nomap clauses to record ACC_DMA_nomap");
           if (VarDAs.DSAKind == ACC_DSA_shared && DirStack.size() > 1) {
             const DAVarData &VarParentDAs = (DirStack.rbegin() + 1)->DAMap[Var];
+            assert(VarParentDAs.VisibleDMAKind != ACC_DMA_unknown &&
+                   VarParentDAs.VisibleDMARefExpr &&
+                   "expected visible DMA at parent for nomap/shared var");
             if (VarParentDAs.VisibleDMAKind == ACC_DMA_no_create &&
                 NoCreateOMPNoAlloc) {
+              if (MapMods.empty())
+                MapMods.push_back(OMPC_MAP_MODIFIER_ompx_no_alloc);
               getSema().Diag(D->getEndLoc(),
                              diag::warn_acc_omp_map_ompx_no_alloc_from_visible)
                   << getOpenACCName(C->getClauseKind());
@@ -995,6 +988,10 @@ public:
                 return VAR_ADD_ZERO_LENGTH_ARRAY_SECTION;
               return VAR_PRESERVE;
             }
+            if (Var.getType()->isPointerType() &&
+                !isa<OMPArraySectionExpr>(
+                    VarParentDAs.VisibleDMARefExpr->IgnoreParenImpCasts()))
+              return VAR_PRESERVE;
           }
           if (VarDAs.DSAKind == ACC_DSA_shared &&
               Var.getType()->isScalarType() &&
@@ -1005,9 +1002,9 @@ public:
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
           SmallVector<SourceLocation, 1> MapModLocs;
           return getDerived().RebuildOMPMapClause(
-              {OMPC_MAP_MODIFIER_ompx_no_alloc}, {L.LParenLoc}, CXXScopeSpec(),
-              DeclarationNameInfo(), OMPC_MAP_alloc,
-              /*IsMapTypeImplicit=*/false, L.LocStart, L.LParenLoc, Vars,
+              MapMods, {L.LParenLoc}, CXXScopeSpec(), DeclarationNameInfo(),
+              OMPC_MAP_alloc, /*IsMapTypeImplicit=*/false, L.LocStart,
+              L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
         });
   }
