@@ -66,9 +66,9 @@ stages:
   tags: [shell, leconte]
   variables:
     BUILD_ID: leconte
-    MODULES: git cmake/3.19.2 gnu/9.2.0 nvhpc/22.2
+    MODULES: git cmake/3.19.2 gnu/9.2.0 nvhpc/22.11
     PATH_PREPEND:
-      /opt/nvidia/hpc_sdk/Linux_ppc64le/22.2/cuda/11.6/bin
+      /opt/nvidia/hpc_sdk/Linux_ppc64le/22.11/cuda/11.8/bin
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
