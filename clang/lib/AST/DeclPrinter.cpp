@@ -534,7 +534,12 @@ void DeclPrinter::VisitDeclContext(DeclContext *DC, bool Indent) {
         Terminator = nullptr;
       else
         Terminator = ";";
-    } else if (isa<NamespaceDecl>(*D) || isa<LinkageSpecDecl>(*D) ||
+    } else if (auto LSD = dyn_cast<LinkageSpecDecl>(*D)) {
+      if (LSD->hasBraces())
+        Terminator = nullptr;
+      else
+        Terminator = ";";
+    } else if (isa<NamespaceDecl>(*D) ||
              isa<ObjCImplementationDecl>(*D) ||
              isa<ObjCInterfaceDecl>(*D) ||
              isa<ObjCProtocolDecl>(*D) ||

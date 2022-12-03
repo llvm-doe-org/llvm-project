@@ -208,7 +208,7 @@ extern "C" {
 int fn_linkage();
 }
 
-// CHECK: extern "C" int fn_linkage_variant1()
+// CHECK: extern "C" int fn_linkage_variant1();
 // CHECK: #pragma omp declare variant(fn_linkage_variant1) match(implementation={vendor(gnu)}, device={kind(cpu, host)})
 // CHECK: int fn_linkage1();
 extern "C" int fn_linkage_variant1();
