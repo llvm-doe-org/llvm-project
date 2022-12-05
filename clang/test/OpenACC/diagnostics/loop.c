@@ -2080,28 +2080,28 @@ void fn(int param) {
   #pragma acc parallel
 #endif
   {
-    // orph-sep-error@+8 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
-    // orph-sep-error@+8 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
-    // orph-sep-error@+8 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
-    // orph-sep-error@+8 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
-    // cmb-error@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // cmb-error@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // cmb-error@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // cmb-error@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // orph-sep-error-re@+8 {{in 'private' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // orph-sep-error-re@+8 {{in 'private' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // orph-sep-error-re@+8 {{in 'private' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // orph-sep-error-re@+8 {{in 'private' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
     #pragma acc CMB_PAR loop vector private(s.i,   \
                                             u.i,   \
                                             ps->i, \
                                             pu->i)
     for (int i = 0; i < 5; ++i)
       ;
-    // orph-sep-error@+8 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
-    // orph-sep-error@+8 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
-    // orph-sep-error@+8 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
-    // orph-sep-error@+8 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
-    // cmb-error@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // cmb-error@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // cmb-error@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // cmb-error@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // orph-sep-error-re@+8 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // orph-sep-error-re@+8 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // orph-sep-error-re@+8 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // orph-sep-error-re@+8 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
     #pragma acc CMB_PAR loop worker reduction(+:s.i, \
                                               u.i,   \
                                               ps->i, \
@@ -2115,36 +2115,36 @@ void fn(int param) {
   #pragma acc parallel
 #endif
   {
-    // orph-sep-error@+12 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
-    // orph-sep-error@+12 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
-    // orph-sep-error@+12 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
-    // orph-sep-error@+12 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
-    // cmb-error@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // cmb-error@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // cmb-error@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // cmb-error@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // expected-error@+4 {{expected variable name}} // range is for ss.s
-    // expected-error@+4 {{expected variable name}} // range is for ss.ps
-    // expected-error@+4 {{expected variable name}} // range is for pss->s
-    // expected-error@+4 {{expected variable name}} // range is for pss->ps
+    // orph-sep-error-re@+12 {{in 'private' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // orph-sep-error-re@+12 {{in 'private' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // orph-sep-error-re@+12 {{in 'private' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // orph-sep-error-re@+12 {{in 'private' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for ss.s
+    // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for ss.ps
+    // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for pss->s
+    // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for pss->ps
     #pragma acc CMB_PAR loop vector private(ss.s.i,     \
                                             ss.ps->i,   \
                                             pss->s.i,   \
                                             pss->ps->i)
     for (int i = 0; i < 5; ++i)
       ;
-    // orph-sep-error@+12 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
-    // orph-sep-error@+12 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
-    // orph-sep-error@+12 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
-    // orph-sep-error@+12 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
-    // cmb-error@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // cmb-error@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // cmb-error@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // cmb-error@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // expected-error@+4 {{expected variable name}} // range is for ss.s
-    // expected-error@+4 {{expected variable name}} // range is for ss.ps
-    // expected-error@+4 {{expected variable name}} // range is for pss->s
-    // expected-error@+4 {{expected variable name}} // range is for pss->ps
+    // orph-sep-error-re@+12 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // orph-sep-error-re@+12 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // orph-sep-error-re@+12 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // orph-sep-error-re@+12 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for ss.s
+    // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for ss.ps
+    // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for pss->s
+    // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for pss->ps
     #pragma acc CMB_PAR loop vector reduction(*:ss.s.i,   \
                                               ss.ps->i,   \
                                               pss->s.i,   \
@@ -2239,10 +2239,10 @@ void fn(int param) {
     // orph-sep-error@+8 {{in 'reduction' clause on '#pragma acc loop', subarray is not supported}}
     // cmb-error@+6 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
     // cmb-error@+6 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
-    // orph-sep-error@+4 {{in 'private' clause on '#pragma acc loop', member expression is not supported}}
-    // orph-sep-error@+4 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported}}
-    // cmb-error@+2 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-    // cmb-error@+2 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
+    // orph-sep-error-re@+4 {{in 'private' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // orph-sep-error-re@+4 {{in 'reduction' clause on '#pragma acc loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+2 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+    // cmb-error-re@+2 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
     #pragma acc CMB_PAR loop gang private(ss.ps[1:1])       \
                                   reduction(max:ss.ps[0:2])
     for (int i = 0; i < 5; ++i)
@@ -2266,10 +2266,10 @@ void fn(int param) {
   #pragma acc parallel
 #endif
   {
-    // expected-error@+4 {{const variable cannot be private because initialization is impossible}}
-    // expected-error@+3 {{const variable cannot be private because initialization is impossible}}
-    // expected-error@+2 {{reduction variable cannot be const}}
-    // expected-error@+1 {{reduction variable cannot be const}}
+    // expected-error@+4 {{const variable cannot be initialized after 'private' clause}}
+    // expected-error@+3 {{const variable cannot be initialized after 'private' clause}}
+    // expected-error@+2 {{const variable cannot be written by 'reduction' clause}}
+    // expected-error@+1 {{const variable cannot be written by 'reduction' clause}}
     #pragma acc CMB_PAR loop private(constI, constIDecl) reduction(+: constI, constIDecl)
     for (int i = 0; i < 5; ++i)
       ;

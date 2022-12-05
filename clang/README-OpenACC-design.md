@@ -951,10 +951,16 @@ clarify these points in future versions of the OpenACC specification.
       different values and one must be updated from the other, but
       doing so would violate `const`.
 * It is an error to use member expressions in `firstprivate`, `private`, and
-  `reduction` clauses.  Notes:
-    * Clang currently doesn't accept member expressions in the corresponding
-      OpenMP clauses unless the member expression base is an implicit or
-      explicit C++ `this`.
+  `reduction` clauses unless the base is a C++ `this` (possibly implicit), the
+  clause is not a `reduction` clause on an orphaned `loop` directive, and the
+  clause is not a `private` clause on any `loop` directive.  Notes:
+    * Clang currently doesn't accept member expressions in `firstprivate`,
+      `private`, and `reduction` clauses in OpenMP unless the member expression
+      base is a C++ `this` (possibly implicit).
+    * OpenACC 3.3 requires that orphaned loop reduction variables are private.
+      Within a member function, it is usually not possible to determine whether
+      `this` is always private, so Clacc currently assumes it is not when
+      checking this restriction.
     * In some cases, Clacc's translation of an OpenACC `private` clause on a
       `loop` construct achieves privatization by inserting a local variable
       declaration.  However, the associated implementation (which uses

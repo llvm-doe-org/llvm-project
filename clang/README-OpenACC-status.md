@@ -219,8 +219,16 @@ Run-Time Environment Variables
       statement
     * Implicit `firstprivate` for uses of scalar variables in the associated
       statement
-    * Implicit data attributes are not yet computed for implicit or explicit
-      uses of C++ `this` in the associated statement.
+    * Implicit `copy` on C++ `this[0:1]` for implicit or explicit uses of C++
+      `this` in the associated statement.  Notes:
+        * This behavior appears to mimic NVHPC 22.7.
+        * This behavior is especially useful for a call to a `this` member
+          function (e.g., `this->foo()` possibly without the explicit `this->`),
+          whose implementation might access any member of `this`.
+        * The implicit data attribute for `this` is not described by OpenACC
+          3.3.  While `this` has scalar type like a pointer variable, an
+          implicit `firstprivate(this)` is not specified because `this` is not a
+          variable, as discussed below under "Data Expressions in Clauses".
     * Implicit data attributes are computed for a member expression used in the
       directive's associated statement as follows:
         * If the full member expression (e.g., `s.x`) does not appear in a
@@ -511,15 +519,22 @@ Run-Time Environment Variables
 Data Expressions in Clauses
 ---------------------------
 
-* Subarray and member expression support varies among clauses:
+* Subarray and member expression support varies among clauses and directives:
     * Subarrays and member expressions are supported in the `self` and `device`
       clauses of the `update` directive.
     * Subarrays and member expressions are supported in the `present`, `copy`,
       `copyin`, `copyout`, `create`, `no_create`, and `delete` clauses of the
       `enter data`, `exit data`, `data`, and `parallel` directives.
-    * Subarrays and member expressions are not supported in the `firstprivate`,
-      `private`, and `reduction` clauses of the `parallel` and `loop`
-      directives.
+    * Member expressions either implicitly or explicitly on C++ `this` (e.g.,
+      `this->x` possibly without the explicit `this->`) are supported in the
+      `firstprivate`, `private`, and `reduction` clauses of the `parallel`
+      directive and in the `reduction` clause of a non-orphaned `loop`
+      directive.  They are not currently supported in the `reduction` clause of
+      an orphaned `loop` directive or in the `private` clause of any `loop`
+      directive.
+    * Otherwise, subarrays and member expressions are not supported in the
+      `firstprivate`, `private`, and `reduction` clauses of the `parallel` and
+      `loop` directives.
     * Support is the same among any clause and its aliases.
 * In clauses where subarrays are supported, the following constraints always
   hold:
@@ -536,7 +551,16 @@ Data Expressions in Clauses
     * Member expressions on member expressions are not supported (e.g.,
       `x.y.z`).
     * Member expressions on subarrays are not supported (e.g., `arr[0:3].x`).
-* The appearance of C++ `this` in the above clauses is not yet supported.
+* The appearance of C++ `this` in the above clauses is constrained as follows:
+    * If a subarray is specified on `this`, the starting index must evaluate to
+      0, and the length must evaluate to 1 (e.g., `copy(this[0:1])`).
+    * If `this` appears as a variable (e.g., `copy(this)` or `self(this)`), a
+      compile-time error diagnostic is produced because `this` is not a variable
+      (lvalue).  That is, like a pointer variable, `this` can be used as an
+      expression that evaluates to an address.  However, unlike a pointer
+      variable, `this` does not represent storage that contains that address,
+      that can be overwritten, that should thus be synced between host and
+      device, and that has its own address.
 
 Device-Side Directives
 ----------------------

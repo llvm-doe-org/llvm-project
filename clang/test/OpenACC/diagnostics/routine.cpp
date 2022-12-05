@@ -3,7 +3,6 @@
 // This is intended to complement rather than repeat coverage already in
 // routine-cxx-funcs.
 
-// OpenACC disabled
 // RUN: %clang_cc1 -verify=noacc -Wno-gnu-alignof-expression %s
 // RUN: %clang_cc1 -verify=expected -fopenacc \
 // RUN:     -Wno-openacc-and-cxx -Wno-gnu-alignof-expression %s
@@ -12,8 +11,7 @@
 
 #include <stddef.h>
 
-// Generate unique function name based on the line number to make it easier to
-// avoid diagnostics about multiple routine directives for the same function.
+// Generate unique name based on the line number.
 #define UNIQUE_NAME CONCAT2(unique_name_, __LINE__)
 #define CONCAT2(X, Y) CONCAT(X, Y)
 #define CONCAT(X, Y) X##Y

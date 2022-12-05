@@ -5,7 +5,8 @@
 // extension errors are checked in data-extension-errors.c (in
 // openmp/libacc2omp/test/directives), and other runtime errors from data
 // clauses are checked in no-create.c and present.c.  Member expressions in
-// data clauses are checked in data-da-member-expr.c.
+// data clauses are checked in data-da-member-expr.c and
+// data-da-member-expr.cpp.
 
 // REDEFINE: %{exe:fc:args} = -strict-whitespace
 // RUN: %{acc-check-dmp}

@@ -21,42 +21,6 @@
 using namespace clang;
 
 //===----------------------------------------------------------------------===//
-// Utilities.
-//===----------------------------------------------------------------------===//
-
-namespace {
-/// Convenient way to stream a variable or function name into a diagnostic.  For
-/// example:
-///
-/// Diag(Loc, diag::err_acc_foobar)
-///   << NameForDiag(*this, getCurFunctionDecl());
-///
-/// TODO: While convenient, it might be expensive, most notably if used before
-/// diagnostics are actually known to be needed.
-class NameForDiag {
-  SmallString<128> Name;
-
-public:
-  NameForDiag(Sema &SemaRef, FunctionDecl *FD) {
-    llvm::raw_svector_ostream OS(Name);
-    FD->getNameForDiagnostic(OS, SemaRef.getPrintingPolicy(),
-                             /*Qualified=*/true);
-  }
-  NameForDiag(Sema &SemaRef, ACCDataVar Var) {
-    llvm::raw_svector_ostream OS(Name);
-    Var.getReferencedDecl()->getNameForDiagnostic(
-        OS, SemaRef.getPrintingPolicy(), /*Qualified=*/true);
-  }
-  friend const StreamingDiagnostic &operator<<(const StreamingDiagnostic &SD,
-                                               const NameForDiag &NFD);
-};
-const StreamingDiagnostic &operator<<(const StreamingDiagnostic &SD,
-                                      const NameForDiag &NFD) {
-  return SD << NFD.Name;
-}
-} // namespace
-
-//===----------------------------------------------------------------------===//
 // OpenACC directive stack
 //===----------------------------------------------------------------------===//
 
@@ -246,7 +210,7 @@ public:
            "expected loop control variable to be added to loop directive");
     // It should not be possible to receive a subarray here.  Member expressions
     // will be diagnosed later, so accept them here.
-    ACCDataVar Var(E, /*AllowMemberExpr=*/true, /*AllowSubarray=*/false,
+    ACCDataVar Var(E, ACCDataVar::AllowMemberExprOnAny, /*AllowSubarray=*/false,
                    &SemaRef, /*Quiet=*/true);
     // Drop invalid loop control variables for now.  Loop form validation will
     // catch them later.
@@ -1460,19 +1424,39 @@ public:
     if (isa<VarDecl>(DRE->getDecl()))
       VisitVar(DRE);
   }
+  void VisitCXXThisExpr(CXXThisExpr *TE) {
+    SourceLocation Loc = TE->getEndLoc();
+    ExprResult TENew = DirStack.SemaRef.BuildCXXThisExpr(
+        TE->getLocation(), TE->getType(), /*IsImplicit=*/true);
+    if (TENew.isInvalid())
+      return;
+    ExprResult Zero = DirStack.SemaRef.ActOnIntegerConstant(Loc, 0).get();
+    if (Zero.isInvalid())
+      return;
+    ExprResult One = DirStack.SemaRef.ActOnIntegerConstant(Loc, 1).get();
+    if (One.isInvalid())
+      return;
+    ExprResult Subarray = DirStack.SemaRef.ActOnOMPArraySectionExpr(
+        /*Base=*/TE, /*LBLoc=*/Loc, /*LowerBound=*/Zero.get(),
+        /*ColonLocFirst=*/Loc, /*ColonLocSecond=*/SourceLocation(),
+        /*Length=*/One.get(), /*Stride=*/nullptr, /*RBLoc=*/Loc);
+    if (Subarray.isInvalid())
+      return;
+    VisitVar(Subarray.get());
+  }
   // So far in our experiments, a CXXMemberCallExpr has a MemberExpr child,
   // which is handled properly here.
   void VisitMemberExpr(MemberExpr *ME) {
     // If ACCDataVar can handle ME, then ME might appear in an explicit data
     // clause somewhere.  If so, finish its implicit attributes.  Otherwise,
     // add implicit attributes for the base instead.
-    ACCDataVar MEVar(ME, /*AllowMemberExpr=*/true, /*AllowSubarray=*/true,
-                     &DirStack.SemaRef, /*Quiet=*/true);
+    ACCDataVar MEVar(ME, ACCDataVar::AllowMemberExprOnAny,
+                     /*AllowSubarray=*/true, &DirStack.SemaRef, /*Quiet=*/true);
     if (MEVar.isValid() && VisitVar(ME, /*FinishOnly=*/true))
       return;
-    // In the case of s.x, the following produces copy(s).  In the case of p->x,
-    // it produces firstprivate(p) because p is a scalar.  It's up to the
-    // programmer to get that right.
+    // In the case of this->x or s.x, the following produces copy(this[0:1]) or
+    // copy(s).  In the case of p->x, it produces firstprivate(p) because p is a
+    // scalar.  It's up to the programmer to get that right.
     Visit(ME->getBase());
   }
   void VisitACCDirectiveStmt(ACCDirectiveStmt *D) {
@@ -2068,9 +2052,14 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
       // talk about what's permitted in a private clause, which would be
       // confusing because the private clause in this case is implicit.
       if (Var.isMember()) {
+        Expr *BaseExpr =
+            cast<MemberExpr>(RefExpr)->getBase()->IgnoreParenImpCasts();
+        bool OnImplicitCXXThis = false;
+        if (CXXThisExpr *TE = dyn_cast<CXXThisExpr>(BaseExpr))
+          OnImplicitCXXThis = TE->isImplicit();
         Diag(RefExpr->getBeginLoc(),
              diag::err_acc_unsupported_member_expr_loop_control_variable)
-            << RefExpr->getSourceRange();
+            << (OnImplicitCXXThis ? 1 : 0) << RefExpr->getSourceRange();
         ErrorFound = true;
         continue;
       }
@@ -2202,6 +2191,8 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
     SmallVector<VarDecl *, 5> LCVVars;
     for (Expr *RefExpr : DirStack.getLoopControlVariables()) {
       ACCDataVar Var(RefExpr);
+      assert(Var.hasReferencedDecl() &&
+             "expected loop control variable to have a declaration");
       VarDecl *VD = cast<VarDecl>(Var.getReferencedDecl());
       LCVVars.push_back(VD);
     }
@@ -3457,22 +3448,29 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
 
 static ACCDataVar getVarFromDMAVarList(Sema &S, DirStackTy &DirStack,
                                        OpenACCClauseKind CKind, Expr *RefExpr) {
-  return ACCDataVar(RefExpr, /*AllowMemberExpr=*/true, /*AllowSubarray=*/true,
-                    &S, DirStack.getRealDirective(), CKind);
+  return ACCDataVar(RefExpr, ACCDataVar::AllowMemberExprOnAny,
+                    /*AllowSubarray=*/true, &S, DirStack.getRealDirective(),
+                    CKind);
 }
 
 static ACCDataVar getVarFromDSAVarList(Sema &S, DirStackTy &DirStack,
                                        OpenACCClauseKind CKind, Expr *RefExpr) {
   // See the section "Basic Data Attributes" in the Clang OpenACC design
-  // document for a discussion of why we don't permit member expressions and
+  // document for a discussion of why we restrict member expressions and
   // subarrays for explicit DSAs.
   //
-  // Except for an implicit 'shared' (which uses 'getVarFromDMAVarList' instead)
-  // associated with an explicit DMA, an implicit DSA is never computed for a
-  // member expression or array.  (If such an expression is used in a construct,
-  // an implicit DSA might be computed for the base of the expression instead.)
-  return ACCDataVar(RefExpr, /*AllowMemberExpr=*/false, /*AllowSubarray=*/false,
-                    &S, DirStack.getRealDirective(), CKind);
+  // Except for some cases of implicit 'shared', which uses
+  // 'getVarFromDMAVarList' instead, an implicit DSA is never computed for a
+  // member expression or subarray.  (If such an expression is used in a
+  // construct, an implicit DSA might be computed for the base of the expression
+  // instead.)
+  ACCDataVar::AllowMemberExprTy AllowMemberExpr =
+      isOpenACCLoopDirective(DirStack.getEffectiveDirective()) &&
+              CKind == ACCC_private
+          ? ACCDataVar::AllowMemberExprNone
+          : ACCDataVar::AllowMemberExprOnCXXThis;
+  return ACCDataVar(RefExpr, AllowMemberExpr, /*AllowSubarray=*/false, &S,
+                    DirStack.getRealDirective(), CKind);
 }
 
 static bool RequireCompleteTypeACC(
@@ -3588,7 +3586,6 @@ ACCClause *Sema::ActOnOpenACCCopyinClause(
          "expected copyin clause or alias");
   DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
-
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC copyin clause");
     ACCDataVar Var = getVarFromDMAVarList(*this, DirStack, Kind, RefExpr);
@@ -3631,13 +3628,11 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     if (!Var.isValid())
       continue;
 
-    QualType Type = Var.getType();
-
     // The OpenACC 2.7 spec doesn't say, as far as I know, that a variable
     // in a copyout clause must have a complete type.  However, you cannot copy
     // data if it doesn't have a size, and the OpenMP implementation does have
     // this restriction for map clauses.
-    if (RequireCompleteTypeACC(*this, Type, ACC_EXPLICIT, Kind,
+    if (RequireCompleteTypeACC(*this, Var.getType(), ACC_EXPLICIT, Kind,
                                OpenACCData->DirStack.getDirectiveStartLoc(),
                                RefExpr->getExprLoc()))
       continue;
@@ -3647,13 +3642,8 @@ ACCClause *Sema::ActOnOpenACCCopyoutClause(
     // device copy of such a variable (except that, in the case of acc exit
     // data, another directive might have initialized it), and the value has to
     // be written back to the host.
-    if (Type.isConstant(Context)) {
-      Diag(RefExpr->getExprLoc(), diag::err_acc_const_var_write)
-          << getOpenACCName(Kind) << RefExpr->getSourceRange();
-      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_const)
-          << NameForDiag(*this, Var);
+    if (Var.diagnoseConst(*this, diag::err_acc_const_var_write, RefExpr, Kind))
       continue;
-    }
 
     if (!DirStack.addDMA(Var, RefExpr->IgnoreParens(), ACC_DMA_copyout,
                          ACC_EXPLICIT))
@@ -3674,7 +3664,6 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
          "expected create clause or alias");
   DirStackTy &DirStack = OpenACCData->DirStack;
   SmallVector<Expr *, 8> Vars;
-
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC create clause");
     ACCDataVar Var = getVarFromDMAVarList(*this, DirStack, Kind, RefExpr);
@@ -3695,13 +3684,8 @@ ACCClause *Sema::ActOnOpenACCCreateClause(
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const variable
     // cannot be create.  However, you can never initialize the device copy of
     // such a variable.
-    if (Type.isConstant(Context)) {
-      Diag(RefExpr->getExprLoc(), diag::err_acc_const_da)
-          << getOpenACCName(ACCC_create) << RefExpr->getSourceRange();
-      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_const)
-          << NameForDiag(*this, Var);
+    if (Var.diagnoseConst(*this, diag::err_acc_const_var_init, RefExpr, Kind))
       continue;
-    }
 
     if (!DirStack.addDMA(Var, RefExpr->IgnoreParens(), ACC_DMA_create,
                          ACC_EXPLICIT))
@@ -3790,7 +3774,8 @@ ACCClause *Sema::ActOnOpenACCSharedClause(ArrayRef<Expr *> VarList) {
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC implicit shared clause");
     // On compute constructs, the implicit shared clause is usually paired with
-    // DMAs, which permit member expressions and subarrays.  We make it as
+    // DMAs, which permit member expressions and subarrays.  On compute and loop
+    // constructs, it can be implicit for 'this[0:1]'.  Thus, we make it as
     // flexible as a DMA.
     ACCDataVar Var =
         getVarFromDMAVarList(*this, DirStack, ACCC_shared, RefExpr);
@@ -3836,11 +3821,8 @@ ACCClause *Sema::ActOnOpenACCPrivateClause(
     // variable cannot be private.  However, you can never initialize the
     // private version of such a variable, and OpenMP does have this
     // restriction.
-    if (Type.isConstant(Context)) {
-      Diag(RefExpr->getExprLoc(), diag::err_acc_const_da)
-          << getOpenACCName(ACCC_private) << RefExpr->getSourceRange();
-      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_const)
-          << NameForDiag(*this, Var);
+    if (Var.diagnoseConst(*this, diag::err_acc_const_var_init, RefExpr,
+                          ACCC_private)) {
       // Implicit private is for loop control variables, which cannot be const.
       assert(Determination == ACC_EXPLICIT &&
              "unexpected const type for computed private");
@@ -4016,7 +3998,6 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
   for (Expr *RefExpr : VarList) {
     assert(RefExpr && "unexpected nullptr in OpenACC reduction clause");
     SourceLocation ELoc = RefExpr->getExprLoc();
-    SourceRange ERange = RefExpr->getSourceRange();
     ACCDataVar Var =
         getVarFromDSAVarList(*this, DirStack, ACCC_reduction, RefExpr);
     if (!Var.isValid())
@@ -4035,10 +4016,8 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // variable cannot be private.  However, you can never initialize the
     // private version of such a variable, and OpenMP does have this
     // restriction.
-    if (Type.isConstant(Context)) {
-      Diag(ELoc, diag::err_acc_const_reduction_list_item) << ERange;
-      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_const)
-          << NameForDiag(*this, Var);
+    if (Var.diagnoseConst(*this, diag::err_acc_const_var_write, RefExpr,
+                          ACCC_reduction)) {
       // Implicit reductions are copied from explicit reductions, which are
       // validated already.
       assert(Determination == ACC_EXPLICIT &&
@@ -4070,8 +4049,10 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     if (DiagN != diag::NUM_BUILTIN_SEMA_DIAGNOSTICS) {
       Diag(ELoc, DiagN)
           << ACCReductionClause::printReductionOperatorToString(ReductionId);
-      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_var_declared)
-          << NameForDiag(*this, Var);
+      if (Var.hasReferencedDecl())
+        Diag(Var.getReferencedDecl()->getLocation(),
+             diag::note_acc_var_declared)
+            << NameForDiag(*this, Var);
       continue;
     }
 
@@ -4079,15 +4060,19 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     // "Every var in a reduction clause appearing on an orphaned loop construct
     // must be private."
     // The getVarFromDSAVarList call above rejects member expressions in
-    // reduction clauses.
-    assert(!Var.isMember() &&
-           "expected reduction clause not to accept member expression");
-    bool hasLocalStorage =
+    // reduction clauses except on C++ 'this', but we cannot generally determine
+    // whether 'this' points to local storage, so we assume it doesn't to be
+    // safe.
+    assert((!Var.isMember() || Var.isMemberOnCXXThis()) &&
+           "expected reduction clause not to accept non-this member "
+           "expression");
+    bool HasLocalStorage =
+        !Var.isMemberOnCXXThis() && Var.hasReferencedDecl() &&
         cast<VarDecl>(Var.getReferencedDecl())->hasLocalStorage();
     if (DirStack.getEffectiveDirective() == ACCD_loop &&
         !isOpenACCComputeDirective(DirStack.isInComputeRegion()) &&
         !DirStack.hasPrivatizingDSAOnAncestorOrphanedLoop(Var) &&
-        !hasLocalStorage)
+        !HasLocalStorage)
       Diag(ELoc, diag::err_acc_orphaned_loop_reduction_var_not_gang_private)
           << NameForDiag(*this, Var);
 
@@ -4143,13 +4128,8 @@ ACCClause *Sema::ActOnOpenACCSelfClause(OpenACCClauseKind Kind,
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
     // variable cannot be in a self clause, but updating it seems to be a
     // violation of const.
-    if (Type.isConstant(Context)) {
-      Diag(RefExpr->getExprLoc(), diag::err_acc_const_var_write)
-          << getOpenACCName(Kind) << RefExpr->getSourceRange();
-      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_const)
-          << NameForDiag(*this, Var);
+    if (Var.diagnoseConst(*this, diag::err_acc_const_var_write, RefExpr, Kind))
       continue;
-    }
 
     if (!DirStack.addUpdateVar(Var, RefExpr->IgnoreParens()))
       Vars.push_back(RefExpr->IgnoreParens());
@@ -4188,13 +4168,9 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
     // The OpenACC 3.0 spec doesn't say, as far as I know, that a const
     // variable cannot be in a device clause, but updating it seems to be a
     // violation of const.
-    if (Type.isConstant(Context)) {
-      Diag(RefExpr->getExprLoc(), diag::err_acc_const_var_write)
-          << getOpenACCName(ACCC_device) << RefExpr->getSourceRange();
-      Diag(Var.getReferencedDecl()->getLocation(), diag::note_acc_const)
-          << NameForDiag(*this, Var);
+    if (Var.diagnoseConst(*this, diag::err_acc_const_var_write, RefExpr,
+                          ACCC_device))
       continue;
-    }
 
     if (!DirStack.addUpdateVar(Var, RefExpr->IgnoreParens()))
       Vars.push_back(RefExpr->IgnoreParens());

@@ -624,98 +624,98 @@ int main() {
   #pragma acc parallel LOOP reduction(*:i ,)
     FORLOOP
 
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP present((int)jk)
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP copy((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP pcopy((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP present_or_copy((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP copyin((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP pcopyin((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP present_or_copyin((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP copyout((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP pcopyout((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP present_or_copyout((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP create((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP pcreate((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP present_or_create((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP no_create((int)jk)
     FORLOOP
-  // expected-error@+1 {{expected variable name}}
+  // expected-error-re@+1 {{expected variable name{{$}}}}
   #pragma acc parallel LOOP firstprivate((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name}}
+  // expected-error-re@+1 {{expected variable name{{$}}}}
   #pragma acc parallel LOOP private((int)i)
     FORLOOP
-  // expected-error@+1 {{expected variable name}}
+  // expected-error-re@+1 {{expected variable name{{$}}}}
   #pragma acc parallel LOOP reduction(*:(int)i)
     FORLOOP
 
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP present(((int*)a)[1:1])
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP copy(((int*)a)[0:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP pcopy(((int*)a)[:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP present_or_copy((*(int(*)[3])a)[0:])
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP copyin((*((int(*)[3])a))[:])
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP pcopyin(((int*)a)[0:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP present_or_copyin(((int*)a)[:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP copyout(((int*)a)[0:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP pcopyout(((int*)a)[:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP present_or_copyout(((int*)a)[0:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP create(((int*)a)[0:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP pcreate(((int*)a)[:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP present_or_create(((int*)a)[0:2])
     FORLOOP
-  // expected-error@+1 {{expected variable name or member expression or subarray}}
+  // expected-error@+1 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP no_create(((int*)a)[1:1])
     FORLOOP
   // expected-error-re@+3 {{expected variable name{{$}}}}
@@ -849,40 +849,40 @@ int main() {
 
   // Member expression not permitted.
 
-  // par-error@+8 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+8 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+8 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+8 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported}}
-  // parloop-error@+4 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+4 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+4 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+4 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported}}
+  // par-error-re@+8 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+8 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+8 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+8 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // parloop-error-re@+4 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+4 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+4 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+4 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
   #pragma acc parallel LOOP firstprivate(s.i,   \
                                          u.i,   \
                                          ps->i, \
                                          pu->i)
     FORLOOP
-  // par-error@+8 {{in 'private' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+8 {{in 'private' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+8 {{in 'private' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+8 {{in 'private' clause on '#pragma acc parallel', member expression is not supported}}
-  // parloop-error@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
+  // par-error-re@+8 {{in 'private' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+8 {{in 'private' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+8 {{in 'private' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+8 {{in 'private' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // parloop-error-re@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+4 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
   #pragma acc parallel LOOP private(s.i,   \
                                     u.i,   \
                                     ps->i, \
                                     pu->i)
     FORLOOP
-  // par-error@+8 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+8 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+8 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+8 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported}}
-  // parloop-error@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
+  // par-error-re@+8 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+8 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+8 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+8 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // parloop-error-re@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+4 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
   #pragma acc parallel LOOP reduction(min:s.i,   \
                                       u.i,   \
                                       ps->i, \
@@ -891,71 +891,71 @@ int main() {
 
   // Nested member expression not permitted.
 
-  // par-error@+12 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+12 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+12 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+12 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported}}
-  // parloop-error@+8 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+8 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+8 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+8 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // expected-error@+4 {{expected variable name}} // range is for ss.s
-  // expected-error@+4 {{expected variable name}} // range is for ss.ps
-  // expected-error@+4 {{expected variable name}} // range is for pss->s
-  // expected-error@+4 {{expected variable name}} // range is for pss->ps
+  // par-error-re@+12 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+12 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+12 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+12 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // parloop-error-re@+8 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+8 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+8 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+8 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for ss.ps
+  // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for pss->s
+  // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for pss->ps
   #pragma acc parallel LOOP firstprivate(ss.s.i,   \
                                          ss.ps->i,   \
                                          pss->s.i, \
                                          pss->ps->i)
     FORLOOP
-  // par-error@+12 {{in 'private' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+12 {{in 'private' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+12 {{in 'private' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+12 {{in 'private' clause on '#pragma acc parallel', member expression is not supported}}
-  // parloop-error@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // expected-error@+4 {{expected variable name}} // range is for ss.s
-  // expected-error@+4 {{expected variable name}} // range is for ss.ps
-  // expected-error@+4 {{expected variable name}} // range is for pss->s
-  // expected-error@+4 {{expected variable name}} // range is for pss->ps
+  // par-error-re@+12 {{in 'private' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+12 {{in 'private' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+12 {{in 'private' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+12 {{in 'private' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // parloop-error-re@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+8 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for ss.ps
+  // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for pss->s
+  // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for pss->ps
   #pragma acc parallel LOOP private(ss.s.i,   \
                                     ss.ps->i,   \
                                     pss->s.i, \
                                     pss->ps->i)
     FORLOOP
-  // par-error@+12 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+12 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+12 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+12 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported}}
-  // parloop-error@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // expected-error@+4 {{expected variable name}} // range is for ss.s
-  // expected-error@+4 {{expected variable name}} // range is for ss.ps
-  // expected-error@+4 {{expected variable name}} // range is for pss->s
-  // expected-error@+4 {{expected variable name}} // range is for pss->ps
+  // par-error-re@+12 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+12 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+12 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+12 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // parloop-error-re@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+8 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for ss.ps
+  // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for pss->s
+  // expected-error-re@+4 {{nested member expression is not supported{{$}}}} // range is for pss->ps
   #pragma acc parallel LOOP reduction(+:ss.s.i,   \
                                       ss.ps->i,   \
                                       pss->s.i, \
                                       pss->ps->i)
     FORLOOP
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
-  // expected-error@+14 {{expected variable name}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+14 {{nested member expression is not supported{{$}}}} // range is for ss.s
   #pragma acc parallel LOOP present(ss.s.i)            \
                             copy(ss.s.i)               \
                             pcopy(ss.s.i)              \
@@ -1002,7 +1002,7 @@ int main() {
     FORLOOP
   // expected-error@+3 {{subarray syntax must include ':'}}
   // expected-error@+3 {{subarray syntax must include ':'}}
-  // expected-error@+2 {{expected variable name or member expression or subarray}}
+  // expected-error@+2 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP present_or_copy(a[i], \
                                             m[0][1], \
                                             a[:1], m[0:2][0:2])
@@ -1015,7 +1015,7 @@ int main() {
     FORLOOP
   // expected-error@+3 {{subarray syntax must include ':'}}
   // expected-error@+3 {{subarray syntax must include ':'}}
-  // expected-error@+2 {{expected variable name or member expression or subarray}}
+  // expected-error@+2 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP pcopyin(a[b], \
                                     m[i][3], \
                                     a[0:2], m[0:2][0:2])
@@ -1028,7 +1028,7 @@ int main() {
     FORLOOP
   // expected-error@+3 {{subarray syntax must include ':'}}
   // expected-error@+3 {{subarray syntax must include ':'}}
-  // expected-error@+2 {{expected variable name or member expression or subarray}}
+  // expected-error@+2 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP copyout(a[0], \
                                     m[i][e], \
                                     a[0:2], m[0:2][0:2])
@@ -1047,7 +1047,7 @@ int main() {
     FORLOOP
   // expected-error@+3 {{subarray syntax must include ':'}}
   // expected-error@+3 {{subarray syntax must include ':'}}
-  // expected-error@+2 {{expected variable name or member expression or subarray}}
+  // expected-error@+2 {{expected variable name or data member expression or subarray}}
   #pragma acc parallel LOOP create(a[0], \
                                    m[i][e], \
                                    a[0:2], m[0:2][0:2])
@@ -1192,12 +1192,12 @@ int main() {
   // parloop-error@+9 {{in 'firstprivate' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+9 {{in 'private' clause on '#pragma acc parallel loop', subarray is not supported}}
   // parloop-error@+9 {{in 'reduction' clause on '#pragma acc parallel loop', subarray is not supported}}
-  // par-error@+6 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+6 {{in 'private' clause on '#pragma acc parallel', member expression is not supported}}
-  // par-error@+6 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported}}
-  // parloop-error@+3 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+3 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported}}
-  // parloop-error@+3 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported}}
+  // par-error-re@+6 {{in 'firstprivate' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+6 {{in 'private' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // par-error-re@+6 {{in 'reduction' clause on '#pragma acc parallel', member expression is not supported{{$}}}}
+  // parloop-error-re@+3 {{in 'firstprivate' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+3 {{in 'private' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
+  // parloop-error-re@+3 {{in 'reduction' clause on '#pragma acc parallel loop', member expression is not supported{{$}}}}
   #pragma acc parallel LOOP firstprivate(ss.ps[3:1]) \
                             private(ss.ps[2:2])      \
                             reduction(+:ss.ps[1:3])
@@ -1270,21 +1270,21 @@ int main() {
   // expected-error@+1 2 {{const variable cannot be written by 'present_or_copyout' clause}}
   #pragma acc parallel LOOP present_or_copyout(constI, constIDecl)
     FORLOOP
-  // expected-error@+1 2 {{const variable cannot be create because initialization is impossible}}
+  // expected-error@+1 2 {{const variable cannot be initialized after 'create' clause}}
   #pragma acc parallel LOOP create(constI, constIDecl)
     FORLOOP
-  // expected-error@+1 2 {{const variable cannot be create because initialization is impossible}}
+  // expected-error@+1 2 {{const variable cannot be initialized after 'pcreate' clause}}
   #pragma acc parallel LOOP pcreate(constI, constIDecl)
     FORLOOP
-  // expected-error@+1 2 {{const variable cannot be create because initialization is impossible}}
+  // expected-error@+1 2 {{const variable cannot be initialized after 'present_or_create' clause}}
   #pragma acc parallel LOOP present_or_create(constI, constIDecl)
     FORLOOP
   #pragma acc parallel LOOP no_create(constI, constIDecl)
     FORLOOP
   #pragma acc parallel LOOP firstprivate(constI, constIDecl)
     FORLOOP
-  // expected-error@+2 2 {{const variable cannot be private because initialization is impossible}}
-  // expected-error@+2 2 {{reduction variable cannot be const}}
+  // expected-error@+2 2 {{const variable cannot be initialized after 'private' clause}}
+  // expected-error@+2 2 {{const variable cannot be written by 'reduction' clause}}
   #pragma acc parallel LOOP private(constI, constIDecl) \
                             reduction(max: constI, constIDecl)
     FORLOOP

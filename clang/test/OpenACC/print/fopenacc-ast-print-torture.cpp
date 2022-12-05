@@ -23,7 +23,7 @@
 
 /* expected-no-diagnostics */
 
-// Generate unique function name based on the line number.
+// Generate unique name based on the line number.
 #define UNIQUE_NAME CONCAT2(unique_name_, __LINE__)
 #define CONCAT2(X, Y) CONCAT(X, Y)
 #define CONCAT(X, Y) X##Y

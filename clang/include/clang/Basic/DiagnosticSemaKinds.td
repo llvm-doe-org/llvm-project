@@ -10978,12 +10978,17 @@ def err_acc_unsupported_subarray : Error <
 def err_acc_subarray_without_colon : Error<
   "subarray syntax must include ':'">;
 def err_acc_unsupported_member_expr : Error <
-  "in '%1' clause on '#pragma acc %0', member expression is not supported">;
+  "in '%1' clause on '#pragma acc %0', member expression is not supported"
+  "%select{| even on implicit C++ 'this' pointer| except on C++ 'this' pointer}2">;
+def err_acc_unsupported_member_expr_nested : Error <
+  "nested member expression is not supported"
+  "%select{| even on implicit C++ 'this' pointer}0">;
 def err_acc_unsupported_member_expr_loop_control_variable : Error <
-  "as OpenACC loop control variable, member expression is not supported">;
+  "as OpenACC loop control variable, member expression is not supported"
+  "%select{| even on implicit C++ 'this' pointer}0">;
 def err_acc_expected_data_var : Error<
   "expected variable name"
-  "%select{| or member expression}0"
+  "%select{| or data member expression}0"
   "%select{| or subarray}1">;
 def err_acc_expected_data_member : Error<"expected data member">;
 def err_acc_unexpected_subarray : Error<
@@ -11015,10 +11020,12 @@ def err_acc_update_same_var : Error<
 def note_acc_update_var : Note<"previously appeared here">;
 def err_acc_const_var_write : Error<
   "const variable cannot be written by '%0' clause">;
-def err_acc_const_da : Error<
-  "const variable cannot be %0 because initialization is impossible">;
-def note_acc_const : Note<
+def err_acc_const_var_init : Error<
+  "const variable cannot be initialized after '%0' clause">;
+def note_acc_const_var_decl : Note<
   "variable '%0' declared const here">;
+def note_acc_const_var_in_const_member_fn : Note<
+  "variable is const within member function '%0' declared const here">;
 def note_acc_var_declared : Note<
   "variable '%0' declared here">;
 def err_acc_clause_not_ice : Error<
@@ -11045,8 +11052,6 @@ def note_acc_collapse_expr : Note<
   "as specified in 'collapse' clause">;
 def err_acc_unknown_reduction_operator : Error<
   "unknown reduction operator">;
-def err_acc_const_reduction_list_item : Error<
-  "reduction variable cannot be const">;
 def err_acc_reduction_not_integer_type : Error<
   "OpenACC reduction operator '%0' argument must be of integer type">;
 def err_acc_reduction_not_arithmetic_type : Error<

@@ -173,11 +173,11 @@ int main() {
   // expected-error@+1 {{expected expression}}
   #pragma acc data pcopyin(jk ,)
     ;
-  // expected-error@+2 {{expected variable name or member expression or subarray}}
+  // expected-error@+2 {{expected variable name or data member expression or subarray}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data present_or_copyin((int)i)
     ;
-  // expected-error@+2 {{expected variable name or member expression or subarray}}
+  // expected-error@+2 {{expected variable name or data member expression or subarray}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data copyout((*(int(*)[3])a)[0:])
     ;
@@ -216,7 +216,7 @@ int main() {
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data copy(foo)
     ;
-  // expected-error@+2 {{expected variable name}} // range is for ss.s
+  // expected-error-re@+2 {{nested member expression is not supported{{$}}}} // range is for ss.s
   // expected-error@+1 {{expected at least one data clause for '#pragma acc data'}}
   #pragma acc data copy(ss.s.i)
     ;

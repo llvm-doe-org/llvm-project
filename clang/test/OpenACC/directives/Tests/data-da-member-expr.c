@@ -1,5 +1,4 @@
-// Check implicit and explicit data attributes for member expressions on
-// "acc data".
+// Check data clauses for member expressions on "acc data".
 //
 // data.c checks other cases with every data clause.  Here, we just check 'copy'
 // (whose behavior should be representative of most data clauses) and

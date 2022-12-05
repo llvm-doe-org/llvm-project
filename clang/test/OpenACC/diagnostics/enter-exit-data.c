@@ -269,10 +269,10 @@ int main() {
   #pragma acc enter data pcopyin(i jk)
   // expected-error@+1 {{expected expression}}
   #pragma acc exit data pcopyout(jk ,)
-  // expected-error@+2 {{expected variable name or member expression or subarray}}
+  // expected-error@+2 {{expected variable name or data member expression or subarray}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data present_or_copyin((int)i)
-  // expected-error@+2 {{expected variable name or member expression or subarray}}
+  // expected-error@+2 {{expected variable name or data member expression or subarray}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
   #pragma acc exit data present_or_copyout((*(int(*)[3])a)[0:])
   // expected-error@+2 {{subscripted value is not an array or pointer}}
@@ -332,12 +332,12 @@ int main() {
 
   // Nested member expression not permitted.
 
-  // expected-error@+7 {{expected variable name}} // range is for ss.s
-  // expected-error@+7 {{expected variable name}} // range is for ss.s
-  // expected-error@+7 {{expected variable name}} // range is for ss.s
-  // expected-error@+7 {{expected variable name}} // range is for ss.s
-  // expected-error@+7 {{expected variable name}} // range is for ss.s
-  // expected-error@+7 {{expected variable name}} // range is for ss.s
+  // expected-error-re@+7 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+7 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+7 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+7 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+7 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+7 {{nested member expression is not supported{{$}}}} // range is for ss.s
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data copyin(ss.s.i)             \
                          pcopyin(ss.s.i)            \
@@ -346,10 +346,10 @@ int main() {
                          pcreate(ss.s.i)            \
                          present_or_create(ss.s.i)
 
-  // expected-error@+5 {{expected variable name}} // range is for ss.s
-  // expected-error@+5 {{expected variable name}} // range is for ss.s
-  // expected-error@+5 {{expected variable name}} // range is for ss.s
-  // expected-error@+5 {{expected variable name}} // range is for ss.s
+  // expected-error-re@+5 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+5 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+5 {{nested member expression is not supported{{$}}}} // range is for ss.s
+  // expected-error-re@+5 {{nested member expression is not supported{{$}}}} // range is for ss.s
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
   #pragma acc exit data copyout(ss.s.i)            \
                         pcopyout(ss.s.i)           \
@@ -474,13 +474,13 @@ int main() {
   #pragma acc enter data copyin(constI, constIDecl)
   #pragma acc enter data pcopyin(constA, constADecl)
   #pragma acc enter data present_or_copyin(constI, constIDecl)
-  // expected-error@+2 2 {{const variable cannot be create because initialization is impossible}}
+  // expected-error@+2 2 {{const variable cannot be initialized after 'create' clause}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data create(constA, constADecl)
-  // expected-error@+2 2 {{const variable cannot be create because initialization is impossible}}
+  // expected-error@+2 2 {{const variable cannot be initialized after 'pcreate' clause}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data pcreate(constI, constIDecl)
-  // expected-error@+2 2 {{const variable cannot be create because initialization is impossible}}
+  // expected-error@+2 2 {{const variable cannot be initialized after 'present_or_create' clause}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data present_or_create(constA, constADecl)
 

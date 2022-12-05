@@ -3,7 +3,8 @@
 // fopenacc-structured-ref-count-omp.c checks these when "ompx_hold" is not used
 // by "acc data" and "acc parallel".  Here, we focus on the normal translation
 // using "ompx_hold".  exit-data-uninit.c checks the case where "acc exit data"
-// occurs before runtime initialization.
+// occurs before runtime initialization.  Member expressions are checked in
+// enter-exit-data-da-member-expr.c and enter-exit-data-da-member-expr.cpp.
 
 // RUN: %{acc-check-dmp}
 // RUN: %{acc-check-prt}
@@ -593,85 +594,6 @@ int main() {
     printHostInt(dyn[3]);
     printDeviceInt(dyn[1]);
     printDeviceInt(dyn[2]);
-  }
-
-  //----------------------------------------------------------------------------
-  // Check action suppression in the case of member expressions.
-  //----------------------------------------------------------------------------
-
-  // EXE-LABEL: member expressions
-  printf("member expressions\n");
-
-  {
-    struct T { int before; int i; int after; };
-    struct T dyn, str;
-    #pragma acc enter data copyin(dyn.i)
-    #pragma acc data copy(str.i)
-    {
-      // Making a single member present shouldn't make the larger struct
-      // present.
-      // EXE-HOST-NEXT: dyn is present: 1
-      // EXE-HOST-NEXT: str is present: 1
-      //  EXE-OFF-NEXT: dyn is present: 0
-      //  EXE-OFF-NEXT: str is present: 0
-      printf("dyn is present: %d\n", acc_is_present(&dyn, sizeof dyn));
-      printf("str is present: %d\n", acc_is_present(&str, sizeof str));
-
-      setHostInt(dyn.i, 10);
-      setHostInt(str.i, 20);
-      setDeviceInt(dyn.i, 11);
-      setDeviceInt(str.i, 21);
-
-      // Actions for the same member expression should have no effect except to
-      // adjust the dynamic reference count.
-      #pragma acc data copy(dyn.i)
-      ;
-      #pragma acc enter data copyin(dyn.i, str.i)
-      #pragma acc exit data copyout(dyn.i, str.i)
-      #pragma acc exit data copyout(str.i)
-      #pragma acc enter data create(dyn.i, str.i)
-      #pragma acc exit data delete(dyn.i, str.i)
-      #pragma acc exit data delete(str.i)
-
-      // EXE-HOST-NEXT:   host dyn.i         11{{$}}
-      // EXE-HOST-NEXT:   host str.i         21{{$}}
-      //  EXE-OFF-NEXT:   host dyn.i         10{{$}}
-      //  EXE-OFF-NEXT:   host str.i         20{{$}}
-      //      EXE-NEXT: device dyn.i present 11{{$}}
-      //      EXE-NEXT: device str.i present 21{{$}}
-      printHostInt(dyn.i);
-      printHostInt(str.i);
-      printDeviceInt(dyn.i);
-      printDeviceInt(str.i);
-
-      // acc exit data should have no effect for entire struct when only a
-      // member is present.
-      #pragma acc exit data copyout(dyn)
-      #pragma acc exit data delete(dyn)
-      #pragma acc exit data copyout(str)
-      #pragma acc exit data delete(str)
-  
-      // EXE-HOST-NEXT:   host dyn.i         11{{$}}
-      // EXE-HOST-NEXT:   host str.i         21{{$}}
-      //  EXE-OFF-NEXT:   host dyn.i         10{{$}}
-      //  EXE-OFF-NEXT:   host str.i         20{{$}}
-      //      EXE-NEXT: device dyn.i present 11{{$}}
-      //      EXE-NEXT: device str.i present 21{{$}}
-      printHostInt(dyn.i);
-      printHostInt(str.i);
-      printDeviceInt(dyn.i);
-      printDeviceInt(str.i);
-    }
-
-    // acc exit data should have an effect on a member that's present.
-    #pragma acc exit data copyout(dyn.i)
-
-    // EXE-HOST-NEXT:   host dyn.i         11{{$}}
-    //  EXE-OFF-NEXT:   host dyn.i         11{{$}}
-    // EXE-HOST-NEXT: device dyn.i present 11{{$}}
-    //  EXE-OFF-NEXT: device dyn.i absent{{$}}
-    printHostInt(dyn.i);
-    printDeviceInt(dyn.i);
   }
 
   return 0;

@@ -194,10 +194,10 @@ int main() {
   #pragma acc update host(i jk)
   // expected-error@+1 {{expected expression}}
   #pragma acc update device(jk ,)
-  // expected-error@+2 {{expected variable name or member expression or subarray}}
+  // expected-error@+2 {{expected variable name or data member expression or subarray}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update self((int)i)
-  // expected-error@+2 {{expected variable name or member expression or subarray}}
+  // expected-error@+2 {{expected variable name or data member expression or subarray}}
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update host((*(int(*)[3])a)[0:])
   // expected-error@+2 {{subscripted value is not an array or pointer}}
@@ -235,13 +235,13 @@ int main() {
 
   // Nested member expression not permitted.
 
-  // expected-error@+2 {{expected variable name}} // range is for ss.s
+  // expected-error-re@+2 {{nested member expression is not supported{{$}}}} // range is for ss.s
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update self(ss.s.i)
-  // expected-error@+2 {{expected variable name}} // range is for ss.s
+  // expected-error-re@+2 {{nested member expression is not supported{{$}}}} // range is for ss.s
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update host(ss.s.i)
-  // expected-error@+2 {{expected variable name}} // range is for ss.s
+  // expected-error-re@+2 {{nested member expression is not supported{{$}}}} // range is for ss.s
   // expected-error@+1 {{expected at least one 'self', 'host', or 'device' clause for '#pragma acc update'}}
   #pragma acc update device(ss.s.i)
 

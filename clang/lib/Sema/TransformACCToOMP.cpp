@@ -774,7 +774,7 @@ public:
           // See the section "Basic Data Attributes" in the Clang OpenACC design
           // document for a discussion of how the following implementation is a
           // reason we don't permit member expressions in private clauses.
-          ACCDataVar Var(VR, /*AllowMemberExpr=*/false,
+          ACCDataVar Var(VR, ACCDataVar::AllowMemberExprNone,
                          /*AllowSubarray=*/false);
           VarDecl *VD =
               cast<VarDecl>(Var.getReferencedDecl())->getCanonicalDecl();
@@ -1193,10 +1193,12 @@ public:
            && "Unexpected explicit OpenACC shared clause");
     return transformACCVarListClause<ACCSharedClause>(
         RequireImplicit ? nullptr : D, C, OMPC_shared,
-        // Don't generate shared(s.x), or Clang's OpenMP support will complain
-        // as it doesn't support member expressions in shared clauses.
+        // Don't generate shared(this[0:1]) or shared(s.x) or Clang's OpenMP
+        // support will complain as it doesn't support array sections and member
+        // expressions in shared clauses.
         [](Expr *RefExpr) {
-          return ACCDataVar(RefExpr).isMember() ? VAR_DISCARD : VAR_PRESERVE;
+          ACCDataVar Var(RefExpr);
+          return Var.isCXXThis() || Var.isMember() ? VAR_DISCARD : VAR_PRESERVE;
         },
         OMPVarListClauseRebuilder(this,
                                   &TransformACCToOMP::RebuildOMPSharedClause));

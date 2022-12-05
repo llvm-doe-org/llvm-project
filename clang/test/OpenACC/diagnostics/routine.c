@@ -27,8 +27,7 @@
 int i, jk;
 float f;
 
-// Generate unique function name based on the line number to make it easier to
-// avoid diagnostics about multiple routine directives for the same function.
+// Generate unique name based on the line number.
 #define UNIQUE_NAME CONCAT2(unique_name_, __LINE__)
 #define CONCAT2(X, Y) CONCAT(X, Y)
 #define CONCAT(X, Y) X##Y
