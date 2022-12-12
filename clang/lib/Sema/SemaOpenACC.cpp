@@ -3449,8 +3449,8 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
 static ACCDataVar getVarFromDMAVarList(Sema &S, DirStackTy &DirStack,
                                        OpenACCClauseKind CKind, Expr *RefExpr) {
   return ACCDataVar(RefExpr, ACCDataVar::AllowMemberExprOnAny,
-                    /*AllowSubarray=*/true, &S, DirStack.getRealDirective(),
-                    CKind);
+                    /*AllowSubarray=*/true, &S, /*Quiet=*/false,
+                    DirStack.getRealDirective(), CKind);
 }
 
 static ACCDataVar getVarFromDSAVarList(Sema &S, DirStackTy &DirStack,
@@ -3470,7 +3470,7 @@ static ACCDataVar getVarFromDSAVarList(Sema &S, DirStackTy &DirStack,
           ? ACCDataVar::AllowMemberExprNone
           : ACCDataVar::AllowMemberExprOnCXXThis;
   return ACCDataVar(RefExpr, AllowMemberExpr, /*AllowSubarray=*/false, &S,
-                    DirStack.getRealDirective(), CKind);
+                    /*Quiet=*/false, DirStack.getRealDirective(), CKind);
 }
 
 static bool RequireCompleteTypeACC(
