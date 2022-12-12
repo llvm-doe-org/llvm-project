@@ -1447,13 +1447,32 @@ public:
   // So far in our experiments, a CXXMemberCallExpr has a MemberExpr child,
   // which is handled properly here.
   void VisitMemberExpr(MemberExpr *ME) {
-    // If ACCDataVar can handle ME, then ME might appear in an explicit data
-    // clause somewhere.  If so, finish its implicit attributes.  Otherwise,
-    // add implicit attributes for the base instead.
+    // If the member has a visible data clause, finish its implicit data
+    // attributes.  Otherwise, compute implicit data attributes for the base.
+    //
+    // There's one exception: if the base has an explicit data clause on this
+    // directive, then that covers the member too.  Don't confuse things (like
+    // OpenMP codegen) by adding potentially contradictory implicit data
+    // attributes for the member.  Just compute implicit data attributes for the
+    // base instead.
+    //
+    // If an ACCDataVar ctor call below can handle an expression, then that
+    // expression might appear in a data clause.  If not (it creates an invalid
+    // ACCDataVar), then we can safely assume it doesn't appear in one.
     ACCDataVar MEVar(ME, ACCDataVar::AllowMemberExprOnAny,
                      /*AllowSubarray=*/true, &DirStack.SemaRef, /*Quiet=*/true);
-    if (MEVar.isValid() && VisitVar(ME, /*FinishOnly=*/true))
-      return;
+    if (MEVar.isValid()) {
+      ACCDataVar MEBaseVar(ME->getBase(), ACCDataVar::AllowMemberExprOnAny,
+                           /*AllowSubarray=*/true, &DirStack.SemaRef,
+                           /*Quiet=*/true);
+      DirStackTy::DAVarData MEBaseVarData;
+      if (MEBaseVar.isValid())
+        MEBaseVarData = DirStack.getTopDA(MEBaseVar);
+      if (MEBaseVarData.DMAKind == ACC_DMA_unknown &&
+          MEBaseVarData.DSAKind == ACC_DSA_unknown &&
+          VisitVar(ME, /*FinishOnly=*/true))
+        return;
+    }
     // In the case of this->x or s.x, the following produces copy(this[0:1]) or
     // copy(s).  In the case of p->x, it produces firstprivate(p) because p is a
     // scalar.  It's up to the programmer to get that right.

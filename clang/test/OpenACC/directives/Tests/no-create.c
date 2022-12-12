@@ -81,6 +81,7 @@
 // DEFINE:   %{check-case}( caseParallelMembersDisjoint      %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
 // DEFINE:   %{check-case}( caseParallelMembersConcat2       %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
 // DEFINE:   %{check-case}( caseParallelMemberFullStruct     %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseParallelPtrMemberFullStruct  %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
 // DEFINE:   %{check-case}( caseParallelSubarrayPresent      %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
 // DEFINE:   %{check-case}( caseParallelSubarrayDisjoint     %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
 // DEFINE:   %{check-case}( caseParallelSubarrayOverlapStart %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
@@ -1372,6 +1373,90 @@ CASE(caseParallelMemberFullStruct) {
   #pragma acc data copy(s.y)
   #pragma acc parallel no_create(s)
   if (use) s.y = 1;
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseParallelPtrMemberFullStruct
+//       DMP: ACCDataDirective
+//  DMP-NEXT:   ACCCopyClause
+//   DMP-NOT:     <implicit>
+//  DMP-NEXT:     MemberExpr {{.* .p }}
+//  DMP-NEXT:       DeclRefExpr {{.*}} 's'
+//  DMP-NEXT:   impl: OMPTargetDataDirective
+//  DMP-NEXT:     OMPMapClause
+//   DMP-NOT:       <implicit>
+//  DMP-NEXT:       MemberExpr {{.* .p }}
+//  DMP-NEXT:         DeclRefExpr {{.*}} 's'
+//       DMP:   ACCParallelDirective
+//  DMP-NEXT:     ACCNoCreateClause
+//   DMP-NOT:       <implicit>
+//  DMP-NEXT:       DeclRefExpr {{.*}} 's' 'struct S'
+//  DMP-NEXT:     ACCNomapClause {{.*}} <implicit>
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'use' 'int'
+//  DMP-NEXT:     ACCSharedClause {{.*}} <implicit>
+//  DMP-NEXT:       DeclRefExpr {{.*}} 's' 'struct S'
+//  DMP-NEXT:     ACCFirstprivateClause {{.*}} <implicit>
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'use' 'int'
+//  DMP-NEXT:     impl: OMPTargetTeamsDirective
+//  DMP-NEXT:       OMPMapClause
+//   DMP-NOT:         <implicit>
+//  DMP-NEXT:         DeclRefExpr {{.*}} 's' 'struct S'
+//  DMP-NEXT:       OMPSharedClause
+//   DMP-NOT:         <implicit>
+//  DMP-NEXT:         DeclRefExpr {{.*}} 's' 'struct S'
+//  DMP-NEXT:       OMPFirstprivateClause
+//   DMP-NOT:         <implicit>
+//  DMP-NEXT:         DeclRefExpr {{.*}} 'use' 'int'
+//
+//   PRT-LABEL: {{.*}}caseParallelPtrMemberFullStruct{{.*}} {
+//         PRT:   int use = 0;
+//
+//  PRT-A-NEXT:   #pragma acc data copy(s.p){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: s.p){{$}}
+//  PRT-A-NEXT:   #pragma acc parallel no_create(s){{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: s) shared(s) firstprivate(use){{$}}
+//
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: s.p){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(s.p){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: s) shared(s) firstprivate(use){{$}}
+// PRT-OA-NEXT:   // #pragma acc parallel no_create(s){{$}}
+//
+//    PRT-NEXT:   if (use)
+//    PRT-NEXT:     s.p = 0;
+//    PRT-NEXT: }
+//
+//  EXE-HOST-caseParallelPtrMemberFullStruct-NOT: {{.}}
+//      EXE-HOST-caseParallelPtrMemberFullStruct: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+// EXE-HOST-caseParallelPtrMemberFullStruct-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//
+//           EXE-OFF-caseParallelPtrMemberFullStruct-NOT: {{.}}
+//               EXE-OFF-caseParallelPtrMemberFullStruct: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
+//          EXE-OFF-caseParallelPtrMemberFullStruct-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
+//          EXE-OFF-caseParallelPtrMemberFullStruct-NEXT: acc_ev_enter_data_start
+//          EXE-OFF-caseParallelPtrMemberFullStruct-NEXT:   acc_ev_alloc
+//          EXE-OFF-caseParallelPtrMemberFullStruct-NEXT:   acc_ev_create
+//          EXE-OFF-caseParallelPtrMemberFullStruct-NEXT:   acc_ev_enter_data_start
+//    EXE-OFF-caseParallelPtrMemberFullStruct-ALLOC-NEXT:   Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
+//                                                          # FIXME: Names like getTargetPointer are meaningless to users.
+//    EXE-OFF-caseParallelPtrMemberFullStruct-ALLOC-NEXT:   Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
+//    EXE-OFF-caseParallelPtrMemberFullStruct-ALLOC-NEXT:   Libomptarget error: Call to targetDataBegin failed, abort target.
+//    EXE-OFF-caseParallelPtrMemberFullStruct-ALLOC-NEXT:   Libomptarget error: Failed to process data before launching the kernel.
+//    EXE-OFF-caseParallelPtrMemberFullStruct-ALLOC-NEXT:   Libomptarget error: Consult {{.*}}
+//    EXE-OFF-caseParallelPtrMemberFullStruct-ALLOC-NEXT:   {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
+//                                                          # An abort message usually follows.
+//     EXE-OFF-caseParallelPtrMemberFullStruct-ALLOC-NOT:   Libomptarget
+// EXE-OFF-caseParallelPtrMemberFullStruct-NO-ALLOC-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseParallelPtrMemberFullStruct-NO-ALLOC-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseParallelPtrMemberFullStruct-NO-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseParallelPtrMemberFullStruct-NO-ALLOC-NEXT:   acc_ev_free
+CASE(caseParallelPtrMemberFullStruct) {
+  struct S { int x; int *p; int z; } s;
+  PRINT_VAR_INFO(s.p);
+  PRINT_VAR_INFO(s);
+  int use = 0;
+  #pragma acc data copy(s.p)
+  #pragma acc parallel no_create(s)
+  if (use)
+    s.p = 0;
 }
 
 //  EXE-OFF-caseParallelSubarrayPresent-NOT: {{.}}

@@ -795,13 +795,19 @@ clarify these points in future versions of the OpenACC specification.
     * Default DA:
         * Each group has one default DA.
         * It is not permitted as *exp* and is never computed as *pre*.
-        * It is computed as *imp* for a variable on a directive if (1)
-          the group is relevant to the directive, (2) there is no
-          other *exp*, *pre*, or *imp* DA from that group for that
-          variable on that directive, and (3) the variable needs a DA
-          on that directive (for most directives, that means the
-          variable is referenced on or within the directive and
-          declared outside it).
+        * It is computed as *imp* for a variable on a directive if all of the
+          following are true:
+            * The OpenACC specification actually specifies *imp* DAs at all for
+              that kind of directive (e.g., `acc parallel` and `acc loop`).
+            * The group is relevant to the directive.
+            * The variable is referenced within the directive's associated
+              statement and declared outside it.
+            * There is no other *exp*, *pre*, or *imp* DA from that group for
+              that variable on that directive.
+            * If the variable is a member expression (e.g., `s.x`), then (1) it
+              has an *exp* DA of either group visible at the directive, and (2)
+              its base expression (e.g., `s`) has no *exp* DA of either group on
+              the directive.
         * `nomap` indicates no data mapping of a variable between
           device and host.
         * `shared` indicates no privatization of a variable.  That is,
@@ -839,6 +845,27 @@ clarify these points in future versions of the OpenACC specification.
         * Otherwise, the DMAs are listed in OpenACC 3.1 sec. 2.7 "Data
           Clauses", and the DSAs are described in the sections for the
           directives that permit them.
+        * The constraints above for a member expression check that the
+          application programmer has (1) chosen to specify DAs for the specific
+          member at some point and (2) not chosen to specify DAs for the entire
+          base on the current directive.  If condition 1 is met but condition 2
+          is not, and if the compiler were to add *imp* default DAs for the
+          member to the current directive anyway, those *imp* default DAs might
+          contradict the application programmer's DA there.  For example, given
+          `acc data copy(s.ptr)` enclosing an `acc parallel no_create(s)`, what
+          happens if the compiler adds *imp* `nomap(s.ptr)` to the latter?  At
+          least at one point in Clacc's history, `nomap(s.ptr)` translated to
+          something like `map(s.ptr)` because, in other scenarios, it's
+          necessary to override OpenMP's implicit attribute (`map(s.ptr[0:0])`,
+          which is wrong for OpenACC semantics).  That combined with
+          `map(ompx_no_alloc,ompx_hold,alloc:s)` during codegen such that, at
+          run time, it ignored the `ompx_no_alloc` for the entire `s` and
+          complained about an array extension error when the rest of `s` was not
+          already mapped.  There might have been multiple ways to fix this, but
+          the simplest at the time seemed to be to avoid the contradictory *imp*
+          `nomap(s.ptr)`.  That is, the application programmer's `no_create(s)`
+          on `acc parallel` applies to `s.ptr` too, and the compiler shouldn't
+          contradict it by saying `s.ptr` is not mapped there.
 * It is an error if, on any OpenACC directive, a variable appears more
   than once per *exp* DA.  Notes:
     * The main motivation for this error is that such redundancy is
