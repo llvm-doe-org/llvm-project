@@ -164,17 +164,19 @@ public:
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-      // DMP-NEXT:     OMPMapClause {{.*}} <implicit>
-      // DMP-NEXT:       MemberExpr {{.* ->c }}
+      // DMP-NEXT:     OMPMapClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       OMPArraySectionExpr
       // DMP-NEXT:         CXXThisExpr {{.*}} 'Test *' this
-      // DMP-NEXT:       MemberExpr {{.* ->nc }}
-      // DMP-NEXT:         CXXThisExpr {{.*}} 'Test *' implicit this
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:         <<<NULL>>>
       //  DMP-NOT:     OMP
       //      DMP:     CompoundAssignOperator
       //
       //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
-      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) map(alloc: this[0:1]){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) map(alloc: this[0:1]){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       //    PRT-NEXT: {
       //         PRT: }
@@ -540,16 +542,16 @@ public:
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-      // DMP-NEXT:     OMPMapClause {{.*}} <implicit>
+      // DMP-NEXT:     OMPMapClause
+      //  DMP-NOT:       <implicit>
       // DMP-NEXT:       MemberExpr {{.* ->c }}
       // DMP-NEXT:         CXXThisExpr {{.*}} 'Test *' implicit this
       //  DMP-NOT:     OMP
       //      DMP:     CompoundAssignOperator
       //
       //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
-      //
-      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) map(alloc: this->c){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) map(alloc: this->c){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       //
       // PRT-NEXT: c +=
@@ -709,6 +711,7 @@ public:
       // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,alloc: this->nc){{$}}
       //
       //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+      //  PRT-O-SAME: {{^ *}}map(ompx_no_alloc,alloc: this->nc){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       //
       // PRT-NEXT: {
@@ -842,7 +845,7 @@ public:
     // PRT-AO-SAME: {{^  *}}map(ompx_hold,tofrom: this->c){{$}}
     //
     //  PRT-O-NEXT: {{^ *}}#pragma omp target data
-    //  PRT-O-SAME: {{^  *}}map(ompx_hold,tofrom: this->c){{$}}
+    //  PRT-O-SAME: {{^ *}}map(ompx_hold,tofrom: this->c){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(this->c){{$}}
     //
     // PRT-NEXT: ;

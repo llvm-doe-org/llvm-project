@@ -1036,8 +1036,6 @@ clarify these points in future versions of the OpenACC specification.
       OpenMP 5.0, but our understanding is that it will be clarified
       in OpenMP 5.1.  For now, Clacc handles this case by deferring to
       the OpenMP implementation's handling.
-    * For further discussion, see the notes on the translation of
-      `nomap` in the "Parallel Directives" section below.
 * Identifying a DA as *pre* instead of *imp* only matters for combined
   directives.  Notes:
     * OpenACC 3.0 sec. 2.6 "Data Environment" says "Variables with
@@ -1568,29 +1566,22 @@ to OpenMP is as follows:
 
 * `acc parallel` -> `omp target teams`
 * *imp* `nomap` is translated as follows:
-    * If (a) the variable is *imp* `shared` on the `acc parallel`, (b)
-      the variable is *exp* `no_create` on an enclosing `acc data`
-      directive, (c) the variable has no *exp* DMA on any `acc data`
-      in between, and (d) `-fopenacc-no-create-omp=ompx-no-alloc`,
-      then:
-        * *imp* `nomap` -> *exp* `map` with a `ompx_no_alloc,alloc` map type.
-        * If the variable is an array and is specified as a subarray in the
-          enclosing `no_create`, then the full array is specified in the *exp*
-          `map` here.
-        * If the variable is a pointer and is specified as a subarray in the
-          enclosing `no_create`, then a zero-length array section is specified
-          in the *exp* `map` here.
-    * Otherwise, if the variable is *imp* `shared` on the
-      `acc parallel` and is a pointer (without a subarray specification), then
-      *imp* `nomap` -> *exp* `map` with an `alloc` map type.  Under the current
-      implementation, if at least one other variable on the same `acc parallel`
-      matches the previous condition and thus its *exp* `map` requires
-      `ompx_no_alloc`, then this variable's *exp* `map` also has
-      `ompx_no_alloc` even though not required.
-    * Otherwise, if the variable is *imp* `shared` on the
-      `acc parallel` and is a scalar but not class/struct/union member, then ->
-      *exp* `defaultmap(tofrom:scalar)`.  This is generated only once per
-      `acc parallel`.
+    * If the variable is *imp* `shared` on the `acc parallel`, then:
+        * *imp* `nomap` -> *exp* `map` with an `alloc` map type.
+        * If (1) the variable is specified as a subarray in an *exp* DMA on an
+          enclosing `acc data` directive and (2) the variable has no *exp* DMA
+          on any `acc data` in between, then a zero-length array section is
+          specified on the variable in that map type.  There is one exception in
+          the current implementation: `this[0:1]` retains its length of `1`.
+        * If (1) the variable is *exp* `no_create` on an enclosing `acc data`
+          directive, (2) the variable has no *exp* DMA on any `acc data` in
+          between, and (3) `-fopenacc-no-create-omp=ompx-no-alloc`, then the
+          `ompx_no_alloc` map type modifier is specified in the map type.
+        * Under the current implementation, if the *exp* `map` in the *imp*
+          `nomap` translation of at least one other variable on the same
+          `acc parallel` has `ompx_no_alloc` due to the previous condition, then
+          the *exp* `map` in this variable's *imp* `nomap` translation also has
+          `ompx_no_alloc` even if not required.
     * Otherwise, the translations discards *imp* `nomap`.
     * Notes:
         * There is a discrepancy between the OpenACC and OpenMP
@@ -1605,53 +1596,75 @@ to OpenMP is as follows:
               normally apply on the `omp target teams` when there's no
               *exp* DA there are *not suppressed* by any *exp* DMA on
               an enclosing `omp target data`.
-        * Thus, when a variable is both *imp* `nomap` and *imp*
-          `shared` on the `acc parallel` and thus there is an
-          enclosing `acc data` with an *exp* DMA for the same
-          variable, Clacc's translation must override any OpenMP *imp*
-          DAs on the `omp target teams` if they don't have the correct
-          semantics for OpenACC, as discussed below.  In all cases,
-          the correct semantics are to perform no additional action
-          for the variable.
+        * Thus, when a variable is both *imp* `nomap` and *imp* `shared` on the
+          `acc parallel`:
+            * There is an enclosing `acc data` with an *exp* DMA for the same
+              variable.  Below, we call this the *suppressing DMA*.
+            * Clacc's translation must override any OpenMP *imp* DAs on the
+              `omp target teams` if they don't have the correct behavior for
+              OpenACC, as discussed below.  In all cases, the correct behavior
+              is to perform no additional action for the variable.
+            * As usual (see "Explicit vs. Implicit OpenMP Clauses" above),
+              Clacc's approach is to specify OpenMP *exp* DAs even if the *imp*
+              DAs do not need to be overridden.
         * In the case that the suppressing DMA is `no_create`:
-            * The *imp* `map` specified by OpenMP 5.2 does not always achieve
-              the desired semantics in this case because it sometimes allocates
-              or produces a runtime error when the variable is not present.  To
-              override that behavior, the Clacc translation specifies the
-              `ompx_no_alloc,alloc` map type.
-            * In the case that the suppressing `no_create` clause specifies a
-              subarray, the Clacc translation of the *imp* `nomap` specifies the
-              full array or a zero-length array section:
-                * This approach avoids the need to copy potentially non-constant
-                  subarray bounds expressions from the suppressing `no_create`.
-                * When the base of the subarray is an array, the full array is
-                  easiest to specify because it just requires omitting the
-                  bounds.  When the `no_create` subarray is present, the full
-                  array might not be present, but that just means no action is
-                  performed for the subarray at the `acc parallel`, exactly as
-                  desired.  In that case, because the array is partially
-                  present, our `ompx_no_alloc` implementation still maps it as
-                  required for accessing the subarray.
-                * When the base of the subarray is instead a pointer variable,
-                  omitting the bounds would cause the pointer variable itself to
-                  be mapped instead of its target, so the Clacc translation adds
-                  a zero-length array section.  When the `no_create` subarray is
-                  not present, that array section might be considered present,
-                  but we assume the variable uses in the `acc parallel` are
-                  unreachable in that case (as documented in
-                  `README-OpenACC-status.md`), so its mapping should not matter.
-                * TODO: OpenACC 3.3 specifies that `no_create` causes a variable
-                  to have its host memory address when it's not present on the
-                  device.  That seems to mean that accessing the variable's
-                  memory is illegal but you can take its address.  It's unclear
-                  if real code actually depends on that behavior.  However, our
-                  `ompx_no_alloc` implementation in the case of partial
-                  presence, as described above, does not support that behavior.
-                  Morever, that behavior appears to violate the above assumption
-                  that uses of such a non-present variable are unreachable.
-        * In the case of a pointer (without a subarray specification) when the
-          suppressing DMA is not `no_create`:
-            * The *imp* `map` specified by OpenMP does not achieve the desired
+            * The *imp* DA specified by OpenMP 5.2 does not always achieve the
+              correct behavior in this case because, when the variable is not
+              present (including when it is partly present) on the device, it
+              sometimes allocates the variable on the device or produces a
+              runtime error.
+            * To override that behavior, the Clacc translation of the *imp*
+              `nomap` is an *exp* `map` with the `ompx_no_alloc,alloc` map
+              type.
+        * In the case that the suppressing DMA is not `no_create`:
+            * The *imp* DA specified by OpenMP might achieve the correct
+              behavior when the variable is not a pointer (without a subarray
+              specification) or otherwise a scalar (the problems with those
+              cases are discussed below), but the Clacc translation of the *imp*
+              `nomap` specifies an *exp* `map` regardless.
+            * The suppressing DMA guarantees the variable is already present on
+              the device by the time the `acc parallel` is reached, so no new
+              allocations or data transfers are possible for the variable
+              regardless of the map type in the *exp* `map`.
+            * The best map type to reflect a lack of new allocations and data
+              transfers is probably `ompx_no_alloc,alloc`, but again many other
+              map types would have the same behavior.
+            * In the current implementation, so that variables can be grouped
+              in a single *exp* `map` clause, it is convenient to include
+              `ompx_no_alloc` when another variable on the same `acc parallel`
+              actually requires `ompx_no_alloc` (suppressing DMA is
+              `no_create`).  We otherwise drop `ompx_no_alloc` so that
+              source-to-source mode can produce standard OpenMP.
+        * In the case that the suppressing DMA specifies a subarray:
+            * The *imp* DA specified by OpenMP might achieve the correct
+              behavior when the suppressing DMA is not `no_create` (the problem
+              with that case is discussed above), but the Clacc translation of
+              the *imp* `nomap` specifies an *exp* `map` regardless.
+            * That *exp* `map` specifies a zero-length array section.  This
+              avoids the need to copy potentially non-constant subarray bounds
+              expressions from the suppressing `no_create`.  Clang would have to
+              store such a non-constant expression in a local variable and
+              reference that variable in both array section specifications to
+              guarantee the correct value.  This approach would be more
+              complicated to implement and maintain, and the OpenMP code
+              produced by source-to-source mode could be significantly more
+              challenging to read.
+            * Omitting the bounds is not an alternative, in particular when the
+              base of the subarray is a pointer variable.  The pointer variable
+              itself would be mapped instead of its target.
+            * When the suppressing DMA is `no_create` and its subarray is not
+              present on the device, the zero-length array section might be
+              considered present if some parts of the full array are present.
+              However, we assume uses of the variable in the `acc parallel` are
+              unreachable when the `no_create` subarray is not present (as
+              documented in `README-OpenACC-status.md`), so its mapping at run
+              time should not matter.
+            * When the suppressing DMA is not `no_create`, it guarantees its
+              subarray is present on the device, and the zero-length array
+              section is then considered present as well.
+        * In the case that the variable is a pointer (without a subarray
+          specification in the suppressing DMA):
+            * The *imp* DAs specified by OpenMP does not achieve the correct
               behavior in this case because it handles the pointer as the base
               of an array section:
                 * OpenMP 5.2 sec. 5.8.1 "Implicit Data-Mapping Attribute Rules"
@@ -1673,99 +1686,14 @@ to OpenMP is as follows:
                     > that does not appear in a map clause on the construct, the
                     > base pointer is firstprivate.
 
-            * To override that behavior, the Clacc translation specifies the
-              `alloc` map type for the pointer.  Because the suppressing DMA
-              guarantees the pointer is already present, adding `ompx_no_alloc`
-              to that map type has no effect.  In the current implementation, it
-              is convenient to add `ompx_no_alloc` when another variable on the
-              same `acc parallel` requires `ompx_no_alloc` so that the variables
-              can be included in the same `map` clause.
-        * In the case of an array when the suppressing DMA is not `no_create`:
-            * Clacc does not override the *imp* `map` specified by OpenMP 5.2
-              sec. 5.8.1 "Implicit Data-Mapping Attribute Rules" p. 149 L4-5,
-              which says:
-
-                > If a variable is not a scalar then it is treated as if it had
-                > appeared in a map clause with a map-type of tofrom.
-
-            * Even if only a subarray is specified for the array on the
-              enclosing `acc data`, and thus if only an array section is
-              specified for the array on the corresponding `omp target data`,
-              this *imp* `map` considers the array to already be sufficiently
-              present:
-                * OpenMP 5.2 sec. 5.8.3 "map Clause" p. 154 L18-21 clarifies
-                  the behavior for the *imp* `map` clause:
-
-                    > If a single contiguous part of the original storage of a
-                    > list item with an implicit data-mapping attribute has
-                    > corresponding storage in the device data environment prior
-                    > to a task encountering the construct on which the map
-                    > clause appears, only that part of the original storage
-                    > will have corresponding storage in the device data
-                    > environment as a result of the map clause.
-
-                * OpenMP 5.2 sec. 5.8.3 "map Clause" p. 156 L19-22 states the
-                  restriction that enables OpenMP runtime implementations to
-                  produce runtime errors for array extensions, but it states it
-                  only for *exp* `map` clauses, so it does not apply to this
-                  *imp* `map` clause:
-
-                    > If any part of the original storage of a list item with an
-                    > explicit data-mapping attribute has corresponding storage
-                    > in the device data environment prior to a task
-                    > encountering the construct associated with the map clause,
-                    > all of the original storage must have corresponding
-                    > storage in the device data environment prior to the task
-                    > encountering the construct.
-
-            * OpenACC 3.3 does not appear to clarify how references to an array
-              in an `acc parallel` are mapped if multiple enclosing `acc data`
-              directives specify conflicting subarrays for the array.  Until
-              OpenACC includes a clarification, Clacc assumes the semantics of
-              OpenMP.  See "Basic Data Attributes" above.
-            * As an alternative to depending on the *imp* `map` clause, Clacc
-              could have attempted to copy any subarray specification from the
-              enclosing `acc data` to an *exp* `map` clause here.  Again, the
-              OpenACC spec doesn't yet clarify which `acc data` would be
-              appropriate if there are more than one.  Moreover, if any
-              expression in that subarray specification were non-constant, Clacc
-              would have to extract it from the original subarray, store it in a
-              local variable, and reference that variable in both array section
-              specifications to guarantee the correct value.  This approach
-              would be more complicated to implement and maintain, and the
-              OpenMP code produced by source-to-source mode could be
-              significantly more challenging to read.
-        * In the case of a scalar that is not a pointer or class/struct/union
-          member when the suppressing DMA is not `no_create`:
-            * The normal OpenMP *imp* DA is `firstprivate`, which
-              obviously does not have the `shared` behavior required
-              by OpenACC.
-            * The `defaultmap(tofrom:scalar)` in Clacc's translation
-              overrides this *imp* `firstprivate`.
-            * As an alternative to using `defaultmap`, Clacc could
-              have generated an *exp* `map` clause per scalar.
-              However, this would be less consistent with the handling
-              of arrays, and so the OpenMP code produced by
-              source-to-source mode would be more confusing to
-              understand.
-            * A scalar member of a class/struct/union is omitted for this case
-              because the OpenMP *imp* DA is for the class/struct/union not the
-              member.
-            * A pointer is omitted for this case because OpenMP computes *imp*
-              DAs for pointers separately from other scalars.  That is,
-              `defaultmap(tofrom:scalar)` is irrelevant.
-        * When the suppressing DMA is not `no_create`:
-            * Regardless of the variable type, the variable should already be
-              present on the device due to the suppressing DMA, and so no new
-              allocation or data transfers are expected to be possible
-              regardless of the map type.
-            * Because Clacc depends on the implicit `tofrom` for non-scalars,
-              Clacc chooses `tofrom` for scalars for consistency.
-            * If the variable is a class/struct/union member, the OpenMP *imp*
-              DA is for the class/struct/union not the member, but partial
-              presence counts as presence when an OpenMP DA is *imp*, as
-              discussed above for arrays.
-        * When the variable is already present, including when the
+            * To override that behavior, the Clacc translation of the *imp*
+              `nomap` is an *exp* `map` without an array section specification.
+        * In the case that the variable is otherwise a scalar:
+            * The normal OpenMP *imp* DA is `firstprivate`, which obviously does
+              not have the `shared` behavior required by OpenACC.
+            * To override that behavior, the Clacc translation of the *imp*
+              `nomap` is an *exp* `map`.
+        * When the variable is already present on the device, including when the
           suppressing DMA is `no_create`, the `map` clauses will
           redundantly increment and decrement the variable's dynamic
           reference counter (regardless of

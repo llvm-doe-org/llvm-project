@@ -41,10 +41,6 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     /// Map from all variables with DAs on this OpenACC directive to those DAs.
     /// This is set before OpenACC clauses are translated.
     llvm::DenseMap<ACCDataVar, DAVarData> DAMap;
-    /// TransformACC*Clause functions set this to true to indicate that a
-    /// defaultmap(tofrom:scalar) is required on the OpenMP directive, and
-    /// transformACCClauses creates that clause afterward.
-    bool NeedsDefaultmapForScalars = false;
     ///@{
     /// Before translating the associated statement of an acc parallel
     /// directive, TransformACCParallelDirective sets these as follows, and they
@@ -190,8 +186,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
 
   void transformACCClauses(ACCDirectiveStmt *D, OpenMPDirectiveKind TDKind,
                            llvm::SmallVectorImpl<OMPClause *> &TClauses,
-                           size_t &TClausesEmptyCount,
-                           size_t &NumClausesAdded) {
+                           size_t &TClausesEmptyCount) {
     TClausesEmptyCount = 0;
     ArrayRef<ACCClause *> Clauses = D->clauses();
     TClauses.reserve(Clauses.size());
@@ -204,13 +199,6 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
         ++TClausesEmptyCount;
       else if (!ClauseResult.isInvalid())
         TClauses.push_back(ClauseResult.get());
-    }
-    if (DirStack.back().NeedsDefaultmapForScalars) {
-      TClauses.push_back(getSema().ActOnOpenMPDefaultmapClause(
-          OMPC_DEFAULTMAP_MODIFIER_tofrom, OMPC_DEFAULTMAP_scalar,
-          D->getEndLoc(), D->getEndLoc(), D->getEndLoc(), D->getEndLoc(),
-          D->getEndLoc()));
-      ++NumClausesAdded;
     }
   }
 
@@ -479,9 +467,7 @@ public:
     // Transform OpenACC clauses.
     llvm::SmallVector<OMPClause *, 16> TClauses;
     size_t TClausesEmptyCount;
-    size_t NumClausesAdded = 0;
-    transformACCClauses(D, OMPD_target_update, TClauses, TClausesEmptyCount,
-                        NumClausesAdded);
+    transformACCClauses(D, OMPD_target_update, TClauses, TClausesEmptyCount);
 
     // Neither acc update nor omp target update have associated statements, but
     // for some reason OMPTargetUpdateDirective expects one.
@@ -497,8 +483,7 @@ public:
     // Build OpenMP directive and finalize enclosing compound statement, if
     // any.
     StmtResult Res;
-    if (TClauses.size() !=
-        D->clauses().size() - TClausesEmptyCount + NumClausesAdded)
+    if (TClauses.size() != D->clauses().size() - TClausesEmptyCount)
       Res = StmtError();
     else
       Res = getDerived().RebuildOMPExecutableDirective(
@@ -520,9 +505,8 @@ public:
     // Transform OpenACC clauses.
     llvm::SmallVector<OMPClause *, 16> TClauses;
     size_t TClausesEmptyCount;
-    size_t NumClausesAdded = 0;
-    transformACCClauses(D, OMPD_target_enter_data, TClauses, TClausesEmptyCount,
-                        NumClausesAdded);
+    transformACCClauses(D, OMPD_target_enter_data, TClauses,
+                        TClausesEmptyCount);
 
     // Neither acc enter data nor omp target enter data have associated
     // statements, but for some reason OMPTargetEnterDataDirective expects one.
@@ -537,8 +521,7 @@ public:
 
     // Build OpenMP directive and finalize enclosing compound statement, if any.
     StmtResult Res;
-    if (TClauses.size() !=
-        D->clauses().size() - TClausesEmptyCount + NumClausesAdded)
+    if (TClauses.size() != D->clauses().size() - TClausesEmptyCount)
       Res = StmtError();
     else
       Res = getDerived().RebuildOMPExecutableDirective(
@@ -560,9 +543,7 @@ public:
     // Transform OpenACC clauses.
     llvm::SmallVector<OMPClause *, 16> TClauses;
     size_t TClausesEmptyCount;
-    size_t NumClausesAdded = 0;
-    transformACCClauses(D, OMPD_target_exit_data, TClauses, TClausesEmptyCount,
-                        NumClausesAdded);
+    transformACCClauses(D, OMPD_target_exit_data, TClauses, TClausesEmptyCount);
 
     // Neither acc exit data nor omp target exit data have associated
     // statements, but for some reason OMPTargetEnterDataDirective expects one.
@@ -577,8 +558,7 @@ public:
 
     // Build OpenMP directive and finalize enclosing compound statement, if any.
     StmtResult Res;
-    if (TClauses.size() !=
-        D->clauses().size() - TClausesEmptyCount + NumClausesAdded)
+    if (TClauses.size() != D->clauses().size() - TClausesEmptyCount)
       Res = StmtError();
     else
       Res = getDerived().RebuildOMPExecutableDirective(
@@ -600,9 +580,7 @@ public:
     // Transform OpenACC clauses.
     llvm::SmallVector<OMPClause *, 16> TClauses;
     size_t TClausesEmptyCount;
-    size_t NumClausesAdded = 0;
-    transformACCClauses(D, OMPD_target_data, TClauses, TClausesEmptyCount,
-                        NumClausesAdded);
+    transformACCClauses(D, OMPD_target_data, TClauses, TClausesEmptyCount);
 
     // Transform associated statement.
     StmtResult AssociatedStmt = transformACCAssociatedStmt(D, OMPD_target_data,
@@ -612,8 +590,7 @@ public:
     // any.
     StmtResult Res;
     if (AssociatedStmt.isInvalid() ||
-        TClauses.size() !=
-            D->clauses().size() - TClausesEmptyCount + NumClausesAdded)
+        TClauses.size() != D->clauses().size() - TClausesEmptyCount)
       Res = StmtError();
     else
       Res = getDerived().RebuildOMPExecutableDirective(
@@ -661,9 +638,7 @@ public:
     // Transform OpenACC clauses.
     llvm::SmallVector<OMPClause *, 16> TClauses;
     size_t TClausesEmptyCount;
-    size_t NumClausesAdded = 0;
-    transformACCClauses(D, OMPD_target_teams, TClauses, TClausesEmptyCount,
-                        NumClausesAdded);
+    transformACCClauses(D, OMPD_target_teams, TClauses, TClausesEmptyCount);
 
     // Transform associated statement.
     StmtResult AssociatedStmt = transformACCAssociatedStmt(D, OMPD_target_teams,
@@ -673,8 +648,7 @@ public:
     // any.
     StmtResult Res;
     if (AssociatedStmt.isInvalid() ||
-        TClauses.size() != D->clauses().size() - TClausesEmptyCount +
-                           NumClausesAdded)
+        TClauses.size() != D->clauses().size() - TClausesEmptyCount)
       Res = StmtError();
     else
       Res = getDerived().RebuildOMPExecutableDirective(
@@ -820,8 +794,7 @@ public:
 
     // Transform OpenACC clauses.
     size_t TClausesEmptyCount;
-    transformACCClauses(D, TDKind, TClauses, TClausesEmptyCount,
-                        NumClausesAdded);
+    transformACCClauses(D, TDKind, TClauses, TClausesEmptyCount);
 
     // Transform associated statement.
     StmtResult AssociatedStmt = transformACCAssociatedStmt(D, TDKind, TClauses);
@@ -873,9 +846,7 @@ public:
     // Transform OpenACC clauses.
     llvm::SmallVector<OMPClause *, 16> TClauses;
     size_t TClausesEmptyCount;
-    size_t NumClausesAdded = 0;
-    transformACCClauses(D, OMPD_atomic, TClauses, TClausesEmptyCount,
-                        NumClausesAdded);
+    transformACCClauses(D, OMPD_atomic, TClauses, TClausesEmptyCount);
 
     // Transform associated statement.
     StmtResult AssociatedStmt =
@@ -885,8 +856,7 @@ public:
     // any.
     StmtResult Res;
     if (AssociatedStmt.isInvalid() ||
-        TClauses.size() !=
-            D->clauses().size() - TClausesEmptyCount + NumClausesAdded)
+        TClauses.size() != D->clauses().size() - TClausesEmptyCount)
       Res = StmtError();
     else
       Res = getDerived().RebuildOMPExecutableDirective(
@@ -969,34 +939,27 @@ public:
           const DAVarData &VarDAs = DirStack.back().DAMap[Var];
           assert(VarDAs.DMAKind == ACC_DMA_nomap &&
                  "expected nomap clauses to record ACC_DMA_nomap");
-          if (VarDAs.DSAKind == ACC_DSA_shared && DirStack.size() > 1) {
-            const DAVarData &VarParentDAs = (DirStack.rbegin() + 1)->DAMap[Var];
-            assert(VarParentDAs.VisibleDMAKind != ACC_DMA_unknown &&
-                   VarParentDAs.VisibleDMARefExpr &&
-                   "expected visible DMA at parent for nomap/shared var");
-            if (VarParentDAs.VisibleDMAKind == ACC_DMA_no_create &&
-                NoCreateOMPNoAlloc) {
-              if (MapMods.empty())
-                MapMods.push_back(OMPC_MAP_MODIFIER_ompx_no_alloc);
-              getSema().Diag(D->getEndLoc(),
-                             diag::warn_acc_omp_map_ompx_no_alloc_from_visible)
-                  << getOpenACCName(C->getClauseKind());
-              if (Var.getType()->isPointerType() &&
-                  isa<OMPArraySectionExpr>(
-                      VarParentDAs.VisibleDMARefExpr->IgnoreParenImpCasts()))
-                return VAR_ADD_ZERO_LENGTH_ARRAY_SECTION;
-              return VAR_PRESERVE;
-            }
-            if (Var.getType()->isPointerType() &&
-                !isa<OMPArraySectionExpr>(
-                    VarParentDAs.VisibleDMARefExpr->IgnoreParenImpCasts()))
-              return VAR_PRESERVE;
+          if (VarDAs.DSAKind != ACC_DSA_shared)
+            return VAR_DISCARD;
+          assert(DirStack.size() > 1 &&
+                 "expected visible DMA at parent for nomap/shared var");
+          const DAVarData &VarParentDAs = (DirStack.rbegin() + 1)->DAMap[Var];
+          assert(VarParentDAs.VisibleDMAKind != ACC_DMA_unknown &&
+                 VarParentDAs.VisibleDMARefExpr &&
+                 "expected visible DMA at parent for nomap/shared var");
+          if (VarParentDAs.VisibleDMAKind == ACC_DMA_no_create &&
+              NoCreateOMPNoAlloc) {
+            if (MapMods.empty())
+              MapMods.push_back(OMPC_MAP_MODIFIER_ompx_no_alloc);
+            getSema().Diag(D->getEndLoc(),
+                           diag::warn_acc_omp_map_ompx_no_alloc_from_visible)
+                << getOpenACCName(C->getClauseKind());
           }
-          if (VarDAs.DSAKind == ACC_DSA_shared &&
-              Var.getType()->isScalarType() &&
-              !Var.getType()->isPointerType() && !Var.isMember())
-            DirStack.back().NeedsDefaultmapForScalars = true;
-          return VAR_DISCARD;
+          if (isa<OMPArraySectionExpr>(
+                  VarParentDAs.VisibleDMARefExpr->IgnoreParenImpCasts()) &&
+              !Var.isCXXThis())
+            return VAR_ADD_ZERO_LENGTH_ARRAY_SECTION;
+          return VAR_PRESERVE;
         },
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
           SmallVector<SourceLocation, 1> MapModLocs;

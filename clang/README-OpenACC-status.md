@@ -197,12 +197,13 @@ Run-Time Environment Variables
       source-to-source mode caveats.  Notes:
         * OpenACC 3.3 specifies that `no_create` causes device code to use a
           variable's host memory address if it's not already present on the
-          device.  It's unclear if real code actually depends on that behavior,
-          but Clacc does not consistently support it.  Instead, all device uses
-          of a `no_create` variable must be unreachable if the variable is not
-          already present on the device.  See the discussion of `nomap` in the
-          "Parallel Directives" section in `README-OpenACC-design.md` for
-          related implementation details.
+          device.  That seems to mean that accessing the variable's memory is
+          illegal but you can take its address.  It's unclear if real code
+          actually depends on that behavior, but Clacc does not consistently
+          support it.  Instead, all device uses of a `no_create` variable must
+          be unreachable if the variable is not already present on the device.
+          See the discussion of `nomap` in the "Parallel Directives" section in
+          `README-OpenACC-design.md` for related implementation details.
     * `firstprivate` clause
     * `private` clause
     * `reduction` clause

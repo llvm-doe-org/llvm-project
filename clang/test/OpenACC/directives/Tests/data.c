@@ -505,7 +505,20 @@ void test() {
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:     OMPMapClause
       // DMP-NOT:        <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co0' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co1' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co2' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr0' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr1' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr2' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'pr' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c0' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c1' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c2' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci0' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci1' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci2' 'int'
       // DMP-NEXT:     OMPSharedClause
       // DMP-NOT:        <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co0' 'int'
@@ -522,20 +535,16 @@ void test() {
       // DMP-NEXT:       DeclRefExpr {{.*}} 'ci0' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'ci1' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'ci2' 'int'
-      // DMP-NEXT:     OMPDefaultmapClause
-      // DMP-NOT:        <implicit>
       // DMP-NOT:      OMP
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
+      //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,alloc: nc)
-      // PRT-AO-SAME: {{^ *}}shared(co0,co1,co2,cr0,cr1,cr2,nc,pr,c0,c1,c2,ci0,ci1,ci2)
-      // PRT-AO-SAME: {{^ *}}defaultmap(tofrom: scalar){{$}}
+      // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,alloc: co0,co1,co2,cr0,cr1,cr2,nc,pr,c0,c1,c2,ci0,ci1,ci2)
+      // PRT-AO-SAME: {{^ *}}shared(co0,co1,co2,cr0,cr1,cr2,nc,pr,c0,c1,c2,ci0,ci1,ci2){{$}}
       //
-      // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(ompx_no_alloc,alloc: nc)
-      // PRT-O-SAME:  {{^ *}}shared(co0,co1,co2,cr0,cr1,cr2,nc,pr,c0,c1,c2,ci0,ci1,ci2)
-      // PRT-O-SAME:  {{^ *}}defaultmap(tofrom: scalar){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+      //  PRT-O-SAME: {{^ *}}map(ompx_no_alloc,alloc: co0,co1,co2,cr0,cr1,cr2,nc,pr,c0,c1,c2,ci0,ci1,ci2)
+      //  PRT-O-SAME: {{^ *}}shared(co0,co1,co2,cr0,cr1,cr2,nc,pr,c0,c1,c2,ci0,ci1,ci2){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
       // DMP: CompoundStmt
@@ -798,8 +807,7 @@ void test() {
   //----------------------------------------------------------------------------
   // Repeat except...
   //
-  // Check pointer types (including not adding defaultmap for scalars with
-  // suppressed OpenACC implicit DAs).
+  // Check pointer types.
   // Check suppression of inner copy clause data transfers again.
   //
   // Check clause aliases again.  Currently, that check exercises a unique code
@@ -1505,8 +1513,7 @@ void test() {
   // Repeat except...
   //
   // Don't bother checking clause aliases again.
-  // Check array types (including not adding defaultmap for scalars with
-  // suppressed OpenACC implicit DAs).
+  // Check array types.
   // Check suppression of inner copyin clause data transfers.
   //----------------------------------------------------------------------------
 
@@ -1590,7 +1597,7 @@ void test() {
 
       // Check suppression of implicit data clauses.
       //
-      // DMP:      ACCParallelDirective
+      //      DMP: ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
@@ -1611,26 +1618,31 @@ void test() {
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:     OMPMapClause
-      // DMP-NOT:        <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int[1]'
-      // DMP-NEXT:     OMPSharedClause
-      // DMP-NOT:        <implicit>
+      //  DMP-NOT:       <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int[1]'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int[1]'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int[1]'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int[1]'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int[1]'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int[1]'
-      // DMP-NOT:      OMP
+      // DMP-NEXT:     OMPSharedClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prArr' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int[1]'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int[1]'
+      //  DMP-NOT:     OMP
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
+      //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,alloc: nc)
+      // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,alloc: co,cr,nc,prArr,c,ci)
       // PRT-AO-SAME: {{^ *}}shared(co,cr,nc,prArr,c,ci){{$}}
       //
-      // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(ompx_no_alloc,alloc: nc)
-      // PRT-O-SAME:  {{^ *}}shared(co,cr,nc,prArr,c,ci){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+      //  PRT-O-SAME: {{^ *}}map(ompx_no_alloc,alloc: co,cr,nc,prArr,c,ci)
+      //  PRT-O-SAME: {{^ *}}shared(co,cr,nc,prArr,c,ci){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
       // DMP: CompoundStmt
@@ -1813,8 +1825,7 @@ void test() {
   //----------------------------------------------------------------------------
   // Repeat except...
   //
-  // Check struct types (including not adding defaultmap for scalars with
-  // suppressed OpenACC implicit DAs).
+  // Check struct types.
   // Check suppression of inner copyout clause data transfers.
   //----------------------------------------------------------------------------
 
@@ -1898,7 +1909,7 @@ void test() {
 
       // Check suppression of implicit data clauses.
       //
-      // DMP:      ACCParallelDirective
+      //      DMP: ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
@@ -1919,26 +1930,31 @@ void test() {
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:     OMPMapClause
-      // DMP-NOT:        <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'struct T'
-      // DMP-NEXT:     OMPSharedClause
-      // DMP-NOT:        <implicit>
+      //  DMP-NOT:       <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'struct T'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'struct T'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'struct T'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'prStruct' 'struct T'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'struct T'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'struct T'
-      // DMP-NOT:      OMP
+      // DMP-NEXT:     OMPSharedClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'struct T'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'cr' 'struct T'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'nc' 'struct T'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'prStruct' 'struct T'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'struct T'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'struct T'
+      //  DMP-NOT:     OMP
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
+      //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,alloc: nc)
+      // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,alloc: co,cr,nc,prStruct,c,ci)
       // PRT-AO-SAME: {{^ *}}shared(co,cr,nc,prStruct,c,ci){{$}}
       //
-      // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}map(ompx_no_alloc,alloc: nc)
-      // PRT-O-SAME:  {{^ *}}shared(co,cr,nc,prStruct,c,ci){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+      //  PRT-O-SAME: {{^ *}}map(ompx_no_alloc,alloc: co,cr,nc,prStruct,c,ci)
+      //  PRT-O-SAME: {{^ *}}shared(co,cr,nc,prStruct,c,ci){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
       // DMP: CompoundStmt
@@ -2191,7 +2207,7 @@ void test() {
 
       // Check suppression of implicit data clauses.
       //
-      // DMP:      ACCParallelDirective
+      //      DMP: ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
@@ -2205,21 +2221,24 @@ void test() {
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-      // DMP-NEXT:     OMPSharedClause
-      // DMP-NOT:        <implicit>
+      // DMP-NEXT:     OMPMapClause
+      //  DMP-NOT:       <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int'
       // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int'
-      // DMP-NEXT:     OMPDefaultmapClause
-      // DMP-NOT:        <implicit>
-      // DMP-NOT:      OMP
+      // DMP-NEXT:     OMPSharedClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'co' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'int'
+      // DMP-NEXT:       DeclRefExpr {{.*}} 'ci' 'int'
+      //  DMP-NOT:     OMP
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
+      //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}shared(co,c,ci) defaultmap(tofrom: scalar){{$}}
+      // PRT-AO-SAME: {{^ *}}map(alloc: co,c,ci) shared(co,c,ci){{$}}
       //
-      // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}shared(co,c,ci) defaultmap(tofrom: scalar){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+      //  PRT-O-SAME: {{^ *}}map(alloc: co,c,ci) shared(co,c,ci){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
       // DMP: CompoundStmt
@@ -2376,7 +2395,7 @@ void test() {
 
       // Check suppression of implicit data clauses.
       //
-      // DMP:      ACCParallelDirective
+      //      DMP: ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
@@ -2386,17 +2405,25 @@ void test() {
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:     OMPMapClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       OMPArraySectionExpr
+      // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
+      // DMP-NEXT:           DeclRefExpr {{.*}} 'arr' 'int[5]'
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
+      // DMP-NEXT:         <<<NULL>>>
       // DMP-NEXT:     OMPSharedClause
-      // DMP-NOT:        <implicit>
+      //  DMP-NOT:       <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int[5]'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
+      //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}shared(arr){{$}}
+      // PRT-AO-SAME: {{^ *}}map(alloc: arr[0:0]) shared(arr){{$}}
       //
-      // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}shared(arr){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+      //  PRT-O-SAME: {{^ *}}map(alloc: arr[0:0]) shared(arr){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
       // DMP: CompoundStmt
@@ -2559,7 +2586,7 @@ void test() {
 
       // Check suppression of implicit data clauses.
       //
-      // DMP:      ACCParallelDirective
+      //      DMP: ACCParallelDirective
       // DMP-NEXT:   ACCNumGangsClause
       // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
       // DMP-NEXT:   ACCNomapClause {{.*}} <implicit>
@@ -2569,17 +2596,25 @@ void test() {
       // DMP-NEXT:   impl: OMPTargetTeamsDirective
       // DMP-NEXT:     OMPNum_teamsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+      // DMP-NEXT:     OMPMapClause
+      //  DMP-NOT:       <implicit>
+      // DMP-NEXT:       OMPArraySectionExpr
+      // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
+      // DMP-NEXT:           DeclRefExpr {{.*}} 'arr' 'int[5]'
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
+      // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
+      // DMP-NEXT:         <<<NULL>>>
       // DMP-NEXT:     OMPSharedClause
-      // DMP-NOT:        <implicit>
+      //  DMP-NOT:       <implicit>
       // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int[5]'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
-      // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
+      //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}shared(arr){{$}}
+      // PRT-AO-SAME: {{^ *}}map(alloc: arr[0:0]) shared(arr){{$}}
       //
-      // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-      // PRT-O-SAME:  {{^ *}}shared(arr){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+      //  PRT-O-SAME: {{^ *}}map(alloc: arr[0:0]) shared(arr){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       #pragma acc parallel num_gangs(1)
       // DMP: CompoundStmt
@@ -2808,18 +2843,34 @@ void test() {
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     OMPMapClause
+    // DMP-NOT:        <implicit>
+    // DMP-NEXT:       OMPArraySectionExpr
+    // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr0' 'int[5]'
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
+    // DMP-NEXT:         <<<NULL>>>
+    // DMP-NEXT:       OMPArraySectionExpr
+    // DMP-NEXT:         ImplicitCastExpr {{.*}} 'int *' <ArrayToPointerDecay>
+    // DMP-NEXT:           DeclRefExpr {{.*}} 'arr1' 'int[5]'
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
+    // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 0
+    // DMP-NEXT:         <<<NULL>>>
     // DMP-NEXT:     OMPSharedClause
     // DMP-NOT:        <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'arr0' 'int[5]'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'arr1' 'int[5]'
     // DMP-NOT:      OMP
     //
-    // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1){{$}}
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
+    // PRT-AO-SAME: {{^ *}}map(alloc: arr0[0:0],arr1[0:0])
     // PRT-AO-SAME: {{^ *}}shared(arr0,arr1){{$}}
     //
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1)
-    // PRT-O-SAME:  {{^ *}}shared(arr0,arr1){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+    //  PRT-O-SAME: {{^ *}}map(alloc: arr0[0:0],arr1[0:0])
+    //  PRT-O-SAME: {{^ *}}shared(arr0,arr1){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
     #pragma acc parallel num_gangs(1)
     // DMP: CompoundStmt
@@ -2840,8 +2891,8 @@ void test() {
   } // PRT-NEXT: }
 
   //----------------------------------------------------------------------------
-  // defaultmap for scalars with suppressed OpenACC implicit DAs: Check that an
-  // inherited ompx_no_alloc prevents adding it.
+  // Check that ompx_no_alloc can be inherited through multiple enclosing acc
+  // data directives.
   //----------------------------------------------------------------------------
 
   // PRT-NEXT: {
@@ -2895,42 +2946,11 @@ void test() {
   } // PRT-NEXT: }
 
   //----------------------------------------------------------------------------
-  // defaultmap for scalars with suppressed OpenACC implicit DAs: Check that an
-  // an explicit DSA prevents adding it.
-  //
-  // The case where implicit DAs are not suppressed by an enclosing acc data and
-  // thus prevent defaultmap is tested in, for example, parallel-da.c.
-  //
-  // Cases where it isn't added because the variable is non-scalar are tested
-  // above.
+  // Check that the implicit DAs that result from a suppressing DMA can be
+  // prevented by an explicit DMA or DSA.
   //----------------------------------------------------------------------------
 
-  // PRT-NEXT: {
-  {
-    // PRT-NEXT: int x =
-    int x = 10;
-    //  PRT-A-NEXT: {{^ *}}#pragma acc data copy(x){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: x){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(ompx_hold,tofrom: x){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(x){{$}}
-    #pragma acc data copy(x)
-    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1) firstprivate(x){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) firstprivate(x){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) firstprivate(x){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) firstprivate(x){{$}}
-    #pragma acc parallel num_gangs(1) firstprivate(x)
-    // PRT-NEXT: x +=
-    x += 100;
-    // PRT-NEXT: printf(
-    // EXE-NEXT: x=10
-    printf("x=%d\n", x);
-  } // PRT-NEXT: }
-
-  //----------------------------------------------------------------------------
-  // defaultmap for scalars with suppressed OpenACC implicit DAs: Check that the
-  // record of the need for it doesn't accidentally persist to a sibling acc
-  // parallel.
-  //----------------------------------------------------------------------------
+  // First, where the suppressing DMA is not no_create.
 
   // PRT-NEXT: {
   {
@@ -2938,26 +2958,21 @@ void test() {
     // PRT-NEXT: int y =
     int x = 10;
     int y = 20;
-    //  PRT-A-NEXT: {{^ *}}#pragma acc data copy(x){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: x){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(ompx_hold,tofrom: x){{$}}
-    // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(x){{$}}
-    #pragma acc data copy(x)
+    //  PRT-A-NEXT: {{^ *}}#pragma acc data copy(x,y){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target data map(ompx_hold,tofrom: x,y){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target data map(ompx_hold,tofrom: x,y){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc data copy(x,y){{$}}
+    #pragma acc data copy(x,y)
+    //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1) copy(x) firstprivate(y){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: x) firstprivate(y) shared(x){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) map(ompx_hold,tofrom: x) firstprivate(y) shared(x){{$}}
+    // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) copy(x) firstprivate(y){{$}}
+    #pragma acc parallel num_gangs(1) copy(x) firstprivate(y)
     // PRT-NEXT: {
     {
-      //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) shared(x) defaultmap(tofrom: scalar){{$}}
-      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) shared(x) defaultmap(tofrom: scalar){{$}}
-      // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
-      #pragma acc parallel num_gangs(1)
       // PRT-NEXT: x +=
-      x += 100;
-      //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) firstprivate(y){{$}}
-      //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1) firstprivate(y){{$}}
-      // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
-      #pragma acc parallel num_gangs(1)
       // PRT-NEXT: y +=
+      x += 100;
       y += 200;
     } // PRT-NEXT: }
     // PRT-NEXT: printf(
@@ -2965,12 +2980,10 @@ void test() {
     printf("x=%d, y=%d\n", x, y);
   } // PRT-NEXT: }
 
-  //----------------------------------------------------------------------------
-  // Inherited ompx_no_alloc: Check that an explicit DMA or DSA prevents it.
+  // Second, where the suppressing DMA is no_create.
   //
-  // The case where -fopenacc-no-create-omp=no-ompx-no-alloc prevents it is
-  // checked in no-create.c.
-  //----------------------------------------------------------------------------
+  // The case where -fopenacc-no-create-omp=no-ompx-no-alloc prevents
+  // ompx_no_alloc is checked in no-create.c.
 
   // PRT-NEXT: {
   {

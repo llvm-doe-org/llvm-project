@@ -176,17 +176,18 @@ int main() {
       // DMP-NEXT:     OMPMapClause
       //  DMP-NOT:       <implicit>
       // DMP-NEXT:       MemberExpr {{.* .i }}
+      // DMP-NEXT:         DeclRefExpr {{.*}} 'c' 'struct T'
+      // DMP-NEXT:       MemberExpr {{.* .i }}
       // DMP-NEXT:         DeclRefExpr {{.*}} 'nc' 'struct T'
-      // DMP-NEXT:     OMPMapClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'c' 'struct T'
       //  DMP-NOT:     OMP
       //      DMP:     CompoundStmt
       //
       //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(1){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1)
-      // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,alloc: nc.i){{$}}
+      // PRT-AO-SAME: {{^ *}}map(ompx_no_alloc,alloc: c.i,nc.i){{$}}
       //
       //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(1)
+      //  PRT-O-SAME: {{^ *}}map(ompx_no_alloc,alloc: c.i,nc.i){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
       //
       // PRT-NEXT: {

@@ -1,8 +1,7 @@
 // Check no_create clauses on different constructs and with different values of
 // -fopenacc-no-create-omp.
 //
-// data.c checks various interactions with explicit DAs and the defaultmap added
-// for scalars with suppressed OpenACC implicit DAs.  Diagnostics about
+// data.c checks various interactions with explicit DAs.  Diagnostics about
 // ompx_no_alloc in the translation are checked in
 // diagnostics/warn-acc-omp-map-ompx-no-alloc.c.  Diagnostics about bad
 // -fopenacc-no-create-omp arguments are checked in
@@ -1799,52 +1798,50 @@ CASE(caseConstAbsent) {
   if (use) y = x;
 }
 
-//         DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseInheritedPresent
-//               DMP: ACCDataDirective
-//          DMP-NEXT:   ACCCreateClause
-//          DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
-//          DMP-NEXT:   impl: OMPTargetDataDirective
-//          DMP-NEXT:     OMPMapClause
-//          DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
-//               DMP:   ACCDataDirective
-//          DMP-NEXT:     ACCNoCreateClause
-//          DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
-//          DMP-NEXT:     impl: OMPTargetDataDirective
-//          DMP-NEXT:       OMPMapClause
-//          DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
-//               DMP:     ACCParallelDirective
-//          DMP-NEXT:       ACCNomapClause
-//          DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
-//          DMP-NEXT:       ACCSharedClause
-//          DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
-//          DMP-NEXT:       impl: OMPTargetTeamsDirective
-// DMP-NO-ALLOC-NEXT:         OMPMapClause
-// DMP-NO-ALLOC-NEXT:           DeclRefExpr {{.*}} 'x' 'int'
-//          DMP-NEXT:         OMPSharedClause
-//          DMP-NEXT:           DeclRefExpr {{.*}} 'x' 'int'
-//    DMP-ALLOC-NEXT:         DefaultmapClause
+// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseInheritedPresent
+//       DMP: ACCDataDirective
+//  DMP-NEXT:   ACCCreateClause
+//  DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:   impl: OMPTargetDataDirective
+//  DMP-NEXT:     OMPMapClause
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+//       DMP:   ACCDataDirective
+//  DMP-NEXT:     ACCNoCreateClause
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:     impl: OMPTargetDataDirective
+//  DMP-NEXT:       OMPMapClause
+//  DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
+//       DMP:     ACCParallelDirective
+//  DMP-NEXT:       ACCNomapClause
+//  DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:       ACCSharedClause
+//  DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:       impl: OMPTargetTeamsDirective
+//  DMP-NEXT:         OMPMapClause
+//  DMP-NEXT:           DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:         OMPSharedClause
+//  DMP-NEXT:           DeclRefExpr {{.*}} 'x' 'int'
+//   DMP-NOT:         OMP{{.*}}Clause
 //
-//            PRT-LABEL: {{.*}}caseInheritedPresent{{.*}} {
-//             PRT-NEXT:   int x;
+//   PRT-LABEL: {{.*}}caseInheritedPresent{{.*}} {
+//    PRT-NEXT:   int x;
 //
-//           PRT-A-NEXT:   #pragma acc data create(x){{$}}
-//          PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,alloc: x){{$}}
-//           PRT-A-NEXT:   #pragma acc data no_create(x){{$}}
-//          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
-//           PRT-A-NEXT:   #pragma acc parallel{{$}}
-// PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x){{$}}
-//    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams shared(x) defaultmap(tofrom: scalar){{$}}
+//  PRT-A-NEXT:   #pragma acc data create(x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,alloc: x){{$}}
+//  PRT-A-NEXT:   #pragma acc data no_create(x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
+//  PRT-A-NEXT:   #pragma acc parallel{{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x){{$}}
 //
-//           PRT-O-NEXT:   #pragma omp target data map(ompx_hold,alloc: x){{$}}
-//          PRT-OA-NEXT:   // #pragma acc data create(x){{$}}
-//           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
-//          PRT-OA-NEXT:   // #pragma acc data no_create(x){{$}}
-//  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x){{$}}
-//     PRT-O-ALLOC-NEXT:   #pragma omp target teams shared(x) defaultmap(tofrom: scalar){{$}}
-//          PRT-OA-NEXT:   // #pragma acc parallel{{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,alloc: x){{$}}
+// PRT-OA-NEXT:   // #pragma acc data create(x){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
+// PRT-OA-NEXT:   // #pragma acc data no_create(x){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x){{$}}
+// PRT-OA-NEXT:   // #pragma acc parallel{{$}}
 //
-//             PRT-NEXT:   x = 1;
-//             PRT-NEXT: }
+//    PRT-NEXT:   x = 1;
+//    PRT-NEXT: }
 //
 //  EXE-OFF-caseInheritedPresent-NOT: {{.}}
 //      EXE-OFF-caseInheritedPresent: acc_ev_enter_data_start
@@ -1866,49 +1863,46 @@ CASE(caseInheritedPresent) {
   x = 1;
 }
 
-//         DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseInheritedAbsent
-//               DMP: ACCDataDirective
-//          DMP-NEXT:   ACCNoCreateClause
-//          DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
-//          DMP-NEXT:   impl: OMPTargetDataDirective
-//          DMP-NEXT:     OMPMapClause
-//          DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
-//               DMP:   ACCParallelDirective
-//          DMP-NEXT:     ACCNomapClause
-//          DMP-NEXT:       DeclRefExpr {{.*}} 'use' 'int'
-//          DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
-//          DMP-NEXT:     ACCSharedClause
-//          DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
-//          DMP-NEXT:     ACCFirstprivateClause
-//          DMP-NEXT:       DeclRefExpr {{.*}} 'use' 'int'
-//          DMP-NEXT:     impl: OMPTargetTeamsDirective
-// DMP-NO-ALLOC-NEXT:       OMPMapClause
-// DMP-NO-ALLOC-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
-//          DMP-NEXT:       OMPSharedClause
-//          DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
-//          DMP-NEXT:       OMPFirstprivateClause
-//          DMP-NEXT:         DeclRefExpr {{.*}} 'use' 'int'
-//    DMP-ALLOC-NEXT:       DefaultmapClause
+// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseInheritedAbsent
+//       DMP: ACCDataDirective
+//  DMP-NEXT:   ACCNoCreateClause
+//  DMP-NEXT:     DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:   impl: OMPTargetDataDirective
+//  DMP-NEXT:     OMPMapClause
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+//       DMP:   ACCParallelDirective
+//  DMP-NEXT:     ACCNomapClause
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'use' 'int'
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:     ACCSharedClause
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:     ACCFirstprivateClause
+//  DMP-NEXT:       DeclRefExpr {{.*}} 'use' 'int'
+//  DMP-NEXT:     impl: OMPTargetTeamsDirective
+//  DMP-NEXT:       OMPMapClause
+//  DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:       OMPSharedClause
+//  DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
+//  DMP-NEXT:       OMPFirstprivateClause
+//  DMP-NEXT:         DeclRefExpr {{.*}} 'use' 'int'
 //
-//            PRT-LABEL: {{.*}}caseInheritedAbsent{{.*}} {
-//             PRT-NEXT:   int x;
-//             PRT-NEXT:   int use = 0;
+//   PRT-LABEL: {{.*}}caseInheritedAbsent{{.*}} {
+//    PRT-NEXT:   int x;
+//    PRT-NEXT:   int use = 0;
 //
-//           PRT-A-NEXT:   #pragma acc data no_create(x){{$}}
-//          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
-//           PRT-A-NEXT:   #pragma acc parallel{{$}}
-// PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x) firstprivate(use){{$}}
-//    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams shared(x) firstprivate(use) defaultmap(tofrom: scalar){{$}}
+//  PRT-A-NEXT:   #pragma acc data no_create(x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
+//  PRT-A-NEXT:   #pragma acc parallel{{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x) firstprivate(use){{$}}
 //
-//           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
-//          PRT-OA-NEXT:   // #pragma acc data no_create(x){{$}}
-//  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x) firstprivate(use){{$}}
-//     PRT-O-ALLOC-NEXT:   #pragma omp target teams shared(x) firstprivate(use) defaultmap(tofrom: scalar){{$}}
-//          PRT-OA-NEXT:   // #pragma acc parallel{{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
+// PRT-OA-NEXT:   // #pragma acc data no_create(x){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x) firstprivate(use){{$}}
+// PRT-OA-NEXT:   // #pragma acc parallel{{$}}
 //
-//             PRT-NEXT:   if (use)
-//             PRT-NEXT:     x = 1;
-//             PRT-NEXT: }
+//    PRT-NEXT:   if (use)
+//    PRT-NEXT:     x = 1;
+//    PRT-NEXT: }
 //
 //        EXE-OFF-caseInheritedAbsent-NOT: {{.}}
 //            EXE-OFF-caseInheritedAbsent: acc_ev_enter_data_start
@@ -1929,38 +1923,36 @@ CASE(caseInheritedAbsent) {
     x = 1;
 }
 
-//            PRT-LABEL: {{.*}}caseInheritedSubarrayPresent{{.*}} {
-//             PRT-NEXT:   fprintf
-//             PRT-NEXT:   int arr[] =
-//             PRT-NEXT:   int arr2[] =
-//             PRT-NEXT:   int *p =
-//             PRT-NEXT:   int *p2 =
+//   PRT-LABEL: {{.*}}caseInheritedSubarrayPresent{{.*}} {
+//    PRT-NEXT:   fprintf
+//    PRT-NEXT:   int arr[] =
+//    PRT-NEXT:   int arr2[] =
+//    PRT-NEXT:   int *p =
+//    PRT-NEXT:   int *p2 =
 //
-//           PRT-A-NEXT:   #pragma acc data copy(arr,p[0:5],p2){{$}}
-//          PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: arr,p[0:5],p2){{$}}
-//           PRT-A-NEXT:   #pragma acc data no_create(arr[1:2],p[2:1],p2){{$}}
-//          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1],p2){{$}}
-//           PRT-A-NEXT:   #pragma acc parallel num_gangs(1){{$}}
-// PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams num_teams(1) map([[INHERITED_NO_CREATE_MT]]: arr,p[0:0],p2) shared(arr,p,p2){{$}}
-//    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams num_teams(1) map(alloc: p2) shared(arr,p,p2){{$}}
+//  PRT-A-NEXT:   #pragma acc data copy(arr,p[0:5],p2){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: arr,p[0:5],p2){{$}}
+//  PRT-A-NEXT:   #pragma acc data no_create(arr[1:2],p[2:1],p2){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1],p2){{$}}
+//  PRT-A-NEXT:   #pragma acc parallel num_gangs(1){{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams num_teams(1) map([[INHERITED_NO_CREATE_MT]]: arr[0:0],p[0:0],p2) shared(arr,p,p2){{$}}
 //
-//           PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: arr,p[0:5],p2){{$}}
-//          PRT-OA-NEXT:   // #pragma acc data copy(arr,p[0:5],p2){{$}}
-//           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1],p2){{$}}
-//          PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2],p[2:1],p2){{$}}
-//  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams num_teams(1) map([[INHERITED_NO_CREATE_MT]]: arr,p[0:0],p2) shared(arr,p,p2){{$}}
-//     PRT-O-ALLOC-NEXT:   #pragma omp target teams num_teams(1) map(alloc: p2) shared(arr,p,p2){{$}}
-//          PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: arr,p[0:5],p2){{$}}
+// PRT-OA-NEXT:   // #pragma acc data copy(arr,p[0:5],p2){{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1],p2){{$}}
+// PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2],p[2:1],p2){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams num_teams(1) map([[INHERITED_NO_CREATE_MT]]: arr[0:0],p[0:0],p2) shared(arr,p,p2){{$}}
+// PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1){{$}}
 //
-//             PRT-NEXT:   {
-//             PRT-NEXT:     arr[1] += 1;
-//             PRT-NEXT:     p[2] += 2;
-//             PRT-NEXT:     p2 += 1;
-//             PRT-NEXT:   }
-//             PRT-NEXT:   fprintf
-//             PRT-NEXT:   fprintf
-//             PRT-NEXT:   fprintf
-//             PRT-NEXT: }
+//    PRT-NEXT:   {
+//    PRT-NEXT:     arr[1] += 1;
+//    PRT-NEXT:     p[2] += 2;
+//    PRT-NEXT:     p2 += 1;
+//    PRT-NEXT:   }
+//    PRT-NEXT:   fprintf
+//    PRT-NEXT:   fprintf
+//    PRT-NEXT:   fprintf
+//    PRT-NEXT: }
 //
 //      EXE-caseInheritedSubarrayPresent-NOT: {{.}}
 //          EXE-caseInheritedSubarrayPresent: start
@@ -2008,35 +2000,33 @@ CASE(caseInheritedSubarrayPresent) {
   fprintf(stderr, "p2 == arr + 1: %d\n", p2 == arr + 1);
 }
 
-//            PRT-LABEL: {{.*}}caseInheritedSubarrayAbsent{{.*}} {
-//             PRT-NEXT:   fprintf
-//             PRT-NEXT:   int arr[] =
-//             PRT-NEXT:   int arr2[] =
-//             PRT-NEXT:   int *p =
-//             PRT-NEXT:   int *p2 =
-//             PRT-NEXT:   int use = 0;
+//   PRT-LABEL: {{.*}}caseInheritedSubarrayAbsent{{.*}} {
+//    PRT-NEXT:   fprintf
+//    PRT-NEXT:   int arr[] =
+//    PRT-NEXT:   int arr2[] =
+//    PRT-NEXT:   int *p =
+//    PRT-NEXT:   int *p2 =
+//    PRT-NEXT:   int use = 0;
 //
-//           PRT-A-NEXT:   #pragma acc data no_create(arr[1:2],p[2:1],p2){{$}}
-//          PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1],p2){{$}}
-//           PRT-A-NEXT:   #pragma acc parallel{{$}}
-// PRT-AO-NO-ALLOC-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr,p[0:0],p2) shared(arr,p,p2) firstprivate(use){{$}}
-//    PRT-AO-ALLOC-NEXT:   // #pragma omp target teams map(alloc: p2) shared(arr,p,p2) firstprivate(use){{$}}
+//  PRT-A-NEXT:   #pragma acc data no_create(arr[1:2],p[2:1],p2){{$}}
+// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1],p2){{$}}
+//  PRT-A-NEXT:   #pragma acc parallel{{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr[0:0],p[0:0],p2) shared(arr,p,p2) firstprivate(use){{$}}
 //
-//           PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1],p2){{$}}
-//          PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2],p[2:1],p2){{$}}
-//  PRT-O-NO-ALLOC-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr,p[0:0],p2) shared(arr,p,p2) firstprivate(use){{$}}
-//     PRT-O-ALLOC-NEXT:   #pragma omp target teams map(alloc: p2) shared(arr,p,p2) firstprivate(use){{$}}
-//          PRT-OA-NEXT:   // #pragma acc parallel{{$}}
+//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1],p2){{$}}
+// PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2],p[2:1],p2){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr[0:0],p[0:0],p2) shared(arr,p,p2) firstprivate(use){{$}}
+// PRT-OA-NEXT:   // #pragma acc parallel{{$}}
 //
-//             PRT-NEXT:   if (use) {
-//             PRT-NEXT:     arr[1] = 1;
-//             PRT-NEXT:     p[2] = 1;
-//             PRT-NEXT:     p2 += 1;
-//             PRT-NEXT:   }
-//             PRT-NEXT:   fprintf
-//             PRT-NEXT:   fprintf
-//             PRT-NEXT:   fprintf
-//             PRT-NEXT: }
+//    PRT-NEXT:   if (use) {
+//    PRT-NEXT:     arr[1] = 1;
+//    PRT-NEXT:     p[2] = 1;
+//    PRT-NEXT:     p2 += 1;
+//    PRT-NEXT:   }
+//    PRT-NEXT:   fprintf
+//    PRT-NEXT:   fprintf
+//    PRT-NEXT:   fprintf
+//    PRT-NEXT: }
 //
 //            EXE-caseInheritedSubarrayAbsent-NOT: {{.}}
 //                EXE-caseInheritedSubarrayAbsent: start
