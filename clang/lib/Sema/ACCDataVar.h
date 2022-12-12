@@ -283,8 +283,8 @@ public:
         // for any nested member expression.
         assert(S && "unexpected nested member expression");
         bool NestedOnImplicitCXXThis = false;
-        if (CXXThisExpr *TE = dyn_cast<CXXThisExpr>(NestedME->getBase()->
-                                                    IgnoreParenImpCasts()))
+        if (CXXThisExpr *TE = dyn_cast<CXXThisExpr>(
+                NestedME->getBase()->IgnoreParenImpCasts()))
           NestedOnImplicitCXXThis = TE->isImplicit();
         Diag(NestedME->getBeginLoc(),
              diag::err_acc_unsupported_member_expr_nested)
@@ -407,8 +407,8 @@ public:
       ConstDecl = CompositeDecl;
       NoteDiagID = diag::note_acc_const_var_decl;
     } else if ((isCXXThis() || isMemberOnCXXThis()) &&
-               SemaRef.getCurrentThisType()->getPointeeType()
-                   .isConstant(Ctxt)) {
+               SemaRef.getCurrentThisType()->getPointeeType().isConstant(
+                   Ctxt)) {
       // TODO: Check for mutable fields.
       ConstDecl = SemaRef.getCurFunctionDecl();
       NoteDiagID = diag::note_acc_const_var_in_const_member_fn;
