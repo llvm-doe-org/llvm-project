@@ -33,10 +33,10 @@ int main() {
   //
   //    PRT-NEXT: {
   //    PRT-NEXT:   int noInitCopy, initCopy;
-  //  PRT-A-NEXT:   #pragma acc parallel num_gangs(1) copyout(noInitCopy,initCopy)
-  // PRT-AO-NEXT:   // #pragma omp target teams num_teams(1) map(ompx_hold,from: noInitCopy,initCopy) shared(noInitCopy,initCopy)
-  //  PRT-O-NEXT:   #pragma omp target teams num_teams(1) map(ompx_hold,from: noInitCopy,initCopy) shared(noInitCopy,initCopy)
-  // PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1) copyout(noInitCopy,initCopy)
+  //  PRT-A-NEXT:   #pragma acc parallel num_gangs(1) copyout(noInitCopy,initCopy){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target teams num_teams(1) map(ompx_hold,from: noInitCopy,initCopy){{$}}
+  //  PRT-O-NEXT:   #pragma omp target teams num_teams(1) map(ompx_hold,from: noInitCopy,initCopy){{$}}
+  // PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1) copyout(noInitCopy,initCopy){{$}}
   //    PRT-NEXT:   {
   //    PRT-NEXT:     int noInit;
   //    PRT-NEXT:     noInit = 4;
@@ -68,10 +68,10 @@ int main() {
   //
   //    PRT-NEXT: {
   //    PRT-NEXT:   int iCopy;
-  //  PRT-A-NEXT:   #pragma acc parallel num_gangs(1) copyout(iCopy)
-  // PRT-AO-NEXT:   // #pragma omp target teams num_teams(1) map(ompx_hold,from: iCopy) shared(iCopy)
-  //  PRT-O-NEXT:   #pragma omp target teams num_teams(1) map(ompx_hold,from: iCopy) shared(iCopy)
-  // PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1) copyout(iCopy)
+  //  PRT-A-NEXT:   #pragma acc parallel num_gangs(1) copyout(iCopy){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target teams num_teams(1) map(ompx_hold,from: iCopy){{$}}
+  //  PRT-O-NEXT:   #pragma omp target teams num_teams(1) map(ompx_hold,from: iCopy){{$}}
+  // PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1) copyout(iCopy){{$}}
   //    PRT-NEXT:   {
   //    PRT-NEXT:     typedef int Number;
   //    PRT-NEXT:     Number i = 809;
@@ -96,10 +96,10 @@ int main() {
   //
   //    PRT-NEXT: {
   //    PRT-NEXT:   int CCopy;
-  //  PRT-A-NEXT:   #pragma acc parallel num_gangs(1) copyout(CCopy)
-  // PRT-AO-NEXT:   // #pragma omp target teams num_teams(1) map(ompx_hold,from: CCopy) shared(CCopy)
-  //  PRT-O-NEXT:   #pragma omp target teams num_teams(1) map(ompx_hold,from: CCopy) shared(CCopy)
-  // PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1) copyout(CCopy)
+  //  PRT-A-NEXT:   #pragma acc parallel num_gangs(1) copyout(CCopy){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target teams num_teams(1) map(ompx_hold,from: CCopy){{$}}
+  //  PRT-O-NEXT:   #pragma omp target teams num_teams(1) map(ompx_hold,from: CCopy){{$}}
+  // PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1) copyout(CCopy){{$}}
   //    PRT-NEXT:   {
   //    PRT-NEXT:     enum {
   //    PRT-NEXT:       A = 3
@@ -139,10 +139,10 @@ int main() {
   //    PRT-NEXT:   int siCopy;
   //    PRT-NEXT:   int sxiCopy;
   //    PRT-NEXT:   int sxjCopy;
-  //  PRT-A-NEXT:   #pragma acc parallel num_gangs(1) copyout(siCopy,sxiCopy,sxjCopy)
-  // PRT-AO-NEXT:   // #pragma omp target teams num_teams(1) map(ompx_hold,from: siCopy,sxiCopy,sxjCopy) shared(siCopy,sxiCopy,sxjCopy)
-  //  PRT-O-NEXT:   #pragma omp target teams num_teams(1) map(ompx_hold,from: siCopy,sxiCopy,sxjCopy) shared(siCopy,sxiCopy,sxjCopy)
-  // PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1) copyout(siCopy,sxiCopy,sxjCopy)
+  //  PRT-A-NEXT:   #pragma acc parallel num_gangs(1) copyout(siCopy,sxiCopy,sxjCopy){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target teams num_teams(1) map(ompx_hold,from: siCopy,sxiCopy,sxjCopy){{$}}
+  //  PRT-O-NEXT:   #pragma omp target teams num_teams(1) map(ompx_hold,from: siCopy,sxiCopy,sxjCopy){{$}}
+  // PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1) copyout(siCopy,sxiCopy,sxjCopy){{$}}
   //    PRT-NEXT:   {
   //    PRT-NEXT:     struct S;
   //    PRT-NEXT:     struct S {
@@ -215,10 +215,10 @@ int main() {
   //
   //    PRT-NEXT: {
   //    PRT-NEXT:   int uxiCopy;
-  //  PRT-A-NEXT:   #pragma acc parallel num_gangs(1) copyout(uxiCopy)
-  // PRT-AO-NEXT:   // #pragma omp target teams num_teams(1) map(ompx_hold,from: uxiCopy) shared(uxiCopy)
-  //  PRT-O-NEXT:   #pragma omp target teams num_teams(1) map(ompx_hold,from: uxiCopy) shared(uxiCopy)
-  // PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1) copyout(uxiCopy)
+  //  PRT-A-NEXT:   #pragma acc parallel num_gangs(1) copyout(uxiCopy){{$}}
+  // PRT-AO-NEXT:   // #pragma omp target teams num_teams(1) map(ompx_hold,from: uxiCopy){{$}}
+  //  PRT-O-NEXT:   #pragma omp target teams num_teams(1) map(ompx_hold,from: uxiCopy){{$}}
+  // PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1) copyout(uxiCopy){{$}}
   //    PRT-NEXT:   {
   //    PRT-NEXT:     union U;
   //    PRT-NEXT:     union U {

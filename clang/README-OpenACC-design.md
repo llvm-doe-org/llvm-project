@@ -836,12 +836,10 @@ clarify these points in future versions of the OpenACC specification.
               determined.  However, Clacc sometimes translates it to
               suppress OpenMP's *imp* DAs, which do not always have
               the desired semantics.
-            * As noted in the mappings below, in many cases, Clacc
-              translates `shared` to OpenMP's `shared` clause.
-              However, `omp distribute` and `omp simd` do not accept
-              *exp* `shared`, so Clacc then relies on OpenMP *imp*
-              DSAs, and the semantics are the desired OpenACC
-              semantics.
+            * As noted in the mappings below, Clacc's translation discards
+              `shared`.  However, it assists in determining when the translation
+              should not discard `nomap` because `shared` means no other DSA was
+              determined.
         * Otherwise, the DMAs are listed in OpenACC 3.1 sec. 2.7 "Data
           Clauses", and the DSAs are described in the sections for the
           directives that permit them.
@@ -1706,12 +1704,15 @@ to OpenMP is as follows:
 * All other DMAs are translated in the same manner as when appearing
   on an `acc data`.  *imp* `copy` is translated in the same manner as
   *exp* `copy`.
-* If *v* is not a member expression, then *imp* `shared(`*v*`)` ->
-  *exp* `shared(`*v*`)`
-* Else, *imp* `shared(`*v*`)` -> *imp* `shared(`*v*`)`.  Notes:
-    * Clang does not support member expressions in OpenMP *exp* `shared`
-      clauses, so we must rely on OpenMP implicit data sharing rules for this
-      case.
+* The translation discards *imp* `shared`.  Notes:
+    * We have not found a scenario in which *imp* `shared` -> *exp* `shared`
+      would benefit behavior.  This is likely due to existing *exp* `map`
+      clauses in the translation.
+    * We have found many scenerios in which it's not permitted.  For example, at
+      least at one time, Clang's OpenMP implementation did not permit *exp*
+      `shared` for array sections or for member expressions.
+    * Because it is apparently useless, it would be confusing in the OpenMP
+      source generated in source-to-source mode.
 * *exp*|*imp* `reduction` -> *exp* `reduction`
 * *exp*|*imp* `firstprivate` -> *exp* `firstprivate`
 * *exp* `private` -> *exp* `private`
@@ -1868,13 +1869,16 @@ its clauses to OpenMP is as follows:
   constant-expression argument from ancestor `acc parallel` -> *exp*
   `simdlen`.
 * `collapse` -> `collapse`
-* If *exp* `worker` and *v* is not a member expression, then *imp*
-  `shared(`*v*`)` -> *exp* `shared(`*v*`)`.
-* Else, *imp* `shared(`*v*`)` -> *imp* `shared(`*v*`)`.  Notes:
-    * `omp distribute` or `omp simd` without `parallel for` does not support a
-      `shared` clause, and Clang does not support member expressions in OpenMP
-       *exp* `shared` clauses, so we must rely on OpenMP implicit data sharing
-       rules for these cases.
+* The translation discards *imp* `shared`.  Notes:
+    * We have not found a scenario in which *imp* `shared` -> *exp* `shared`
+      would benefit behavior.
+    * We have found many scenerios in which it's not permitted.  For example, at
+      least at one time, Clang's OpenMP implementation did not permit *exp*
+      `shared` on an `omp distribute` or `omp simd` directive not combined with
+      an `omp parallel`, and it did not permit it for array sections or for
+      member expressions.
+    * Because it is apparently useless, it would be confusing in the OpenMP
+      source generated in source-to-source mode.
 * *pre* `private` for a loop control variable that is declared in the
   init of the attached `for` loop -> *pre* `private`.  Notes:
     * Mapping to *exp* `private` would be erroneous because it would

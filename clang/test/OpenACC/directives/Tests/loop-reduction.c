@@ -372,7 +372,7 @@ int main() {
       // PRT-NEXT: int *in = arr;
       int arr[] = {10000, 1};
       int *in = arr;
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCReductionClause {{.*}} 'max'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'out' 'enum E'
       // DMP-NEXT:   ACCReductionClause {{.*}} 'min'
@@ -382,9 +382,8 @@ int main() {
       // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int[2]'
       // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int[2]'
-      // DMP:          ForStmt
+      //  DMP-NOT:     OMP
+      //      DMP:     ForStmt
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop reduction(max: out) reduction(min: in){{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -3572,8 +3571,7 @@ static void withinGangFn(int param) {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'arr' 'int[2]'
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'arr' 'int[2]'
+    //  DMP-NOT:     OMP
     //      DMP:     ForStmt
     //      DMP:       ConditionalOperator
     //      DMP:       ConditionalOperator

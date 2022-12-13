@@ -202,8 +202,6 @@ int main() {
   //     DMP-NEXT:         ACCSharedClause {{.*}} <implicit>
   //     DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:         impl: OMPDistributeDirective
-  //     DMP-NEXT:           OMPSharedClause {{.*}} <implicit>
-  //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //      DMP-NOT:           OMP
   //          DMP:         ACCLoopDirective
   //     DMP-NEXT:           ACCSeqClause
@@ -321,9 +319,6 @@ int main() {
   //     DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:         ACCGangClause {{.*}} <implicit>
   //     DMP-NEXT:         impl: OMPDistributeParallelForDirective
-  //     DMP-NEXT:           OMPSharedClause
-  //      DMP-NOT:             <implicit>
-  //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //      DMP-NOT:           OMP
   //          DMP:         ACCLoopDirective
   //     DMP-NEXT:           ACCSeqClause
@@ -364,8 +359,8 @@ int main() {
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop worker{{$}}
-  //      PRT-AO-NEXT:       // #pragma omp distribute parallel for shared(i){{$}}
-  //       PRT-O-NEXT:       #pragma omp distribute parallel for shared(i){{$}}
+  //      PRT-AO-NEXT:       // #pragma omp distribute parallel for{{$}}
+  //       PRT-O-NEXT:       #pragma omp distribute parallel for{{$}}
   //      PRT-OA-NEXT:       // #pragma acc loop worker{{$}}
   //         PRT-NEXT:       for (int j = 0; j < 4; ++j) {
   //       PRT-A-NEXT:         #pragma acc loop seq
@@ -449,8 +444,6 @@ int main() {
   //     DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:         ACCGangClause {{.*}} <implicit>
   //     DMP-NEXT:         impl: OMPDistributeSimdDirective
-  //     DMP-NEXT:           OMPSharedClause {{.*}} <implicit>
-  //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //      DMP-NOT:           OMP
   //          DMP:         ACCLoopDirective
   //     DMP-NEXT:           ACCSeqClause
@@ -584,10 +577,6 @@ int main() {
   //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
   //     DMP-NEXT:           impl: OMPParallelForDirective
-  //     DMP-NEXT:             OMPSharedClause
-  //      DMP-NOT:               <implicit>
-  //     DMP-NEXT:               DeclRefExpr {{.*}} 'i' 'int'
-  //     DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
   //      DMP-NOT:             OMP
   //          DMP:             ForStmt
   //      DMP-NOT:               OMP
@@ -630,8 +619,8 @@ int main() {
   //      PRT-OA-SAME:       {{^$}}
   //         PRT-NEXT:       for (int j = 0; j < 2; ++j) {
   //       PRT-A-NEXT:         #pragma acc loop worker{{$}}
-  //      PRT-AO-NEXT:         // #pragma omp parallel for shared(i,j){{$}}
-  //       PRT-O-NEXT:         #pragma omp parallel for shared(i,j){{$}}
+  //      PRT-AO-NEXT:         // #pragma omp parallel for{{$}}
+  //       PRT-O-NEXT:         #pragma omp parallel for{{$}}
   //      PRT-OA-NEXT:         // #pragma acc loop worker{{$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
   //         PRT-NEXT:           {{TGT_PRINTF|printf}}
@@ -696,9 +685,6 @@ int main() {
   //     DMP-NEXT:         ACCSharedClause {{.*}} <implicit>
   //     DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:         impl: OMPDistributeParallelForDirective
-  //     DMP-NEXT:           OMPSharedClause
-  //      DMP-NOT:             <implicit>
-  //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //      DMP-NOT:           OMP
   //          DMP:         ACCLoopDirective
   //     DMP-NEXT:           ACCSeqClause
@@ -739,8 +725,8 @@ int main() {
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop gang worker{{$}}
-  //      PRT-AO-NEXT:       // #pragma omp distribute parallel for shared(i){{$}}
-  //       PRT-O-NEXT:       #pragma omp distribute parallel for shared(i){{$}}
+  //      PRT-AO-NEXT:       // #pragma omp distribute parallel for{{$}}
+  //       PRT-O-NEXT:       #pragma omp distribute parallel for{{$}}
   //      PRT-OA-NEXT:       // #pragma acc loop gang worker{{$}}
   //         PRT-NEXT:       for (int j = 0; j < 4; ++j) {
   //       PRT-A-NEXT:         #pragma acc loop seq
@@ -832,9 +818,6 @@ int main() {
   //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
   //     DMP-NEXT:           impl: OMPSimdDirective
-  //     DMP-NEXT:             OMPSharedClause {{.*}} <implicit>
-  //     DMP-NEXT:               DeclRefExpr {{.*}} 'i' 'int'
-  //     DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
   //      DMP-NOT:             OMP
   //          DMP:             ForStmt
   //      DMP-NOT:               OMP
@@ -943,8 +926,6 @@ int main() {
   //     DMP-NEXT:         ACCSharedClause {{.*}} <implicit>
   //     DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:         impl: OMPDistributeSimdDirective
-  //     DMP-NEXT:           OMPSharedClause {{.*}} <implicit>
-  //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //      DMP-NOT:           OMP
   //          DMP:         ACCLoopDirective
   //     DMP-NEXT:           ACCSeqClause
@@ -1079,9 +1060,6 @@ int main() {
   //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
   //     DMP-NEXT:           impl: OMPSimdDirective
-  //     DMP-NEXT:             OMPSharedClause {{.*}} <implicit>
-  //     DMP-NEXT:               DeclRefExpr {{.*}} 'i' 'int'
-  //     DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
   //      DMP-NOT:             OMP
   //          DMP:             ForStmt
   //      DMP-NOT:               OMP
@@ -1199,9 +1177,6 @@ int main() {
   //     DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:         ACCGangClause {{.*}} <implicit>
   //     DMP-NEXT:         impl: OMPDistributeParallelForSimdDirective
-  //     DMP-NEXT:           OMPSharedClause
-  //      DMP-NOT:             <implicit>
-  //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //      DMP-NOT:           OMP
   //          DMP:         ACCLoopDirective
   //     DMP-NEXT:           ACCSeqClause
@@ -1242,8 +1217,8 @@ int main() {
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop worker vector{{$}}
-  //      PRT-AO-NEXT:       // #pragma omp distribute parallel for simd shared(i){{$}}
-  //       PRT-O-NEXT:       #pragma omp distribute parallel for simd shared(i){{$}}
+  //      PRT-AO-NEXT:       // #pragma omp distribute parallel for simd{{$}}
+  //       PRT-O-NEXT:       #pragma omp distribute parallel for simd{{$}}
   //      PRT-OA-NEXT:       // #pragma acc loop worker vector{{$}}
   //         PRT-NEXT:       for (int j = 0; j < 6; ++j) {
   //       PRT-A-NEXT:         #pragma acc loop seq
@@ -1337,9 +1312,6 @@ int main() {
   //     DMP-NEXT:         ACCSharedClause {{.*}} <implicit>
   //     DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:         impl: OMPParallelForDirective
-  //     DMP-NEXT:           OMPSharedClause
-  //      DMP-NOT:             <implicit>
-  //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //      DMP-NOT:           OMP
   //          DMP:           ForStmt
   //          DMP:         ACCLoopDirective
@@ -1349,9 +1321,6 @@ int main() {
   //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
   //     DMP-NEXT:           impl: OMPSimdDirective
-  //     DMP-NEXT:             OMPSharedClause {{.*}} <implicit>
-  //     DMP-NEXT:               DeclRefExpr {{.*}} 'i' 'int'
-  //     DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
   //      DMP-NOT:             OMP
   //          DMP:             ForStmt
   //      DMP-NOT:               OMP
@@ -1387,8 +1356,8 @@ int main() {
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop worker{{$}}
-  //      PRT-AO-NEXT:       // #pragma omp parallel for shared(i){{$}}
-  //       PRT-O-NEXT:       #pragma omp parallel for shared(i){{$}}
+  //      PRT-AO-NEXT:       // #pragma omp parallel for{{$}}
+  //       PRT-O-NEXT:       #pragma omp parallel for{{$}}
   //      PRT-OA-NEXT:       // #pragma acc loop worker{{$}}
   //         PRT-NEXT:       for (int j = 0; j < 2; ++j) {
   //       PRT-A-NEXT:         #pragma acc loop vector{{$}}
@@ -1468,9 +1437,6 @@ int main() {
   //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
   //     DMP-NEXT:           impl: OMPSimdDirective
-  //     DMP-NEXT:             OMPSharedClause {{.*}} <implicit>
-  //     DMP-NEXT:               DeclRefExpr {{.*}} 'i' 'int'
-  //     DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
   //      DMP-NOT:             OMP
   //          DMP:             ForStmt
   //      DMP-NOT:               OMP
@@ -1596,10 +1562,6 @@ int main() {
   //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
   //     DMP-NEXT:           impl: OMPParallelForSimdDirective
-  //     DMP-NEXT:             OMPSharedClause
-  //      DMP-NOT:               <implicit>
-  //     DMP-NEXT:               DeclRefExpr {{.*}} 'i' 'int'
-  //     DMP-NEXT:               DeclRefExpr {{.*}} 'j' 'int'
   //      DMP-NOT:             OMP
   //          DMP:             ForStmt
   //      DMP-NOT:               OMP
@@ -1642,8 +1604,8 @@ int main() {
   //      PRT-OA-SAME:       {{^$}}
   //         PRT-NEXT:       for (int j = 0; j < 2; ++j) {
   //       PRT-A-NEXT:         #pragma acc loop worker vector{{$}}
-  //      PRT-AO-NEXT:         // #pragma omp parallel for simd shared(i,j){{$}}
-  //       PRT-O-NEXT:         #pragma omp parallel for simd shared(i,j){{$}}
+  //      PRT-AO-NEXT:         // #pragma omp parallel for simd{{$}}
+  //       PRT-O-NEXT:         #pragma omp parallel for simd{{$}}
   //      PRT-OA-NEXT:         // #pragma acc loop worker vector{{$}}
   //         PRT-NEXT:         for (int k = 0; k < 2; ++k)
   //         PRT-NEXT:           {{TGT_PRINTF|printf}}
@@ -1717,9 +1679,6 @@ int main() {
   //     DMP-NEXT:         ACCSharedClause {{.*}} <implicit>
   //     DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
   //     DMP-NEXT:         impl: OMPDistributeParallelForSimdDirective
-  //     DMP-NEXT:           OMPSharedClause
-  //      DMP-NOT:             <implicit>
-  //     DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
   //      DMP-NOT:           OMP
   //          DMP:         ACCLoopDirective
   //     DMP-NEXT:           ACCSeqClause
@@ -1760,8 +1719,8 @@ int main() {
   //
   //         PRT-NEXT:     for (int i = 0; i < 2; ++i) {
   //       PRT-A-NEXT:       #pragma acc loop gang worker vector{{$}}
-  //      PRT-AO-NEXT:       // #pragma omp distribute parallel for simd shared(i){{$}}
-  //       PRT-O-NEXT:       #pragma omp distribute parallel for simd shared(i){{$}}
+  //      PRT-AO-NEXT:       // #pragma omp distribute parallel for simd{{$}}
+  //       PRT-O-NEXT:       #pragma omp distribute parallel for simd{{$}}
   //      PRT-OA-NEXT:       // #pragma acc loop gang worker vector{{$}}
   //         PRT-NEXT:       for (int j = 0; j < 6; ++j) {
   //       PRT-A-NEXT:         #pragma acc loop seq

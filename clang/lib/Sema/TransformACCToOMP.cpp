@@ -1142,29 +1142,7 @@ public:
   OMPClauseResult TransformACCSharedClause(ACCDirectiveStmt *D,
                                            OpenMPDirectiveKind TDKind,
                                            ACCSharedClause *C) {
-    // OpenMP distribute or simd directives without parallel do not accept
-    // shared clauses, so let our implicit OpenACC shared clauses stay implicit
-    // in OpenMP.
-    bool RequireImplicit = (isOpenMPDistributeDirective(TDKind) ||
-                            isOpenMPSimdDirective(TDKind)) &&
-                           !isOpenMPParallelDirective(TDKind);
-    // Currently, there's no such thing as an explicit OpenACC shared clause.
-    // If there were and RequireImplicit=true, we would need to complain to the
-    // user as the OpenMP implementation might not complain unless we print the
-    // generated OpenMP and recompile it.
-    assert(C->getBeginLoc().isInvalid()
-           && "Unexpected explicit OpenACC shared clause");
-    return transformACCVarListClause<ACCSharedClause>(
-        RequireImplicit ? nullptr : D, C, OMPC_shared,
-        // Don't generate shared(this[0:1]) or shared(s.x) or Clang's OpenMP
-        // support will complain as it doesn't support array sections and member
-        // expressions in shared clauses.
-        [](Expr *RefExpr) {
-          ACCDataVar Var(RefExpr);
-          return Var.isCXXThis() || Var.isMember() ? VAR_DISCARD : VAR_PRESERVE;
-        },
-        OMPVarListClauseRebuilder(this,
-                                  &TransformACCToOMP::RebuildOMPSharedClause));
+    return OMPClauseEmpty();
   }
 
   OMPClauseResult TransformACCPrivateClause(ACCDirectiveStmt *D,

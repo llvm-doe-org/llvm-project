@@ -417,7 +417,7 @@ int main(int argc, char *argv[]) {
       #pragma acc loop gang
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
-        // DMP:      ACCLoopDirective
+        //      DMP: ACCLoopDirective
         // DMP-NEXT:   ACCWorkerClause
         // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
         // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
@@ -425,17 +425,17 @@ int main(int argc, char *argv[]) {
         // DMP-NEXT:   impl: OMPParallelForDirective
         // DMP-NEXT:     OMPNum_threadsClause
         // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
-        // DMP-NEXT:     OMPSharedClause
-        // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
+        //  DMP-NOT:     OMP
+        //      DMP:     ForStmt
         //
-        // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker{{$}}
-        // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(1) shared(i){{$}}
-        // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(1) shared(i){{$}}
+        //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker{{$}}
+        // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(1){{$}}
+        //  PRT-O-NEXT: {{^ *}}#pragma omp parallel for num_threads(1){{$}}
         // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker{{$}}
         #pragma acc loop worker
         // PRT-NEXT: for ({{.*}}) {
         for (int j = 0; j < 2; ++j) {
-          // DMP:      ACCLoopDirective
+          //      DMP: ACCLoopDirective
           // DMP-NEXT:   ACCVectorClause
           // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
           // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
@@ -446,10 +446,7 @@ int main(int argc, char *argv[]) {
           // DMP-NEXT:       ConstantExpr {{.*}} 'int'
           // DMP-NEXT:         value: Int 1
           // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
-          // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-          // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-          // DMP-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
-          // DMP-NOT:      OMP
+          //  DMP-NOT:     OMP
           //
           // PRT-A-NEXT:  {{^ *}}#pragma acc loop vector{{$}}
           // PRT-AO-NEXT: {{^ *}}// #pragma omp simd simdlen(1){{$}}
@@ -724,7 +721,7 @@ int main(int argc, char *argv[]) {
       // DMP: ForStmt
       // PRT-NEXT: for ({{.*}}) {
       for (int i = 0; i < 2; ++i) {
-        // DMP:      ACCLoopDirective
+        //      DMP: ACCLoopDirective
         // DMP-NEXT:   ACCWorkerClause
         // DMP-NEXT:   ACCVectorClause
         // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
@@ -737,13 +734,11 @@ int main(int argc, char *argv[]) {
         // DMP-NEXT:       ConstantExpr {{.*}} 'int'
         // DMP-NEXT:         value: Int 3
         // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
-        // DMP-NEXT:     OMPSharedClause {{.*}}
-        // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-        // DMP-NOT:      OMP
+        //  DMP-NOT:     OMP
         //
         // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker vector{{$}}
-        // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(2) simdlen(3) shared(i){{$}}
-        // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(2) simdlen(3) shared(i){{$}}
+        // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(2) simdlen(3){{$}}
+        // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(2) simdlen(3){{$}}
         // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector{{$}}
         #pragma acc loop worker vector
         // PRT-NEXT: for ({{.*}}) {
@@ -919,7 +914,7 @@ int main(int argc, char *argv[]) {
     // DMP: ForStmt
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 2; ++i) {
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCWorkerClause
       // DMP-NEXT:   ACCVectorClause
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
@@ -932,13 +927,11 @@ int main(int argc, char *argv[]) {
       // DMP-NEXT:       ConstantExpr {{.*}} 'int'
       // DMP-NEXT:         value: Int 3
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 3
-      // DMP-NEXT:     OMPSharedClause {{.*}}
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker vector{{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(2) simdlen(3) shared(i){{$}}
-      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(2) simdlen(3) shared(i){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(2) simdlen(3){{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for simd num_threads(2) simdlen(3){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector{{$}}
       #pragma acc loop worker vector
       // PRT-NEXT: for ({{.*}}) {
@@ -1312,7 +1305,7 @@ int main(int argc, char *argv[]) {
   {
     // PRT-NEXT: int nw = 1;
     int nw = 1;
-    // DMP:      ACCParallelLoopDirective
+    //      DMP: ACCParallelLoopDirective
     // DMP-NEXT:   ACCGangClause
     // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
@@ -1342,14 +1335,14 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:       OMPTargetTeamsDirective
     // DMP-NEXT:         OMPNum_teamsClause
     // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
-    // DMP-NOT:          OMP
-    // DMP:              CapturedStmt
-    // DMP:          ACCLoopDirective
+    //  DMP-NOT:         OMP
+    //      DMP:         CapturedStmt
+    //      DMP:     ACCLoopDirective
     // DMP-NEXT:       ACCGangClause
     // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:       impl: OMPDistributeDirective
-    // DMP:            ForStmt
-    // DMP:              ACCLoopDirective
+    //      DMP:       ForStmt
+    //      DMP:         ACCLoopDirective
     // DMP-NEXT:           ACCVectorClause
     // DMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:           ACCSharedClause {{.*}} <implicit>
@@ -1359,11 +1352,9 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:               ConstantExpr {{.*}} 'int'
     // DMP-NEXT:                 value: Int 1
     // DMP-NEXT:                 IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:             OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NOT:              OMP
-    // DMP:                  ForStmt
-    // DMP:                    CallExpr
+    //  DMP-NOT:             OMP
+    //      DMP:             ForStmt
+    //      DMP:               CallExpr
     //
     // PRT-NOACC-NEXT: for ({{.*}}) {
     // PRT-NOACC-NEXT:   for ({{.*}}) {
@@ -1534,41 +1525,41 @@ int main(int argc, char *argv[]) {
     // PRT-NEXT: int nw = {{.*}};
     int nw = atoi(argv[1]);
 
-    // DMP:      ACCParallelLoopDirective
+    //      DMP: ACCParallelLoopDirective
     // DMP-NEXT:   ACCWorkerClause
     // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   ACCNumWorkersClause
-    // DMP:          DeclRefExpr {{.*}} 'nw' 'int'
+    //      DMP:     DeclRefExpr {{.*}} 'nw' 'int'
     // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   effect: ACCParallelDirective
     // DMP-NEXT:     ACCNumGangsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:     ACCNumWorkersClause
-    // DMP:            DeclRefExpr {{.*}} 'nw' 'int'
+    //      DMP:       DeclRefExpr {{.*}} 'nw' 'int'
     // DMP-NEXT:     ACCVectorLengthClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:     impl: CompoundStmt
     // DMP-NEXT:       DeclStmt
     // DMP-NEXT:         VarDecl {{.*}} __clang_acc_num_workers__ 'const int'
-    // DMP:                DeclRefExpr {{.*}} 'nw' 'int'
+    //      DMP:           DeclRefExpr {{.*}} 'nw' 'int'
     // DMP-NEXT:       OMPTargetTeamsDirective
     // DMP-NEXT:         OMPNum_teamsClause
     // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:         OMPFirstprivateClause {{.*}} <implicit>
     // DMP-NEXT:           DeclRefExpr {{.*}} '__clang_acc_num_workers__' 'const int'
-    // DMP-NOT:          OMP
-    // DMP:              CapturedStmt
-    // DMP:          ACCLoopDirective
+    //  DMP-NOT:         OMP
+    //      DMP:         CapturedStmt
+    //      DMP:     ACCLoopDirective
     // DMP-NEXT:       ACCWorkerClause
     // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:       impl: OMPDistributeParallelForDirective
     // DMP-NEXT:         OMPNum_threadsClause
     // DMP-NEXT:           DeclRefExpr {{.*}} '__clang_acc_num_workers__' 'const int'
-    // DMP:            ForStmt
-    // DMP:              ACCLoopDirective
+    //      DMP:       ForStmt
+    //      DMP:         ACCLoopDirective
     // DMP-NEXT:           ACCVectorClause
     // DMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:           ACCSharedClause {{.*}} <implicit>
@@ -1578,11 +1569,9 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:               ConstantExpr {{.*}} 'int'
     // DMP-NEXT:                 value: Int 1
     // DMP-NEXT:                 IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:             OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:               DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NOT:              OMP
-    // DMP:                  ForStmt
-    // DMP:                    CallExpr
+    //  DMP-NOT:             OMP
+    //      DMP:             ForStmt
+    //      DMP:               CallExpr
     //
     // PRT-NOACC-NEXT: for ({{.*}}) {
     // PRT-NOACC-NEXT:   for ({{.*}}) {
@@ -1654,44 +1643,44 @@ int main(int argc, char *argv[]) {
 
   // PRT-NEXT: {
   {
-    // DMP:      ACCParallelDirective
+    //      DMP: ACCParallelDirective
     // DMP-NEXT:   ACCNumGangsClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   ACCNumWorkersClause
     // DMP-NEXT:     CallExpr
-    // DMP:            DeclRefExpr {{.*}} 'foo'
+    //      DMP:       DeclRefExpr {{.*}} 'foo'
     // DMP-NEXT:   ACCVectorLengthClause
     // DMP-NEXT:     IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:   impl: CompoundStmt
     // DMP-NEXT:     DeclStmt
     // DMP-NEXT:       VarDecl {{.*}} __clang_acc_num_workers__ 'const int'
     // DMP-NEXT:         CallExpr
-    // DMP:                DeclRefExpr {{.*}} 'foo'
+    //      DMP:           DeclRefExpr {{.*}} 'foo'
     // DMP-NEXT:     OMPTargetTeamsDirective
     // DMP-NEXT:       OMPNum_teamsClause
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:       OMPFirstprivateClause {{.*}} <implicit>
     // DMP-NEXT:         DeclRefExpr {{.*}} '__clang_acc_num_workers__' 'const int'
-    // DMP-NOT:        OMP
-    // DMP:        CompoundStmt
-    // DMP:          ACCLoopDirective
+    //  DMP-NOT:       OMP
+    //      DMP:   CompoundStmt
+    //      DMP:     ACCLoopDirective
     // DMP-NEXT:       ACCSeqClause
     // DMP-NEXT:       impl: ForStmt
-    // DMP:            ACCLoopDirective
+    //      DMP:       ACCLoopDirective
     // DMP-NEXT:         ACCGangClause
     // DMP-NEXT:         ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:         ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:           DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:         impl: OMPDistributeDirective
-    // DMP-NEXT:           OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
-    // DMP:              ACCLoopDirective
+    //  DMP-NOT:           OMP
+    //      DMP:           ForStmt
+    //      DMP:         ACCLoopDirective
     // DMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:           ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:             DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:             DeclRefExpr {{.*}} 'j' 'int'
     // DMP-NEXT:           impl: ForStmt
-    // DMP:                ACCLoopDirective
+    //      DMP:           ACCLoopDirective
     // DMP-NEXT:             ACCWorkerClause
     // DMP-NEXT:             ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
@@ -1701,11 +1690,9 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:             impl: OMPParallelForDirective
     // DMP-NEXT:               OMPNum_threadsClause
     // DMP-NEXT:                 DeclRefExpr {{.*}} '__clang_acc_num_workers__' 'const int'
-    // DMP-NEXT:               OMPSharedClause {{.*}}
-    // DMP-NEXT:                 DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NEXT:                 DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:                 DeclRefExpr {{.*}} 'k' 'int'
-    // DMP:                  ACCLoopDirective
+    //  DMP-NOT:               OMP
+    //      DMP:               ForStmt
+    //      DMP:             ACCLoopDirective
     // DMP-NEXT:               ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:               ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:                 DeclRefExpr {{.*}} 'i' 'int'
@@ -1713,7 +1700,7 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:                 DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:                 DeclRefExpr {{.*}} 'l' 'int'
     // DMP-NEXT:               impl: ForStmt
-    // DMP:                    ACCLoopDirective
+    //      DMP:               ACCLoopDirective
     // DMP-NEXT:                 ACCVectorClause
     // DMP-NEXT:                 ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:                 ACCSharedClause {{.*}} <implicit>
@@ -1727,14 +1714,8 @@ int main(int argc, char *argv[]) {
     // DMP-NEXT:                     ConstantExpr {{.*}} 'int'
     // DMP-NEXT:                       value: Int 1
     // DMP-NEXT:                       IntegerLiteral {{.*}} 'int' 1
-    // DMP-NEXT:                   OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:                     DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NEXT:                     DeclRefExpr {{.*}} 'j' 'int'
-    // DMP-NEXT:                     DeclRefExpr {{.*}} 'k' 'int'
-    // DMP-NEXT:                     DeclRefExpr {{.*}} 'l' 'int'
-    // DMP-NEXT:                     DeclRefExpr {{.*}} 'm' 'int'
-    // DMP-NOT:                    OMP
-    // DMP:            CallExpr
+    //  DMP-NOT:                   OMP
+    //      DMP:       CallExpr
     //
     // PRT-NOACC-NEXT: {
     // PRT-NOACC-NEXT:   for (int i = 0; i < 2; ++i) {
@@ -1781,7 +1762,7 @@ int main(int argc, char *argv[]) {
     // PRT-AO-NEXT:    //       #pragma omp distribute{{$}}
     // PRT-AO-NEXT:    //       for (int j = 0; j < 1; ++j) {
     // PRT-AO-NEXT:    //         for (int k = 0; k < 2; ++k) {
-    // PRT-AO-NEXT:    //           #pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(i,j,k){{$}}
+    // PRT-AO-NEXT:    //           #pragma omp parallel for num_threads(__clang_acc_num_workers__){{$}}
     // PRT-AO-NEXT:    //           for (int l = 0; l < 2; ++l) {
     // PRT-AO-NEXT:    //             for (int m = 0; m < 2; ++m) {
     // PRT-AO-NEXT:    //               #pragma omp simd simdlen(1){{$}}
@@ -1804,7 +1785,7 @@ int main(int argc, char *argv[]) {
     // PRT-O-NEXT:           {{^ *}}#pragma omp distribute{{$}}
     // PRT-O-NEXT:           for (int j = 0; j < 1; ++j) {
     // PRT-O-NEXT:             for (int k = 0; k < 2; ++k) {
-    // PRT-O-NEXT:               {{^ *}}#pragma omp parallel for num_threads(__clang_acc_num_workers__) shared(i,j,k){{$}}
+    // PRT-O-NEXT:               {{^ *}}#pragma omp parallel for num_threads(__clang_acc_num_workers__){{$}}
     // PRT-O-NEXT:               for (int l = 0; l < 2; ++l) {
     // PRT-O-NEXT:                 for (int m = 0; m < 2; ++m) {
     // PRT-O-NEXT:                   {{^ *}}#pragma omp simd simdlen(1){{$}}

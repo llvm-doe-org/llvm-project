@@ -48,8 +48,8 @@ public:
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:       <<<NULL>>>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    //  DMP-NOT:   OMP
-    //      DMP:   ForStmt
+    //  DMP-NOT:     OMP
+    //      DMP:     ForStmt
     //
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCSeqClause
@@ -125,8 +125,8 @@ public:
     // DMP-NEXT:     OMPReductionClause
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} OMPCapturedExpr {{.*}} 'i'
-    //  DMP-NOT:   OMP
-    //      DMP:   ForStmt
+    //  DMP-NOT:     OMP
+    //      DMP:     ForStmt
     //
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCGangClause
@@ -141,8 +141,8 @@ public:
     // DMP-NEXT:     OMPReductionClause
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} OMPCapturedExpr {{.*}} 'j'
-    //  DMP-NOT:   OMP
-    //      DMP:   ForStmt
+    //  DMP-NOT:     OMP
+    //      DMP:     ForStmt
     //
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCGangClause
@@ -157,8 +157,8 @@ public:
     // DMP-NEXT:     OMPReductionClause
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} OMPCapturedExpr {{.*}} 'k'
-    //  DMP-NOT:   OMP
-    //      DMP:   ForStmt
+    //  DMP-NOT:     OMP
+    //      DMP:     ForStmt
     //
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCGangClause
@@ -173,8 +173,8 @@ public:
     // DMP-NEXT:     OMPReductionClause
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} OMPCapturedExpr {{.*}} 'l'
-    //  DMP-NOT:   OMP
-    //      DMP:   ForStmt
+    //  DMP-NOT:     OMP
+    //      DMP:     ForStmt
     //
     //             PRT: this->l =
     //             PRT: {
@@ -256,8 +256,8 @@ public:
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:       <<<NULL>>>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    //  DMP-NOT:   OMP
-    //      DMP:   ForStmt
+    //  DMP-NOT:     OMP
+    //      DMP:     ForStmt
     //
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCSeqClause
@@ -323,8 +323,8 @@ public:
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
     // DMP-NEXT:       <<<NULL>>>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    //  DMP-NOT:   OMP
-    //      DMP:   ForStmt
+    //  DMP-NOT:     OMP
+    //      DMP:     ForStmt
     //
     //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCSeqClause
@@ -392,8 +392,8 @@ public:
     // DMP-NEXT:     DeclRefExpr {{.*}} 'local'
     // DMP-NEXT:   ACCGangClause
     //      DMP:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'local'
+    //  DMP-NOT:     OMP
+    //      DMP:     ForStmt
     //
     //         PRT: local.l = {{.}};
     //         PRT: {
@@ -442,8 +442,8 @@ public:
     // DMP-NEXT:       <<<NULL>>> 
     // DMP-NEXT:   ACCGangClause
     //      DMP:   impl: OMPDistributeDirective
-    //  DMP-NOT:   OMP
-    //      DMP:   ForStmt
+    //  DMP-NOT:     OMP
+    //      DMP:     ForStmt
     //
     //         PRT: l = {{.}};
     //         PRT: {

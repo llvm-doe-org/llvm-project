@@ -355,8 +355,8 @@ void fullRewriteOuterDirOnly() {
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
-  // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr){{$}}
+  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i) {
   // PRT-AO-NEXT:  //                 var = 5;
   // PRT-AO-NEXT:  //                 var = non_const_expr;
@@ -367,8 +367,8 @@ void fullRewriteOuterDirOnly() {
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
-  //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr)
-  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr){{$}}
+  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i) {
   //  PRT-O-NEXT:                  var = 5;
   //  PRT-O-NEXT:                  var = non_const_expr;
@@ -443,8 +443,8 @@ void fullRewriteOuterDirOnly() {
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
-  // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr){{$}}
+  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 var = non_const_expr;
   // PRT-AO-NEXT:  // }
@@ -453,8 +453,8 @@ void fullRewriteOuterDirOnly() {
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
-  //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr)
-  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr){{$}}
+  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  var = non_const_expr;
   //  PRT-O-NEXT:  }
@@ -515,8 +515,8 @@ void fullRewriteOuterDirOnly() {
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
   // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
-  // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr){{$}}
+  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 var = (non_const_expr);
   // PRT-AO-NEXT:  // }
@@ -525,8 +525,8 @@ void fullRewriteOuterDirOnly() {
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
   //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
-  //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr)
-  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__) shared(var,non_const_expr)
+  //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr){{$}}
+  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  var = (non_const_expr);
   //  PRT-O-NEXT:  }
@@ -1073,8 +1073,8 @@ void fullRewriteInnerDirOnly() {
   #undef MAC
 
   //  PRT-A-NEXT:  #pragma acc parallel loop worker
-  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  // #pragma omp distribute parallel for shared(var,non_const_expr)
+  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr){{$}}
+  // PRT-AO-NEXT:  // #pragma omp distribute parallel for{{$}}
   //  PRT-A-NEXT:  for (int j = 0; j < 5; ++j) {
   // PRT-AO-NEXT:    // v----------ACC----------v
   //  PRT-A-NEXT:    #pragma acc loop vector
@@ -1094,8 +1094,8 @@ void fullRewriteInnerDirOnly() {
   // PRT-AO-NEXT:    // ^----------OMP----------^
   //  PRT-A-NEXT:  }
   //
-  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr)
-  //  PRT-O-NEXT:  #pragma omp distribute parallel for shared(var,non_const_expr)
+  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr){{$}}
+  //  PRT-O-NEXT:  #pragma omp distribute parallel for{{$}}
   // PRT-OA-NEXT:  // #pragma acc parallel loop worker
   //  PRT-O-NEXT:  for (int j = 0; j < 5; ++j) {
   // PRT-OA-NEXT:    // v----------OMP----------v
@@ -1129,8 +1129,8 @@ void fullRewriteInnerDirOnly() {
 
   // Preceding token is a descendant.
   //  PRT-A-NEXT:  #pragma acc parallel loop worker
-  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  // #pragma omp distribute parallel for shared(var,non_const_expr)
+  // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr){{$}}
+  // PRT-AO-NEXT:  // #pragma omp distribute parallel for{{$}}
   //  PRT-A-NEXT:  for (int j = 0; j < 5; ++j) {
   // PRT-AO-NEXT:    // v----------ACC----------v
   //  PRT-A-NEXT:    #pragma acc loop vector
@@ -1146,8 +1146,8 @@ void fullRewriteInnerDirOnly() {
   // PRT-AO-NEXT:    // ^----------OMP----------^
   //  PRT-A-NEXT:  }
   //
-  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr)
-  //  PRT-O-NEXT:  #pragma omp distribute parallel for shared(var,non_const_expr)
+  //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr){{$}}
+  //  PRT-O-NEXT:  #pragma omp distribute parallel for{{$}}
   // PRT-OA-NEXT:  // #pragma acc parallel loop worker
   //  PRT-O-NEXT:  for (int j = 0; j < 5; ++j) {
   // PRT-OA-NEXT:    // v----------OMP----------v

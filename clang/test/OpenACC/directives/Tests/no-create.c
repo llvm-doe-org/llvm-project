@@ -1026,11 +1026,11 @@ CASE(caseDataSubarrayNonSubarray) {
 //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
 // PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: x){{$}}
 //  PRT-A-NEXT:   #pragma acc parallel no_create(x){{$}}
-// PRT-AO-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: x){{$}}
 //
 //  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: x){{$}}
 // PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
-//  PRT-O-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: x){{$}}
 // PRT-OA-NEXT:   // #pragma acc parallel no_create(x){{$}}
 //
 //    PRT-NEXT:   ;
@@ -1399,9 +1399,6 @@ CASE(caseParallelMemberFullStruct) {
 //  DMP-NEXT:       OMPMapClause
 //   DMP-NOT:         <implicit>
 //  DMP-NEXT:         DeclRefExpr {{.*}} 's' 'struct S'
-//  DMP-NEXT:       OMPSharedClause
-//   DMP-NOT:         <implicit>
-//  DMP-NEXT:         DeclRefExpr {{.*}} 's' 'struct S'
 //  DMP-NEXT:       OMPFirstprivateClause
 //   DMP-NOT:         <implicit>
 //  DMP-NEXT:         DeclRefExpr {{.*}} 'use' 'int'
@@ -1412,11 +1409,11 @@ CASE(caseParallelMemberFullStruct) {
 //  PRT-A-NEXT:   #pragma acc data copy(s.p){{$}}
 // PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: s.p){{$}}
 //  PRT-A-NEXT:   #pragma acc parallel no_create(s){{$}}
-// PRT-AO-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: s) shared(s) firstprivate(use){{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: s) firstprivate(use){{$}}
 //
 //  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: s.p){{$}}
 // PRT-OA-NEXT:   // #pragma acc data copy(s.p){{$}}
-//  PRT-O-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: s) shared(s) firstprivate(use){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: s) firstprivate(use){{$}}
 // PRT-OA-NEXT:   // #pragma acc parallel no_create(s){{$}}
 //
 //    PRT-NEXT:   if (use)
@@ -1704,8 +1701,6 @@ CASE(caseParallelSubarrayNonSubarray) {
 //  DMP-NEXT:           DeclRefExpr {{.*}} 'x' 'int'
 //  DMP-NEXT:         ACCGangClause {{.*}} <implicit>
 //  DMP-NEXT:         impl: OMPDistributeDirective
-//  DMP-NEXT:           OMPSharedClause {{.*}} <implicit>
-//  DMP-NEXT:             DeclRefExpr {{.*}} 'x' 'int'
 //   DMP-NOT:           OMP
 //       DMP:           ForStmt
 //
@@ -1715,12 +1710,12 @@ CASE(caseParallelSubarrayNonSubarray) {
 //  PRT-A-NEXT:   #pragma acc data copy(x){{$}}
 // PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: x){{$}}
 //  PRT-A-NEXT:   #pragma acc parallel loop no_create(x){{$}}
-// PRT-AO-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams map([[NO_CREATE_MT]]: x){{$}}
 // PRT-AO-NEXT:   // #pragma omp distribute{{$}}
 //
 //  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: x){{$}}
 // PRT-OA-NEXT:   // #pragma acc data copy(x){{$}}
-//  PRT-O-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: x) shared(x){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams map([[NO_CREATE_MT]]: x){{$}}
 //  PRT-O-NEXT:   #pragma omp distribute{{$}}
 // PRT-OA-NEXT:   // #pragma acc parallel loop no_create(x){{$}}
 //
@@ -1819,8 +1814,6 @@ CASE(caseConstAbsent) {
 //  DMP-NEXT:       impl: OMPTargetTeamsDirective
 //  DMP-NEXT:         OMPMapClause
 //  DMP-NEXT:           DeclRefExpr {{.*}} 'x' 'int'
-//  DMP-NEXT:         OMPSharedClause
-//  DMP-NEXT:           DeclRefExpr {{.*}} 'x' 'int'
 //   DMP-NOT:         OMP{{.*}}Clause
 //
 //   PRT-LABEL: {{.*}}caseInheritedPresent{{.*}} {
@@ -1831,13 +1824,13 @@ CASE(caseConstAbsent) {
 //  PRT-A-NEXT:   #pragma acc data no_create(x){{$}}
 // PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
 //  PRT-A-NEXT:   #pragma acc parallel{{$}}
-// PRT-AO-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x){{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x){{$}}
 //
 //  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,alloc: x){{$}}
 // PRT-OA-NEXT:   // #pragma acc data create(x){{$}}
 //  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
 // PRT-OA-NEXT:   // #pragma acc data no_create(x){{$}}
-//  PRT-O-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x){{$}}
 // PRT-OA-NEXT:   // #pragma acc parallel{{$}}
 //
 //    PRT-NEXT:   x = 1;
@@ -1881,8 +1874,6 @@ CASE(caseInheritedPresent) {
 //  DMP-NEXT:     impl: OMPTargetTeamsDirective
 //  DMP-NEXT:       OMPMapClause
 //  DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
-//  DMP-NEXT:       OMPSharedClause
-//  DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'int'
 //  DMP-NEXT:       OMPFirstprivateClause
 //  DMP-NEXT:         DeclRefExpr {{.*}} 'use' 'int'
 //
@@ -1893,11 +1884,11 @@ CASE(caseInheritedPresent) {
 //  PRT-A-NEXT:   #pragma acc data no_create(x){{$}}
 // PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
 //  PRT-A-NEXT:   #pragma acc parallel{{$}}
-// PRT-AO-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x) firstprivate(use){{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) firstprivate(use){{$}}
 //
 //  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: x){{$}}
 // PRT-OA-NEXT:   // #pragma acc data no_create(x){{$}}
-//  PRT-O-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) shared(x) firstprivate(use){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: x) firstprivate(use){{$}}
 // PRT-OA-NEXT:   // #pragma acc parallel{{$}}
 //
 //    PRT-NEXT:   if (use)
@@ -1935,13 +1926,13 @@ CASE(caseInheritedAbsent) {
 //  PRT-A-NEXT:   #pragma acc data no_create(arr[1:2],p[2:1],p2){{$}}
 // PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1],p2){{$}}
 //  PRT-A-NEXT:   #pragma acc parallel num_gangs(1){{$}}
-// PRT-AO-NEXT:   // #pragma omp target teams num_teams(1) map([[INHERITED_NO_CREATE_MT]]: arr[0:0],p[0:0],p2) shared(arr,p,p2){{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams num_teams(1) map([[INHERITED_NO_CREATE_MT]]: arr[0:0],p[0:0],p2){{$}}
 //
 //  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: arr,p[0:5],p2){{$}}
 // PRT-OA-NEXT:   // #pragma acc data copy(arr,p[0:5],p2){{$}}
 //  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1],p2){{$}}
 // PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2],p[2:1],p2){{$}}
-//  PRT-O-NEXT:   #pragma omp target teams num_teams(1) map([[INHERITED_NO_CREATE_MT]]: arr[0:0],p[0:0],p2) shared(arr,p,p2){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams num_teams(1) map([[INHERITED_NO_CREATE_MT]]: arr[0:0],p[0:0],p2){{$}}
 // PRT-OA-NEXT:   // #pragma acc parallel num_gangs(1){{$}}
 //
 //    PRT-NEXT:   {
@@ -2011,11 +2002,11 @@ CASE(caseInheritedSubarrayPresent) {
 //  PRT-A-NEXT:   #pragma acc data no_create(arr[1:2],p[2:1],p2){{$}}
 // PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1],p2){{$}}
 //  PRT-A-NEXT:   #pragma acc parallel{{$}}
-// PRT-AO-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr[0:0],p[0:0],p2) shared(arr,p,p2) firstprivate(use){{$}}
+// PRT-AO-NEXT:   // #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr[0:0],p[0:0],p2) firstprivate(use){{$}}
 //
 //  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[1:2],p[2:1],p2){{$}}
 // PRT-OA-NEXT:   // #pragma acc data no_create(arr[1:2],p[2:1],p2){{$}}
-//  PRT-O-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr[0:0],p[0:0],p2) shared(arr,p,p2) firstprivate(use){{$}}
+//  PRT-O-NEXT:   #pragma omp target teams map([[INHERITED_NO_CREATE_MT]]: arr[0:0],p[0:0],p2) firstprivate(use){{$}}
 // PRT-OA-NEXT:   // #pragma acc parallel{{$}}
 //
 //    PRT-NEXT:   if (use) {

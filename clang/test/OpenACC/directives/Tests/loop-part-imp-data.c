@@ -348,18 +348,14 @@ int main() {
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    // DMP-NEXT:     OMPSharedClause
-    //  DMP-NOT:       <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:     OMPFirstprivateClause
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
     //      DMP:     CompoundStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
     //    PRT-NEXT: {
     #pragma acc parallel num_gangs(3)
@@ -502,18 +498,14 @@ int main() {
     //       DMP-NOT:       <implicit>
     //      DMP-NEXT:       DeclRefExpr {{.*}} 'save'
     //      DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    //      DMP-NEXT:     OMPSharedClause
-    //       DMP-NOT:       <implicit>
-    //      DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-    //      DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     //      DMP-NEXT:     OMPFirstprivateClause
     //       DMP-NOT:       <implicit>
     //      DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
     //           DMP:     CompoundStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
     //    PRT-NEXT: {
     #pragma acc parallel num_gangs(3)
@@ -754,18 +746,14 @@ int main() {
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    // DMP-NEXT:     OMPSharedClause
-    //  DMP-NOT:       <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:     OMPFirstprivateClause
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
     //      DMP:     CompoundStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
     //    PRT-NEXT: {
     #pragma acc parallel num_gangs(3)
@@ -1016,18 +1004,14 @@ int main() {
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    // DMP-NEXT:     OMPSharedClause
-    //  DMP-NOT:       <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:     OMPFirstprivateClause
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
     //      DMP:     CompoundStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
     //    PRT-NEXT: {
     #pragma acc parallel num_gangs(3)
@@ -1278,18 +1262,14 @@ int main() {
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    // DMP-NEXT:     OMPSharedClause
-    //  DMP-NOT:       <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:     OMPFirstprivateClause
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
     //      DMP:     CompoundStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
     //    PRT-NEXT: {
     #pragma acc parallel num_gangs(3)
@@ -1552,18 +1532,14 @@ int main() {
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    // DMP-NEXT:     OMPSharedClause
-    //  DMP-NOT:       <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:     OMPFirstprivateClause
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
     //      DMP:     CompoundStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
     //    PRT-NEXT: {
     #pragma acc parallel num_gangs(3)
@@ -1583,11 +1559,7 @@ int main() {
       //         DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
       // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
       //         DMP-NEXT:   impl: OMPDistributeDirective
-      //         DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
+      //          DMP-NOT:     OMP
       //              DMP:     ForStmt
       //
       //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -1650,8 +1622,7 @@ int main() {
       //         DMP-NEXT:     OMPPrivateClause
       //          DMP-NOT:       <implicit>
       //         DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
-      //         DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'l' 'int'
+      //          DMP-NOT:     OMP
       //              DMP:     ForStmt
       //
       //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -1709,8 +1680,7 @@ int main() {
       //         DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
       // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
       //         DMP-NEXT:   impl: OMPDistributeDirective
-      //         DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+      //          DMP-NOT:     OMP
       //              DMP:     ForStmt
       //
       //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -1821,18 +1791,14 @@ int main() {
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    // DMP-NEXT:     OMPSharedClause
-    //  DMP-NOT:       <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:     OMPFirstprivateClause
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
     //      DMP:     CompoundStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
     //    PRT-NEXT: {
     #pragma acc parallel num_gangs(3)
@@ -1851,11 +1817,7 @@ int main() {
       //         DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
       // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
       //         DMP-NEXT:   impl: OMPDistributeParallelForDirective
-      //         DMP-NEXT:     OMPSharedClause
-      //          DMP-NOT:       <implicit>
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
+      //          DMP-NOT:     OMP
       //              DMP:     ForStmt
       //
       //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -1863,8 +1825,8 @@ int main() {
       //   PRT-A-AST-IND-SAME: {{^ }}independent
       //  PRT-A-AST-GANG-SAME: {{^ }}gang
       //           PRT-A-SAME: {{^ }}worker{{$}}
-      //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for shared(save,loopOnly,loopOnlyArr){{$}}
-      //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for shared(save,loopOnly,loopOnlyArr){{$}}
+      //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+      //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
       //          PRT-OA-NEXT: {{^ *}}// #pragma acc loop
       //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT GANG
       //  PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -1953,9 +1915,7 @@ int main() {
       //         DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
       // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
       //         DMP-NEXT:   impl: OMPDistributeParallelForDirective
-      //         DMP-NEXT:     OMPSharedClause
-      //          DMP-NOT:       <implicit>
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+      //          DMP-NOT:     OMP
       //              DMP:     ForStmt
       //
       //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -1963,8 +1923,8 @@ int main() {
       //   PRT-A-AST-IND-SAME: {{^ }}independent
       //  PRT-A-AST-GANG-SAME: {{^ }}gang
       //           PRT-A-SAME: {{^ }}worker{{$}}
-      //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for shared(k){{$}}
-      //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for shared(k){{$}}
+      //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+      //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
       //          PRT-OA-NEXT: {{^ *}}// #pragma acc loop
       //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT GANG
       //  PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -2054,18 +2014,14 @@ int main() {
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    // DMP-NEXT:     OMPSharedClause
-    //  DMP-NOT:       <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:     OMPFirstprivateClause
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
     //      DMP:     CompoundStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
     //    PRT-NEXT: {
     #pragma acc parallel num_gangs(3)
@@ -2084,10 +2040,7 @@ int main() {
       //         DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
       // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
       //         DMP-NEXT:   impl: OMPDistributeSimdDirective
-      //         DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
+      //          DMP-NOT:     OMP
       //              DMP:     ForStmt
       //
       //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -2212,8 +2165,7 @@ int main() {
       //         DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
       // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
       //         DMP-NEXT:   impl: OMPDistributeSimdDirective
-      //         DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+      //          DMP-NOT:     OMP
       //              DMP:     ForStmt
       //
       //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -2312,18 +2264,14 @@ int main() {
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    // DMP-NEXT:     OMPSharedClause
-    //  DMP-NOT:       <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:     OMPFirstprivateClause
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
     //      DMP:     CompoundStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(3){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(3){{$}}
     //    PRT-NEXT: {
     #pragma acc parallel num_gangs(3)
@@ -2344,11 +2292,7 @@ int main() {
       //         DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
       // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
       //         DMP-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      //         DMP-NEXT:     OMPSharedClause
-      //          DMP-NOT:       <implicit>
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int'
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
+      //          DMP-NOT:     OMP
       //              DMP:     ForStmt
       //
       //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -2356,8 +2300,8 @@ int main() {
       //   PRT-A-AST-IND-SAME: {{^ }}independent
       //  PRT-A-AST-GANG-SAME: {{^ }}gang
       //           PRT-A-SAME: {{^ }}worker vector{{$}}
-      //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd shared(save,loopOnly,loopOnlyArr){{$}}
-      //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd shared(save,loopOnly,loopOnlyArr){{$}}
+      //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd{{$}}
+      //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd{{$}}
       //          PRT-OA-NEXT: {{^ *}}// #pragma acc loop
       //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT GANG
       //  PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -2479,9 +2423,7 @@ int main() {
       //         DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
       // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
       //         DMP-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      //         DMP-NEXT:     OMPSharedClause
-      //          DMP-NOT:       <implicit>
-      //         DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+      //          DMP-NOT:     OMP
       //              DMP:     ForStmt
       //
       //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -2489,8 +2431,8 @@ int main() {
       //   PRT-A-AST-IND-SAME: {{^ }}independent
       //  PRT-A-AST-GANG-SAME: {{^ }}gang
       //           PRT-A-SAME: {{^ }}worker vector{{$}}
-      //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd shared(k){{$}}
-      //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd shared(k){{$}}
+      //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd{{$}}
+      //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd{{$}}
       //          PRT-OA-NEXT: {{^ *}}// #pragma acc loop
       //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT GANG
       //  PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -2606,10 +2548,6 @@ int main() {
     //  DMP-NOT:         <implicit>
     // DMP-NEXT:         DeclRefExpr {{.*}} 'save'
     // DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    // DMP-NEXT:       OMPSharedClause
-    //  DMP-NOT:         <implicit>
-    // DMP-NEXT:         DeclRefExpr {{.*}} 'save'
-    // DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NEXT:       OMPFirstprivateClause
     //  DMP-NOT:         <implicit>
     // DMP-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
@@ -2625,8 +2563,8 @@ int main() {
     // DMP-NEXT:       impl: ForStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(3) seq{{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(3) seq{{$}}
     //    PRT-NEXT: for ({{.*}}) {
     //         PRT: }
@@ -2766,10 +2704,6 @@ int main() {
     //       DMP-NOT:         <implicit>
     //      DMP-NEXT:         DeclRefExpr {{.*}} 'save'
     //      DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    //      DMP-NEXT:       OMPSharedClause
-    //       DMP-NOT:         <implicit>
-    //      DMP-NEXT:         DeclRefExpr {{.*}} 'save'
-    //      DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     //      DMP-NEXT:       OMPFirstprivateClause
     //       DMP-NOT:         <implicit>
     //      DMP-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
@@ -2790,8 +2724,8 @@ int main() {
     //       PRT-A-SRC-SAME: {{^ }}GANG
     //  PRT-A-AST-GANG-SAME: {{^ }}gang
     //           PRT-A-SAME: {{^$}}
-    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
-    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
     //          PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(3) auto
     //      PRT-OA-SRC-SAME: {{^ }}GANG
     // PRT-OA-AST-GANG-SAME: {{^ }}gang
@@ -2982,10 +2916,6 @@ int main() {
     //       DMP-NOT:         <implicit>
     //      DMP-NEXT:         DeclRefExpr {{.*}} 'save'
     //      DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    //      DMP-NEXT:       OMPSharedClause
-    //       DMP-NOT:         <implicit>
-    //      DMP-NEXT:         DeclRefExpr {{.*}} 'save'
-    //      DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     //      DMP-NEXT:       OMPFirstprivateClause
     //       DMP-NOT:         <implicit>
     //      DMP-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
@@ -3008,8 +2938,8 @@ int main() {
     //       PRT-A-SRC-SAME: {{^ }}GANG
     //  PRT-A-AST-GANG-SAME: {{^ }}gang
     //           PRT-A-SAME: {{^ }}worker{{$}}
-    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
-    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
     //          PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(3) auto
     //      PRT-OA-SRC-SAME: {{^ }}GANG
     // PRT-OA-AST-GANG-SAME: {{^ }}gang
@@ -3204,10 +3134,6 @@ int main() {
     //       DMP-NOT:         <implicit>
     //      DMP-NEXT:         DeclRefExpr {{.*}} 'save'
     //      DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    //      DMP-NEXT:       OMPSharedClause
-    //       DMP-NOT:         <implicit>
-    //      DMP-NEXT:         DeclRefExpr {{.*}} 'save'
-    //      DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     //      DMP-NEXT:       OMPFirstprivateClause
     //       DMP-NOT:         <implicit>
     //      DMP-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
@@ -3230,8 +3156,8 @@ int main() {
     //       PRT-A-SRC-SAME: {{^ }}GANG
     //  PRT-A-AST-GANG-SAME: {{^ }}gang
     //           PRT-A-SAME: {{^ }}vector{{$}}
-    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
-    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
     //          PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(3) auto
     //      PRT-OA-SRC-SAME: {{^ }}GANG
     // PRT-OA-AST-GANG-SAME: {{^ }}gang
@@ -3428,10 +3354,6 @@ int main() {
     //       DMP-NOT:         <implicit>
     //      DMP-NEXT:         DeclRefExpr {{.*}} 'save'
     //      DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    //      DMP-NEXT:       OMPSharedClause
-    //       DMP-NOT:         <implicit>
-    //      DMP-NEXT:         DeclRefExpr {{.*}} 'save'
-    //      DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     //      DMP-NEXT:       OMPFirstprivateClause
     //       DMP-NOT:         <implicit>
     //      DMP-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
@@ -3456,8 +3378,8 @@ int main() {
     //       PRT-A-SRC-SAME: {{^ }}GANG
     //  PRT-A-AST-GANG-SAME: {{^ }}gang
     //           PRT-A-SAME: {{^ }}worker vector{{$}}
-    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
-    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
     //          PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(3) auto
     //      PRT-OA-SRC-SAME: {{^ }}GANG
     // PRT-OA-AST-GANG-SAME: {{^ }}gang
@@ -3662,10 +3584,6 @@ int main() {
     //          DMP-NOT:         <implicit>
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'save'
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    //         DMP-NEXT:       OMPSharedClause
-    //          DMP-NOT:         <implicit>
-    //         DMP-NEXT:         DeclRefExpr {{.*}} 'save'
-    //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     //         DMP-NEXT:       OMPFirstprivateClause
     //         DMP-NOT:          <implicit>
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'j' 'int'
@@ -3683,11 +3601,7 @@ int main() {
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NO-GANG-NEXT:       ACCGangClause {{.*}} <implicit>
     //         DMP-NEXT:       impl: OMPDistributeDirective
-    //         DMP-NEXT:         OMPSharedClause {{.*}} <implicit>
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'j' 'int'
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'save'
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'loopOnly' 'int'
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
+    //          DMP-NOT:         OMP
     //              DMP:         ForStmt
     //
     //           PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(3)
@@ -3695,9 +3609,9 @@ int main() {
     //   PRT-A-AST-IND-SAME: {{^ }}independent
     //  PRT-A-AST-GANG-SAME: {{^ }}gang
     //           PRT-A-SAME: {{^$}}
-    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
     //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
+    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(j,loopOnly){{$}}
     //           PRT-O-NEXT: {{^ *}}#pragma omp distribute{{$}}
     //          PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(3)
     //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT GANG
@@ -3792,8 +3706,7 @@ int main() {
     //         DMP-NEXT:         OMPPrivateClause
     //          DMP-NOT:           <implicit>
     //         DMP-NEXT:           DeclRefExpr {{.*}} 'k' 'int'
-    //         DMP-NEXT:         OMPSharedClause {{.*}} <implicit>
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'l' 'int'
+    //          DMP-NOT:         OMP
     //              DMP:         ForStmt
     //
     //           PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(3)
@@ -3875,10 +3788,6 @@ int main() {
     //          DMP-NOT:         <implicit>
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'save'
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    //         DMP-NEXT:       OMPSharedClause
-    //          DMP-NOT:         <implicit>
-    //         DMP-NEXT:         DeclRefExpr {{.*}} 'save'
-    //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     //         DMP-NEXT:       OMPFirstprivateClause
     //         DMP-NOT:          <implicit>
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnly' 'int'
@@ -3896,11 +3805,7 @@ int main() {
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NO-GANG-NEXT:       ACCGangClause {{.*}} <implicit>
     //         DMP-NEXT:       impl: OMPDistributeParallelForDirective
-    //         DMP-NEXT:         OMPSharedClause
-    //          DMP-NOT:           <implicit>
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'save'
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'loopOnly' 'int'
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
+    //          DMP-NOT:         OMP
     //              DMP:         ForStmt
     //
     //           PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(3)
@@ -3908,10 +3813,10 @@ int main() {
     //   PRT-A-AST-IND-SAME: {{^ }}independent
     //  PRT-A-AST-GANG-SAME: {{^ }}gang
     //           PRT-A-SAME: {{^ }}worker{{$}}
-    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for shared(save,loopOnly,loopOnlyArr){{$}}
-    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for shared(save,loopOnly,loopOnlyArr){{$}}
+    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
     //          PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(3)
     //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT GANG
     //  PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -3996,9 +3901,7 @@ int main() {
     //         DMP-NEXT:         OMPPrivateClause
     //          DMP-NOT:           <implicit>
     //         DMP-NEXT:           DeclRefExpr {{.*}} 'k' 'int'
-    //         DMP-NEXT:         OMPSharedClause
-    //          DMP-NOT:           <implicit>
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'l' 'int'
+    //          DMP-NOT:         OMP
     //              DMP:         ForStmt
     //
     //           PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(3)
@@ -4007,9 +3910,9 @@ int main() {
     //  PRT-A-AST-GANG-SAME: {{^ }}gang
     //           PRT-A-SAME: {{^ }}worker{{$}}
     //          PRT-AO-NEXT: // #pragma omp target teams num_teams(3) firstprivate(l){{$}}
-    //          PRT-AO-NEXT: // #pragma omp distribute parallel for private(k) shared(l){{$}}
+    //          PRT-AO-NEXT: // #pragma omp distribute parallel for private(k){{$}}
     //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) firstprivate(l){{$}}
-    //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for private(k) shared(l){{$}}
+    //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for private(k){{$}}
     //          PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(3)
     //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT GANG
     //  PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -4080,10 +3983,6 @@ int main() {
     //          DMP-NOT:         <implicit>
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'save'
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    //         DMP-NEXT:       OMPSharedClause
-    //          DMP-NOT:         <implicit>
-    //         DMP-NEXT:         DeclRefExpr {{.*}} 'save'
-    //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     //         DMP-NEXT:       OMPFirstprivateClause
     //         DMP-NOT:          <implicit>
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnly' 'int'
@@ -4101,10 +4000,7 @@ int main() {
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NO-GANG-NEXT:       ACCGangClause {{.*}} <implicit>
     //         DMP-NEXT:       impl: OMPDistributeSimdDirective
-    //         DMP-NEXT:         OMPSharedClause {{.*}} <implicit>
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'save'
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'loopOnly' 'int'
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
+    //          DMP-NOT:         OMP
     //              DMP:         ForStmt
     //
     //           PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(3)
@@ -4112,9 +4008,9 @@ int main() {
     //   PRT-A-AST-IND-SAME: {{^ }}independent
     //  PRT-A-AST-GANG-SAME: {{^ }}gang
     //           PRT-A-SAME: {{^ }}vector{{$}}
-    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
     //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute simd{{$}}
-    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
     //           PRT-O-NEXT: {{^ *}}#pragma omp distribute simd{{$}}
     //          PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(3)
     //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT GANG
@@ -4199,8 +4095,7 @@ int main() {
     //         DMP-NEXT:         DeclStmt
     //         DMP-NEXT:           VarDecl {{.*}} k 'int'
     //         DMP-NEXT:         OMPDistributeSimdDirective
-    //         DMP-NEXT:           OMPSharedClause {{.*}} <implicit>
-    //         DMP-NEXT:             DeclRefExpr {{.*}} 'l' 'int'
+    //          DMP-NOT:           OMP
     //              DMP:           ForStmt
     //
     //          PRT-AO-NEXT: // v----------ACC----------v
@@ -4318,10 +4213,6 @@ int main() {
     //          DMP-NOT:         <implicit>
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'save'
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
-    //         DMP-NEXT:       OMPSharedClause
-    //          DMP-NOT:         <implicit>
-    //         DMP-NEXT:         DeclRefExpr {{.*}} 'save'
-    //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     //         DMP-NEXT:       OMPFirstprivateClause
     //         DMP-NOT:          <implicit>
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnly' 'int'
@@ -4341,11 +4232,7 @@ int main() {
     //         DMP-NEXT:         DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
     // DMP-NO-GANG-NEXT:       ACCGangClause {{.*}} <implicit>
     //         DMP-NEXT:       impl: OMPDistributeParallelForSimdDirective
-    //         DMP-NEXT:         OMPSharedClause
-    //          DMP-NOT:           <implicit>
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'save'
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'loopOnly' 'int'
-    //         DMP-NEXT:           DeclRefExpr {{.*}} 'loopOnlyArr' 'int[1]'
+    //          DMP-NOT:         OMP
     //              DMP:         ForStmt
     //
     //           PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(3)
@@ -4353,10 +4240,10 @@ int main() {
     //   PRT-A-AST-IND-SAME: {{^ }}independent
     //  PRT-A-AST-GANG-SAME: {{^ }}gang
     //           PRT-A-SAME: {{^ }}worker vector{{$}}
-    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd shared(save,loopOnly,loopOnlyArr){{$}}
-    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) shared(save,loopOnlyArr) firstprivate(loopOnly){{$}}
-    //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd shared(save,loopOnly,loopOnlyArr){{$}}
+    //          PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd{{$}}
+    //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) map(ompx_hold,tofrom: save,loopOnlyArr) firstprivate(loopOnly){{$}}
+    //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd{{$}}
     //          PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(3)
     //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT GANG
     //  PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -4446,9 +4333,7 @@ int main() {
     //         DMP-NEXT:         DeclStmt
     //         DMP-NEXT:           VarDecl {{.*}} k 'int'
     //         DMP-NEXT:         OMPDistributeParallelForSimdDirective
-    //         DMP-NEXT:           OMPSharedClause
-    //          DMP-NOT:             <implicit>
-    //         DMP-NEXT:             DeclRefExpr {{.*}} 'l' 'int'
+    //          DMP-NOT:           OMP
     //              DMP:           ForStmt
     //
     //          PRT-AO-NEXT: // v----------ACC----------v
@@ -4466,7 +4351,7 @@ int main() {
     //          PRT-AO-NEXT: // #pragma omp target teams num_teams(3) firstprivate(l){{$}}
     //          PRT-AO-NEXT: // {
     //          PRT-AO-NEXT: //   int k;
-    //          PRT-AO-NEXT: //   #pragma omp distribute parallel for simd shared(l){{$}}
+    //          PRT-AO-NEXT: //   #pragma omp distribute parallel for simd{{$}}
     //          PRT-AO-NEXT: //   for (k ={{.*}}) {
     //          PRT-AO-NEXT: //     {{printf|TGT_PRINTF}}
     //          PRT-AO-NEXT: //     for (l ={{.*}})
@@ -4479,7 +4364,7 @@ int main() {
     //           PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(3) firstprivate(l){{$}}
     //           PRT-O-NEXT: {
     //           PRT-O-NEXT:   int k;
-    //           PRT-O-NEXT:   {{^ *}}#pragma omp distribute parallel for simd shared(l){{$}}
+    //           PRT-O-NEXT:   {{^ *}}#pragma omp distribute parallel for simd{{$}}
     //           PRT-O-NEXT:   for (k ={{.*}}) {
     //           PRT-O-NEXT:     {{printf|TGT_PRINTF}}
     //           PRT-O-NEXT:     for (l ={{.*}})
@@ -5688,11 +5573,7 @@ static void withinGangFnAccLoopIndependentGang(struct Save *save, int *loopOnly,
   //         DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
   // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
   //         DMP-NEXT:   impl: OMPDistributeDirective
-  //         DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'j' 'int'
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int *'
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
+  //          DMP-NOT:     OMP
   //              DMP:     ForStmt
   //
   //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -5751,8 +5632,7 @@ static void withinGangFnAccLoopIndependentGang(struct Save *save, int *loopOnly,
   //         DMP-NEXT:     OMPPrivateClause
   //          DMP-NOT:       <implicit>
   //         DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
-  //         DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'l' 'int'
+  //          DMP-NOT:     OMP
   //              DMP:     ForStmt
   //
   //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -5806,8 +5686,7 @@ static void withinGangFnAccLoopIndependentGang(struct Save *save, int *loopOnly,
   //         DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
   // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
   //         DMP-NEXT:   impl: OMPDistributeDirective
-  //         DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+  //          DMP-NOT:     OMP
   //              DMP:     ForStmt
   //
   //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -5911,11 +5790,7 @@ static void withinGangFnAccLoopIndependentGangWorker(struct Save *save,
   //         DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
   // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
   //         DMP-NEXT:   impl: OMPDistributeParallelForDirective
-  //         DMP-NEXT:     OMPSharedClause
-  //          DMP-NOT:       <implicit>
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int *'
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
+  //          DMP-NOT:     OMP
   //              DMP:     ForStmt
   //
   //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -5923,8 +5798,8 @@ static void withinGangFnAccLoopIndependentGangWorker(struct Save *save,
   //   PRT-A-AST-IND-SAME: {{^ }}independent
   //  PRT-A-AST-GANG-SAME: {{^ }}gang
   //           PRT-A-SAME: {{^ }}worker{{$}}
-  //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for shared(save,loopOnly,loopOnlyArr){{$}}
-  //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for shared(save,loopOnly,loopOnlyArr){{$}}
+  //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+  //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
   //          PRT-OA-NEXT: {{^ *}}// #pragma acc loop
   //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT GANG
   //  PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -6005,9 +5880,7 @@ static void withinGangFnAccLoopIndependentGangWorker(struct Save *save,
   //         DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
   // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
   //         DMP-NEXT:   impl: OMPDistributeParallelForDirective
-  //         DMP-NEXT:     OMPSharedClause
-  //          DMP-NOT:       <implicit>
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+  //          DMP-NOT:     OMP
   //              DMP:     ForStmt
   //
   //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -6015,8 +5888,8 @@ static void withinGangFnAccLoopIndependentGangWorker(struct Save *save,
   //   PRT-A-AST-IND-SAME: {{^ }}independent
   //  PRT-A-AST-GANG-SAME: {{^ }}gang
   //           PRT-A-SAME: {{^ }}worker{{$}}
-  //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for shared(k){{$}}
-  //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for shared(k){{$}}
+  //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+  //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
   //          PRT-OA-NEXT: {{^ *}}// #pragma acc loop
   //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT GANG
   //  PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -6111,10 +5984,7 @@ static void withinGangFnAccLoopIndependentGangVector(struct Save *save,
   //         DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
   // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
   //         DMP-NEXT:   impl: OMPDistributeSimdDirective
-  //         DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int *'
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
+  //          DMP-NOT:     OMP
   //              DMP:     ForStmt
   //
   //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -6231,8 +6101,7 @@ static void withinGangFnAccLoopIndependentGangVector(struct Save *save,
   //         DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
   // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
   //         DMP-NEXT:   impl: OMPDistributeSimdDirective
-  //         DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+  //          DMP-NOT:     OMP
   //              DMP:     ForStmt
   //
   //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -6338,11 +6207,7 @@ static void withinGangFnAccLoopIndependentGangWorkerVector(struct Save *save,
   //         DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
   // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
   //         DMP-NEXT:   impl: OMPDistributeParallelForSimdDirective
-  //         DMP-NEXT:     OMPSharedClause
-  //          DMP-NOT:       <implicit>
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int *'
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
+  //          DMP-NOT:     OMP
   //              DMP:     ForStmt
   //
   //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -6350,8 +6215,8 @@ static void withinGangFnAccLoopIndependentGangWorkerVector(struct Save *save,
   //   PRT-A-AST-IND-SAME: {{^ }}independent
   //  PRT-A-AST-GANG-SAME: {{^ }}gang
   //           PRT-A-SAME: {{^ }}worker vector{{$}}
-  //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd shared(save,loopOnly,loopOnlyArr){{$}}
-  //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd shared(save,loopOnly,loopOnlyArr){{$}}
+  //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd{{$}}
+  //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd{{$}}
   //          PRT-OA-NEXT: {{^ *}}// #pragma acc loop
   //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT GANG
   //  PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -6465,9 +6330,7 @@ static void withinGangFnAccLoopIndependentGangWorkerVector(struct Save *save,
   //         DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
   // DMP-NO-GANG-NEXT:   ACCGangClause {{.*}} <implicit>
   //         DMP-NEXT:   impl: OMPDistributeParallelForSimdDirective
-  //         DMP-NEXT:     OMPSharedClause
-  //          DMP-NOT:       <implicit>
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+  //          DMP-NOT:     OMP
   //              DMP:     ForStmt
   //
   //           PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -6475,8 +6338,8 @@ static void withinGangFnAccLoopIndependentGangWorkerVector(struct Save *save,
   //   PRT-A-AST-IND-SAME: {{^ }}independent
   //  PRT-A-AST-GANG-SAME: {{^ }}gang
   //           PRT-A-SAME: {{^ }}worker vector{{$}}
-  //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd shared(k){{$}}
-  //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd shared(k){{$}}
+  //          PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd{{$}}
+  //           PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd{{$}}
   //          PRT-OA-NEXT: {{^ *}}// #pragma acc loop
   //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT GANG
   //  PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -7799,19 +7662,15 @@ static void withinWorkerFnAccLoopIndependentWorker(struct Save *save,
   //        DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnly' 'int *'
   //        DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
   //        DMP-NEXT:   impl: OMPParallelForDirective
-  //        DMP-NEXT:     OMPSharedClause
-  //         DMP-NOT:       <implicit>
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int *'
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
+  //         DMP-NOT:     OMP
   //             DMP:     ForStmt
   //
   //          PRT-A-NEXT: {{^ *}}#pragma acc loop
   //      PRT-A-SRC-SAME: {{^ }}INDEPENDENT
   //  PRT-A-AST-IND-SAME: {{^ }}independent
   //          PRT-A-SAME: {{^ }}worker{{$}}
-  //         PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for shared(save,loopOnly,loopOnlyArr){{$}}
-  //          PRT-O-NEXT: {{^ *}}#pragma omp parallel for shared(save,loopOnly,loopOnlyArr){{$}}
+  //         PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for{{$}}
+  //          PRT-O-NEXT: {{^ *}}#pragma omp parallel for{{$}}
   //         PRT-OA-NEXT: {{^ *}}// #pragma acc loop
   //     PRT-OA-SRC-SAME: {{^ }}INDEPENDENT
   // PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -7883,17 +7742,15 @@ static void withinWorkerFnAccLoopIndependentWorker(struct Save *save,
   //        DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
   //        DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
   //        DMP-NEXT:   impl: OMPParallelForDirective
-  //        DMP-NEXT:     OMPSharedClause
-  //         DMP-NOT:       <implicit>
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+  //         DMP-NOT:     OMP
   //             DMP:     ForStmt
   //
   //          PRT-A-NEXT: {{^ *}}#pragma acc loop
   //      PRT-A-SRC-SAME: {{^ }}INDEPENDENT
   //  PRT-A-AST-IND-SAME: {{^ }}independent
   //          PRT-A-SAME: {{^ }}worker{{$}}
-  //         PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for shared(k){{$}}
-  //          PRT-O-NEXT: {{^ *}}#pragma omp parallel for shared(k){{$}}
+  //         PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for{{$}}
+  //          PRT-O-NEXT: {{^ *}}#pragma omp parallel for{{$}}
   //         PRT-OA-NEXT: {{^ *}}// #pragma acc loop
   //     PRT-OA-SRC-SAME: {{^ }}INDEPENDENT
   // PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -8023,10 +7880,7 @@ static void withinWorkerFnAccLoopIndependentVector(struct Save *save,
   //        DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnly' 'int *'
   //        DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
   //        DMP-NEXT:   impl: OMPSimdDirective
-  //        DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int *'
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
+  //         DMP-NOT:     OMP
   //             DMP:     ForStmt
   //
   //          PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -8133,8 +7987,7 @@ static void withinWorkerFnAccLoopIndependentVector(struct Save *save,
   //        DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
   //        DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
   //        DMP-NEXT:   impl: OMPSimdDirective
-  //        DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+  //         DMP-NOT:     OMP
   //             DMP:     ForStmt
   //
   //          PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -8274,19 +8127,15 @@ static void withinWorkerFnAccLoopIndependentWorkerVector(struct Save *save,
   //        DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnly' 'int *'
   //        DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
   //        DMP-NEXT:   impl: OMPParallelForSimdDirective
-  //        DMP-NEXT:     OMPSharedClause
-  //         DMP-NOT:       <implicit>
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int *'
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
+  //         DMP-NOT:     OMP
   //             DMP:     ForStmt
   //
   //          PRT-A-NEXT: {{^ *}}#pragma acc loop
   //      PRT-A-SRC-SAME: {{^ }}INDEPENDENT
   //  PRT-A-AST-IND-SAME: {{^ }}independent
   //          PRT-A-SAME: {{^ }}worker vector{{$}}
-  //         PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd shared(save,loopOnly,loopOnlyArr){{$}}
-  //          PRT-O-NEXT: {{^ *}}#pragma omp parallel for simd shared(save,loopOnly,loopOnlyArr){{$}}
+  //         PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd{{$}}
+  //          PRT-O-NEXT: {{^ *}}#pragma omp parallel for simd{{$}}
   //         PRT-OA-NEXT: {{^ *}}// #pragma acc loop
   //     PRT-OA-SRC-SAME: {{^ }}INDEPENDENT
   // PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -8391,17 +8240,15 @@ static void withinWorkerFnAccLoopIndependentWorkerVector(struct Save *save,
   //         DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
   //         DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
   //         DMP-NEXT:   impl: OMPParallelForSimdDirective
-  //         DMP-NEXT:     OMPSharedClause
-  //          DMP-NOT:       <implicit>
-  //         DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+  //          DMP-NOT:     OMP
   //              DMP:     ForStmt
   //
   //           PRT-A-NEXT: {{^ *}}#pragma acc loop
   //       PRT-A-SRC-SAME: {{^ }}INDEPENDENT
   //   PRT-A-AST-IND-SAME: {{^ }}independent
   //           PRT-A-SAME: {{^ }}worker vector{{$}}
-  //          PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd shared(k){{$}}
-  //           PRT-O-NEXT: {{^ *}}#pragma omp parallel for simd shared(k){{$}}
+  //          PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd{{$}}
+  //           PRT-O-NEXT: {{^ *}}#pragma omp parallel for simd{{$}}
   //          PRT-OA-NEXT: {{^ *}}// #pragma acc loop
   //      PRT-OA-SRC-SAME: {{^ }}INDEPENDENT
   //  PRT-OA-AST-IND-SAME: {{^ }}independent
@@ -9335,10 +9182,7 @@ static void withinVectorFnAccLoopIndependentVector(struct Save *save,
   //        DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnly' 'int *'
   //        DMP-NEXT:     DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
   //        DMP-NEXT:   impl: OMPSimdDirective
-  //        DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'save'
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnly' 'int *'
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'loopOnlyArr' 'int *'
+  //         DMP-NOT:     OMP
   //             DMP:     ForStmt
   //
   //          PRT-A-NEXT: {{^ *}}#pragma acc loop
@@ -9445,8 +9289,7 @@ static void withinVectorFnAccLoopIndependentVector(struct Save *save,
   //        DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
   //        DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
   //        DMP-NEXT:   impl: OMPSimdDirective
-  //        DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-  //        DMP-NEXT:       DeclRefExpr {{.*}} 'k' 'int'
+  //         DMP-NOT:     OMP
   //             DMP:     ForStmt
   //
   //          PRT-A-NEXT: {{^ *}}#pragma acc loop

@@ -1082,15 +1082,13 @@ int main() {
     // PRT-NEXT:    for ({{.*}}) {
     #pragma acc loop seq
     for (int i = 0; i < 2; ++i) {
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -1123,15 +1121,13 @@ int main() {
     // DMP: ForStmt
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 2; ++i) {
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -1166,15 +1162,13 @@ int main() {
     // DMP: ForStmt
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 2; ++i) {
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -1423,15 +1417,13 @@ int main() {
   // PRT-NEXT: for ({{.*}}) {
   #pragma acc parallel loop num_gangs(2) seq
   for (int i = 0; i < 2; ++i) {
-    // DMP:      ACCLoopDirective
+    //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NOT:      OMP
+    //  DMP-NOT:     OMP
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -1481,15 +1473,13 @@ int main() {
   // PRT-NEXT: for ({{.*}}) {
   #pragma acc parallel loop num_gangs(2) auto
   for (int i = 0; i < 2; ++i) {
-    // DMP:      ACCLoopDirective
+    //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NOT:      OMP
+    //  DMP-NOT:     OMP
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -1543,15 +1533,13 @@ int main() {
   // PRT-NEXT: for ({{.*}}) {
   #pragma acc parallel loop num_gangs(2) gang auto
   for (int i = 0; i < 2; ++i) {
-    // DMP:      ACCLoopDirective
+    //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NOT:      OMP
+    //  DMP-NOT:     OMP
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -1615,16 +1603,14 @@ int main() {
     // PRT-NEXT:    for ({{.*}}) {
     #pragma acc loop
     for (int i = 0; i < 2; ++i) {
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCGangClause
-      // DMP-NOT:      <implicit>
+      //  DMP-NOT:     <implicit>
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop gang{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -1657,23 +1643,20 @@ int main() {
     // DMP: ForStmt
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 2; ++i) {
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCWorkerClause
-      // DMP-NOT:      <implicit>
+      //  DMP-NOT:     <implicit>
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   impl: OMPParallelForDirective
       // DMP-NEXT:     OMPNum_threadsClause
       // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
-      // DMP-NEXT:     OMPSharedClause
-      // DMP-NOT:        <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker{{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(2) shared(i){{$}}
-      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(2) shared(i){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(2){{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(2){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker{{$}}
       #pragma acc loop worker
       // DMP: ForStmt
@@ -1702,9 +1685,9 @@ int main() {
     // DMP: ForStmt
     // PRT-NEXT: for ({{.*}}) {
     for (int i = 0; i < 2; ++i) {
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCVectorClause
-      // DMP-NOT:      <implicit>
+      //  DMP-NOT:     <implicit>
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
@@ -1713,9 +1696,7 @@ int main() {
       // DMP-NEXT:       ConstantExpr
       // DMP-NEXT:         value: Int 2
       // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop vector{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp simd simdlen(2){{$}}
@@ -1887,16 +1868,14 @@ int main() {
   // PRT-NEXT:    for ({{.*}}) {
   #pragma acc parallel loop num_gangs(2)
   for (int i = 0; i < 2; ++i) {
-    // DMP:      ACCLoopDirective
+    //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCGangClause
-    // DMP-NOT:      <implicit>
+    //  DMP-NOT:     <implicit>
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NOT:      OMP
+    //  DMP-NOT:     OMP
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc loop gang{{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -1951,23 +1930,20 @@ int main() {
   // DMP: ForStmt
   // PRT-NEXT: for ({{.*}}) {
   for (int i = 0; i < 2; ++i) {
-    // DMP:      ACCLoopDirective
+    //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCWorkerClause
-    // DMP-NOT:      <implicit>
+    //  DMP-NOT:     <implicit>
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   impl: OMPParallelForDirective
     // DMP-NEXT:     OMPNum_threadsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:     OMPSharedClause
-    // DMP-NOT:        <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NOT:      OMP
+    //  DMP-NOT:     OMP
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker{{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(2) shared(i){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(2) shared(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(2){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(2){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker{{$}}
     #pragma acc loop worker
     // DMP: ForStmt
@@ -2018,9 +1994,9 @@ int main() {
   // DMP: ForStmt
   // PRT-NEXT: for ({{.*}}) {
   for (int i = 0; i < 2; ++i) {
-    // DMP:      ACCLoopDirective
+    //      DMP: ACCLoopDirective
     // DMP-NEXT:   ACCVectorClause
-    // DMP-NOT:      <implicit>
+    //  DMP-NOT:     <implicit>
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
@@ -2029,9 +2005,7 @@ int main() {
     // DMP-NEXT:       ConstantExpr
     // DMP-NEXT:         value: Int 2
     // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-    // DMP-NOT:      OMP
+    //  DMP-NOT:     OMP
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc loop vector{{$}}
     // PRT-AO-NEXT: {{^ *}}// #pragma omp simd simdlen(2){{$}}
@@ -2764,16 +2738,14 @@ int main() {
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCGangClause
-      // DMP-NOT:      <implicit>
+      //  DMP-NOT:     <implicit>
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop gang{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -2792,15 +2764,13 @@ int main() {
         TGT_PRINTF("siblings, separate, gang loop first, first loop: %d, %d\n",
                    i, j);
 
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -2852,16 +2822,14 @@ int main() {
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCGangClause
-      // DMP-NOT:      <implicit>
+      //  DMP-NOT:     <implicit>
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop gang{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -2880,15 +2848,13 @@ int main() {
         TGT_PRINTF("siblings, combined, gang loop first, first loop: %d, %d\n",
                    i, j);
 
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -2952,15 +2918,13 @@ int main() {
       // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, separate, gang function first, function: 1{{$}}
       gangFn("siblings, separate, gang function first, function", i);
 
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -3021,15 +2985,13 @@ int main() {
       // EXE-TGT-USE-STDIO-DAG: {{^}}siblings, combined, gang function first, function: 1{{$}}
       gangFn("siblings, combined, gang function first, function", i);
 
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -3084,15 +3046,13 @@ int main() {
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -3111,16 +3071,14 @@ int main() {
         TGT_PRINTF("siblings, separate, gang loop second, first loop: %d, %d\n",
                    i, j);
 
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCGangClause
-      // DMP-NOT:      <implicit>
+      //  DMP-NOT:     <implicit>
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop gang{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -3172,15 +3130,13 @@ int main() {
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -3199,16 +3155,14 @@ int main() {
         TGT_PRINTF("siblings, combined, gang loop second, first loop: %d, %d\n",
                    i, j);
 
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCGangClause
-      // DMP-NOT:      <implicit>
+      //  DMP-NOT:     <implicit>
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop gang{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -3263,15 +3217,13 @@ int main() {
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -3332,15 +3284,13 @@ int main() {
     // DMP: CompoundStmt
     // PRT-NEXT: {
     {
-      // DMP:      ACCLoopDirective
+      //      DMP: ACCLoopDirective
       // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
       // DMP-NEXT:   impl: OMPDistributeDirective
-      // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-      // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
-      // DMP-NOT:      OMP
+      //  DMP-NOT:     OMP
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop{{$}}
       // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
@@ -3815,8 +3765,6 @@ void withinGangFn() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     //  DMP-NOT:     OMP
     //      DMP:     ForStmt
     //      DMP:       CallExpr
@@ -3856,8 +3804,6 @@ void withinGangFn() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     //  DMP-NOT:     OMP
     //      DMP:     ForStmt
     //      DMP:       CallExpr
@@ -3897,8 +3843,6 @@ void withinGangFn() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     //  DMP-NOT:     OMP
     //      DMP:     ForStmt
     //      DMP:       CallExpr
@@ -3941,8 +3885,6 @@ void withinGangFn() {
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     //  DMP-NOT:     OMP
     //      DMP:     ForStmt
     //      DMP:       CallExpr
@@ -3984,16 +3926,13 @@ void withinGangFn() {
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   impl: OMPParallelForDirective
-    // DMP-NEXT:     OMPSharedClause
-    //  DMP-NOT:       <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     //  DMP-NOT:     OMP
     //      DMP:     ForStmt
     //      DMP:       CallExpr
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker{{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for shared(i){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp parallel for shared(i){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for{{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp parallel for{{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker{{$}}
     //    PRT-NEXT: for ({{.*}})
     //    PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -4028,8 +3967,6 @@ void withinGangFn() {
     // DMP-NEXT:  ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:    DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:  impl: OMPSimdDirective
-    // DMP-NEXT:    OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:      DeclRefExpr {{.*}} 'i' 'int'
     //  DMP-NOT:    OMP
     //      DMP:    ForStmt
     //      DMP:      CallExpr
@@ -4372,8 +4309,6 @@ void withinGangFn() {
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     //  DMP-NOT:     OMP
     //      DMP:     ForStmt
     //      DMP:       CallExpr
@@ -4399,8 +4334,6 @@ void withinGangFn() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     //  DMP-NOT:     OMP
     //      DMP:     ForStmt
     //      DMP:       CallExpr
@@ -4448,8 +4381,6 @@ void withinGangFn() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     //  DMP-NOT:     OMP
     //      DMP:     ForStmt
     //      DMP:       CallExpr
@@ -4488,8 +4419,6 @@ void withinGangFn() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     //  DMP-NOT:     OMP
     //      DMP:     ForStmt
     //      DMP:       CallExpr
@@ -4516,8 +4445,6 @@ void withinGangFn() {
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     //  DMP-NOT:     OMP
     //      DMP:     ForStmt
     //      DMP:       CallExpr
@@ -4556,8 +4483,6 @@ void withinGangFn() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeDirective
-    // DMP-NEXT:     OMPSharedClause {{.*}} <implicit>
-    // DMP-NEXT:       DeclRefExpr {{.*}} 'i' 'int'
     //  DMP-NOT:     OMP
     //      DMP:     ForStmt
     //      DMP:       CallExpr

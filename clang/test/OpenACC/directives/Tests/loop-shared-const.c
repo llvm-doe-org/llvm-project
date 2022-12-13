@@ -169,9 +169,7 @@ int main() {
   // DMP-NEXT:       ACCSharedClause {{.*}} <implicit>
   // DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'const int'
   // DMP-NEXT:       impl: OMPDistributeDirective
-  // DMP-NEXT:         OMPSharedClause
-  // DMP-SAME:           <implicit>
-  // DMP-NEXT:           DeclRefExpr {{.*}} 'x' 'const int'
+  //  DMP-NOT:         OMP
   //      DMP:         ForStmt
   //
   //    PRT-NEXT: {
@@ -237,9 +235,7 @@ int main() {
   // DMP-NEXT:       ACCSharedClause {{.*}} <implicit>
   // DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'const int'
   // DMP-NEXT:       impl: OMPDistributeParallelForDirective
-  // DMP-NEXT:         OMPSharedClause
-  //  DMP-NOT:           <implicit>
-  // DMP-NEXT:           DeclRefExpr {{.*}} 'x' 'const int'
+  //  DMP-NOT:         OMP
   //      DMP:         ForStmt
   //
   //    PRT-NEXT: {
@@ -250,8 +246,8 @@ int main() {
   // PRT-OA-NEXT:   {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
   //    PRT-NEXT:   {
   //  PRT-A-NEXT:     {{^ *}}#pragma acc loop independent gang worker{{$}}
-  // PRT-AO-NEXT:     {{^ *}}// #pragma omp distribute parallel for shared(x){{$}}
-  //  PRT-O-NEXT:     {{^ *}}#pragma omp distribute parallel for shared(x){{$}}
+  // PRT-AO-NEXT:     {{^ *}}// #pragma omp distribute parallel for{{$}}
+  //  PRT-O-NEXT:     {{^ *}}#pragma omp distribute parallel for{{$}}
   // PRT-OA-NEXT:     {{^ *}}// #pragma acc loop independent gang worker{{$}}
   //    PRT-NEXT:     for (int i ={{.*}})
   //    PRT-NEXT:       {{printf|TGT_PRINTF}}
@@ -304,8 +300,7 @@ int main() {
   // DMP-NEXT:       ACCSharedClause {{.*}} <implicit>
   // DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'const int'
   // DMP-NEXT:       impl: OMPDistributeSimdDirective
-  // DMP-NEXT:         OMPSharedClause {{.*}} <implicit>
-  // DMP-NEXT:           DeclRefExpr {{.*}} 'x' 'const int'
+  //  DMP-NOT:         OMP
   //      DMP:         ForStmt
   //
   //    PRT-NEXT: {
@@ -372,9 +367,7 @@ int main() {
   // DMP-NEXT:       ACCSharedClause {{.*}} <implicit>
   // DMP-NEXT:         DeclRefExpr {{.*}} 'x' 'const int'
   // DMP-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-NEXT:         OMPSharedClause
-  //  DMP-NOT:           <implicit>
-  // DMP-NEXT:           DeclRefExpr {{.*}} 'x' 'const int'
+  //  DMP-NOT:         OMP
   //      DMP:         ForStmt
   //
   //    PRT-NEXT: {
@@ -385,8 +378,8 @@ int main() {
   // PRT-OA-NEXT:   {{^ *}}// #pragma acc parallel num_gangs(1){{$}}
   //    PRT-NEXT:   {
   //  PRT-A-NEXT:     {{^ *}}#pragma acc loop independent gang worker vector{{$}}
-  // PRT-AO-NEXT:     {{^ *}}// #pragma omp distribute parallel for simd shared(x){{$}}
-  //  PRT-O-NEXT:     {{^ *}}#pragma omp distribute parallel for simd shared(x){{$}}
+  // PRT-AO-NEXT:     {{^ *}}// #pragma omp distribute parallel for simd{{$}}
+  //  PRT-O-NEXT:     {{^ *}}#pragma omp distribute parallel for simd{{$}}
   // PRT-OA-NEXT:     {{^ *}}// #pragma acc loop independent gang worker vector{{$}}
   //    PRT-NEXT:     for (int i ={{.*}})
   //    PRT-NEXT:       {{printf|TGT_PRINTF}}

@@ -478,11 +478,12 @@ public:
     // DMP-NEXT:     OMPMapClause
     //  DMP-NOT:       <implicit>
     // DMP-NEXT:       DeclRefExpr {{.*}} 'local'
+    //  DMP-NOT:     OMP{{.*}}Clause
     //
     //         PRT: local.l = {{.}};
     //  PRT-A-NEXT: #pragma acc parallel num_gangs(1){{$}}
-    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: local) shared(local){{$}}
-    //  PRT-O-NEXT: #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: local) shared(local){{$}}
+    // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: local){{$}}
+    //  PRT-O-NEXT: #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: local){{$}}
     // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1){{$}}
     //
     // EXE-NEXT:local.i = 15

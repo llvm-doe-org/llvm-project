@@ -138,11 +138,13 @@ int main() {
   // DMP-NEXT:     OMPMapClause
   //  DMP-NOT:       <implicit>
   // DMP-NEXT:       DeclRefExpr {{.*}} 's'
+  //  DMP-NOT:     OMP
+  //      DMP:     CompoundAssignOperator
   //
   //         PRT: s.z = {{.}};
   //  PRT-A-NEXT: #pragma acc parallel num_gangs(1){{$}}
-  // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: s) shared(s){{$}}
-  //  PRT-O-NEXT: #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: s) shared(s){{$}}
+  // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: s){{$}}
+  //  PRT-O-NEXT: #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: s){{$}}
   // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1){{$}}
   //
   // EXE-OFF-NEXT: acc_ev_enter_data_start
@@ -191,11 +193,13 @@ int main() {
   // DMP-NEXT:     OMPMapClause
   //  DMP-NOT:       <implicit>
   // DMP-NEXT:       DeclRefExpr {{.*}} 's'
+  //  DMP-NOT:     OMP
+  //      DMP:     CompoundStmt
   //
   //         PRT: s.z = {{.}};
   //  PRT-A-NEXT: #pragma acc parallel num_gangs(1){{$}}
-  // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: s) shared(s){{$}}
-  //  PRT-O-NEXT: #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: s) shared(s){{$}}
+  // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: s){{$}}
+  //  PRT-O-NEXT: #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: s){{$}}
   // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1){{$}}
   //
   // EXE-OFF-NEXT: acc_ev_enter_data_start
@@ -244,14 +248,15 @@ int main() {
   // DMP-NEXT:     OMPMapClause
   //  DMP-NOT:       <implicit>
   // DMP-NEXT:       DeclRefExpr {{.*}} 's'
+  //  DMP-NOT:     OMP{{.*}}Clause
   //      DMP:   ACCLoopDirective
   //
   //         PRT: s.z = {{.}};
   //  PRT-A-NEXT: #pragma acc parallel{{$}}
-  // PRT-AO-NEXT: // #pragma omp target teams map(ompx_hold,tofrom: s) shared(s){{$}}
+  // PRT-AO-NEXT: // #pragma omp target teams map(ompx_hold,tofrom: s){{$}}
   //  PRT-A-NEXT: #pragma acc loop{{$}}
   // PRT-AO-NEXT: // #pragma omp distribute
-  //  PRT-O-NEXT: #pragma omp target teams map(ompx_hold,tofrom: s) shared(s){{$}}
+  //  PRT-O-NEXT: #pragma omp target teams map(ompx_hold,tofrom: s){{$}}
   // PRT-OA-NEXT: // #pragma acc parallel{{$}}
   //  PRT-O-NEXT: #pragma omp distribute
   // PRT-OA-NEXT: // #pragma acc loop{{$}}
@@ -302,13 +307,14 @@ int main() {
   // DMP-NEXT:       OMPMapClause
   //  DMP-NOT:         <implicit>
   // DMP-NEXT:         DeclRefExpr {{.*}} 's'
+  //  DMP-NOT:       OMP{{.*}}Clause
   //      DMP:     ACCLoopDirective
   //
   //         PRT: s.z = {{.}};
   //  PRT-A-NEXT: #pragma acc parallel loop{{$}}
-  // PRT-AO-NEXT: // #pragma omp target teams map(ompx_hold,tofrom: s) shared(s){{$}}
+  // PRT-AO-NEXT: // #pragma omp target teams map(ompx_hold,tofrom: s){{$}}
   // PRT-AO-NEXT: // #pragma omp distribute
-  //  PRT-O-NEXT: #pragma omp target teams map(ompx_hold,tofrom: s) shared(s){{$}}
+  //  PRT-O-NEXT: #pragma omp target teams map(ompx_hold,tofrom: s){{$}}
   //  PRT-O-NEXT: #pragma omp distribute
   // PRT-OA-NEXT: // #pragma acc parallel loop{{$}}
   //
@@ -366,11 +372,12 @@ int main() {
   // DMP-NEXT:     OMPMapClause
   //  DMP-NOT:       <implicit>
   // DMP-NEXT:       DeclRefExpr {{.*}} 'ss'
+  //  DMP-NOT:     OMP{{.*}}Clause
   //
   //         PRT: ss.s.z = {{.}};
   //  PRT-A-NEXT: #pragma acc parallel num_gangs(1){{$}}
-  // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: ss) shared(ss){{$}}
-  //  PRT-O-NEXT: #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: ss) shared(ss){{$}}
+  // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: ss){{$}}
+  //  PRT-O-NEXT: #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: ss){{$}}
   // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1){{$}}
   //
   // EXE-OFF-NEXT: acc_ev_enter_data_start
@@ -428,17 +435,14 @@ int main() {
   // DMP-NEXT:     OMPMapClause
   //  DMP-NOT:       <implicit>
   // DMP-NEXT:       DeclRefExpr {{.*}} 'py'
-  // DMP-NEXT:     OMPSharedClause
-  //  DMP-NOT:       <implicit>
-  // DMP-NEXT:       DeclRefExpr {{.*}} 'py'
   // DMP-NEXT:     OMPFirstprivateClause
   //  DMP-NOT:       <implicit>
   // DMP-NEXT:       DeclRefExpr {{.*}} 'ps'
   //
   //         PRT: int *py;
   //  PRT-A-NEXT: #pragma acc parallel num_gangs(1) copy(py){{$}}
-  // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: py) shared(py) firstprivate(ps){{$}}
-  //  PRT-O-NEXT: #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: py) shared(py) firstprivate(ps){{$}}
+  // PRT-AO-NEXT: // #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: py) firstprivate(ps){{$}}
+  //  PRT-O-NEXT: #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: py) firstprivate(ps){{$}}
   // PRT-OA-NEXT: // #pragma acc parallel num_gangs(1) copy(py){{$}}
   //
   //      EXE-NEXT: &s.y = 0x[[#%x,S_Y_ADDR:]]
