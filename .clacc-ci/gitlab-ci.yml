@@ -195,6 +195,11 @@ stages:
       External/openacc_vv/acc_unmap_data.c.test
       External/openacc_vv/atomic_capture_bitand_equals.c.test
       External/openacc_vv/atomic_capture_expr_plus_x.c.test
+      External/openacc_vv/atomic_minus_equals.c.test
+      External/openacc_vv/atomic_structured_assign_x_minus_expr.c.test
+      External/openacc_vv/atomic_update_minus_equals.c.test
+      External/openacc_vv/atomic_update_x_minus_expr.c.test
+      External/openacc_vv/atomic_x_minus_expr.c.test
       External/openacc_vv/data_create.c.test
       External/openacc_vv/parallel_copy.c.test
       "
