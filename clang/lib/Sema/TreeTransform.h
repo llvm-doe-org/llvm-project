@@ -10670,9 +10670,13 @@ OMPClause *TreeTransform<Derived>::TransformOMPBindClause(OMPBindClause *C) {
 // OpenACC directive transformation
 //===----------------------------------------------------------------------===//
 
+/// Keep the implementation in sync with Parser::ParseOpenACCDirectiveStmt.
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCDirectiveStmt(ACCDirectiveStmt *D) {
+  Sema &SemaRef = getDerived().getSema();
+  bool ErrorFound = SemaRef.StartOpenACCDirectiveAndAssociate(
+                        D->getDirectiveKind(), D->getBeginLoc());
   // Transform the clauses
   ArrayRef<ACCClause *> Clauses = D->clauses();
   for (ArrayRef<ACCClause *>::iterator I = Clauses.begin(), E = Clauses.end();
@@ -10680,112 +10684,79 @@ TreeTransform<Derived>::TransformACCDirectiveStmt(ACCDirectiveStmt *D) {
     if (*I) {
       ACCClause *Clause = getDerived().TransformACCClause(*I);
       if (Clause)
-        getDerived().getSema().AddOpenACCClause(Clause);
+        SemaRef.AddOpenACCClause(Clause);
     }
   }
-  getDerived().getSema().EndOpenACCDirective(D->getEndLoc());
-  if (getDerived().getSema().StartOpenACCAssociatedStatement())
-    return StmtError();
+  SemaRef.EndOpenACCDirective(D->getEndLoc());
+  ErrorFound |= SemaRef.StartOpenACCAssociatedStatement();
   StmtResult AssociatedStmt;
   if (D->hasAssociatedStmt()) {
-    Sema::CompoundScopeRAII CompoundScope(getSema());
-    Stmt *CS = D->getAssociatedStmt();
-    AssociatedStmt = getDerived().TransformStmt(CS);
-    if (AssociatedStmt.isInvalid())
-      return StmtError();
+    Sema::CompoundScopeRAII CompoundScope(SemaRef);
+    AssociatedStmt = getDerived().TransformStmt(D->getAssociatedStmt());
+    ErrorFound |= AssociatedStmt.isInvalid();
   }
-  if (getDerived().getSema().EndOpenACCAssociatedStatement())
-    return StmtError();
-  return getDerived().RebuildACCDirectiveStmt(AssociatedStmt.get());
+  ErrorFound |= SemaRef.EndOpenACCAssociatedStatement();
+  StmtResult Result =
+      getDerived().RebuildACCDirectiveStmt(AssociatedStmt.get());
+  SemaRef.EndOpenACCDirectiveAndAssociate(D->getDirectiveKind());
+  if (!SemaRef.getDiagnostics().hasErrorOccurred()) {
+    assert(!Result.isInvalid() &&
+           "expected diagnostic for invalid OpenACC directive");
+    if (SemaRef.transformACCToOMP(cast<ACCDirectiveStmt>(Result.get())))
+      ErrorFound = true;
+  }
+  if (ErrorFound)
+    Result = StmtError();
+  return Result;
 }
 
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCUpdateDirective(ACCUpdateDirective *D) {
-  if (getDerived().getSema().StartOpenACCDirectiveAndAssociate(
-          ACCD_update, D->getBeginLoc()))
-    return StmtError();
-  StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_update);
-  return Res;
+  return getDerived().TransformACCDirectiveStmt(D);
 }
 
 template <typename Derived>
 StmtResult TreeTransform<Derived>::TransformACCEnterDataDirective(
     ACCEnterDataDirective *D) {
-  if (getDerived().getSema().StartOpenACCDirectiveAndAssociate(
-          ACCD_enter_data, D->getBeginLoc()))
-    return StmtError();
-  StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_enter_data);
-  return Res;
+  return getDerived().TransformACCDirectiveStmt(D);
 }
 
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCExitDataDirective(ACCExitDataDirective *D) {
-  if (getDerived().getSema().StartOpenACCDirectiveAndAssociate(
-          ACCD_exit_data, D->getBeginLoc()))
-    return StmtError();
-  StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_exit_data);
-  return Res;
+  return getDerived().TransformACCDirectiveStmt(D);
 }
 
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCDataDirective(ACCDataDirective *D) {
-  if (getDerived().getSema().StartOpenACCDirectiveAndAssociate(
-          ACCD_data, D->getBeginLoc()))
-    return StmtError();
-  StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_data);
-  return Res;
+  return getDerived().TransformACCDirectiveStmt(D);
 }
 
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCParallelDirective(ACCParallelDirective *D) {
-  if (getDerived().getSema().StartOpenACCDirectiveAndAssociate(
-          ACCD_parallel, D->getBeginLoc()))
-    return StmtError();
-  StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_parallel);
-  return Res;
+  return getDerived().TransformACCDirectiveStmt(D);
 }
 
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCLoopDirective(ACCLoopDirective *D) {
-  if (getDerived().getSema().StartOpenACCDirectiveAndAssociate(
-          ACCD_loop, D->getBeginLoc()))
-    return StmtError();
-  StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_loop);
-  return Res;
+  return getDerived().TransformACCDirectiveStmt(D);
 }
 
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCParallelLoopDirective(
     ACCParallelLoopDirective *D) {
-  if (getDerived().getSema().StartOpenACCDirectiveAndAssociate(
-          ACCD_parallel_loop, D->getBeginLoc()))
-    return StmtError();
-  StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_parallel_loop);
-  return Res;
+  return getDerived().TransformACCDirectiveStmt(D);
 }
 
 template <typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformACCAtomicDirective(ACCAtomicDirective *D) {
-  if (getDerived().getSema().StartOpenACCDirectiveAndAssociate(
-          ACCD_atomic, D->getBeginLoc()))
-    return StmtError();
-  StmtResult Res = getDerived().TransformACCDirectiveStmt(D);
-  getDerived().getSema().EndOpenACCDirectiveAndAssociate(ACCD_atomic);
-  return Res;
+  return getDerived().TransformACCDirectiveStmt(D);
 }
 
 //===----------------------------------------------------------------------===//

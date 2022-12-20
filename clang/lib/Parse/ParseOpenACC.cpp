@@ -216,6 +216,9 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective(
 ///     | 'parallel loop' | 'atomic'
 ///     {clause}
 ///     annot_pragma_openacc_end
+///
+/// Keep TreeTransform::TransformACCDirectiveStmt in sync with this
+/// implementation.
 StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedAttributes &Attrs,
                                              ParsedStmtContext StmtCtx) {
   assert(Tok.is(tok::annot_pragma_openacc) && "Not an OpenACC directive!");
@@ -282,7 +285,7 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedAttributes &Attrs,
     // OpenMP.
     if (!Actions.getDiagnostics().hasErrorOccurred()) {
       assert(!Result.isInvalid() &&
-             "Invalid OpenACC directive without diagnostic");
+             "expected diagnostic for invalid OpenACC directive");
       if (Actions.transformACCToOMP(cast<ACCDirectiveStmt>(Result.get())))
         ErrorFound = true;
     }
