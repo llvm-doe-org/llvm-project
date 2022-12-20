@@ -2346,12 +2346,7 @@ void fn(int param) {
     #pragma acc CMB_PAR loop gang reduction(max:b,e,i,jk,f,d,p)
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+6 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
-    // expected-error@+5 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
-    // expected-error@+4 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
-    // expected-error@+3 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
-    // expected-error@+2 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
-    // expected-error@+1 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
+    // expected-error@+1 6 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
     #pragma acc CMB_PAR loop worker reduction(max:fc,dc,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
@@ -2363,12 +2358,7 @@ void fn(int param) {
     #pragma acc CMB_PAR loop vector reduction(min:b,e,i,jk,f,d,p)
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+6 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
-    // expected-error@+5 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
-    // expected-error@+4 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
-    // expected-error@+3 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
-    // expected-error@+2 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
-    // expected-error@+1 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
+    // expected-error@+1 6 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
     #pragma acc CMB_PAR loop worker gang reduction(min:fc,dc,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
@@ -2380,11 +2370,7 @@ void fn(int param) {
     #pragma acc CMB_PAR loop vector gang reduction(+:b,e,i,jk,f,d,fc,dc)
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+5 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
-    // expected-error@+4 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
-    // expected-error@+3 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
-    // expected-error@+2 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
-    // expected-error@+1 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
+    // expected-error@+1 5 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
     #pragma acc CMB_PAR loop vector worker reduction(+:p,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
@@ -2396,11 +2382,7 @@ void fn(int param) {
     #pragma acc CMB_PAR loop vector gang reduction(*:b,e,i,jk,f,d,fc,dc) worker
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+5 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
-    // expected-error@+4 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
-    // expected-error@+3 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
-    // expected-error@+2 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
-    // expected-error@+1 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
+    // expected-error@+1 5 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
     #pragma acc CMB_PAR loop reduction(*:p,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
@@ -2412,11 +2394,7 @@ void fn(int param) {
     #pragma acc CMB_PAR loop reduction(&&:b,e,i,jk,f,d,fc,dc) gang
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+5 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
-    // expected-error@+4 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
-    // expected-error@+3 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
-    // expected-error@+2 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
-    // expected-error@+1 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
+    // expected-error@+1 5 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
     #pragma acc CMB_PAR loop reduction(&&:p,a,s,u,sDecl) worker
     for (int i = 0; i < 5; ++i)
       ;
@@ -2428,11 +2406,7 @@ void fn(int param) {
     #pragma acc CMB_PAR loop reduction(||:b,e,i,jk,f,d,fc,dc) vector
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+5 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
-    // expected-error@+4 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
-    // expected-error@+3 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
-    // expected-error@+2 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
-    // expected-error@+1 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
+    // expected-error@+1 5 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
     #pragma acc CMB_PAR loop gang reduction(||:p,a,s,u,sDecl) worker
     for (int i = 0; i < 5; ++i)
       ;
@@ -2444,15 +2418,7 @@ void fn(int param) {
     #pragma acc CMB_PAR loop gang reduction(&:b,e,i,jk) vector
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+9 {{OpenACC reduction operator '&' argument must be of integer type}}
-    // expected-error@+8 {{OpenACC reduction operator '&' argument must be of integer type}}
-    // expected-error@+7 {{OpenACC reduction operator '&' argument must be of integer type}}
-    // expected-error@+6 {{OpenACC reduction operator '&' argument must be of integer type}}
-    // expected-error@+5 {{OpenACC reduction operator '&' argument must be of integer type}}
-    // expected-error@+4 {{OpenACC reduction operator '&' argument must be of integer type}}
-    // expected-error@+3 {{OpenACC reduction operator '&' argument must be of integer type}}
-    // expected-error@+2 {{OpenACC reduction operator '&' argument must be of integer type}}
-    // expected-error@+1 {{OpenACC reduction operator '&' argument must be of integer type}}
+    // expected-error@+1 9 {{OpenACC reduction operator '&' argument must be of integer type}}
     #pragma acc CMB_PAR loop vector worker reduction(&:f,d,fc,dc,p,a,s,u,sDecl) gang
     for (int i = 0; i < 5; ++i)
       ;
@@ -2464,15 +2430,7 @@ void fn(int param) {
     #pragma acc CMB_PAR loop reduction(|:b,e,i,jk)
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+9 {{OpenACC reduction operator '|' argument must be of integer type}}
-    // expected-error@+8 {{OpenACC reduction operator '|' argument must be of integer type}}
-    // expected-error@+7 {{OpenACC reduction operator '|' argument must be of integer type}}
-    // expected-error@+6 {{OpenACC reduction operator '|' argument must be of integer type}}
-    // expected-error@+5 {{OpenACC reduction operator '|' argument must be of integer type}}
-    // expected-error@+4 {{OpenACC reduction operator '|' argument must be of integer type}}
-    // expected-error@+3 {{OpenACC reduction operator '|' argument must be of integer type}}
-    // expected-error@+2 {{OpenACC reduction operator '|' argument must be of integer type}}
-    // expected-error@+1 {{OpenACC reduction operator '|' argument must be of integer type}}
+    // expected-error@+1 9 {{OpenACC reduction operator '|' argument must be of integer type}}
     #pragma acc CMB_PAR loop gang reduction(|:f,d,fc,dc,p,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;
@@ -2484,15 +2442,7 @@ void fn(int param) {
     #pragma acc CMB_PAR loop worker reduction(^:b,e,i,jk)
     for (int i = 0; i < 5; ++i)
       ;
-    // expected-error@+9 {{OpenACC reduction operator '^' argument must be of integer type}}
-    // expected-error@+8 {{OpenACC reduction operator '^' argument must be of integer type}}
-    // expected-error@+7 {{OpenACC reduction operator '^' argument must be of integer type}}
-    // expected-error@+6 {{OpenACC reduction operator '^' argument must be of integer type}}
-    // expected-error@+5 {{OpenACC reduction operator '^' argument must be of integer type}}
-    // expected-error@+4 {{OpenACC reduction operator '^' argument must be of integer type}}
-    // expected-error@+3 {{OpenACC reduction operator '^' argument must be of integer type}}
-    // expected-error@+2 {{OpenACC reduction operator '^' argument must be of integer type}}
-    // expected-error@+1 {{OpenACC reduction operator '^' argument must be of integer type}}
+    // expected-error@+1 9 {{OpenACC reduction operator '^' argument must be of integer type}}
     #pragma acc CMB_PAR loop vector reduction(^:f,d,fc,dc,p,a,s,u,sDecl)
     for (int i = 0; i < 5; ++i)
       ;

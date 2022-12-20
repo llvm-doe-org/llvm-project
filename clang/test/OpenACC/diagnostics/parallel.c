@@ -1350,97 +1350,47 @@ int main() {
 
   #pragma acc parallel LOOP reduction(max:b,e,i,jk,f,d,p)
     FORLOOP
-  // expected-error@+6 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
-  // expected-error@+5 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
-  // expected-error@+4 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
-  // expected-error@+3 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
-  // expected-error@+2 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
-  // expected-error@+1 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
+  // expected-error@+1 6 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
   #pragma acc parallel LOOP reduction(max:fc,dc,a,s,u,uDecl)
     FORLOOP
   #pragma acc parallel LOOP reduction(min:b,e,i,jk,f,d,p)
     FORLOOP
-  // expected-error@+6 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
-  // expected-error@+5 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
-  // expected-error@+4 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
-  // expected-error@+3 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
-  // expected-error@+2 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
-  // expected-error@+1 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
+  // expected-error@+1 6 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
   #pragma acc parallel LOOP reduction(min:fc,dc,a,s,u,uDecl)
     FORLOOP
   #pragma acc parallel LOOP reduction(+:b,e,i,jk,f,d,fc,dc)
     FORLOOP
-  // expected-error@+5 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
-  // expected-error@+4 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
-  // expected-error@+3 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
-  // expected-error@+2 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
-  // expected-error@+1 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
+  // expected-error@+1 5 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
   #pragma acc parallel LOOP reduction(+:p,a,s,u,uDecl)
     FORLOOP
   #pragma acc parallel LOOP reduction(*:b,e,i,jk,f,d,fc,dc)
     FORLOOP
-  // expected-error@+5 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
-  // expected-error@+4 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
-  // expected-error@+3 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
-  // expected-error@+2 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
-  // expected-error@+1 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
+  // expected-error@+1 5 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
   #pragma acc parallel LOOP reduction(*:p,a,s,u,uDecl)
     FORLOOP
   #pragma acc parallel LOOP reduction(&&:b,e,i,jk,f,d,fc,dc)
     FORLOOP
-  // expected-error@+5 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
-  // expected-error@+4 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
-  // expected-error@+3 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
-  // expected-error@+2 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
-  // expected-error@+1 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
+  // expected-error@+1 5 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
   #pragma acc parallel LOOP reduction(&&:p,a,s,u,uDecl)
     FORLOOP
   #pragma acc parallel LOOP reduction(||:b,e,i,jk,f,d,fc,dc)
     FORLOOP
-  // expected-error@+5 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
-  // expected-error@+4 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
-  // expected-error@+3 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
-  // expected-error@+2 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
-  // expected-error@+1 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
+  // expected-error@+1 5 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
   #pragma acc parallel LOOP reduction(||:p,a,s,u,uDecl)
     FORLOOP
   #pragma acc parallel LOOP reduction(&:b,e,i,jk)
     FORLOOP
-  // expected-error@+9 {{OpenACC reduction operator '&' argument must be of integer type}}
-  // expected-error@+8 {{OpenACC reduction operator '&' argument must be of integer type}}
-  // expected-error@+7 {{OpenACC reduction operator '&' argument must be of integer type}}
-  // expected-error@+6 {{OpenACC reduction operator '&' argument must be of integer type}}
-  // expected-error@+5 {{OpenACC reduction operator '&' argument must be of integer type}}
-  // expected-error@+4 {{OpenACC reduction operator '&' argument must be of integer type}}
-  // expected-error@+3 {{OpenACC reduction operator '&' argument must be of integer type}}
-  // expected-error@+2 {{OpenACC reduction operator '&' argument must be of integer type}}
-  // expected-error@+1 {{OpenACC reduction operator '&' argument must be of integer type}}
+  // expected-error@+1 9 {{OpenACC reduction operator '&' argument must be of integer type}}
   #pragma acc parallel LOOP reduction(&:f,d,fc,dc,p,a,s,u,uDecl)
     FORLOOP
   #pragma acc parallel LOOP reduction(|:b,e,i,jk)
     FORLOOP
-  // expected-error@+9 {{OpenACC reduction operator '|' argument must be of integer type}}
-  // expected-error@+8 {{OpenACC reduction operator '|' argument must be of integer type}}
-  // expected-error@+7 {{OpenACC reduction operator '|' argument must be of integer type}}
-  // expected-error@+6 {{OpenACC reduction operator '|' argument must be of integer type}}
-  // expected-error@+5 {{OpenACC reduction operator '|' argument must be of integer type}}
-  // expected-error@+4 {{OpenACC reduction operator '|' argument must be of integer type}}
-  // expected-error@+3 {{OpenACC reduction operator '|' argument must be of integer type}}
-  // expected-error@+2 {{OpenACC reduction operator '|' argument must be of integer type}}
-  // expected-error@+1 {{OpenACC reduction operator '|' argument must be of integer type}}
+  // expected-error@+1 9 {{OpenACC reduction operator '|' argument must be of integer type}}
   #pragma acc parallel LOOP reduction(|:f,d,fc,dc,p,a,s,u,uDecl)
     FORLOOP
   #pragma acc parallel LOOP reduction(^:b,e,i,jk)
     FORLOOP
-  // expected-error@+9 {{OpenACC reduction operator '^' argument must be of integer type}}
-  // expected-error@+8 {{OpenACC reduction operator '^' argument must be of integer type}}
-  // expected-error@+7 {{OpenACC reduction operator '^' argument must be of integer type}}
-  // expected-error@+6 {{OpenACC reduction operator '^' argument must be of integer type}}
-  // expected-error@+5 {{OpenACC reduction operator '^' argument must be of integer type}}
-  // expected-error@+4 {{OpenACC reduction operator '^' argument must be of integer type}}
-  // expected-error@+3 {{OpenACC reduction operator '^' argument must be of integer type}}
-  // expected-error@+2 {{OpenACC reduction operator '^' argument must be of integer type}}
-  // expected-error@+1 {{OpenACC reduction operator '^' argument must be of integer type}}
+  // expected-error@+1 9 {{OpenACC reduction operator '^' argument must be of integer type}}
   #pragma acc parallel LOOP reduction(^:f,d,fc,dc,p,a,s,u,uDecl)
     FORLOOP
 

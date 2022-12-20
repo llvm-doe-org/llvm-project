@@ -708,6 +708,130 @@ class Main {
     FORLOOP
 
     //..........................................................................
+    // Reduction operator doesn't permit variable type, but whether it's a
+    // reference type is irrelevant.
+
+    {
+      bool b0, &b = b0;
+      enum { E1, E2 } e0, &e = e0;
+      int i0, &i = i0, jk0, &jk = jk0;
+      int a0[2], (&a)[2] = a0; // #reduction_ref_a
+      int *p0, *&p = p0; // #reduction_ref_p
+      float f0, &f = f0; // #reduction_ref_f
+      double d0, &d = d0; // #reduction_ref_d
+      float _Complex fc0, &fc = fc0; // #reduction_ref_fc
+      double _Complex dc0, &dc = dc0; // #reduction_ref_dc
+      struct S { int i; } s0, &s = s0; // #reduction_ref_s
+      union U { int i; } u0, &u = u0; // #reduction_ref_u
+      extern union U &uDecl; // #reduction_ref_uDecl
+
+      #pragma acc parallel LOOP reduction(max:b,e,i,jk,f,d,p)
+        FORLOOP
+      // expected-error@+7 6 {{OpenACC reduction operator 'max' argument must be of real or pointer type}}
+      // expected-note@#reduction_ref_fc {{variable 'fc' declared here}}
+      // expected-note@#reduction_ref_dc {{variable 'dc' declared here}}
+      // expected-note@#reduction_ref_a {{variable 'a' declared here}}
+      // expected-note@#reduction_ref_s {{variable 's' declared here}}
+      // expected-note@#reduction_ref_u {{variable 'u' declared here}}
+      // expected-note@#reduction_ref_uDecl {{variable 'uDecl' declared here}}
+      #pragma acc parallel LOOP reduction(max:fc,dc,a,s,u,uDecl)
+        FORLOOP
+      #pragma acc parallel LOOP reduction(min:b,e,i,jk,f,d,p)
+        FORLOOP
+      // expected-error@+7 6 {{OpenACC reduction operator 'min' argument must be of real or pointer type}}
+      // expected-note@#reduction_ref_fc {{variable 'fc' declared here}}
+      // expected-note@#reduction_ref_dc {{variable 'dc' declared here}}
+      // expected-note@#reduction_ref_a {{variable 'a' declared here}}
+      // expected-note@#reduction_ref_s {{variable 's' declared here}}
+      // expected-note@#reduction_ref_u {{variable 'u' declared here}}
+      // expected-note@#reduction_ref_uDecl {{variable 'uDecl' declared here}}
+      #pragma acc parallel LOOP reduction(min:fc,dc,a,s,u,uDecl)
+        FORLOOP
+      #pragma acc parallel LOOP reduction(+:b,e,i,jk,f,d,fc,dc)
+        FORLOOP
+      // expected-error@+6 5 {{OpenACC reduction operator '+' argument must be of arithmetic type}}
+      // expected-note@#reduction_ref_p {{variable 'p' declared here}}
+      // expected-note@#reduction_ref_a {{variable 'a' declared here}}
+      // expected-note@#reduction_ref_s {{variable 's' declared here}}
+      // expected-note@#reduction_ref_u {{variable 'u' declared here}}
+      // expected-note@#reduction_ref_uDecl {{variable 'uDecl' declared here}}
+      #pragma acc parallel LOOP reduction(+:p,a,s,u,uDecl)
+        FORLOOP
+      #pragma acc parallel LOOP reduction(*:b,e,i,jk,f,d,fc,dc)
+        FORLOOP
+      // expected-error@+6 5 {{OpenACC reduction operator '*' argument must be of arithmetic type}}
+      // expected-note@#reduction_ref_p {{variable 'p' declared here}}
+      // expected-note@#reduction_ref_a {{variable 'a' declared here}}
+      // expected-note@#reduction_ref_s {{variable 's' declared here}}
+      // expected-note@#reduction_ref_u {{variable 'u' declared here}}
+      // expected-note@#reduction_ref_uDecl {{variable 'uDecl' declared here}}
+      #pragma acc parallel LOOP reduction(*:p,a,s,u,uDecl)
+        FORLOOP
+      #pragma acc parallel LOOP reduction(&&:b,e,i,jk,f,d,fc,dc)
+        FORLOOP
+      // expected-error@+6 5 {{OpenACC reduction operator '&&' argument must be of arithmetic type}}
+      // expected-note@#reduction_ref_p {{variable 'p' declared here}}
+      // expected-note@#reduction_ref_a {{variable 'a' declared here}}
+      // expected-note@#reduction_ref_s {{variable 's' declared here}}
+      // expected-note@#reduction_ref_u {{variable 'u' declared here}}
+      // expected-note@#reduction_ref_uDecl {{variable 'uDecl' declared here}}
+      #pragma acc parallel LOOP reduction(&&:p,a,s,u,uDecl)
+        FORLOOP
+      #pragma acc parallel LOOP reduction(||:b,e,i,jk,f,d,fc,dc)
+        FORLOOP
+      // expected-error@+6 5 {{OpenACC reduction operator '||' argument must be of arithmetic type}}
+      // expected-note@#reduction_ref_p {{variable 'p' declared here}}
+      // expected-note@#reduction_ref_a {{variable 'a' declared here}}
+      // expected-note@#reduction_ref_s {{variable 's' declared here}}
+      // expected-note@#reduction_ref_u {{variable 'u' declared here}}
+      // expected-note@#reduction_ref_uDecl {{variable 'uDecl' declared here}}
+      #pragma acc parallel LOOP reduction(||:p,a,s,u,uDecl)
+        FORLOOP
+      #pragma acc parallel LOOP reduction(&:b,e,i,jk)
+        FORLOOP
+      // expected-error@+10 9 {{OpenACC reduction operator '&' argument must be of integer type}}
+      // expected-note@#reduction_ref_f {{variable 'f' declared here}}
+      // expected-note@#reduction_ref_d {{variable 'd' declared here}}
+      // expected-note@#reduction_ref_fc {{variable 'fc' declared here}}
+      // expected-note@#reduction_ref_dc {{variable 'dc' declared here}}
+      // expected-note@#reduction_ref_p {{variable 'p' declared here}}
+      // expected-note@#reduction_ref_a {{variable 'a' declared here}}
+      // expected-note@#reduction_ref_s {{variable 's' declared here}}
+      // expected-note@#reduction_ref_u {{variable 'u' declared here}}
+      // expected-note@#reduction_ref_uDecl {{variable 'uDecl' declared here}}
+      #pragma acc parallel LOOP reduction(&:f,d,fc,dc,p,a,s,u,uDecl)
+        FORLOOP
+      #pragma acc parallel LOOP reduction(|:b,e,i,jk)
+        FORLOOP
+      // expected-error@+10 9 {{OpenACC reduction operator '|' argument must be of integer type}}
+      // expected-note@#reduction_ref_f {{variable 'f' declared here}}
+      // expected-note@#reduction_ref_d {{variable 'd' declared here}}
+      // expected-note@#reduction_ref_fc {{variable 'fc' declared here}}
+      // expected-note@#reduction_ref_dc {{variable 'dc' declared here}}
+      // expected-note@#reduction_ref_p {{variable 'p' declared here}}
+      // expected-note@#reduction_ref_a {{variable 'a' declared here}}
+      // expected-note@#reduction_ref_s {{variable 's' declared here}}
+      // expected-note@#reduction_ref_u {{variable 'u' declared here}}
+      // expected-note@#reduction_ref_uDecl {{variable 'uDecl' declared here}}
+      #pragma acc parallel LOOP reduction(|:f,d,fc,dc,p,a,s,u,uDecl)
+        FORLOOP
+      #pragma acc parallel LOOP reduction(^:b,e,i,jk)
+        FORLOOP
+      // expected-error@+10 9 {{OpenACC reduction operator '^' argument must be of integer type}}
+      // expected-note@#reduction_ref_f {{variable 'f' declared here}}
+      // expected-note@#reduction_ref_d {{variable 'd' declared here}}
+      // expected-note@#reduction_ref_fc {{variable 'fc' declared here}}
+      // expected-note@#reduction_ref_dc {{variable 'dc' declared here}}
+      // expected-note@#reduction_ref_p {{variable 'p' declared here}}
+      // expected-note@#reduction_ref_a {{variable 'a' declared here}}
+      // expected-note@#reduction_ref_s {{variable 's' declared here}}
+      // expected-note@#reduction_ref_u {{variable 'u' declared here}}
+      // expected-note@#reduction_ref_uDecl {{variable 'uDecl' declared here}}
+      #pragma acc parallel LOOP reduction(^:f,d,fc,dc,p,a,s,u,uDecl)
+        FORLOOP
+    }
+
+    //..........................................................................
     // Conflicting DSAs.
 
     // par-error@+3 {{private variable defined again as private variable}}

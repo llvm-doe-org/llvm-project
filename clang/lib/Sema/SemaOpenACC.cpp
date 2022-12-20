@@ -4022,7 +4022,7 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
     if (!Var.isValid())
       continue;
 
-    QualType Type = Var.getType();
+    QualType Type = Var.getType().getNonReferenceType();
 
     // The OpenACC 2.6 spec doesn't say, as far as I know, that a private
     // variable must have a complete type.  However, you cannot copy data if
