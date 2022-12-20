@@ -43,6 +43,12 @@ public:
   S s;
 };
 
+template <typename T>
+void reductionPlusTmplTypeVar(T var) { // #reductionPlusTmplTypeVar_var
+  #pragma acc parallel LOOP reduction(+: var) // #reductionPlusTmplTypeVar_reduction
+  FORLOOP
+}
+
 class Main {
   int thisMember = 0;
   const int thisConstMember = 0; // #Main_thisConstMember
@@ -829,6 +835,21 @@ class Main {
       // expected-note@#reduction_ref_uDecl {{variable 'uDecl' declared here}}
       #pragma acc parallel LOOP reduction(^:f,d,fc,dc,p,a,s,u,uDecl)
         FORLOOP
+    }
+
+    //..........................................................................
+    // Reduction operator mismatch with variable type is diagnosed only when
+    // template is instantiated with mismatched type.
+
+    {
+      int i, *p;
+      float f;
+      reductionPlusTmplTypeVar(i);
+      // expected-error@#reductionPlusTmplTypeVar_reduction {{OpenACC reduction operator '+' argument must be of arithmetic type}}
+      // expected-note@+2 {{in instantiation of function template specialization 'reductionPlusTmplTypeVar<int *>' requested here}}
+      // expected-note@#reductionPlusTmplTypeVar_var {{variable 'var' declared here}}
+      reductionPlusTmplTypeVar(p);
+      reductionPlusTmplTypeVar(f);
     }
 
     //..........................................................................

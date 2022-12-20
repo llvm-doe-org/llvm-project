@@ -49,6 +49,51 @@ public:
   S s;
 };
 
+#if PARENT == PARENT_ORPHANED
+#pragma acc routine gang
+#endif
+template <typename T>
+void reductionPlusTmplTypeVar(T var) { // #reductionPlusTmplTypeVar_var
+  // Any valid loop gang reduction (unless orphaned) must be copied to the
+  // parallel construct.  When the template is instantiated with a T such that
+  // '+' cannot be used as a reduction operator for var, Clang should diagnose
+  // that mismatch exactly once, at the original gang loop reduction, which
+  // Clang should then discard so that it never copies it to the parallel
+  // construct.  The risk is that, if Clang copies the reduction while
+  // processing the original template and does not ignore that copy after
+  // diagnosing the problem with the loop reduction within the instantiation, it
+  // might duplicate the diagnostic at the copied reduction.
+#if PARENT == PARENT_SEPARATE
+  #pragma acc parallel copy(var)
+#endif
+  #pragma acc CMB_PAR loop gang reduction(+: var) // #reductionPlusTmplTypeVar_reduction
+  for (int i = 0; i < 5; ++i)
+    var += i;
+}
+
+#if PARENT == PARENT_ORPHANED
+#pragma acc routine gang
+#endif
+template <typename T>
+void loopReductionNeedsDataClause(T var) { // #loopReductionNeedsDataClause_var
+  // Where the template is instantiated such that T is a scalar, we should see a
+  // diagnostic that var needs a data clause on the acc parallel.
+  //
+  // Where the template is instantiated such that T is not a scalar, we should
+  // see a diagnostic that non-scalars are not yet supported in reductions.
+  //
+  // The template itself should produce neither diagnostic as it doesn't
+  // determine whether T is a scalar.
+#if PARENT == PARENT_SEPARATE
+  #pragma acc parallel // #loopReductionNeedsDataClause_parallel
+#endif
+  {
+    #pragma acc CMB_PAR loop gang worker vector reduction(+:var) // #loopReductionNeedsDataClause_reduction
+    for (int i = 0; i < 5; ++i)
+      var += i;
+  }
+}
+
 class Main {
   int thisMember = 0;
   const int thisConstMember = 0; // #Main_thisConstMember
@@ -541,6 +586,21 @@ class Main {
     }
 
     //..........................................................................
+    // Reduction operator mismatch with variable type is diagnosed only when
+    // template is instantiated with mismatched type.
+
+    {
+      int i, *p;
+      float f;
+      reductionPlusTmplTypeVar(i);
+      // expected-error@#reductionPlusTmplTypeVar_reduction {{OpenACC reduction operator '+' argument must be of arithmetic type}}
+      // expected-note@+2 {{in instantiation of function template specialization 'reductionPlusTmplTypeVar<int *>' requested here}}
+      // expected-note@#reductionPlusTmplTypeVar_var {{variable 'var' declared here}}
+      reductionPlusTmplTypeVar(p);
+      reductionPlusTmplTypeVar(f);
+    }
+
+    //..........................................................................
     // Conflicting DSAs.
 
 #if PARENT == PARENT_SEPARATE
@@ -623,5 +683,28 @@ class Main {
       for (int i = 0; i < 5; ++i)
         ;
     }
+  }
+
+  //----------------------------------------------------------------------------
+  // Data clauses: data clauses required for scalar loop reduction var
+  //
+  // This is diagnosed only when template is instantiated with scalar type.
+  //----------------------------------------------------------------------------
+
+#if PARENT == PARENT_ORPHANED
+  #pragma acc routine gang
+#endif
+  void testLoopReductionNeedsDataClause() {
+    int i;
+    int arr[8];
+    // sep-error@#loopReductionNeedsDataClause_reduction {{scalar loop reduction variable 'var' requires data clause visible at parent '#pragma acc parallel'}}
+    // sep-note@+3 {{in instantiation of function template specialization 'loopReductionNeedsDataClause<int>' requested here}}
+    // sep-note@#loopReductionNeedsDataClause_parallel {{parent '#pragma acc parallel' appears here}}
+    // sep-note@#loopReductionNeedsDataClause_reduction {{suggest 'copy(var)' because 'var' has gang reduction, specified here}}
+    loopReductionNeedsDataClause(i);
+    // expected-error@#loopReductionNeedsDataClause_reduction {{OpenACC reduction operator '+' argument must be of arithmetic type}}
+    // expected-note@+2 {{in instantiation of function template specialization 'loopReductionNeedsDataClause<int *>' requested here}}
+    // expected-note@#loopReductionNeedsDataClause_var {{variable 'var' declared here}}
+    loopReductionNeedsDataClause(arr);
   }
 };

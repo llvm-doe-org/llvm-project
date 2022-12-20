@@ -569,6 +569,152 @@ See the section "Source-to-Source Mode Limitations" in
 `README-OpenACC-status.md` for details on how this currently limits
 `-fopenacc-print`.
 
+OpenACC Directive within C++ Templates
+======================================
+
+Clacc's support for OpenACC directives appearing within C++ templates is in its
+infancy.  This section discusses related design principles and caveats, but
+these will likely evolve as support grows.
+
+Background: TreeTransform Member Functions
+------------------------------------------
+
+As discussed in the section "TransformACCToOMP" above, Clang uses
+`TreeTransform` to transform C++ templates for the sake of instantiating them.
+Specifically, Clang derives `TemplateInstantiator` from `TreeTransform` for this
+purpose.
+
+Within `TreeTransform`, for each kind of AST node, a member function must be
+implemented to call the same `Sema` actions the parser normally calls to build
+that AST node.  The difference from the parser is the input: instead of textual
+source code, the input consists of (1) the template's corresponding AST node,
+which is passed as an argument to the `TreeTransform` member function, and (2)
+template arguments and other instantiation-specific information, which are
+contained with the `TemplateInstantiator` object.
+
+In contrast, `TreeTransform` is not used for a template specialization providing
+a new template definition, which is instead parsed into new AST nodes.
+
+For OpenACC AST nodes, such as `ACCParallelDirective`, Clacc adds
+implementations for associated `TreeTransform` member functions, such as
+`TransformACCParallelDirective`.  The remainder of this section describes Clacc
+design principles governing the relationship between these member functions and
+OpenACC actions in `Sema`.
+
+Assume Conformance Where Undefined
+----------------------------------
+
+While parsing an original template or a partial template specialization, if
+missing actual template arguments are required to determine whether OpenACC
+directives violate a restriction, Clacc's OpenACC `Sema` actions assume there is
+no violation, skip associated diagnostics, and continue building the AST.  Where
+a template is instantiated, such undefined cases are eliminated.  As discussed
+above, Clacc's `TreeTransform` member functions then perform the `Sema` actions
+again and thus diagnose any violation of the restriction.  Where a restriction
+violation can be determined in a template despite missing template arguments,
+rather than waiting for template instantiations, Clacc's `Sema` actions diagnose
+it immediately in the template where the diagnostic is more helpful to the user.
+
+For example:
+
+```
+template <typename T>
+void f(T x) {
+  #pragma acc parallel copy(x) // implicit reduction(+:x)
+  #pragma acc loop gang worker vector reduction(+:x)
+  for (int i = 0; i < N; ++i)
+  x += N;
+}
+void g(int i)  { f(i); }
+void h(int *p) { f(p); } // error: OpenACC reduction operator '+' argument must be of arithmetic type
+```
+
+While parsing the template function `f`, Clacc's `Sema` actions assume `T` is
+compatible with the reduction operator `+` on the `loop` construct.  While
+instantiating `f` for its use in `g`, they verify that `int` is indeed
+compatible.  However, while instantiating `f` for its use in `h`, they report an
+error diagnostic that `int *` is not compatible, and they then discard the
+explicit `reduction` on the `loop` construct as a result.
+
+TODO: In some cases, Clacc does not yet implement detection of template argument
+dependencies and thus reports error diagnostics when it shouldn't in the
+template.
+
+Discard AST Nodes Computed for Templates
+----------------------------------------
+
+The implementation of any of Clacc's `TreeTransform` member functions is mostly
+straightforward.  It extracts properties from the template's AST node and calls
+`Sema` actions to build the template instantiation's corresponding AST node from
+those properties.  When such a property is another AST node, it normally calls
+an appropriate `TreeTransform` member function to recurse and rebuild it first.
+
+However, that recursion is usually sufficient only for AST nodes that correspond
+to explicit source code.  AST nodes computed by the OpenACC semantic analysis
+must be recomputed from scratch to consider the impact of the template
+arguments.  Specifically:
+
+* Clacc's `TreeTransform` member functions ignore the predetermined and
+  implicitly determined clauses previously computed for a template.  Doing so
+  permits the `Sema` actions for the associated OpenACC directive to recompute
+  the clauses from scratch for the template instantiation.
+* After building the OpenACC directive's new AST node with new such clauses, it
+  calls `TransformACCToOMP` to recompute its OpenMP node in terms of them.
+
+For example, in `f` in the previous example, Clacc's `Sema` actions for the
+`parallel` construct compute an implicit `reduction` clause to indicate that the
+`loop` construct's gang reduction is effectively performed there ("Semantic
+Clarifications" later in this document explains implicit `reduction` clauses).
+However, in the instantiation of `f` within `h`, because the explicit
+`reduction` clause on the `loop` construct is found to have a type compatibility
+error, Clacc's `Sema` actions for the `parallel` construct now do not compute
+the implicit `reduction` clause.  It is important here that Clacc's
+`TreeTransform` member function for the `parallel` construct ignores the
+implicit `reduction` clause from the original template because recursing and
+rebuilding it with `TreeTransform` would trigger the same type compatibility
+diagnostic again except it would be for a bogus `reduction` clause that the user
+cannot see.
+
+Traditional Compilation vs. Source-to-Source Mode
+-------------------------------------------------
+
+For traditional compilation, it might seem that computing the implicit
+`reduction` clause for the original template `f` in the previous example is
+never useful.  That is, LLVM IR codegen is not performed for the original
+template but only for its instantiations, so computing implicit clauses might
+seem useful only for instantiations to translate to OpenMP before performing
+LLVM IR codegen.  Even so, implicit clauses are often important for subsequent
+OpenACC analysis, which can sometimes be useful to produce diagnostics
+immediately at the template.
+
+For source-to-source mode, the reverse is true: OpenMP source is generated for
+the original template and not for its instantiations.  Thus, OpenACC implicit
+clauses are needed in the original templates in order to translate to OpenMP
+before printing OpenMP source.  Unfortunately, without the type information
+provided by template arguments, some OpenACC implicit clauses cannot be
+computed.  In the current implementation, this issue sometimes prevents
+source-to-source mode from behaving correctly.  A couple of possible approaches
+to solving this problem are as follows, but neither has been implemented:
+
+* In the original templates, somehow generate OpenMP directives that encode
+  OpenACC's general implicit clause rules.  For example, we might rely on
+  OpenMP's implicit clause rules where sufficient and add OpenMP's `defaultmap`
+  clause for other cases.  However, before supporting C++, Clacc's approach has
+  been not to rely on implicit clauses in the OpenMP translation when possible,
+  as discussed under "Explicit vs. Implicit OpenMP Clauses" below, so we have
+  not investigated exactly what an encoding of the general rules would look
+  like in OpenMP.
+* For template instantiations, generate explicit template specializations
+  containing the OpenMP directives.  However, even in the simple example above,
+  it is not clear where those specializations should be inserted in the
+  translation, and it is still not clear what the original template should look
+  like in the translation.  Furthermore, imagine an elaborate template class
+  appearing in a header file and instantiations appearing in many compilation
+  units.  Replicating that class in template specializations throughout all the
+  compilation units is surely not what the source-to-source mode user would
+  want.  They likely just want the OpenACC directives to be translated to OpenMP
+  in their original source locations within the original template.
+
 Interaction with OpenMP Support
 ===============================
 

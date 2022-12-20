@@ -1532,6 +1532,10 @@ public:
           // Skip variable if it is locally declared or privatized by a clause.
           if (LocalDefinitions.back().count(Var))
             continue;
+          // Skip variable if its type is dependent.  The diagnostic won't make
+          // sense if the variable turns out never to be a scalar.
+          if (Var.getType()->isDependentType())
+            continue;
           // Currently, Clang supports only scalar variables in OpenACC
           // reductions.
           assert(Var.getType()->isScalarType() &&
@@ -4046,33 +4050,38 @@ ACCClause *Sema::ActOnOpenACCReductionClause(
 
     // Is the reduction variable type reasonable for the reduction operator?
     //
+    // Skip this check if the variable's type is dependent.  The type might
+    // always turn out to be correct.
+    //
     // TODO: When adding support for arrays, this should be on the base element
     // type of the array.  See the OpenMP implementation for an example.
-    unsigned DiagN = diag::NUM_BUILTIN_SEMA_DIAGNOSTICS;
-    switch (RedOpType) {
-    case RedOpInteger:
-      if (!Type->isIntegerType())
-        DiagN = diag::err_acc_reduction_not_integer_type;
-      break;
-    case RedOpArithmetic:
-      if (!Type->isArithmeticType())
-        DiagN = diag::err_acc_reduction_not_arithmetic_type;
-      break;
-    case RedOpRealOrPointer:
-      if (!Type->isRealType() && !Type->isPointerType())
-        DiagN = diag::err_acc_reduction_not_real_or_pointer_type;
-      break;
-    case RedOpInvalid:
-      llvm_unreachable("expected reduction operand type");
-    }
-    if (DiagN != diag::NUM_BUILTIN_SEMA_DIAGNOSTICS) {
-      Diag(ELoc, DiagN)
-          << ACCReductionClause::printReductionOperatorToString(ReductionId);
-      if (Var.hasReferencedDecl())
-        Diag(Var.getReferencedDecl()->getLocation(),
-             diag::note_acc_var_declared)
-            << NameForDiag(*this, Var);
-      continue;
+    if (!Type->isDependentType()) {
+      unsigned DiagN = diag::NUM_BUILTIN_SEMA_DIAGNOSTICS;
+      switch (RedOpType) {
+      case RedOpInteger:
+        if (!Type->isIntegerType())
+          DiagN = diag::err_acc_reduction_not_integer_type;
+        break;
+      case RedOpArithmetic:
+        if (!Type->isArithmeticType())
+          DiagN = diag::err_acc_reduction_not_arithmetic_type;
+        break;
+      case RedOpRealOrPointer:
+        if (!Type->isRealType() && !Type->isPointerType())
+          DiagN = diag::err_acc_reduction_not_real_or_pointer_type;
+        break;
+      case RedOpInvalid:
+        llvm_unreachable("expected reduction operand type");
+      }
+      if (DiagN != diag::NUM_BUILTIN_SEMA_DIAGNOSTICS) {
+        Diag(ELoc, DiagN)
+            << ACCReductionClause::printReductionOperatorToString(ReductionId);
+        if (Var.hasReferencedDecl())
+          Diag(Var.getReferencedDecl()->getLocation(),
+               diag::note_acc_var_declared)
+              << NameForDiag(*this, Var);
+        continue;
+      }
     }
 
     // OpenACC 3.2, sec. 2.9.11 "reduction clause", L2114:

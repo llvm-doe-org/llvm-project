@@ -4107,6 +4107,13 @@ ACCClause *TreeTransform<Derived>::TransformACCClause(ACCClause *S) {
   if (!S)
     return S;
 
+  // Ignore this clause if it was computed (predetermined or implicit).  Such
+  // clauses will be computed again based on any additional information in this
+  // transformation (e.g., actual template arguments).  See the Clang OpenACC
+  // design document for further discussion.
+  if (S->getDetermination() != ACC_EXPLICIT)
+    return nullptr;
+
   switch (S->getClauseKind()) {
   default: break;
   // Transform individual clause nodes
