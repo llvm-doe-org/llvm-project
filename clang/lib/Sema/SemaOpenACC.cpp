@@ -4450,6 +4450,10 @@ ACCClause *Sema::ActOnOpenACCCompareClause(SourceLocation StartLoc,
   return new (Context) ACCCompareClause(StartLoc, EndLoc);
 }
 
+ExprResult Sema::ActOnOpenACCStarExpr(SourceLocation Loc) {
+  return new (Context) ACCStarExpr(Context, Loc);
+}
+
 bool Sema::isInOpenACCDirectiveStmt() {
   return isOpenACCDirectiveStmt(OpenACCData->DirStack.getRealDirective());
 }

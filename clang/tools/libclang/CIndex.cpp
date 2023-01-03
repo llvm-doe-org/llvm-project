@@ -5404,6 +5404,8 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
     return cxstring::createRef("ObjCMessageExpr");
   case CXCursor_BuiltinBitCastExpr:
     return cxstring::createRef("BuiltinBitCastExpr");
+  case CXCursor_ACCStarExpr:
+    return cxstring::createRef("ACCStarExpr");
   case CXCursor_UnexposedStmt:
     return cxstring::createRef("UnexposedStmt");
   case CXCursor_DeclStmt:

@@ -3455,6 +3455,7 @@ bool Expr::HasSideEffects(const ASTContext &Ctx,
   case ConceptSpecializationExprClass:
   case RequiresExprClass:
   case SYCLUniqueStableNameExprClass:
+  case ACCStarExprClass:
     // These never have a side-effect.
     return false;
 

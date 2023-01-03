@@ -2706,6 +2706,12 @@ void ASTStmtWriter::VisitACCAtomicDirective(ACCAtomicDirective *D) {
   Code = serialization::STMT_ACC_ATOMIC_DIRECTIVE;
 }
 
+void ASTStmtWriter::VisitACCStarExpr(ACCStarExpr *E) {
+  VisitExpr(E);
+  Record.AddSourceLocation(E->getLoc());
+  Code = serialization::EXPR_ACC_STAR;
+}
+
 //===----------------------------------------------------------------------===//
 // ASTWriter Implementation
 //===----------------------------------------------------------------------===//

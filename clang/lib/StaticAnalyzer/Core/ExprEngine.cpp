@@ -1309,6 +1309,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
     case Stmt::ACCLoopDirectiveClass:
     case Stmt::ACCParallelLoopDirectiveClass:
     case Stmt::ACCAtomicDirectiveClass:
+    case Stmt::ACCStarExprClass:
     case Stmt::CapturedStmtClass:
     case Stmt::OMPUnrollDirectiveClass:
     case Stmt::OMPMetaDirectiveClass: {

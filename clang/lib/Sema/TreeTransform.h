@@ -22,6 +22,7 @@
 #include "clang/AST/ExprConcepts.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
+#include "clang/AST/ExprOpenACC.h"
 #include "clang/AST/ExprOpenMP.h"
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/Stmt.h"
@@ -2537,6 +2538,14 @@ public:
                                       SourceLocation EndLoc) {
     return getSema().ActOnOpenACCCollapseClause(Collapse, StartLoc, LParenLoc,
                                                 EndLoc);
+  }
+
+  /// Build a new OpenACC '*' expression.
+  ///
+  /// By default, performs semantic analysis to build the new expression.
+  /// Subclasses may override this routine to provide different behavior.
+  ExprResult RebuildACCStarExpr(SourceLocation Loc) {
+    return getSema().ActOnOpenACCStarExpr(Loc);
   }
 
   /// Rebuild the operand to an Objective-C \@synchronized statement.
@@ -15080,6 +15089,13 @@ TreeTransform<Derived>::TransformAtomicExpr(AtomicExpr *E) {
 
   return getDerived().RebuildAtomicExpr(E->getBuiltinLoc(), SubExprs,
                                         E->getOp(), E->getRParenLoc());
+}
+
+template <typename Derived>
+ExprResult TreeTransform<Derived>::TransformACCStarExpr(ACCStarExpr *E) {
+  if (!getDerived().AlwaysRebuild())
+    return E;
+  return getDerived().RebuildACCStarExpr(E->getBeginLoc());
 }
 
 //===----------------------------------------------------------------------===//

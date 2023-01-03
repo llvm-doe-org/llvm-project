@@ -2747,6 +2747,11 @@ void ASTStmtReader::VisitACCAtomicDirective(ACCAtomicDirective *D) {
   VisitACCDirectiveStmt(D);
 }
 
+void ASTStmtReader::VisitACCStarExpr(ACCStarExpr *E) {
+  VisitExpr(E);
+  E->setLoc(readSourceLocation());
+}
+
 //===----------------------------------------------------------------------===//
 // ASTReader Implementation
 //===----------------------------------------------------------------------===//
@@ -3782,6 +3787,10 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
       S = ACCAtomicDirective::CreateEmpty(Context, NumClauses, Empty);
       break;
     }
+
+    case EXPR_ACC_STAR:
+      S = new (Context) ACCStarExpr(Empty);
+      break;
 
     case EXPR_CXX_OPERATOR_CALL:
       S = CXXOperatorCallExpr::CreateEmpty(

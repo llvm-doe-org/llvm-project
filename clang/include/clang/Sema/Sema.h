@@ -11827,6 +11827,8 @@ public:
   /// Called on well-formed 'compare' clause.
   ACCClause *ActOnOpenACCCompareClause(SourceLocation StartLoc,
                                        SourceLocation EndLoc);
+  /// Called on well-formed OpenACC '*' expression.
+  ExprResult ActOnOpenACCStarExpr(SourceLocation Loc);
 
   /// Is an OpenACC directive that forms a statement currently being analyzed?
   bool isInOpenACCDirectiveStmt();

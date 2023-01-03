@@ -2189,7 +2189,11 @@ enum CXCursorKind {
    */
   CXCursor_CXXAddrspaceCastExpr = 152,
 
-  CXCursor_LastExpr = CXCursor_CXXAddrspaceCastExpr,
+  /** OpenACC '*' expression
+   */
+  CXCursor_ACCStarExpr = 153,
+
+  CXCursor_LastExpr = CXCursor_ACCStarExpr,
 
   /* Statements */
   CXCursor_FirstStmt = 200,

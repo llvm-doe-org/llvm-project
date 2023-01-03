@@ -2433,6 +2433,8 @@ void StmtProfiler::VisitObjCAvailabilityCheckExpr(
   VisitExpr(S);
 }
 
+void StmtProfiler::VisitACCStarExpr(const ACCStarExpr *S) { VisitExpr(S); }
+
 void StmtProfiler::VisitTemplateArguments(const TemplateArgumentLoc *Args,
                                           unsigned NumArgs) {
   ID.AddInteger(NumArgs);
