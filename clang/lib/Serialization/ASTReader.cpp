@@ -13314,7 +13314,12 @@ void ACCClauseReader::VisitACCVectorLengthClause(ACCVectorLengthClause *C) {
 void ACCClauseReader::VisitACCSeqClause(ACCSeqClause *) {}
 void ACCClauseReader::VisitACCIndependentClause(ACCIndependentClause *) {}
 void ACCClauseReader::VisitACCAutoClause(ACCAutoClause *) {}
-void ACCClauseReader::VisitACCGangClause(ACCGangClause *) {}
+void ACCClauseReader::VisitACCGangClause(ACCGangClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  C->setStaticKwLoc(Record.readSourceLocation());
+  C->setStaticColonLoc(Record.readSourceLocation());
+  C->setStaticArg(Record.readSubExpr());
+}
 void ACCClauseReader::VisitACCWorkerClause(ACCWorkerClause *) {}
 void ACCClauseReader::VisitACCVectorClause(ACCVectorClause *) {}
 

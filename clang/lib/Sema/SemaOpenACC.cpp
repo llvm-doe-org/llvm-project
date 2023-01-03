@@ -4214,6 +4214,7 @@ enum PosIntResult {PosIntConst, PosIntNonConst, PosIntError};
 
 static PosIntResult IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
                                            OpenACCClauseKind CKind,
+                                           Optional<StringRef> ArgName,
                                            bool ErrorIfNotConst) {
   SourceLocation Loc = ValExpr->getExprLoc();
   // This uses err_omp_* diagnostics, but none currently mention OpenMP or
@@ -4235,13 +4236,16 @@ static PosIntResult IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
   if (!Result) {
     if (ErrorIfNotConst) {
       SemaRef.Diag(Loc, diag::err_acc_clause_not_ice)
-          << getOpenACCName(CKind) << ValExpr->getSourceRange();
+          << getOpenACCName(CKind) << ArgName.hasValue()
+          << ArgName.getValueOr("") << ValExpr->getSourceRange();
       return PosIntError;
     }
     return PosIntNonConst;
-  } else if (!Result->isStrictlyPositive()) {
+  }
+  if (!Result->isStrictlyPositive()) {
     SemaRef.Diag(Loc, diag::err_acc_clause_not_positive_ice)
-        << getOpenACCName(CKind) << ValExpr->getSourceRange();
+        << getOpenACCName(CKind) << ArgName.hasValue() << ArgName.getValueOr("")
+        << ValExpr->getSourceRange();
     return PosIntError;
   }
 
@@ -4344,6 +4348,21 @@ ACCClause *Sema::ActOnOpenACCGangClause(OpenACCDetermination Determination,
   return new (Context) ACCGangClause(Determination, StartLoc, EndLoc);
 }
 
+ACCClause *Sema::ActOnOpenACCGangClause(SourceLocation StartLoc,
+                                        SourceLocation LParenLoc,
+                                        SourceLocation StaticKwLoc,
+                                        SourceLocation StaticColonLoc,
+                                        Expr *StaticArg,
+                                        SourceLocation EndLoc) {
+  if (!isa<ACCStarExpr>(StaticArg) &&
+      PosIntError == IsPositiveIntegerValue(StaticArg, *this, ACCC_gang,
+                                            StringRef("static:"),
+                                            /*ErrorIfNotConst=*/false))
+    return nullptr;
+  return new (Context) ACCGangClause(StartLoc, LParenLoc, StaticKwLoc,
+                                     StaticColonLoc, StaticArg, EndLoc);
+}
+
 ACCClause *Sema::ActOnOpenACCWorkerClause(SourceLocation StartLoc,
                                           SourceLocation EndLoc) {
   return new (Context) ACCWorkerClause(StartLoc, EndLoc);
@@ -4362,7 +4381,8 @@ ACCClause *Sema::ActOnOpenACCNumGangsClause(Expr *NumGangs,
   // OpenACC doesn't specify such a restriction that I see for num_gangs, but
   // it seems reasonable.
   if (PosIntError == IsPositiveIntegerValue(NumGangs, *this, ACCC_num_gangs,
-                                            false))
+                                            /*ArgName=*/None,
+                                            /*ErrorIfNotConst=*/false))
     return nullptr;
   return new (Context) ACCNumGangsClause(NumGangs, StartLoc, LParenLoc,
                                          EndLoc);
@@ -4375,8 +4395,9 @@ ACCClause *Sema::ActOnOpenACCNumWorkersClause(Expr *NumWorkers,
   // OpenMP says num_threads must evaluate to a positive integer value.
   // OpenACC doesn't specify such a restriction that I see for num_workers, but
   // it seems reasonable.
-  if (PosIntError == IsPositiveIntegerValue(NumWorkers, *this,
-                                            ACCC_num_workers, false))
+  if (PosIntError == IsPositiveIntegerValue(NumWorkers, *this, ACCC_num_workers,
+                                            /*ArgName=*/None,
+                                            /*ErrorIfNotConst=*/false))
     return nullptr;
   return new (Context) ACCNumWorkersClause(NumWorkers, StartLoc, LParenLoc,
                                            EndLoc);
@@ -4399,8 +4420,9 @@ ACCClause *Sema::ActOnOpenACCVectorLengthClause(Expr *VectorLength,
   // However, the translation to OpenMP is careful to evaluate the expression
   // if it might have side effects.
   //
-  PosIntResult Res = IsPositiveIntegerValue(VectorLength, *this,
-                                            ACCC_vector_length, false);
+  PosIntResult Res =
+      IsPositiveIntegerValue(VectorLength, *this, ACCC_vector_length,
+                             /*ArgName=*/None, /*ErrorIfNotConst=*/false);
   if (Res == PosIntError)
     return nullptr;
   if (Res == PosIntNonConst)
@@ -4416,7 +4438,8 @@ ACCClause *Sema::ActOnOpenACCCollapseClause(Expr *Collapse,
                                             SourceLocation LParenLoc,
                                             SourceLocation EndLoc) {
   if (PosIntError == IsPositiveIntegerValue(Collapse, *this, ACCC_collapse,
-                                            true))
+                                            /*ArgName=*/None,
+                                            /*ErrorIfNotConst=*/true))
     return nullptr;
   OpenACCData->DirStack.setAssociatedLoops(
       Collapse->EvaluateKnownConstInt(Context).getExtValue());

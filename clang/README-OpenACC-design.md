@@ -2014,6 +2014,8 @@ its clauses to OpenMP is as follows:
 * If *exp* `vector`, then *exp* `vector_length` with a
   constant-expression argument from ancestor `acc parallel` -> *exp*
   `simdlen`.
+* `static:*` within `gang` -> `dist_schedule(static)`
+* `static:`*N* within `gang` -> `dist_schedule(static,`*N*`)`
 * `collapse` -> `collapse`
 * The translation discards *imp* `shared`.  Notes:
     * We have not found a scenario in which *imp* `shared` -> *exp* `shared`

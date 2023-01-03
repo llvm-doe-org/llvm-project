@@ -7112,7 +7112,12 @@ void ACCClauseWriter::VisitACCVectorLengthClause(ACCVectorLengthClause *C) {
 void ACCClauseWriter::VisitACCSeqClause(ACCSeqClause *) {}
 void ACCClauseWriter::VisitACCIndependentClause(ACCIndependentClause *) {}
 void ACCClauseWriter::VisitACCAutoClause(ACCAutoClause *) {}
-void ACCClauseWriter::VisitACCGangClause(ACCGangClause *) {}
+void ACCClauseWriter::VisitACCGangClause(ACCGangClause *C) {
+  Record.AddSourceLocation(C->getLParenLoc());
+  Record.AddSourceLocation(C->getStaticKwLoc());
+  Record.AddSourceLocation(C->getStaticColonLoc());
+  Record.AddStmt(C->getStaticArg());
+}
 void ACCClauseWriter::VisitACCWorkerClause(ACCWorkerClause *) {}
 void ACCClauseWriter::VisitACCVectorClause(ACCVectorClause *) {}
 

@@ -1475,8 +1475,9 @@ def err_acc_unknown_directive : Error<
   "unknown or unsupported OpenACC directive">;
 def err_acc_unexpected_directive : Error<
   "unexpected OpenACC directive '#pragma acc %0'">;
-def err_acc_expected_punc : Error<
+def err_acc_clause_expected_comma_or_paren : Error<
   "expected ',' or ')' in '%0' clause">;
+def err_acc_clause_expected_token : Error<"expected '%1' in '%0' clause">;
 def err_acc_more_one_clause : Error<
   "directive '#pragma acc %0' cannot contain more than one '%1' clause">;
 def err_acc_unexpected_clause : Error<

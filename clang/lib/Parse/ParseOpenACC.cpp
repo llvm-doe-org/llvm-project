@@ -386,7 +386,11 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
                                       {ACCC_seq});
       }
     }
-    Clause = ParseOpenACCNoArgClause(CKind, WrongDirective);
+    if (isOpenACCLoopDirective(DKind) && CKind == ACCC_gang &&
+        PP.LookAhead(/*N=*/0).is(tok::l_paren))
+      Clause = ParseOpenACCGangClauseWithArg(WrongDirective);
+    else
+      Clause = ParseOpenACCNoArgClause(CKind, WrongDirective);
     break;
   case ACCC_present:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
@@ -447,25 +451,33 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
   return ErrorFound ? nullptr : Clause;
 }
 
-/// Parses simple expression in parens for single-expression clauses of OpenACC
-/// constructs.
-/// \param RLoc Returned location of right paren.
+/// Parses simple expression for argument of OpenACC directive.
+ExprResult Parser::ParseOpenACCArgExpr() {
+  SourceLocation ExprLoc = Tok.getLocation();
+  ExprResult LHS(ParseCastExpression(AnyCastExpr, /*isAddressOfOperand=*/false,
+                                     NotTypeCast));
+  ExprResult Val(ParseRHSOfBinaryExpression(LHS, prec::Conditional));
+  return Actions.ActOnFinishFullExpr(Val.get(), ExprLoc,
+                                     /*DiscardedValue=*/false);
+}
+
+/// Parses simple expression in parens for single-expression clause of OpenACC
+/// directive.
+/// \param RParenLoc Returns location of right paren.
 ExprResult Parser::ParseOpenACCParensExpr(StringRef ClauseName,
-                                          SourceLocation &RLoc) {
+                                          SourceLocation &RParenLoc) {
+  // Parse '('.
   BalancedDelimiterTracker T(*this, tok::l_paren, tok::annot_pragma_openacc_end);
   if (T.expectAndConsume(diag::err_expected_lparen_after, ClauseName.data()))
     return ExprError();
 
-  SourceLocation ELoc = Tok.getLocation();
-  ExprResult LHS(ParseCastExpression(AnyCastExpr, /*isAddressOfOperand=*/false,
-                                     NotTypeCast));
-  ExprResult Val(ParseRHSOfBinaryExpression(LHS, prec::Conditional));
-  Val = Actions.ActOnFinishFullExpr(Val.get(), ELoc, /*DiscardedValue*/ false);
+  // Parse expression.
+  ExprResult Val = Parser::ParseOpenACCArgExpr();
 
   // Parse ')'.
-  RLoc = Tok.getLocation();
+  RParenLoc = Tok.getLocation();
   if (!T.consumeClose())
-    RLoc = T.getCloseLocation();
+    RParenLoc = T.getCloseLocation();
 
   return Val;
 }
@@ -491,6 +503,84 @@ ACCClause *Parser::ParseOpenACCSingleExprClause(OpenACCClauseKind Kind,
   return Actions.ActOnOpenACCSingleExprClause(Kind, Val.get(), Loc, LLoc, RLoc);
 }
 
+/// Parsing of OpenACC 'gang' clause's argument.
+///
+///   gang-clause:
+///     'gang' '(' 'static' ':' expression ')'
+///
+/// Fail an assert if next two tokens aren't 'gang' and '('.
+///
+/// If anything after that isn't as expected, diagnose it, and skip the rest of
+/// the clause because we don't know what to expect next.  In the future, when
+/// we support more 'gang' clause arguments, we can probably just skip until the
+/// next argument (delimited by ',') instead.
+ACCClause *Parser::ParseOpenACCGangClauseWithArg(bool ParseOnly) {
+  // Consume 'gang'.
+  StringRef ClauseName = getOpenACCName(ACCC_gang);
+  SourceLocation StartLoc = ConsumeToken();
+
+  // Consume '('.
+  SourceLocation LParenLoc = Tok.getLocation();
+  BalancedDelimiterTracker T(*this, tok::l_paren,
+                             tok::annot_pragma_openacc_end);
+  bool HaveLParen =
+      !T.expectAndConsume(diag::err_expected_lparen_after, ClauseName.data());
+  assert(HaveLParen && "expected ParseOpenACCGangClauseWithArg upon 'gang('");
+
+  // Parse 'static'.
+  SourceLocation StaticKwLoc;
+  if (Tok.is(tok::kw_static))
+    StaticKwLoc = ConsumeToken();
+  else {
+    Diag(Tok, diag::err_acc_clause_expected_token)
+        << getOpenACCName(ACCC_gang) << getKeywordSpelling(tok::kw_static);
+    SkipUntil(tok::r_paren, tok::annot_pragma_openacc_end, StopBeforeMatch);
+    T.consumeClose();
+    return nullptr;
+  }
+
+  // Parse ':'.
+  SourceLocation StaticColonLoc;
+  if (Tok.is(tok::colon))
+    StaticColonLoc = ConsumeToken();
+  else {
+    Diag(Tok, diag::err_acc_clause_expected_token)
+        << getOpenACCName(ACCC_gang) << getPunctuatorSpelling(tok::colon);
+    SkipUntil(tok::r_paren, tok::annot_pragma_openacc_end, StopBeforeMatch);
+    T.consumeClose();
+    return nullptr;
+  }
+
+  // Parse arg for 'static:'.
+  SourceLocation StaticArgLoc = Tok.getLocation();
+  ExprResult StaticArg;
+  if (Tok.is(tok::star)) {
+    ConsumeToken();
+    StaticArg = Actions.ActOnOpenACCStarExpr(StaticArgLoc);
+  } else {
+    StaticArg = ParseOpenACCArgExpr();
+  }
+  if (StaticArg.isInvalid()) {
+    SkipUntil(tok::r_paren, tok::annot_pragma_openacc_end, StopBeforeMatch);
+    T.consumeClose();
+    return nullptr;
+  }
+
+  // Parse ')'.
+  SourceLocation EndLoc = Tok.getLocation();
+  if (T.consumeClose()) {
+    SkipUntil(tok::annot_pragma_openacc_end, StopBeforeMatch);
+    return nullptr;
+  }
+
+  // Build clause's node.
+  if (ParseOnly)
+    return nullptr;
+  return Actions.ActOnOpenACCGangClause(StartLoc, LParenLoc, StaticKwLoc,
+                                        StaticColonLoc, StaticArg.get(),
+                                        EndLoc);
+}
+
 ///  Parsing of OpenACC clauses like 'seq'.
 ///
 ///    seq-clause:
@@ -499,7 +589,7 @@ ACCClause *Parser::ParseOpenACCSingleExprClause(OpenACCClauseKind Kind,
 ACCClause *Parser::ParseOpenACCNoArgClause(OpenACCClauseKind Kind,
                                            bool ParseOnly) {
   SourceLocation Loc = Tok.getLocation();
-  ConsumeAnyToken();
+  ConsumeToken();
 
   if (ParseOnly)
     return nullptr;
@@ -626,7 +716,7 @@ bool Parser::ParseOpenACCVarList(OpenACCDirectiveKind DKind,
       ConsumeToken();
     else if (Tok.isNot(tok::r_paren) &&
              Tok.isNot(tok::annot_pragma_openacc_end))
-      Diag(Tok, diag::err_acc_expected_punc)
+      Diag(Tok, diag::err_acc_clause_expected_comma_or_paren)
           << getOpenACCName(Kind);
   }
 

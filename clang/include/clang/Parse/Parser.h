@@ -3404,6 +3404,12 @@ public:
   ///
   ACCClause *ParseOpenACCSingleExprClause(OpenACCClauseKind Kind,
                                           bool ParseOnly);
+  /// Parses OpenACC 'gang' clause with an argument.
+  ///
+  /// \param ParseOnly true to skip the clause's semantic actions and return
+  /// nullptr.
+  ///
+  ACCClause *ParseOpenACCGangClauseWithArg(bool ParseOnly);
   /// Parses clause without any additional arguments.
   ///
   /// \param Kind Kind of current clause.
@@ -3449,11 +3455,14 @@ public:
       bool &ErrorFound, const SmallVector<OpenACCClauseKind> &List0,
       const SmallVector<OpenACCClauseKind> &List1 = {});
 
-public:
-  /// Parses simple expression in parens for single-expression clauses of OpenACC
-  /// constructs.
-  /// \param RLoc Returned location of right paren.
-  ExprResult ParseOpenACCParensExpr(StringRef ClauseName, SourceLocation &RLoc);
+  /// Parses simple expression for argument of OpenACC directive.
+  ExprResult ParseOpenACCArgExpr();
+
+  /// Parses simple expression in parens for single-expression clause of OpenACC
+  /// directive.
+  /// \param RParenLoc Returns location of right paren.
+  ExprResult ParseOpenACCParensExpr(StringRef ClauseName,
+                                    SourceLocation &RParenLoc);
 
   /// Parses clauses with list.
   bool ParseOpenACCVarList(OpenACCDirectiveKind DKind, OpenACCClauseKind Kind,

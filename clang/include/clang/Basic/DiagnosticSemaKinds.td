@@ -11029,12 +11029,14 @@ def note_acc_const_var_in_const_member_fn : Note<
 def note_acc_var_declared : Note<
   "variable '%0' declared here">;
 def err_acc_clause_not_ice : Error<
-  "argument to '%0' clause must be an integer constant expression">;
+  "%select{|'%2' }1argument to '%0' clause must be an integer constant "
+  "expression">;
 def warn_acc_clause_ignored_not_ice : Warning<
   "'%0' ignored because argument is not an integer constant expression">,
   InGroup<OpenACCIgnoredClause>;
 def err_acc_clause_not_positive_ice : Error<
-  "argument to '%0' clause must be a strictly positive integer value">;
+  "%select{|'%2' }1argument to '%0' clause must be a strictly positive integer "
+  "value">;
 def err_acc_directive_bad_nesting : Error<
   "'#pragma acc %1' cannot be nested within '#pragma acc %0'">;
 def note_acc_enclosing_directive : Note<

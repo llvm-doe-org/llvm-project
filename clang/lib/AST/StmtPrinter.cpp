@@ -1242,6 +1242,14 @@ void ACCClausePrinter::VisitACCAutoClause(ACCAutoClause *Node) {
 
 void ACCClausePrinter::VisitACCGangClause(ACCGangClause *Node) {
   OS << "gang";
+  if (Node->hasArg()) {
+    OS << "(";
+    if (Expr *StaticArg = Node->getStaticArg()) {
+      OS << "static: ";
+      StaticArg->printPretty(OS, nullptr, Policy, 0);
+    }
+    OS << ")";
+  }
 }
 
 void ACCClausePrinter::VisitACCWorkerClause(ACCWorkerClause *Node) {

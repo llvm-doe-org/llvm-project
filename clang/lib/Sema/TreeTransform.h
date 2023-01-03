@@ -2528,6 +2528,29 @@ public:
                                               EndLoc);
   }
 
+  /// Build a new OpenACC 'gang' clause without child nodes.
+  ///
+  /// By default, performs semantic analysis to build the new statement.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCGangClause(OpenACCDetermination Determination,
+                                  SourceLocation StartLoc,
+                                  SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCGangClause(Determination, StartLoc, EndLoc);
+  }
+
+  /// Build a new OpenACC 'gang' clause with child nodes.
+  ///
+  /// By default, performs semantic analysis to build the new statement.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCGangClause(SourceLocation StartLoc,
+                                  SourceLocation LParenLoc,
+                                  SourceLocation StaticKwLoc,
+                                  SourceLocation StaticColonLoc,
+                                  Expr *StaticArg, SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCGangClause(StartLoc, LParenLoc, StaticKwLoc,
+                                            StaticColonLoc, StaticArg, EndLoc);
+  }
+
   /// Build a new OpenACC 'collapse' clause.
   ///
   /// By default, performs semantic analysis to build the new statement.
@@ -11071,8 +11094,21 @@ TreeTransform<Derived>::TransformACCAutoClause(ACCAutoClause *C) {
 template <typename Derived>
 ACCClause *
 TreeTransform<Derived>::TransformACCGangClause(ACCGangClause *C) {
-  // No need to rebuild this clause, no parameters.
-  return C;
+  if (C->children().empty()) {
+    if (!getDerived().AlwaysRebuild())
+      return C;
+    return getDerived().RebuildACCGangClause(C->getDetermination(),
+                                             C->getBeginLoc(), C->getEndLoc());
+  }
+
+  Expr *StaticArg = C->getStaticArg();
+  assert(StaticArg && "expected 'static:' argument to be child");
+  ExprResult E = getDerived().TransformExpr(StaticArg);
+  if (E.isInvalid())
+    return nullptr;
+  return getDerived().RebuildACCGangClause(
+      C->getBeginLoc(), C->getLParenLoc(), C->getStaticKwLoc(),
+      C->getStaticColonLoc(), E.get(), C->getEndLoc());
 }
 
 template <typename Derived>

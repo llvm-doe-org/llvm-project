@@ -113,9 +113,9 @@ void fn(int param) {
   union U *pu;
   struct SS *pss;
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // No clauses
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
@@ -126,9 +126,9 @@ void fn(int param) {
       ;
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Unrecognized clauses
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
@@ -199,9 +199,9 @@ void fn(int param) {
       ;
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Partitionability clauses
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
@@ -266,15 +266,30 @@ void fn(int param) {
       ;
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Partitioning clauses
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
 #endif
   {
+    //..........................................................................
+    // Correct clauses.
+
     #pragma acc CMB_PAR loop gang
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop gang(static:*)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop gang(static:16)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop gang ( static : * )
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop gang ( static : 1 )
     for (int i = 0; i < 5; ++i)
       ;
     #pragma acc CMB_PAR loop worker
@@ -283,11 +298,227 @@ void fn(int param) {
     #pragma acc CMB_PAR loop vector
     for (int i = 0; i < 5; ++i)
       ;
-    // orph-sep-warning@+2 {{extra tokens at the end of '#pragma acc loop' are ignored}}
-    // cmb-warning@+1 {{extra tokens at the end of '#pragma acc parallel loop' are ignored}}
-    #pragma acc CMB_PAR loop gang()
+
+    //..........................................................................
+    // 'static' is missing in 'gang' clause.
+
+    // expected-error@+2 {{expected 'static' in 'gang' clause}}
+    #pragma acc CMB_PAR loop gang(          \
+                                  bogus     \
+                                       : 1)
     for (int i = 0; i < 5; ++i)
       ;
+    // expected-error@+2 {{expected 'static' in 'gang' clause}}
+    #pragma acc CMB_PAR loop gang(    \
+                                  :   \
+                                   1)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected 'static' in 'gang' clause}}
+    #pragma acc CMB_PAR loop gang(   \
+                                  !  \
+                                   )
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected 'static' in 'gang' clause}}
+    #pragma acc CMB_PAR loop gang(  \
+                                  )
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+3 {{expected 'static' in 'gang' clause}}
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop gang(
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    //..........................................................................
+    // ':' is missing after 'static' in 'gang' clause.
+
+    // expected-error@+2 {{expected ':' in 'gang' clause}}
+    #pragma acc CMB_PAR loop gang(static     \
+                                        ,    \
+                                          1)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected ':' in 'gang' clause}}
+    #pragma acc CMB_PAR loop gang(static    \
+                                         1  \
+                                          )
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected ':' in 'gang' clause}}
+    #pragma acc CMB_PAR loop gang(static   \
+                                        !)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected ':' in 'gang' clause}}
+    #pragma acc CMB_PAR loop gang(static  \
+                                        )
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+3 {{expected ':' in 'gang' clause}}
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop gang(static
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    //..........................................................................
+    // Argument is missing after 'static:' in 'gang' clause.
+
+    // expected-error@+2 {{expected expression}}
+    #pragma acc CMB_PAR loop gang(static:   \
+                                          !)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected expression}}
+    #pragma acc CMB_PAR loop gang(static:  \
+                                          )
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+3 {{expected expression}}
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop gang(static:
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    //..........................................................................
+    // ')' is missing after 'gang' clause.
+
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop gang(static:*
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop gang(static:1
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+3 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop gang(static:*   \
+                                          1  \
+                                           )
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    //..........................................................................
+    // Parser error recovery after malformed 'gang' clause: recovery is possible
+    // when parens are balanced, and then anotherError is diagnosed.
+
+    // expected-error@+3 {{expected 'static' in 'gang' clause}}
+    // orph-sep-warning@+3 {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // cmb-warning@+2 {{extra tokens at the end of '#pragma acc parallel loop' are ignored}}
+    #pragma acc CMB_PAR loop gang() \
+                             anotherError
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+3 {{expected ':' in 'gang' clause}}
+    // orph-sep-warning@+3 {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // cmb-warning@+2 {{extra tokens at the end of '#pragma acc parallel loop' are ignored}}
+    #pragma acc CMB_PAR loop gang(static) \
+                             anotherError
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+3 {{expected expression}}
+    // orph-sep-warning@+3 {{extra tokens at the end of '#pragma acc loop' are ignored}}
+    // cmb-warning@+2 {{extra tokens at the end of '#pragma acc parallel loop' are ignored}}
+    #pragma acc CMB_PAR loop gang(static:) \
+                             anotherError
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+3 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop gang(static:1 \
+                             anotherError
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+6 {{expected ')'}}
+    // expected-note@+4 {{to match this '('}}
+    // expected-error@+4 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop gang(static:   \
+                                         (1 \
+                             anotherError
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+4 {{expected 'static' in 'gang' clause}}
+    // expected-error@+3 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop gang( \
+                             anotherError
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    //..........................................................................
+    // Semantically bad 'static:' argument in 'gang' clause.
+
+    // expected-error@+1 {{use of undeclared identifier 'bogus'}}
+    #pragma acc CMB_PAR loop gang(static:bogus)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop gang(static:8)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop gang(static:31 * 3 + 1)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop gang(static:i)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop gang(static:i*1)
+    for (int i = 0; i < 5; ++i)
+      ;
+    #pragma acc CMB_PAR loop gang(static:1)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{'static:' argument to 'gang' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop gang(static:0)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{'static:' argument to 'gang' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop gang(static:0u)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{'static:' argument to 'gang' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop gang(static:-1)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{'static:' argument to 'gang' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop gang(static:-5)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expression must have integral or unscoped enumeration type, not 'double'}}
+    #pragma acc CMB_PAR loop gang(static:d)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expression must have integral or unscoped enumeration type, not 'float'}}
+    #pragma acc CMB_PAR loop gang(static:f)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expression must have integral or unscoped enumeration type, not '_Complex float'}}
+    #pragma acc CMB_PAR loop gang(static:fc)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expression must have integral or unscoped enumeration type, not 'float'}}
+    #pragma acc CMB_PAR loop gang(static:1.0f)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expression must have integral or unscoped enumeration type, not 'double'}}
+    #pragma acc CMB_PAR loop gang(static:2e3)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expression must have integral or unscoped enumeration type, not 'long double'}}
+    #pragma acc CMB_PAR loop gang(static:1.3l)
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    //..........................................................................
+    // Bogus parens after other clauses.
+
     // orph-sep-warning@+2 {{extra tokens at the end of '#pragma acc loop' are ignored}}
     // cmb-warning@+1 {{extra tokens at the end of '#pragma acc parallel loop' are ignored}}
     #pragma acc CMB_PAR loop worker()
@@ -298,6 +529,10 @@ void fn(int param) {
     #pragma acc CMB_PAR loop vector()
     for (int i = 0; i < 5; ++i)
       ;
+
+    //..........................................................................
+    // Conflicting clauses.
+
     // orph-sep-error@+2 {{directive '#pragma acc loop' cannot contain more than one 'gang' clause}}
     // cmb-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'gang' clause}}
     #pragma acc CMB_PAR loop gang gang
@@ -338,9 +573,9 @@ void fn(int param) {
       ;
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Partitionability and partitioning clauses
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
@@ -369,9 +604,9 @@ void fn(int param) {
       ;
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // collapse clause
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // Syntax
 #if PARENT == PARENT_SEPARATE
@@ -678,9 +913,9 @@ void fn(int param) {
             ;
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // associated for loop
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
@@ -753,9 +988,9 @@ void fn(int param) {
       ;
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // nesting of acc loops: 2 levels
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
@@ -1039,9 +1274,9 @@ void fn(int param) {
     }
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // nesting of acc loops: 2 levels with auto on outer level
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
@@ -1325,9 +1560,9 @@ void fn(int param) {
     }
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // nesting of acc loops: 2 levels with auto on inner level
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
@@ -1611,9 +1846,9 @@ void fn(int param) {
     }
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // nesting of acc loops: 3 levels
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
@@ -1693,9 +1928,9 @@ void fn(int param) {
     }
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // nesting of acc loops: 4 levels
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
@@ -1721,9 +1956,9 @@ void fn(int param) {
     }
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // nesting of acc loops: other loops in between
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
@@ -1791,12 +2026,12 @@ void fn(int param) {
     }
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // nesting of acc loops: very deeply nested
   //
   // At one time, Clang OpenACC analyses failed assertions when resizing arrays
   // based on the number of levels of nested loops.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
@@ -1852,17 +2087,17 @@ void fn(int param) {
     }
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // We sprinkle seq, auto, independent, gang, worker, and vector clauses
   // throughout the following tests as the validation of the private,
   // reduction, and data clauses should be independent of those clauses.  The
   // only exception is gang reductions, which interact with the parent parallel
   // directive, so we test that case more carefully at the end.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Data clauses: syntax
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel DATA(jk)
@@ -2037,9 +2272,9 @@ void fn(int param) {
       ;
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Data clauses: arg semantics
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // Unknown reduction operator.
 #if PARENT == PARENT_SEPARATE
@@ -2543,9 +2778,9 @@ void fn(int param) {
               ;
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Data clauses: reduction inter-directive conflicts
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // Explicit reduction on acc parallel (so another data clause there is not
   // required but should be fine), and non-conflicting reductions on acc loops.
@@ -3314,12 +3549,12 @@ void fn(int param) {
       ;
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Data clauses: data clauses required for scalar loop reduction vars
   //
   // Restriction applies only to non-orphaned loop construct that is not
   // combined with its parent parallel construct.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // Explicit gang, worker, and vector: suggest copy.
 #if PARENT == PARENT_SEPARATE
@@ -3624,9 +3859,9 @@ void fn(int param) {
     d += i;
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Data clauses: orphaned loop reduction variables that are not gang-private
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // The diagnostic should be reported regardless of parallelism clauses on the
   // same directive.
@@ -3818,12 +4053,12 @@ void fn(int param) {
     }
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Bad parent.
   //
   // Some of these cases used to fail an unnecessary assert in an analysis
   // required by the clauses.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // orph-error@+3 {{'#pragma acc data' is not permitted within function 'fn' because the latter is attributed with '#pragma acc routine'}}
   // expected-error@+3 {{'#pragma acc loop' cannot be nested within '#pragma acc data'}}
@@ -3877,12 +4112,12 @@ void fn(int param) {
     ;
 }
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Orphaned acc loop without routine directive.
 //
 // Some of these cases used to fail an unnecessary assert in an analysis
 // required by the clauses.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 void nonRoutineFn() {
   // expected-error@+1 {{'nonRoutineFn' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
@@ -3910,7 +4145,7 @@ void nonRoutineFn() {
 // Complete to suppress an additional warning, but it's too late for pragmas.
 int incomplete[3];
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // The remaining diagnostics are currently produced by OpenMP sema during the
 // transform from OpenACC to OpenMP, which is skipped if there have been any
 // previous diagnostics.  Thus, each must be tested in a separate compilation.
@@ -3919,7 +4154,7 @@ int incomplete[3];
 // that.  We just check some of them (roughly one of each diagnostic kind) to
 // give us some confidence that they're handled properly by the OpenACC
 // implementation.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 #elif ERR == ERR_OMP_INIT
 

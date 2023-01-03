@@ -1311,7 +1311,23 @@ public:
   OMPClauseResult TransformACCGangClause(ACCDirectiveStmt *D,
                                          OpenMPDirectiveKind TDKind,
                                          ACCGangClause *C) {
-    return OMPClauseEmpty();
+    Expr *StaticArg = C->getStaticArg();
+    if (!StaticArg)
+      return OMPClauseEmpty();
+    OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_dist_schedule);
+    ExplicitClauseLocs L(D, C, C->getLParenLoc());
+    Expr *OMPChunkSize;
+    if (isa<ACCStarExpr>(StaticArg))
+      OMPChunkSize = nullptr;
+    else {
+      ExprResult E = getDerived().TransformExpr(StaticArg);
+      if (E.isInvalid())
+        return OMPClauseError();
+      OMPChunkSize = E.get();
+    }
+    return getDerived().RebuildOMPDistScheduleClause(
+        OMPC_DIST_SCHEDULE_static, OMPChunkSize, L.LocStart, L.LParenLoc,
+        C->getStaticKwLoc(), C->getStaticColonLoc(), L.LocEnd);
   }
 
   OMPClauseResult TransformACCWorkerClause(ACCDirectiveStmt *D,

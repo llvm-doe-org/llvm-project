@@ -291,9 +291,16 @@ Run-Time Environment Variables
         * For now, always produces a sequential loop.
 * Supported partitioning clauses
     * `gang`
+        * `static:` argument, which must be `*` or a positive integer
+          expression.  A non-positive constant integer expression produces a
+          compile-time error diagnostic, and the behavior of a non-positive
+          non-constant integer expression is undefined.  OpenACC 3.3 does not
+          specify that the expression must be positive but also does not clarify
+          the semantics if it's not.  GCC 12.2.0 warns about a non-positive
+          constant integer expression, and NVHPC 22.11 quietly accepts it.
     * `worker`
     * `vector`
-    * Arguments to those clauses are not yet supported.
+    * Otherwise, arguments to those clauses are not yet supported.
     * For now, all three are ignored when combined with `auto` clause
       because, for now, `auto` produces a sequential loop.
     * Implicit `gang` clause

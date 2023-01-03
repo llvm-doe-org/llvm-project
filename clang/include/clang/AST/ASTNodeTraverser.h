@@ -225,8 +225,15 @@ public:
   void Visit(const ACCClause *C) {
     getNodeDelegate().AddChild([=] {
       getNodeDelegate().Visit(C);
-      for (const auto *S : C->children())
+      for (const auto *S : C->children()) {
+        if (const ACCGangClause *Gang = dyn_cast<ACCGangClause>(C)) {
+          if (S == Gang->getStaticArg()) {
+            Visit(S, "static");
+            continue;
+          }
+        }
         Visit(S);
+      }
     });
   }
 

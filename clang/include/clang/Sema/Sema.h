@@ -11702,10 +11702,16 @@ public:
   /// Called on well-formed 'auto' clause.
   ACCClause *ActOnOpenACCAutoClause(SourceLocation StartLoc,
                                     SourceLocation EndLoc);
-  /// Called on well-formed 'gang' clause.
+  /// Called on well-formed 'gang' clause without an argument.
   ACCClause *ActOnOpenACCGangClause(OpenACCDetermination Determination,
                                     SourceLocation StartLoc,
                                     SourceLocation EndLoc);
+  /// Called on well-formed 'gang' clause with an argument.
+  ACCClause *ActOnOpenACCGangClause(SourceLocation StartLoc,
+                                    SourceLocation LParenLoc,
+                                    SourceLocation StaticKwLoc,
+                                    SourceLocation StaticColonLoc,
+                                    Expr *StaticArg, SourceLocation EndLoc);
   /// Called on well-formed 'worker' clause.
   ACCClause *ActOnOpenACCWorkerClause(SourceLocation StartLoc,
                                       SourceLocation EndLoc);

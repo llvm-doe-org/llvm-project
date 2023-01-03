@@ -1531,8 +1531,25 @@ public:
 /// \endcode
 /// In this example directive '#pragma acc loop' has clause 'gang'.
 class ACCGangClause : public ACCClause {
+  friend class ACCClauseReader;
+
+  /// Location of '(', or invalid if none.
+  SourceLocation LParenLoc;
+  /// Location of 'static', or invalid if none.
+  SourceLocation StaticKwLoc;
+  /// Location of ':' after 'static', or invalid if none.
+  SourceLocation StaticColonLoc;
+  /// Arg for 'static:' (always an \c Expr, possibly an \c ACCStarExpr), or
+  /// \c nullptr if none.
+  Stmt *StaticArg = nullptr;
+
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
+  void setStaticKwLoc(SourceLocation Loc) { StaticKwLoc = Loc; }
+  void setStaticColonLoc(SourceLocation Loc) { StaticColonLoc = Loc; }
+  void setStaticArg(Expr *E) { StaticArg = E; }
+
 public:
-  /// Build 'gang' clause.
+  /// Build 'gang' clause without an argument.
   ///
   /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
@@ -1541,10 +1558,42 @@ public:
                 SourceLocation EndLoc)
       : ACCClause(ACCC_gang, Determination, StartLoc, EndLoc) {}
 
+  /// Build 'gang' clause with an argument.
+  ///
+  /// \param Determination How the clause was determined.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param StaticKwLoc Location of 'static'.
+  /// \param StaticColonLoc Location of ':' after 'static'.
+  /// \param StaticArg Arg for 'static:' (possibly an \c ACCStarExpr).
+  /// \param EndLoc Location of ')'.
+  ///
+  /// Called on well-formed 'gang' clause with an argument.
+  ACCGangClause(SourceLocation StartLoc, SourceLocation LParenLoc,
+                SourceLocation StaticKwLoc, SourceLocation StaticColonLoc,
+                Expr *StaticArg, SourceLocation EndLoc)
+      : ACCClause(ACCC_gang, ACC_EXPLICIT, StartLoc, EndLoc),
+        LParenLoc(LParenLoc), StaticKwLoc(StaticKwLoc),
+        StaticColonLoc(StaticColonLoc), StaticArg(StaticArg) {}
+
   /// Build an empty clause.
   ACCGangClause() : ACCClause(ACCC_gang) {}
 
+  /// Does it have any arguments?
+  bool hasArg() const { return StaticArg; }
+  /// Return location of '(', or invalid if \c !hasArg().
+  SourceLocation getLParenLoc() const { return LParenLoc; }
+  /// Return location of 'static', or invalid if none.
+  SourceLocation getStaticKwLoc() const { return StaticKwLoc; }
+  /// Return location of ':' after 'static', or invalid if none.
+  SourceLocation getStaticColonLoc() const { return StaticColonLoc; }
+  /// Return arg for 'static:' (possibly an \c ACCStarExpr), or \c nullptr if
+  /// none.
+  Expr *getStaticArg() const { return cast_or_null<Expr>(StaticArg); }
+
   child_range children() {
+    if (StaticArg)
+      return child_range(&StaticArg, &StaticArg + 1);
     return child_range(child_iterator(), child_iterator());
   }
 

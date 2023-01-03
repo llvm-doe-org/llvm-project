@@ -182,6 +182,12 @@ void UNIQUE_NAME();
 // expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
 #pragma acc routine gang(i)
 void UNIQUE_NAME();
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine gang(static:*)
+void UNIQUE_NAME();
+// expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
+#pragma acc routine gang(static:1)
+void UNIQUE_NAME();
 
 // expected-warning@+1 {{extra tokens at the end of '#pragma acc routine' are ignored}}
 #pragma acc routine worker(
