@@ -1335,6 +1335,16 @@ void ACCClauseProfiler::VisitACCCollapseClause(const ACCCollapseClause *C) {
   if (C->getCollapse())
     Profiler->VisitStmt(C->getCollapse());
 }
+void ACCClauseProfiler::VisitACCAsyncClause(const ACCAsyncClause *C) {
+  if (C->getAsyncArg())
+    Profiler->VisitStmt(C->getAsyncArg());
+}
+void ACCClauseProfiler::VisitACCWaitClause(const ACCWaitClause *C) {
+  for (auto *E : C->queuelists()) {
+    if (E)
+      Profiler->VisitStmt(E);
+  }
+}
 void ACCClauseProfiler::VisitACCReadClause(const ACCReadClause *) {}
 void ACCClauseProfiler::VisitACCWriteClause(const ACCWriteClause *) {}
 void ACCClauseProfiler::VisitACCUpdateClause(const ACCUpdateClause *) {}

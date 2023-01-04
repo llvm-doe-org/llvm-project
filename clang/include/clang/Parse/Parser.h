@@ -3425,6 +3425,12 @@ public:
   ///
   ACCClause *ParseOpenACCVarListClause(OpenACCDirectiveKind DKind,
                                        OpenACCClauseKind Kind, bool ParseOnly);
+  /// Parses OpenACC 'wait' clause with an argument.
+  ///
+  /// \param ParseOnly true to skip the clause's semantic actions and return
+  /// nullptr.
+  ///
+  ACCClause *ParseOpenACCWaitClauseWithArg(bool ParseOnly);
   /// Diagnoses the appearance of mutually exclusive clauses on the current
   /// directive.
   ///

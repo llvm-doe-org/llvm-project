@@ -2591,6 +2591,9 @@ def fopenacc_no_create_omp_EQ : Joined<["-"], "fopenacc-no-create-omp=">,
            "specifies that 'ompx_no_alloc' be omitted, which might be useful "
            "for testing while porting some OpenACC applications to OpenMP.">,
   Values<"ompx-no-alloc,no-ompx-no-alloc">;
+def fopenacc_fake_async_wait : Flag<["-"], "fopenacc-fake-async-wait">,
+  Group<f_Group>, Flags<[CC1Option, NoArgumentUnused]>,
+  HelpText<"Fake OpenACC async/wait support">;
 
 def fno_optimize_sibling_calls : Flag<["-"], "fno-optimize-sibling-calls">, Group<f_Group>;
 def foptimize_sibling_calls : Flag<["-"], "foptimize-sibling-calls">, Group<f_Group>;

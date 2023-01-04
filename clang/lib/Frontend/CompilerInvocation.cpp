@@ -3613,6 +3613,8 @@ void CompilerInvocation::GenerateLangArgs(const LangOptions &Opts,
                 LangOptions::getOpenACCNoCreateOMPValue(
                     Opts.getOpenACCNoCreateOMP()),
                 SA);
+    if (Opts.OpenACCFakeAsyncWait)
+      GenerateArg(Args, OPT_fopenacc_fake_async_wait, SA);
   }
 
   // OpenMP was requested via '-fopenmp', not implied by '-fopenmp-simd' or
@@ -4092,6 +4094,9 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
     if (I == LangOptions::OpenACCNoCreateOMP_Last + 1)
       Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
   }
+
+  // Check if -fopenacc-fake-async-wait is specified.
+  Opts.OpenACCFakeAsyncWait = Args.hasArg(OPT_fopenacc_fake_async_wait);
 
   // Check if -fopenmp is specified and set default version to 5.0.
   Opts.OpenMP = Args.hasArg(OPT_fopenmp) ? 50 : 0;

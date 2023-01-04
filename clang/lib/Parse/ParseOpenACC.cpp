@@ -322,6 +322,7 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedAttributes &Attrs,
 ///       | num_gangs-clause | num_workers-clause | vector_length-clause
 ///       | seq-clause | independent-clause | auto-clause
 ///       | gang-clause | worker-clause | vector-clause | collapse-clause
+///       | async-clause | wait-clause
 ///       | read-clause | write-clause | update-clause | capture-clause
 ///
 ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
@@ -338,7 +339,9 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
   // clause has no meaning on this directive, so diagnostics about its conflicts
   // with other occurrences of itself or with other clauses would be baseless
   // and confusing, so we suppress them.
-  if (CKind != ACCC_unknown && !isAllowedClauseForDirective(DKind, CKind)) {
+  if ((CKind != ACCC_unknown && !isAllowedClauseForDirective(DKind, CKind)) ||
+      ((CKind == ACCC_async || CKind == ACCC_wait) &&
+       !Actions.getLangOpts().OpenACCFakeAsyncWait)) {
     Diag(Tok, diag::err_acc_unexpected_clause) << getOpenACCName(CKind)
                                                << getOpenACCName(DKind);
     ErrorFound = true;
@@ -351,12 +354,27 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
   case ACCC_num_workers:
   case ACCC_vector_length:
   case ACCC_collapse:
+  case ACCC_async:
     if (!WrongDirective && SeenClauses[CKind]) {
       Diag(Tok, diag::err_acc_more_one_clause)
           << getOpenACCName(DKind) << getOpenACCName(CKind);
       ErrorFound = true;
     }
-    Clause = ParseOpenACCSingleExprClause(CKind, WrongDirective);
+    if (CKind == ACCC_async && PP.LookAhead(/*N=*/0).isNot(tok::l_paren))
+      Clause = ParseOpenACCNoArgClause(CKind, WrongDirective);
+    else
+      Clause = ParseOpenACCSingleExprClause(CKind, WrongDirective);
+    break;
+  case ACCC_wait:
+    if (!WrongDirective && SeenClauses[CKind]) {
+      Diag(Tok, diag::err_acc_more_one_clause)
+          << getOpenACCName(DKind) << getOpenACCName(CKind);
+      ErrorFound = true;
+    }
+    if (PP.LookAhead(/*N=*/0).isNot(tok::l_paren))
+      Clause = ParseOpenACCNoArgClause(CKind, WrongDirective);
+    else
+      Clause = ParseOpenACCWaitClauseWithArg(WrongDirective);
     break;
   case ACCC_if_present:
   case ACCC_seq:
@@ -772,4 +790,53 @@ ACCClause *Parser::ParseOpenACCVarListClause(OpenACCDirectiveKind DKind,
     return nullptr;
   return Actions.ActOnOpenACCVarListClause(Kind, Vars, Loc, LOpen, ColonLoc,
                                            EndLoc, ReductionId);
+}
+
+/// Parsing of OpenACC clause 'wait' with an argument.
+///
+///   wait-clause:
+///      'wait' '(' list ')'
+ACCClause *Parser::ParseOpenACCWaitClauseWithArg(bool ParseOnly) {
+  SourceLocation StartLoc = Tok.getLocation();
+  SmallVector<Expr *, 4> QueueExprs;
+  SourceLocation EndLoc;
+
+  // Parse '('.
+  SourceLocation LParenLoc = ConsumeToken();
+  BalancedDelimiterTracker T(*this, tok::l_paren,
+                             tok::annot_pragma_openacc_end);
+  if (T.expectAndConsume(diag::err_expected_lparen_after,
+                         getOpenACCName(ACCC_wait)))
+    return nullptr;
+
+  bool IsComma = true;
+  while (IsComma || (Tok.isNot(tok::r_paren) &&
+                     Tok.isNot(tok::annot_pragma_openacc_end))) {
+    // Parse queue expression.
+    ExprResult Val = ParseOpenACCArgExpr();
+    if (Val.isUsable())
+      QueueExprs.push_back(Val.get());
+    else
+      SkipUntil(tok::comma, tok::r_paren, tok::annot_pragma_openacc_end,
+                StopBeforeMatch);
+
+    // Skip ',' if any
+    IsComma = Tok.is(tok::comma);
+    if (IsComma)
+      ConsumeToken();
+    else if (Tok.isNot(tok::r_paren) &&
+             Tok.isNot(tok::annot_pragma_openacc_end))
+      Diag(Tok, diag::err_acc_clause_expected_comma_or_paren)
+          << getOpenACCName(ACCC_wait);
+  }
+
+  // Parse ')'.
+  EndLoc = Tok.getLocation();
+  if (!T.consumeClose())
+    EndLoc = T.getCloseLocation();
+
+  if (ParseOnly)
+    return nullptr;
+  return Actions.ActOnOpenACCWaitClause(QueueExprs, StartLoc, LParenLoc,
+                                        EndLoc);
 }

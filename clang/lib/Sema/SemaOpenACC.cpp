@@ -1104,6 +1104,8 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
   case ACCC_worker:
   case ACCC_vector:
   case ACCC_collapse:
+  case ACCC_async:
+  case ACCC_wait:
   case ACCC_read:
   case ACCC_write:
   case ACCC_update:
@@ -3430,6 +3432,9 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
   case ACCC_collapse:
     Res = ActOnOpenACCCollapseClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
+  case ACCC_async:
+    Res = ActOnOpenACCAsyncClause(Expr, StartLoc, LParenLoc, EndLoc);
+    break;
   case ACCC_nomap:
   case ACCC_present:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
@@ -3458,6 +3463,7 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
   case ACCC_gang:
   case ACCC_worker:
   case ACCC_vector:
+  case ACCC_wait:
   case ACCC_read:
   case ACCC_write:
   case ACCC_update:
@@ -4278,6 +4284,14 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_vector:
     Res = ActOnOpenACCVectorClause(StartLoc, EndLoc);
     break;
+  case ACCC_async:
+    Res = ActOnOpenACCAsyncClause(/*AsyncArg=*/nullptr, StartLoc,
+                                  /*LParenLoc=*/SourceLocation(), EndLoc);
+    break;
+  case ACCC_wait:
+    Res = ActOnOpenACCWaitClause(llvm::None, StartLoc,
+                                 /*LParenLoc=*/SourceLocation(), EndLoc);
+    break;
   case ACCC_read:
     Res = ActOnOpenACCReadClause(StartLoc, EndLoc);
     break;
@@ -4445,6 +4459,25 @@ ACCClause *Sema::ActOnOpenACCCollapseClause(Expr *Collapse,
       Collapse->EvaluateKnownConstInt(Context).getExtValue());
   return new (Context) ACCCollapseClause(Collapse, StartLoc, LParenLoc,
                                          EndLoc);
+}
+
+ACCClause *Sema::ActOnOpenACCAsyncClause(Expr *AsyncArg,
+                                         SourceLocation StartLoc,
+                                         SourceLocation LParenLoc,
+                                         SourceLocation EndLoc) {
+  // TODO: Check that it's an integer expression.  Currently, this should only
+  // be reachable if -fopenacc-fake-async-wait.
+  return new (Context) ACCAsyncClause(AsyncArg, StartLoc, LParenLoc, EndLoc);
+}
+
+ACCClause *Sema::ActOnOpenACCWaitClause(ArrayRef<Expr *> QueueExprList,
+                                        SourceLocation StartLoc,
+                                        SourceLocation LParenLoc,
+                                        SourceLocation EndLoc) {
+  // TODO: Check that has integer expressions.  Currently, this should only be
+  // reachable if -fopenacc-fake-async-wait.
+  return ACCWaitClause::Create(Context, StartLoc, LParenLoc, EndLoc,
+                               QueueExprList);
 }
 
 ACCClause *Sema::ActOnOpenACCReadClause(SourceLocation StartLoc,

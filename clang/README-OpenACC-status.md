@@ -92,6 +92,30 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
         * This warning is an error by default.  To try out C++ support, you
           might wish to disable the warning entirely with
           `-Wno-openacc-and-cxx`.
+* Options that enable incomplete or "fake" support for specific OpenACC features
+  that Clacc does not yet fully support
+    * Commonalities
+        * Each option and its associated features are not well tested and are
+          not recommended for production use.
+        * When an option is not specified, compile-time diagnostics (warnings or
+          errors) are normally produced upon uses of the associated features.
+        * When an option is specified, uses of the associated features are
+          partially or fully validated, and compile-time diagnostics are
+          produced if uses are found to be incorrect.  Otherwise, the features
+          have no effect or a partial effect on behavior, as described below.
+        * Each option will be removed when Clacc develops full support for the
+          associated features.
+    * `-fopenacc-fake-async-wait`
+        * Clacc accepts but discards OpenACC directives and clauses associated
+          with async/wait support.  That is, they have no OpenMP translation in
+          source-to-source mode.
+        * Clacc inserts preprocessor definitions to handle OpenACC Runtime
+          Library API routines and other symbols associated with async/wait
+          support.
+        * The effect in both cases is that behavior remains synchronous.
+        * Some async/wait features might not be covered yet and thus will
+          still produce compile-time diagnostics.  We are adding them as the
+          need arises in the applications we are investigating.
 
 Run-Time Environment Variables
 ------------------------------

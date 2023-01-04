@@ -1266,6 +1266,29 @@ void ACCClausePrinter::VisitACCCollapseClause(ACCCollapseClause *Node) {
   OS << ")";
 }
 
+void ACCClausePrinter::VisitACCAsyncClause(ACCAsyncClause *Node) {
+  OS << "async";
+  Expr *AsyncArg = Node->getAsyncArg();
+  if (AsyncArg) {
+    OS << "(";
+    AsyncArg->printPretty(OS, nullptr, Policy, 0);
+    OS << ")";
+  }
+}
+
+void ACCClausePrinter::VisitACCWaitClause(ACCWaitClause *Node) {
+  OS << "wait(";
+  for (ACCWaitClause::queuelist_iterator I = Node->queuelist_begin(),
+                                         E = Node->queuelist_end();
+       I != E; ++I) {
+    if (I != Node->queuelist_begin())
+      OS << ',';
+    assert(*I && "expected valid queue expression");
+    (*I)->printPretty(OS, nullptr, Policy, 0);
+  }
+  OS << ")";
+}
+
 void ACCClausePrinter::VisitACCReadClause(ACCReadClause *Node) { OS << "read"; }
 
 void ACCClausePrinter::VisitACCWriteClause(ACCWriteClause *Node) {

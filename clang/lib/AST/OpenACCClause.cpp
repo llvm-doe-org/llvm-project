@@ -71,6 +71,8 @@ clang::getPrivateVarsFromClause(ACCClause *C) {
   case ACCC_worker:
   case ACCC_vector:
   case ACCC_collapse:
+  case ACCC_async:
+  case ACCC_wait:
   case ACCC_read:
   case ACCC_write:
   case ACCC_update:
@@ -337,4 +339,22 @@ ACCDeviceClause *ACCDeviceClause::Create(const ASTContext &C,
 ACCDeviceClause *ACCDeviceClause::CreateEmpty(const ASTContext &C, unsigned N) {
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
   return new (Mem) ACCDeviceClause(N);
+}
+
+ACCWaitClause *ACCWaitClause::Create(const ASTContext &C,
+                                     SourceLocation StartLoc,
+                                     SourceLocation LParenLoc,
+                                     SourceLocation EndLoc,
+                                     ArrayRef<Expr *> QL) {
+  // Allocate space for queue expressions.
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(QL.size()));
+  ACCWaitClause *Clause =
+      new (Mem) ACCWaitClause(StartLoc, LParenLoc, EndLoc, QL.size());
+  Clause->setQueueExprs(QL);
+  return Clause;
+}
+
+ACCWaitClause *ACCWaitClause::CreateEmpty(const ASTContext &C, unsigned N) {
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
+  return new (Mem) ACCWaitClause(N);
 }

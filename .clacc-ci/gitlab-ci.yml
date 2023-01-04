@@ -820,10 +820,13 @@ debug (test):
     - cd ../llvm-test-suite
     - mkdir build
     - cd build
+    # -fopenacc-fake-* options enable building OpenACC applications that behave
+    # correctly without a full implementation of the associated OpenACC
+    # features.  The V&V suite is a convenient way to check for unexpected
+    # issues with the incomplete implementations.
+    - export VV_CFLAGS="-fopenacc -fopenacc-fake-async-wait -lm"
     - if test x"$GPU_TRIPLE" != x; then
-        export VV_CFLAGS="-fopenacc -fopenmp-targets=$GPU_TRIPLE -lm";
-      else
-        export VV_CFLAGS="-fopenacc -lm";
+        export VV_CFLAGS="$VV_CFLAGS -fopenmp-targets=$GPU_TRIPLE";
       fi
     - echo "$VV_CFLAGS"
     - time $CMAKE -G Ninja

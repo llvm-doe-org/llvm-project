@@ -2563,6 +2563,29 @@ public:
                                                 EndLoc);
   }
 
+  /// Build a new OpenACC 'async' clause.
+  ///
+  /// By default, performs semantic analysis to build the new statement.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCAsyncClause(Expr *AsyncArg, SourceLocation StartLoc,
+                                   SourceLocation LParenLoc,
+                                   SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCAsyncClause(AsyncArg, StartLoc, LParenLoc,
+                                             EndLoc);
+  }
+
+  /// Build a new OpenACC 'wait' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenACC clause.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCWaitClause(ArrayRef<Expr *> QueueExprList,
+                                  SourceLocation StartLoc,
+                                  SourceLocation LParenLoc,
+                                  SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCWaitClause(QueueExprList, StartLoc, LParenLoc,
+                                            EndLoc);
+  }
+
   /// Build a new OpenACC '*' expression.
   ///
   /// By default, performs semantic analysis to build the new expression.
@@ -11133,6 +11156,33 @@ TreeTransform<Derived>::TransformACCCollapseClause(ACCCollapseClause *C) {
     return nullptr;
   return getDerived().RebuildACCCollapseClause(
       E.get(), C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
+}
+
+template <typename Derived>
+ACCClause *TreeTransform<Derived>::TransformACCAsyncClause(ACCAsyncClause *C) {
+  Expr *AsyncArg = C->getAsyncArg();
+  if (AsyncArg) {
+    ExprResult E = getDerived().TransformExpr(AsyncArg);
+    if (E.isInvalid())
+      return nullptr;
+    AsyncArg = E.get();
+  }
+  return getDerived().RebuildACCAsyncClause(AsyncArg, C->getBeginLoc(),
+                                            C->getLParenLoc(), C->getEndLoc());
+}
+
+template <typename Derived>
+ACCClause *TreeTransform<Derived>::TransformACCWaitClause(ACCWaitClause *C) {
+  llvm::SmallVector<Expr *, 16> QueueExprs;
+  QueueExprs.reserve(C->queuelist_size());
+  for (auto *SE : C->queuelists()) {
+    ExprResult SET = getDerived().TransformExpr(cast<Expr>(SE));
+    if (SET.isInvalid())
+      return nullptr;
+    QueueExprs.push_back(SET.get());
+  }
+  return getDerived().RebuildACCWaitClause(QueueExprs, C->getBeginLoc(),
+                                           C->getLParenLoc(), C->getEndLoc());
 }
 
 template <typename Derived>

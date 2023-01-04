@@ -13120,6 +13120,12 @@ ACCClause *ACCClauseReader::readClause() {
   case ACCC_collapse:
     C = new (Context) ACCCollapseClause();
     break;
+  case ACCC_async:
+    C = new (Context) ACCAsyncClause();
+    break;
+  case ACCC_wait:
+    C = ACCWaitClause::CreateEmpty(Context, Record.readInt());
+    break;
   case ACCC_read:
     C = new (Context) ACCReadClause();
     break;
@@ -13326,6 +13332,21 @@ void ACCClauseReader::VisitACCVectorClause(ACCVectorClause *) {}
 void ACCClauseReader::VisitACCCollapseClause(ACCCollapseClause *C) {
   C->setCollapse(Record.readSubExpr());
   C->setLParenLoc(Record.readSourceLocation());
+}
+
+void ACCClauseReader::VisitACCAsyncClause(ACCAsyncClause *C) {
+  C->setAsyncArg(Record.readSubExpr());
+  C->setLParenLoc(Record.readSourceLocation());
+}
+
+void ACCClauseReader::VisitACCWaitClause(ACCWaitClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  unsigned NumQueueExprs = C->queuelist_size();
+  SmallVector<Expr *, 16> QueueExprs;
+  QueueExprs.reserve(NumQueueExprs);
+  for (unsigned i = 0; i != NumQueueExprs; ++i)
+    QueueExprs.push_back(Record.readSubExpr());
+  C->setQueueExprs(QueueExprs);
 }
 
 void ACCClauseReader::VisitACCReadClause(ACCReadClause *C) {}

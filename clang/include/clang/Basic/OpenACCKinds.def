@@ -316,6 +316,8 @@ OPENACC_CLAUSE(gang, ACCGangClause)
 OPENACC_CLAUSE(worker, ACCWorkerClause)
 OPENACC_CLAUSE(vector, ACCVectorClause)
 OPENACC_CLAUSE(collapse, ACCCollapseClause)
+OPENACC_CLAUSE(async, ACCAsyncClause)
+OPENACC_CLAUSE(wait, ACCWaitClause)
 OPENACC_CLAUSE(read, ACCReadClause)
 OPENACC_CLAUSE(write, ACCWriteClause)
 OPENACC_CLAUSE(update, ACCUpdateClause)
@@ -328,6 +330,8 @@ OPENACC_UPDATE_CLAUSE(if_present)
 OPENACC_UPDATE_CLAUSE(self)
 OPENACC_UPDATE_CLAUSE(host)
 OPENACC_UPDATE_CLAUSE(device)
+OPENACC_UPDATE_CLAUSE(async)
+OPENACC_UPDATE_CLAUSE(wait)
 
 // Explicit clauses and DAs allowed for OpenACC directive 'enter data'.
 OPENACC_ENTER_DATA_CLAUSE_AND_DMA(copyin)
@@ -336,12 +340,16 @@ OPENACC_ENTER_DATA_CLAUSE(present_or_copyin)
 OPENACC_ENTER_DATA_CLAUSE_AND_DMA(create)
 OPENACC_ENTER_DATA_CLAUSE(pcreate)
 OPENACC_ENTER_DATA_CLAUSE(present_or_create)
+OPENACC_ENTER_DATA_CLAUSE(async)
+OPENACC_ENTER_DATA_CLAUSE(wait)
 
 // Explicit clauses and DAs allowed for OpenACC directive 'exit data'.
 OPENACC_EXIT_DATA_CLAUSE_AND_DMA(copyout)
 OPENACC_EXIT_DATA_CLAUSE(pcopyout)
 OPENACC_EXIT_DATA_CLAUSE(present_or_copyout)
 OPENACC_EXIT_DATA_CLAUSE_AND_DMA(delete)
+OPENACC_EXIT_DATA_CLAUSE(async)
+OPENACC_EXIT_DATA_CLAUSE(wait)
 
 // Explicit clauses and DAs allowed for OpenACC directive 'data'.
 OPENACC_DATA_DMA(nomap)
@@ -359,6 +367,8 @@ OPENACC_DATA_CLAUSE_AND_DMA(create)
 OPENACC_DATA_CLAUSE(pcreate)
 OPENACC_DATA_CLAUSE(present_or_create)
 OPENACC_DATA_CLAUSE_AND_DMA(no_create)
+OPENACC_DATA_CLAUSE(async)
+OPENACC_DATA_CLAUSE(wait)
 
 // Explicit clauses and DAs allowed for OpenACC directive 'parallel'.
 OPENACC_PARALLEL_DMA(nomap)
@@ -383,6 +393,8 @@ OPENACC_PARALLEL_CLAUSE_AND_DSA(firstprivate)
 OPENACC_PARALLEL_CLAUSE(num_gangs)
 OPENACC_PARALLEL_CLAUSE(num_workers)
 OPENACC_PARALLEL_CLAUSE(vector_length)
+OPENACC_PARALLEL_CLAUSE(async)
+OPENACC_PARALLEL_CLAUSE(wait)
 
 // Explicit clauses and DAs allowed for OpenACC directive 'loop'.
 OPENACC_LOOP_CLAUSE(seq)
@@ -425,6 +437,8 @@ OPENACC_PARALLEL_LOOP_CLAUSE(gang)
 OPENACC_PARALLEL_LOOP_CLAUSE(worker)
 OPENACC_PARALLEL_LOOP_CLAUSE(vector)
 OPENACC_PARALLEL_LOOP_CLAUSE(collapse)
+OPENACC_PARALLEL_LOOP_CLAUSE(async)
+OPENACC_PARALLEL_LOOP_CLAUSE(wait)
 
 // Explicit clauses allowed for OpenACC directive 'atomic'.
 OPENACC_ATOMIC_CLAUSE(read)

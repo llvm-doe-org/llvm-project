@@ -1277,6 +1277,17 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
   if (LangOpts.OpenACC)
     Builder.defineMacro("_OPENACC", "202011");
 
+  if (LangOpts.OpenACC && LangOpts.OpenACCFakeAsyncWait) {
+    Builder.defineMacro("acc_memcpy_to_device_async(Dst, Src, Bytes, AA)",
+                        "acc_memcpy_to_device(Dst, Src, Bytes)");
+    Builder.defineMacro("acc_memcpy_from_device_async(Dst, Src, Bytes, AA)",
+                        "acc_memcpy_from_device(Dst, Src, Bytes)");
+    Builder.defineMacro("acc_memcpy_device_async(Dst, Src, Bytes, AA)",
+                        "acc_memcpy_device(Dst, Src, Bytes)");
+    Builder.defineMacro("acc_wait_all()", "");
+    Builder.defineMacro("acc_wait(WaitArg)", "");
+  }
+
   // We need to communicate this to our CUDA header wrapper, which in turn
   // informs the proper CUDA headers of this choice.
   if (LangOpts.CUDADeviceApproxTranscendentals || LangOpts.FastMath) {

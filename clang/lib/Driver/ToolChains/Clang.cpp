@@ -6098,6 +6098,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_structured_ref_count_omp_EQ);
   Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_present_omp_EQ);
   Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_no_create_omp_EQ);
+  Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_fake_async_wait);
 
   SanitizeArgs.addArgs(TC, Args, CmdArgs, InputType);
 

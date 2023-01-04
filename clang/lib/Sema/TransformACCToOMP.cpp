@@ -919,6 +919,22 @@ public:
         C->getCollapse(), L.LocStart, L.LParenLoc, L.LocEnd);
   }
 
+  OMPClauseResult TransformACCAsyncClause(ACCDirectiveStmt *D,
+                                          OpenMPDirectiveKind TDKind,
+                                          ACCAsyncClause *C) {
+    // TODO: Actually translate it.  Currently, this should only be reachable
+    // if -fopenacc-fake-async-wait.
+    return OMPClauseEmpty();
+  }
+
+  OMPClauseResult TransformACCWaitClause(ACCDirectiveStmt *D,
+                                         OpenMPDirectiveKind TDKind,
+                                         ACCWaitClause *C) {
+    // TODO: Actually translate it.  Currently, this should be reachable only
+    // if -fopenacc-fake-async-wait.
+    return OMPClauseEmpty();
+  }
+
   OMPClauseResult TransformACCNomapClause(ACCDirectiveStmt *D,
                                           OpenMPDirectiveKind TDKind,
                                           ACCNomapClause *C) {

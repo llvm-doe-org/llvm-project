@@ -1715,6 +1715,174 @@ public:
   }
 };
 
+/// This represents 'async' clause in the '#pragma acc ...' directive.
+///
+/// \code
+/// #pragma acc parallel async(q)
+/// \endcode
+/// In this example directive '#pragma acc parallel' has clause 'async' with
+/// single expression 'q'.
+class ACCAsyncClause : public ACCClause {
+  friend class ACCClauseReader;
+
+  /// Location of '('.
+  SourceLocation LParenLoc;
+
+  /// Original AsyncArg expression.
+  Stmt *AsyncArg = nullptr;
+
+  /// Set the original AsyncArg expression.
+  ///
+  /// \param E AsyncArg expression.
+  void setAsyncArg(Expr *E) { AsyncArg = E; }
+
+public:
+  /// Build 'async' clause.
+  ///
+  /// \param E Original expression associated with this clause, or \c nullptr if
+  ///        omitted.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '(', or an invalid location if argument
+  ///        omitted.
+  /// \param EndLoc Ending location of the clause.
+  ACCAsyncClause(Expr *E, SourceLocation StartLoc, SourceLocation LParenLoc,
+                 SourceLocation EndLoc)
+      : ACCClause(ACCC_async, ACC_EXPLICIT, StartLoc, EndLoc),
+        LParenLoc(LParenLoc), AsyncArg(E) {}
+
+  /// Build an empty clause.
+  ACCAsyncClause() : ACCClause(ACCC_async) {}
+
+  /// Sets the location of '('.
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
+
+  /// Returns the location of '(', invalid if argument omitted.
+  SourceLocation getLParenLoc() const { return LParenLoc; }
+
+  /// Return the original AsyncArg expression or \c nullptr if omitted.
+  Expr *getAsyncArg() { return cast_or_null<Expr>(AsyncArg); }
+
+  /// Return the original AsyncArg expression or \c nullptr if omitted.
+  Expr *getAsyncArg() const { return cast_or_null<Expr>(AsyncArg); }
+
+  child_range children() { return child_range(&AsyncArg, &AsyncArg + 1); }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_async;
+  }
+};
+
+/// This represents 'wait' clause in the '#pragma acc ...' directive.
+///
+/// \code
+/// #pragma acc parallel wait(q)
+/// \endcode
+/// In this example directive '#pragma acc parallel' has clause 'wait' with
+/// single expression 'q'.
+class ACCWaitClause final
+    : public ACCClause,
+      private llvm::TrailingObjects<ACCWaitClause, Expr *> {
+  friend TrailingObjects;
+  friend class ACCClauseReader;
+
+  /// Location of '('.
+  SourceLocation LParenLoc;
+  /// Number of queue expressions in the list.
+  unsigned NumQueueExprs;
+
+  /// Sets the location of '('.
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
+
+  /// Fetches list of queue expressions associated with this clause.
+  MutableArrayRef<Expr *> getQueueExprs() {
+    return MutableArrayRef<Expr *>(getTrailingObjects<Expr *>(), NumQueueExprs);
+  }
+
+  /// Sets the list of queue expressions for this clause.
+  void setQueueExprs(ArrayRef<Expr *> SL) {
+    assert(SL.size() == NumQueueExprs &&
+           "expected number of queue expressions to be the same as in the "
+           "preallocated buffer");
+    std::copy(SL.begin(), SL.end(), getTrailingObjects<Expr *>());
+  }
+
+  /// Build clause with number of queue expressions \p N.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param NumSizeExprs Number of the queue expressions in the clause.
+  ACCWaitClause(SourceLocation StartLoc, SourceLocation LParenLoc,
+                SourceLocation EndLoc, unsigned NumQueueExprs)
+      : ACCClause(ACCC_wait, ACC_EXPLICIT, StartLoc, EndLoc, ACCC_wait),
+        LParenLoc(LParenLoc), NumQueueExprs(NumQueueExprs) {}
+
+  /// Build an empty clause.
+  ///
+  /// \param NumQueueExprs Number of the size expressions in the clause.
+  explicit ACCWaitClause(unsigned NumQueueExprs)
+      : ACCClause(ACCC_wait, ACCC_wait), NumQueueExprs(NumQueueExprs) {}
+
+public:
+  /// Creates clause with a list of queue expressions \p QL.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '(', or invalid if argument omitted.
+  /// \param EndLoc Ending location of the clause.
+  /// \param QL List of references to the queue expressions.
+  static ACCWaitClause *Create(const ASTContext &C, SourceLocation StartLoc,
+                               SourceLocation LParenLoc, SourceLocation EndLoc,
+                               ArrayRef<Expr *> QL);
+  /// Creates an empty clause with the place for \p N queue expressions.
+  ///
+  /// \param C AST context.
+  /// \param N The number of queue expressions.
+  static ACCWaitClause *CreateEmpty(const ASTContext &C, unsigned N);
+
+  typedef MutableArrayRef<Expr *>::iterator queuelist_iterator;
+  typedef ArrayRef<const Expr *>::iterator queuelist_const_iterator;
+  typedef llvm::iterator_range<queuelist_iterator> queuelist_range;
+  typedef llvm::iterator_range<queuelist_const_iterator> queuelist_const_range;
+
+  unsigned queuelist_size() const { return NumQueueExprs; }
+  bool queuelist_empty() const { return NumQueueExprs == 0; }
+
+  queuelist_range queuelists() {
+    return queuelist_range(queuelist_begin(), queuelist_end());
+  }
+  queuelist_const_range queuelists() const {
+    return queuelist_const_range(queuelist_begin(), queuelist_end());
+  }
+
+  queuelist_iterator queuelist_begin() { return getQueueExprs().begin(); }
+  queuelist_iterator queuelist_end() { return getQueueExprs().end(); }
+  queuelist_const_iterator queuelist_begin() const {
+    return getQueueExprs().begin();
+  }
+  queuelist_const_iterator queuelist_end() const {
+    return getQueueExprs().end();
+  }
+
+  /// Returns the location of '(', invalid if argument omitted.
+  SourceLocation getLParenLoc() const { return LParenLoc; }
+
+  /// Fetches list of queue expressions associated with this clause.  It's
+  /// empty if none.
+  ArrayRef<const Expr *> getQueueExprs() const {
+    return llvm::makeArrayRef(getTrailingObjects<Expr *>(), NumQueueExprs);
+  }
+
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(queuelist_begin()),
+                       reinterpret_cast<Stmt **>(queuelist_end()));
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_wait;
+  }
+};
+
 /// This represents 'read' clause in the '#pragma acc atomic' directive.
 ///
 /// \code

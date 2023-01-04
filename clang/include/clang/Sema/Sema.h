@@ -11817,6 +11817,15 @@ public:
                                         SourceLocation StartLoc,
                                         SourceLocation LParenLoc,
                                         SourceLocation EndLoc);
+  /// Called on well-formed 'async' clause.
+  ACCClause *ActOnOpenACCAsyncClause(Expr *AsyncArg, SourceLocation StartLoc,
+                                     SourceLocation LParenLoc,
+                                     SourceLocation EndLoc);
+  /// Called on well-formed 'wait' clause.
+  ACCClause *ActOnOpenACCWaitClause(ArrayRef<Expr *> QueueExprList,
+                                    SourceLocation StartLoc,
+                                    SourceLocation LParenLoc,
+                                    SourceLocation EndLoc);
   /// Called on well-formed 'read' clause.
   ACCClause *ActOnOpenACCReadClause(SourceLocation StartLoc,
                                     SourceLocation EndLoc);
