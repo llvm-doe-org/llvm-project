@@ -3991,6 +3991,13 @@ bool RecursiveASTVisitor<Derived>::VisitACCCollapseClause(
 }
 
 template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitACCTileClause(ACCTileClause *C) {
+  for (auto *E : C->sizelists())
+    TRY_TO(TraverseStmt(E));
+  return true;
+}
+
+template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCAsyncClause(ACCAsyncClause *C) {
   TRY_TO(TraverseStmt(C->getAsyncArg()));
   return true;

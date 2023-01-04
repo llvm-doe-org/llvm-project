@@ -2594,6 +2594,9 @@ def fopenacc_no_create_omp_EQ : Joined<["-"], "fopenacc-no-create-omp=">,
 def fopenacc_fake_async_wait : Flag<["-"], "fopenacc-fake-async-wait">,
   Group<f_Group>, Flags<[CC1Option, NoArgumentUnused]>,
   HelpText<"Fake OpenACC async/wait support">;
+def fopenacc_fake_tile_clause : Flag<["-"], "fopenacc-fake-tile-clause">,
+  Group<f_Group>, Flags<[CC1Option, NoArgumentUnused]>,
+  HelpText<"Fake OpenACC 'tile' clause support">;
 
 def fno_optimize_sibling_calls : Flag<["-"], "fno-optimize-sibling-calls">, Group<f_Group>;
 def foptimize_sibling_calls : Flag<["-"], "foptimize-sibling-calls">, Group<f_Group>;

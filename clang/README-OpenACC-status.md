@@ -116,6 +116,35 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
         * Some async/wait features might not be covered yet and thus will
           still produce compile-time diagnostics.  We are adding them as the
           need arises in the applications we are investigating.
+    * `-fopenacc-fake-tile-clause`
+        * Clacc accepts but mostly discards the OpenACC `tile` clause.  That is,
+          it has no OpenMP translation in source-to-source mode, but it can
+          cause predetermined `private` clauses, as described below.
+        * If a `collapse` clause and a `tile` clause appear on the same `loop`
+          construct, a compile-time error diagnostic is produced.  While OpenACC
+          3.3 does not specify this restriction, both NVHPC 22.11 and GCC 12.2.0
+          enforce it.
+        * If a `tile` clause contains *N* size expressions, there must be *N*
+          tightly nested loops following the `loop` construct, or a compile-time
+          error diagnostic is produced.
+        * Predetermined `private` is computed for the loop control variables in
+          those *N* loops in the same manner as it would be in the case of a
+          `collapse(`*N*`)` clause.  This appears to mimic the behavior of GCC
+          12.2.0.  OpenACC 3.3 uses the term "associated loop" in the
+          specification of predetermined `private` clauses and `collapse`
+          clauses but not in the specification of `tile` clauses, so this
+          behavior is not clear.  NVHPC 22.11 instead performs a liveness
+          analysis to determine data attributes.
+        * Each size expression within a `tile` clause must be either `*` or a
+          positive constant integer expression.  Otherwise, a compile-time error
+          diagnostic is produced.  There is one exception for now: a size
+          expression can also be a non-constant integer expression.  OpenACC 3.3
+          does not require support for non-constant integer expressions, GCC
+          12.2.0 rejects them with compile-time error diagnostics, and NVHPC
+          22.11 ignores the entire `tile` clause if it contains one (as reported
+          by `-Minfo`).   Clacc accepts them for now just because Kokkos's
+          OpenACC backend currently uses them (even though they are apparently
+          discarded by NVHPC).
 
 Run-Time Environment Variables
 ------------------------------

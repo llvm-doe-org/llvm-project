@@ -316,6 +316,7 @@ OPENACC_CLAUSE(gang, ACCGangClause)
 OPENACC_CLAUSE(worker, ACCWorkerClause)
 OPENACC_CLAUSE(vector, ACCVectorClause)
 OPENACC_CLAUSE(collapse, ACCCollapseClause)
+OPENACC_CLAUSE(tile, ACCTileClause)
 OPENACC_CLAUSE(async, ACCAsyncClause)
 OPENACC_CLAUSE(wait, ACCWaitClause)
 OPENACC_CLAUSE(read, ACCReadClause)
@@ -407,6 +408,7 @@ OPENACC_LOOP_DSA(shared)
 OPENACC_LOOP_CLAUSE_AND_DSA(private)
 OPENACC_LOOP_CLAUSE_AND_DSA(reduction)
 OPENACC_LOOP_CLAUSE(collapse)
+OPENACC_LOOP_CLAUSE(tile)
 
 // Explicit clauses allowed for OpenACC directive 'parallel loop'.  DAs are
 // checked only for effective directives, so there's no need to list them here.
@@ -437,6 +439,7 @@ OPENACC_PARALLEL_LOOP_CLAUSE(gang)
 OPENACC_PARALLEL_LOOP_CLAUSE(worker)
 OPENACC_PARALLEL_LOOP_CLAUSE(vector)
 OPENACC_PARALLEL_LOOP_CLAUSE(collapse)
+OPENACC_PARALLEL_LOOP_CLAUSE(tile)
 OPENACC_PARALLEL_LOOP_CLAUSE(async)
 OPENACC_PARALLEL_LOOP_CLAUSE(wait)
 

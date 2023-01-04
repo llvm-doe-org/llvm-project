@@ -13120,6 +13120,9 @@ ACCClause *ACCClauseReader::readClause() {
   case ACCC_collapse:
     C = new (Context) ACCCollapseClause();
     break;
+  case ACCC_tile:
+    C = ACCTileClause::CreateEmpty(Context, Record.readInt());
+    break;
   case ACCC_async:
     C = new (Context) ACCAsyncClause();
     break;
@@ -13332,6 +13335,16 @@ void ACCClauseReader::VisitACCVectorClause(ACCVectorClause *) {}
 void ACCClauseReader::VisitACCCollapseClause(ACCCollapseClause *C) {
   C->setCollapse(Record.readSubExpr());
   C->setLParenLoc(Record.readSourceLocation());
+}
+
+void ACCClauseReader::VisitACCTileClause(ACCTileClause *C) {
+  C->setLParenLoc(Record.readSourceLocation());
+  unsigned NumSizeExprs = C->sizelist_size();
+  SmallVector<Expr *, 16> SizeExprs;
+  SizeExprs.reserve(NumSizeExprs);
+  for (unsigned i = 0; i != NumSizeExprs; ++i)
+    SizeExprs.push_back(Record.readSubExpr());
+  C->setSizeExprs(SizeExprs);
 }
 
 void ACCClauseReader::VisitACCAsyncClause(ACCAsyncClause *C) {

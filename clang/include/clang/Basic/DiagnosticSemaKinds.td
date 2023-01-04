@@ -11050,8 +11050,8 @@ def err_acc_loop_cannot_use_stmt : Error<
   "'%0' statement cannot be used in partitionable OpenACC for loop">;
 def err_acc_not_for : Error<
   "statement after '#pragma acc %0' must be a for loop">;
-def note_acc_collapse_expr : Note<
-  "as specified in 'collapse' clause">;
+def note_acc_specified_in_clause : Note<
+  "as specified in '%0' clause">;
 def err_acc_unknown_reduction_operator : Error<
   "unknown reduction operator">;
 def err_acc_reduction_not_integer_type : Error<

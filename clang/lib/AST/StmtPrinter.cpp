@@ -1266,6 +1266,19 @@ void ACCClausePrinter::VisitACCCollapseClause(ACCCollapseClause *Node) {
   OS << ")";
 }
 
+void ACCClausePrinter::VisitACCTileClause(ACCTileClause *Node) {
+  OS << "tile(";
+  for (ACCTileClause::sizelist_iterator I = Node->sizelist_begin(),
+                                        E = Node->sizelist_end();
+       I != E; ++I) {
+    if (I != Node->sizelist_begin())
+      OS << ',';
+    assert(*I && "expected valid tile size expression");
+    (*I)->printPretty(OS, nullptr, Policy, 0);
+  }
+  OS << ")";
+}
+
 void ACCClausePrinter::VisitACCAsyncClause(ACCAsyncClause *Node) {
   OS << "async";
   Expr *AsyncArg = Node->getAsyncArg();

@@ -919,10 +919,18 @@ public:
         C->getCollapse(), L.LocStart, L.LParenLoc, L.LocEnd);
   }
 
+  OMPClauseResult TransformACCTileClause(ACCDirectiveStmt *D,
+                                         OpenMPDirectiveKind TDKind,
+                                         ACCTileClause *C) {
+    // TODO: Actually translate it.  Currently, this should be reachable only
+    // if -fopenacc-fake-tile-clause.
+    return OMPClauseEmpty();
+  }
+
   OMPClauseResult TransformACCAsyncClause(ACCDirectiveStmt *D,
                                           OpenMPDirectiveKind TDKind,
                                           ACCAsyncClause *C) {
-    // TODO: Actually translate it.  Currently, this should only be reachable
+    // TODO: Actually translate it.  Currently, this should be reachable only
     // if -fopenacc-fake-async-wait.
     return OMPClauseEmpty();
   }

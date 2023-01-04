@@ -7126,6 +7126,13 @@ void ACCClauseWriter::VisitACCCollapseClause(ACCCollapseClause *C) {
   Record.AddSourceLocation(C->getLParenLoc());
 }
 
+void ACCClauseWriter::VisitACCTileClause(ACCTileClause *C) {
+  Record.push_back(C->sizelist_size());
+  Record.AddSourceLocation(C->getLParenLoc());
+  for (auto *VE : C->sizelists())
+    Record.AddStmt(VE);
+}
+
 void ACCClauseWriter::VisitACCAsyncClause(ACCAsyncClause *C) {
   Record.AddStmt(C->getAsyncArg());
   Record.AddSourceLocation(C->getLParenLoc());

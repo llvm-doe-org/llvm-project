@@ -1335,6 +1335,12 @@ void ACCClauseProfiler::VisitACCCollapseClause(const ACCCollapseClause *C) {
   if (C->getCollapse())
     Profiler->VisitStmt(C->getCollapse());
 }
+void ACCClauseProfiler::VisitACCTileClause(const ACCTileClause *C) {
+  for (auto *E : C->sizelists()) {
+    if (E)
+      Profiler->VisitStmt(E);
+  }
+}
 void ACCClauseProfiler::VisitACCAsyncClause(const ACCAsyncClause *C) {
   if (C->getAsyncArg())
     Profiler->VisitStmt(C->getAsyncArg());

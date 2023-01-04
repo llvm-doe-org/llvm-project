@@ -2563,6 +2563,18 @@ public:
                                                 EndLoc);
   }
 
+  /// Build a new OpenACC 'tile' clause.
+  ///
+  /// By default, performs semantic analysis to build the new OpenACC clause.
+  /// Subclasses may override this routine to provide different behavior.
+  ACCClause *RebuildACCTileClause(ArrayRef<Expr *> SizeExprList,
+                                  SourceLocation StartLoc,
+                                  SourceLocation LParenLoc,
+                                  SourceLocation EndLoc) {
+    return getSema().ActOnOpenACCTileClause(SizeExprList, StartLoc, LParenLoc,
+                                            EndLoc);
+  }
+
   /// Build a new OpenACC 'async' clause.
   ///
   /// By default, performs semantic analysis to build the new statement.
@@ -11156,6 +11168,20 @@ TreeTransform<Derived>::TransformACCCollapseClause(ACCCollapseClause *C) {
     return nullptr;
   return getDerived().RebuildACCCollapseClause(
       E.get(), C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
+}
+
+template <typename Derived>
+ACCClause *TreeTransform<Derived>::TransformACCTileClause(ACCTileClause *C) {
+  llvm::SmallVector<Expr *, 16> SizeExprs;
+  SizeExprs.reserve(C->sizelist_size());
+  for (auto *SE : C->sizelists()) {
+    ExprResult SET = getDerived().TransformExpr(cast<Expr>(SE));
+    if (SET.isInvalid())
+      return nullptr;
+    SizeExprs.push_back(SET.get());
+  }
+  return getDerived().RebuildACCTileClause(SizeExprs, C->getBeginLoc(),
+                                           C->getLParenLoc(), C->getEndLoc());
 }
 
 template <typename Derived>

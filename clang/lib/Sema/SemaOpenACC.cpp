@@ -105,7 +105,7 @@ private:
     bool ExplicitRoutineDirectiveIsActedOn = false;
     ACCPartitioningKind LoopDirectiveKind;
     SourceLocation LoopBreakLoc; // invalid if no break statement or not loop
-    unsigned AssociatedLoops = 1; // from collapse clause
+    unsigned AssociatedLoops = 1; // from collapse or tile clause
     unsigned AssociatedLoopsParsed = 0; // how many have been parsed so far
     // True if this is an effective compute or loop directive and has an
     // effective nested loop directive with explicit gang partitioning or
@@ -536,14 +536,15 @@ public:
     return I->EffectiveDKind;
   }
 
-  /// Set associated loop count (collapse value) for the region.
+  /// Set associated loop count (from collapse or tile clause) for the region.
   void setAssociatedLoops(unsigned Val) {
     assert(!Stack.empty() && "expected non-empty directive stack");
     assert(Stack.back().AssociatedLoops == 1);
     assert(Stack.back().AssociatedLoopsParsed == 0);
     Stack.back().AssociatedLoops = Val;
   }
-  /// Return associated loop count (collapse value) for the region.
+  /// Return associated loop count (from collapse or tile clause) for the
+  /// region.
   unsigned getAssociatedLoops() const {
     return Stack.empty() ? 0 : Stack.back().AssociatedLoops;
   }
@@ -1104,6 +1105,7 @@ ACCClause *Sema::ActOnOpenACCVarListClause(
   case ACCC_worker:
   case ACCC_vector:
   case ACCC_collapse:
+  case ACCC_tile:
   case ACCC_async:
   case ACCC_wait:
   case ACCC_read:
@@ -2596,9 +2598,14 @@ StmtResult Sema::ActOnOpenACCLoopDirective(ArrayRef<ACCClause *> Clauses,
     return StmtError();
   DirStackTy &DirStack = OpenACCData->DirStack;
 
-  // OpenACC 2.7 sec. 2.9.1, lines 1441-1442:
-  // "The collapse clause is used to specify how many tightly nested loops are
+  // OpenACC 3.3 sec. 2.9.1 "collapse clause", L2025-2026:
+  // "The collapse clause is used to specify how many nested loops are
   // associated with the loop construct."
+  //
+  // OpenACC 3.3 sec. 2.9.8 "tile clause", L2181-2182:
+  // "If there are n tile sizes in the list, the loop construct must be
+  // immediately followed by n tightly-nested loops."
+  //
   // Complain if there aren't enough.
   Stmt *LoopStmt = AStmt;
   for (unsigned LoopI = 0, LoopCount = DirStack.getAssociatedLoops();
@@ -2610,10 +2617,17 @@ StmtResult Sema::ActOnOpenACCLoopDirective(ArrayRef<ACCClause *> Clauses,
           << getOpenACCName(DirStack.getRealDirective());
       auto CollapseClauses =
           ACCDirectiveStmt::getClausesOfKind<ACCCollapseClause>(Clauses);
+      auto TileClauses =
+          ACCDirectiveStmt::getClausesOfKind<ACCTileClause>(Clauses);
       if (CollapseClauses.begin() != CollapseClauses.end()) {
-        Expr *E = CollapseClauses.begin()->getCollapse();
-        Diag(E->getExprLoc(), diag::note_acc_collapse_expr)
-            << E->getSourceRange();
+        ACCCollapseClause *C = *CollapseClauses.begin();
+        Expr *E = C->getCollapse();
+        Diag(E->getExprLoc(), diag::note_acc_specified_in_clause)
+            << getOpenACCName(C->getClauseKind()) << E->getSourceRange();
+      } else if (TileClauses.begin() != TileClauses.end()) {
+        ACCTileClause *C = *TileClauses.begin();
+        Diag(C->getBeginLoc(), diag::note_acc_specified_in_clause)
+            << getOpenACCName(C->getClauseKind()) << C->getSourceRange();
       }
       return StmtError();
     }
@@ -3463,6 +3477,7 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
   case ACCC_gang:
   case ACCC_worker:
   case ACCC_vector:
+  case ACCC_tile:
   case ACCC_wait:
   case ACCC_read:
   case ACCC_write:
@@ -4333,6 +4348,7 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
   case ACCC_num_workers:
   case ACCC_vector_length:
   case ACCC_collapse:
+  case ACCC_tile:
   case ACCC_unknown:
     llvm_unreachable("expected clause that accepts no arguments");
   }
@@ -4459,6 +4475,25 @@ ACCClause *Sema::ActOnOpenACCCollapseClause(Expr *Collapse,
       Collapse->EvaluateKnownConstInt(Context).getExtValue());
   return new (Context) ACCCollapseClause(Collapse, StartLoc, LParenLoc,
                                          EndLoc);
+}
+
+ACCClause *Sema::ActOnOpenACCTileClause(ArrayRef<Expr *> SizeExprList,
+                                        SourceLocation StartLoc,
+                                        SourceLocation LParenLoc,
+                                        SourceLocation EndLoc) {
+  for (Expr *SizeExpr : SizeExprList) {
+    // TODO: OpenACC says it must be a constant positive integer expression, but
+    // we accept non-constant expressions for now.  See the Clang OpenACC status
+    // document for further discussion.  In short, this will eventually change.
+    if (SizeExpr && !isa<ACCStarExpr>(SizeExpr) &&
+        PosIntError == IsPositiveIntegerValue(SizeExpr, *this, ACCC_tile,
+                                              /*ArgName=*/None,
+                                              /*ErrorIfNotConst=*/false))
+      return nullptr;
+  }
+  OpenACCData->DirStack.setAssociatedLoops(SizeExprList.size());
+  return ACCTileClause::Create(Context, StartLoc, LParenLoc, EndLoc,
+                               SizeExprList);
 }
 
 ACCClause *Sema::ActOnOpenACCAsyncClause(Expr *AsyncArg,

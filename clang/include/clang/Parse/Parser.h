@@ -3425,6 +3425,12 @@ public:
   ///
   ACCClause *ParseOpenACCVarListClause(OpenACCDirectiveKind DKind,
                                        OpenACCClauseKind Kind, bool ParseOnly);
+  /// Parses OpenACC 'tile' clause.
+  ///
+  /// \param ParseOnly true to skip the clause's semantic actions and return
+  /// nullptr.
+  ///
+  ACCClause *ParseOpenACCTileClause(bool ParseOnly);
   /// Parses OpenACC 'wait' clause with an argument.
   ///
   /// \param ParseOnly true to skip the clause's semantic actions and return

@@ -322,7 +322,7 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedAttributes &Attrs,
 ///       | num_gangs-clause | num_workers-clause | vector_length-clause
 ///       | seq-clause | independent-clause | auto-clause
 ///       | gang-clause | worker-clause | vector-clause | collapse-clause
-///       | async-clause | wait-clause
+///       | tile-clause | async-clause | wait-clause
 ///       | read-clause | write-clause | update-clause | capture-clause
 ///
 ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
@@ -340,6 +340,7 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
   // with other occurrences of itself or with other clauses would be baseless
   // and confusing, so we suppress them.
   if ((CKind != ACCC_unknown && !isAllowedClauseForDirective(DKind, CKind)) ||
+      (CKind == ACCC_tile && !Actions.getLangOpts().OpenACCFakeTileClause) ||
       ((CKind == ACCC_async || CKind == ACCC_wait) &&
        !Actions.getLangOpts().OpenACCFakeAsyncWait)) {
     Diag(Tok, diag::err_acc_unexpected_clause) << getOpenACCName(CKind)
@@ -355,10 +356,15 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
   case ACCC_vector_length:
   case ACCC_collapse:
   case ACCC_async:
-    if (!WrongDirective && SeenClauses[CKind]) {
-      Diag(Tok, diag::err_acc_more_one_clause)
-          << getOpenACCName(DKind) << getOpenACCName(CKind);
-      ErrorFound = true;
+    if (!WrongDirective) {
+      if (SeenClauses[CKind]) {
+        Diag(Tok, diag::err_acc_more_one_clause)
+            << getOpenACCName(DKind) << getOpenACCName(CKind);
+        ErrorFound = true;
+      } else {
+        checkMutuallyExclusiveClauses(SeenClauses, CKind, ErrorFound,
+                                      {ACCC_collapse, ACCC_tile});
+      }
     }
     if (CKind == ACCC_async && PP.LookAhead(/*N=*/0).isNot(tok::l_paren))
       Clause = ParseOpenACCNoArgClause(CKind, WrongDirective);
@@ -438,10 +444,18 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
     // Discard any var list.
     ParseOpenACCVarListClause(DKind, CKind, WrongDirective);
     break;
-  case ACCC_unknown:
-    Diag(Tok, diag::warn_acc_extra_tokens_at_eol)
-        << getOpenACCName(DKind);
-    SkipUntil(tok::annot_pragma_openacc_end, StopBeforeMatch);
+  case ACCC_tile:
+    if (!WrongDirective) {
+      if (SeenClauses[CKind]) {
+        Diag(Tok, diag::err_acc_more_one_clause)
+            << getOpenACCName(DKind) << getOpenACCName(CKind);
+        ErrorFound = true;
+      } else {
+        checkMutuallyExclusiveClauses(SeenClauses, CKind, ErrorFound,
+                                      {ACCC_collapse, ACCC_tile});
+      }
+    }
+    Clause = ParseOpenACCTileClause(WrongDirective);
     break;
   case ACCC_read:
   case ACCC_write:
@@ -460,6 +474,10 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
       }
     }
     Clause = ParseOpenACCNoArgClause(CKind, WrongDirective);
+    break;
+  case ACCC_unknown:
+    Diag(Tok, diag::warn_acc_extra_tokens_at_eol) << getOpenACCName(DKind);
+    SkipUntil(tok::annot_pragma_openacc_end, StopBeforeMatch);
     break;
   }
   // If the clause is ever permitted on this directive, then record its
@@ -790,6 +808,58 @@ ACCClause *Parser::ParseOpenACCVarListClause(OpenACCDirectiveKind DKind,
     return nullptr;
   return Actions.ActOnOpenACCVarListClause(Kind, Vars, Loc, LOpen, ColonLoc,
                                            EndLoc, ReductionId);
+}
+
+///  Parsing of OpenACC clause 'tile'.
+///
+///    tile-clause:
+///       'tile' '(' list ')'
+ACCClause *Parser::ParseOpenACCTileClause(bool ParseOnly) {
+  SourceLocation StartLoc = Tok.getLocation();
+  SmallVector<Expr *, 4> SizeExprs;
+  SourceLocation EndLoc;
+
+  // Parse '('.
+  SourceLocation LParenLoc = ConsumeToken();
+  BalancedDelimiterTracker T(*this, tok::l_paren,
+                             tok::annot_pragma_openacc_end);
+  if (T.expectAndConsume(diag::err_expected_lparen_after,
+                         getOpenACCName(ACCC_tile)))
+    return nullptr;
+
+  bool IsComma = true;
+  while (IsComma || (Tok.isNot(tok::r_paren) &&
+                     Tok.isNot(tok::annot_pragma_openacc_end))) {
+    // Parse size expression.
+    ExprResult SizeExpr;
+    if (Tok.is(tok::star))
+      SizeExpr = Actions.ActOnOpenACCStarExpr(ConsumeToken());
+    else
+      SizeExpr = ParseOpenACCArgExpr();
+    if (SizeExpr.isUsable())
+      SizeExprs.push_back(SizeExpr.get());
+    else
+      SkipUntil(tok::comma, tok::r_paren, tok::annot_pragma_openacc_end,
+                StopBeforeMatch);
+
+    // Skip ',' if any
+    IsComma = Tok.is(tok::comma);
+    if (IsComma)
+      ConsumeToken();
+    else if (Tok.isNot(tok::r_paren) &&
+             Tok.isNot(tok::annot_pragma_openacc_end))
+      Diag(Tok, diag::err_acc_clause_expected_comma_or_paren)
+          << getOpenACCName(ACCC_tile);
+  }
+
+  // Parse ')'.
+  EndLoc = Tok.getLocation();
+  if (!T.consumeClose())
+    EndLoc = T.getCloseLocation();
+
+  if (ParseOnly)
+    return nullptr;
+  return Actions.ActOnOpenACCTileClause(SizeExprs, StartLoc, LParenLoc, EndLoc);
 }
 
 /// Parsing of OpenACC clause 'wait' with an argument.

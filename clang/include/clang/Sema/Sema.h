@@ -11817,6 +11817,11 @@ public:
                                         SourceLocation StartLoc,
                                         SourceLocation LParenLoc,
                                         SourceLocation EndLoc);
+  /// Called on well-formed 'tile' clause.
+  ACCClause *ActOnOpenACCTileClause(ArrayRef<Expr *> SizeExprList,
+                                    SourceLocation StartLoc,
+                                    SourceLocation LParenLoc,
+                                    SourceLocation EndLoc);
   /// Called on well-formed 'async' clause.
   ACCClause *ActOnOpenACCAsyncClause(Expr *AsyncArg, SourceLocation StartLoc,
                                      SourceLocation LParenLoc,

@@ -6099,6 +6099,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_present_omp_EQ);
   Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_no_create_omp_EQ);
   Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_fake_async_wait);
+  Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_fake_tile_clause);
 
   SanitizeArgs.addArgs(TC, Args, CmdArgs, InputType);
 

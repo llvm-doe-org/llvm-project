@@ -71,6 +71,7 @@ clang::getPrivateVarsFromClause(ACCClause *C) {
   case ACCC_worker:
   case ACCC_vector:
   case ACCC_collapse:
+  case ACCC_tile:
   case ACCC_async:
   case ACCC_wait:
   case ACCC_read:
@@ -339,6 +340,24 @@ ACCDeviceClause *ACCDeviceClause::Create(const ASTContext &C,
 ACCDeviceClause *ACCDeviceClause::CreateEmpty(const ASTContext &C, unsigned N) {
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
   return new (Mem) ACCDeviceClause(N);
+}
+
+ACCTileClause *ACCTileClause::Create(const ASTContext &C,
+                                     SourceLocation StartLoc,
+                                     SourceLocation LParenLoc,
+                                     SourceLocation EndLoc,
+                                     ArrayRef<Expr *> SL) {
+  // Allocate space for size expressions.
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(SL.size()));
+  ACCTileClause *Clause =
+      new (Mem) ACCTileClause(StartLoc, LParenLoc, EndLoc, SL.size());
+  Clause->setSizeExprs(SL);
+  return Clause;
+}
+
+ACCTileClause *ACCTileClause::CreateEmpty(const ASTContext &C, unsigned N) {
+  void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(N));
+  return new (Mem) ACCTileClause(N);
 }
 
 ACCWaitClause *ACCWaitClause::Create(const ASTContext &C,

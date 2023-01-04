@@ -1715,6 +1715,114 @@ public:
   }
 };
 
+/// This represents the clause 'tile' for '#pragma acc loop' directives.
+///
+/// \code
+/// #pragma acc loop tile(1,2)
+/// \endcode
+/// In this example directive '#pragma acc loop' has clause 'tile' with the tile
+/// sizes '1' and '2'.
+class ACCTileClause final
+    : public ACCClause,
+      private llvm::TrailingObjects<ACCTileClause, Expr *> {
+  friend TrailingObjects;
+  friend class ACCClauseReader;
+
+  /// Location of '('.
+  SourceLocation LParenLoc;
+  /// Number of size expressions in the list.
+  unsigned NumSizeExprs;
+
+  /// Sets the location of '('.
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
+
+  /// Fetches list of size expressions associated with this clause.
+  MutableArrayRef<Expr *> getSizeExprs() {
+    return MutableArrayRef<Expr *>(getTrailingObjects<Expr *>(), NumSizeExprs);
+  }
+
+  /// Sets the list of size expressions for this clause.
+  void setSizeExprs(ArrayRef<Expr *> SL) {
+    assert(SL.size() == NumSizeExprs &&
+           "expected number of size expressions to be the same as in the "
+           "preallocated buffer");
+    std::copy(SL.begin(), SL.end(), getTrailingObjects<Expr *>());
+  }
+
+  /// Build clause with number of size expressions \p N.
+  ///
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param NumSizeExprs Number of the size expressions in the clause.
+  ACCTileClause(SourceLocation StartLoc, SourceLocation LParenLoc,
+                SourceLocation EndLoc, unsigned NumSizeExprs)
+      : ACCClause(ACCC_tile, ACC_EXPLICIT, StartLoc, EndLoc, ACCC_tile),
+        LParenLoc(LParenLoc), NumSizeExprs(NumSizeExprs) {}
+
+  /// Build an empty clause.
+  ///
+  /// \param NumSizeExprs Number of the size expressions in the clause.
+  explicit ACCTileClause(unsigned NumSizeExprs)
+      : ACCClause(ACCC_tile, ACCC_tile), NumSizeExprs(NumSizeExprs) {}
+
+public:
+  /// Creates clause with a list of size expressions \p SL.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  /// \param SL List of references to the size expressions.
+  static ACCTileClause *Create(const ASTContext &C, SourceLocation StartLoc,
+                               SourceLocation LParenLoc, SourceLocation EndLoc,
+                               ArrayRef<Expr *> SL);
+  /// Creates an empty clause with the place for \p N size expressions.
+  ///
+  /// \param C AST context.
+  /// \param N The number of size expressions.
+  static ACCTileClause *CreateEmpty(const ASTContext &C, unsigned N);
+
+  typedef MutableArrayRef<Expr *>::iterator sizelist_iterator;
+  typedef ArrayRef<const Expr *>::iterator sizelist_const_iterator;
+  typedef llvm::iterator_range<sizelist_iterator> sizelist_range;
+  typedef llvm::iterator_range<sizelist_const_iterator> sizelist_const_range;
+
+  unsigned sizelist_size() const { return NumSizeExprs; }
+  bool sizelist_empty() const { return NumSizeExprs == 0; }
+
+  sizelist_range sizelists() {
+    return sizelist_range(sizelist_begin(), sizelist_end());
+  }
+  sizelist_const_range sizelists() const {
+    return sizelist_const_range(sizelist_begin(), sizelist_end());
+  }
+
+  sizelist_iterator sizelist_begin() { return getSizeExprs().begin(); }
+  sizelist_iterator sizelist_end() { return getSizeExprs().end(); }
+  sizelist_const_iterator sizelist_begin() const {
+    return getSizeExprs().begin();
+  }
+  sizelist_const_iterator sizelist_end() const { return getSizeExprs().end(); }
+
+  /// Returns the location of '('.
+  SourceLocation getLParenLoc() const { return LParenLoc; }
+
+  /// Fetches list of size expressions associated with this clause.
+  ArrayRef<const Expr *> getSizeExprs() const {
+    return llvm::makeArrayRef(getTrailingObjects<Expr *>(), NumSizeExprs);
+  }
+
+  child_range children() {
+    return child_range(reinterpret_cast<Stmt **>(sizelist_begin()),
+                       reinterpret_cast<Stmt **>(sizelist_end()));
+  }
+
+  static bool classof(const ACCClause *T) {
+    return T->getClauseKind() == ACCC_tile;
+  }
+};
+
 /// This represents 'async' clause in the '#pragma acc ...' directive.
 ///
 /// \code
