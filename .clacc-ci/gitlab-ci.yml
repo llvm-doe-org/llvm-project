@@ -43,7 +43,7 @@ variables:
   LIT_NPROC_DIVISOR: 1
   # Which commits to use for OpenACC V&V testing.
   VV_LLVM_TEST_SUITE_COMMIT: da5c250df731c259bd6f15f05ab93f3f7b902b63
-  VV_COMMIT: cf6f24e65a46c71b9ea505e80bd555862cd44526
+  VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
 
 stages:
   - setup
@@ -110,14 +110,6 @@ stages:
       "
       External/openacc_vv/acc_map_data.c.test
       External/openacc_vv/acc_unmap_data.c.test
-      External/openacc_vv/atomic_capture_bitand_equals.c.test
-      External/openacc_vv/atomic_minus_equals.c.test
-      External/openacc_vv/atomic_structured_assign_x_minus_expr.c.test
-      External/openacc_vv/atomic_update_minus_equals.c.test
-      External/openacc_vv/atomic_update_x_minus_expr.c.test
-      External/openacc_vv/atomic_x_minus_expr.c.test
-      External/openacc_vv/data_create.c.test
-      External/openacc_vv/parallel_copy.c.test
       "
 
 .oswald02:
@@ -154,9 +146,6 @@ stages:
       "
       External/openacc_vv/acc_map_data.c.test
       External/openacc_vv/acc_unmap_data.c.test
-      External/openacc_vv/atomic_capture_bitand_equals.c.test
-      External/openacc_vv/data_create.c.test
-      External/openacc_vv/parallel_copy.c.test
       "
 
 .explorer:
@@ -193,15 +182,7 @@ stages:
       "
       External/openacc_vv/acc_map_data.c.test
       External/openacc_vv/acc_unmap_data.c.test
-      External/openacc_vv/atomic_capture_bitand_equals.c.test
       External/openacc_vv/atomic_capture_expr_plus_x.c.test
-      External/openacc_vv/atomic_minus_equals.c.test
-      External/openacc_vv/atomic_structured_assign_x_minus_expr.c.test
-      External/openacc_vv/atomic_update_minus_equals.c.test
-      External/openacc_vv/atomic_update_x_minus_expr.c.test
-      External/openacc_vv/atomic_x_minus_expr.c.test
-      External/openacc_vv/data_create.c.test
-      External/openacc_vv/parallel_copy.c.test
       "
 
 .excl-us:
@@ -228,8 +209,6 @@ stages:
       "
       External/openacc_vv/acc_map_data.c.test
       External/openacc_vv/acc_unmap_data.c.test
-      External/openacc_vv/atomic_capture_bitand_equals.c.test
-      External/openacc_vv/parallel_copy.c.test
       "
 
 .no-asserts:
@@ -250,8 +229,6 @@ stages:
       "
       External/openacc_vv/acc_map_data.c.test
       External/openacc_vv/acc_unmap_data.c.test
-      External/openacc_vv/atomic_capture_bitand_equals.c.test
-      External/openacc_vv/parallel_copy.c.test
       "
 
 .debug:
@@ -275,8 +252,6 @@ stages:
       "
       External/openacc_vv/acc_map_data.c.test
       External/openacc_vv/acc_unmap_data.c.test
-      External/openacc_vv/atomic_capture_bitand_equals.c.test
-      External/openacc_vv/parallel_copy.c.test
       "
 
 # Not setup or cleanup.
