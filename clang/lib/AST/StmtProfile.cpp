@@ -1235,8 +1235,7 @@ namespace {
 class ACCClauseProfiler : public ConstACCClauseVisitor<ACCClauseProfiler> {
   StmtProfiler *Profiler;
   /// Process clauses with list of variables.
-  template <typename T>
-  void VisitACCClauseList(T *Node);
+  template <typename T> void VisitACCClauseVarList(T *Node);
 
 public:
   ACCClauseProfiler(StmtProfiler *P) : Profiler(P) { }
@@ -1245,8 +1244,7 @@ public:
 #include "clang/Basic/OpenACCKinds.def"
 };
 
-template<typename T>
-void ACCClauseProfiler::VisitACCClauseList(T *Node) {
+template <typename T> void ACCClauseProfiler::VisitACCClauseVarList(T *Node) {
   for (auto *E : Node->varlists()) {
     if (E)
       Profiler->VisitStmt(E);
@@ -1254,49 +1252,49 @@ void ACCClauseProfiler::VisitACCClauseList(T *Node) {
 }
 
 void ACCClauseProfiler::VisitACCNomapClause(const ACCNomapClause *C) {
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void ACCClauseProfiler::VisitACCPresentClause(const ACCPresentClause *C) {
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void ACCClauseProfiler::VisitACCCopyClause(const ACCCopyClause *C) {
   // FIXME: Should we visit the clause kind, which varies among clause
   // aliases?
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void ACCClauseProfiler::VisitACCCopyinClause(const ACCCopyinClause *C) {
   // FIXME: Should we visit the clause kind, which varies among clause
   // aliases?
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void ACCClauseProfiler::VisitACCCopyoutClause(const ACCCopyoutClause *C) {
   // FIXME: Should we visit the clause kind, which varies among clause
   // aliases?
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void ACCClauseProfiler::VisitACCCreateClause(const ACCCreateClause *C) {
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void ACCClauseProfiler::VisitACCNoCreateClause(const ACCNoCreateClause *C) {
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void ACCClauseProfiler::VisitACCDeleteClause(const ACCDeleteClause *C) {
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void ACCClauseProfiler::VisitACCSharedClause(const ACCSharedClause *C) {
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void ACCClauseProfiler::VisitACCPrivateClause(const ACCPrivateClause *C) {
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void
 ACCClauseProfiler::VisitACCFirstprivateClause(const ACCFirstprivateClause *C) {
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void ACCClauseProfiler::VisitACCReductionClause(
                                          const ACCReductionClause *C) {
   Profiler->VisitName(C->getNameInfo().getName());
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void ACCClauseProfiler::VisitACCIfClause(const ACCIfClause *C) {
   if (C->getCondition())
@@ -1306,10 +1304,10 @@ void ACCClauseProfiler::VisitACCIfPresentClause(const ACCIfPresentClause *) {}
 void ACCClauseProfiler::VisitACCSelfClause(const ACCSelfClause *C) {
   // FIXME: Should we visit the clause kind, which varies among clause
   // aliases?
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void ACCClauseProfiler::VisitACCDeviceClause(const ACCDeviceClause *C) {
-  VisitACCClauseList(C);
+  VisitACCClauseVarList(C);
 }
 void ACCClauseProfiler::VisitACCNumGangsClause(const ACCNumGangsClause *C) {
   if (C->getNumGangs())

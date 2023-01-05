@@ -1062,8 +1062,8 @@ class ACCClausePrinter : public ACCClauseVisitor<ACCClausePrinter> {
   raw_ostream &OS;
   const PrintingPolicy &Policy;
   /// Process clauses with list of variables.
-  template <typename T>
-  void VisitACCClauseList(T *Node, char StartSym);
+  template <typename T> void VisitACCClauseVarList(T *Node, char StartSym);
+
 public:
   ACCClausePrinter(raw_ostream &OS, const PrintingPolicy &Policy)
     : OS(OS), Policy(Policy) { }
@@ -1072,8 +1072,8 @@ public:
 #include "clang/Basic/OpenACCKinds.def"
 };
 
-template<typename T>
-void ACCClausePrinter::VisitACCClauseList(T *Node, char StartSym) {
+template <typename T>
+void ACCClausePrinter::VisitACCClauseVarList(T *Node, char StartSym) {
   for (typename T::varlist_iterator I = Node->varlist_begin(),
                                     E = Node->varlist_end();
        I != E; ++I) {
@@ -1089,7 +1089,7 @@ void ACCClausePrinter::VisitACCClauseList(T *Node, char StartSym) {
 void ACCClausePrinter::VisitACCNomapClause(ACCNomapClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "nomap";
-    VisitACCClauseList(Node, '(');
+    VisitACCClauseVarList(Node, '(');
     OS << ")";
   }
 }
@@ -1097,7 +1097,7 @@ void ACCClausePrinter::VisitACCNomapClause(ACCNomapClause *Node) {
 void ACCClausePrinter::VisitACCPresentClause(ACCPresentClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "present";
-    VisitACCClauseList(Node, '(');
+    VisitACCClauseVarList(Node, '(');
     OS << ")";
   }
 }
@@ -1105,7 +1105,7 @@ void ACCClausePrinter::VisitACCPresentClause(ACCPresentClause *Node) {
 void ACCClausePrinter::VisitACCCopyClause(ACCCopyClause *Node) {
   if (!Node->varlist_empty()) {
     OS << getOpenACCName(Node->getClauseKind());
-    VisitACCClauseList(Node, '(');
+    VisitACCClauseVarList(Node, '(');
     OS << ")";
   }
 }
@@ -1113,7 +1113,7 @@ void ACCClausePrinter::VisitACCCopyClause(ACCCopyClause *Node) {
 void ACCClausePrinter::VisitACCCopyinClause(ACCCopyinClause *Node) {
   if (!Node->varlist_empty()) {
     OS << getOpenACCName(Node->getClauseKind());
-    VisitACCClauseList(Node, '(');
+    VisitACCClauseVarList(Node, '(');
     OS << ")";
   }
 }
@@ -1121,7 +1121,7 @@ void ACCClausePrinter::VisitACCCopyinClause(ACCCopyinClause *Node) {
 void ACCClausePrinter::VisitACCCopyoutClause(ACCCopyoutClause *Node) {
   if (!Node->varlist_empty()) {
     OS << getOpenACCName(Node->getClauseKind());
-    VisitACCClauseList(Node, '(');
+    VisitACCClauseVarList(Node, '(');
     OS << ")";
   }
 }
@@ -1129,7 +1129,7 @@ void ACCClausePrinter::VisitACCCopyoutClause(ACCCopyoutClause *Node) {
 void ACCClausePrinter::VisitACCCreateClause(ACCCreateClause *Node) {
   if (!Node->varlist_empty()) {
     OS << getOpenACCName(Node->getClauseKind());
-    VisitACCClauseList(Node, '(');
+    VisitACCClauseVarList(Node, '(');
     OS << ")";
   }
 }
@@ -1137,7 +1137,7 @@ void ACCClausePrinter::VisitACCCreateClause(ACCCreateClause *Node) {
 void ACCClausePrinter::VisitACCNoCreateClause(ACCNoCreateClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "no_create";
-    VisitACCClauseList(Node, '(');
+    VisitACCClauseVarList(Node, '(');
     OS << ")";
   }
 }
@@ -1145,7 +1145,7 @@ void ACCClausePrinter::VisitACCNoCreateClause(ACCNoCreateClause *Node) {
 void ACCClausePrinter::VisitACCDeleteClause(ACCDeleteClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "delete";
-    VisitACCClauseList(Node, '(');
+    VisitACCClauseVarList(Node, '(');
     OS << ")";
   }
 }
@@ -1153,7 +1153,7 @@ void ACCClausePrinter::VisitACCDeleteClause(ACCDeleteClause *Node) {
 void ACCClausePrinter::VisitACCSharedClause(ACCSharedClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "shared";
-    VisitACCClauseList(Node, '(');
+    VisitACCClauseVarList(Node, '(');
     OS << ")";
   }
 }
@@ -1161,7 +1161,7 @@ void ACCClausePrinter::VisitACCSharedClause(ACCSharedClause *Node) {
 void ACCClausePrinter::VisitACCPrivateClause(ACCPrivateClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "private";
-    VisitACCClauseList(Node, '(');
+    VisitACCClauseVarList(Node, '(');
     OS << ")";
   }
 }
@@ -1169,7 +1169,7 @@ void ACCClausePrinter::VisitACCPrivateClause(ACCPrivateClause *Node) {
 void ACCClausePrinter::VisitACCFirstprivateClause(ACCFirstprivateClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "firstprivate";
-    VisitACCClauseList(Node, '(');
+    VisitACCClauseVarList(Node, '(');
     OS << ")";
   }
 }
@@ -1179,7 +1179,7 @@ void ACCClausePrinter::VisitACCReductionClause(ACCReductionClause *Node) {
     OS << "reduction(";
     Node->printReductionOperator(OS);
     OS << ":";
-    VisitACCClauseList(Node, ' ');
+    VisitACCClauseVarList(Node, ' ');
     OS << ")";
   }
 }
@@ -1197,7 +1197,7 @@ void ACCClausePrinter::VisitACCIfPresentClause(ACCIfPresentClause *Node) {
 void ACCClausePrinter::VisitACCSelfClause(ACCSelfClause *Node) {
   if (!Node->varlist_empty()) {
     OS << getOpenACCName(Node->getClauseKind());
-    VisitACCClauseList(Node, '(');
+    VisitACCClauseVarList(Node, '(');
     OS << ")";
   }
 }
@@ -1205,7 +1205,7 @@ void ACCClausePrinter::VisitACCSelfClause(ACCSelfClause *Node) {
 void ACCClausePrinter::VisitACCDeviceClause(ACCDeviceClause *Node) {
   if (!Node->varlist_empty()) {
     OS << "device";
-    VisitACCClauseList(Node, '(');
+    VisitACCClauseVarList(Node, '(');
     OS << ")";
   }
 }

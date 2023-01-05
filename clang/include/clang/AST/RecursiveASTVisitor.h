@@ -515,7 +515,7 @@ private:
 #define OPENACC_CLAUSE(Name, Class) bool Visit##Class(Class *C);
 #include "clang/Basic/OpenACCKinds.def"
   /// Process clauses with list of variables.
-  template <typename T> bool VisitACCClauseList(T *Node);
+  template <typename T> bool VisitACCClauseVarList(T *Node);
 
   bool PostVisitStmt(Stmt *S);
 };
@@ -3825,7 +3825,7 @@ bool RecursiveASTVisitor<Derived>::TraverseACCClause(ACCClause *C) {
 
 template <typename Derived>
 template <typename T>
-bool RecursiveASTVisitor<Derived>::VisitACCClauseList(T *Node) {
+bool RecursiveASTVisitor<Derived>::VisitACCClauseVarList(T *Node) {
   for (auto *E : Node->varlists()) {
     TRY_TO(TraverseStmt(E));
   }
@@ -3834,68 +3834,68 @@ bool RecursiveASTVisitor<Derived>::VisitACCClauseList(T *Node) {
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCNomapClause(ACCNomapClause *C) {
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCPresentClause(ACCPresentClause *C) {
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCCopyClause(ACCCopyClause *C) {
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCCopyinClause(ACCCopyinClause *C) {
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCCopyoutClause(ACCCopyoutClause *C) {
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCCreateClause(ACCCreateClause *C) {
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCNoCreateClause(ACCNoCreateClause *C) {
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCDeleteClause(ACCDeleteClause *C) {
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCSharedClause(ACCSharedClause *C) {
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCPrivateClause(ACCPrivateClause *C) {
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCFirstprivateClause(
     ACCFirstprivateClause *C) {
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
@@ -3903,7 +3903,7 @@ template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCReductionClause(
     ACCReductionClause *C) {
   TRY_TO(TraverseDeclarationNameInfo(C->getNameInfo()));
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
@@ -3921,13 +3921,13 @@ bool RecursiveASTVisitor<Derived>::VisitACCIfPresentClause(
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCSelfClause(ACCSelfClause *C) {
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCDeviceClause(ACCDeviceClause *C) {
-  TRY_TO(VisitACCClauseList(C));
+  TRY_TO(VisitACCClauseVarList(C));
   return true;
 }
 
