@@ -44,6 +44,8 @@ variables:
   # Which commits to use for OpenACC V&V testing.
   VV_LLVM_TEST_SUITE_COMMIT: da5c250df731c259bd6f15f05ab93f3f7b902b63
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
+  KOKKOS_COMMIT: 5665868ff397be30de5d94b010d895d588a634cd
+  KOKKOS_TESTS_COMMIT: c0fd4bed313cac8abda70f4b5e1f53beb2196709
 
 stages:
   - setup
@@ -51,16 +53,17 @@ stages:
   - build
   - test
   - vv
+  - kokkos
   - cleanup
   - manual cleanup
 
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 # build configurations
 #
 # Test every architecture with a release build plus assertions using python3.
 # There are multiple excl-us* systems, so use them to check configuration
 # choices that are hopefully orthogonal to the architecture.
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 
 .leconte:
   tags: [shell, leconte]
@@ -283,9 +286,9 @@ stages:
     - if test -e $BUILD_DIR/install; then du -hs $BUILD_DIR/install; fi
     - echo -e "\e[0Ksection_end:`date +%s`:show_stats\r\e[0K"
 
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 # setup
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 
 .setup:
   stage: setup
@@ -334,9 +337,9 @@ no-asserts (setup):
 debug (setup):
   extends: [.debug, .setup]
 
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 # cleanup
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 
 .rm-build-dir:
   variables:
@@ -364,6 +367,8 @@ leconte (cleanup):
       artifacts: false
     - job: leconte (vv)
       artifacts: false
+    - job: leconte (kokkos)
+      artifacts: false
 
 oswald02 (cleanup):
   extends: [.oswald02, .cleanup]
@@ -371,6 +376,8 @@ oswald02 (cleanup):
     - job: oswald02 (test)
       artifacts: false
     - job: oswald02 (vv)
+      artifacts: false
+    - job: oswald02 (kokkos)
       artifacts: false
 
 explorer (cleanup):
@@ -380,6 +387,8 @@ explorer (cleanup):
       artifacts: false
     - job: explorer (vv)
       artifacts: false
+    - job: explorer (kokkos)
+      artifacts: false
 
 excl-us (cleanup):
   extends: [.excl-us, .cleanup]
@@ -387,6 +396,8 @@ excl-us (cleanup):
     - job: excl-us (test)
       artifacts: false
     - job: excl-us (vv)
+      artifacts: false
+    - job: excl-us (kokkos)
       artifacts: false
 
 no-asserts (cleanup):
@@ -396,6 +407,8 @@ no-asserts (cleanup):
       artifacts: false
     - job: no-asserts (vv)
       artifacts: false
+    - job: no-asserts (kokkos)
+      artifacts: false
 
 debug (cleanup):
   extends: [.debug, .cleanup]
@@ -403,6 +416,8 @@ debug (cleanup):
     - job: debug (test)
       artifacts: false
     - job: debug (vv)
+      artifacts: false
+    - job: debug (kokkos)
       artifacts: false
 
 leconte (manual cleanup):
@@ -445,9 +460,9 @@ z-cleanup-project-builds:
     - echo $BUILD_DIR_PROJ
     - rm -rf $BUILD_DIR_PROJ
 
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 # config
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 
 .config:
   extends: .non-utility
@@ -523,9 +538,9 @@ debug (config):
     - job: debug (setup)
       artifacts: false
 
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 # build
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 
 .build:
   extends: .non-utility
@@ -535,7 +550,7 @@ debug (config):
     - echo $NINJA
     - $NINJA --version
     - time $NINJA -l `nproc` |& tee $CI_PROJECT_DIR/build-log.txt
-    - $NINJA -l `nproc` install
+    - time $NINJA -l `nproc` install
     - echo -e "\e[0Ksection_end:`date +%s`:build\r\e[0K"
   artifacts:
     when: always
@@ -577,9 +592,9 @@ debug (build):
     - job: debug (config)
       artifacts: false
 
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 # test
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 
 .test:
   extends: .non-utility
@@ -736,12 +751,12 @@ debug (test):
     - job: debug (build)
       artifacts: false
 
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 # vv
 #
 # Clone llvm-test-suite.git and the OpenACC V&V suite, and run the latter via
 # the former.
-#-------------------------------------------------
+#-------------------------------------------------------------------------------
 
 .vv:
   extends: .non-utility
@@ -909,6 +924,105 @@ no-asserts (vv):
 
 debug (vv):
   extends: [.debug, .vv]
+  needs:
+    - job: debug (build)
+      artifacts: false
+
+#-------------------------------------------------------------------------------
+# kokkos
+#
+# Clone Kokkos and kokkos-ornl-int-test.git, and try to build some tests in the
+# latter using required parts of the former.
+#-------------------------------------------------------------------------------
+
+.kokkos:
+  extends: .non-utility
+  stage: kokkos
+  script:
+    #...........................................................................
+    # Clone Kokkos.
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:clone_kokkos[collapsed=true]\r\e[0KClone kokkos.git"
+    - cd ..
+    - rm -rf kokkos
+    - mkdir kokkos
+    - cd kokkos
+    - time git clone https://github.com/seyonglee/kokkos.git
+    - cd kokkos
+    - echo $KOKKOS_COMMIT
+    - time git checkout $KOKKOS_COMMIT
+    - patch -p1 < ../../source/.clacc-ci/kokkos.patch
+    - echo -e "\e[0Ksection_end:`date +%s`:clone_kokkos\r\e[0K"
+    #...........................................................................
+    # Clone kokkos-ornl-int-test.git.
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:clone_kokkos_tests[collapsed=true]\r\e[0KClone kokkos-ornl-int-test.git"
+    - cd ..
+    - time git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@code.ornl.gov/f6l/kokkos-ornl-int-test
+    - cd kokkos-ornl-int-test
+    - echo $KOKKOS_TESTS_COMMIT
+    - time git checkout $KOKKOS_TESTS_COMMIT
+    - patch -p1 < ../../source/.clacc-ci/kokkos-ornl-int-test.patch
+    - echo -e "\e[0Ksection_end:`date +%s`:clone_kokkos_tests\r\e[0K"
+    #...........................................................................
+    # Build and run kokkos-ornl-int-test.git/examples/openacc-performance
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:openacc-performance[collapsed=true]\r\e[0KCheck kokkos-ornl-int-test.git/examples/openacc-performance"
+    - cd examples/openacc-performance
+    - export KOKKOS_CXXFLAGS="-fopenacc -Wno-openacc-and-cxx -O3
+                              -fopenacc-fake-async-wait
+                              -fopenacc-fake-tile-clause -DVERIFY"
+    - if test x"$GPU_TRIPLE" != x; then
+        export KOKKOS_CXXFLAGS="$KOKKOS_CXXFLAGS -fopenmp-targets=$GPU_TRIPLE";
+      fi
+    - echo "$KOKKOS_CXXFLAGS"
+    - time make -l `nproc`
+        KOKKOS_PATH=`pwd`/../../../kokkos
+        KOKKOS_DEVICES=OpenACC
+        CXX=`pwd`/../../../../install/bin/clang++
+        CXXFLAGS="$KOKKOS_CXXFLAGS"
+        LINKFLAGS="$KOKKOS_CXXFLAGS -lm"
+        KOKKOS_OPTIONS=
+        KOKKOS_ARCH=
+      |& tee $CI_PROJECT_DIR/kokkos-openacc-performance-build-log.txt
+    - ./OpenACC.acc
+    - echo -e "\e[0Ksection_end:`date +%s`:openacc-performance\r\e[0K"
+  artifacts:
+    when: always
+    paths: [kokkos-openacc-performance-build-log.txt]
+
+leconte (kokkos):
+  extends: [.leconte, .kokkos]
+  needs:
+    - job: leconte (build)
+      artifacts: false
+
+oswald02 (kokkos):
+  extends: [.oswald02, .kokkos]
+  needs:
+    - job: oswald02 (build)
+      artifacts: false
+
+explorer (kokkos):
+  extends: [.explorer, .kokkos]
+  needs:
+    - job: explorer (build)
+      artifacts: false
+
+excl-us (kokkos):
+  extends: [.excl-us, .kokkos]
+  needs:
+    - job: excl-us (build)
+      artifacts: false
+
+no-asserts (kokkos):
+  extends: [.no-asserts, .kokkos]
+  needs:
+    - job: no-asserts (build)
+      artifacts: false
+
+debug (kokkos):
+  extends: [.debug, .kokkos]
   needs:
     - job: debug (build)
       artifacts: false

@@ -1,0 +1,82 @@
+diff --git a/Makefile.kokkos b/Makefile.kokkos
+index 5cc69bf05..c72c6efca 100644
+--- a/Makefile.kokkos
++++ b/Makefile.kokkos
+@@ -280,6 +280,7 @@ ifeq ($(KOKKOS_INTERNAL_USE_OPENACC), 1)
+   # Set OpenACC flags.
+   ifeq ($(KOKKOS_INTERNAL_COMPILER_NVHPC), 1)
+     KOKKOS_INTERNAL_OPENACC_FLAG := -acc
++  else ifeq ($(KOKKOS_INTERNAL_COMPILER_CLANG), 1)
+   else
+     $(error Makefile.kokkos: OpenACC is enabled but the compiler must be NVHPC (got version string $(KOKKOS_CXX_VERSION)))
+   endif
+@@ -1230,8 +1231,8 @@ ifneq ($(KOKKOS_INTERNAL_NEW_CONFIG), 0)
+     tmp := $(call kokkos_append_config_header,"$H""include <decl/Kokkos_Declare_OPENMP.hpp>","KokkosCore_Config_DeclareBackend.hpp")
+   endif
+   ifeq ($(KOKKOS_INTERNAL_USE_OPENACC), 1)
+-    tmp := $(call kokkos_append_config_header,"\#include <fwd/Kokkos_Fwd_OPENACC.hpp>","KokkosCore_Config_FwdBackend.hpp")
+-    tmp := $(call kokkos_append_config_header,"\#include <decl/Kokkos_Declare_OPENACC.hpp>","KokkosCore_Config_DeclareBackend.hpp")
++    tmp := $(call kokkos_append_config_header,"$H""include <fwd/Kokkos_Fwd_OPENACC.hpp>","KokkosCore_Config_FwdBackend.hpp")
++    tmp := $(call kokkos_append_config_header,"$H""include <decl/Kokkos_Declare_OPENACC.hpp>","KokkosCore_Config_DeclareBackend.hpp")
+   endif
+   ifeq ($(KOKKOS_INTERNAL_USE_THREADS), 1)
+     tmp := $(call kokkos_append_config_header,"$H""include <fwd/Kokkos_Fwd_THREADS.hpp>","KokkosCore_Config_FwdBackend.hpp")
+diff --git a/cmake/kokkos_arch.cmake b/cmake/kokkos_arch.cmake
+index b051f8e3b..46d553b66 100644
+--- a/cmake/kokkos_arch.cmake
++++ b/cmake/kokkos_arch.cmake
+@@ -585,7 +585,7 @@ FUNCTION(CHECK_AMDGPU_ARCH ARCH FLAG)
+       MESSAGE(FATAL_ERROR "Multiple GPU architectures given! Already have ${AMDGPU_ARCH_ALREADY_SPECIFIED}, but trying to add ${ARCH}. If you are re-running CMake, try clearing the cache and running again.")
+     ENDIF()
+     SET(AMDGPU_ARCH_ALREADY_SPECIFIED ${ARCH} PARENT_SCOPE)
+-    IF (NOT KOKKOS_ENABLE_HIP AND NOT KOKKOS_ENABLE_OPENMPTARGET)
++    IF (NOT KOKKOS_ENABLE_HIP AND NOT KOKKOS_ENABLE_OPENMPTARGET and NOT KOKKOS_ENABLE_OPENACC)
+       MESSAGE(WARNING "Given AMD GPU architecture ${ARCH}, but Kokkos_ENABLE_HIP and Kokkos_ENABLE_OPENMPTARGET are OFF. Option will be ignored.")
+       UNSET(KOKKOS_ARCH_${ARCH} PARENT_SCOPE)
+     ELSE()
+@@ -646,7 +646,7 @@ IF (KOKKOS_ENABLE_OPENMPTARGET)
+   IF (CLANG_CUDA_ARCH)
+     STRING(REPLACE "sm_" "cc" NVHPC_CUDA_ARCH ${CLANG_CUDA_ARCH})
+     COMPILER_SPECIFIC_FLAGS(
+-      Clang -Xopenmp-target -march=${CLANG_CUDA_ARCH} -fopenmp-targets=nvptx64
++      Clang -Xopenmp-target -march=${CLANG_CUDA_ARCH} -fopenmp-targets=nvptx64-nvidia-cuda
+       NVHPC -gpu=${NVHPC_CUDA_ARCH}
+     )
+   ENDIF()
+@@ -689,13 +689,19 @@ ENDIF()
+ 
+ IF (KOKKOS_ENABLE_OPENACC)
+   IF(KOKKOS_CUDA_ARCH_FLAG)
++    SET(CLANG_CUDA_ARCH ${KOKKOS_CUDA_ARCH_FLAG})
+     STRING(REPLACE "sm_" "cc" NVHPC_CUDA_ARCH ${KOKKOS_CUDA_ARCH_FLAG})
+     COMPILER_SPECIFIC_FLAGS(
+-      NVHPC -acc -gpu=${NVHPC_CUDA_ARCH}
++      Clang -fopenacc -fopenacc-fake-async-wait -fopenacc-fake-tile-clause -Wno-openacc-and-cxx -Xopenmp-target=nvptx64-nvidia-cuda -march=${CLANG_CUDA_ARCH} -fopenmp-targets=nvptx64-nvidia-cuda
++      NVHPC -acc -gpu=${NVHPC_CUDA_ARCH} -Minfo=acc
++    )
++  ELSEIF(KOKKOS_AMDGPU_ARCH_FLAG)
++    COMPILER_SPECIFIC_FLAGS(
++      Clang -fopenacc -fopenacc-fake-async-wait -fopenacc-fake-tile-clause -Wno-openacc-and-cxx -Xopenmp-target=amdgcn-amd-amdhsa -march=${KOKKOS_AMDGPU_ARCH} -fopenmp-targets=amdgcn-amd-amdhsa
+     )
+   ELSE()
+     COMPILER_SPECIFIC_FLAGS(
+-      NVHPC -acc
++      NVHPC -acc -Minfo=acc
+     )
+   ENDIF()
+ ENDIF()
+diff --git a/core/src/Kokkos_Macros.hpp b/core/src/Kokkos_Macros.hpp
+index 34dc6370e..745fa5e30 100644
+--- a/core/src/Kokkos_Macros.hpp
++++ b/core/src/Kokkos_Macros.hpp
+@@ -478,6 +478,10 @@
+ #define KOKKOS_IF_ON_HOST(CODE) NV_IF_TARGET(NV_IS_HOST, CODE)
+ #endif
+ 
++#ifdef KOKKOS_ENABLE_OPENACC
++#include <openacc.h>
++#endif
++
+ #ifdef KOKKOS_ENABLE_OPENMPTARGET
+ #ifdef KOKKOS_COMPILER_NVHPC
+ #define KOKKOS_IF_ON_DEVICE(CODE)   \

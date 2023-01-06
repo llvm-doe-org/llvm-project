@@ -1,0 +1,29 @@
+diff --git a/examples/openacc-performance/openacc-test.cpp b/examples/openacc-performance/openacc-test.cpp
+index 6a4a9f4..0a3e101 100644
+--- a/examples/openacc-performance/openacc-test.cpp
++++ b/examples/openacc-performance/openacc-test.cpp
+@@ -71,6 +71,24 @@ int main( int argc, char* argv[] )
+ 
+   printf( "AXPY = %d Time ( %e s )\n", M, time );
+ 
++#if VERIFY
++  printf("verifying results: ");
++  Kokkos::View<float *> Y_dev(Y, M);
++  Kokkos::View<float *>::HostMirror Y_host = Kokkos::create_mirror(Y_dev);
++  Kokkos::deep_copy(Y_host, Y_dev);
++  float expected = 2.0 + 101 * 2.0 * 2.0;
++  for ( int m = 0; m < M; m++ )
++  {
++    if ( Y_host[m] != expected )
++    {
++      printf( "error starting at Y[%d]: expected=%f, actual=%f\n",
++              m, expected, Y_host[m] );
++      return 1;
++    }
++  }
++  printf("success\n");
++#endif
++
+   /*
+   //printf("DOT Product -- Kokkos parallel_reduce\n");
+   Kokkos::parallel_for( "dotproduct_init", M, KOKKOS_LAMBDA ( int m )
