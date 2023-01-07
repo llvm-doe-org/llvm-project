@@ -46,6 +46,7 @@ variables:
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
   KOKKOS_COMMIT: 5665868ff397be30de5d94b010d895d588a634cd
   KOKKOS_TESTS_COMMIT: c0fd4bed313cac8abda70f4b5e1f53beb2196709
+  KOKKOS_CMAKE_OPTS:
 
 stages:
   - setup
@@ -82,6 +83,7 @@ stages:
     CPU_COUNT:  4
     GPU_TRIPLE: "nvptx64-nvidia-cuda"
     GPU_COUNT:  6
+    KOKKOS_CMAKE_OPTS: -DKokkos_ARCH_VOLTA70=On
     LIT_NPROC_DIVISOR: 4
     LIT_XFAIL:
       "
@@ -132,6 +134,7 @@ stages:
     CPU_COUNT:  4
     GPU_TRIPLE: "nvptx64-nvidia-cuda"
     GPU_COUNT:  1
+    KOKKOS_CMAKE_OPTS: -DKokkos_ARCH_PASCAL60=On
     LIT_NPROC_DIVISOR: 1
     LIT_XFAIL:
       "
@@ -172,6 +175,7 @@ stages:
     CPU_COUNT:  4
     GPU_TRIPLE: "amdgcn-amd-amdhsa"
     GPU_COUNT:  2
+    KOKKOS_CMAKE_OPTS: -DKokkos_ARCH_VEGA906=On
     LIT_NPROC_DIVISOR: 1
     LIT_XFAIL:
       ""
@@ -943,7 +947,7 @@ debug (vv):
     # Clone Kokkos.
     #...........................................................................
     - echo -e "\e[0Ksection_start:`date +%s`:clone_kokkos[collapsed=true]\r\e[0KClone kokkos.git"
-    - cd ..
+    - cd $BUILD_DIR
     - rm -rf kokkos
     - mkdir kokkos
     - cd kokkos
@@ -951,45 +955,62 @@ debug (vv):
     - cd kokkos
     - echo $KOKKOS_COMMIT
     - time git checkout $KOKKOS_COMMIT
-    - patch -p1 < ../../source/.clacc-ci/kokkos.patch
+    - patch -p1 < $BUILD_DIR/source/.clacc-ci/kokkos.patch
     - echo -e "\e[0Ksection_end:`date +%s`:clone_kokkos\r\e[0K"
+    #...........................................................................
+    # Build kokkos.
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:build_kokkos[collapsed=true]\r\e[0KBuild Kokkos"
+    - mkdir build && cd build
+    - echo $CMAKE
+    - $CMAKE --version
+    - echo $KOKKOS_CMAKE_OPTS
+    - time $CMAKE -G Ninja
+        -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
+        -DCMAKE_CXX_STANDARD=17
+        -DCMAKE_INSTALL_PREFIX=`pwd`/../install
+        -DCMAKE_BINARY_DIR=`pwd`
+        -DKokkos_ENABLE_OPENACC=On
+        -DKokkos_ENABLE_HWLOC=Off
+        -DKokkos_ENABLE_TESTS=Off
+        $KOKKOS_CMAKE_OPTS
+        ..
+    - echo $NINJA
+    - $NINJA --version
+    - time $NINJA -l `nproc` install |& tee $CI_PROJECT_DIR/kokkos-build-log.txt
+    - echo -e "\e[0Ksection_end:`date +%s`:build_kokkos\r\e[0K"
     #...........................................................................
     # Clone kokkos-ornl-int-test.git.
     #...........................................................................
     - echo -e "\e[0Ksection_start:`date +%s`:clone_kokkos_tests[collapsed=true]\r\e[0KClone kokkos-ornl-int-test.git"
-    - cd ..
+    - cd $BUILD_DIR/kokkos
     - time git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@code.ornl.gov/f6l/kokkos-ornl-int-test
     - cd kokkos-ornl-int-test
     - echo $KOKKOS_TESTS_COMMIT
     - time git checkout $KOKKOS_TESTS_COMMIT
-    - patch -p1 < ../../source/.clacc-ci/kokkos-ornl-int-test.patch
+    - patch -p1 < $BUILD_DIR/source/.clacc-ci/kokkos-ornl-int-test.patch
     - echo -e "\e[0Ksection_end:`date +%s`:clone_kokkos_tests\r\e[0K"
     #...........................................................................
     # Build and run kokkos-ornl-int-test.git/examples/openacc-performance
     #...........................................................................
     - echo -e "\e[0Ksection_start:`date +%s`:openacc-performance[collapsed=true]\r\e[0KCheck kokkos-ornl-int-test.git/examples/openacc-performance"
     - cd examples/openacc-performance
-    - export KOKKOS_CXXFLAGS="-fopenacc -Wno-openacc-and-cxx -O3
-                              -fopenacc-fake-async-wait
-                              -fopenacc-fake-tile-clause -DVERIFY"
-    - if test x"$GPU_TRIPLE" != x; then
-        export KOKKOS_CXXFLAGS="$KOKKOS_CXXFLAGS -fopenmp-targets=$GPU_TRIPLE";
-      fi
-    - echo "$KOKKOS_CXXFLAGS"
-    - time make -l `nproc`
-        KOKKOS_PATH=`pwd`/../../../kokkos
-        KOKKOS_DEVICES=OpenACC
-        CXX=`pwd`/../../../../install/bin/clang++
-        CXXFLAGS="$KOKKOS_CXXFLAGS"
-        LINKFLAGS="$KOKKOS_CXXFLAGS -lm"
-        KOKKOS_OPTIONS=
-        KOKKOS_ARCH=
-      |& tee $CI_PROJECT_DIR/kokkos-openacc-performance-build-log.txt
-    - ./OpenACC.acc
+    - mkdir build && cd build
+    - echo $CMAKE
+    - $CMAKE --version
+    - time $CMAKE -G Ninja
+        -DKokkos_ROOT=$BUILD_DIR/kokkos/kokkos/install
+        -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
+        -DCMAKE_CXX_FLAGS='-DVERIFY -O3 -lm'
+        ..
+    - echo $NINJA
+    - $NINJA --version
+    - time $NINJA -l `nproc`
+    - time ./openacctest
     - echo -e "\e[0Ksection_end:`date +%s`:openacc-performance\r\e[0K"
   artifacts:
     when: always
-    paths: [kokkos-openacc-performance-build-log.txt]
+    paths: [kokkos-build-log.txt]
 
 leconte (kokkos):
   extends: [.leconte, .kokkos]

@@ -1,3 +1,16 @@
+diff --git a/examples/openacc-performance/CMakeLists.txt b/examples/openacc-performance/CMakeLists.txt
+index 9f5c25f..2a109d0 100644
+--- a/examples/openacc-performance/CMakeLists.txt
++++ b/examples/openacc-performance/CMakeLists.txt
+@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.10)
+ 
+ # Projects can safely mix languages - must have C++ support
+ # Kokkos flags will only apply to C++ files
+-project(Example CXX Fortran)
++project(Example CXX)
+ 
+ # You need this for using Kokkos_ROOT variable
+ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.12.0")
 diff --git a/examples/openacc-performance/openacc-test.cpp b/examples/openacc-performance/openacc-test.cpp
 index 6a4a9f4..0a3e101 100644
 --- a/examples/openacc-performance/openacc-test.cpp
@@ -27,3 +40,16 @@ index 6a4a9f4..0a3e101 100644
    /*
    //printf("DOT Product -- Kokkos parallel_reduce\n");
    Kokkos::parallel_for( "dotproduct_init", M, KOKKOS_LAMBDA ( int m )
+diff --git a/examples/stream/CMakeLists.txt b/examples/stream/CMakeLists.txt
+index 8f1972e..22a42ec 100644
+--- a/examples/stream/CMakeLists.txt
++++ b/examples/stream/CMakeLists.txt
+@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.10)
+ 
+ # Projects can safely mix languages - must have C++ support
+ # Kokkos flags will only apply to C++ files
+-project(Example CXX Fortran)
++project(Example CXX)
+ 
+ # You need this for using Kokkos_ROOT variable
+ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.12.0")
