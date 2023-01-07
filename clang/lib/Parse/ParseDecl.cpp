@@ -4410,7 +4410,9 @@ void Parser::ParseStructUnionBody(SourceLocation RecordLoc,
 
     if (Tok.is(tok::annot_pragma_openacc)) {
       ParsedAttributes Attrs(AttrFactory);
+#ifndef NDEBUG
       DeclGroupPtrTy Ptr =
+#endif
           ParseOpenACCDeclarativeDirective(DeclaratorContext::Member, Attrs);
       assert(!Ptr &&
              "expected OpenACC directive to be rejected in struct/union");

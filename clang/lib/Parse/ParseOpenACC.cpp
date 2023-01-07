@@ -559,9 +559,11 @@ ACCClause *Parser::ParseOpenACCGangClauseWithArg(bool ParseOnly) {
   SourceLocation LParenLoc = Tok.getLocation();
   BalancedDelimiterTracker T(*this, tok::l_paren,
                              tok::annot_pragma_openacc_end);
-  bool HaveLParen =
-      !T.expectAndConsume(diag::err_expected_lparen_after, ClauseName.data());
-  assert(HaveLParen && "expected ParseOpenACCGangClauseWithArg upon 'gang('");
+#ifndef NDEBUG
+  bool NoLParen =
+#endif
+      T.expectAndConsume(diag::err_expected_lparen_after, ClauseName.data());
+  assert(!NoLParen && "expected ParseOpenACCGangClauseWithArg upon 'gang('");
 
   // Parse 'static'.
   SourceLocation StaticKwLoc;
