@@ -994,7 +994,7 @@ debug (vv):
     # Build and run kokkos-ornl-int-test.git/examples/openacc-performance
     #...........................................................................
     - echo -e "\e[0Ksection_start:`date +%s`:openacc-performance[collapsed=true]\r\e[0KCheck kokkos-ornl-int-test.git/examples/openacc-performance"
-    - cd examples/openacc-performance
+    - cd $BUILD_DIR/kokkos/kokkos-ornl-int-test/examples/openacc-performance
     - mkdir build && cd build
     - echo $CMAKE
     - $CMAKE --version
@@ -1008,6 +1008,24 @@ debug (vv):
     - time $NINJA -l `nproc`
     - time ./openacctest
     - echo -e "\e[0Ksection_end:`date +%s`:openacc-performance\r\e[0K"
+    #...........................................................................
+    # Build and run kokkos-ornl-int-test.git/examples/stream
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:stream[collapsed=true]\r\e[0KCheck kokkos-ornl-int-test.git/examples/stream"
+    - cd $BUILD_DIR/kokkos/kokkos-ornl-int-test/examples/stream
+    - mkdir build && cd build
+    - echo $CMAKE
+    - $CMAKE --version
+    - time $CMAKE -G Ninja
+        -DKokkos_ROOT=$BUILD_DIR/kokkos/kokkos/install
+        -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
+        -DCMAKE_CXX_FLAGS='-O3 -lm'
+        ..
+    - echo $NINJA
+    - $NINJA --version
+    - time $NINJA -l `nproc`
+    - time ./stream
+    - echo -e "\e[0Ksection_end:`date +%s`:stream\r\e[0K"
   artifacts:
     when: always
     paths: [kokkos-build-log.txt]

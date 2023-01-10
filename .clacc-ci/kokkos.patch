@@ -22,7 +22,7 @@ index 5cc69bf05..c72c6efca 100644
    ifeq ($(KOKKOS_INTERNAL_USE_THREADS), 1)
      tmp := $(call kokkos_append_config_header,"$H""include <fwd/Kokkos_Fwd_THREADS.hpp>","KokkosCore_Config_FwdBackend.hpp")
 diff --git a/cmake/kokkos_arch.cmake b/cmake/kokkos_arch.cmake
-index b051f8e3b..81d429b63 100644
+index b051f8e3b..f3d623bb5 100644
 --- a/cmake/kokkos_arch.cmake
 +++ b/cmake/kokkos_arch.cmake
 @@ -88,7 +88,7 @@ KOKKOS_ARCH_OPTION(AMPERE80        GPU  "NVIDIA Ampere generation CC 8.0"  "KOKK
@@ -54,7 +54,7 @@ index b051f8e3b..81d429b63 100644
        NVHPC -gpu=${NVHPC_CUDA_ARCH}
      )
    ENDIF()
-@@ -689,9 +689,17 @@ ENDIF()
+@@ -689,14 +689,29 @@ ENDIF()
  
  IF (KOKKOS_ENABLE_OPENACC)
    IF(KOKKOS_CUDA_ARCH_FLAG)
@@ -73,6 +73,18 @@ index b051f8e3b..81d429b63 100644
      )
    ELSE()
      COMPILER_SPECIFIC_FLAGS(
+       NVHPC -acc
+     )
++    # When not compiling for offload to any GPU, we're compiling for kernel
++    # execution on the host.  In that case, memory is shared between the OpenACC
++    # space and the host space.
++    # TODO: Does something like this also make sense for NVHPC?
++    COMPILER_SPECIFIC_DEFS(
++      Clang KOKKOS_OPENACC_WITHOUT_GPU
++    )
+   ENDIF()
+ ENDIF()
+ 
 diff --git a/cmake/kokkos_enable_devices.cmake b/cmake/kokkos_enable_devices.cmake
 index d4a7744eb..0f8e784b2 100644
 --- a/cmake/kokkos_enable_devices.cmake
@@ -109,3 +121,34 @@ index 34dc6370e..745fa5e30 100644
  #ifdef KOKKOS_ENABLE_OPENMPTARGET
  #ifdef KOKKOS_COMPILER_NVHPC
  #define KOKKOS_IF_ON_DEVICE(CODE)   \
+diff --git a/core/src/OpenACC/Kokkos_OpenACCSpace.hpp b/core/src/OpenACC/Kokkos_OpenACCSpace.hpp
+index 4e7170cbb..ee24270f9 100644
+--- a/core/src/OpenACC/Kokkos_OpenACCSpace.hpp
++++ b/core/src/OpenACC/Kokkos_OpenACCSpace.hpp
+@@ -85,16 +85,26 @@ class OpenACCSpace {
+ template <>
+ struct Kokkos::Impl::MemorySpaceAccess<Kokkos::HostSpace,
+                                        Kokkos::Experimental::OpenACCSpace> {
++#if KOKKOS_OPENACC_WITHOUT_GPU
++  enum : bool { assignable = true };
++  enum : bool { accessible = true };
++#else
+   enum : bool { assignable = false };
+   enum : bool { accessible = false };
++#endif
+   enum : bool { deepcopy = true };
+ };
+ 
+ template <>
+ struct Kokkos::Impl::MemorySpaceAccess<Kokkos::Experimental::OpenACCSpace,
+                                        Kokkos::HostSpace> {
++#if KOKKOS_OPENACC_WITHOUT_GPU
++  enum : bool { assignable = true };
++  enum : bool { accessible = true };
++#else
+   enum : bool { assignable = false };
+   enum : bool { accessible = false };
++#endif
+   enum : bool { deepcopy = true };
+ };
+ 
