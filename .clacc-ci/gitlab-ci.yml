@@ -45,7 +45,7 @@ variables:
   VV_LLVM_TEST_SUITE_COMMIT: da5c250df731c259bd6f15f05ab93f3f7b902b63
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
   KOKKOS_COMMIT: 5665868ff397be30de5d94b010d895d588a634cd
-  KOKKOS_TESTS_COMMIT: c0fd4bed313cac8abda70f4b5e1f53beb2196709
+  KOKKOS_TESTS_COMMIT: a2381951c0e5aa5cf1bbf1c23d9a655cf2412378
   KOKKOS_CMAKE_OPTS:
 
 stages:
@@ -988,7 +988,6 @@ debug (vv):
     - cd kokkos-ornl-int-test
     - echo $KOKKOS_TESTS_COMMIT
     - time git checkout $KOKKOS_TESTS_COMMIT
-    - patch -p1 < $BUILD_DIR/source/.clacc-ci/kokkos-ornl-int-test.patch
     - echo -e "\e[0Ksection_end:`date +%s`:clone_kokkos_tests\r\e[0K"
     #...........................................................................
     # Build and run kokkos-ornl-int-test.git/examples/openacc-performance
