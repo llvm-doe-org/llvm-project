@@ -44,7 +44,7 @@ variables:
   # Which commits to use for OpenACC V&V testing.
   VV_LLVM_TEST_SUITE_COMMIT: da5c250df731c259bd6f15f05ab93f3f7b902b63
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
-  KOKKOS_COMMIT: 8e03dc3840ed7139e5e9cd21fc5d6cd66794af80
+  KOKKOS_COMMIT: ce0ece55dc3c63265c3e96b5a900650cf2dcf56b
   KOKKOS_TESTS_COMMIT: a2381951c0e5aa5cf1bbf1c23d9a655cf2412378
   KOKKOS_CMAKE_OPTS:
 
@@ -971,13 +971,22 @@ debug (vv):
         -DCMAKE_BINARY_DIR=`pwd`
         -DKokkos_ENABLE_OPENACC=On
         -DKokkos_ENABLE_HWLOC=Off
-        -DKokkos_ENABLE_TESTS=Off
+        -DKokkos_ENABLE_TESTS=On
         $KOKKOS_CMAKE_OPTS
         ..
     - echo $NINJA
     - $NINJA --version
     - time $NINJA -l `nproc` install |& tee $CI_PROJECT_DIR/kokkos-build-log.txt
     - echo -e "\e[0Ksection_end:`date +%s`:build_kokkos\r\e[0K"
+    #...........................................................................
+    # Run kokkos test suite.
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:run_kokkos_tests[collapsed=true]\r\e[0KRun Kokkos test suite"
+    - time $NINJA -l `nproc` test || KOKKOS_TEST_FAIL=1
+    - cp $BUILD_DIR/kokkos/kokkos/build/Testing/Temporary/LastTest.log
+         $CI_PROJECT_DIR/kokkos-test-log.txt
+    - if test x$KOKKOS_TEST_FAIL = x1; then exit 1; fi
+    - echo -e "\e[0Ksection_end:`date +%s`:run_kokkos_tests\r\e[0K"
     #...........................................................................
     # Clone kokkos-ornl-int-test.git.
     #...........................................................................
@@ -1026,7 +1035,7 @@ debug (vv):
     - echo -e "\e[0Ksection_end:`date +%s`:stream\r\e[0K"
   artifacts:
     when: always
-    paths: [kokkos-build-log.txt]
+    paths: [kokkos-build-log.txt, kokkos-test-log.txt]
 
 leconte (kokkos):
   extends: [.leconte, .kokkos]
