@@ -44,7 +44,7 @@ variables:
   # Which commits to use for OpenACC V&V testing.
   VV_LLVM_TEST_SUITE_COMMIT: da5c250df731c259bd6f15f05ab93f3f7b902b63
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
-  KOKKOS_COMMIT: ce0ece55dc3c63265c3e96b5a900650cf2dcf56b
+  KOKKOS_COMMIT: 72b16983cab9d06cfcb5b13acf1c9fee3aca7b41
   KOKKOS_TESTS_COMMIT: 8f94f5618c17ef97ca9ad7ed1d8c4e02f1bb4c77
   KOKKOS_CMAKE_OPTS:
 
