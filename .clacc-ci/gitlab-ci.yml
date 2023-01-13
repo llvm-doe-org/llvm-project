@@ -45,7 +45,7 @@ variables:
   VV_LLVM_TEST_SUITE_COMMIT: da5c250df731c259bd6f15f05ab93f3f7b902b63
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
   KOKKOS_COMMIT: 72b16983cab9d06cfcb5b13acf1c9fee3aca7b41
-  KOKKOS_TESTS_COMMIT: 8f94f5618c17ef97ca9ad7ed1d8c4e02f1bb4c77
+  KOKKOS_TESTS_COMMIT: bfc659dedf5289e14a76e5b49df06211397324cf
   KOKKOS_CMAKE_OPTS:
 
 stages:
@@ -998,10 +998,28 @@ debug (vv):
     - time git checkout $KOKKOS_TESTS_COMMIT
     - echo -e "\e[0Ksection_end:`date +%s`:clone_kokkos_tests\r\e[0K"
     #...........................................................................
+    # Build and run kokkos-ornl-int-test.git/examples/openacc-parallel-reduce-md
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:openacc-parallel-reduce-md[collapsed=true]\r\e[0KCheck kokkos-ornl-int-test.git/examples/openacc-parallel-reduce-md"
+    - cd $BUILD_DIR/kokkos/kokkos-ornl-int-test/examples/openacc-parallel-reduce-md
+    - mkdir build && cd build
+    - echo $CMAKE
+    - $CMAKE --version
+    - time $CMAKE -G Ninja
+        -DKokkos_ROOT=$BUILD_DIR/kokkos/kokkos/install
+        -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
+        -DCMAKE_CXX_FLAGS='-DVERIFY -O3 -lm'
+        ..
+    - echo $NINJA
+    - $NINJA --version
+    - time $NINJA -l `nproc`
+    - time ./openacctest
+    - echo -e "\e[0Ksection_end:`date +%s`:openacc-parallel-reduce-md\r\e[0K"
+    #...........................................................................
     # Build and run
     # kokkos-ornl-int-test.git/examples/openacc-parallel-reduce-single
     #...........................................................................
-    - echo -e "\e[0Ksection_start:`date +%s`:openacc-performance[collapsed=true]\r\e[0KCheck kokkos-ornl-int-test.git/examples/openacc-parallel-reduce-single"
+    - echo -e "\e[0Ksection_start:`date +%s`:openacc-parallel-reduce-single[collapsed=true]\r\e[0KCheck kokkos-ornl-int-test.git/examples/openacc-parallel-reduce-single"
     - cd $BUILD_DIR/kokkos/kokkos-ornl-int-test/examples/openacc-parallel-reduce-single
     - mkdir build && cd build
     - echo $CMAKE
