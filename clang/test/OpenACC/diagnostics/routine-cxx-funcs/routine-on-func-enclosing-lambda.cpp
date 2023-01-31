@@ -17,12 +17,16 @@
 #pragma acc routine seq
 void fn() {
   auto lambda = []() {
-    // expected-error@+1 {{function 'fn()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
+    // expected-error@+3 {{function 'fn()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
+    // expected-note@+2 {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
+    // expected-note@+1 {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
     #pragma acc loop
     for (int i = 0; i < 8; ++i)
     ;
     auto nestedLambda = []() {
-      // expected-error@+1 {{function 'fn()::(anonymous class)::operator()()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
+      // expected-error@+3 {{function 'fn()::(anonymous class)::operator()()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
+      // expected-note@+2 {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
+      // expected-note@+1 {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
       #pragma acc loop
       for (int i = 0; i < 8; ++i)
       ;

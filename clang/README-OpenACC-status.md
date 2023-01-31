@@ -92,6 +92,16 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
         * This warning is an error by default.  To try out C++ support, you
           might wish to disable the warning entirely with
           `-Wno-openacc-and-cxx`.
+    * `-Wopenacc-routine-cxx-lambda`
+        * Warns when a C++ lambda without an explicit `routine` directive
+          contains an orphaned loop construct or a call to a non-seq function.
+        * This warning is an error by default.  If you have manually verified
+          level-of-parallelism compatibility for lambdas, you can safely disable
+          the warning entirely with `-Wno-openacc-routine-cxx-lambda`.
+        * Unlike other functions, for which this diagnostic is always an error,
+          lambdas do not currently support explicit `routine` directives.  The
+          option to disable this diagnostic for lambdas will be removed in the
+          future when `routine` directive support for lambdas has improved.
 * Options that enable incomplete or "fake" support for specific OpenACC features
   that Clacc does not yet fully support
     * Commonalities

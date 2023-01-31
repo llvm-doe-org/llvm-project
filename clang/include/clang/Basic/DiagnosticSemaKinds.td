@@ -11199,6 +11199,14 @@ def err_acc_routine_func_par_level : Error<
 def err_acc_routine_func_par_level_vs_no_explicit : Error<
   "function '%0' has no explicit '#pragma acc routine' but calls function "
   "'%1', which has '#pragma acc routine %2'">;
+def warn_acc_routine_func_par_level_vs_no_explicit_for_cxx_lambda : Warning<
+  "function '%0' has no explicit '#pragma acc routine' but calls function "
+  "'%1', which has '#pragma acc routine %2'">,
+  InGroup<OpenACCRoutineCXXLambda>, DefaultError;
+def note_acc_routine_cxx_lambda : Note<
+  "explicit '#pragma acc routine' is currently not supported for lambdas, but "
+  "this diagnostic can be safely disabled if level-of-parallelism "
+  "compatibility has been verified manually">;
 def err_acc_routine_func_par_level_at_file_scope : Error<
   "function '%0' has '#pragma acc routine %1' but is called at file scope">;
 // "previous" is used to contrast with a more recent routine directive.
@@ -11211,6 +11219,10 @@ def note_acc_routine_seq_implicit : Note<
 def err_acc_routine_for_orphaned_loop : Error<
   "function '%0' has no explicit '#pragma acc routine' but contains orphaned "
   "'#pragma acc loop'">;
+def warn_acc_routine_for_orphaned_loop_for_cxx_lambda : Warning<
+  "function '%0' has no explicit '#pragma acc routine' but contains orphaned "
+  "'#pragma acc loop'">,
+  InGroup<OpenACCRoutineCXXLambda>, DefaultError;
 } // end of OpenACC category
 
 let CategoryName = "Related Result Type Issue" in {

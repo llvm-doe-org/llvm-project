@@ -14,6 +14,7 @@
 
 #include "ACCDataVar.h"
 #include "UsedDeclVisitor.h"
+#include "clang/AST/ASTLambda.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Sema/ScopeInfo.h"
@@ -1084,9 +1085,18 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
     // the scope of an explicit and applying routine directive."
     ACCRoutineDeclAttr *Attr = CurFnDecl->getAttr<ACCRoutineDeclAttr>();
     if (RealDKind == ACCD_loop && (!Attr || !Attr->getLoc().isValid())) {
-      Diag(StartLoc, diag::err_acc_routine_for_orphaned_loop)
+      if (!isLambdaCallOperator(CurFnDecl)) {
+        Diag(StartLoc, diag::err_acc_routine_for_orphaned_loop)
+            << NameForDiag(*this, CurFnDecl);
+        return true;
+      }
+      Diag(StartLoc, diag::warn_acc_routine_for_orphaned_loop_for_cxx_lambda)
           << NameForDiag(*this, CurFnDecl);
-      return true;
+      Diag(StartLoc, diag::note_acc_routine_cxx_lambda);
+      Diag(StartLoc, diag::note_acc_disable_diag)
+          << DiagnosticIDs::getWarningOptionForDiag(
+                 diag::
+                     warn_acc_routine_func_par_level_vs_no_explicit_for_cxx_lambda);
     }
     return false;
   }
@@ -2622,10 +2632,24 @@ void Sema::ActOnFunctionCallForOpenACC(FunctionDecl *Callee,
       // been implied for Caller, we report the mismatched level of parallelism
       // at the next diagnostic even though this diagnostic's wording would
       // cover that case too.
-      Diag(CallLoc, diag::err_acc_routine_func_par_level_vs_no_explicit)
-          << NameForDiag(*this, Caller) << NameForDiag(*this, Callee)
-          << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
-      ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Callee);
+      if (!isLambdaCallOperator(Caller)) {
+        Diag(CallLoc, diag::err_acc_routine_func_par_level_vs_no_explicit)
+            << NameForDiag(*this, Caller) << NameForDiag(*this, Callee)
+            << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
+        ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Callee);
+      } else {
+        Diag(
+            CallLoc,
+            diag::warn_acc_routine_func_par_level_vs_no_explicit_for_cxx_lambda)
+            << NameForDiag(*this, Caller) << NameForDiag(*this, Callee)
+            << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
+        ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Callee);
+        Diag(CallLoc, diag::note_acc_routine_cxx_lambda);
+        Diag(CallLoc, diag::note_acc_disable_diag)
+            << DiagnosticIDs::getWarningOptionForDiag(
+                   diag::
+                       warn_acc_routine_func_par_level_vs_no_explicit_for_cxx_lambda);
+      }
     }
     return;
   }

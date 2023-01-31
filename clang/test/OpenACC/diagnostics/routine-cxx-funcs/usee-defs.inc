@@ -823,7 +823,9 @@ auto lambdaUsee = []() {
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContent-error@+1 {{function '(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
+  // funcBadContent-error@+3 {{function '(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
+  // funcBadContent-note@+2 {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
+  // funcBadContent-note@+1 {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -846,7 +848,9 @@ void lambdaUseeDefinerAndUser() {
     // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
     #pragma acc parallel
     ;
-    // funcBadContent-error@+1 {{function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
+    // funcBadContent-error@+3 {{function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
+    // funcBadContent-note@+2 {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
+    // funcBadContent-note@+1 {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
     #pragma acc loop gang
     for (int i = 0; i < 5; ++i)
       ;
@@ -866,7 +870,9 @@ void accParallelLambdaUseeDefinerAndUser() {
       // funcBadContent-note@#accParallelLambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by use in construct '#pragma acc parallel' here}}
       #pragma acc parallel
       ;
-      // funcBadContent-error@+1 {{function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
+      // funcBadContent-error@+3 {{function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
+      // funcBadContent-note@+2 {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
+      // funcBadContent-note@+1 {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
       #pragma acc loop
       for (int i = 0; i < 5; ++i)
         ;
@@ -886,7 +892,9 @@ void accLoopLambdaUseeDefinerAndUser() {
       // funcBadContent-note@#accLoopLambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by use in construct '#pragma acc parallel loop' here}}
       #pragma acc parallel
       ;
-      // funcBadContent-error@+1 {{function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
+      // funcBadContent-error@+3 {{function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
+      // funcBadContent-note@+2 {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
+      // funcBadContent-note@+1 {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
       #pragma acc loop gang
       for (int i = 0; i < 5; ++i)
         ;
