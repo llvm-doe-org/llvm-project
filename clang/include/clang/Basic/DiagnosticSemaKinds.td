@@ -11209,8 +11209,8 @@ def note_acc_routine_seq_implicit : Note<
   "'#pragma acc routine seq'%select{| previously}0 implied for function '%1' "
   "by use in %select{construct|function}2 '%select{#pragma acc |}2%3' here">;
 def err_acc_routine_for_orphaned_loop : Error<
-  "function '%0' contains orphaned '#pragma acc loop' but has no explicit "
-  "'#pragma acc routine'">;
+  "function '%0' has no explicit '#pragma acc routine' but contains orphaned "
+  "'#pragma acc loop'">;
 } // end of OpenACC category
 
 let CategoryName = "Related Result Type Issue" in {

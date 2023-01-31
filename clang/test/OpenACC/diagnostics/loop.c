@@ -4120,23 +4120,23 @@ void fn(int param) {
 //------------------------------------------------------------------------------
 
 void nonRoutineFn() {
-  // expected-error@+1 {{'nonRoutineFn' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // expected-error@+1 {{'nonRoutineFn' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop
   for (int i = 0; i < 5; ++i)
     ;
-  // expected-error@+1 {{'nonRoutineFn' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // expected-error@+1 {{'nonRoutineFn' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
-  // expected-error@+1 {{'nonRoutineFn' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // expected-error@+1 {{'nonRoutineFn' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop worker
   for (int i = 0; i < 5; ++i)
     ;
-  // expected-error@+1 {{'nonRoutineFn' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // expected-error@+1 {{'nonRoutineFn' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop vector
   for (int i = 0; i < 5; ++i)
     ;
-  // expected-error@+1 {{'nonRoutineFn' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // expected-error@+1 {{'nonRoutineFn' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop seq
   for (int i = 0; i < 5; ++i)
     ;

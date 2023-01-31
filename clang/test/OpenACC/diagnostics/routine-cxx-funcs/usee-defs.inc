@@ -54,7 +54,7 @@ MemberUsees::MemberUsees() {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::MemberUsees' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_ctor_routine {{'#pragma acc routine' for function 'MemberUsees::MemberUsees' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::MemberUsees' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::MemberUsees' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -86,7 +86,7 @@ MemberUsees::MemberUsees(MemberUsees &) {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::MemberUsees' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_ctorCopy_routine {{'#pragma acc routine' for function 'MemberUsees::MemberUsees' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::MemberUsees' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::MemberUsees' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -160,7 +160,7 @@ MemberUsees::~MemberUsees() {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::~MemberUsees' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_dtor_routine {{'#pragma acc routine' for function 'MemberUsees::~MemberUsees' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::~MemberUsees' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::~MemberUsees' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -188,7 +188,7 @@ MemberUseesTrivial::MemberUseesTrivial() {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUseesTrivial::MemberUseesTrivial' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUseesTrivial_ctor_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::MemberUseesTrivial' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUseesTrivial::MemberUseesTrivial' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUseesTrivial::MemberUseesTrivial' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -216,7 +216,7 @@ MemberUseesTrivial::MemberUseesTrivial(MemberUseesTrivial &) {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUseesTrivial::MemberUseesTrivial' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUseesTrivial_ctorCopy_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::MemberUseesTrivial' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUseesTrivial::MemberUseesTrivial' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUseesTrivial::MemberUseesTrivial' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -253,7 +253,7 @@ MemberUseesTrivial::~MemberUseesTrivial() {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUseesTrivial::~MemberUseesTrivial' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUseesTrivial_dtor_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUseesTrivial::~MemberUseesTrivial' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUseesTrivial::~MemberUseesTrivial' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -281,7 +281,7 @@ void *MemberUsees::operator new(unsigned long s) {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::operator new' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_new_routine {{'#pragma acc routine' for function 'MemberUsees::operator new' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator new' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator new' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -314,7 +314,7 @@ void MemberUsees::operator delete(void *p) {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::operator delete' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_delete_routine {{'#pragma acc routine' for function 'MemberUsees::operator delete' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator delete' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator delete' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -342,7 +342,7 @@ int MemberUsees::operator-() const {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::operator-' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opUnary_routine {{'#pragma acc routine' for function 'MemberUsees::operator-' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator-' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator-' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -371,7 +371,7 @@ int MemberUsees::operator+(int) const {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::operator+' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opBinary_routine {{'#pragma acc routine' for function 'MemberUsees::operator+' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator+' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator+' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -400,7 +400,7 @@ int MemberUsees::operator[](int) const {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::operator[]' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opSubscript_routine {{'#pragma acc routine' for function 'MemberUsees::operator[]' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator[]' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator[]' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -429,7 +429,7 @@ int MemberUsees::operator()() const {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::operator()' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opCall_routine {{'#pragma acc routine' for function 'MemberUsees::operator()' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator()' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -458,7 +458,7 @@ MemberUsees::ArrowResult MemberUsees::operator->() {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::operator->' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opArrow_routine {{'#pragma acc routine' for function 'MemberUsees::operator->' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator->' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator->' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -488,7 +488,7 @@ MemberUsees::ArrowResult::operator->() {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::ArrowResult::operator->' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_ArrowResult_opArrow_routine {{'#pragma acc routine' for function 'MemberUsees::ArrowResult::operator->' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::ArrowResult::operator->' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::ArrowResult::operator->' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -521,7 +521,7 @@ MemberUsees::operator int() const {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::operator int' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opConvert_routine {{'#pragma acc routine' for function 'MemberUsees::operator int' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator int' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator int' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -550,7 +550,7 @@ MemberUsees::operator FnPtr() const {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::operator int (*)(int)' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opConvertSurrogate_routine {{'#pragma acc routine' for function 'MemberUsees::operator int (*)(int)' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator int (*)(int)' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::operator int (*)(int)' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -579,7 +579,7 @@ int *MemberUsees::begin() {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::begin' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_begin_routine {{'#pragma acc routine' for function 'MemberUsees::begin' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::begin' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::begin' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -608,7 +608,7 @@ int *MemberUsees::end() {
   ;
   // funcBadContentExp-error@+3 {{function 'MemberUsees::end' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_end_routine {{'#pragma acc routine' for function 'MemberUsees::end' appears here}}
-  // funcBadContentImp-error@+1 {{function 'MemberUsees::end' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'MemberUsees::end' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -634,7 +634,7 @@ void fnUsee() {
   ;
   // funcBadContentExp-error@+3 {{function 'fnUsee' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUsee_routine  {{'#pragma acc routine' for function 'fnUsee' appears here}}
-  // funcBadContentImp-error@+1 {{function 'fnUsee' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'fnUsee' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -655,7 +655,7 @@ void fnUseeInNestedHostLambda() {
   ;
   // funcBadContentExp-error@+3 {{function 'fnUseeInNestedHostLambda' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUseeInNestedHostLambda_routine  {{'#pragma acc routine' for function 'fnUseeInNestedHostLambda' appears here}}
-  // funcBadContentImp-error@+1 {{function 'fnUseeInNestedHostLambda' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'fnUseeInNestedHostLambda' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -676,7 +676,7 @@ void fnUseeInHostLambda() {
   ;
   // funcBadContentExp-error@+3 {{function 'fnUseeInHostLambda' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUseeInHostLambda_routine  {{'#pragma acc routine' for function 'fnUseeInHostLambda' appears here}}
-  // funcBadContentImp-error@+1 {{function 'fnUseeInHostLambda' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'fnUseeInHostLambda' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -701,7 +701,7 @@ void fnUseeInNestedAccRoutineLambda() {
   ;
   // funcBadContentExp-error@+3 {{function 'fnUseeInNestedAccRoutineLambda' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUseeInNestedAccRoutineLambda_routine  {{'#pragma acc routine' for function 'fnUseeInNestedAccRoutineLambda' appears here}}
-  // funcBadContentImp-error@+1 {{function 'fnUseeInNestedAccRoutineLambda' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'fnUseeInNestedAccRoutineLambda' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -726,7 +726,7 @@ void fnUseeInAccRoutineLambda() {
   ;
   // funcBadContentExp-error@+3 {{function 'fnUseeInAccRoutineLambda' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUseeInAccRoutineLambda_routine  {{'#pragma acc routine' for function 'fnUseeInAccRoutineLambda' appears here}}
-  // funcBadContentImp-error@+1 {{function 'fnUseeInAccRoutineLambda' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'fnUseeInAccRoutineLambda' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -751,7 +751,7 @@ void fnUseeInAccParallelLambda() {
   ;
   // funcBadContentExp-error@+3 {{function 'fnUseeInAccParallelLambda' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUseeInAccParallelLambda_routine  {{'#pragma acc routine' for function 'fnUseeInAccParallelLambda' appears here}}
-  // funcBadContentImp-error@+1 {{function 'fnUseeInAccParallelLambda' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'fnUseeInAccParallelLambda' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -776,7 +776,7 @@ void fnUseeInAccLoopLambda() {
   ;
   // funcBadContentExp-error@+3 {{function 'fnUseeInAccLoopLambda' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUseeInAccLoopLambda_routine  {{'#pragma acc routine' for function 'fnUseeInAccLoopLambda' appears here}}
-  // funcBadContentImp-error@+1 {{function 'fnUseeInAccLoopLambda' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'fnUseeInAccLoopLambda' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -802,7 +802,7 @@ void NamespaceUsees::fn() {
   ;
   // funcBadContentExp-error@+3 {{function 'NamespaceUsees::fn' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#NamespaceUsees_fn_routine  {{'#pragma acc routine' for function 'NamespaceUsees::fn' appears here}}
-  // funcBadContentImp-error@+1 {{function 'NamespaceUsees::fn' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContentImp-error@+1 {{function 'NamespaceUsees::fn' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -823,7 +823,7 @@ auto lambdaUsee = []() {
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContent-error@+1 {{function '(anonymous class)::operator()' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+  // funcBadContent-error@+1 {{function '(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
   for (int i = 0; i < 5; ++i)
     ;
@@ -846,7 +846,7 @@ void lambdaUseeDefinerAndUser() {
     // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
     #pragma acc parallel
     ;
-    // funcBadContent-error@+1 {{function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+    // funcBadContent-error@+1 {{function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
     #pragma acc loop gang
     for (int i = 0; i < 5; ++i)
       ;
@@ -866,7 +866,7 @@ void accParallelLambdaUseeDefinerAndUser() {
       // funcBadContent-note@#accParallelLambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by use in construct '#pragma acc parallel' here}}
       #pragma acc parallel
       ;
-      // funcBadContent-error@+1 {{function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+      // funcBadContent-error@+1 {{function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
       #pragma acc loop
       for (int i = 0; i < 5; ++i)
         ;
@@ -886,7 +886,7 @@ void accLoopLambdaUseeDefinerAndUser() {
       // funcBadContent-note@#accLoopLambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by use in construct '#pragma acc parallel loop' here}}
       #pragma acc parallel
       ;
-      // funcBadContent-error@+1 {{function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' contains orphaned '#pragma acc loop' but has no explicit '#pragma acc routine'}}
+      // funcBadContent-error@+1 {{function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
       #pragma acc loop gang
       for (int i = 0; i < 5; ++i)
         ;
