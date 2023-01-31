@@ -11851,6 +11851,9 @@ public:
   ExprResult ActOnOpenACCStarExpr(SourceLocation Loc);
 
   /// Is an OpenACC directive that forms a statement currently being analyzed?
+  ///
+  /// Returns true even if we're currently within a lambda within that
+  /// directive's associated statement.
   bool isInOpenACCDirectiveStmt();
 
   /// Transform OpenACC region to OpenMP, and return true if an error occurred.

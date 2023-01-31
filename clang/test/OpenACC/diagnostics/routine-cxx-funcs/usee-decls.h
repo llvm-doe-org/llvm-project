@@ -23,11 +23,32 @@
 //
 // They're normally defined in usee-defs.inc, but that's not included if
 // USEE_ADD_DEF_TO_DECL.
+//
+// Each fnUseeIn*Lambda is meant to have only one user, a single lambda, so
+// that we can be sure that user is sufficient to trigger certain diagnostics.
 void fnUsee();
+void fnUseeInNestedHostLambda();
+void fnUseeInHostLambda();
+void fnUseeInNestedAccRoutineLambda();
+void fnUseeInAccRoutineLambda();
+void fnUseeInAccParallelLambda();
+void fnUseeInAccLoopLambda();
 namespace NamespaceUsees { void fn(); }
 #if USEE_ADD_DEF_TO_DECL
 USEE_ROUTINE_DIR // #fnUsee_routine
 void fnUsee() {}
+USEE_ROUTINE_DIR // #fnUseeInNestedHostLambda_routine
+void fnUseeInNestedHostLambda() {}
+USEE_ROUTINE_DIR // #fnUseeInHostLambda_routine
+void fnUseeInHostLambda() {}
+USEE_ROUTINE_DIR // #fnUseeInNestedAccRoutineLambda_routine
+void fnUseeInNestedAccRoutineLambda() {}
+USEE_ROUTINE_DIR // #fnUseeInAccRoutineLambda_routine
+void fnUseeInAccRoutineLambda() {}
+USEE_ROUTINE_DIR // #fnUseeInAccParallelLambda_routine
+void fnUseeInAccParallelLambda() {}
+USEE_ROUTINE_DIR // #fnUseeInAccLoopLambda_routine
+void fnUseeInAccLoopLambda() {}
 namespace NamespaceUsees {
   USEE_ROUTINE_DIR // #NamespaceUsees_fn_routine
   void fn() {}

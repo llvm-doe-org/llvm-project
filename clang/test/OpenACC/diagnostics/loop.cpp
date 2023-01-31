@@ -114,6 +114,7 @@ class Main {
     #pragma acc parallel
 #endif
     {
+      //........................................................................
       // Clang currently diagnoses most invalid OpenACC loop control variable
       // expressions with a generic OpenMP canonical form diagnostic (see
       // loop.c), but it has a specific OpenACC diagnostic for member
@@ -131,6 +132,33 @@ class Main {
       #pragma acc CMB_PAR loop independent gang
       for (thisMember = 0; thisMember < 5; ++thisMember)
         ;
+
+      //........................................................................
+      // Check that lambda boundaries are seen when analyzing associated loops.
+      //
+      // At one time, Clang incorrectly complained about the member expression
+      // or reduction variables in the loop because it incorrectly associated
+      // the loop with the loop directive.  Only if that incorrectly associated
+      // loop had no such issue, Clang would then correctly report that the loop
+      // directive didn't have enough loops.
+
+      // orph-sep-error@+3 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+2 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      #pragma acc CMB_PAR loop independent gang
+      []() {
+        struct S { int i; } s;
+        for (s.i = 0; s.i < 5; ++s.i)
+          ;
+      }();
+
+      // orph-sep-error@+4 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+3 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      int red;
+      #pragma acc CMB_PAR loop independent gang reduction(+:red)
+      [&]() {
+        for (red = 0; red < 8; ++red)
+          ;
+      }();
     }
   }
 

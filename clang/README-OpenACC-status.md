@@ -294,6 +294,20 @@ Run-Time Environment Variables
           attribute for the base expression is `firstprivate`.  However, this
           behavior is consistent with how an implicit data attribute is computed
           for a pointer variable outside a member expression.
+    * If the `parallel` construct appears within a C++ lambda definition within
+      a `data` construct, implicit data attributes are not suppressed by
+      explicit data clauses on the `data` construct :
+        * OpenACC 3.3, sec. 2.6.2 "Variables with Implicitly Determined Data
+          Attributes", L1283-1284 states: "Visible data clause: Any data clause
+          on the compute construct, a lexically containing data construct, or a
+          visible declare directive."
+        * Based on that definition, it seems the data clauses on the `data`
+          construct should be considered visible at the `parallel` construct.
+          However, are the variables considered to be the same variables?  If
+          they are captured by value for the lambda, they certainly are not the
+          same.  If they are captured by reference, it's less clear, but Clacc
+          still assumes they are not the same.  Thus, implicit data attributes
+          are not suppressed.
     * See "Data Expressions in Clauses" below for details of their support in
       explicit data clauses.
 * `num_gangs`, `num_workers`, `vector_length` clauses

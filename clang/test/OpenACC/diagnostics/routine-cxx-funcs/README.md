@@ -9,14 +9,22 @@ ways because they were originally implemented only for C:
 * When reporting those diagnostics (or collecting those diagnostics in case they
   might later need to be reported), they failed assertions because they used a
   getter that assumed the kinds of simple function names found in C.
+* They overlooked enclosing lambdas because `Sema::getCurFunctionDecl` by
+  default skips lambdas.
+* When iterating upward through lexically enclosing OpenACC constructs, they
+  continued beyond any enclosing lambda and thus saw OpenACC constructs in the
+  function containing the lambda.
+* They incorrectly assumed that any lexically enclosing `routine` directive
+  applies to the nearest lexically enclosing function, but that can be a lambda
+  enclosed in the function to which the `routine` directive applies.
 
 The tests in this directory attempt to check that no known cases are overlooked,
-that C++ names are handled, and that diagnostics are not duplicated by
-unintentional duplicate checks in Clang.  It's too much to check every possible
-kind of constructor and overloaded operator, but we try to check major
-categories (e.g., default constructor, copy constructor, unary operator, binary
-operator, conversion operator), which are typically handled separately within
-Clang.
+that C++ names are handled, that diagnostics are not duplicated by unintentional
+duplicate checks in Clang, and that diagnostics affected by the above issues are
+correct.  It's too much to check every possible kind of constructor and
+overloaded operator, but we try to check major categories (e.g., default
+constructor, copy constructor, unary operator, binary operator, conversion
+operator), which are typically handled separately within Clang.
 
 Additional diagnostic checking for C++ appears in `../routine.cpp`.
 

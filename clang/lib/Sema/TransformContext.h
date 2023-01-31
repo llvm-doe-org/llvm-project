@@ -66,10 +66,12 @@ public:
     // Handle variable declarations.
     DeclContext *DCNew = this->getSema().CurContext;
     if (VarDecl *VDOld = dyn_cast<VarDecl>(D)) {
+      TypeSourceInfo *TypeNew =
+          this->getDerived().TransformType(VDOld->getTypeSourceInfo());
       VarDecl *VDNew = VarDecl::Create(
           VDOld->getASTContext(), DCNew, VDOld->getBeginLoc(),
-          VDOld->getLocation(), VDOld->getIdentifier(), VDOld->getType(),
-          VDOld->getTypeSourceInfo(), VDOld->getStorageClass());
+          VDOld->getLocation(), VDOld->getIdentifier(), TypeNew->getType(),
+          TypeNew, VDOld->getStorageClass());
       if (!DropInit && VDOld->hasInit()) {
         // Sema::InstantiateVariableInitializer seems to be a good model for how
         // this code can expand to handle more cases.  We cannot use it directly

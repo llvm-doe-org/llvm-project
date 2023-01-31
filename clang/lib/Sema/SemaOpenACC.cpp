@@ -80,6 +80,9 @@ private:
     llvm::SmallVector<Expr *, 4> ReductionVarsOnEffectiveOrCombined;
     llvm::DenseSet<ACCDataVar> LCVSet;
     llvm::SmallVector<Expr *, 4> LCVExprs;
+    /// The function immediately lexically enclosing this directive, or
+    /// \c nullptr if none.
+    FunctionDecl *EnclosingFn;
     /// The real directive kind.  In the case of a combined directive, there
     /// are two consecutive entries: the outer has RealDKind as the combined
     /// directive kind, the inner has RealDKind has ACCD_unknown, and both
@@ -107,24 +110,26 @@ private:
     SourceLocation LoopBreakLoc; // invalid if no break statement or not loop
     unsigned AssociatedLoops = 1; // from collapse or tile clause
     unsigned AssociatedLoopsParsed = 0; // how many have been parsed so far
-    // True if this is an effective compute or loop directive and has an
-    // effective nested loop directive with explicit gang partitioning or
-    // encloses a function call with a routine gang directive.
-    //
-    // Implicit gang clauses are later added by ImplicitGangAdder after the
-    // entire parallel construct is parsed and thus after this stack is popped
-    // for all effective nested loop directives, so we don't bother to update
-    // this then.
+    /// True if this is an effective compute or loop construct that encloses one
+    /// of the following that is not in an enclosed function definition: either
+    /// an effective loop directive with explicit gang partitioning, or a
+    /// function call with a routine gang directive.
+    ///
+    /// Implicit gang clauses are later added by ImplicitGangAdder after an
+    /// entire parallel construct or outermost orphaned loop construct is parsed
+    /// and thus after this stack is popped for all effective nested loop
+    /// directives, so we don't bother to update this then.
     bool NestedExplicitGangPartitioning = false;
-    // True if this is an effective compute or loop directive and has an
-    // effective nested loop directive with worker partitioning or encloses a
-    // function call with a routine worker directive.
+    /// True if this is an effective compute or loop construct that encloses one
+    /// of the following that is not in an enclosed function definition: either
+    /// an effective loop directive with worker partitioning, or a function call
+    /// with a routine worker directive.
     bool NestedWorkerPartitioning = false;
-    DirStackEntryTy(OpenACCDirectiveKind RealDKind,
+    DirStackEntryTy(FunctionDecl *EnclosingFn, OpenACCDirectiveKind RealDKind,
                     OpenACCDirectiveKind EffectiveDKind,
                     SourceLocation StartLoc)
-        : RealDKind(RealDKind), EffectiveDKind(EffectiveDKind),
-          DirectiveStartLoc(StartLoc) {}
+        : EnclosingFn(EnclosingFn), RealDKind(RealDKind),
+          EffectiveDKind(EffectiveDKind), DirectiveStartLoc(StartLoc) {}
   };
 
   /// The underlying directive stack.
@@ -135,7 +140,9 @@ public:
 
   void push(OpenACCDirectiveKind RealDKind, OpenACCDirectiveKind EffectiveDKind,
             SourceLocation Loc) {
-    Stack.push_back(DirStackEntryTy(RealDKind, EffectiveDKind, Loc));
+    Stack.push_back(
+        DirStackEntryTy(SemaRef.getCurFunctionDecl(/*AllowLambda=*/true),
+                        RealDKind, EffectiveDKind, Loc));
   }
 
   void pop(OpenACCDirectiveKind EffectiveDKind) {
@@ -237,10 +244,11 @@ public:
     return Stack.back().LCVExprs;
   }
   /// Register loop partitioning for the current loop directive if
-  /// \a ForCurrentDir or for a function call otherwise.
+  /// \p ForCurrentDir or for a function call otherwise.
   ///
   /// As part of that, mark all effective ancestor compute or loop directives
-  /// as containing any explicit gang or worker partitioning.
+  /// within this function as containing any explicit gang or worker
+  /// partitioning.
   void setLoopPartitioning(ACCPartitioningKind Kind, bool ForCurrentDir) {
     auto I = Stack.rbegin();
     if (ForCurrentDir) {
@@ -250,7 +258,8 @@ public:
       ++I;
     }
     if (Kind.hasGangPartitioning() || Kind.hasWorkerPartitioning()) {
-      for (auto E = Stack.rend(); I != E; ++I) {
+      FunctionDecl *CurFn = SemaRef.getCurFunctionDecl(/*AllowLambda=*/true);
+      for (auto E = Stack.rend(); I != E && I->EnclosingFn == CurFn; ++I) {
         bool IsComputeConstruct = isOpenACCComputeDirective(I->EffectiveDKind);
         if (!isOpenACCLoopDirective(I->EffectiveDKind) && !IsComputeConstruct)
           break;
@@ -278,9 +287,10 @@ public:
   /// Iterate through the current directive and its ancestors until finding
   /// either (1) an acc loop directive or combined loop directive with gang,
   /// worker, or vector clauses, (2) a compute directive, or (3) or the start of
-  /// the stack.  If case 1, return that directive's loop partitioning kind, and
-  /// record its real directive kind and location.  Else if case 2 or 3, return
-  /// no partitioning, and don't record a directive kind or location.
+  /// the stack or a directive outside the current function.  If case 1, return
+  /// that directive's loop partitioning kind, and record its real directive
+  /// kind and location.  Else if case 2 or 3, return no partitioning, and don't
+  // record a directive kind or location.
   ACCPartitioningKind
   getAncestorLoopPartitioning(OpenACCDirectiveKind &ParentDir,
                               SourceLocation &ParentLoc,
@@ -288,7 +298,8 @@ public:
     auto I = Stack.rbegin();
     if (SkipCurrentDir)
       ++I;
-    for (auto E = Stack.rend(); I != E; ++I) {
+    FunctionDecl *CurFn = SemaRef.getCurFunctionDecl(/*AllowLambda=*/true);
+    for (auto E = Stack.rend(); I != E && I->EnclosingFn == CurFn; ++I) {
       if (isOpenACCComputeDirective(I->EffectiveDKind))
         return ACCPartitioningKind();
       const ACCPartitioningKind &ParentKind = I->LoopDirectiveKind;
@@ -304,21 +315,23 @@ public:
     }
     return ACCPartitioningKind();
   }
-  /// Is this an effective compute or loop directive with either (1) an
-  /// effective nested loop directive with explicit gang partitioning or (2) an
-  /// enclosed function call with a routine gang directive?
-  ///
-  /// Implicit gang clauses are later added by ImplicitGangAdder after the
-  /// entire parallel construct is parsed and thus after this stack is popped
-  /// for all effective nested loop directives, so we don't bother to update
-  /// this then.
+  /// Is this is an effective compute or loop construct that encloses one of
+  /// the following that is not in an enclosed function definition: either an
+  /// effective loop directive with explicit gang partitioning, or a function
+  /// call with a routine gang directive?
+  //
+  /// Implicit gang clauses are later added by ImplicitGangAdder after an
+  /// entire parallel construct or outermost orphaned loop construct is parsed
+  /// and thus after this stack is popped for all effective nested loop
+  /// directives, so we don't bother to update this then.
   bool getNestedExplicitGangPartitioning() const {
     assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().NestedExplicitGangPartitioning;
   }
-  /// Is this an effective compute or loop directive with either (1) an
-  /// effective nested loop directive with worker partitioning or (2) an
-  /// enclosed function call with a routine worker directive?
+  /// Is this an effective compute or loop construct that encloses one of the
+  /// following that is not in an enclosed function definition: either an
+  /// effective loop directive with worker partitioning, or a function call with
+  /// a routine worker directive?
   bool getNestedWorkerPartitioning() const {
     assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().NestedWorkerPartitioning;
@@ -434,21 +447,58 @@ public:
   /// usually have not been computed yet.)
   DAVarData getTopDA(ACCDataVar Var);
 
-  /// Returns true if the declaration has a DMA anywhere on the stack.
+  /// Returns true if the declaration has a DMA on the current directive or on
+  /// any lexically enclosing directive within the current function.
+  ///
   /// (Predetermined and implicitly determined data attributes usually have not
   /// been computed yet.)
-  bool hasVisibleDMA(ACCDataVar Var);
+  bool hasVisibleDMA(ACCDataVar Var) {
+    assert(!Stack.empty() && "expected non-empty directive stack");
+    FunctionDecl *CurFD = SemaRef.getCurFunctionDecl(/*AllowLambda=*/true);
+    for (auto I = Stack.rbegin(), E = Stack.rend();
+         I != E && I->EnclosingFn == CurFD; ++I) {
+      auto DAItr = I->DAMap.find(Var);
+      if (DAItr != I->DAMap.end() && DAItr->second.DMAKind != ACC_DMA_unknown)
+        return true;
+    }
+    return false;
+  }
 
   /// Returns true if the declaration has a privatizing DSA on any loop
-  /// construct on the stack beyond the current stack entry.
+  /// construct within the current function beyond the current directive.
   ///
-  /// Fails an assertion if encounters an ancestor stack entry that is not a
-  /// loop construct or a routine directive.
+  /// Fails an assertion if encounters an enclosing construct that is not a
+  /// loop construct and that is within the current function.
   ///
   /// Checks for explicit DSAs and predetermined DSAs except in the case of
   /// local variable declarations, which must be checked separately.  Loop
   /// constructs have no implicitly determined DSAs.
-  bool hasPrivatizingDSAOnAncestorOrphanedLoop(ACCDataVar Var);
+  bool hasPrivatizingDSAOnAncestorOrphanedLoop(ACCDataVar Var) {
+    assert(!Stack.empty() && "expected non-empty directive stack");
+    FunctionDecl *CurFD = SemaRef.getCurFunctionDecl(/*AllowLambda=*/true);
+    for (auto I = std::next(Stack.rbegin()), E = Stack.rend();
+         I != E && I->EnclosingFn == CurFD; ++I) {
+      assert((I->EffectiveDKind == ACCD_loop ||
+              I->EffectiveDKind == ACCD_routine) &&
+             "expected all ancestor constructs to be orphaned loop constructs");
+      auto DAItr = I->DAMap.find(Var);
+      if (DAItr != I->DAMap.end()) {
+        switch (DAItr->second.DSAKind) {
+        case clang::ACC_DSA_unknown:
+        case clang::ACC_DSA_shared:
+          break;
+        case clang::ACC_DSA_reduction:
+        case clang::ACC_DSA_private:
+          return true;
+        case clang::ACC_DSA_firstprivate:
+          llvm_unreachable("unexpected firstprivate on loop construct");
+        }
+      }
+      if (I->LCVSet.count(Var))
+        return true;
+    }
+    return false;
+  }
 
   /// Records a variable appearing in an update directive clause and returns
   /// false, or complains and returns true if it already appeared in one for
@@ -471,44 +521,72 @@ public:
   /// real kind of the compute construct.  If the parser is currently somewhere
   /// in a function for which an applying routine directive is already known,
   /// returns \c ACCD_routine.  Otherwise, returns \c ACCD_unknown even if a
-  /// routine directive will be implied later.
+  /// routine directive will be implied later.  Does not otherwise return
+  /// directives outside the current function.
   OpenACCDirectiveKind isInComputeRegion() const {
-    for (auto I = Stack.rbegin(); I != Stack.rend(); ++I) {
+    FunctionDecl *CurFD = SemaRef.getCurFunctionDecl(/*AllowLambda=*/true);
+    for (auto I = Stack.rbegin(), E = Stack.rend();
+         I != E && I->EnclosingFn == CurFD; ++I) {
       OpenACCDirectiveKind DKind = I->RealDKind;
       if (isOpenACCComputeDirective(DKind))
         return DKind;
     }
-    FunctionDecl *CurFD = SemaRef.getCurFunctionDecl();
     if (CurFD && CurFD->hasAttr<ACCRoutineDeclAttr>())
       return ACCD_routine;
     return ACCD_unknown;
   }
 
-  /// Returns currently analyzed directive.
-  OpenACCDirectiveKind getRealDirective() const {
+  /// Returns the real directive currently being analyzed, or returns
+  /// ACCD_unknown if none.
+  ///
+  /// Except for any routine directive lexically attached to the current
+  /// function, directives outside the current function are not returned unless
+  /// \p LookOutsideCurFunction.
+  OpenACCDirectiveKind
+  getRealDirective(bool LookOutsideCurFunction = false) const {
     auto I = Stack.rbegin();
     if (I == Stack.rend())
       return ACCD_unknown;
+    if (!LookOutsideCurFunction) {
+      FunctionDecl *CurFn = SemaRef.getCurFunctionDecl(/*AllowLambda=*/true);
+      if (I->EffectiveDKind != ACCD_routine && I->EnclosingFn != CurFn)
+        return ACCD_unknown;
+    }
     while (I->RealDKind == ACCD_unknown)
       I = std::next(I);
     return I->RealDKind;
   }
 
-  /// Returns the effective directive currently being analyzed (always the
-  /// same as getRealDirective unless the latter is a combined directive).
+  /// Returns the effective directive currently being analyzed, or returns
+  /// ACCD_unknown if none.  This is always the same as \c getRealDirective()
+  /// unless the latter is a combined directive.
+  ///
+  /// Except for any routine directive lexically attached to the current
+  /// function, directives outside the current function are not returned.
   OpenACCDirectiveKind getEffectiveDirective() const {
-    return Stack.empty() ? ACCD_unknown : Stack.back().EffectiveDKind;
+    auto I = Stack.rbegin();
+    if (I == Stack.rend())
+      return ACCD_unknown;
+    FunctionDecl *CurFn = SemaRef.getCurFunctionDecl(/*AllowLambda=*/true);
+    if (I->EffectiveDKind != ACCD_routine && I->EnclosingFn != CurFn)
+      return ACCD_unknown;
+    return I->EffectiveDKind;
   }
 
-  /// Returns the real directive for the construct enclosing the currently
-  /// analyzed real directive, or returns ACCD_unknown if none.  In the former
-  /// case only, set ParentLoc as the returned directive's location.  A routine
-  /// directive that is lexically attached to a function is modeled as an
-  /// enclosing construct.
+  /// Returns the real directive for the construct immediately enclosing the
+  /// currently analyzed real directive, or returns ACCD_unknown if none.  In
+  /// the former case only, set ParentLoc as the returned directive's location.
+  ///
+  /// Routine directives that are lexically attached to the current function are
+  /// modeled as enclosing constructs.  Other directives outside the current
+  /// function are not returned.
   OpenACCDirectiveKind getRealParentDirective(SourceLocation &ParentLoc) const {
     // Find real directive.
     auto I = Stack.rbegin();
     if (I == Stack.rend())
+      return ACCD_unknown;
+    FunctionDecl *CurFn = SemaRef.getCurFunctionDecl(/*AllowLambda=*/true);
+    if (I->EffectiveDKind != ACCD_routine && I->EnclosingFn != CurFn)
       return ACCD_unknown;
     while (I->RealDKind == ACCD_unknown)
       I = std::next(I);
@@ -516,22 +594,32 @@ public:
     I = std::next(I);
     if (I == Stack.rend())
       return ACCD_unknown;
+    if (I->EffectiveDKind != ACCD_routine && I->EnclosingFn != CurFn)
+      return ACCD_unknown;
     while (I->RealDKind == ACCD_unknown)
       I = std::next(I);
     ParentLoc = I->DirectiveStartLoc;
     return I->RealDKind;
   }
 
-  /// Returns the effective directive for the construct enclosing the currently
-  /// analyzed effective directive or returns ACCD_unknown if none.  A routine
-  /// directive that is lexically attached to a function is modeled as an
-  /// enclosing construct.
+  /// Returns the effective directive for the construct immediately enclosing
+  /// the currently analyzed effective directive, or returns ACCD_unknown if
+  /// none.
+  ///
+  /// Routine directives that are lexically attached to the current function are
+  /// modeled as enclosing constructs.  Other directives outside the current
+  /// function are not returned.
   OpenACCDirectiveKind getEffectiveParentDirective() const {
     auto I = Stack.rbegin();
     if (I == Stack.rend())
       return ACCD_unknown;
+    FunctionDecl *CurFn = SemaRef.getCurFunctionDecl(/*AllowLambda=*/true);
+    if (I->EffectiveDKind != ACCD_routine && I->EnclosingFn != CurFn)
+      return ACCD_unknown;
     I = std::next(I);
     if (I == Stack.rend())
+      return ACCD_unknown;
+    if (I->EffectiveDKind != ACCD_routine && I->EnclosingFn != CurFn)
       return ACCD_unknown;
     return I->EffectiveDKind;
   }
@@ -666,41 +754,6 @@ DirStackTy::DAVarData DirStackTy::getTopDA(ACCDataVar Var) {
   if (DAItr != I->DAMap.end())
     return DAItr->second;
   return DAVarData();
-}
-
-bool DirStackTy::hasVisibleDMA(ACCDataVar Var) {
-  assert(!Stack.empty() && "expected non-empty directive stack");
-  for (auto I = Stack.rbegin(), E = Stack.rend(); I != E; ++I) {
-    auto DAItr = I->DAMap.find(Var);
-    if (DAItr != I->DAMap.end() && DAItr->second.DMAKind != ACC_DMA_unknown)
-      return true;
-  }
-  return false;
-}
-
-bool DirStackTy::hasPrivatizingDSAOnAncestorOrphanedLoop(ACCDataVar Var) {
-  assert(!Stack.empty() && "expected non-empty directive stack");
-  for (auto I = std::next(Stack.rbegin()), E = Stack.rend(); I != E; ++I) {
-    assert(
-        (I->EffectiveDKind == ACCD_loop || I->EffectiveDKind == ACCD_routine) &&
-        "expected all ancestor constructs to be orphaned loop constructs");
-    auto DAItr = I->DAMap.find(Var);
-    if (DAItr != I->DAMap.end()) {
-      switch (DAItr->second.DSAKind) {
-      case clang::ACC_DSA_unknown:
-      case clang::ACC_DSA_shared:
-        break;
-      case clang::ACC_DSA_reduction:
-      case clang::ACC_DSA_private:
-        return true;
-      case clang::ACC_DSA_firstprivate:
-        llvm_unreachable("unexpected firstprivate on loop construct");
-      }
-    }
-    if (I->LCVSet.count(Var))
-      return true;
-  }
-  return false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -977,22 +1030,40 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
   // Check directive nesting.
   SourceLocation ParentLoc;
   OpenACCDirectiveKind ParentDKind = DirStack.getRealParentDirective(ParentLoc);
-  FunctionDecl *CurFnDecl = getCurFunctionDecl();
+  FunctionDecl *CurFnDecl = getCurFunctionDecl(/*AllowLambda=*/true);
   if (CurFnDecl && !isOpenACCDirectiveStmt(ParentDKind)) {
     assert((ParentDKind == ACCD_unknown || ParentDKind == ACCD_routine) &&
            "expected the only non-ACCDirectiveStmt OpenACC directive to be the "
            "routine directive");
-    ACCRoutineDeclAttr *Attr = CurFnDecl->getAttr<ACCRoutineDeclAttr>();
-    // Any lexically attached routine directive should be recorded as an
-    // ACCRoutineDeclAttr on the function, and that's important for how we
-    // detect the routine directive below.  The only exception is that an
-    // erroneous routine directive might have been discarded, leaving no
-    // ACCRoutineDeclAttr or a previous routine directive's ACCRoutineDeclAttr.
-    assert((ParentDKind != ACCD_routine ||
-            (Attr && ParentLoc == Attr->getLoc()) ||
-            getDiagnostics().hasErrorOccurred()) &&
-           "expected lexically attached routine directive to be attached as "
-           "ACCRoutineDeclAttr to FunctionDecl");
+    // Assert that any lexically enclosing routine directive (that is,
+    // ParentDKind == ACCD_routine) is already attached as an ACCRoutineDeclAttr
+    // to a lexically enclosing function.  That function might not be the
+    // nearest lexically enclosing function (CurFnDecl) if the nearest is a
+    // lambda without a routine directive.  However, if it is the nearest, it's
+    // important that the ACCRoutineDeclAttr has already been attached to it or
+    // we'll overlook the routine directive for the diagnostics below.
+    //
+    // The only exception is that an erroneous routine directive might have been
+    // discarded, leaving no ACCRoutineDeclAttr or a previous routine
+    // directive's ACCRoutineDeclAttr.
+#ifndef NDEBUG
+    if (ParentDKind == ACCD_routine && !getDiagnostics().hasErrorOccurred()) {
+      DeclContext *DCFind = CurFnDecl;
+      ACCRoutineDeclAttr *AttrFind = nullptr;
+      do {
+        if (FunctionDecl *FDFind = dyn_cast_or_null<FunctionDecl>(DCFind)) {
+          AttrFind = FDFind->getAttr<ACCRoutineDeclAttr>();
+          if (AttrFind && ParentLoc == AttrFind->getLoc())
+            break;
+          AttrFind = nullptr;
+        }
+        DCFind = DCFind->getLexicalParent();
+      } while (DCFind);
+      assert(AttrFind &&
+             "expected enclosing routine directive to already be attached as "
+             "ACCRoutineDeclAttr to an enclosing FunctionDecl");
+    }
+#endif
     assert(isAllowedParentForDirective(RealDKind, ACCD_unknown) &&
            "expected every OpenACC directive to be permitted without a "
            "lexically enclosing OpenACC directive");
@@ -1011,6 +1082,7 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
     // Proposed text for OpenACC after 3.2:
     // "A procedure definition containing an orphaned loop construct must be in
     // the scope of an explicit and applying routine directive."
+    ACCRoutineDeclAttr *Attr = CurFnDecl->getAttr<ACCRoutineDeclAttr>();
     if (RealDKind == ACCD_loop && (!Attr || !Attr->getLoc().isValid())) {
       Diag(StartLoc, diag::err_acc_routine_for_orphaned_loop)
           << NameForDiag(*this, CurFnDecl);
@@ -1939,7 +2011,7 @@ bool Sema::StartOpenACCAssociatedStatement() {
         // We have an orphaned loop construct.  If there's no routine directive
         // for the enclosing function, we already complained about that.  If
         // there is, complain if the level of parallelism is incompatible.
-        FunctionDecl *Fn = getCurFunctionDecl();
+        FunctionDecl *Fn = getCurFunctionDecl(/*AllowLambda=*/true);
         assert(Fn && "expected acc loop to be in a function");
         ACCRoutineDeclAttr *FnAttr = Fn->getAttr<ACCRoutineDeclAttr>();
         if (FnAttr) {
@@ -2445,12 +2517,12 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
       Usee->getMostRecentDecl()->getAttr<ACCRoutineDeclAttr>();
   if (!UseeAttr) {
     OpenACCDirectiveKind ComputeDKind = DirStack.isInComputeRegion();
+    FunctionDecl *CurFD = getCurFunctionDecl(/*AllowLambda=*/true);
     if (ComputeDKind != ACCD_unknown) {
-      ImplicitRoutineDirInfo.addImplicitRoutineSeqDir(
-          Usee, UseLoc, getCurFunctionDecl(), ComputeDKind);
+      ImplicitRoutineDirInfo.addImplicitRoutineSeqDir(Usee, UseLoc, CurFD,
+                                                      ComputeDKind);
       return;
     }
-    FunctionDecl *CurFD = getCurFunctionDecl();
     if (CurFD)
       ImplicitRoutineDirInfo.addHostFunctionUse(CurFD, Usee, UseLoc);
   }
@@ -2531,7 +2603,7 @@ void Sema::ActOnFunctionCallForOpenACC(FunctionDecl *Callee,
   // Caller can execute only outside compute regions, but Callee's higher level
   // of parallelism requires execution modes (gang-redundant, etc.) that are
   // impossible outside compute regions.
-  FunctionDecl *Caller = getCurFunctionDecl();
+  FunctionDecl *Caller = getCurFunctionDecl(/*AllowLambda=*/true);
   if (!Caller) {
     if (CalleePart > ACCRoutineDeclAttr::Seq) {
       Diag(CallLoc, diag::err_acc_routine_func_par_level_at_file_scope)
@@ -2576,7 +2648,7 @@ void Sema::ActOnFunctionCallForOpenACC(FunctionDecl *Callee,
 void Sema::ActOnDeclStmtForOpenACC(DeclStmt *S) {
   if (OpenACCData->TransformingOpenACC)
     return;
-  FunctionDecl *CurFn = getCurFunctionDecl();
+  FunctionDecl *CurFn = getCurFunctionDecl(/*AllowLambda=*/true);
   for (Decl *D : S->decls()) {
     if (VarDecl *VD = dyn_cast<VarDecl>(D)) {
       // OpenACC 3.1, sec. 2.15.1 "Routine Directive", L2794-2795:
@@ -2654,7 +2726,7 @@ StmtResult Sema::ActOnOpenACCLoopDirective(ArrayRef<ACCClause *> Clauses,
     // routine directive, which must appear before the function definition.
     // Guard against violations of those rules just in case error recovery
     // permitted the analysis to reach this point anyway.
-    FunctionDecl *CurFnDecl = getCurFunctionDecl();
+    FunctionDecl *CurFnDecl = getCurFunctionDecl(/*AllowLambda=*/true);
     if (CurFnDecl) {
       ACCRoutineDeclAttr *FnAttr = CurFnDecl->getAttr<ACCRoutineDeclAttr>();
       // Implicit gang clauses are not permitted if the routine directive
@@ -4546,5 +4618,6 @@ ExprResult Sema::ActOnOpenACCStarExpr(SourceLocation Loc) {
 }
 
 bool Sema::isInOpenACCDirectiveStmt() {
-  return isOpenACCDirectiveStmt(OpenACCData->DirStack.getRealDirective());
+  return isOpenACCDirectiveStmt(
+      OpenACCData->DirStack.getRealDirective(/*LookOutsideCurFunction=*/true));
 }

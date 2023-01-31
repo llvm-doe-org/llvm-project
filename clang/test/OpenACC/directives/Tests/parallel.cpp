@@ -99,8 +99,52 @@ template <typename T> void simple(T x) {
   TGT_PRINTF("hello world\n");
 }
 
+//------------------------------------------------------------------------------
+// Check that a lambda can be defined and assigned to a variable within a
+// parallel construct.
+//
+// The transformation to OpenMP used to produce a spurious type conversion error
+// diagnostic because the variable's type wasn't transformed to the transformed
+// lambda's type.
+//------------------------------------------------------------------------------
+
+// DMP-LABEL: FunctionDecl {{.*}} lambdaAssignInAccParallel
+//
+//   PRT-LABEL: void lambdaAssignInAccParallel() {
+//    PRT-NEXT:   printf
+//    PRT-NEXT:   int x =
+//  PRT-A-NEXT:   {{^ *}}#pragma acc parallel num_gangs(1) copy(x){{$}}
+// PRT-AO-NEXT:   {{^ *}}// #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: x){{$}}
+//  PRT-O-NEXT:   {{^ *}}#pragma omp target teams num_teams(1) map(ompx_hold,tofrom: x){{$}}
+// PRT-OA-NEXT:   {{^ *}}// #pragma acc parallel num_gangs(1) copy(x){{$}}
+//    PRT-NEXT:   {
+//    PRT-NEXT:     auto lambda = [&x]() {
+//    PRT-NEXT:       x *=
+//    PRT-NEXT:     };
+//    PRT-NEXT:     lambda();
+//    PRT-NEXT:   }
+//    PRT-NEXT:   printf
+//    PRT-NEXT: }
+//
+// EXE-LABEL:lambdaAssignInAccParallel
+//  EXE-NEXT:x=198
+//   EXE-NOT:{{.}}
+void lambdaAssignInAccParallel() {
+  printf("lambdaAssignInAccParallel\n");
+  int x = 99;
+  #pragma acc parallel num_gangs(1) copy(x)
+  {
+    auto lambda = [&x]() {
+      x *= 2;
+    };
+    lambda();
+  }
+  printf("x=%d\n", x);
+}
+
 int main() {
   simple(3);
   simple(4.2);
+  lambdaAssignInAccParallel();
   return 0;
 }

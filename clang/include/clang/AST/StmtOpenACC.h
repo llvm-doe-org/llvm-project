@@ -524,9 +524,10 @@ class ACCParallelDirective : public ACCDirectiveStmt {
                          SourceLocation(), SourceLocation(), NumClauses, 0, 1) {
   }
 
-  /// Record whether either a (separate or combined with this directive) acc
-  /// loop directive with worker partitioning is nested here or a call to a
-  /// function with a routine worker directive is enclosed here.
+  /// Record whether this parallel construct encloses one of the following that
+  /// is not in an enclosed function definition: either an effective loop
+  /// directive with worker partitioning, or a function call with a routine
+  /// worker directive.
   void setNestedWorkerPartitioning(bool V) { NestedWorkerPartitioning = V; }
 
 public:
@@ -537,10 +538,10 @@ public:
   /// \param EndLoc Ending Location of the directive.
   /// \param Clauses List of clauses.
   /// \param AssociatedStmt Statement associated with the directive.
-  /// \param NestedWorkerPartitioning Whether either a (separate or combined
-  ///        with this directive) acc loop directive with worker partitioning is
-  ///        nested here or a call to a function with a routine worker directive
-  ///        is enclosed here.
+  /// \param NestedWorkerPartitioning Whether this parallel construct encloses
+  ///        one of the following that is not in an enclosed function
+  ///        definition: either an effective loop directive with worker
+  ///        partitioning, or a function call with a routine worker directive.
   static ACCParallelDirective *
   Create(const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
          ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
@@ -558,9 +559,10 @@ public:
     return T->getStmtClass() == ACCParallelDirectiveClass;
   }
 
-  /// Return true if either a (separate or combined with this directive) acc
-  /// loop directive with worker partitioning is nested here or a call to a
-  /// function with a routine worker directive is enclosed here.
+  /// Return true if this parallel construct encloses one of the following that
+  /// is not in an enclosed function definition: either an effective loop
+  /// directive with worker partitioning, or a function call with a routine
+  /// worker directive.
   bool getNestedWorkerPartitioning() const { return NestedWorkerPartitioning; }
 };
 
@@ -799,9 +801,10 @@ class ACCLoopDirective : public ACCDirectiveStmt {
       this->LCVs[I++] = LCV;
   }
 
-  /// Record whether either an acc loop directive with gang partitioning is
-  /// nested here or a call to a function with a routine gang directive is
-  /// enclosed here.
+  /// Record whether this loop construct encloses one of the following that is
+  /// not in an enclosed function definition: either a loop directive with
+  /// explicit gang partitioning, or a function call with a routine gang
+  /// directive.
   void setNestedGangPartitioning(bool V) { NestedGangPartitioning = V; }
 
   /// Set how the loop is partitioned.
@@ -818,9 +821,10 @@ public:
   /// \param LCVs Loop control variables that are assigned but not declared in
   ///        the inits of the for loops associated with the directive.
   /// \param Partitioning How this loop is partitioned.
-  /// \param NestedGangPartitioning Whether either an acc loop directive with
-  ///        gang partitioning is nested here or a call to a function with a
-  ///        routine gang directive is enclosed here.
+  /// \param NestedGangPartitioning Whether this loop construct encloses one of
+  ///        the following that is not in an enclosed function definition:
+  ///        either a loop directive with explicit gang partitioning, or a
+  ///        function call with a routine gang directive.
   static ACCLoopDirective *Create(
       const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
       ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
@@ -848,9 +852,10 @@ public:
   /// set if none.
   const ArrayRef<VarDecl *> &getLoopControlVariables() const { return LCVs; }
 
-  /// Return true if either an acc loop directive with gang partitioning is
-  /// nested here or a call to a function with a routine gang directive is
-  /// enclosed here.
+  /// Return true if this loop construct encloses one of the following that is
+  /// not in an enclosed function definition: either a loop directive with
+  /// explicit gang partitioning, or a function call with a routine gang
+  /// directive.
   bool getNestedGangPartitioning() const { return NestedGangPartitioning; }
 
   /// Get how the loop is partitioned.
