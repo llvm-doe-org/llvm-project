@@ -44,8 +44,8 @@ variables:
   # Which commits to use for OpenACC V&V testing.
   VV_LLVM_TEST_SUITE_COMMIT: da5c250df731c259bd6f15f05ab93f3f7b902b63
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
-  KOKKOS_COMMIT: 72b16983cab9d06cfcb5b13acf1c9fee3aca7b41
-  KOKKOS_TESTS_COMMIT: 3a77c5ed8915f2acd8153241a7d2e9687a84e626
+  KOKKOS_COMMIT: d78d013f933b50a45aa87c5aa7eef735df31e6eb
+  KOKKOS_TESTS_COMMIT: a883ce8d4806b9ad1a1696ccb1e83f8a043f5be5
   KOKKOS_CMAKE_OPTS:
 
 stages:
@@ -1035,6 +1035,25 @@ debug (vv):
     - time ./openacctest
     - echo -e "\e[0Ksection_end:`date +%s`:openacc-parallel-reduce-single\r\e[0K"
     #...........................................................................
+    # Build and run
+    # kokkos-ornl-int-test.git/examples/openacc-parallel-reduce-team
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:openacc-parallel-reduce-team[collapsed=true]\r\e[0KCheck kokkos-ornl-int-test.git/examples/openacc-parallel-reduce-team"
+    - cd $BUILD_DIR/kokkos/kokkos-ornl-int-test/examples/openacc-parallel-reduce-team
+    - mkdir build && cd build
+    - echo $CMAKE
+    - $CMAKE --version
+    - time $CMAKE -G Ninja
+        -DKokkos_ROOT=$BUILD_DIR/kokkos/kokkos/install
+        -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
+        -DCMAKE_CXX_FLAGS='-DVERIFY -O3 -lm'
+        ..
+    - echo $NINJA
+    - $NINJA --version
+    - time $NINJA -l `nproc`
+    - time ./openacctest
+    - echo -e "\e[0Ksection_end:`date +%s`:openacc-parallel-reduce-team\r\e[0K"
+    #...........................................................................
     # Build and run kokkos-ornl-int-test.git/examples/openacc-performance
     #...........................................................................
     - echo -e "\e[0Ksection_start:`date +%s`:openacc-performance[collapsed=true]\r\e[0KCheck kokkos-ornl-int-test.git/examples/openacc-performance"
@@ -1074,6 +1093,28 @@ debug (vv):
     - time $NINJA -l `nproc`
     - time ./openacctest
     - echo -e "\e[0Ksection_end:`date +%s`:openacc-performance-multidimensional\r\e[0K"
+    #...........................................................................
+    # Build and run kokkos-ornl-int-test.git/examples/openacc-performance-teams
+    #
+    # On CPU-only systems, it can be slow and precision isn't as good, so we set
+    # DSTEP to get just three iterations across a wide range of sizes, and we
+    # increase EPSILON.  That should be sufficient to check basic behavior.
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:openacc-performance-teams[collapsed=true]\r\e[0KCheck kokkos-ornl-int-test.git/examples/openacc-performance-teams"
+    - cd $BUILD_DIR/kokkos/kokkos-ornl-int-test/examples/openacc-performance-teams
+    - mkdir build && cd build
+    - echo $CMAKE
+    - $CMAKE --version
+    - time $CMAKE -G Ninja
+        -DKokkos_ROOT=$BUILD_DIR/kokkos/kokkos/install
+        -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
+        -DCMAKE_CXX_FLAGS='-DVERIFY -DDSTEP=4499 -DEPSILON=1e-3 -O3 -lm'
+        ..
+    - echo $NINJA
+    - $NINJA --version
+    - time $NINJA -l `nproc`
+    - time ./openacctest
+    - echo -e "\e[0Ksection_end:`date +%s`:openacc-performance-teams\r\e[0K"
     #...........................................................................
     # Build and run kokkos-ornl-int-test.git/examples/stream
     #...........................................................................
