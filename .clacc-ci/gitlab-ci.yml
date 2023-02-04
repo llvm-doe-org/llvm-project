@@ -41,6 +41,10 @@ variables:
   CHECK_TARGETS: check-all check-openmp
   # The number of tests launched at once is `nproc` / $LIT_NPROC_DIVISOR.
   LIT_NPROC_DIVISOR: 1
+  # Sometimes a build process gets stuck for a long time, and sometimes a test
+  # process does (usually OpenMP tests).  One hour of CPU time should be plenty
+  # for any process.  The goal is simply not to let them stick around forever.
+  ULIMIT_T: 3600
   # Which commits to use for OpenACC V&V testing.
   VV_LLVM_TEST_SUITE_COMMIT: da5c250df731c259bd6f15f05ab93f3f7b902b63
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
@@ -62,7 +66,7 @@ stages:
 # build configurations
 #
 # Test every architecture with a release build plus assertions using python3.
-# There are multiple excl-us* systems, so use them to check configuration
+# There are multiple milan* systems, so use them to check configuration
 # choices that are hopefully orthogonal to the architecture.
 #-------------------------------------------------------------------------------
 
@@ -192,22 +196,24 @@ stages:
       External/openacc_vv/atomic_capture_expr_plus_x.c.test
       "
 
-.excl-us:
-  tags: [shell, excl-us]
+.milan:
+  tags: [shell, milan]
   variables:
-    BUILD_ID: excl-us
-    MODULES: git gnu/11.1.0
+    BUILD_ID: milan
+    MODULES: gnu/12.2.0
     PATH_PREPEND: ""
-    CMAKE: cmake3
-    NINJA: ninja-build
+    CMAKE: cmake
+    NINJA: ninja
     PYTHON: /usr/bin/python3
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
     LLVM_ENABLE_PROJECTS: "clang"
     LLVM_ENABLE_RUNTIMES: "openmp"
     CPU_TRIPLE: "x86_64-pc-linux-gnu"
-    CPU_COUNT:  4
+    CPU_COUNT: 4
     LIT_XFAIL:
-      ""
+      "
+      LLVM :: Other/ChangePrinters/DotCfg/print-changed-dot-cfg.ll
+      "
     LIT_XFAIL_NOT:
       ""
     VV_COMP_LIT_XFAIL:
@@ -219,7 +225,7 @@ stages:
       "
 
 .no-asserts:
-  extends: [.excl-us]
+  extends: [.milan]
   variables:
     BUILD_ID: no-asserts
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=False
@@ -227,6 +233,7 @@ stages:
       "
       Clang :: Headers/wasm.c
       LLVM :: Analysis/CostModel/X86/interleaved-store-accesses-with-gaps.ll
+      LLVM :: Other/ChangePrinters/DotCfg/print-changed-dot-cfg.ll
       "
     LIT_XFAIL_NOT:
       ""
@@ -239,7 +246,7 @@ stages:
       "
 
 .debug:
-  extends: [.excl-us]
+  extends: [.milan]
   variables:
     BUILD_ID: debug
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Debug
@@ -250,6 +257,7 @@ stages:
       libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
       libomptarget :: x86_64-pc-linux-gnu :: unified_shared_memory/close_modifier.c
       libomptarget :: x86_64-pc-linux-gnu-newDriver :: unified_shared_memory/close_modifier.c
+      LLVM :: Other/ChangePrinters/DotCfg/print-changed-dot-cfg.ll
       "
     LIT_XFAIL_NOT:
       ""
@@ -276,11 +284,7 @@ stages:
     - pwd
     - echo $BUILD_DIR
     - cd $BUILD_DIR/build
-    # Sometimes a build process gets stuck for a long time, and sometimes a test
-    # process does (usually OpenMP tests).  One hour of CPU time should be
-    # plenty for any process.  The goal is simply not to let them stick around
-    # forever.
-    - ulimit -t 3600
+    - ulimit -t $ULIMIT_T
     - echo -e "\e[0Ksection_end:`date +%s`:prepare_for_job\r\e[0K"
   after_script:
     - echo -e "\e[0Ksection_start:`date +%s`:show_stats[collapsed=true]\r\e[0KShow ccache and build statistics"
@@ -332,8 +336,8 @@ oswald02 (setup):
 explorer (setup):
   extends: [.explorer, .setup]
 
-excl-us (setup):
-  extends: [.excl-us, .setup]
+milan (setup):
+  extends: [.milan, .setup]
 
 no-asserts (setup):
   extends: [.no-asserts, .setup]
@@ -394,14 +398,14 @@ explorer (cleanup):
     - job: explorer (kokkos)
       artifacts: false
 
-excl-us (cleanup):
-  extends: [.excl-us, .cleanup]
+milan (cleanup):
+  extends: [.milan, .cleanup]
   needs:
-    - job: excl-us (test)
+    - job: milan (test)
       artifacts: false
-    - job: excl-us (vv)
+    - job: milan (vv)
       artifacts: false
-    - job: excl-us (kokkos)
+    - job: milan (kokkos)
       artifacts: false
 
 no-asserts (cleanup):
@@ -433,8 +437,8 @@ oswald02 (manual cleanup):
 explorer (manual cleanup):
   extends: [.explorer, .manual-cleanup]
 
-excl-us (manual cleanup):
-  extends: [.excl-us, .manual-cleanup]
+milan (manual cleanup):
+  extends: [.milan, .manual-cleanup]
 
 no-asserts (manual cleanup):
   extends: [.no-asserts, .manual-cleanup]
@@ -446,7 +450,7 @@ z-cleanup-pipeline-builds:
   stage: manual cleanup
   when: manual
   needs: []
-  tags: [shell, excl-us]
+  tags: [shell, milan]
   variables:
     GIT_STRATEGY: none
   script:
@@ -457,7 +461,7 @@ z-cleanup-project-builds:
   stage: manual cleanup
   when: manual
   needs: []
-  tags: [shell, excl-us]
+  tags: [shell, milan]
   variables:
     GIT_STRATEGY: none
   script:
@@ -524,10 +528,10 @@ explorer (config):
     - job: explorer (setup)
       artifacts: false
 
-excl-us (config):
-  extends: [.excl-us, .config]
+milan (config):
+  extends: [.milan, .config]
   needs:
-    - job: excl-us (setup)
+    - job: milan (setup)
       artifacts: false
 
 no-asserts (config):
@@ -578,10 +582,10 @@ explorer (build):
     - job: explorer (config)
       artifacts: false
 
-excl-us (build):
-  extends: [.excl-us, .build]
+milan (build):
+  extends: [.milan, .build]
   needs:
-    - job: excl-us (config)
+    - job: milan (config)
       artifacts: false
 
 no-asserts (build):
@@ -737,10 +741,10 @@ explorer (test):
     - job: explorer (build)
       artifacts: false
 
-excl-us (test):
-  extends: [.excl-us, .test]
+milan (test):
+  extends: [.milan, .test]
   needs:
-    - job: excl-us (build)
+    - job: milan (build)
       artifacts: false
 
 no-asserts (test):
@@ -766,6 +770,11 @@ debug (test):
   extends: .non-utility
   stage: vv
   script:
+    # Systems without a GPU omit -fopenmp-targets, and this causes linking
+    # problems for libomptarget.so if we don't extend LD_LIBRARY_PATH.
+    - if test x"$GPU_TRIPLE" = x; then
+        export LD_LIBRARY_PATH=$BUILD_DIR/install/lib:$LD_LIBRARY_PATH;
+      fi
     - export VV_COMP_LIT_XFAIL=`
         echo "$VV_COMP_LIT_XFAIL"
         | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
@@ -914,10 +923,10 @@ explorer (vv):
     - job: explorer (build)
       artifacts: false
 
-excl-us (vv):
-  extends: [.excl-us, .vv]
+milan (vv):
+  extends: [.milan, .vv]
   needs:
-    - job: excl-us (build)
+    - job: milan (build)
       artifacts: false
 
 no-asserts (vv):
@@ -943,6 +952,11 @@ debug (vv):
   extends: .non-utility
   stage: kokkos
   script:
+    # Systems without a GPU omit -fopenmp-targets, and this causes linking
+    # problems for libomptarget.so if we don't extend LD_LIBRARY_PATH.
+    - if test x"$GPU_TRIPLE" = x; then
+        export LD_LIBRARY_PATH=$BUILD_DIR/install/lib:$LD_LIBRARY_PATH;
+      fi
     #...........................................................................
     # Clone Kokkos.
     #...........................................................................
@@ -1155,20 +1169,31 @@ explorer (kokkos):
     - job: explorer (build)
       artifacts: false
 
-excl-us (kokkos):
-  extends: [.excl-us, .kokkos]
+# On systems without a GPU, the kokkos examples use CPU parallelism, which
+# effectively divides the time limit imposed by our default ulimit -t (1 hour)
+# by the number of CPU threads (60), but 1 minute is not enough time for some
+# of our Kokkos examples, so we increase it to 5 minutes for those cases.
+
+milan (kokkos):
+  extends: [.milan, .kokkos]
+  variables:
+    ULIMIT_T: 18000
   needs:
-    - job: excl-us (build)
+    - job: milan (build)
       artifacts: false
 
 no-asserts (kokkos):
   extends: [.no-asserts, .kokkos]
+  variables:
+    ULIMIT_T: 18000
   needs:
     - job: no-asserts (build)
       artifacts: false
 
 debug (kokkos):
   extends: [.debug, .kokkos]
+  variables:
+    ULIMIT_T: 18000
   needs:
     - job: debug (build)
       artifacts: false
