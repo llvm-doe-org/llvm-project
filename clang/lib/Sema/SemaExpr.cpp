@@ -17914,8 +17914,7 @@ void Sema::MarkFunctionReferenced(SourceLocation Loc, FunctionDecl *Func,
     Func->markUsed(Context);
   }
 
-  if (LangOpts.OpenACC && (OdrUse == OdrUseContext::Used ||
-                           OdrUse == OdrUseContext::FormallyOdrUsed))
+  if (LangOpts.OpenACC && (OdrUse != OdrUseContext::None))
     ActOnFunctionUseForOpenACC(Func, Loc);
 }
 

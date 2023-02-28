@@ -784,7 +784,8 @@ void BadContentForNamespace::onDeclOnOuterDef() {
 }
 
 //------------------------------------------------------------------------------
-// Restrictions on the function definition body for implicit routine directives.
+// Restrictions on class/namespace function definition body due to routine
+// directive implied by uses in/after class/namespace.
 //
 // routine-cxx-funcs/func-bad-content-imp.cpp checks this for one context
 // (currently that's the body of another accelerator routine) that can imply a
@@ -956,7 +957,38 @@ void ImpAccRoutineNoteForNamespace::accUserOuterDef() {
 }
 
 //------------------------------------------------------------------------------
-// Compatible levels of parallelism.
+// Restriction on function definition body for routine directive implied by use
+// in template.
+//
+// Clang's OpenACC analysis used to miss calls within template functions until
+// the templates were instantiated.
+//------------------------------------------------------------------------------
+
+void templateParUseImplyBadContent_fn() {
+  // expected-error@+1 {{static local variable 'i' is not permitted within function 'templateParUseImplyBadContent_fn' because the latter is attributed with '#pragma acc routine'}}
+  static int i;
+}
+template <typename T>
+void templateParUseImplyBadContent_template() {
+  #pragma acc parallel
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'templateParUseImplyBadContent_fn' by use in construct '#pragma acc parallel' here}}
+  templateParUseImplyBadContent_fn();
+}
+
+void templateUseImplyBadContent_fn() {
+  // expected-error@+1 {{static local variable 'i' is not permitted within function 'templateUseImplyBadContent_fn' because the latter is attributed with '#pragma acc routine'}}
+  static int i;
+}
+// expected-note@+1 {{'#pragma acc routine' for function 'templateUseImplyBadContent_template' appears here}}
+#pragma acc routine seq
+template <typename T>
+void templateUseImplyBadContent_template() {
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'templateUseImplyBadContent_fn' by use in function 'templateUseImplyBadContent_template' here}}
+  templateUseImplyBadContent_fn();
+}
+
+//------------------------------------------------------------------------------
+// Compatible levels of parallelism in class/namespace functions.
 //
 // routine-cxx-funcs/call-par-level-*.cpp cover this pretty thoroughly, but the
 // users are always outside the usee's class/namespace.  Here we check the case
