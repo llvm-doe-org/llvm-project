@@ -11858,17 +11858,27 @@ public:
 
   /// Transform OpenACC region to OpenMP, and return true if an error occurred.
   ///
-  /// This function must be called on \a D immediately after Parser and Sema
-  /// have otherwise finished analyzing \a D.  If Sema is not still analyzing
-  /// any other OpenACC directive, then \a D is not enclosed in another OpenACC
-  /// directive.  In that case, this function then transforms \a D and all
-  /// OpenACC directives \a D encloses such that, for each such directive,
-  /// \c getOMPNode then returns the corresponding OpenMP directive.  Otherwise,
-  /// this function does nothing so that we only transform each OpenACC region
-  /// to OpenMP once, in its entirety.
+  /// This function must be called on \p D immediately after Parser and Sema
+  /// have otherwise finished analyzing \p D.
+  ///
+  /// If we've already encountered errors anywhere, this function does nothing
+  /// and returns false (because no additional error occurred).  Otherwise, we
+  /// could end up with redundant diagnostics, some of which might mention
+  /// OpenMP.
+  ///
+  /// If \p D is enclosed in another OpenACC construct (this includes the case
+  /// when \p D is within a lambda within that construct), then this function
+  /// does nothing and returns false (because this case is not an error).  That
+  /// way, we transform each OpenACC construct to OpenMP only once, in its
+  /// entirety.
+  ///
+  /// Otherwise, this function transforms \p D and all OpenACC directives \p D
+  /// encloses such that, for each such directive, \c getOMPNode then returns
+  /// the corresponding OpenMP directive.  If there is an error during the
+  /// transformation, this function returns true.
   bool transformACCToOMP(ACCDirectiveStmt *D);
-  /// Transform the OpenACC attribute \a ACCAttr on the function declaration or
-  /// definition \a FD to an OpenMP attribute, and attach the latter to \a FD
+  /// Transform the OpenACC attribute \p ACCAttr on the function declaration or
+  /// definition \p FD to an OpenMP attribute, and attach the latter to \p FD
   /// unless it does not require a translation.
   void transformACCToOMP(ACCDeclAttr *ACCAttr, FunctionDecl *FD);
 

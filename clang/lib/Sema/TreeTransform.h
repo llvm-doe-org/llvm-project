@@ -10773,12 +10773,9 @@ TreeTransform<Derived>::TransformACCDirectiveStmt(ACCDirectiveStmt *D) {
   StmtResult Result =
       getDerived().RebuildACCDirectiveStmt(AssociatedStmt.get());
   SemaRef.EndOpenACCDirectiveAndAssociate(D->getDirectiveKind());
-  if (!SemaRef.getDiagnostics().hasErrorOccurred()) {
-    assert(!Result.isInvalid() &&
-           "expected diagnostic for invalid OpenACC directive");
-    if (SemaRef.transformACCToOMP(cast<ACCDirectiveStmt>(Result.get())))
-      ErrorFound = true;
-  }
+  if (!Result.isInvalid() &&
+      SemaRef.transformACCToOMP(cast<ACCDirectiveStmt>(Result.get())))
+    ErrorFound = true;
   if (ErrorFound)
     Result = StmtError();
   return Result;

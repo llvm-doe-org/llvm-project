@@ -1453,9 +1453,8 @@ public:
 } // namespace
 
 bool Sema::transformACCToOMP(ACCDirectiveStmt *D) {
-  // If D is within another OpenACC construct, D will be translated to OpenMP
-  // along with it, so don't translate D now.  That is true even if D is within
-  // a lambda within that construct.
+  if (getDiagnostics().hasErrorOccurred())
+    return false;
   if (isInOpenACCDirectiveStmt())
     return false;
   StartOpenACCTransform();

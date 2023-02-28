@@ -280,15 +280,9 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedAttributes &Attrs,
     // Exit scope.
     Actions.EndOpenACCDirectiveAndAssociate(DKind);
     ACCDirectiveScope.Exit();
-    // Don't bother translating to OpenMP if we've encountered errors or we
-    // might end up with redundant diagnostics, some of which might mention
-    // OpenMP.
-    if (!Actions.getDiagnostics().hasErrorOccurred()) {
-      assert(!Result.isInvalid() &&
-             "expected diagnostic for invalid OpenACC directive");
-      if (Actions.transformACCToOMP(cast<ACCDirectiveStmt>(Result.get())))
-        ErrorFound = true;
-    }
+    if (!Result.isInvalid() &&
+        Actions.transformACCToOMP(cast<ACCDirectiveStmt>(Result.get())))
+      ErrorFound = true;
     if (ErrorFound)
       Result = StmtError();
     break;
