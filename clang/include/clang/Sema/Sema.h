@@ -11627,6 +11627,8 @@ public:
   /// At the start of a function definition, create the \c ACCRoutineDeclAttr
   /// for any routine directive lexically attached to the function definition.
   void ActOnStartOfFunctionDefForOpenACC(FunctionDecl *FD);
+  /// At the end of a function body, finish the function's OpenACC analysis.
+  void ActOnFinishFunctionBodyForOpenACC(FunctionDecl *FD);
   /// Add implicit routine directive upon an offload device use of a function.
   void ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc);
   /// Check the level of parallelism of a called function.
@@ -11713,10 +11715,12 @@ public:
                                     SourceLocation StaticColonLoc,
                                     Expr *StaticArg, SourceLocation EndLoc);
   /// Called on well-formed 'worker' clause.
-  ACCClause *ActOnOpenACCWorkerClause(SourceLocation StartLoc,
+  ACCClause *ActOnOpenACCWorkerClause(OpenACCDetermination Determination,
+                                      SourceLocation StartLoc,
                                       SourceLocation EndLoc);
   /// Called on well-formed 'vector' clause.
-  ACCClause *ActOnOpenACCVectorClause(SourceLocation StartLoc,
+  ACCClause *ActOnOpenACCVectorClause(OpenACCDetermination Determination,
+                                      SourceLocation StartLoc,
                                       SourceLocation EndLoc);
   /// Called on well-formed clauses that take variable lists.  Assumes they
   /// are explicit clauses.

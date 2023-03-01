@@ -18,6 +18,10 @@
 # error USER_LOOP_ROUTINE_DIR not defined
 # define USER_LOOP_ROUTINE_DIR // to pacify editors
 #endif
+#ifndef INCLUDE_LAMBDA_USES
+# error INCLUDE_LAMBDA_USES not defined
+# define INCLUDE_LAMBDA_USES // to pacify editors
+#endif
 
 struct Derived : MemberUsees {
   using MemberUsees::MemberUsees; // #Derived_ctorUsing
@@ -320,9 +324,12 @@ void accRoutineUse(int cond) {
   // callParLevel-note@#MemberUsees_end_routine {{'#pragma acc routine' for function 'MemberUsees::end' appears here}}
   for (int i : var) // #accRoutineUse_MemberUsees_rangeBasedLoop
     ;
-#if USEE_BAD_CONTENT
-  lambdaUsee();
-  lambdaUseeDefinerAndUser();
+  // callParLevel-error@#accRoutineUse_lambdaUsee_call {{function 'accRoutineUse' has '#pragma acc routine worker' but calls function '(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // callParLevel-note@#accRoutineUse_routine {{'#pragma acc routine' for function 'accRoutineUse' appears here}}
+  // callParLevel-note@#lambdaUsee_lambdaUseeUsee_call {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of function 'lambdaUseeUsee' here}}
+  // callParLevel-note@#lambdaUseeUsee_routine {{'#pragma acc routine' for function 'lambdaUseeUsee' appears here}}
+#if INCLUDE_LAMBDA_USES
+  lambdaUsee(); // #accRoutineUse_lambdaUsee_call
 #endif
 }
 
@@ -358,9 +365,8 @@ void accParallelUse(int cond) {
     decltype(var(3)) varOpConvertSurrogateUneval;
     for (int i : var) // #accParallelUse_MemberUsees_rangeBasedLoop
       ;
-#if USEE_BAD_CONTENT
+#if INCLUDE_LAMBDA_USES
     lambdaUsee();
-    lambdaUseeDefinerAndUser();
 #endif
   }
 }
@@ -502,9 +508,12 @@ void accLoopUse(int cond) {
     // callParLevel-note@#MemberUsees_end_routine {{'#pragma acc routine' for function 'MemberUsees::end' appears here}}
     for (int i : var) // #accLoopUse_MemberUsees_rangeBasedLoop
       ;
-#if USEE_BAD_CONTENT
-    lambdaUsee();
-    lambdaUseeDefinerAndUser();
+    // callParLevel-error@#accLoopUse_lambdaUsee_call {{'#pragma acc loop worker' construct calls function '(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+    // callParLevel-note@#accLoopUse_accLoop {{enclosing '#pragma acc loop' here}}
+    // callParLevel-note@#lambdaUsee_lambdaUseeUsee_call {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of function 'lambdaUseeUsee' here}}
+    // callParLevel-note@#lambdaUseeUsee_routine {{'#pragma acc routine' for function 'lambdaUseeUsee' appears here}}
+#if INCLUDE_LAMBDA_USES
+    lambdaUsee(); // #accLoopUse_lambdaUsee_call
 #endif
   }
 }
@@ -613,9 +622,11 @@ void hostUse(int cond) {
   // callParLevel-note@#MemberUsees_end_routine {{'#pragma acc routine' for function 'MemberUsees::end' appears here}}
   for (int i : var) // #hostUse_MemberUsees_rangeBasedLoop
     ;
-#if USEE_BAD_CONTENT
-  lambdaUsee();
-  lambdaUseeDefinerAndUser();
+  // callParLevel-error@#hostUse_lambdaUsee_call {{function 'hostUse' has no explicit '#pragma acc routine' but calls function '(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // callParLevel-note@#lambdaUsee_lambdaUseeUsee_call {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of function 'lambdaUseeUsee' here}}
+  // callParLevel-note@#lambdaUseeUsee_routine {{'#pragma acc routine' for function 'lambdaUseeUsee' appears here}}
+#if INCLUDE_LAMBDA_USES
+  lambdaUsee(); // #hostUse_lambdaUsee_call
 #endif
 }
 
@@ -694,9 +705,16 @@ namespace NamespaceUsees {
   }
 }
 
+// The cases below check a lambda as the user.  Because explicit routine
+// directives are not yet supported for lambdas, and because an implicit routine
+// directive for a lambda is determined by its usees, its level of parallelism
+// cannot be incompatible with its usees.
+//
 // At one time, Clang's OpenACC analysis overlooked enclosing lambdas as if
 // their contents appeared at file scope, in an enclosing function, or in an
-// enclosing construct.
+// enclosing construct.  In most cases below, if that were to happen, there
+// would be a diagnostic about an incompatible level of parallelism between a
+// lambda's usees and whatever encloses the lambda.
 //
 // For each accLambda below, we imply rather than explicitly specify (using
 // USER_ROUTINE_DIR) a routine directive for two reasons.  First, explicit
@@ -705,18 +723,12 @@ namespace NamespaceUsees {
 // in accLambda (not in lambdaDefiner) specifically in the case that there's no
 // routine directive yet on accLambda as that case used to misbehave.
 void lambdaDefiner() {
+  // It's a "host" lambda in that it's never actually used in a compute region,
+  // but it has an implicit routine directive based on its definition.
   auto hostLambda = []() {
-    // callParLevel-error@#fnUseeInNestedHostLambda_call {{function 'lambdaDefiner()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but calls function 'fnUseeInNestedHostLambda', which has '#pragma acc routine gang'}}
-    // callParLevel-note@#fnUseeInNestedHostLambda_routine {{'#pragma acc routine' for function 'fnUseeInNestedHostLambda' appears here}}
-    // callParLevel-note@#fnUseeInNestedHostLambda_call {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
-    // callParLevel-note@#fnUseeInNestedHostLambda_call {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
     fnUseeInNestedHostLambda(); // #fnUseeInNestedHostLambda_call
   };
   auto accLambda = []() {
-    // callParLevel-error@#fnUseeInNestedAccRoutineLambda_call {{function 'lambdaDefiner()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but calls function 'fnUseeInNestedAccRoutineLambda', which has '#pragma acc routine gang'}}
-    // callParLevel-note@#fnUseeInNestedAccRoutineLambda_routine {{'#pragma acc routine' for function 'fnUseeInNestedAccRoutineLambda' appears here}}
-    // callParLevel-note@#fnUseeInNestedAccRoutineLambda_call {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
-    // callParLevel-note@#fnUseeInNestedAccRoutineLambda_call {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
     fnUseeInNestedAccRoutineLambda(); // #fnUseeInNestedAccRoutineLambda_call
   };
   #pragma acc parallel
@@ -724,36 +736,27 @@ void lambdaDefiner() {
   #pragma acc parallel
   {
     []() {
-      // callParLevel-error@#fnUseeInAccParallelLambda_call {{function 'lambdaDefiner()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but calls function 'fnUseeInAccParallelLambda', which has '#pragma acc routine gang'}}
-      // callParLevel-note@#fnUseeInAccParallelLambda_routine {{'#pragma acc routine' for function 'fnUseeInAccParallelLambda' appears here}}
-      // callParLevel-note@#fnUseeInAccParallelLambda_call {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
-      // callParLevel-note@#fnUseeInAccParallelLambda_call {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
       fnUseeInAccParallelLambda(); // #fnUseeInAccParallelLambda_call
     }(); // #lambdaDefiner_accParallelLambda_call
-    USER_LOOP_DIR
+    USER_LOOP_DIR // #lambdaDefiner_loop
     for (int i = 0; i < 8; ++i) {
-      []() {
-        // callParLevel-error@#fnUseeInAccLoopLambda_call {{function 'lambdaDefiner()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but calls function 'fnUseeInAccLoopLambda', which has '#pragma acc routine gang'}}
-        // callParLevel-note@#fnUseeInAccLoopLambda_routine {{'#pragma acc routine' for function 'fnUseeInAccLoopLambda' appears here}}
-        // callParLevel-note@#fnUseeInAccLoopLambda_call {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
-        // callParLevel-note@#fnUseeInAccLoopLambda_call {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
+      auto f = []() {
         fnUseeInAccLoopLambda(); // #fnUseeInAccLoopLambda_call
-      }(); // #lambdaDefiner_accLoopLambda_call
+        // The following makes sure f has a routine directive so that
+        // fnUseeInAccLoopLambda always has one due to its use in f.
+        #pragma acc loop seq // #lambdaDefiner_accLoopLambda_loop
+        for (int i = 0; i < 8; ++i)
+          ;
+      };
     }
   }
 }
+// It's a "host" lambda in that it's never actually used in a compute region,
+// but it has an implicit routine directive based on its definition.
 auto hostLambda = []() {
-  // callParLevel-error@#fnUseeInHostLambda_call {{function '(anonymous class)::operator()' has no explicit '#pragma acc routine' but calls function 'fnUseeInHostLambda', which has '#pragma acc routine gang'}}
-  // callParLevel-note@#fnUseeInHostLambda_routine {{'#pragma acc routine' for function 'fnUseeInHostLambda' appears here}}
-  // callParLevel-note@#fnUseeInHostLambda_call {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
-  // callParLevel-note@#fnUseeInHostLambda_call {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
   fnUseeInHostLambda(); // #fnUseeInHostLambda_call
 };
 auto accLambda = []() {
-  // callParLevel-error@#fnUseeInAccRoutineLambda_call {{function '(anonymous class)::operator()' has no explicit '#pragma acc routine' but calls function 'fnUseeInAccRoutineLambda', which has '#pragma acc routine gang'}}
-  // callParLevel-note@#fnUseeInAccRoutineLambda_routine {{'#pragma acc routine' for function 'fnUseeInAccRoutineLambda' appears here}}
-  // callParLevel-note@#fnUseeInAccRoutineLambda_call {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
-  // callParLevel-note@#fnUseeInAccRoutineLambda_call {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
   fnUseeInAccRoutineLambda(); // #fnUseeInAccRoutineLambda_call
 };
 void accLambdaUser() {

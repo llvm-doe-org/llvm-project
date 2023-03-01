@@ -53,6 +53,13 @@ namespace NamespaceUsees {
   USEE_ROUTINE_DIR // #NamespaceUsees_fn_routine
   void fn() {}
 }
+// Because lambdas currently cannot have explicit routine directives, this
+// function is called within lambdas to imply their routine directives instead.
+USEE_ROUTINE_DIR // #lambdaUseeUsee_routine
+void lambdaUseeUsee() {}
+auto lambdaUsee = []() {
+  lambdaUseeUsee(); // #lambdaUsee_lambdaUseeUsee_call
+};
 #endif
 
 // Each of the following is used as a constructor parameter (thus, the

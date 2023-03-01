@@ -15164,6 +15164,9 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
     DiscardCleanupsInEvaluationContext();
   }
 
+  if (FD && LangOpts.OpenACC)
+    ActOnFinishFunctionBodyForOpenACC(FD);
+
   if (FD && ((LangOpts.OpenMP && (LangOpts.OpenMPIsDevice ||
                                   !LangOpts.OMPTargetTriples.empty())) ||
              LangOpts.CUDA || LangOpts.SYCLIsDevice)) {

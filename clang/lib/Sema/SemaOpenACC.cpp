@@ -762,35 +762,57 @@ DirStackTy::DAVarData DirStackTy::getTopDA(ACCDataVar Var) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Info recorded about functions that at first are not known to have routine
-/// directives, but routine seq directives might be implied later.
+/// Info recorded about functions that at first do not have fully determined
+/// routine directives.
+///
+/// An \c ACCRoutineDeclAttr is attached to a function at the point when an
+/// implicit routine directive is fully determined.  If an implier is a use of
+/// the function, the implicit routine directive is fully determined immediately
+/// upon the use.  If an implier is within the definition of the function, the
+/// implicit routine directive (and specifically its level of parallelism) is
+/// not fully determined until the end of the function.
 class ImplicitRoutineDirInfoTy {
 private:
   Sema &SemaRef;
   struct FunctionEntryTy {
     typedef std::pair<SourceLocation, PartialDiagnostic> DiagTy;
-    /// Diagnostics to report if a routine seq directive is implied for this
-    /// function later.  Diagnostics are stored here by \c DiagIfRoutineDir.
+    /// Diagnostics to report if and when an implicit routine directive is fully
+    /// determined for this function later.  Diagnostics are stored here by
+    /// \c DiagIfRoutineDir.
     std::list<DiagTy> Diags;
     /// This function's uses of other functions such that, in each case, the use
-    /// does not appear in a compute construct and neither function was known to
-    /// have a routine directive when the use was discovered.  For each such
-    /// other function FD, this table is indexed by FD->getCanonicalDecl().
+    /// does not appear in a compute construct and neither function had a fully
+    /// determined routine directive when the use was discovered.  For each such
+    /// other function \c FD, this table is indexed by
+    /// \c FD->getCanonicalDecl().
     llvm::DenseMap<FunctionDecl *, SourceLocation> HostFunctionUses;
-    /// The location of the use of this function that originally implied a
-    /// routine seq directive for this function.  Invalid if no routine seq
-    /// directive has been implied for this function yet.
-    SourceLocation UseLoc;
-    /// The function in which appeared the use of this function that originally
-    /// implied a routine seq directive for this function.  \c nullptr if no
-    /// routine seq directive has been implied for this function yet.
-    FunctionDecl *UserFn = nullptr;
-    /// The compute construct in which appeared the use of this function that
-    /// originally implied a routine seq directive for this function.
-    /// \c ACCD_routine if that use did not appear within a compute construct.
-    /// \c ACCD_unknown if no routine seq directive has been implied for this
-    /// function yet.
-    OpenACCDirectiveKind UserComputeConstruct = ACCD_unknown;
+    /// The location of the original implier of a routine directive with level
+    /// of parallelism \c ParLevel for this function, or invalid if no routine
+    /// directive implier has been encountered yet for this function.  That is,
+    /// this location is valid starting at the first routine directive implier
+    /// for this function even if an implicit routine directive has not yet been
+    /// fully determined for this function.
+    SourceLocation ImplierLoc;
+    /// Either:
+    /// - The function in which \c ImplierLoc appeared if \c ImplierLoc is for a
+    ///   use of this function.
+    /// - The callee if \c ImplierLoc is for a function call within this
+    ///   function.
+    /// - \c nullptr otherwise.
+    FunctionDecl *ImplierFn = nullptr;
+    /// Either:
+    /// - The real kind of the compute construct in which \c ImplierLoc appeared
+    ///   if \c ImplierLoc is for a use of this function.
+    /// - \c ACCD_routine if \c ImplierLoc is for a use of this function not
+    ///   within a compute construct.
+    /// - \c ACCD_loop if \c ImplierLoc is for an orphaned loop construct within
+    ///   this function.
+    /// - \c ACCD_unknown if \c ImplierLoc is for a function call within this
+    ///   function or is invalid.
+    OpenACCDirectiveKind ImplierConstruct = ACCD_unknown;
+    /// The current level of parallelism implied for this function.  Undefined
+    /// if \c ImplierLoc is invalid.
+    ACCRoutineDeclAttr::PartitioningTy ParLevel;
   };
   /// For each function FD, this table is indexed by FD->getCanonicalDecl().
   llvm::DenseMap<FunctionDecl *, FunctionEntryTy> Map;
@@ -806,59 +828,107 @@ private:
 public:
   ImplicitRoutineDirInfoTy(Sema &SemaRef) : SemaRef(SemaRef) {}
 
-  /// Record use of \a Usee at \a UseLoc within \a User such that the use does
-  /// not appear in a compute construct and neither function is yet known to
-  /// have a routine directive.
+  /// Record use of \p Usee at \p UseLoc within \p User such that the use does
+  /// not appear in a compute construct and neither function yet has a fully
+  /// determined routine directive.
   void addHostFunctionUse(FunctionDecl *User, FunctionDecl *Usee,
                           SourceLocation UseLoc) {
+    assert(!User->getMostRecentDecl()->hasAttr<ACCRoutineDeclAttr>() &&
+           "unexpected host function use after routine directive for user");
+    assert(!Usee->getMostRecentDecl()->hasAttr<ACCRoutineDeclAttr>() &&
+           "unexpected host function use after routine directive for usee");
     FunctionEntryTy &Entry = Map[User->getCanonicalDecl()];
-    assert(Entry.UseLoc.isInvalid() &&
-           "unexpected host function use after implicit routine directive");
     Entry.HostFunctionUses.try_emplace(Usee->getCanonicalDecl(), UseLoc);
   }
 
-  /// Add routine seq directive implied for \a FD by its use at \a UseLoc within
-  /// \a UserFn and within a compute construct of kind \a UserComputeConstruct
-  /// (must be \c ACCD_routine if the use is not within a compute construct).
+  /// Add routine directive implier with level of parallelism \p ParLevel for
+  /// \p FD at \p ImplierLoc.  An implicit routine directive isn't fully
+  /// determined until a later call to \c fullyDetermineImplicitRoutineDir,
+  /// which uses the information added here.
   ///
-  /// Emit diagnostics that were previously recorded for \a FD by
-  /// \c DiagIfRoutineDir.  \c emitNotesForRoutineDirChain is called for \a FD,
-  /// so its preconditions must be met.
+  /// \p ImplierConstruct must be either:
+  /// - The real kind of the compute construct in which \p ImplierLoc appeared
+  ///   if \p ImplierLoc is for a use of \p FD.  The use must have appeared in
+  ///   \p ImplierFn.
+  /// - \c ACCD_routine if \p ImplierLoc is for a use of \p FD not within a
+  ///   compute construct.  The use must have appeared in \p ImplierFn.
+  /// - \c ACCD_loop if \p ImplierLoc is for an orphaned loop construct within
+  ///   \p FD.  \p ImplierFn must then be \c nullptr.
+  /// - \c ACCD_unknown if \p ImplierLoc is for a function call within \p FD.
+  ///   \c ImplierFn must then be the callee.
   ///
-  /// Recursively add routine seq directives for all functions recorded by
-  /// \c addHostFunctionUse as used by \a User.
+  /// \c addRoutineDirImplier must not be called after
+  /// \c fullyDetermineImplicitRoutineDir for the same \p FD.
+  void addRoutineDirImplier(FunctionDecl *FD,
+                            ACCRoutineDeclAttr::PartitioningTy ParLevel,
+                            SourceLocation ImplierLoc, FunctionDecl *ImplierFn,
+                            OpenACCDirectiveKind ImplierConstruct) {
+    assert(!FD->getMostRecentDecl()->hasAttr<ACCRoutineDeclAttr>() &&
+           "expected function not to have routine directive already");
+    assert((isOpenACCComputeDirective(ImplierConstruct) ||
+            ImplierConstruct == ACCD_routine || ImplierConstruct == ACCD_loop ||
+            ImplierConstruct == ACCD_unknown) &&
+           "unexpected routine directive implier kind");
+    assert((ImplierFn || ImplierConstruct == ACCD_loop) &&
+           "expected function to be specified for specified implier kind");
+    FunctionEntryTy &Entry = Map[FD->getCanonicalDecl()];
+    if (Entry.ImplierLoc.isInvalid() || Entry.ParLevel < ParLevel) {
+      Entry.ImplierLoc = ImplierLoc;
+      Entry.ImplierFn = ImplierFn ? ImplierFn->getCanonicalDecl() : nullptr;
+      Entry.ImplierConstruct = ImplierConstruct;
+      Entry.ParLevel = ParLevel;
+    }
+  }
+
+  /// Fully determine routine directive for \p FD based on impliers previously
+  /// added by \c addRoutineDirImplier, or do nothing if none.
   ///
-  /// \c addImplicitRoutineSeqDir must be called at most once per function.
-  void addImplicitRoutineSeqDir(
-      FunctionDecl *FD, SourceLocation UseLoc, FunctionDecl *UserFn,
-      OpenACCDirectiveKind UserComputeConstruct) {
-    assert((isOpenACCComputeDirective(UserComputeConstruct) ||
-            UserComputeConstruct == ACCD_routine) &&
-           "expected use to be in compute construct or function with a routine "
-           "directive");
+  /// In the former case:
+  /// - Emit diagnostics that were previously recorded for \p FD by
+  ///   \c DiagIfRoutineDir.  \c emitNotesForRoutineDirChain is called for
+  ///   \p FD, so its preconditions must be met.
+  /// - Recursively add routine seq directives for all functions recorded by
+  ///   \c addHostFunctionUse as used by \p FD.
+  ///
+  /// \c fullyDetermineImplicitRoutineDir must be called at most once per \p FD.
+  void fullyDetermineImplicitRoutineDir(FunctionDecl *FD) {
     assert(!FD->getMostRecentDecl()->hasAttr<ACCRoutineDeclAttr>() &&
            "expected function not to have routine directive already");
     FunctionEntryTy &Entry = Map[FD->getCanonicalDecl()];
-    assert(Entry.UseLoc.isInvalid() &&
-           "unexpected second implicit routine seq directive for function");
+    if (Entry.ImplierLoc.isInvalid())
+      return;
+    ACCClause *ParLevelClause;
+    switch (Entry.ParLevel) {
+    case ACCRoutineDeclAttr::Seq:
+      ParLevelClause = SemaRef.ActOnOpenACCSeqClause(
+          ACC_IMPLICIT, SourceLocation(), SourceLocation());
+      break;
+    case ACCRoutineDeclAttr::Vector:
+      ParLevelClause = SemaRef.ActOnOpenACCVectorClause(
+          ACC_IMPLICIT, SourceLocation(), SourceLocation());
+      break;
+    case ACCRoutineDeclAttr::Worker:
+      ParLevelClause = SemaRef.ActOnOpenACCWorkerClause(
+          ACC_IMPLICIT, SourceLocation(), SourceLocation());
+      break;
+    case ACCRoutineDeclAttr::Gang:
+      ParLevelClause = SemaRef.ActOnOpenACCGangClause(
+          ACC_IMPLICIT, SourceLocation(), SourceLocation());
+      break;
+    }
     // Add the ACCRoutineDeclAttr to the most recent FunctionDecl for FD so that
     // it's inherited by any later FunctionDecl for FD and so that we see it in
     // the recursion check below, which examines the most recent FunctionDecl.
-    SemaRef.ActOnOpenACCRoutineDirective(
-      {SemaRef.ActOnOpenACCSeqClause(ACC_IMPLICIT, SourceLocation(),
-                                     SourceLocation())},
-      ACC_IMPLICIT, SourceLocation(), SourceLocation(),
-      DeclGroupRef(FD->getMostRecentDecl()));
-    Entry.UseLoc = UseLoc;
-    Entry.UserFn = UserFn->getCanonicalDecl();
-    Entry.UserComputeConstruct = UserComputeConstruct;
+    SemaRef.ActOnOpenACCRoutineDirective({ParLevelClause}, ACC_IMPLICIT,
+                                         SourceLocation(), SourceLocation(),
+                                         DeclGroupRef(FD->getMostRecentDecl()));
     for (auto Diag : Entry.Diags)
       emitRoutineDirDiag(FD, Diag.first, Diag.second);
     Entry.Diags.clear(); // don't need them anymore
     SmallVector<std::pair<FunctionDecl *, SourceLocation>> Uses;
-    // addImplicitRoutineSeqDir sometimes inserts a new entry into Map (above),
-    // so calling it could relocate the current Entry in memory and break any
-    // ongoing iteration over Entry.HostFunctionUses.  Thus, we move
+    // fullyDetermineImplicitRoutineDir sometimes inserts a new entry into Map
+    // (above), so calling it could relocate the current Entry in memory and
+    // break any ongoing iteration over Entry.HostFunctionUses.  Thus, we move
     // Entry.HostFunctionUses to local memory before iterating it below.  We
     // won't need Entry.HostFunctionUses again, so it's fine that it's destroyed
     // afterward.
@@ -869,19 +939,23 @@ public:
       Usee = Usee->getMostRecentDecl();
       if (Usee->hasAttr<ACCRoutineDeclAttr>())
         continue; // avoid infinite recursion
-      addImplicitRoutineSeqDir(Usee, UseeUseLoc, FD, ACCD_routine);
+      addRoutineDirImplier(Usee, ACCRoutineDeclAttr::Seq, UseeUseLoc, FD,
+                           ACCD_routine);
+      fullyDetermineImplicitRoutineDir(Usee);
     }
   }
 
-  /// Emit notes identifying the origin of the routine directive for \a FD.
-  /// If \a PreviousDir, then point out that it was a previous routine directive
+  /// Emit notes identifying the origin of the routine directive for \p FD.
+  /// If \p PreviousDir, then point out that it was a previous routine directive
   /// to contrast with a new routine directive.
   ///
-  /// If \a FD has an explicit routine directive, report it.  Otherwise, report
-  /// the first use of \a FD that implied its routine seq directive.  If that
-  /// use does not appear in a compute construct, recursively emit notes
-  /// identifying the origin of the routine directive for the function in which
-  /// the use appears.
+  /// If \p FD has an explicit routine directive, report it.  Otherwise, report
+  /// the original implier of the routine directive for \p FD with its current
+  /// level of parallelism.  If that implier is a use of \p FD in a function,
+  /// recursively emit notes identifying the origin of the routine directive for
+  /// the function in which the use appears.  If that implier is a function call
+  /// within the body of \p FD, recursively emit notes identifying the origin of
+  /// the routine directive for the function called.
   ///
   /// All routine directives in that chain must already be attached to the
   /// functions to which they apply, and all that are implicit must already be
@@ -902,30 +976,44 @@ public:
 
     // Handle implicit routine directive.
     const FunctionEntryTy &Entry = Map.lookup(FD->getCanonicalDecl());
-    assert(Entry.UseLoc.isValid() && Entry.UserFn &&
-           Entry.UserComputeConstruct != ACCD_unknown &&
-           "expected function to have implicit seq routine directive");
-    if (Entry.UserComputeConstruct == ACCD_routine) {
-      SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
-          << PreviousDir << NameForDiag(SemaRef, FD) << 1
-          << NameForDiag(SemaRef, Entry.UserFn);
-      emitNotesForRoutineDirChain(Entry.UserFn, /*PreviousDir=*/false);
+    assert(Entry.ImplierLoc.isValid() &&
+           "expected function to have implicit routine directive");
+    StringRef ParLevel =
+        ACCRoutineDeclAttr::ConvertPartitioningTyToStr(Attr->getPartitioning());
+    bool DefNotUse;
+    bool FnNotConstruct;
+    if (isOpenACCComputeDirective(Entry.ImplierConstruct)) {
+      DefNotUse = 0;
+      FnNotConstruct = 0;
+    } else if (Entry.ImplierConstruct == ACCD_routine) {
+      DefNotUse = 0;
+      FnNotConstruct = 1;
+    } else if (Entry.ImplierConstruct == ACCD_loop) {
+      DefNotUse = 1;
+      FnNotConstruct = 0;
+    } else if (Entry.ImplierConstruct == ACCD_unknown) {
+      DefNotUse = 1;
+      FnNotConstruct = 1;
     } else {
-      SemaRef.Diag(Entry.UseLoc, diag::note_acc_routine_seq_implicit)
-          << PreviousDir << NameForDiag(SemaRef, FD) << 0
-          << getOpenACCName(Entry.UserComputeConstruct);
+      llvm_unreachable("unexpected routine directive implier");
     }
-  }
-  /// Return the location of the use of this function that originally implied a
-  /// routine seq directive for this function, or return an invalid location if
-  /// no routine seq directive has been implied for this function yet.
-  SourceLocation getUseLoc(FunctionDecl *FD) const {
-    return Map.lookup(FD->getCanonicalDecl()).UseLoc;
+    {
+      Sema::SemaDiagnosticBuilder Diag =
+          SemaRef.Diag(Entry.ImplierLoc, diag::note_acc_routine_implicit)
+          << ParLevel << PreviousDir << NameForDiag(SemaRef, FD) << DefNotUse
+          << FnNotConstruct;
+      if (FnNotConstruct)
+        Diag << NameForDiag(SemaRef, Entry.ImplierFn);
+      else
+        Diag << getOpenACCName(Entry.ImplierConstruct);
+    }
+    if (FnNotConstruct)
+      emitNotesForRoutineDirChain(Entry.ImplierFn, /*PreviousDir=*/false);
   }
 
   /// A diagnostic for a function that is emitted either immediately if the
   /// function is already known to have a routine directive or later when a
-  /// routine seq directive is implied for it, if ever.  In either case, notes
+  /// routine directive is implied for it, if ever.  In either case, notes
   /// identifying the origin of the routine directive are emitted afterward
   /// unless the diagnostic itself is a note.
   ///
@@ -939,10 +1027,10 @@ public:
     bool *Emitted;
 
   public:
-    /// The diagnostic to be emitted is \a DiagID at \a DiagLoc for function
-    /// \a FD.
+    /// The diagnostic to be emitted is \p DiagID at \p DiagLoc for function
+    /// \p FD.
     ///
-    /// If \a Emitted is not \c nullptr, \a *Emitted is set to true or false
+    /// If \p Emitted is not \c nullptr, \p *Emitted is set to true or false
     /// upon destruction to indicate whether the diagnostic was emitted
     /// immediately.
     DiagIfRoutineDir(ImplicitRoutineDirInfoTy &ImplicitRoutineDirInfo,
@@ -964,8 +1052,6 @@ public:
         *Emitted = false;
       FunctionEntryTy &Entry =
           ImplicitRoutineDirInfo.Map[FD->getCanonicalDecl()];
-      assert(Entry.UseLoc.isInvalid() &&
-             "unexpected diagnostic after implicit routine directive");
       Entry.Diags.emplace_back(DiagLoc, *this);
     }
   };
@@ -1080,23 +1166,16 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
            "expected orphaned loop construct, atomic construct, and routine "
            "directive to be the only permitted OpenACC directives in function "
            "with routine directive");
-    // Proposed text for OpenACC after 3.2:
+    // Proposed text for OpenACC after 3.3:
     // "A procedure definition containing an orphaned loop construct must be in
-    // the scope of an explicit and applying routine directive."
+    // the scope of an explicit and applying routine directive if the procedure
+    // is not a C++ lambda."
     ACCRoutineDeclAttr *Attr = CurFnDecl->getAttr<ACCRoutineDeclAttr>();
-    if (RealDKind == ACCD_loop && (!Attr || !Attr->getLoc().isValid())) {
-      if (!isLambdaCallOperator(CurFnDecl)) {
-        Diag(StartLoc, diag::err_acc_routine_for_orphaned_loop)
-            << NameForDiag(*this, CurFnDecl);
-        return true;
-      }
-      Diag(StartLoc, diag::warn_acc_routine_for_orphaned_loop_for_cxx_lambda)
+    if (RealDKind == ACCD_loop && (!Attr || !Attr->getLoc().isValid()) &&
+        !isLambdaCallOperator(CurFnDecl)) {
+      Diag(StartLoc, diag::err_acc_routine_for_orphaned_loop)
           << NameForDiag(*this, CurFnDecl);
-      Diag(StartLoc, diag::note_acc_routine_cxx_lambda);
-      Diag(StartLoc, diag::note_acc_disable_diag)
-          << DiagnosticIDs::getWarningOptionForDiag(
-                 diag::
-                     warn_acc_routine_func_par_level_vs_no_explicit_for_cxx_lambda);
+      return true;
     }
     return false;
   }
@@ -1995,47 +2074,49 @@ bool Sema::StartOpenACCAssociatedStatement() {
     // Check any level-of-parallelism clause against any parent loop construct
     // or the enclosing function.
     ACCRoutineDeclAttr::PartitioningTy LoopLevel =
-        LoopKind.getMaxParallelismLevel();
-    if (LoopLevel != ACCRoutineDeclAttr::Seq) {
-      OpenACCDirectiveKind ParentDKind;
-      SourceLocation ParentLoopLoc;
-      ACCRoutineDeclAttr::PartitioningTy ParentLoopLevel =
-          OpenACCData->DirStack
-              .getAncestorLoopPartitioning(ParentDKind, ParentLoopLoc,
-                                           /*SkipCurrentDir=*/true)
-              .getMinParallelismLevel();
-      if (ParentLoopLevel != ACCRoutineDeclAttr::Seq) {
-        // There's a parent loop with a level-of-parallelism clause.  Complain
-        // if it's incompatible.
-        if (ParentLoopLevel <= LoopLevel) {
-          Diag(StartLoc, diag::err_acc_loop_loop_par_level)
-              << getOpenACCName(ParentDKind)
-              << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(ParentLoopLevel)
+        LoopKind.getMaxParLevelClause();
+    OpenACCDirectiveKind ParentDKind;
+    SourceLocation ParentLoopLoc;
+    ACCRoutineDeclAttr::PartitioningTy ParentLoopLevel =
+        OpenACCData->DirStack
+            .getAncestorLoopPartitioning(ParentDKind, ParentLoopLoc,
+                                         /*SkipCurrentDir=*/true)
+            .getMinParLevelClause();
+    bool RoutineDirImplier = false;
+    if (ParentLoopLevel != ACCRoutineDeclAttr::Seq) {
+      // There's a parent loop with a level-of-parallelism clause.  Complain
+      // if it's incompatible.
+      if (ParentLoopLevel <= LoopLevel) {
+        Diag(StartLoc, diag::err_acc_loop_loop_par_level)
+            << getOpenACCName(ParentDKind)
+            << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(ParentLoopLevel)
+            << getOpenACCName(DKind)
+            << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(LoopLevel);
+        Diag(ParentLoopLoc, diag::note_acc_enclosing_directive)
+            << getOpenACCName(ParentDKind);
+        ErrorFound = true;
+      }
+    } else if (!isOpenACCComputeDirective(DirStack.isInComputeRegion())) {
+      // We have an orphaned loop construct.  If there's no routine directive
+      // for the enclosing function, we already complained about that, or we
+      // will record the loop construct as a routine directive implier if the
+      // enclosing function is a lambda.  If there is a routine directive,
+      // complain if the level of parallelism is incompatible.
+      FunctionDecl *Fn = getCurFunctionDecl(/*AllowLambda=*/true);
+      assert(Fn && "expected acc loop to be in a function");
+      ACCRoutineDeclAttr *FnAttr = Fn->getAttr<ACCRoutineDeclAttr>();
+      if (FnAttr) {
+        ACCRoutineDeclAttr::PartitioningTy FnLevel = FnAttr->getPartitioning();
+        if (FnLevel < LoopLevel) {
+          Diag(StartLoc, diag::err_acc_loop_func_par_level)
+              << NameForDiag(*this, Fn)
+              << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(FnLevel)
               << getOpenACCName(DKind)
               << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(LoopLevel);
-          Diag(ParentLoopLoc, diag::note_acc_enclosing_directive)
-              << getOpenACCName(ParentDKind);
-          ErrorFound = true;
+          OpenACCData->ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Fn);
         }
-      } else if (!isOpenACCComputeDirective(DirStack.isInComputeRegion())) {
-        // We have an orphaned loop construct.  If there's no routine directive
-        // for the enclosing function, we already complained about that.  If
-        // there is, complain if the level of parallelism is incompatible.
-        FunctionDecl *Fn = getCurFunctionDecl(/*AllowLambda=*/true);
-        assert(Fn && "expected acc loop to be in a function");
-        ACCRoutineDeclAttr *FnAttr = Fn->getAttr<ACCRoutineDeclAttr>();
-        if (FnAttr) {
-          ACCRoutineDeclAttr::PartitioningTy FnLevel =
-              FnAttr->getPartitioning();
-          if (FnLevel < LoopLevel) {
-            Diag(StartLoc, diag::err_acc_loop_func_par_level)
-                << NameForDiag(*this, Fn)
-                << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(FnLevel)
-                << getOpenACCName(DKind)
-                << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(LoopLevel);
-            OpenACCData->ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Fn);
-          }
-        }
+      } else if (isLambdaCallOperator(Fn)) {
+        RoutineDirImplier = true;
       }
     }
 
@@ -2044,6 +2125,15 @@ bool Sema::StartOpenACCAssociatedStatement() {
     // independent is possible.
     if (LoopKind.hasAuto())
       LoopKind.setSeqComputed();
+
+    // Now that auto clause analysis is done, record any routine directive
+    // implier with the resulting level of parallelism.
+    if (RoutineDirImplier) {
+      FunctionDecl *Fn = getCurFunctionDecl(/*AllowLambda=*/true);
+      OpenACCData->ImplicitRoutineDirInfo.addRoutineDirImplier(
+          Fn, LoopKind.getMaxPartitioningLevel(), StartLoc,
+          /*ImplierFn=*/nullptr, ACCD_loop);
+    }
 
     // Record partitioning on stack.
     OpenACCData->DirStack.setLoopPartitioning(LoopKind,
@@ -2510,6 +2600,12 @@ void Sema::ActOnStartOfFunctionDefForOpenACC(FunctionDecl *FD) {
   if (OpenACCData->DirStack.getEffectiveDirective() == ACCD_routine)
     ActOnOpenACCRoutineDirective(ACC_EXPLICIT, DeclGroupRef(FD));
 }
+
+void Sema::ActOnFinishFunctionBodyForOpenACC(FunctionDecl *FD) {
+  if (isLambdaCallOperator(FD))
+    OpenACCData->ImplicitRoutineDirInfo.fullyDetermineImplicitRoutineDir(FD);
+}
+
 void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
                                       SourceLocation UseLoc) {
   if (OpenACCData->TransformingOpenACC || isa<CXXDeductionGuideDecl>(Usee))
@@ -2529,8 +2625,9 @@ void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,
     OpenACCDirectiveKind ComputeDKind = DirStack.isInComputeRegion();
     FunctionDecl *CurFD = getCurFunctionDecl(/*AllowLambda=*/true);
     if (ComputeDKind != ACCD_unknown) {
-      ImplicitRoutineDirInfo.addImplicitRoutineSeqDir(Usee, UseLoc, CurFD,
-                                                      ComputeDKind);
+      ImplicitRoutineDirInfo.addRoutineDirImplier(Usee, ACCRoutineDeclAttr::Seq,
+                                                  UseLoc, CurFD, ComputeDKind);
+      ImplicitRoutineDirInfo.fullyDetermineImplicitRoutineDir(Usee);
       return;
     }
     if (CurFD)
@@ -2583,7 +2680,7 @@ void Sema::ActOnFunctionCallForOpenACC(FunctionDecl *Callee,
       DirStack
           .getAncestorLoopPartitioning(LoopDirKind, LoopLoc,
                                        /*SkipCurrentDir=*/false)
-          .getMinParallelismLevel();
+          .getMinParLevelClause();
   if (LoopPart != ACCRoutineDeclAttr::Seq) {
     if (LoopPart <= CalleePart) {
       Diag(CallLoc, diag::err_acc_routine_loop_par_level)
@@ -2626,29 +2723,22 @@ void Sema::ActOnFunctionCallForOpenACC(FunctionDecl *Callee,
   ACCRoutineDeclAttr *CallerAttr = Caller->getAttr<ACCRoutineDeclAttr>();
   if (!CallerAttr) {
     if (CalleePart > ACCRoutineDeclAttr::Seq) {
-      // We report that Caller has no explicit routine directive.  That's true,
-      // and an explicit routine directive is required to enable the required
-      // level of parallelism.  However, if an implicit routine seq has already
-      // been implied for Caller, we report the mismatched level of parallelism
-      // at the next diagnostic even though this diagnostic's wording would
-      // cover that case too.
-      if (!isLambdaCallOperator(Caller)) {
+      // If Caller is a lambda, we record the call as a routine directive
+      // implier.  Otherwise, we report that Caller has no explicit routine
+      // directive.  That's true, and an explicit routine directive is required
+      // to enable the required level of parallelism.  However, if an implicit
+      // routine seq has already been implied for Caller, we report the
+      // mismatched level of parallelism at the next diagnostic even though this
+      // diagnostic's wording would cover that case too.
+      if (isLambdaCallOperator(Caller)) {
+        ImplicitRoutineDirInfo.addRoutineDirImplier(
+            Caller, CalleePart, CallLoc, Callee,
+            /*ImplierConstruct=*/ACCD_unknown);
+      } else {
         Diag(CallLoc, diag::err_acc_routine_func_par_level_vs_no_explicit)
             << NameForDiag(*this, Caller) << NameForDiag(*this, Callee)
             << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
         ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Callee);
-      } else {
-        Diag(
-            CallLoc,
-            diag::warn_acc_routine_func_par_level_vs_no_explicit_for_cxx_lambda)
-            << NameForDiag(*this, Caller) << NameForDiag(*this, Callee)
-            << ACCRoutineDeclAttr::ConvertPartitioningTyToStr(CalleePart);
-        ImplicitRoutineDirInfo.emitNotesForRoutineDirChain(Callee);
-        Diag(CallLoc, diag::note_acc_routine_cxx_lambda);
-        Diag(CallLoc, diag::note_acc_disable_diag)
-            << DiagnosticIDs::getWarningOptionForDiag(
-                   diag::
-                       warn_acc_routine_func_par_level_vs_no_explicit_for_cxx_lambda);
       }
     }
     return;
@@ -4390,10 +4480,10 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
     Res = ActOnOpenACCGangClause(ACC_EXPLICIT, StartLoc, EndLoc);
     break;
   case ACCC_worker:
-    Res = ActOnOpenACCWorkerClause(StartLoc, EndLoc);
+    Res = ActOnOpenACCWorkerClause(ACC_EXPLICIT, StartLoc, EndLoc);
     break;
   case ACCC_vector:
-    Res = ActOnOpenACCVectorClause(StartLoc, EndLoc);
+    Res = ActOnOpenACCVectorClause(ACC_EXPLICIT, StartLoc, EndLoc);
     break;
   case ACCC_async:
     Res = ActOnOpenACCAsyncClause(/*AsyncArg=*/nullptr, StartLoc,
@@ -4489,14 +4579,16 @@ ACCClause *Sema::ActOnOpenACCGangClause(SourceLocation StartLoc,
                                      StaticColonLoc, StaticArg, EndLoc);
 }
 
-ACCClause *Sema::ActOnOpenACCWorkerClause(SourceLocation StartLoc,
+ACCClause *Sema::ActOnOpenACCWorkerClause(OpenACCDetermination Determination,
+                                          SourceLocation StartLoc,
                                           SourceLocation EndLoc) {
-  return new (Context) ACCWorkerClause(StartLoc, EndLoc);
+  return new (Context) ACCWorkerClause(Determination, StartLoc, EndLoc);
 }
 
-ACCClause *Sema::ActOnOpenACCVectorClause(SourceLocation StartLoc,
+ACCClause *Sema::ActOnOpenACCVectorClause(OpenACCDetermination Determination,
+                                          SourceLocation StartLoc,
                                           SourceLocation EndLoc) {
-  return new (Context) ACCVectorClause(StartLoc, EndLoc);
+  return new (Context) ACCVectorClause(Determination, StartLoc, EndLoc);
 }
 
 ACCClause *Sema::ActOnOpenACCNumGangsClause(Expr *NumGangs,

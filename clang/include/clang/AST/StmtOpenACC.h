@@ -701,7 +701,7 @@ public:
   /// Return either gang, worker, or vector (in that order of preference) if the
   /// loop has that clause.  Otherwise, return seq (which does not indicate the
   /// loop necessarily has a seq clause).
-  ACCRoutineDeclAttr::PartitioningTy getMaxParallelismLevel() const {
+  ACCRoutineDeclAttr::PartitioningTy getMaxParLevelClause() const {
     if (hasGangClause())
       return ACCRoutineDeclAttr::Gang;
     if (hasWorkerClause())
@@ -713,7 +713,7 @@ public:
   /// Return either vector, worker, or gang (in that order of preference) if the
   /// loop has that clause.  Otherwise, return seq (which does not indicate the
   /// loop necessarily has a seq clause).
-  ACCRoutineDeclAttr::PartitioningTy getMinParallelismLevel() const {
+  ACCRoutineDeclAttr::PartitioningTy getMinParLevelClause() const {
     if (hasVectorClause())
       return ACCRoutineDeclAttr::Vector;
     if (hasWorkerClause())
@@ -732,6 +732,18 @@ public:
   /// Does the loop have vector partitioning?  Must not be called before
   /// converting any auto clause to seq or independent.
   bool hasVectorPartitioning() const { return hasPartitioning(Vector); }
+  /// Return either gang, worker, or vector (in that order of preference) if the
+  /// loop has that level of partitioning.  Otherwise, return seq.  Must not be
+  /// called before converting any auto clause to seq or independent.
+  ACCRoutineDeclAttr::PartitioningTy getMaxPartitioningLevel() const {
+    if (hasGangPartitioning())
+      return ACCRoutineDeclAttr::Gang;
+    if (hasWorkerPartitioning())
+      return ACCRoutineDeclAttr::Worker;
+    if (hasVectorPartitioning())
+      return ACCRoutineDeclAttr::Vector;
+    return ACCRoutineDeclAttr::Seq;
+  }
 };
 
 /// This represents '#pragma acc loop' directive.

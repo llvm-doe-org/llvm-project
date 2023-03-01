@@ -93,15 +93,8 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
           might wish to disable the warning entirely with
           `-Wno-openacc-and-cxx`.
     * `-Wopenacc-routine-cxx-lambda`
-        * Warns when a C++ lambda without an explicit `routine` directive
-          contains an orphaned loop construct or a call to a non-seq function.
-        * This warning is an error by default.  If you have manually verified
-          level-of-parallelism compatibility for lambdas, you can safely disable
-          the warning entirely with `-Wno-openacc-routine-cxx-lambda`.
-        * Unlike other functions, for which this diagnostic is always an error,
-          lambdas do not currently support explicit `routine` directives.  The
-          option to disable this diagnostic for lambdas will be removed in the
-          future when `routine` directive support for lambdas has improved.
+        * This option is deprecated and is a no-op now that implicit `routine`
+          directives are computed for C++ lambdas based on their bodies.
 * Options that enable incomplete or "fake" support for specific OpenACC features
   that Clacc does not yet fully support
     * Commonalities
@@ -510,7 +503,7 @@ Run-Time Environment Variables
         * A special case of this diagnostic is produced if a function's level of
           parallelism is `gang`, `worker`, or `vector` and if a call to it
           appears in host-only code.
-            * In C, host-only code is any code outside of any compute or loop
+            * In C, host-only code is any code outside of any compute or `loop`
               construct and within a function that has no `routine` directive.
             * In C++, host-only code also includes code executed at file scope.
             * In these cases, the call site can execute only outside compute
@@ -526,6 +519,9 @@ Run-Time Environment Variables
       `routine` directive applies to that function.
     * A declaration containing multiple declarators is not supported.
       For example, `void foo(), bar();`.
+    * A C++ lambda definition is not currently supported.  However, implicit
+      `routine` directives are computed based on a lambda's body, as described
+      below.
 * Scope of the directive
     * A `routine` directive's scope starts at the `routine` directive and ends
       at the end of the compilation unit.  Of course, its visibility is only
@@ -549,11 +545,6 @@ Run-Time Environment Variables
       compile-time error diagnostic is produced.  Uses include host
       uses and accelerator uses but only if they're evaluated (e.g., a
       reference in `sizeof` is not a use).
-    * OpenACC 3.2 is not clear about the required locations of definitions and
-      uses of a function relative to applying `routine` directives.
-      Clarifications consistent with the above rules (except the caveat) are
-      under discussion among the OpenACC technical committee for inclusion in
-      the OpenACC spec after 3.2.
 * Body of the associated function's definition
     * Appearance of any OpenACC directive other than an orphaned `loop`
       construct, an `atomic` construct, or a `routine` directive produces a
@@ -562,11 +553,12 @@ Run-Time Environment Variables
       parallelism produces a compile-time error diagnostic.
     * Declaration of a static local variable produces a compile-time
       error diagnostic.
-* Implicit `routine seq` directive
-    * Unless a function has an explicit `routine` directive in scope,
-      a `routine seq` directive is implied for it by any use of the
-      function within a compute construct or within another function
-      with a `routine` directive (whether implicit or explicit).  Caveat:
+* Implicit `routine` directive
+    * Unless a function has an explicit `routine` directive in scope or has an
+      implicit `routine` directive based on its body as described below, a
+      `routine seq` directive is implied for it by any use of the function
+      within a compute construct or within another function with a `routine`
+      directive (whether implicit or explicit).  Caveats:
         * Currently, if a function *x* is defined in a compilation unit, if the
           only use of *x* within that compilation unit appears in an inline
           function *y* (e.g., *y* might be a member function defined within a
@@ -574,9 +566,31 @@ Run-Time Environment Variables
           definition of *x* will not be compiled for accelerators as expected.
           This behavior is inherited from Clang's current `omp declare target`
           behavior, and Clacc currently does not diagnose it.
-    * An implicit `routine seq` directive has scope throughout the compilation
-      unit and thus triggers the above diagnostics for the function definition's
-      body as long it's in the same compilation unit.  Caveat:
+    * An implicit `routine` directive is implied for a C++ lambda if the
+      lambda's body encloses, outside any enclosed compute construct or other
+      lambda's body, either (1) a call to another function with a `routine`
+      directive (whether implicit or explicit) with a `gang`, `worker`, or
+      `vector` clause, or (2) a `loop` construct.  The level of parallelism
+      clause on the implicit `routine` directive is the highest level of
+      parallelism from such enclosed calls or `loop` constructs.  Caveats:
+        * OpenACC 3.3 does not specify implicit `routine` directives based on
+          the bodies of C++ lambdas.  A proposal is under discussion among the
+          OpenACC technical committee for inclusion in the OpenACC spec after
+          3.3.
+        * Currently, for one of the aforementioned `loop` constructs, any
+          conversion of `auto` to `seq` is performed before the implicit
+          `routine` directive is computed for the lambda, and thus the implied
+          level of parallelism from that `loop` construct is `seq`.  This
+          behavior could change based on committee discussions.
+        * Currently, implicit `gang` clauses on the aforementioned `loop`
+          constructs are not implemented, but they might be implemented in the
+          future based on committee discussions.  They will likely be computed
+          after the implicit `routine` directive on the lambda and thus only if
+          the lambda body contains other such calls or `loop` constructs with
+          gang parallelism.
+    * An implicit `routine` directive has scope throughout the compilation unit
+      and thus triggers the above diagnostics for the function definition's body
+      as long it's in the same compilation unit.  Caveat:
         * If the function to which an implicit `routine` directive applies is
           prototyped within the same function in which the implying use appears,
           the visibility of the implicit `routine` directive might be limited in
@@ -584,10 +598,6 @@ Run-Time Environment Variables
           a function.
         * As for the explicit `routine` directive, such usage is confusing
           anyway and appears to be uncommon.
-    * OpenACC 3.2 does not specify implicit `routine` directives
-      except for C++ lambdas, but nvc 21.11 computes them.
-      Clarifications are under discussion among the OpenACC technical
-      committee for inclusion in the OpenACC spec after 3.2.
 * C++ function uses and calls
     * For all behavior described above for function uses and calls, both
       explicit and implicit function calls in C++ are included.

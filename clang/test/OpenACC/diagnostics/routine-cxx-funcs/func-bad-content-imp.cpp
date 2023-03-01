@@ -25,5 +25,6 @@
 #define USER_USER_ROUTINE_DIR _Pragma("acc routine seq")
 #define USER_LOOP_DIR _Pragma("acc loop seq")
 #define USER_LOOP_ROUTINE_DIR _Pragma("acc routine seq")
+#define INCLUDE_LAMBDA_USES 1
 #include "users.inc" // routine directives implied (usually multiple times, but
                      // we don't care which ones), triggering recorded diags

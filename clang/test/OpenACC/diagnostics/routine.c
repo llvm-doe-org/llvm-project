@@ -540,7 +540,7 @@ void inOwnFuncNoParLevelConflict() {
 void impSeqExpGang();
 void impSeqExpGang_use() {
   // expected-note@+3 {{use of function 'impSeqExpGang' appears here}}
-  // expected-note@+2 {{'#pragma acc routine seq' previously implied for function 'impSeqExpGang' by use in construct '#pragma acc parallel' here}}
+  // expected-note@+2 {{'#pragma acc routine seq' previously implied for function 'impSeqExpGang' by its use in construct '#pragma acc parallel' here}}
   #pragma acc parallel
   impSeqExpGang();
 }
@@ -554,7 +554,7 @@ void impSeqExpWorker_use() {
   #pragma acc parallel loop
   for (int i = 0; i < 5; ++i) {
     // expected-note@+2 {{use of function 'impSeqExpWorker' appears here}}
-    // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'impSeqExpWorker' by use in construct '#pragma acc parallel loop' here}}
+    // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'impSeqExpWorker' by its use in construct '#pragma acc parallel loop' here}}
     impSeqExpWorker();
   }
 }
@@ -568,7 +568,7 @@ void impSeqExpVector();
 #pragma acc routine seq
 void impSeqExpVector_use() {
   // expected-note@+2 {{use of function 'impSeqExpVector' appears here}}
-  // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'impSeqExpVector' by use in function 'impSeqExpVector_use' here}}
+  // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'impSeqExpVector' by its use in function 'impSeqExpVector_use' here}}
   impSeqExpVector();
 }
 // expected-error@+2 {{first '#pragma acc routine' for function 'impSeqExpVector' not in scope at some uses}}
@@ -721,12 +721,12 @@ struct AssociatedDeclIsType {
 //------------------------------------------------------------------------------
 // Restrictions on location of function definition and uses.
 //
-// Proposed text for OpenACC after 3.2:
-// - "In C and C++, a routine directive's scope starts at the routine directive
-//   and ends at the end of the compilation unit."
-// - "In C and C++, a definition or use of a procedure must appear within the
-//   scope of at least one explicit and applying routine directive if any
-//   appears in the same compilation unit."
+// OpenACC 3.3, sec. 2.15.1 "Routine Directive", L3099-3102:
+// "In C and C++, a definition or use of a procedure must appear within the
+// scope of at least one explicit and applying routine directive if any appears
+// in the same compilation unit.  An explicit routine directive's scope is from
+// the directive to the end of the compilation unit."
+//
 // Uses include host uses and accelerator uses but only if they're evaluated
 // (e.g., a reference in sizeof is not a use).
 //------------------------------------------------------------------------------
@@ -1250,7 +1250,7 @@ void dirUnderDiscardedRoutineDir() {
 void parUseBeforeDef();
 void parUseBeforeDef_use() {
   #pragma acc parallel
-  // expected-note@+1 11 {{'#pragma acc routine seq' implied for function 'parUseBeforeDef' by use in construct '#pragma acc parallel' here}}
+  // expected-note@+1 11 {{'#pragma acc routine seq' implied for function 'parUseBeforeDef' by its use in construct '#pragma acc parallel' here}}
   parUseBeforeDef();
 }
 void parUseBeforeDef() {
@@ -1339,7 +1339,7 @@ void parUseAfterDef() {
 }
 void parUseAfterDef_use() {
   #pragma acc parallel
-  // expected-note@+1 11 {{'#pragma acc routine seq' implied for function 'parUseAfterDef' by use in construct '#pragma acc parallel' here}}
+  // expected-note@+1 11 {{'#pragma acc routine seq' implied for function 'parUseAfterDef' by its use in construct '#pragma acc parallel' here}}
   parUseAfterDef();
 }
 
@@ -1356,7 +1356,7 @@ void parUseInDef() {
     ;
   // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'parUseInDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc parallel
-  // expected-note@+1 5 {{'#pragma acc routine seq' implied for function 'parUseInDef' by use in construct '#pragma acc parallel' here}}
+  // expected-note@+1 5 {{'#pragma acc routine seq' implied for function 'parUseInDef' by its use in construct '#pragma acc parallel' here}}
   parUseInDef();
   // expected-error@+1 {{static local variable 'sAfter' is not permitted within function 'parUseInDef' because the latter is attributed with '#pragma acc routine'}}
   static int sAfter;
@@ -1374,7 +1374,7 @@ void parLoopUseBeforeDef();
 void parLoopUseBeforeDef_use() {
   #pragma acc parallel loop
   for (int i = 0; i < 5; ++i) {
-    // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'parLoopUseBeforeDef' by use in construct '#pragma acc parallel loop' here}}
+    // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'parLoopUseBeforeDef' by its use in construct '#pragma acc parallel loop' here}}
     parLoopUseBeforeDef();
   }
 }
@@ -1404,7 +1404,7 @@ void parLoopUseAfterDef() {
 void parLoopUseAfterDef_use() {
   #pragma acc parallel loop
   for (int i = 0; i < 5; ++i) {
-    // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'parLoopUseAfterDef' by use in construct '#pragma acc parallel loop' here}}
+    // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'parLoopUseAfterDef' by its use in construct '#pragma acc parallel loop' here}}
     parLoopUseAfterDef();
   }
 }
@@ -1422,7 +1422,7 @@ void parLoopUseInDef() {
     ;
   // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'parLoopUseInDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc parallel
-  // expected-note@+1 5 {{'#pragma acc routine seq' implied for function 'parLoopUseInDef' by use in construct '#pragma acc parallel' here}}
+  // expected-note@+1 5 {{'#pragma acc routine seq' implied for function 'parLoopUseInDef' by its use in construct '#pragma acc parallel' here}}
   parLoopUseInDef();
   // expected-error@+1 {{static local variable 'sAfter' is not permitted within function 'parLoopUseInDef' because the latter is attributed with '#pragma acc routine'}}
   static int sAfter;
@@ -1440,7 +1440,7 @@ void expOffFnUseBeforeDef();
 // expected-note@+1 2 {{'#pragma acc routine' for function 'expOffFnUseBeforeDef_use' appears here}}
 #pragma acc routine seq
 void expOffFnUseBeforeDef_use() {
-  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'expOffFnUseBeforeDef' by use in function 'expOffFnUseBeforeDef_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'expOffFnUseBeforeDef' by its use in function 'expOffFnUseBeforeDef_use' here}}
   expOffFnUseBeforeDef();
 }
 void expOffFnUseBeforeDef() {
@@ -1469,7 +1469,7 @@ void expOffFnUseAfterDef() {
 // expected-note@+1 2 {{'#pragma acc routine' for function 'expOffFnUseAfterDef_use' appears here}}
 #pragma acc routine seq
 void expOffFnUseAfterDef_use() {
-  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'expOffFnUseAfterDef' by use in function 'expOffFnUseAfterDef_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'expOffFnUseAfterDef' by its use in function 'expOffFnUseAfterDef_use' here}}
   expOffFnUseAfterDef();
 }
 
@@ -1480,11 +1480,11 @@ void impOffFnUseBeforeDef_use();
 // expected-note@+1 2 {{'#pragma acc routine' for function 'impOffFnUseBeforeDef_use_use' appears here}}
 #pragma acc routine seq
 void impOffFnUseBeforeDef_use_use() {
-  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'impOffFnUseBeforeDef_use' by use in function 'impOffFnUseBeforeDef_use_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'impOffFnUseBeforeDef_use' by its use in function 'impOffFnUseBeforeDef_use_use' here}}
   impOffFnUseBeforeDef_use();
 }
 void impOffFnUseBeforeDef_use() {
-  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'impOffFnUseBeforeDef' by use in function 'impOffFnUseBeforeDef_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'impOffFnUseBeforeDef' by its use in function 'impOffFnUseBeforeDef_use' here}}
   impOffFnUseBeforeDef();
 }
 void impOffFnUseBeforeDef() {
@@ -1502,13 +1502,13 @@ void impOffFnUseBeforeDef() {
 // chain.
 void chainedImpOffFnUseBeforeDef();
 void chainedImpOffFnUseBeforeDef_use() {
-  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseBeforeDef' by use in function 'chainedImpOffFnUseBeforeDef_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseBeforeDef' by its use in function 'chainedImpOffFnUseBeforeDef_use' here}}
   chainedImpOffFnUseBeforeDef();
 }
 // expected-note@+1 2 {{'#pragma acc routine' for function 'chainedImpOffFnUseBeforeDef_use_use' appears here}}
 #pragma acc routine seq
 void chainedImpOffFnUseBeforeDef_use_use() {
-  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseBeforeDef_use' by use in function 'chainedImpOffFnUseBeforeDef_use_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseBeforeDef_use' by its use in function 'chainedImpOffFnUseBeforeDef_use_use' here}}
   chainedImpOffFnUseBeforeDef_use();
 }
 void chainedImpOffFnUseBeforeDef() {
@@ -1538,11 +1538,11 @@ void impOffFnUseAfterDef_use();
 // expected-note@+1 2 {{'#pragma acc routine' for function 'impOffFnUseAfterDef_use_use' appears here}}
 #pragma acc routine seq
 void impOffFnUseAfterDef_use_use() {
-  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'impOffFnUseAfterDef_use' by use in function 'impOffFnUseAfterDef_use_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'impOffFnUseAfterDef_use' by its use in function 'impOffFnUseAfterDef_use_use' here}}
   impOffFnUseAfterDef_use();
 }
 void impOffFnUseAfterDef_use() {
-  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'impOffFnUseAfterDef' by use in function 'impOffFnUseAfterDef_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'impOffFnUseAfterDef' by its use in function 'impOffFnUseAfterDef_use' here}}
   impOffFnUseAfterDef();
 }
 
@@ -1559,13 +1559,13 @@ void chainedImpOffFnUseAfterDef() {
     ;
 }
 void chainedImpOffFnUseAfterDef_use() {
-  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseAfterDef' by use in function 'chainedImpOffFnUseAfterDef_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseAfterDef' by its use in function 'chainedImpOffFnUseAfterDef_use' here}}
   chainedImpOffFnUseAfterDef();
 }
 // expected-note@+1 2 {{'#pragma acc routine' for function 'chainedImpOffFnUseAfterDef_use_use' appears here}}
 #pragma acc routine seq
 void chainedImpOffFnUseAfterDef_use_use() {
-  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseAfterDef_use' by use in function 'chainedImpOffFnUseAfterDef_use_use' here}}
+  // expected-note@+1 2 {{'#pragma acc routine seq' implied for function 'chainedImpOffFnUseAfterDef_use' by its use in function 'chainedImpOffFnUseAfterDef_use_use' here}}
   chainedImpOffFnUseAfterDef_use();
 }
 
@@ -1574,7 +1574,7 @@ void chainedImpOffFnUseAfterDef_use_use() {
 // sure the mid-stream addition of the routine directive doesn't break either.
 void indirectParUseInDef();
 void indirectParUseInDef_use() {
-  // expected-note@+1 5 {{'#pragma acc routine seq' implied for function 'indirectParUseInDef' by use in function 'indirectParUseInDef_use' here}}
+  // expected-note@+1 5 {{'#pragma acc routine seq' implied for function 'indirectParUseInDef' by its use in function 'indirectParUseInDef_use' here}}
   indirectParUseInDef();
 }
 void indirectParUseInDef() {
@@ -1588,7 +1588,7 @@ void indirectParUseInDef() {
     ;
   // expected-error@+1 {{'#pragma acc parallel' is not permitted within function 'indirectParUseInDef' because the latter is attributed with '#pragma acc routine'}}
   #pragma acc parallel
-  // expected-note@+1 5 {{'#pragma acc routine seq' implied for function 'indirectParUseInDef_use' by use in construct '#pragma acc parallel' here}}
+  // expected-note@+1 5 {{'#pragma acc routine seq' implied for function 'indirectParUseInDef_use' by its use in construct '#pragma acc parallel' here}}
   indirectParUseInDef_use(); // routine directive added to current function here
   // expected-error@+1 {{static local variable 'sAfter' is not permitted within function 'indirectParUseInDef' because the latter is attributed with '#pragma acc routine'}}
   static int sAfter;
@@ -2889,7 +2889,7 @@ void dupStaticDiagBeforeRoutineDir() {
   }
 }
 void dupStaticDiagBeforeRoutineDir_use() {
-  // expected-note@+2 7 {{'#pragma acc routine seq' implied for function 'dupStaticDiagBeforeRoutineDir' by use in construct '#pragma acc parallel' here}}
+  // expected-note@+2 7 {{'#pragma acc routine seq' implied for function 'dupStaticDiagBeforeRoutineDir' by its use in construct '#pragma acc parallel' here}}
   #pragma acc parallel
   dupStaticDiagBeforeRoutineDir();
 }
@@ -2979,7 +2979,7 @@ void dupParLevelDiagBeforeRoutineDir_user() {
   }
 }
 void dupParLevelDiagBeforeRoutineDir_user_user() {
-  // expected-note@+2 3 {{'#pragma acc routine seq' implied for function 'dupParLevelDiagBeforeRoutineDir_user' by use in construct '#pragma acc parallel' here}}
+  // expected-note@+2 3 {{'#pragma acc routine seq' implied for function 'dupParLevelDiagBeforeRoutineDir_user' by its use in construct '#pragma acc parallel' here}}
   #pragma acc parallel
   dupParLevelDiagBeforeRoutineDir_user();
 }

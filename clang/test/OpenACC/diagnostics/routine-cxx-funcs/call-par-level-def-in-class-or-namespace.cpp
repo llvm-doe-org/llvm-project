@@ -22,4 +22,5 @@
 #define USER_USER_ROUTINE_DIR _Pragma("acc routine vector")
 #define USER_LOOP_DIR _Pragma("acc loop worker")
 #define USER_LOOP_ROUTINE_DIR _Pragma("acc routine worker")
+#define INCLUDE_LAMBDA_USES 1
 #include "users.inc" // diagnostics reported here

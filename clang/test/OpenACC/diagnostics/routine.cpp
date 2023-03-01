@@ -16,6 +16,24 @@
 #define CONCAT2(X, Y) CONCAT(X, Y)
 #define CONCAT(X, Y) X##Y
 
+#pragma acc routine gang // #gangFn_routine
+void gangFn() {}
+auto gangLambda = []() { gangFn(); }; // #gangLambda_call_gangFn
+#pragma acc routine worker // #workerFn_routine
+void workerFn() {}
+auto workerLambda = []() { workerFn(); }; // #workerLambda_call_workerFn
+#pragma acc routine vector // #vectorFn_routine
+void vectorFn() {}
+auto vectorLambda = []() { vectorFn(); }; // #vectorLambda_call_vectorFn
+#pragma acc routine seq
+void seqFn() {}
+void impSeqFn() {}
+void UNIQUE_NAME() {
+  #pragma acc parallel
+  impSeqFn();
+}
+auto seqLambda = []() { seqFn(); };
+
 // noacc-no-diagnostics
 
 //------------------------------------------------------------------------------
@@ -191,10 +209,10 @@ class ParLevelConflictForClassImpExp {
     #pragma acc parallel
     {
       // expected-note@+2 {{use of function 'ParLevelConflictForClassImpExp::declUseOnDef' appears here}}
-      // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForClassImpExp::declUseOnDef' by use in construct '#pragma acc parallel' here}}
+      // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForClassImpExp::declUseOnDef' by its use in construct '#pragma acc parallel' here}}
       declUseOnDef();
       // expected-note@+2 {{use of function 'ParLevelConflictForClassImpExp::useDeclOnDef' appears here}}
-      // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForClassImpExp::useDeclOnDef' by use in construct '#pragma acc parallel' here}}
+      // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForClassImpExp::useDeclOnDef' by its use in construct '#pragma acc parallel' here}}
       useDeclOnDef();
     }
   }
@@ -216,7 +234,7 @@ struct ParLevelConflictForStructImpExp {
   void declUseOnDef();
   void user() {
     // expected-note@+3 {{use of function 'ParLevelConflictForStructImpExp::declUseOnDef' appears here}}
-    // expected-note@+2 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForStructImpExp::declUseOnDef' by use in construct '#pragma acc parallel' here}}
+    // expected-note@+2 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForStructImpExp::declUseOnDef' by its use in construct '#pragma acc parallel' here}}
     #pragma acc parallel
     declUseOnDef();
   }
@@ -235,16 +253,16 @@ namespace ParLevelConflictForNamespaceImpExp {
     #pragma acc parallel
     {
       // expected-note@+2 {{use of function 'ParLevelConflictForNamespaceImpExp::declUseOnInnerDecl' appears here}}
-      // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForNamespaceImpExp::declUseOnInnerDecl' by use in construct '#pragma acc parallel' here}}
+      // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForNamespaceImpExp::declUseOnInnerDecl' by its use in construct '#pragma acc parallel' here}}
       declUseOnInnerDecl();
       // expected-note@+2 {{use of function 'ParLevelConflictForNamespaceImpExp::declUseOnOuterDecl' appears here}}
-      // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForNamespaceImpExp::declUseOnOuterDecl' by use in construct '#pragma acc parallel' here}}
+      // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForNamespaceImpExp::declUseOnOuterDecl' by its use in construct '#pragma acc parallel' here}}
       declUseOnOuterDecl();
       // expected-note@+2 {{use of function 'ParLevelConflictForNamespaceImpExp::declUseOnInnerDef' appears here}}
-      // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForNamespaceImpExp::declUseOnInnerDef' by use in construct '#pragma acc parallel' here}}
+      // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForNamespaceImpExp::declUseOnInnerDef' by its use in construct '#pragma acc parallel' here}}
       declUseOnInnerDef();
       // expected-note@+2 {{use of function 'ParLevelConflictForNamespaceImpExp::declUseOnOuterDef' appears here}}
-      // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForNamespaceImpExp::declUseOnOuterDef' by use in construct '#pragma acc parallel' here}}
+      // expected-note@+1 {{'#pragma acc routine seq' previously implied for function 'ParLevelConflictForNamespaceImpExp::declUseOnOuterDef' by its use in construct '#pragma acc parallel' here}}
       declUseOnOuterDef();
     }
   }
@@ -339,6 +357,33 @@ namespace UNIQUE_NAME {
   // expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
   #pragma acc routine seq
   ;
+}
+
+//..............................................................................
+// Lambdas currently don't support explicit routine directives.  Check that the
+// diagnostics don't crash.
+
+// expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
+#pragma acc routine seq
+auto expRoutineDirOnLambda = [](){};
+
+void UNIQUE_NAME() {
+  // expected-error@+1 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
+  #pragma acc routine seq
+  [](){} // expected-error {{expected unqualified-id}}
+        (); // expected-error {{expected expression}}
+}
+
+template <typename LambdaTy>
+void fnAcceptingLambda(LambdaTy lambda) { lambda(); }
+
+void UNIQUE_NAME() {
+  fnAcceptingLambda(
+    // expected-error@+2 {{'#pragma acc routine' must be followed by a lone function prototype or definition}}
+    // expected-error@+1 {{expected expression}}
+    #pragma acc routine seq
+    [](){} // expected-error {{expected unqualified-id}}
+          ); // expected-error {{expected expression}}
 }
 
 //------------------------------------------------------------------------------
@@ -802,46 +847,46 @@ struct ImpAccRoutineNoteForClass {
 
   int operator[](int) const {
     // expected-error@+3 {{static local variable 'x' is not permitted within function 'ImpAccRoutineNoteForClass::operator[]' because the latter is attributed with '#pragma acc routine'}}
-    // expected-note@#ImpAccRoutineNoteForClass_opSubscript_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::operator[]' by use in function 'ImpAccRoutineNoteForClass::operator()' here}}
+    // expected-note@#ImpAccRoutineNoteForClass_opSubscript_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::operator[]' by its use in function 'ImpAccRoutineNoteForClass::operator()' here}}
     // expected-note@#ImpAccRoutineNoteForClass_opCall_routine {{'#pragma acc routine' for function 'ImpAccRoutineNoteForClass::operator()' appears here}}
     static int x;
     return 0;
   }
   int *begin() const {
     // expected-error@+3 {{static local variable 'x' is not permitted within function 'ImpAccRoutineNoteForClass::begin' because the latter is attributed with '#pragma acc routine'}}
-    // expected-note@#ImpAccRoutineNoteForClass_rangeBasedLoop_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::begin' by use in function 'ImpAccRoutineNoteForClass::operator()' here}}
+    // expected-note@#ImpAccRoutineNoteForClass_rangeBasedLoop_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::begin' by its use in function 'ImpAccRoutineNoteForClass::operator()' here}}
     // expected-note@#ImpAccRoutineNoteForClass_opCall_routine {{'#pragma acc routine' for function 'ImpAccRoutineNoteForClass::operator()' appears here}}
     static int x;
     return nullptr;
   }
   int *end() const {
     // expected-error@+3 {{static local variable 'x' is not permitted within function 'ImpAccRoutineNoteForClass::end' because the latter is attributed with '#pragma acc routine'}}
-    // expected-note@#ImpAccRoutineNoteForClass_rangeBasedLoop_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::end' by use in function 'ImpAccRoutineNoteForClass::operator()' here}}
+    // expected-note@#ImpAccRoutineNoteForClass_rangeBasedLoop_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::end' by its use in function 'ImpAccRoutineNoteForClass::operator()' here}}
     // expected-note@#ImpAccRoutineNoteForClass_opCall_routine {{'#pragma acc routine' for function 'ImpAccRoutineNoteForClass::operator()' appears here}}
     static int x;
     return nullptr;
   }
   ImpAccRoutineNoteForClass() {
     // expected-error@+2 {{static local variable 'x' is not permitted within function 'ImpAccRoutineNoteForClass::ImpAccRoutineNoteForClass' because the latter is attributed with '#pragma acc routine'}}
-    // expected-note@#ImpAccRoutineNoteForClass_ctor_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::ImpAccRoutineNoteForClass' by use in construct '#pragma acc parallel' here}}
+    // expected-note@#ImpAccRoutineNoteForClass_ctor_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::ImpAccRoutineNoteForClass' by its use in construct '#pragma acc parallel' here}}
     static int x;
   }
   int operator-() {
     // expected-error@+2 {{static local variable 'x' is not permitted within function 'ImpAccRoutineNoteForClass::operator-' because the latter is attributed with '#pragma acc routine'}}
-    // expected-note@#ImpAccRoutineNoteForClass_opUnary_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::operator-' by use in construct '#pragma acc parallel' here}}
+    // expected-note@#ImpAccRoutineNoteForClass_opUnary_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::operator-' by its use in construct '#pragma acc parallel' here}}
     static int x;
     return 0;
   }
   int operator+(int) {
     // expected-error@+3 {{static local variable 'x' is not permitted within function 'ImpAccRoutineNoteForClass::operator+' because the latter is attributed with '#pragma acc routine'}}
-    // expected-note@#ImpAccRoutineNoteForClass_opBinary_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::operator+' by use in function 'ImpAccRoutineNoteForClass::operator delete' here}}
+    // expected-note@#ImpAccRoutineNoteForClass_opBinary_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::operator+' by its use in function 'ImpAccRoutineNoteForClass::operator delete' here}}
     // expected-note@#ImpAccRoutineNoteForClass_delete_routine {{'#pragma acc routine' for function 'ImpAccRoutineNoteForClass::operator delete' appears here}}
     static int x;
     return 0;
   }
   operator int() {
     // expected-error@+3 {{static local variable 'x' is not permitted within function 'ImpAccRoutineNoteForClass::operator int' because the latter is attributed with '#pragma acc routine'}}
-    // expected-note@#ImpAccRoutineNoteForClass_opConvert_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::operator int' by use in function 'ImpAccRoutineNoteForClass::operator delete' here}}
+    // expected-note@#ImpAccRoutineNoteForClass_opConvert_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForClass::operator int' by its use in function 'ImpAccRoutineNoteForClass::operator delete' here}}
     // expected-note@#ImpAccRoutineNoteForClass_delete_routine {{'#pragma acc routine' for function 'ImpAccRoutineNoteForClass::operator delete' appears here}}
     static int x;
     return 0;
@@ -895,29 +940,29 @@ namespace ImpAccRoutineNoteForNamespace {
 
   void inAccUserInnerDef() {
     // expected-error@+3 {{static local variable 'x' is not permitted within function 'ImpAccRoutineNoteForNamespace::inAccUserInnerDef' because the latter is attributed with '#pragma acc routine'}}
-    // expected-note@#ImpAccRoutineNoteForNamespace_inAccUser_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForNamespace::inAccUserInnerDef' by use in function 'ImpAccRoutineNoteForNamespace::accUserInnerDef' here}}
+    // expected-note@#ImpAccRoutineNoteForNamespace_inAccUser_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForNamespace::inAccUserInnerDef' by its use in function 'ImpAccRoutineNoteForNamespace::accUserInnerDef' here}}
     // expected-note@#ImpAccRoutineNoteForNamespace_accUserInnerDef_routine {{'#pragma acc routine' for function 'ImpAccRoutineNoteForNamespace::accUserInnerDef' appears here}}
     static int x;
   }
   void inOrphanedLoop() {
     // expected-error@+3 {{static local variable 'x' is not permitted within function 'ImpAccRoutineNoteForNamespace::inOrphanedLoop' because the latter is attributed with '#pragma acc routine'}}
-    // expected-note@#ImpAccRoutineNoteForNamespace_rangeBasedLoop_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForNamespace::inOrphanedLoop' by use in function 'ImpAccRoutineNoteForNamespace::accUserInnerDef' here}}
+    // expected-note@#ImpAccRoutineNoteForNamespace_rangeBasedLoop_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForNamespace::inOrphanedLoop' by its use in function 'ImpAccRoutineNoteForNamespace::accUserInnerDef' here}}
     // expected-note@#ImpAccRoutineNoteForNamespace_accUserInnerDef_routine {{'#pragma acc routine' for function 'ImpAccRoutineNoteForNamespace::accUserInnerDef' appears here}}
     static int x;
   }
   void inParallel() {
     // expected-error@+2 {{static local variable 'x' is not permitted within function 'ImpAccRoutineNoteForNamespace::inParallel' because the latter is attributed with '#pragma acc routine'}}
-    // expected-note@#ImpAccRoutineNoteForNamespace_inParallel_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForNamespace::inParallel' by use in construct '#pragma acc parallel' here}}
+    // expected-note@#ImpAccRoutineNoteForNamespace_inParallel_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForNamespace::inParallel' by its use in construct '#pragma acc parallel' here}}
     static int x;
   }
   void inLoop() {
     // expected-error@+2 {{static local variable 'x' is not permitted within function 'ImpAccRoutineNoteForNamespace::inLoop' because the latter is attributed with '#pragma acc routine'}}
-    // expected-note@#ImpAccRoutineNoteForNamespace_inLoop_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForNamespace::inLoop' by use in construct '#pragma acc parallel' here}}
+    // expected-note@#ImpAccRoutineNoteForNamespace_inLoop_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForNamespace::inLoop' by its use in construct '#pragma acc parallel' here}}
     static int x;
   }
   void inAccUserOuterDef() {
     // expected-error@+3 {{static local variable 'x' is not permitted within function 'ImpAccRoutineNoteForNamespace::inAccUserOuterDef' because the latter is attributed with '#pragma acc routine'}}
-    // expected-note@#ImpAccRoutineNoteForNamespace_inAccUserOuterDef_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForNamespace::inAccUserOuterDef' by use in function 'ImpAccRoutineNoteForNamespace::accUserOuterDef' here}}
+    // expected-note@#ImpAccRoutineNoteForNamespace_inAccUserOuterDef_use {{'#pragma acc routine seq' implied for function 'ImpAccRoutineNoteForNamespace::inAccUserOuterDef' by its use in function 'ImpAccRoutineNoteForNamespace::accUserOuterDef' here}}
     // expected-note@#ImpAccRoutineNoteForNamespace_accUserOuterDef_routine {{'#pragma acc routine' for function 'ImpAccRoutineNoteForNamespace::accUserOuterDef' appears here}}
     static int x;
   }
@@ -971,7 +1016,7 @@ void templateParUseImplyBadContent_fn() {
 template <typename T>
 void templateParUseImplyBadContent_template() {
   #pragma acc parallel
-  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'templateParUseImplyBadContent_fn' by use in construct '#pragma acc parallel' here}}
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'templateParUseImplyBadContent_fn' by its use in construct '#pragma acc parallel' here}}
   templateParUseImplyBadContent_fn();
 }
 
@@ -983,9 +1028,453 @@ void templateUseImplyBadContent_fn() {
 #pragma acc routine seq
 template <typename T>
 void templateUseImplyBadContent_template() {
-  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'templateUseImplyBadContent_fn' by use in function 'templateUseImplyBadContent_template' here}}
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function 'templateUseImplyBadContent_fn' by its use in function 'templateUseImplyBadContent_template' here}}
   templateUseImplyBadContent_fn();
 }
+
+//------------------------------------------------------------------------------
+// Restrictions on the lambda body for routine directives implied by lambda
+// body.
+//
+// routine-cxx-funcs/func-bad-content-imp.cpp already checks these diagnostics
+// for a lambda when a routine directive is implied by a use of the lambda.
+// routine-cxx-funcs/func-bad-content-exp.cpp does so when a routine directive
+// is implied by a single call within the lambda.  Here we check various ways
+// the lambda body might imply a routine directive.
+//------------------------------------------------------------------------------
+
+//..............................................................................
+// Try different kinds of loop construct impliers (before bad content).
+
+auto UNIQUE_NAME = []() {
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop seq
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+1 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop gang
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+1 {{'#pragma acc routine worker' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop worker
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+1 {{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop vector
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+1 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop gang worker
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+1 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop gang vector
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+1 {{'#pragma acc routine worker' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop worker vector
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+1 {{'#pragma acc routine worker' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop vector worker
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+1 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop gang worker vector
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+1 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop vector worker gang
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+// Currently, auto->seq always and before implicit routine directives.
+auto UNIQUE_NAME = []() {
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop auto
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+// Currently, auto->seq always and before implicit routine directives.
+auto UNIQUE_NAME = []() {
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop auto gang worker vector
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+
+//..............................................................................
+// Try different kinds of function call impliers (before bad content).
+
+auto UNIQUE_NAME = []() {
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of function 'gangFn' here}}
+  // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+  gangFn();
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+3 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of function '(anonymous class)::operator()' here}}
+  // expected-note@#gangLambda_call_gangFn {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of function 'gangFn' here}}
+  // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+  gangLambda();
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+2 {{'#pragma acc routine worker' implied for function '(anonymous class)::operator()' by its use of function 'workerFn' here}}
+  // expected-note@#workerFn_routine {{'#pragma acc routine' for function 'workerFn' appears here}}
+  workerFn();
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+3 {{'#pragma acc routine worker' implied for function '(anonymous class)::operator()' by its use of function '(anonymous class)::operator()' here}}
+  // expected-note@#workerLambda_call_workerFn {{'#pragma acc routine worker' implied for function '(anonymous class)::operator()' by its use of function 'workerFn' here}}
+  // expected-note@#workerFn_routine {{'#pragma acc routine' for function 'workerFn' appears here}}
+  workerLambda();
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+2 {{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  vectorFn();
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  // expected-note@+3 {{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of function '(anonymous class)::operator()' here}}
+  // expected-note@#vectorLambda_call_vectorFn {{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  vectorLambda();
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+};
+auto UNIQUE_NAME = []() {
+  seqFn();
+  impSeqFn();
+  seqLambda();
+  static int x;
+  #pragma acc parallel
+  ;
+};
+
+//..............................................................................
+// Try with implier after bad content.  We tried with it before above.
+
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  // expected-note@+1 {{'#pragma acc routine seq' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop
+  for (int i = 0; i < 8; ++i)
+    ;
+};
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  // expected-note@+2 {{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  vectorFn();
+};
+
+//..............................................................................
+// Try with multiple impliers.  First one of highest level should be identified.
+
+// loop vs. loop
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  // expected-note@+1 3 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop gang
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'y' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int y;
+  #pragma acc loop gang
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'z' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int z;
+};
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  // expected-note@+1 3 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop gang
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'y' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int y;
+  #pragma acc loop vector
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'z' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int z;
+};
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  #pragma acc loop vector
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'y' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int y;
+  // expected-note@+1 3 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop gang
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'z' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int z;
+};
+
+// call vs. call
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  // expected-note@+2 3 {{'#pragma acc routine worker' implied for function '(anonymous class)::operator()' by its use of function 'workerFn' here}}
+  // expected-note@#workerFn_routine 3 {{'#pragma acc routine' for function 'workerFn' appears here}}
+  workerFn();
+  // expected-error@+1 {{static local variable 'y' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int y;
+  workerFn();
+  // expected-error@+1 {{static local variable 'z' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int z;
+};
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  // expected-note@+2 3 {{'#pragma acc routine worker' implied for function '(anonymous class)::operator()' by its use of function 'workerFn' here}}
+  // expected-note@#workerFn_routine 3 {{'#pragma acc routine' for function 'workerFn' appears here}}
+  workerFn();
+  // expected-error@+1 {{static local variable 'y' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int y;
+  vectorFn();
+  // expected-error@+1 {{static local variable 'z' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int z;
+};
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  vectorFn();
+  // expected-error@+1 {{static local variable 'y' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int y;
+  // expected-note@+2 3 {{'#pragma acc routine worker' implied for function '(anonymous class)::operator()' by its use of function 'workerFn' here}}
+  // expected-note@#workerFn_routine 3 {{'#pragma acc routine' for function 'workerFn' appears here}}
+  workerFn();
+  // expected-error@+1 {{static local variable 'z' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int z;
+};
+
+// loop beats call
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  // expected-note@+1 3 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop gang
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'y' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int y;
+  gangFn();
+  // expected-error@+1 {{static local variable 'z' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int z;
+};
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  // expected-note@+1 3 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop gang
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'y' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int y;
+  workerFn();
+  // expected-error@+1 {{static local variable 'z' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int z;
+};
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  workerFn();
+  // expected-error@+1 {{static local variable 'y' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int y;
+  // expected-note@+1 3 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  #pragma acc loop gang
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'z' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int z;
+};
+
+// call beats loop
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  // expected-note@+2 3 {{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine 3 {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  vectorFn();
+  // expected-error@+1 {{static local variable 'y' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int y;
+  #pragma acc loop vector
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'z' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int z;
+};
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  // expected-note@+2 3 {{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine 3 {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  vectorFn();
+  // expected-error@+1 {{static local variable 'y' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int y;
+  #pragma acc loop
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'z' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int z;
+};
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  #pragma acc loop
+  for (int i = 0; i < 8; ++i)
+    ;
+  // expected-error@+1 {{static local variable 'y' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int y;
+  // expected-note@+2 3 {{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine 3 {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  vectorFn();
+  // expected-error@+1 {{static local variable 'z' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int z;
+};
+
+//..............................................................................
+// Try with impliers suppressed (or not) by enclosing constructs.
+
+auto UNIQUE_NAME = []() {
+  static int x;
+  #pragma acc parallel
+  gangFn();
+  #pragma acc parallel loop gang
+  for (int i = 0; i < 8; ++i)
+    ;
+  #pragma acc parallel
+  #pragma acc loop gang
+  for (int i = 0; i < 8; ++i)
+    ;
+  auto lambda = []() {
+    gangFn();
+    #pragma acc loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  };
+};
+
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  #pragma acc loop seq
+  for (int i = 0; i < 8; ++i) {
+    // expected-note@+2 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of function 'gangFn' here}}
+    // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+    gangFn();
+  }
+};
+
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  #pragma acc loop seq
+  for (int i = 0; i < 8; ++i) {
+    // expected-note@+1 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+    #pragma acc loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }
+};
+
+auto UNIQUE_NAME = []() {
+  // expected-error@+1 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  static int x;
+  // expected-error@+1 {{'#pragma acc data' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  #pragma acc data copy(x)
+  {
+    // expected-note@+2 2 {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of function 'gangFn' here}}
+    // expected-note@#gangFn_routine 2 {{'#pragma acc routine' for function 'gangFn' appears here}}
+    gangFn();
+  }
+};
+
+//------------------------------------------------------------------------------
+// Restrictions on the function definition body for routine directives implied
+// by use within lambda whose routine directive was implied by the lambda body.
+//------------------------------------------------------------------------------
+
+void lambdaBodyImplyRecursionBadContent() {
+  // expected-error@+4 {{static local variable 'x' is not permitted within function 'lambdaBodyImplyRecursionBadContent' because the latter is attributed with '#pragma acc routine'}}
+  // expected-note@+7 {{'#pragma acc routine seq' implied for function 'lambdaBodyImplyRecursionBadContent' by its use in function '(anonymous class)::operator()' here}}
+  // expected-note@+5 {{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  static int x;
+}
+auto UNIQUE_NAME = []() {
+  vectorFn();
+  lambdaBodyImplyRecursionBadContent();
+};
 
 //------------------------------------------------------------------------------
 // Compatible levels of parallelism in class/namespace functions.
@@ -993,7 +1482,7 @@ void templateUseImplyBadContent_template() {
 // routine-cxx-funcs/call-par-level-*.cpp cover this pretty thoroughly, but the
 // users are always outside the usee's class/namespace.  Here we check the case
 // where the user and usee are in the same class/namespace.
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 class ParLevelCompatibleForClass {
   // expected-note@+1 {{'#pragma acc routine' for function 'ParLevelCompatibleForClass::forwardRefUser' appears here}}
@@ -1021,6 +1510,855 @@ namespace ParLevelCompatibleForNamespace {
   #pragma acc routine seq
   // expected-error@+1 {{function 'ParLevelCompatibleForNamespace::user' has '#pragma acc routine seq' but calls function 'ParLevelCompatibleForNamespace::usee', which has '#pragma acc routine vector'}}
   void user() { usee(); }
+}
+
+//------------------------------------------------------------------------------
+// Calls to lambdas with routine directives implied by lambda body.
+//------------------------------------------------------------------------------
+
+//..............................................................................
+// Try many kinds of loop construct impliers (user is function).
+
+void lambdaCallParLevelLoopImplierAndHostUser() {
+  []() {
+    #pragma acc loop
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop seq
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    // Currently, auto->seq always and before implicit routine directives.
+    #pragma acc loop auto
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    // Currently, auto->seq always and before implicit routine directives.
+    #pragma acc loop auto gang worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopImplierAndHostUser' has no explicit '#pragma acc routine' but calls function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@+2 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopImplierAndHostUser' has no explicit '#pragma acc routine' but calls function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop worker
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopImplierAndHostUser' has no explicit '#pragma acc routine' but calls function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopImplierAndHostUser' has no explicit '#pragma acc routine' but calls function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop vector worker
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopImplierAndHostUser' has no explicit '#pragma acc routine' but calls function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopImplierAndHostUser' has no explicit '#pragma acc routine' but calls function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop gang worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopImplierAndHostUser' has no explicit '#pragma acc routine' but calls function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopImplierAndHostUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop vector worker gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+}
+
+#pragma acc routine seq // #lambdaCallParLevelLoopImplierAndSeqUser_routine
+void lambdaCallParLevelLoopImplierAndSeqUser() {
+  []() {
+    #pragma acc loop
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop seq
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    // Currently, auto->seq always and before implicit routine directives.
+    #pragma acc loop auto
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    // Currently, auto->seq always and before implicit routine directives.
+    #pragma acc loop auto gang worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndSeqUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndSeqUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndSeqUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndSeqUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndSeqUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndSeqUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop worker
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndSeqUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndSeqUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndSeqUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndSeqUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndSeqUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndSeqUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop vector worker
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndSeqUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndSeqUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndSeqUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndSeqUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndSeqUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndSeqUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop gang worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndSeqUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndSeqUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndSeqUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopImplierAndSeqUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop vector worker gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+}
+
+#pragma acc routine vector // #lambdaCallParLevelLoopImplierAndVectorUser_routine
+void lambdaCallParLevelLoopImplierAndVectorUser() {
+  []() {
+    #pragma acc loop
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop seq
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    // Currently, auto->seq always and before implicit routine directives.
+    #pragma acc loop auto
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    // Currently, auto->seq always and before implicit routine directives.
+    #pragma acc loop auto gang worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndVectorUser' has '#pragma acc routine vector' but calls function 'lambdaCallParLevelLoopImplierAndVectorUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndVectorUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndVectorUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelLoopImplierAndVectorUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop worker
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndVectorUser' has '#pragma acc routine vector' but calls function 'lambdaCallParLevelLoopImplierAndVectorUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndVectorUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndVectorUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelLoopImplierAndVectorUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndVectorUser' has '#pragma acc routine vector' but calls function 'lambdaCallParLevelLoopImplierAndVectorUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndVectorUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndVectorUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelLoopImplierAndVectorUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop vector worker
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndVectorUser' has '#pragma acc routine vector' but calls function 'lambdaCallParLevelLoopImplierAndVectorUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndVectorUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndVectorUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopImplierAndVectorUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndVectorUser' has '#pragma acc routine vector' but calls function 'lambdaCallParLevelLoopImplierAndVectorUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndVectorUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndVectorUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopImplierAndVectorUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop gang worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndVectorUser' has '#pragma acc routine vector' but calls function 'lambdaCallParLevelLoopImplierAndVectorUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndVectorUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndVectorUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopImplierAndVectorUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop vector worker gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+}
+
+#pragma acc routine worker // #lambdaCallParLevelLoopImplierAndWorkerUser_routine
+void lambdaCallParLevelLoopImplierAndWorkerUser() {
+  []() {
+    #pragma acc loop
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop seq
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    // Currently, auto->seq always and before implicit routine directives.
+    #pragma acc loop auto
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    // Currently, auto->seq always and before implicit routine directives.
+    #pragma acc loop auto gang worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop worker
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop vector worker
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndWorkerUser' has '#pragma acc routine worker' but calls function 'lambdaCallParLevelLoopImplierAndWorkerUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndWorkerUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndWorkerUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopImplierAndWorkerUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndWorkerUser' has '#pragma acc routine worker' but calls function 'lambdaCallParLevelLoopImplierAndWorkerUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndWorkerUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndWorkerUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopImplierAndWorkerUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop gang worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+3 {{function 'lambdaCallParLevelLoopImplierAndWorkerUser' has '#pragma acc routine worker' but calls function 'lambdaCallParLevelLoopImplierAndWorkerUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelLoopImplierAndWorkerUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierAndWorkerUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopImplierAndWorkerUser()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+  []() {
+    #pragma acc loop vector worker gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+}
+
+#pragma acc routine gang // #lambdaCallParLevelLoopImplierAndGangUser_routine
+void lambdaCallParLevelLoopImplierAndGangUser() {
+  []() {
+    #pragma acc loop
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop seq
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    // Currently, auto->seq always and before implicit routine directives.
+    #pragma acc loop auto
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    // Currently, auto->seq always and before implicit routine directives.
+    #pragma acc loop auto gang worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop worker
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop vector worker
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop gang worker vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  []() {
+    #pragma acc loop vector worker gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+}
+
+//..............................................................................
+// Try many kinds of function call impliers (user is function).
+
+void lambdaCallParLevelCallImplierAndHostUser() {
+  []() { seqFn(); }();
+  []() { impSeqFn(); }();
+  []() { seqLambda(); }();
+  // expected-error@+3 {{function 'lambdaCallParLevelCallImplierAndHostUser' has no explicit '#pragma acc routine' but calls function 'lambdaCallParLevelCallImplierAndHostUser()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@+2 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelCallImplierAndHostUser()::(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  []() { vectorFn(); }();
+  // expected-error@+4 {{function 'lambdaCallParLevelCallImplierAndHostUser' has no explicit '#pragma acc routine' but calls function 'lambdaCallParLevelCallImplierAndHostUser()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@+3 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelCallImplierAndHostUser()::(anonymous class)::operator()' by its use of function '(anonymous class)::operator()' here}}
+  // expected-note@#vectorLambda_call_vectorFn {{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  []() { vectorLambda(); }();
+  // expected-error@+3 {{function 'lambdaCallParLevelCallImplierAndHostUser' has no explicit '#pragma acc routine' but calls function 'lambdaCallParLevelCallImplierAndHostUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelCallImplierAndHostUser()::(anonymous class)::operator()' by its use of function 'workerFn' here}}
+  // expected-note@#workerFn_routine {{'#pragma acc routine' for function 'workerFn' appears here}}
+  []() { workerFn(); }();
+  // expected-error@+4 {{function 'lambdaCallParLevelCallImplierAndHostUser' has no explicit '#pragma acc routine' but calls function 'lambdaCallParLevelCallImplierAndHostUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@+3 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelCallImplierAndHostUser()::(anonymous class)::operator()' by its use of function '(anonymous class)::operator()' here}}
+  // expected-note@#workerLambda_call_workerFn {{'#pragma acc routine worker' implied for function '(anonymous class)::operator()' by its use of function 'workerFn' here}}
+  // expected-note@#workerFn_routine {{'#pragma acc routine' for function 'workerFn' appears here}}
+  []() { workerLambda(); }();
+  // expected-error@+3 {{function 'lambdaCallParLevelCallImplierAndHostUser' has no explicit '#pragma acc routine' but calls function 'lambdaCallParLevelCallImplierAndHostUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelCallImplierAndHostUser()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+  // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+  []() { gangFn(); }();
+  // expected-error@+4 {{function 'lambdaCallParLevelCallImplierAndHostUser' has no explicit '#pragma acc routine' but calls function 'lambdaCallParLevelCallImplierAndHostUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@+3 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelCallImplierAndHostUser()::(anonymous class)::operator()' by its use of function '(anonymous class)::operator()' here}}
+  // expected-note@#gangLambda_call_gangFn {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of function 'gangFn' here}}
+  // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+  []() { gangLambda(); }();
+}
+
+#pragma acc routine seq // #lambdaCallParLevelCallImplierAndSeqUser_routine
+void lambdaCallParLevelCallImplierAndSeqUser() {
+  []() { seqFn(); }();
+  []() { impSeqFn(); }();
+  []() { seqLambda(); }();
+  // expected-error@+4 {{function 'lambdaCallParLevelCallImplierAndSeqUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelCallImplierAndSeqUser()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@#lambdaCallParLevelCallImplierAndSeqUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallImplierAndSeqUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelCallImplierAndSeqUser()::(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  []() { vectorFn(); }();
+  // expected-error@+5 {{function 'lambdaCallParLevelCallImplierAndSeqUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelCallImplierAndSeqUser()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@#lambdaCallParLevelCallImplierAndSeqUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallImplierAndSeqUser' appears here}}
+  // expected-note@+3 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelCallImplierAndSeqUser()::(anonymous class)::operator()' by its use of function '(anonymous class)::operator()' here}}
+  // expected-note@#vectorLambda_call_vectorFn {{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  []() { vectorLambda(); }();
+  // expected-error@+4 {{function 'lambdaCallParLevelCallImplierAndSeqUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelCallImplierAndSeqUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@#lambdaCallParLevelCallImplierAndSeqUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallImplierAndSeqUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelCallImplierAndSeqUser()::(anonymous class)::operator()' by its use of function 'workerFn' here}}
+  // expected-note@#workerFn_routine {{'#pragma acc routine' for function 'workerFn' appears here}}
+  []() { workerFn(); }();
+  // expected-error@+5 {{function 'lambdaCallParLevelCallImplierAndSeqUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelCallImplierAndSeqUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@#lambdaCallParLevelCallImplierAndSeqUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallImplierAndSeqUser' appears here}}
+  // expected-note@+3 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelCallImplierAndSeqUser()::(anonymous class)::operator()' by its use of function '(anonymous class)::operator()' here}}
+  // expected-note@#workerLambda_call_workerFn {{'#pragma acc routine worker' implied for function '(anonymous class)::operator()' by its use of function 'workerFn' here}}
+  // expected-note@#workerFn_routine {{'#pragma acc routine' for function 'workerFn' appears here}}
+  []() { workerLambda(); }();
+  // expected-error@+4 {{function 'lambdaCallParLevelCallImplierAndSeqUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelCallImplierAndSeqUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelCallImplierAndSeqUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallImplierAndSeqUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelCallImplierAndSeqUser()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+  // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+  []() { gangFn(); }();
+  // expected-error@+5 {{function 'lambdaCallParLevelCallImplierAndSeqUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelCallImplierAndSeqUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelCallImplierAndSeqUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallImplierAndSeqUser' appears here}}
+  // expected-note@+3 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelCallImplierAndSeqUser()::(anonymous class)::operator()' by its use of function '(anonymous class)::operator()' here}}
+  // expected-note@#gangLambda_call_gangFn {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of function 'gangFn' here}}
+  // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+  []() { gangLambda(); }();
+}
+
+#pragma acc routine vector // #lambdaCallParLevelCallImplierAndVectorUser_routine
+void lambdaCallParLevelCallImplierAndVectorUser() {
+  []() { seqFn(); }();
+  []() { impSeqFn(); }();
+  []() { seqLambda(); }();
+  []() { vectorFn(); }();
+  []() { vectorLambda(); }();
+  // expected-error@+4 {{function 'lambdaCallParLevelCallImplierAndVectorUser' has '#pragma acc routine vector' but calls function 'lambdaCallParLevelCallImplierAndVectorUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@#lambdaCallParLevelCallImplierAndVectorUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallImplierAndVectorUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelCallImplierAndVectorUser()::(anonymous class)::operator()' by its use of function 'workerFn' here}}
+  // expected-note@#workerFn_routine {{'#pragma acc routine' for function 'workerFn' appears here}}
+  []() { workerFn(); }();
+  // expected-error@+5 {{function 'lambdaCallParLevelCallImplierAndVectorUser' has '#pragma acc routine vector' but calls function 'lambdaCallParLevelCallImplierAndVectorUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@#lambdaCallParLevelCallImplierAndVectorUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallImplierAndVectorUser' appears here}}
+  // expected-note@+3 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelCallImplierAndVectorUser()::(anonymous class)::operator()' by its use of function '(anonymous class)::operator()' here}}
+  // expected-note@#workerLambda_call_workerFn {{'#pragma acc routine worker' implied for function '(anonymous class)::operator()' by its use of function 'workerFn' here}}
+  // expected-note@#workerFn_routine {{'#pragma acc routine' for function 'workerFn' appears here}}
+  []() { workerLambda(); }();
+  // expected-error@+4 {{function 'lambdaCallParLevelCallImplierAndVectorUser' has '#pragma acc routine vector' but calls function 'lambdaCallParLevelCallImplierAndVectorUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelCallImplierAndVectorUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallImplierAndVectorUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelCallImplierAndVectorUser()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+  // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+  []() { gangFn(); }();
+  // expected-error@+5 {{function 'lambdaCallParLevelCallImplierAndVectorUser' has '#pragma acc routine vector' but calls function 'lambdaCallParLevelCallImplierAndVectorUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelCallImplierAndVectorUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallImplierAndVectorUser' appears here}}
+  // expected-note@+3 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelCallImplierAndVectorUser()::(anonymous class)::operator()' by its use of function '(anonymous class)::operator()' here}}
+  // expected-note@#gangLambda_call_gangFn {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of function 'gangFn' here}}
+  // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+  []() { gangLambda(); }();
+}
+
+#pragma acc routine worker // #lambdaCallParLevelCallImplierAndWorkerUser_routine
+void lambdaCallParLevelCallImplierAndWorkerUser() {
+  []() { seqFn(); }();
+  []() { impSeqFn(); }();
+  []() { seqLambda(); }();
+  []() { vectorFn(); }();
+  []() { vectorLambda(); }();
+  []() { workerFn(); }();
+  []() { workerLambda(); }();
+  // expected-error@+4 {{function 'lambdaCallParLevelCallImplierAndWorkerUser' has '#pragma acc routine worker' but calls function 'lambdaCallParLevelCallImplierAndWorkerUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelCallImplierAndWorkerUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallImplierAndWorkerUser' appears here}}
+  // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelCallImplierAndWorkerUser()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+  // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+  []() { gangFn(); }();
+  // expected-error@+5 {{function 'lambdaCallParLevelCallImplierAndWorkerUser' has '#pragma acc routine worker' but calls function 'lambdaCallParLevelCallImplierAndWorkerUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelCallImplierAndWorkerUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallImplierAndWorkerUser' appears here}}
+  // expected-note@+3 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelCallImplierAndWorkerUser()::(anonymous class)::operator()' by its use of function '(anonymous class)::operator()' here}}
+  // expected-note@#gangLambda_call_gangFn {{'#pragma acc routine gang' implied for function '(anonymous class)::operator()' by its use of function 'gangFn' here}}
+  // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+  []() { gangLambda(); }();
+}
+
+#pragma acc routine gang // #lambdaCallParLevelCallImplierAndGangUser_routine
+void lambdaCallParLevelCallImplierAndGangUser() {
+  []() { seqFn(); }();
+  []() { impSeqFn(); }();
+  []() { seqLambda(); }();
+  []() { vectorFn(); }();
+  []() { vectorLambda(); }();
+  []() { workerFn(); }();
+  []() { workerLambda(); }();
+  []() { gangFn(); }();
+  []() { gangLambda(); }();
+}
+
+//..............................................................................
+// Try with parallel or loop construct as user (with just a few kinds of
+// impliers).
+
+void lambdaCallParLevelConstructUser() {
+  #pragma acc parallel
+  {
+    []() { seqFn(); }();
+    []() { gangFn(); }();
+  }
+  #pragma acc parallel loop seq
+  for (int i = 0; i < 8; ++i) {
+    []() { seqFn(); }();
+    []() { gangFn(); }();
+  }
+  #pragma acc parallel
+  #pragma acc loop seq
+  for (int i = 0; i < 8; ++i) {
+    []() { seqFn(); }();
+    []() { gangFn(); }();
+  }
+  #pragma acc parallel loop auto
+  for (int i = 0; i < 8; ++i) {
+    []() { seqFn(); }();
+    []() { gangFn(); }();
+  }
+  #pragma acc parallel loop gang // #lambdaCallParLevelConstructUser_parLoopGang
+  for (int i = 0; i < 8; ++i) {
+    []() { workerFn(); }();
+    // expected-error@+4 {{'#pragma acc parallel loop gang' construct calls function 'lambdaCallParLevelConstructUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+    // expected-note@#lambdaCallParLevelConstructUser_parLoopGang {{enclosing '#pragma acc parallel loop' here}}
+    // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelConstructUser()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+    // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+    []() { gangFn(); }();
+  }
+  #pragma acc parallel
+  #pragma acc loop gang // #lambdaCallParLevelConstructUser_par_loopGang
+  for (int i = 0; i < 8; ++i) {
+    []() { workerFn(); }();
+    // expected-error@+4 {{'#pragma acc loop gang' construct calls function 'lambdaCallParLevelConstructUser()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+    // expected-note@#lambdaCallParLevelConstructUser_par_loopGang {{enclosing '#pragma acc loop' here}}
+    // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelConstructUser()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+    // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+    []() { gangFn(); }();
+  }
+  #pragma acc parallel loop worker // #lambdaCallParLevelConstructUser_parLoopWorker
+  for (int i = 0; i < 8; ++i) {
+    []() { vectorFn(); }();
+    // expected-error@+4 {{'#pragma acc parallel loop worker' construct calls function 'lambdaCallParLevelConstructUser()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+    // expected-note@#lambdaCallParLevelConstructUser_parLoopWorker {{enclosing '#pragma acc parallel loop' here}}
+    // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelConstructUser()::(anonymous class)::operator()' by its use of function 'workerFn' here}}
+    // expected-note@#workerFn_routine {{'#pragma acc routine' for function 'workerFn' appears here}}
+    []() { workerFn(); }();
+  }
+  #pragma acc parallel loop vector // #lambdaCallParLevelConstructUser_parLoopVector
+  for (int i = 0; i < 8; ++i) {
+    []() { seqFn(); }();
+    // expected-error@+4 {{'#pragma acc parallel loop vector' construct calls function 'lambdaCallParLevelConstructUser()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+    // expected-note@#lambdaCallParLevelConstructUser_parLoopVector {{enclosing '#pragma acc parallel loop' here}}
+    // expected-note@+2 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelConstructUser()::(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+    // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+    []() { vectorFn(); }();
+  }
+  #pragma acc parallel loop auto vector // #lambdaCallParLevelConstructUser_parLoopAutoVector
+  for (int i = 0; i < 8; ++i) {
+    []() { seqFn(); }();
+    // expected-error@+4 {{'#pragma acc parallel loop vector' construct calls function 'lambdaCallParLevelConstructUser()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+    // expected-note@#lambdaCallParLevelConstructUser_parLoopAutoVector {{enclosing '#pragma acc parallel loop' here}}
+    // expected-note@+2 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelConstructUser()::(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+    // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+    []() { vectorFn(); }();
+  }
+}
+
+//..............................................................................
+// Try with multiple impliers.  First one of highest level should be selected.
+
+#pragma acc routine worker // #lambdaCallParLevelLoopVsLoopImplier_routine
+void lambdaCallParLevelLoopVsLoopImplier() {
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopVsLoopImplier' has '#pragma acc routine worker' but calls function 'lambdaCallParLevelLoopVsLoopImplier()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelLoopVsLoopImplier_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopVsLoopImplier' appears here}}
+  []() {
+    // expected-note@+1 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopVsLoopImplier()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+    #pragma acc loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+    #pragma acc loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopVsLoopImplier' has '#pragma acc routine worker' but calls function 'lambdaCallParLevelLoopVsLoopImplier()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelLoopVsLoopImplier_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopVsLoopImplier' appears here}}
+  []() {
+    // expected-note@+1 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopVsLoopImplier()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+    #pragma acc loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+    #pragma acc loop worker
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopVsLoopImplier' has '#pragma acc routine worker' but calls function 'lambdaCallParLevelLoopVsLoopImplier()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelLoopVsLoopImplier_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopVsLoopImplier' appears here}}
+  []() {
+    #pragma acc loop worker
+    for (int i = 0; i < 8; ++i)
+      ;
+    // expected-note@+1 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelLoopVsLoopImplier()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+    #pragma acc loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+}
+
+#pragma acc routine vector // #lambdaCallParLevelCallVsCallImplier_routine
+void lambdaCallParLevelCallVsCallImplier() {
+  // expected-error@+2 {{function 'lambdaCallParLevelCallVsCallImplier' has '#pragma acc routine vector' but calls function 'lambdaCallParLevelCallVsCallImplier()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@#lambdaCallParLevelCallVsCallImplier_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallVsCallImplier' appears here}}
+  []() {
+    // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelCallVsCallImplier()::(anonymous class)::operator()' by its use of function 'workerFn' here}}
+    // expected-note@#workerFn_routine {{'#pragma acc routine' for function 'workerFn' appears here}}
+    workerFn();
+    workerFn();
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelCallVsCallImplier' has '#pragma acc routine vector' but calls function 'lambdaCallParLevelCallVsCallImplier()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@#lambdaCallParLevelCallVsCallImplier_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallVsCallImplier' appears here}}
+  []() {
+    // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelCallVsCallImplier()::(anonymous class)::operator()' by its use of function 'workerFn' here}}
+    // expected-note@#workerFn_routine {{'#pragma acc routine' for function 'workerFn' appears here}}
+    workerFn();
+    vectorFn();
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelCallVsCallImplier' has '#pragma acc routine vector' but calls function 'lambdaCallParLevelCallVsCallImplier()::(anonymous class)::operator()', which has '#pragma acc routine worker'}}
+  // expected-note@#lambdaCallParLevelCallVsCallImplier_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallVsCallImplier' appears here}}
+  []() {
+    vectorFn();
+    // expected-note@+2 {{'#pragma acc routine worker' implied for function 'lambdaCallParLevelCallVsCallImplier()::(anonymous class)::operator()' by its use of function 'workerFn' here}}
+    // expected-note@#workerFn_routine {{'#pragma acc routine' for function 'workerFn' appears here}}
+    workerFn();
+  }();
+}
+
+#pragma acc routine seq // #lambdaCallParLevelLoopBeatsCallImplier_routine
+void lambdaCallParLevelLoopBeatsCallImplier() {
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopBeatsCallImplier' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelLoopBeatsCallImplier()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@#lambdaCallParLevelLoopBeatsCallImplier_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopBeatsCallImplier' appears here}}
+  []() {
+    // expected-note@+1 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelLoopBeatsCallImplier()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+    #pragma acc loop vector
+    for (int i = 0; i < 8; ++i)
+      ;
+    vectorFn();
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopBeatsCallImplier' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelLoopBeatsCallImplier()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@#lambdaCallParLevelLoopBeatsCallImplier_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopBeatsCallImplier' appears here}}
+  []() {
+    // expected-note@+1 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelLoopBeatsCallImplier()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+    #pragma acc loop vector
+    for (int i = 0; i < 8; ++i)
+      ;
+    seqFn();
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopBeatsCallImplier' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelLoopBeatsCallImplier()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@#lambdaCallParLevelLoopBeatsCallImplier_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopBeatsCallImplier' appears here}}
+  []() {
+    seqFn();
+    // expected-note@+1 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelLoopBeatsCallImplier()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+    #pragma acc loop vector
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+}
+
+#pragma acc routine worker // #lambdaCallParLevelCallBeatsLoopImplier_routine
+void lambdaCallParLevelCallBeatsLoopImplier() {
+  // expected-error@+2 {{function 'lambdaCallParLevelCallBeatsLoopImplier' has '#pragma acc routine worker' but calls function 'lambdaCallParLevelCallBeatsLoopImplier()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelCallBeatsLoopImplier_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallBeatsLoopImplier' appears here}}
+  []() {
+    // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelCallBeatsLoopImplier()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+    // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+    gangFn();
+    #pragma acc loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelCallBeatsLoopImplier' has '#pragma acc routine worker' but calls function 'lambdaCallParLevelCallBeatsLoopImplier()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelCallBeatsLoopImplier_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallBeatsLoopImplier' appears here}}
+  []() {
+    // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelCallBeatsLoopImplier()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+    // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+    gangFn();
+    #pragma acc loop seq
+    for (int i = 0; i < 8; ++i)
+      ;
+  }();
+  // expected-error@+2 {{function 'lambdaCallParLevelCallBeatsLoopImplier' has '#pragma acc routine worker' but calls function 'lambdaCallParLevelCallBeatsLoopImplier()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelCallBeatsLoopImplier_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallBeatsLoopImplier' appears here}}
+  []() {
+    #pragma acc loop seq
+    for (int i = 0; i < 8; ++i)
+      ;
+    // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelCallBeatsLoopImplier()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+    // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+    gangFn();
+  }();
+}
+
+//..............................................................................
+// Try with impliers suppressed (or not) by enclosing constructs.
+
+void lambdaCallParLevelSuppressedImplierAndHostUser() {
+  []() {
+    #pragma acc parallel
+    gangFn();
+    #pragma acc parallel loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+    #pragma acc parallel
+    #pragma acc loop gang
+    for (int i = 0; i < 8; ++i)
+      ;
+    auto lambda = []() {
+      gangFn();
+      #pragma acc loop gang
+      for (int i = 0; i < 8; ++i)
+        ;
+    };
+  }();
+}
+
+#pragma acc routine seq // #lambdaCallParLevelSuppressedImplierAndNonHostUser_routine
+void lambdaCallParLevelSuppressedImplierAndNonHostUser() {
+  // expected-error@+2 {{function 'lambdaCallParLevelSuppressedImplierAndNonHostUser' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelSuppressedImplierAndNonHostUser()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@#lambdaCallParLevelSuppressedImplierAndNonHostUser_routine {{'#pragma acc routine' for function 'lambdaCallParLevelSuppressedImplierAndNonHostUser' appears here}}
+  []() {
+    auto lambda = []() {
+      gangFn();
+      #pragma acc loop gang
+      for (int i = 0; i < 8; ++i)
+        ;
+    };
+    // expected-note@+2 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelSuppressedImplierAndNonHostUser()::(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+    // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+    vectorFn();
+  }();
+}
+
+#pragma acc routine seq // #lambdaCallParLevelCallImplierInLoopSeq_routine
+void lambdaCallParLevelCallImplierInLoopSeq() {
+  // expected-error@+2 {{function 'lambdaCallParLevelCallImplierInLoopSeq' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelCallImplierInLoopSeq()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+  // expected-note@#lambdaCallParLevelCallImplierInLoopSeq_routine {{'#pragma acc routine' for function 'lambdaCallParLevelCallImplierInLoopSeq' appears here}}
+  []() {
+    #pragma acc loop seq
+    for (int i = 0; i < 8; ++i) {
+      // expected-note@+2 {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelCallImplierInLoopSeq()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+      // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+      gangFn();
+    }
+  }();
+}
+
+#pragma acc routine seq // #lambdaCallParLevelLoopImplierInLoopSeq_routine
+void lambdaCallParLevelLoopImplierInLoopSeq() {
+  // expected-error@+2 {{function 'lambdaCallParLevelLoopImplierInLoopSeq' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelLoopImplierInLoopSeq()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@#lambdaCallParLevelLoopImplierInLoopSeq_routine {{'#pragma acc routine' for function 'lambdaCallParLevelLoopImplierInLoopSeq' appears here}}
+  []() {
+    #pragma acc loop seq
+    for (int i = 0; i < 8; ++i) {
+      // expected-note@+1 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelLoopImplierInLoopSeq()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
+      #pragma acc loop vector
+      for (int i = 0; i < 8; ++i)
+        ;
+    }
+  }();
+}
+
+//..............................................................................
+// Try with many ways of defining the lambda.
+
+#pragma acc routine seq // #lambdaCallParLevelDefKinds0_routine
+void lambdaCallParLevelDefKinds0() {
+  auto lambda = []() { vectorFn(); }; // #lambdaCallParLevelDefKinds0_lambda
+  // expected-error@+4 {{function 'lambdaCallParLevelDefKinds0' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelDefKinds0()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@#lambdaCallParLevelDefKinds0_routine {{'#pragma acc routine' for function 'lambdaCallParLevelDefKinds0' appears here}}
+  // expected-note@+2 {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelDefKinds0()::(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  []() { vectorFn(); }();
+  // expected-error@+4 {{function 'lambdaCallParLevelDefKinds0' has '#pragma acc routine seq' but calls function 'lambdaCallParLevelDefKinds0()::(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@#lambdaCallParLevelDefKinds0_routine {{'#pragma acc routine' for function 'lambdaCallParLevelDefKinds0' appears here}}
+  // expected-note@#lambdaCallParLevelDefKinds0_lambda {{'#pragma acc routine vector' implied for function 'lambdaCallParLevelDefKinds0()::(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  lambda();
+  // expected-error@+4 {{function 'lambdaCallParLevelDefKinds0' has '#pragma acc routine seq' but calls function '(anonymous class)::operator()', which has '#pragma acc routine vector'}}
+  // expected-note@#lambdaCallParLevelDefKinds0_routine {{'#pragma acc routine' for function 'lambdaCallParLevelDefKinds0' appears here}}
+  // expected-note@#vectorLambda_call_vectorFn {{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of function 'vectorFn' here}}
+  // expected-note@#vectorFn_routine {{'#pragma acc routine' for function 'vectorFn' appears here}}
+  vectorLambda();
+}
+
+void lambdaCallParLevelDefKinds1() {
+  auto lambda = []() { gangFn(); }; // #lambdaCallParLevelDefKinds1_lambda
+  #pragma acc parallel
+  lambda();
+  #pragma acc parallel loop gang // #lambdaCallParLevelDefKinds1_parLoop
+  for (int i = 0; i < 8; ++i) {
+    auto lambdaInner = []() { gangFn(); }; // #lambdaCallParLevelDefKinds1_parLoop_lambdaInner
+    // expected-error@+4 {{'#pragma acc parallel loop gang' construct calls function 'lambdaCallParLevelDefKinds1()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+    // expected-note@#lambdaCallParLevelDefKinds1_parLoop {{enclosing '#pragma acc parallel loop' here}}
+    // expected-note@#lambdaCallParLevelDefKinds1_lambda {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelDefKinds1()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+    // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+    lambda();
+    // expected-error@+4 {{'#pragma acc parallel loop gang' construct calls function 'lambdaCallParLevelDefKinds1()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+    // expected-note@#lambdaCallParLevelDefKinds1_parLoop {{enclosing '#pragma acc parallel loop' here}}
+    // expected-note@#lambdaCallParLevelDefKinds1_parLoop_lambdaInner {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelDefKinds1()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+    // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+    lambdaInner();
+  }
+  #pragma acc parallel
+  #pragma acc loop gang // #lambdaCallParLevelDefKinds1_par_loop
+  for (int i = 0; i < 8; ++i) {
+    auto lambdaInner = []() { gangFn(); }; // #lambdaCallParLevelDefKinds1_par_loop_lambdaInner
+    // expected-error@+4 {{'#pragma acc loop gang' construct calls function 'lambdaCallParLevelDefKinds1()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+    // expected-note@#lambdaCallParLevelDefKinds1_par_loop {{enclosing '#pragma acc loop' here}}
+    // expected-note@#lambdaCallParLevelDefKinds1_lambda {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelDefKinds1()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+    // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+    lambda();
+    // expected-error@+4 {{'#pragma acc loop gang' construct calls function 'lambdaCallParLevelDefKinds1()::(anonymous class)::operator()', which has '#pragma acc routine gang'}}
+    // expected-note@#lambdaCallParLevelDefKinds1_par_loop {{enclosing '#pragma acc loop' here}}
+    // expected-note@#lambdaCallParLevelDefKinds1_par_loop_lambdaInner {{'#pragma acc routine gang' implied for function 'lambdaCallParLevelDefKinds1()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+    // expected-note@#gangFn_routine {{'#pragma acc routine' for function 'gangFn' appears here}}
+    lambdaInner();
+  }
 }
 
 //------------------------------------------------------------------------------

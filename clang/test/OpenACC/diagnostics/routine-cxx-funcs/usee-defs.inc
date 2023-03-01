@@ -43,16 +43,16 @@ MemberUsees::MemberUsees() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::MemberUsees' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_ctor_routine {{'#pragma acc routine' for function 'MemberUsees::MemberUsees' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::MemberUsees' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::MemberUsees' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::MemberUsees' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_ctor_routine {{'#pragma acc routine' for function 'MemberUsees::MemberUsees' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::MemberUsees' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::MemberUsees' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::MemberUsees' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::MemberUsees' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_ctor_routine {{'#pragma acc routine' for function 'MemberUsees::MemberUsees' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::MemberUsees' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -75,16 +75,16 @@ MemberUsees::MemberUsees(MemberUsees &) {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::MemberUsees' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_ctorCopy_routine {{'#pragma acc routine' for function 'MemberUsees::MemberUsees' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::MemberUsees' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::MemberUsees' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::MemberUsees' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_ctorCopy_routine {{'#pragma acc routine' for function 'MemberUsees::MemberUsees' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::MemberUsees' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::MemberUsees' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::MemberUsees' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::MemberUsees' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_ctorCopy_routine {{'#pragma acc routine' for function 'MemberUsees::MemberUsees' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::MemberUsees' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -149,16 +149,16 @@ MemberUsees::~MemberUsees() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::~MemberUsees' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_dtor_routine {{'#pragma acc routine' for function 'MemberUsees::~MemberUsees' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::~MemberUsees' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::~MemberUsees' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::~MemberUsees' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_dtor_routine {{'#pragma acc routine' for function 'MemberUsees::~MemberUsees' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::~MemberUsees' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::~MemberUsees' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::~MemberUsees' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::~MemberUsees' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_dtor_routine {{'#pragma acc routine' for function 'MemberUsees::~MemberUsees' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::~MemberUsees' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -177,16 +177,16 @@ MemberUseesTrivial::MemberUseesTrivial() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUseesTrivial::MemberUseesTrivial' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUseesTrivial_ctor_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::MemberUseesTrivial' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUseesTrivial::MemberUseesTrivial' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUseesTrivial::MemberUseesTrivial' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUseesTrivial::MemberUseesTrivial' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUseesTrivial_ctor_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::MemberUseesTrivial' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUseesTrivial::MemberUseesTrivial' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUseesTrivial::MemberUseesTrivial' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUseesTrivial::MemberUseesTrivial' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUseesTrivial::MemberUseesTrivial' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUseesTrivial_ctor_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::MemberUseesTrivial' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUseesTrivial::MemberUseesTrivial' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -205,16 +205,16 @@ MemberUseesTrivial::MemberUseesTrivial(MemberUseesTrivial &) {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUseesTrivial::MemberUseesTrivial' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUseesTrivial_ctorCopy_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::MemberUseesTrivial' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUseesTrivial::MemberUseesTrivial' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUseesTrivial::MemberUseesTrivial' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUseesTrivial::MemberUseesTrivial' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUseesTrivial_ctorCopy_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::MemberUseesTrivial' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUseesTrivial::MemberUseesTrivial' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUseesTrivial::MemberUseesTrivial' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUseesTrivial::MemberUseesTrivial' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUseesTrivial::MemberUseesTrivial' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUseesTrivial_ctorCopy_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::MemberUseesTrivial' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUseesTrivial::MemberUseesTrivial' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -242,16 +242,16 @@ MemberUseesTrivial::~MemberUseesTrivial() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUseesTrivial::~MemberUseesTrivial' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUseesTrivial_dtor_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUseesTrivial::~MemberUseesTrivial' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUseesTrivial::~MemberUseesTrivial' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUseesTrivial::~MemberUseesTrivial' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUseesTrivial_dtor_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUseesTrivial::~MemberUseesTrivial' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUseesTrivial::~MemberUseesTrivial' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUseesTrivial::~MemberUseesTrivial' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUseesTrivial::~MemberUseesTrivial' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUseesTrivial_dtor_routine {{'#pragma acc routine' for function 'MemberUseesTrivial::~MemberUseesTrivial' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUseesTrivial::~MemberUseesTrivial' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -270,16 +270,16 @@ void *MemberUsees::operator new(unsigned long s) {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::operator new' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_new_routine {{'#pragma acc routine' for function 'MemberUsees::operator new' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator new' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator new' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::operator new' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_new_routine {{'#pragma acc routine' for function 'MemberUsees::operator new' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator new' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator new' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator new' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator new' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_new_routine {{'#pragma acc routine' for function 'MemberUsees::operator new' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::operator new' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -303,16 +303,16 @@ void MemberUsees::operator delete(void *p) {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::operator delete' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_delete_routine {{'#pragma acc routine' for function 'MemberUsees::operator delete' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator delete' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator delete' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::operator delete' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_delete_routine {{'#pragma acc routine' for function 'MemberUsees::operator delete' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator delete' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator delete' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator delete' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator delete' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_delete_routine {{'#pragma acc routine' for function 'MemberUsees::operator delete' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::operator delete' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -331,16 +331,16 @@ int MemberUsees::operator-() const {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::operator-' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opUnary_routine {{'#pragma acc routine' for function 'MemberUsees::operator-' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator-' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator-' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::operator-' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opUnary_routine {{'#pragma acc routine' for function 'MemberUsees::operator-' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator-' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator-' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator-' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator-' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opUnary_routine {{'#pragma acc routine' for function 'MemberUsees::operator-' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::operator-' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -360,16 +360,16 @@ int MemberUsees::operator+(int) const {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::operator+' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opBinary_routine {{'#pragma acc routine' for function 'MemberUsees::operator+' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator+' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator+' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::operator+' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opBinary_routine {{'#pragma acc routine' for function 'MemberUsees::operator+' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator+' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator+' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator+' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator+' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opBinary_routine {{'#pragma acc routine' for function 'MemberUsees::operator+' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::operator+' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -389,16 +389,16 @@ int MemberUsees::operator[](int) const {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::operator[]' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opSubscript_routine {{'#pragma acc routine' for function 'MemberUsees::operator[]' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator[]' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator[]' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::operator[]' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opSubscript_routine {{'#pragma acc routine' for function 'MemberUsees::operator[]' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator[]' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator[]' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator[]' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator[]' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opSubscript_routine {{'#pragma acc routine' for function 'MemberUsees::operator[]' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::operator[]' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -418,16 +418,16 @@ int MemberUsees::operator()() const {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::operator()' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opCall_routine {{'#pragma acc routine' for function 'MemberUsees::operator()' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator()' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator()' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::operator()' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opCall_routine {{'#pragma acc routine' for function 'MemberUsees::operator()' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator()' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator()' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator()' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator()' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opCall_routine {{'#pragma acc routine' for function 'MemberUsees::operator()' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -447,16 +447,16 @@ MemberUsees::ArrowResult MemberUsees::operator->() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::operator->' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opArrow_routine {{'#pragma acc routine' for function 'MemberUsees::operator->' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator->' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator->' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::operator->' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opArrow_routine {{'#pragma acc routine' for function 'MemberUsees::operator->' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator->' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator->' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator->' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator->' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opArrow_routine {{'#pragma acc routine' for function 'MemberUsees::operator->' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::operator->' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -477,16 +477,16 @@ MemberUsees::ArrowResult::operator->() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::ArrowResult::operator->' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_ArrowResult_opArrow_routine {{'#pragma acc routine' for function 'MemberUsees::ArrowResult::operator->' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::ArrowResult::operator->' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::ArrowResult::operator->' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::ArrowResult::operator->' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_ArrowResult_opArrow_routine {{'#pragma acc routine' for function 'MemberUsees::ArrowResult::operator->' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::ArrowResult::operator->' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::ArrowResult::operator->' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::ArrowResult::operator->' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::ArrowResult::operator->' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_ArrowResult_opArrow_routine {{'#pragma acc routine' for function 'MemberUsees::ArrowResult::operator->' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::ArrowResult::operator->' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -510,16 +510,16 @@ MemberUsees::operator int() const {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::operator int' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opConvert_routine {{'#pragma acc routine' for function 'MemberUsees::operator int' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator int' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator int' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::operator int' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opConvert_routine {{'#pragma acc routine' for function 'MemberUsees::operator int' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator int' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator int' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator int' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator int' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opConvert_routine {{'#pragma acc routine' for function 'MemberUsees::operator int' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::operator int' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -539,16 +539,16 @@ MemberUsees::operator FnPtr() const {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::operator int (*)(int)' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opConvertSurrogate_routine {{'#pragma acc routine' for function 'MemberUsees::operator int (*)(int)' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator int (*)(int)' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator int (*)(int)' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::operator int (*)(int)' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_opConvertSurrogate_routine {{'#pragma acc routine' for function 'MemberUsees::operator int (*)(int)' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator int (*)(int)' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::operator int (*)(int)' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator int (*)(int)' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::operator int (*)(int)' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_opConvertSurrogate_routine {{'#pragma acc routine' for function 'MemberUsees::operator int (*)(int)' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::operator int (*)(int)' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -568,16 +568,16 @@ int *MemberUsees::begin() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::begin' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_begin_routine {{'#pragma acc routine' for function 'MemberUsees::begin' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::begin' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::begin' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::begin' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_begin_routine {{'#pragma acc routine' for function 'MemberUsees::begin' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::begin' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::begin' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::begin' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::begin' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_begin_routine {{'#pragma acc routine' for function 'MemberUsees::begin' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::begin' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -597,16 +597,16 @@ int *MemberUsees::end() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'MemberUsees::end' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_end_routine {{'#pragma acc routine' for function 'MemberUsees::end' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::end' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::end' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'MemberUsees::end' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#MemberUsees_end_routine {{'#pragma acc routine' for function 'MemberUsees::end' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::end' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'MemberUsees::end' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'MemberUsees::end' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'MemberUsees::end' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#MemberUsees_end_routine {{'#pragma acc routine' for function 'MemberUsees::end' appears here}}
   // funcBadContentImp-error@+1 {{function 'MemberUsees::end' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -623,16 +623,16 @@ void fnUsee() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'fnUsee' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#fnUsee_routine  {{'#pragma acc routine' for function 'fnUsee' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'fnUsee' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'fnUsee' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'fnUsee' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#fnUsee_routine  {{'#pragma acc routine' for function 'fnUsee' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'fnUsee' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'fnUsee' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'fnUsee' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'fnUsee' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUsee_routine  {{'#pragma acc routine' for function 'fnUsee' appears here}}
   // funcBadContentImp-error@+1 {{function 'fnUsee' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -653,7 +653,7 @@ void fnUseeInNestedHostLambda() {
   // funcBadContentExp-note@#fnUseeInNestedHostLambda_routine  {{'#pragma acc routine' for function 'fnUseeInNestedHostLambda' appears here}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'fnUseeInNestedHostLambda' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'fnUseeInNestedHostLambda' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUseeInNestedHostLambda_routine  {{'#pragma acc routine' for function 'fnUseeInNestedHostLambda' appears here}}
   // funcBadContentImp-error@+1 {{function 'fnUseeInNestedHostLambda' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -674,7 +674,7 @@ void fnUseeInHostLambda() {
   // funcBadContentExp-note@#fnUseeInHostLambda_routine  {{'#pragma acc routine' for function 'fnUseeInHostLambda' appears here}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'fnUseeInHostLambda' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'fnUseeInHostLambda' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUseeInHostLambda_routine  {{'#pragma acc routine' for function 'fnUseeInHostLambda' appears here}}
   // funcBadContentImp-error@+1 {{function 'fnUseeInHostLambda' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -690,16 +690,16 @@ void fnUseeInNestedAccRoutineLambda() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'fnUseeInNestedAccRoutineLambda' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#fnUseeInNestedAccRoutineLambda_routine  {{'#pragma acc routine' for function 'fnUseeInNestedAccRoutineLambda' appears here}}
-  // funcBadContentImp-note@#fnUseeInNestedAccRoutineLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInNestedAccRoutineLambda' by use in function 'lambdaDefiner()::(anonymous class)::operator()' here}}
-  // funcBadContentImp-note@#lambdaDefiner_accLambda_call {{'#pragma acc routine seq' implied for function 'lambdaDefiner()::(anonymous class)::operator()' by use in construct '#pragma acc parallel' here}}
+  // funcBadContentImp-note@#fnUseeInNestedAccRoutineLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInNestedAccRoutineLambda' by its use in function 'lambdaDefiner()::(anonymous class)::operator()' here}}
+  // funcBadContentImp-note@#lambdaDefiner_accLambda_call {{'#pragma acc routine seq' implied for function 'lambdaDefiner()::(anonymous class)::operator()' by its use in construct '#pragma acc parallel' here}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'fnUseeInNestedAccRoutineLambda' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#fnUseeInNestedAccRoutineLambda_routine  {{'#pragma acc routine' for function 'fnUseeInNestedAccRoutineLambda' appears here}}
-  // funcBadContentImp-note@#fnUseeInNestedAccRoutineLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInNestedAccRoutineLambda' by use in function 'lambdaDefiner()::(anonymous class)::operator()' here}}
-  // funcBadContentImp-note@#lambdaDefiner_accLambda_call {{'#pragma acc routine seq' implied for function 'lambdaDefiner()::(anonymous class)::operator()' by use in construct '#pragma acc parallel' here}}
+  // funcBadContentImp-note@#fnUseeInNestedAccRoutineLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInNestedAccRoutineLambda' by its use in function 'lambdaDefiner()::(anonymous class)::operator()' here}}
+  // funcBadContentImp-note@#lambdaDefiner_accLambda_call {{'#pragma acc routine seq' implied for function 'lambdaDefiner()::(anonymous class)::operator()' by its use in construct '#pragma acc parallel' here}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'fnUseeInNestedAccRoutineLambda' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'fnUseeInNestedAccRoutineLambda' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUseeInNestedAccRoutineLambda_routine  {{'#pragma acc routine' for function 'fnUseeInNestedAccRoutineLambda' appears here}}
   // funcBadContentImp-error@+1 {{function 'fnUseeInNestedAccRoutineLambda' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -715,16 +715,16 @@ void fnUseeInAccRoutineLambda() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'fnUseeInAccRoutineLambda' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#fnUseeInAccRoutineLambda_routine  {{'#pragma acc routine' for function 'fnUseeInAccRoutineLambda' appears here}}
-  // funcBadContentImp-note@#fnUseeInAccRoutineLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInAccRoutineLambda' by use in function '(anonymous class)::operator()' here}}
-  // funcBadContentImp-note@#accLambda_call {{'#pragma acc routine seq' implied for function '(anonymous class)::operator()' by use in construct '#pragma acc parallel' here}}
+  // funcBadContentImp-note@#fnUseeInAccRoutineLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInAccRoutineLambda' by its use in function '(anonymous class)::operator()' here}}
+  // funcBadContentImp-note@#accLambda_call {{'#pragma acc routine seq' implied for function '(anonymous class)::operator()' by its use in construct '#pragma acc parallel' here}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'fnUseeInAccRoutineLambda' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#fnUseeInAccRoutineLambda_routine  {{'#pragma acc routine' for function 'fnUseeInAccRoutineLambda' appears here}}
-  // funcBadContentImp-note@#fnUseeInAccRoutineLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInAccRoutineLambda' by use in function '(anonymous class)::operator()' here}}
-  // funcBadContentImp-note@#accLambda_call {{'#pragma acc routine seq' implied for function '(anonymous class)::operator()' by use in construct '#pragma acc parallel' here}}
+  // funcBadContentImp-note@#fnUseeInAccRoutineLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInAccRoutineLambda' by its use in function '(anonymous class)::operator()' here}}
+  // funcBadContentImp-note@#accLambda_call {{'#pragma acc routine seq' implied for function '(anonymous class)::operator()' by its use in construct '#pragma acc parallel' here}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'fnUseeInAccRoutineLambda' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'fnUseeInAccRoutineLambda' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUseeInAccRoutineLambda_routine  {{'#pragma acc routine' for function 'fnUseeInAccRoutineLambda' appears here}}
   // funcBadContentImp-error@+1 {{function 'fnUseeInAccRoutineLambda' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -740,16 +740,16 @@ void fnUseeInAccParallelLambda() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'fnUseeInAccParallelLambda' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#fnUseeInAccParallelLambda_routine  {{'#pragma acc routine' for function 'fnUseeInAccParallelLambda' appears here}}
-  // funcBadContentImp-note@#fnUseeInAccParallelLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInAccParallelLambda' by use in function 'lambdaDefiner()::(anonymous class)::operator()' here}}
-  // funcBadContentImp-note@#lambdaDefiner_accParallelLambda_call {{'#pragma acc routine seq' implied for function 'lambdaDefiner()::(anonymous class)::operator()' by use in construct '#pragma acc parallel' here}}
+  // funcBadContentImp-note@#fnUseeInAccParallelLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInAccParallelLambda' by its use in function 'lambdaDefiner()::(anonymous class)::operator()' here}}
+  // funcBadContentImp-note@#lambdaDefiner_accParallelLambda_call {{'#pragma acc routine seq' implied for function 'lambdaDefiner()::(anonymous class)::operator()' by its use in construct '#pragma acc parallel' here}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'fnUseeInAccParallelLambda' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#fnUseeInAccParallelLambda_routine  {{'#pragma acc routine' for function 'fnUseeInAccParallelLambda' appears here}}
-  // funcBadContentImp-note@#fnUseeInAccParallelLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInAccParallelLambda' by use in function 'lambdaDefiner()::(anonymous class)::operator()' here}}
-  // funcBadContentImp-note@#lambdaDefiner_accParallelLambda_call {{'#pragma acc routine seq' implied for function 'lambdaDefiner()::(anonymous class)::operator()' by use in construct '#pragma acc parallel' here}}
+  // funcBadContentImp-note@#fnUseeInAccParallelLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInAccParallelLambda' by its use in function 'lambdaDefiner()::(anonymous class)::operator()' here}}
+  // funcBadContentImp-note@#lambdaDefiner_accParallelLambda_call {{'#pragma acc routine seq' implied for function 'lambdaDefiner()::(anonymous class)::operator()' by its use in construct '#pragma acc parallel' here}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'fnUseeInAccParallelLambda' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'fnUseeInAccParallelLambda' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUseeInAccParallelLambda_routine  {{'#pragma acc routine' for function 'fnUseeInAccParallelLambda' appears here}}
   // funcBadContentImp-error@+1 {{function 'fnUseeInAccParallelLambda' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -765,16 +765,16 @@ void fnUseeInAccLoopLambda() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'fnUseeInAccLoopLambda' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#fnUseeInAccLoopLambda_routine  {{'#pragma acc routine' for function 'fnUseeInAccLoopLambda' appears here}}
-  // funcBadContentImp-note@#fnUseeInAccLoopLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInAccLoopLambda' by use in function 'lambdaDefiner()::(anonymous class)::operator()' here}}
-  // funcBadContentImp-note@#lambdaDefiner_accLoopLambda_call {{'#pragma acc routine seq' implied for function 'lambdaDefiner()::(anonymous class)::operator()' by use in construct '#pragma acc parallel' here}}
+  // funcBadContentImp-note@#fnUseeInAccLoopLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInAccLoopLambda' by its use in function 'lambdaDefiner()::(anonymous class)::operator()' here}}
+  // funcBadContentImp-note@#lambdaDefiner_accLoopLambda_loop {{'#pragma acc routine seq' implied for function 'lambdaDefiner()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'fnUseeInAccLoopLambda' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#fnUseeInAccLoopLambda_routine  {{'#pragma acc routine' for function 'fnUseeInAccLoopLambda' appears here}}
-  // funcBadContentImp-note@#fnUseeInAccLoopLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInAccLoopLambda' by use in function 'lambdaDefiner()::(anonymous class)::operator()' here}}
-  // funcBadContentImp-note@#lambdaDefiner_accLoopLambda_call {{'#pragma acc routine seq' implied for function 'lambdaDefiner()::(anonymous class)::operator()' by use in construct '#pragma acc parallel' here}}
+  // funcBadContentImp-note@#fnUseeInAccLoopLambda_call {{'#pragma acc routine seq' implied for function 'fnUseeInAccLoopLambda' by its use in function 'lambdaDefiner()::(anonymous class)::operator()' here}}
+  // funcBadContentImp-note@#lambdaDefiner_accLoopLambda_loop {{'#pragma acc routine seq' implied for function 'lambdaDefiner()::(anonymous class)::operator()' by its use of construct '#pragma acc loop' here}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'fnUseeInAccLoopLambda' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'fnUseeInAccLoopLambda' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#fnUseeInAccLoopLambda_routine  {{'#pragma acc routine' for function 'fnUseeInAccLoopLambda' appears here}}
   // funcBadContentImp-error@+1 {{function 'fnUseeInAccLoopLambda' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -791,16 +791,16 @@ void NamespaceUsees::fn() {
 #if USEE_BAD_CONTENT
   // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'NamespaceUsees::fn' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#NamespaceUsees_fn_routine  {{'#pragma acc routine' for function 'NamespaceUsees::fn' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'NamespaceUsees::fn' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'NamespaceUsees::fn' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
   // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'NamespaceUsees::fn' because the latter is attributed with '#pragma acc routine'}}
   // funcBadContentExp-note@#NamespaceUsees_fn_routine  {{'#pragma acc routine' for function 'NamespaceUsees::fn' appears here}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'NamespaceUsees::fn' by use in}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'NamespaceUsees::fn' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContentExp-error@+3 {{function 'NamespaceUsees::fn' has '#pragma acc routine seq' but contains '#pragma acc loop gang'}}
+  // funcBadContentExp-error@+3 {{function 'NamespaceUsees::fn' has '#pragma acc routine vector' but contains '#pragma acc loop gang'}}
   // funcBadContentExp-note@#NamespaceUsees_fn_routine  {{'#pragma acc routine' for function 'NamespaceUsees::fn' appears here}}
   // funcBadContentImp-error@+1 {{function 'NamespaceUsees::fn' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
   #pragma acc loop gang
@@ -809,53 +809,59 @@ void NamespaceUsees::fn() {
 #endif
 }
 
+// Because lambdas currently cannot have explicit routine directives, this
+// function is called within lambdas to imply their routine directives instead.
+USEE_ROUTINE_DIR // #lambdaUseeUsee_routine
+void lambdaUseeUsee() {}
+
 // At one time, Clang's OpenACC analysis overlooked enclosing lambdas as if
 // their contents appeared at file scope, in an enclosing function, or in an
 // enclosing construct.
+//
+// Because explicit routine directives are not yet supported for lambdas, and
+// because an implicit routine directive for a lambda is determined by its
+// usees, an orphaned loop construct in a lambda cannot be bad content, so that
+// case is skipped below.
+//
+// Like other usees, the file-scope lambdaUsee below is used in users.inc.  Each
+// remaining lambdaUsee cannot be used elsewhere, so it's used immediately
+// below.
 auto lambdaUsee = []() {
 #if USEE_BAD_CONTENT
-  // funcBadContentImp-error@+3 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function '(anonymous class)::operator()' by use in}}
+  // funcBadContent-error@+5 {{static local variable 'x' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  // funcBadContentExp-note@#lambdaUsee_lambdaUseeUsee_call{{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of function 'lambdaUseeUsee' here}}
+  // funcBadContentExp-note@#lambdaUseeUsee_routine {{'#pragma acc routine' for function 'lambdaUseeUsee' appears here}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function '(anonymous class)::operator()' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   static int x;
-  // funcBadContentImp-error@+3 {{'#pragma acc parallel' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
-  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function '(anonymous class)::operator()' by use in}}
+  // funcBadContent-error@+5 {{'#pragma acc parallel' is not permitted within function '(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+  // funcBadContentExp-note@#lambdaUsee_lambdaUseeUsee_call{{'#pragma acc routine vector' implied for function '(anonymous class)::operator()' by its use of function 'lambdaUseeUsee' here}}
+  // funcBadContentExp-note@#lambdaUseeUsee_routine {{'#pragma acc routine' for function 'lambdaUseeUsee' appears here}}
+  // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function '(anonymous class)::operator()' by its use in}}
   // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
   #pragma acc parallel
   ;
-  // funcBadContent-error@+3 {{function '(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
-  // funcBadContent-note@+2 {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
-  // funcBadContent-note@+1 {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
-  #pragma acc loop gang
-  for (int i = 0; i < 5; ++i)
-    ;
 #endif
+  lambdaUseeUsee(); // #lambdaUsee_lambdaUseeUsee_call
 };
-USEE_ROUTINE_DIR // #lambdaUseeDefinerAndUser_routine
 void lambdaUseeDefinerAndUser() {
   auto lambdaUsee = []() {
 #if USEE_BAD_CONTENT
-    // funcBadContent-error@+5 {{static local variable 'x' is not permitted within function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
-    // funcBadContent-note@#lambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' by use in function 'lambdaUseeDefinerAndUser' here}}
-    // funcBadContentExp-note@#lambdaUseeDefinerAndUser_routine {{'#pragma acc routine' for function 'lambdaUseeDefinerAndUser' appears here}}
-    // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'lambdaUseeDefinerAndUser' by use in}}
-    // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
+    // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+    // funcBadContentExp-note@#lambdaUseeDefinerAndUser_lambdaUsee_lambdaUseeUsee_call {{'#pragma acc routine vector' implied for function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' by its use of function 'lambdaUseeUsee' here}}
+    // funcBadContentExp-note@#lambdaUseeUsee_routine {{'#pragma acc routine' for function 'lambdaUseeUsee' appears here}}
+    // funcBadContentImp-note@#lambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' by its use in construct '#pragma acc parallel' here}}
     static int x;
-    // funcBadContent-error@+5 {{'#pragma acc parallel' is not permitted within function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
-    // funcBadContent-note@#lambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' by use in function 'lambdaUseeDefinerAndUser' here}}
-    // funcBadContentExp-note@#lambdaUseeDefinerAndUser_routine {{'#pragma acc routine' for function 'lambdaUseeDefinerAndUser' appears here}}
-    // funcBadContentImp-note@*:* {{'#pragma acc routine seq' implied for function 'lambdaUseeDefinerAndUser' by use in}}
-    // funcBadContentImp-note@*:* {{'#pragma acc routine' for function}}
+    // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+    // funcBadContentExp-note@#lambdaUseeDefinerAndUser_lambdaUsee_lambdaUseeUsee_call {{'#pragma acc routine vector' implied for function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' by its use of function 'lambdaUseeUsee' here}}
+    // funcBadContentExp-note@#lambdaUseeUsee_routine {{'#pragma acc routine' for function 'lambdaUseeUsee' appears here}}
+    // funcBadContentImp-note@#lambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' by its use in construct '#pragma acc parallel' here}}
     #pragma acc parallel
     ;
-    // funcBadContent-error@+3 {{function 'lambdaUseeDefinerAndUser()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
-    // funcBadContent-note@+2 {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
-    // funcBadContent-note@+1 {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
-    #pragma acc loop gang
-    for (int i = 0; i < 5; ++i)
-      ;
 #endif
+    lambdaUseeUsee(); // #lambdaUseeDefinerAndUser_lambdaUsee_lambdaUseeUsee_call
   };
+  #pragma acc parallel
   lambdaUsee(); // #lambdaUseeDefinerAndUser_lambdaUsee_call
 }
 void accParallelLambdaUseeDefinerAndUser() {
@@ -863,42 +869,40 @@ void accParallelLambdaUseeDefinerAndUser() {
   {
     []() {
 #if USEE_BAD_CONTENT
-      // funcBadContent-error@+2 {{static local variable 'x' is not permitted within function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
-      // funcBadContent-note@#accParallelLambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by use in construct '#pragma acc parallel' here}}
+      // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+      // funcBadContentExp-note@#accParallelLambdaUseeDefinerAndUser_lambdaUsee_lambdaUseeUsee_call {{'#pragma acc routine vector' implied for function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by its use of function 'lambdaUseeUsee' here}}
+      // funcBadContentExp-note@#lambdaUseeUsee_routine {{'#pragma acc routine' for function 'lambdaUseeUsee' appears here}}
+      // funcBadContentImp-note@#accParallelLambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by its use in construct '#pragma acc parallel' here}}
       static int x;
-      // funcBadContent-error@+2 {{'#pragma acc parallel' is not permitted within function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
-      // funcBadContent-note@#accParallelLambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by use in construct '#pragma acc parallel' here}}
+      // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+      // funcBadContentExp-note@#accParallelLambdaUseeDefinerAndUser_lambdaUsee_lambdaUseeUsee_call {{'#pragma acc routine vector' implied for function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by its use of function 'lambdaUseeUsee' here}}
+      // funcBadContentExp-note@#lambdaUseeUsee_routine {{'#pragma acc routine' for function 'lambdaUseeUsee' appears here}}
+      // funcBadContentImp-note@#accParallelLambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by its use in construct '#pragma acc parallel' here}}
       #pragma acc parallel
       ;
-      // funcBadContent-error@+3 {{function 'accParallelLambdaUseeDefinerAndUser()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
-      // funcBadContent-note@+2 {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
-      // funcBadContent-note@+1 {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
-      #pragma acc loop
-      for (int i = 0; i < 5; ++i)
-        ;
 #endif
+      lambdaUseeUsee(); // #accParallelLambdaUseeDefinerAndUser_lambdaUsee_lambdaUseeUsee_call
     }(); // #accParallelLambdaUseeDefinerAndUser_lambdaUsee_call
   }
 }
 void accLoopLambdaUseeDefinerAndUser() {
-  #pragma acc parallel loop vector
+  #pragma acc parallel loop
   for (int i = 0; i < 5; ++i) {
     []() {
 #if USEE_BAD_CONTENT
-      // funcBadContent-error@+2 {{static local variable 'x' is not permitted within function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
-      // funcBadContent-note@#accLoopLambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by use in construct '#pragma acc parallel loop' here}}
+      // funcBadContent-error@+4 {{static local variable 'x' is not permitted within function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+      // funcBadContentExp-note@#accLoopLambdaUseeDefinerAndUser_lambdaUsee_lambdaUseeUsee_call {{'#pragma acc routine vector' implied for function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by its use of function 'lambdaUseeUsee' here}}
+      // funcBadContentExp-note@#lambdaUseeUsee_routine {{'#pragma acc routine' for function 'lambdaUseeUsee' appears here}}
+      // funcBadContentImp-note@#accLoopLambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by its use in construct '#pragma acc parallel loop' here}}
       static int x;
-      // funcBadContent-error@+2 {{'#pragma acc parallel' is not permitted within function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
-      // funcBadContent-note@#accLoopLambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by use in construct '#pragma acc parallel loop' here}}
+      // funcBadContent-error@+4 {{'#pragma acc parallel' is not permitted within function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+      // funcBadContentExp-note@#accLoopLambdaUseeDefinerAndUser_lambdaUsee_lambdaUseeUsee_call {{'#pragma acc routine vector' implied for function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by its use of function 'lambdaUseeUsee' here}}
+      // funcBadContentExp-note@#lambdaUseeUsee_routine {{'#pragma acc routine' for function 'lambdaUseeUsee' appears here}}
+      // funcBadContentImp-note@#accLoopLambdaUseeDefinerAndUser_lambdaUsee_call {{'#pragma acc routine seq' implied for function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' by its use in construct '#pragma acc parallel loop' here}}
       #pragma acc parallel
       ;
-      // funcBadContent-error@+3 {{function 'accLoopLambdaUseeDefinerAndUser()::(anonymous class)::operator()' has no explicit '#pragma acc routine' but contains orphaned '#pragma acc loop'}}
-      // funcBadContent-note@+2 {{explicit '#pragma acc routine' is currently not supported for lambdas, but }}
-      // funcBadContent-note@+1 {{you can disable this diagnostic with '-Wno-openacc-routine-cxx-lambda'}}
-      #pragma acc loop gang
-      for (int i = 0; i < 5; ++i)
-        ;
 #endif
+      lambdaUseeUsee(); // #accLoopLambdaUseeDefinerAndUser_lambdaUsee_lambdaUseeUsee_call
     }(); // #accLoopLambdaUseeDefinerAndUser_lambdaUsee_call
   }
 }

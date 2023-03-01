@@ -23,6 +23,7 @@
 #define USER_USER_ROUTINE_DIR
 #define USER_LOOP_DIR _Pragma("acc loop vector")
 #define USER_LOOP_ROUTINE_DIR _Pragma("acc routine vector")
+#define INCLUDE_LAMBDA_USES 0 // lambda can't be used before def or routine dir
 #include "users.inc" // uses recorded
 
 #define USEE_ROUTINE_DIR _Pragma("acc routine seq")

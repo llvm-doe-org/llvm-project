@@ -1,7 +1,6 @@
 // Check simple "acc loop" cases that are specific to C++ but don't fit the
 // focus of any other loop-*.cpp test.
 
-// REDEFINE: %{all:clang:args} = -Wno-openacc-routine-cxx-lambda
 // REDEFINE: %{dmp:fc:args} = -strict-whitespace
 // REDEFINE: %{exe:fc:args} = -strict-whitespace -match-full-lines \
 // REDEFINE:                  -implicit-check-not='{{.}}'
@@ -101,130 +100,8 @@ void lambdaAssignInAccLoopCombined() {
   printf("x=%d\n", x);
 }
 
-//------------------------------------------------------------------------------
-// Check that a lambda can contain an orphaned loop construct.
-//
-// This works only because we set -Wno-openacc-routine-cxx-lambda above.  In the
-// future, we expect to compute an implicit routine directive for the lambda
-// based on its orphaned loop construct's level of parallelism.
-//------------------------------------------------------------------------------
-
-// DMP-LABEL: FunctionDecl {{.*}} orphanedLoopInLambda_defineAndCallLambda 'void (int *)'
-//  DMP-NEXT: ParmVarDecl {{.* a}}
-//  DMP-NEXT: CompoundStmt
-//       DMP:   LambdaExpr
-//  DMP-NEXT:     CXXRecordDecl
-//       DMP:       CXXMethodDecl
-//  DMP-NEXT:         CompoundStmt
-//       DMP:           ACCLoopDirective
-//  DMP-NEXT:             ACCGangClause
-//  DMP-NEXT:             ACCIndependentClause {{.*}} <implicit>
-//  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
-//  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
-//  DMP-NEXT:             impl: OMPDistributeDirective
-//   DMP-NOT:               OMP
-//       DMP:               ForStmt
-//
-//   PRT-LABEL: void orphanedLoopInLambda_defineAndCallLambda(int *a) {
-//    PRT-NEXT:   [&]() {
-//  PRT-A-NEXT:     {{^ *}}#pragma acc loop gang{{$}}
-// PRT-AO-NEXT:     {{^ *}}// #pragma omp distribute{{$}}
-//  PRT-O-NEXT:     {{^ *}}#pragma omp distribute{{$}}
-// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop gang{{$}}
-//    PRT-NEXT:     for (int i = {{.*}})
-//    PRT-NEXT:       a[i] +=
-//    PRT-NEXT:   }();
-//    PRT-NEXT: }
-//
-// EXE-LABEL:orphanedLoopInLambda
-//  EXE-NEXT:a[0]=10
-//  EXE-NEXT:a[1]=11
-//  EXE-NEXT:a[2]=12
-//  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
-#pragma acc routine gang
-void orphanedLoopInLambda_defineAndCallLambda(int *a) {
-  [&]() {
-    #pragma acc loop gang
-    for (int i = 0; i < 4; ++i)
-      a[i] += 10;
-  }();
-}
-void orphanedLoopInLambda() {
-  printf("orphanedLoopInLambda\n");
-  int a[4];
-  for (int i = 0; i < 4; ++i)
-    a[i] = i;
-  #pragma acc parallel num_gangs(4)
-  orphanedLoopInLambda_defineAndCallLambda(a);
-  for (int i = 0; i < 4; ++i)
-    printf("a[%d]=%d\n", i, a[i]);
-}
-
-// DMP-LABEL: FunctionDecl {{.*}} orphanedLoopInLambdaInParallel 'void ()'
-//       DMP: LambdaExpr
-//  DMP-NEXT:   CXXRecordDecl
-//       DMP:     CXXMethodDecl
-//  DMP-NEXT:       CompoundStmt
-//       DMP:         ACCLoopDirective
-//  DMP-NEXT:           ACCGangClause
-//  DMP-NEXT:           ACCIndependentClause {{.*}} <implicit>
-//  DMP-NEXT:           ACCSharedClause {{.*}} <implicit>
-//  DMP-NEXT:             DeclRefExpr {{.*}} 'a'
-//  DMP-NEXT:           impl: OMPDistributeDirective
-//   DMP-NOT:             OMP
-//       DMP:             ForStmt
-//
-//   PRT-LABEL: void orphanedLoopInLambdaInParallel() {
-//    PRT-NEXT:   printf
-//    PRT-NEXT:   int a
-//    PRT-NEXT:   for (int i = {{.*}})
-//    PRT-NEXT:     a[i] =
-//  PRT-A-NEXT:   {{^ *}}#pragma acc parallel num_gangs(4){{$}}
-// PRT-AO-NEXT:   {{^ *}}// #pragma omp target teams num_teams(4) map(ompx_hold,tofrom: a){{$}}
-//  PRT-O-NEXT:   {{^ *}}#pragma omp target teams num_teams(4) map(ompx_hold,tofrom: a){{$}}
-// PRT-OA-NEXT:   {{^ *}}// #pragma acc parallel num_gangs(4){{$}}
-//    PRT-NEXT:   {
-//    PRT-NEXT:     [&]() {
-//  PRT-A-NEXT:       {{^ *}}#pragma acc loop gang{{$}}
-// PRT-AO-NEXT:       {{^ *}}// #pragma omp distribute{{$}}
-//  PRT-O-NEXT:       {{^ *}}#pragma omp distribute{{$}}
-// PRT-OA-NEXT:       {{^ *}}// #pragma acc loop gang{{$}}
-//    PRT-NEXT:       for (int i = {{.*}})
-//    PRT-NEXT:         a[i] +=
-//    PRT-NEXT:     }();
-//    PRT-NEXT:   }
-//    PRT-NEXT:   for (int i = {{.*}})
-//    PRT-NEXT:     printf
-//    PRT-NEXT: }
-//
-// EXE-LABEL:orphanedLoopInLambdaInParallel
-//  EXE-NEXT:a[0]=10
-//  EXE-NEXT:a[1]=11
-//  EXE-NEXT:a[2]=12
-//  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
-void orphanedLoopInLambdaInParallel() {
-  printf("orphanedLoopInLambdaInParallel\n");
-  int a[4];
-  for (int i = 0; i < 4; ++i)
-    a[i] = i;
-  #pragma acc parallel num_gangs(4)
-  {
-    [&]() {
-      #pragma acc loop gang
-      for (int i = 0; i < 4; ++i)
-        a[i] += 10;
-    }();
-  }
-  for (int i = 0; i < 4; ++i)
-    printf("a[%d]=%d\n", i, a[i]);
-}
-
 int main() {
   lambdaAssignInAccLoop();
   lambdaAssignInAccLoopCombined();
-  orphanedLoopInLambda();
-  orphanedLoopInLambdaInParallel();
   return 0;
 }

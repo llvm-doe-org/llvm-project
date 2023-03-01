@@ -1560,7 +1560,6 @@ public:
 
   /// Build 'gang' clause with an argument.
   ///
-  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
   /// \param LParenLoc Location of '('.
   /// \param StaticKwLoc Location of 'static'.
@@ -1612,10 +1611,12 @@ class ACCWorkerClause : public ACCClause {
 public:
   /// Build 'worker' clause.
   ///
+  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
   /// \param EndLoc Ending location of the clause.
-  ACCWorkerClause(SourceLocation StartLoc, SourceLocation EndLoc)
-      : ACCClause(ACCC_worker, ACC_EXPLICIT, StartLoc, EndLoc) {}
+  ACCWorkerClause(OpenACCDetermination Determination, SourceLocation StartLoc,
+                  SourceLocation EndLoc)
+      : ACCClause(ACCC_worker, Determination, StartLoc, EndLoc) {}
 
   /// Build an empty clause.
   ACCWorkerClause() : ACCClause(ACCC_worker) {}
@@ -1639,10 +1640,12 @@ class ACCVectorClause : public ACCClause {
 public:
   /// Build 'vector' clause.
   ///
+  /// \param Determination How the clause was determined.
   /// \param StartLoc Starting location of the clause.
   /// \param EndLoc Ending location of the clause.
-  ACCVectorClause(SourceLocation StartLoc, SourceLocation EndLoc)
-      : ACCClause(ACCC_vector, ACC_EXPLICIT, StartLoc, EndLoc) {}
+  ACCVectorClause(OpenACCDetermination Determination, SourceLocation StartLoc,
+                  SourceLocation EndLoc)
+      : ACCClause(ACCC_vector, Determination, StartLoc, EndLoc) {}
 
   /// Build an empty clause.
   ACCVectorClause() : ACCClause(ACCC_vector) {}
