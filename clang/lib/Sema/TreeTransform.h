@@ -7932,6 +7932,10 @@ TreeTransform<Derived>::TransformForStmt(ForStmt *S) {
   // private. Perform analysis of first part (if any).
   if (getSema().getLangOpts().OpenMP && Init.isUsable())
     getSema().ActOnOpenMPLoopInitialization(S->getForLoc(), Init.get());
+  // In OpenACC loop region, data attributes must be computed for loop
+  // control variables.
+  if (getSema().getLangOpts().OpenACC && Init.isUsable())
+    getSema().ActOnOpenACCLoopInitialization(S->getForLoc(), Init.get());
 
   // Transform the condition
   Sema::ConditionResult Cond = getDerived().TransformCondition(
