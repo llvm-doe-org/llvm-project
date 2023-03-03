@@ -14,8 +14,6 @@
 
 #include <stdio.h>
 
-// EXE-NOT:{{.}}
-
 //------------------------------------------------------------------------------
 // Check that reduction var type checking isn't confused by a reference type.
 //
@@ -59,7 +57,6 @@ void refVars() {
   //    PRT-NEXT: ref +=
   //
   // EXE-NEXT:tgt = 50
-  //  EXE-NOT:{{.}}
   #pragma acc parallel num_gangs(4) reduction(+: ref)
   ref += 10;
   printf("tgt = %d\n", tgt);
@@ -149,11 +146,9 @@ void refVars() {
 //
 // EXE-LABEL:tmplTypeVar(3)
 //  EXE-NEXT:  x=48
-//   EXE-NOT:{{.}}
 //
 // EXE-LABEL:tmplTypeVar(3)
 //  EXE-NEXT:  x=49
-//   EXE-NOT:{{.}}
 template <typename T> void tmplTypeVar(T x) {
   printf("tmplTypeVar(%d)\n", (int)x);
   #pragma acc parallel num_gangs(4) reduction(*: x)

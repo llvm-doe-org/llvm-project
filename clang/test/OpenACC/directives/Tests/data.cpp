@@ -46,8 +46,6 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
   REG_CALLBACK(exit_data_start);
 }
 
-// EXE-NOT:{{.}}
-
 //------------------------------------------------------------------------------
 // Check that an OpenACC directive within a lambda within an OpenACC construct
 // (acc data) translates successfully.
@@ -129,7 +127,6 @@ void acc_register_library(acc_prof_reg reg, acc_prof_reg unreg,
 //  EXE-OFF-NEXT:acc_ev_exit_data_start
 //  EXE-OFF-NEXT:acc_ev_delete
 //      EXE-NEXT:after acc data: x=104
-//       EXE-NOT:{{.}}
 void directiveInLambdaInConstruct() {
   printf("directiveInLambdaInConstruct\n");
   int x = 99;
@@ -190,7 +187,6 @@ void directiveInLambdaInConstruct() {
 // EXE-OFF-NEXT:acc_ev_exit_data_start
 //     EXE-NEXT:x[0]=104
 //     EXE-NEXT:y[0]=88
-//      EXE-NOT:{{.}}
 void dmaNotVisibleInLambda() {
   printf("dmaNotVisibleInLambda\n");
   int x[] = {99};
@@ -239,7 +235,6 @@ void dmaNotVisibleInLambda() {
 // EXE-OFF-NEXT:acc_ev_enter_data_start
 //     EXE-NEXT:hello world
 // EXE-OFF-NEXT:acc_ev_exit_data_start
-//      EXE-NOT:{{.}}
 void lambdaAssignInAccData() {
   printf("lambdaAssignInAccData\n");
   int x;

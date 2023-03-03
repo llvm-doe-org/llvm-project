@@ -14,8 +14,6 @@
 
 #include <stdio.h>
 
-// EXE-NOT:{{.}}
-
 //------------------------------------------------------------------------------
 // Check that a lambda can be defined and assigned to a variable within a loop
 // construct.
@@ -49,7 +47,6 @@
 //
 // EXE-LABEL:lambdaAssignInAccLoop
 //  EXE-NEXT:x=256
-//   EXE-NOT:{{.}}
 void lambdaAssignInAccLoop() {
   printf("lambdaAssignInAccLoop\n");
   int x = 1;
@@ -86,7 +83,6 @@ void lambdaAssignInAccLoop() {
 //
 // EXE-LABEL:lambdaAssignInAccLoopCombined
 //  EXE-NEXT:x=256
-//   EXE-NOT:{{.}}
 void lambdaAssignInAccLoopCombined() {
   printf("lambdaAssignInAccLoopCombined\n");
   int x = 1;

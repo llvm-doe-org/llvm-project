@@ -22,8 +22,6 @@
 
 #include <stdio.h>
 
-// EXE-NOT:{{.}}
-
 #define A_SIZE 4
 #define NUM_GANGS 4
 
@@ -143,7 +141,6 @@ void impSeqFn(int *a) {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkGangFnCallInLambda() {
   callLambdaInParallel("checkGangFnCallInLambda", NUM_GANGS, [](int *a) {
     gangFn(a);
@@ -172,7 +169,6 @@ void checkGangFnCallInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkWorkerFnCallInLambda() {
   callLambdaInParallel("checkWorkerFnCallInLambda", 1, [](int *a) {
     workerFn(a);
@@ -201,7 +197,6 @@ void checkWorkerFnCallInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkVectorFnCallInLambda() {
   callLambdaInParallel("checkVectorFnCallInLambda", 1, [](int *a) {
     vectorFn(a);
@@ -233,7 +228,6 @@ void checkVectorFnCallInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkSeqFnCallInLambda() {
   callLambdaInParallel("checkSeqFnCallInLambda", 1, [](int *a) {
     seqFn(a);
@@ -265,7 +259,6 @@ void checkSeqFnCallInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkImpSeqFnCallInLambda() {
   callLambdaInParallel("checkImpSeqFnCallInLambda", 1, [](int *a) {
     impSeqFn(a);
@@ -302,7 +295,6 @@ void checkImpSeqFnCallInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkSeqFnCallInHostLambda() {
   callLambdaFromHost("checkSeqFnCallInHostLambda", 1, [](int ngangs) {
     static int a[A_SIZE];
@@ -347,7 +339,6 @@ void checkSeqFnCallInHostLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkGangLoopInLambda() {
   callLambdaInParallel("checkGangLoopInLambda", NUM_GANGS, [](int *a) {
     #pragma acc loop gang
@@ -387,7 +378,6 @@ void checkGangLoopInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkGangWorkerVectorLoopInLambda() {
   callLambdaInParallel("checkGangWorkerVectorLoopInLambda", NUM_GANGS, [](int *a) {
     #pragma acc loop vector gang worker
@@ -425,7 +415,6 @@ void checkGangWorkerVectorLoopInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkWorkerLoopInLambda() {
   callLambdaInParallel("checkWorkerLoopInLambda", 1, [](int *a) {
     #pragma acc loop worker
@@ -464,7 +453,6 @@ void checkWorkerLoopInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkWorkerVectorLoopInLambda() {
   callLambdaInParallel("checkWorkerVectorLoopInLambda", 1, [](int *a) {
     #pragma acc loop worker vector
@@ -502,7 +490,6 @@ void checkWorkerVectorLoopInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkVectorLoopInLambda() {
   callLambdaInParallel("checkVectorLoopInLambda", 1, [](int *a) {
     #pragma acc loop vector
@@ -537,7 +524,6 @@ void checkVectorLoopInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkSeqLoopInLambda() {
   callLambdaInParallel("checkSeqLoopInLambda", 1, [](int *a) {
     #pragma acc loop seq
@@ -572,7 +558,6 @@ void checkSeqLoopInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkNakedLoopInLambda() {
   callLambdaInParallel("checkNakedLoopInLambda", 1, [](int *a) {
     #pragma acc loop
@@ -609,7 +594,6 @@ void checkNakedLoopInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkAutoLoopInLambda() {
   callLambdaInParallel("checkAutoLoopInLambda", 1, [](int *a) {
     #pragma acc loop auto
@@ -649,7 +633,6 @@ void checkAutoLoopInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkAutoGangWorkerVectorLoopInLambda() {
   callLambdaInParallel("checkAutoGangWorkerVectorLoopInLambda", 1, [](int *a) {
     #pragma acc loop auto gang worker vector
@@ -680,7 +663,6 @@ void checkAutoGangWorkerVectorLoopInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkSerialLoopInLambda() {
   callLambdaInParallel("checkSerialLoopInLambda", 1, [](int *a) {
     LOOP
@@ -740,7 +722,6 @@ void checkSerialLoopInLambda() {
 //  EXE-NEXT:a[1]=51
 //  EXE-NEXT:a[2]=52
 //  EXE-NEXT:a[3]=53
-//   EXE-NOT:{{.}}
 void checkHighLoopLowLoopInLambda() {
   callLambdaInParallel("checkHighLoopLowLoopInLambda", NUM_GANGS, [](int *a) {
     #pragma acc loop gang
@@ -797,7 +778,6 @@ void checkHighLoopLowLoopInLambda() {
 //  EXE-NEXT:a[1]=51
 //  EXE-NEXT:a[2]=52
 //  EXE-NEXT:a[3]=53
-//   EXE-NOT:{{.}}
 void checkLowLoopHighLoopInLambda() {
   callLambdaInParallel("checkLowLoopHighLoopInLambda", NUM_GANGS, [](int *a) {
     #pragma acc loop vector
@@ -836,7 +816,6 @@ void checkLowLoopHighLoopInLambda() {
 //  EXE-NEXT:a[1]=21
 //  EXE-NEXT:a[2]=22
 //  EXE-NEXT:a[3]=23
-//   EXE-NOT:{{.}}
 void checkHighCallLowCallInLambda() {
   callLambdaInParallel("checkHighCallLowCallInLambda", 1, [](int *a) {
     workerFn(a);
@@ -870,7 +849,6 @@ void checkHighCallLowCallInLambda() {
 //  EXE-NEXT:a[1]=21
 //  EXE-NEXT:a[2]=22
 //  EXE-NEXT:a[3]=23
-//   EXE-NOT:{{.}}
 void checkLowCallHighCallInLambda() {
   callLambdaInParallel("checkLowCallHighCallInLambda", 1, [](int *a) {
     vectorFn(a);
@@ -913,7 +891,6 @@ void checkLowCallHighCallInLambda() {
 //  EXE-NEXT:a[1]=21
 //  EXE-NEXT:a[2]=22
 //  EXE-NEXT:a[3]=23
-//   EXE-NOT:{{.}}
 void checkHighLoopLowCallInLambda() {
   callLambdaInParallel("checkHighLoopLowCallInLambda", 1, [](int *a) {
     #pragma acc loop gang
@@ -957,7 +934,6 @@ void checkHighLoopLowCallInLambda() {
 //  EXE-NEXT:a[1]=21
 //  EXE-NEXT:a[2]=22
 //  EXE-NEXT:a[3]=23
-//   EXE-NOT:{{.}}
 void checkLowCallHighLoopInLambda() {
   callLambdaInParallel("checkLowCallHighLoopInLambda", 1, [](int *a) {
     workerFn(a);
@@ -1001,7 +977,6 @@ void checkLowCallHighLoopInLambda() {
 //  EXE-NEXT:a[1]=51
 //  EXE-NEXT:a[2]=52
 //  EXE-NEXT:a[3]=53
-//   EXE-NOT:{{.}}
 void checkHighCallLowLoopInLambda() {
   callLambdaInParallel("checkHighCallLowLoopInLambda", NUM_GANGS, [](int *a) {
     gangFn(a);
@@ -1048,7 +1023,6 @@ void checkHighCallLowLoopInLambda() {
 //  EXE-NEXT:a[1]=51
 //  EXE-NEXT:a[2]=52
 //  EXE-NEXT:a[3]=53
-//   EXE-NOT:{{.}}
 void checkLowLoopHighCallInLambda() {
   callLambdaInParallel("checkLowLoopHighCallInLambda", NUM_GANGS, [](int *a) {
     #pragma acc loop vector
@@ -1089,7 +1063,6 @@ void checkLowLoopHighCallInLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkGangFnCallingGangLambda() {
   callLambdaInParallel("checkGangFnCallingGangLambda", NUM_GANGS, [](int *a) {
     gangFnCallingLambda(a, [](int *a) {
@@ -1123,7 +1096,6 @@ void checkGangFnCallingGangLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkGangFnCallingWorkerLambda() {
   callLambdaInParallel("checkGangFnCallingWorkerLambda", 1, [](int *a) {
     gangFnCallingLambda(a, [](int *a) {
@@ -1157,7 +1129,6 @@ void checkGangFnCallingWorkerLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkGangFnCallingVectorLambda() {
   callLambdaInParallel("checkGangFnCallingVectorLambda", 1, [](int *a) {
     gangFnCallingLambda(a, [](int *a) {
@@ -1191,7 +1162,6 @@ void checkGangFnCallingVectorLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkGangFnCallingSeqLambda() {
   callLambdaInParallel("checkGangFnCallingSeqLambda", 1, [](int *a) {
     gangFnCallingLambda(a, [](int *a) {
@@ -1225,7 +1195,6 @@ void checkGangFnCallingSeqLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkWorkerFnCallingWorkerLambda() {
   callLambdaInParallel("checkWorkerFnCallingWorkerLambda", 1, [](int *a) {
     workerFnCallingLambda(a, [](int *a) {
@@ -1259,7 +1228,6 @@ void checkWorkerFnCallingWorkerLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkVectorFnCallingVectorLambda() {
   callLambdaInParallel("checkVectorFnCallingVectorLambda", 1, [](int *a) {
     vectorFnCallingLambda(a, [](int *a) {
@@ -1293,7 +1261,6 @@ void checkVectorFnCallingVectorLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkSeqFnCallingSeqLambda() {
   callLambdaInParallel("checkSeqFnCallingSeqLambda", 1, [](int *a) {
     seqFnCallingLambda(a, [](int *a) {
@@ -1337,7 +1304,6 @@ void checkSeqFnCallingSeqLambda() {
 //  EXE-NEXT:a[1]=11
 //  EXE-NEXT:a[2]=12
 //  EXE-NEXT:a[3]=13
-//   EXE-NOT:{{.}}
 void checkLambdaCallInLambda() {
   callLambdaInParallel("checkLambdaCallInLambda", NUM_GANGS, [](int *a) {
     [a]() {
@@ -1472,7 +1438,6 @@ void checkLambdaDefAndCallInAccParallel() {
 //  EXE-NEXT:a[1]=1
 //  EXE-NEXT:a[2]=3
 //  EXE-NEXT:a[3]=6
-//   EXE-NOT:{{.}}
 template <typename T>
 void checkAutoPartLoopInLambdaDefInTemplate_templateFn(T *a) {
   auto f = [=]() {

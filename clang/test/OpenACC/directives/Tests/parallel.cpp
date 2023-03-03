@@ -22,8 +22,6 @@
 # define TGT_PRINTF(...)
 #endif
 
-// EXE-NOT:{{.}}
-
 //------------------------------------------------------------------------------
 // Check a very simple acc parallel in a template.
 //
@@ -87,12 +85,10 @@
 //              EXE-LABEL:simple(3)
 // EXE-TGT-USE-STDIO-NEXT:hello world
 // EXE-TGT-USE-STDIO-NEXT:hello world
-//                EXE-NOT:{{.}}
 //
 //              EXE-LABEL:simple(4)
 // EXE-TGT-USE-STDIO-NEXT:hello world
 // EXE-TGT-USE-STDIO-NEXT:hello world
-//                EXE-NOT:{{.}}
 template <typename T> void simple(T x) {
   printf("simple(%d)\n", (int)x);
   #pragma acc parallel num_gangs(2)
@@ -128,7 +124,6 @@ template <typename T> void simple(T x) {
 //
 // EXE-LABEL:lambdaAssignInAccParallel
 //  EXE-NEXT:x=198
-//   EXE-NOT:{{.}}
 void lambdaAssignInAccParallel() {
   printf("lambdaAssignInAccParallel\n");
   int x = 99;

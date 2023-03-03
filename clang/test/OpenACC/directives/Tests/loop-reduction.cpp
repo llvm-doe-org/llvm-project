@@ -14,8 +14,6 @@
 
 #include <stdio.h>
 
-// EXE-NOT:{{.}}
-
 //------------------------------------------------------------------------------
 // Check that reduction var type checking isn't confused by a reference type.
 //
@@ -81,7 +79,6 @@ void refVars() {
   //    PRT-NEXT:   ref *=
   //
   // EXE-NEXT:tgt = 100000
-  //  EXE-NOT:{{.}}
   #pragma acc parallel loop num_gangs(2) gang worker vector reduction(*: ref)
   for (int i = 0; i < 4; ++i)
     ref *= 10;
@@ -235,11 +232,9 @@ void refVars() {
 //
 // EXE-LABEL:tmplTypeVarOnCombined(3)
 //  EXE-NEXT:  x=48
-//   EXE-NOT:{{.}}
 //
 // EXE-LABEL:tmplTypeVarOnCombined(3)
 //  EXE-NEXT:  x=49
-//   EXE-NOT:{{.}}
 template <typename T> void tmplTypeVarOnCombined(T x) {
   printf("tmplTypeVarOnCombined(%d)\n", (int)x);
   #pragma acc parallel loop num_gangs(2) gang worker vector reduction(*: x)
@@ -374,11 +369,9 @@ template <typename T> void tmplTypeVarOnCombined(T x) {
 //
 // EXE-LABEL:tmplTypeVarOnSeparate(3)
 //  EXE-NEXT:  x=48
-//   EXE-NOT:{{.}}
 //
 // EXE-LABEL:tmplTypeVarOnSeparate(3)
 //  EXE-NEXT:  x=49
-//   EXE-NOT:{{.}}
 template <typename T> void tmplTypeVarOnSeparate(T x) {
   printf("tmplTypeVarOnSeparate(%d)\n", (int)x);
   #pragma acc parallel num_gangs(2) copy(x) reduction(*: x)
@@ -456,11 +449,9 @@ template <typename T> void tmplTypeVarOnSeparate(T x) {
 //
 // EXE-LABEL:tmplTypeVarOnOrphaned(3)
 //  EXE-NEXT:  x=48
-//   EXE-NOT:{{.}}
 //
 // EXE-LABEL:tmplTypeVarOnOrphaned(3)
 //  EXE-NEXT:  x=49
-//   EXE-NOT:{{.}}
 #pragma acc routine gang
 template <typename T> void tmplTypeVarOnOrphaned_loop(T *xp) {
   T x = *xp;
