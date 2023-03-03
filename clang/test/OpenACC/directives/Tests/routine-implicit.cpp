@@ -1413,6 +1413,84 @@ void checkLambdaDefAndCallInAccParallel() {
 }
 #endif
 
+//------------------------------------------------------------------------------
+// Check that the implicit routine directive on a lambda defined within a
+// template is recomputed properly during template instantiation.
+//
+// Specifically, the routine directive is implied by the lambda's auto loop that
+// Clang must convert to seq because of the loop-carried dependency, so the
+// routine directive has seq.  At one time, Clang mistakenly copied that routine
+// directive instead of recomputing it for the template instantiation.  Clang
+// then treated it is as an explicit routine directive (because it already
+// existed) and thus reported an error as if it conflicted with the explicit
+// gang/worker/vector clause on the auto loop.
+//------------------------------------------------------------------------------
+
+// DMP-LABEL: FunctionDecl {{.*}} checkAutoPartLoopInLambdaDefInTemplate_templateFn 'void (T *)'
+//       DMP:   LambdaExpr
+//  DMP-NEXT:     CXXRecordDecl
+//       DMP:       CXXMethodDecl
+//  DMP-NEXT:         CompoundStmt
+//       DMP:           ACCLoopDirective
+//  DMP-NEXT:             ACCAutoClause
+//  DMP-NEXT:             ACCGangClause
+//  DMP-NEXT:             ACCWorkerClause
+//  DMP-NEXT:             ACCVectorClause
+//  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
+//  DMP-NEXT:             impl: ForStmt
+//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP
+// DMP-LABEL: FunctionDecl {{.*}} checkAutoPartLoopInLambdaDefInTemplate_templateFn 'void (int *)'
+//       DMP:   LambdaExpr
+//  DMP-NEXT:     CXXRecordDecl
+//       DMP:       CXXMethodDecl
+//  DMP-NEXT:         CompoundStmt
+//       DMP:           ACCLoopDirective
+//  DMP-NEXT:             ACCAutoClause
+//  DMP-NEXT:             ACCGangClause
+//  DMP-NEXT:             ACCWorkerClause
+//  DMP-NEXT:             ACCVectorClause
+//  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
+//  DMP-NEXT:             impl: ForStmt
+//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Seq OMPNodeKind=unknown DirectiveDiscardedForOMP
+//
+//   PRT-LABEL: void checkAutoPartLoopInLambdaDefInTemplate_templateFn(T *a) {
+//    PRT-NEXT:   auto f = [=]() {
+//  PRT-A-NEXT:     {{^ *}}#pragma acc loop auto gang worker vector
+// PRT-AO-SAME:     {{^}} // discarded in OpenMP translation
+//  PRT-A-SAME:     {{^$}}
+// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop auto gang worker vector // discarded in OpenMP translation{{$}}
+//    PRT-NEXT:     for (int i = 1; i < {{.*}}; ++i)
+//    PRT-NEXT:       a[i] += a[i - 1];
+//    PRT-NEXT:   };
+//    PRT-NEXT:   f();
+//    PRT-NEXT: }
+//
+// EXE-LABEL:checkAutoPartLoopInLambdaDefInTemplate
+//  EXE-NEXT:a[0]=0
+//  EXE-NEXT:a[1]=1
+//  EXE-NEXT:a[2]=3
+//  EXE-NEXT:a[3]=6
+//   EXE-NOT:{{.}}
+template <typename T>
+void checkAutoPartLoopInLambdaDefInTemplate_templateFn(T *a) {
+  auto f = [=]() {
+    #pragma acc loop auto gang worker vector
+    for (int i = 1; i < A_SIZE; ++i)
+      a[i] += a[i - 1];
+  };
+  f();
+}
+void checkAutoPartLoopInLambdaDefInTemplate() {
+  printf("%s\n", "checkAutoPartLoopInLambdaDefInTemplate");
+  int a[A_SIZE];
+  initArray(a);
+  #pragma acc parallel num_gangs(1)
+  checkAutoPartLoopInLambdaDefInTemplate_templateFn(a);
+  printArray(a);
+}
+
 int main() {
   checkGangFnCallInLambda();
   checkWorkerFnCallInLambda();
@@ -1449,5 +1527,6 @@ int main() {
 #if TGT_HOST
   checkLambdaDefAndCallInAccParallel();
 #endif
+  checkAutoPartLoopInLambdaDefInTemplate();
   return 0;
 }

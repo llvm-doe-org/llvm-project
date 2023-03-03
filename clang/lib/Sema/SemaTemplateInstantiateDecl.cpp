@@ -723,6 +723,19 @@ void Sema::InstantiateAttrs(const MultiLevelTemplateArgumentList &TemplateArgs,
       continue;
     }
 
+    // Any implicit ACCRoutineDeclAttr is recomputed during template
+    // instantiation.  The old one cannot simply be copied to the instantiation
+    // of the template because, within SemaOpenACC.cpp's ImplicitRoutineDirInfo,
+    // it was recorded only for the original template.  Moreover, it could be
+    // mistakenly handled as an explicit routine directive (because it already
+    // existed), and thus its level of parallelism clause would be mistakenly
+    // reported as conflicting with any explicit level of parallelism clause on
+    // any auto->seq loop in the function.
+    if (const auto *ACCAttr = dyn_cast<ACCRoutineDeclAttr>(TmplAttr)) {
+      if (ACCAttr->isImplicit())
+        continue;
+    }
+
     if (const auto *OMPAttr = dyn_cast<OMPDeclareSimdDeclAttr>(TmplAttr)) {
       instantiateOMPDeclareSimdDeclAttr(*this, TemplateArgs, *OMPAttr, New);
       continue;

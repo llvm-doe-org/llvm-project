@@ -2362,6 +2362,36 @@ void lambdaCallParLevelDefKinds1() {
 }
 
 //------------------------------------------------------------------------------
+// Diagnostic notes for implicit routine directives within template
+// instantiations.
+//
+// At one time during template instantiation, Clang copied an implicit routine
+// directive for a contained lambda instead of recomputing it.  As a result,
+// when trying to report notes about the origin of that routine directive for a
+// diagnostic that is (perhaps unfortunately) repeated during template
+// instantiation, Clang failed asserts because Clang recorded the origin info
+// for the original template function and not for the instantiation.
+// ------------------------------------------------------------------------------
+
+template <typename T>
+void impRoutineDirInTemplateInstantiation() {
+  auto f = []() {
+    // expected-error@+2 2 {{'#pragma acc parallel' is not permitted within function 'impRoutineDirInTemplateInstantiation()::(anonymous class)::operator()' because the latter is attributed with '#pragma acc routine'}}
+    // expected-note@#impRoutineDirInTemplateInstantiation_forInt {{in instantiation of function template specialization 'impRoutineDirInTemplateInstantiation<int>' requested here}}
+    #pragma acc parallel
+    ;
+    // expected-note@+2 2 {{'#pragma acc routine gang' implied for function 'impRoutineDirInTemplateInstantiation()::(anonymous class)::operator()' by its use of function 'gangFn' here}}
+    // expected-note@#gangFn_routine 2 {{'#pragma acc routine' for function 'gangFn' appears here}}
+    gangFn();
+  };
+}
+
+void UNIQUE_NAME() {
+  impRoutineDirInTemplateInstantiation<int>(); // #impRoutineDirInTemplateInstantiation_forInt
+}
+
+
+//------------------------------------------------------------------------------
 // Missing declaration possibly within bad context.
 //------------------------------------------------------------------------------
 
