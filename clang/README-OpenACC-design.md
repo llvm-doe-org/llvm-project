@@ -176,18 +176,17 @@ However, there are also some caveats to consider for `TreeTransform`:
 General Design
 --------------
 
-Clacc's `TransformACCToOMP` component is implemented as a class
-derived via CRTP from `TreeTransform`.  As mentioned earlier,
-`TransformACCToOMP` does not represent a distinct compiler phase.
-Instead, immediately after parsing each OpenACC directive along with
-any associated code region and constructing the OpenACC subtree to
-represent them, Clacc passes the OpenACC subtree to
-`TransformACCToOMP` to construct the corresponding OpenMP subtree.
-Clacc adds the resulting OpenMP subtree to the AST, associates it with
-the OpenACC subtree, and then parsing continues.  However, the manner
-in which Clacc associates an OpenMP subtree with its OpenACC subtree
-differs depending on whether the directive forms a statement or a
-declaration.  We consider each case in the following sections.
+Clacc's `TransformACCToOMP` component is implemented as a class derived via CRTP
+from `TreeTransform`.  As mentioned earlier, `TransformACCToOMP` does not
+represent a distinct compiler phase.  Instead, soon after parsing each OpenACC
+directive along with any associated code region, and after constructing the
+OpenACC subtree to represent them, Clacc passes the OpenACC subtree to
+`TransformACCToOMP` to construct the corresponding OpenMP subtree.  Clacc adds
+the resulting OpenMP subtree to the AST, associates it with the OpenACC subtree,
+and then parsing continues.  However, the manner in which Clacc associates an
+OpenMP subtree with its OpenACC subtree differs depending on whether the
+directive forms a statement or a declaration.  We consider each case in the
+following sections.
 
 `ACCDirectiveStmt`: Directives as Statements
 --------------------------------------------
@@ -357,10 +356,22 @@ unit.
 Clacc overcomes the `TreeTransform` caveats discussed in the section
 "Background: TreeTransform" as follows:
 
-* **Transitory semantic data**: Because Clacc calls
-  `TransformACCToOMP` immediately after constructing an OpenACC
-  subtree, the exact transitory semantic data needed to construct the
-  corresponding OpenMP subtree is present.
+* **Transitory semantic data**: In the simplest cases, Clacc calls
+  `TransformACCToOMP` immediately after constructing an OpenACC subtree, and
+  then the exact transitory semantic data needed to construct the corresponding
+  OpenMP subtree is already present.  However, there are two cases where Clacc
+  defers the call to `TransformACCToOMP`:
+    * When an OpenACC directive is nested within another OpenACC construct,
+      Clacc calls `TransformACCToOMP` once on the entire outermost OpenACC
+      construct.  Thus, it rebuilds transitory semantic data as needed for
+      nested OpenACC directives.
+    * Some OpenACC constructs cannot be fully analyzed and thus translated to
+      OpenMP until the end of the enclosing function.  Specifically, orphaned
+      `loop` constructs can be affected by `routine` directives implied later in
+      an enclosing C++ lambda.  In this case, Clacc runs another
+      `TreeTransform` extension to transform the entire function body and thus
+      rebuild all necessary transitory semantic data before calling
+      `TransformACCToOMP` on the orphaned loop constructs.
 * **Permanent semantic data**: So far, Clacc is able to override
   specific `TreeTransform` functionality in order to transform permanent
   semantic data that must be different between OpenACC and OpenMP

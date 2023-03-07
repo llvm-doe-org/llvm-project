@@ -14760,6 +14760,9 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
   FunctionScopeInfo *FSI = getCurFunction();
   FunctionDecl *FD = dcl ? dcl->getAsFunction() : nullptr;
 
+  if (LangOpts.OpenACC && FD && Body)
+    Body = ActOnFinishFunctionBodyForOpenACC(FD, Body);
+
   if (FSI->UsesFPIntrin && FD && !FD->hasAttr<StrictFPAttr>())
     FD->addAttr(StrictFPAttr::CreateImplicit(Context));
 
@@ -15163,9 +15166,6 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
   if (hasUncompilableErrorOccurred()) {
     DiscardCleanupsInEvaluationContext();
   }
-
-  if (FD && LangOpts.OpenACC)
-    ActOnFinishFunctionBodyForOpenACC(FD);
 
   if (FD && ((LangOpts.OpenMP && (LangOpts.OpenMPIsDevice ||
                                   !LangOpts.OMPTargetTriples.empty())) ||

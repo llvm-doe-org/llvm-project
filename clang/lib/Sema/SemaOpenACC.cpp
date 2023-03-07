@@ -813,6 +813,9 @@ private:
     /// The current level of parallelism implied for this function.  Undefined
     /// if \c ImplierLoc is invalid.
     ACCRoutineDeclAttr::PartitioningTy ParLevel;
+    /// Whether at least one implier was an orphaned loop construct within this
+    /// function.
+    bool HasOrphanedLoopConstructImplier = false;
   };
   /// For each function FD, this table is indexed by FD->getCanonicalDecl().
   llvm::DenseMap<FunctionDecl *, FunctionEntryTy> Map;
@@ -878,6 +881,15 @@ public:
       Entry.ImplierConstruct = ImplierConstruct;
       Entry.ParLevel = ParLevel;
     }
+    if (ImplierConstruct == ACCD_loop)
+      Entry.HasOrphanedLoopConstructImplier = true;
+  }
+
+  /// Has an orphaned loop construct within \p FD been added as an implier of a
+  /// routine directive for \p FD?
+  bool hasOrphanedLoopConstructImplier(FunctionDecl *FD) {
+    FunctionEntryTy &Entry = Map[FD->getCanonicalDecl()];
+    return Entry.HasOrphanedLoopConstructImplier;
   }
 
   /// Fully determine routine directive for \p FD based on impliers previously
@@ -2601,9 +2613,15 @@ void Sema::ActOnStartOfFunctionDefForOpenACC(FunctionDecl *FD) {
     ActOnOpenACCRoutineDirective(ACC_EXPLICIT, DeclGroupRef(FD));
 }
 
-void Sema::ActOnFinishFunctionBodyForOpenACC(FunctionDecl *FD) {
+Stmt *Sema::ActOnFinishFunctionBodyForOpenACC(FunctionDecl *FD, Stmt *Body) {
+  if (OpenACCData->TransformingOpenACC)
+    return Body;
+  ImplicitRoutineDirInfoTy &ImplicitRoutineDirInfo =
+      OpenACCData->ImplicitRoutineDirInfo;
   if (isLambdaCallOperator(FD))
-    OpenACCData->ImplicitRoutineDirInfo.fullyDetermineImplicitRoutineDir(FD);
+    ImplicitRoutineDirInfo.fullyDetermineImplicitRoutineDir(FD);
+  return transformACCToOMP(
+      FD, Body, ImplicitRoutineDirInfo.hasOrphanedLoopConstructImplier(FD));
 }
 
 void Sema::ActOnFunctionUseForOpenACC(FunctionDecl *Usee,

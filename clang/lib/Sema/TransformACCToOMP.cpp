@@ -1452,10 +1452,42 @@ public:
 };
 } // namespace
 
+Stmt *Sema::transformACCToOMP(FunctionDecl *FD, Stmt *Body,
+                              bool HasOrphanedLoopConstructImplier) {
+  if (!HasOrphanedLoopConstructImplier)
+    return Body;
+  if (getDiagnostics().hasErrorOccurred())
+    return Body;
+  // Checking isInOpenACCDirectiveStmt isn't strictly necessary, but there's no
+  // point in running this if transformACCToOMP on every ACCDirectiveStmt will
+  // skip transforming to OpenMP.
+  if (isInOpenACCDirectiveStmt())
+    return Body;
+  class TransformFnBody : public TreeTransform<TransformFnBody> {
+    typedef TreeTransform<TransformFnBody> BaseTransform;
+
+  public:
+    TransformFnBody(Sema &SemaRef) : BaseTransform(SemaRef) {}
+    StmtResult TransformACCDirectiveStmt(ACCDirectiveStmt *D) {
+      if (SemaRef.transformACCToOMP(cast<ACCDirectiveStmt>(D)))
+        return StmtError();
+      return D;
+    }
+  };
+  StmtResult Res = TransformFnBody(*this).TransformStmt(Body);
+  if (!Res.isInvalid())
+    return Res.get();
+  return Body;
+}
+
 bool Sema::transformACCToOMP(ACCDirectiveStmt *D) {
   if (getDiagnostics().hasErrorOccurred())
     return false;
   if (isInOpenACCDirectiveStmt())
+    return false;
+  FunctionDecl *CurFn = getCurFunctionDecl(/*AllowLambda=*/true);
+  if (isa<ACCLoopDirective>(D) && !CurFn->hasAttr<ACCRoutineDeclAttr>() &&
+      !CurFn->hasBody())
     return false;
   StartOpenACCTransform();
   bool Res = TransformACCToOMP(*this).TransformStmt(D).isInvalid();

@@ -11628,7 +11628,9 @@ public:
   /// for any routine directive lexically attached to the function definition.
   void ActOnStartOfFunctionDefForOpenACC(FunctionDecl *FD);
   /// At the end of a function body, finish the function's OpenACC analysis.
-  void ActOnFinishFunctionBodyForOpenACC(FunctionDecl *FD);
+  /// Return either the original \p Body or a transformed version of \p Body in
+  /// which OpenACC directives have OpenMP translations.
+  Stmt *ActOnFinishFunctionBodyForOpenACC(FunctionDecl *FD, Stmt *Body);
   /// Add implicit routine directive upon an offload device use of a function.
   void ActOnFunctionUseForOpenACC(FunctionDecl *FD, SourceLocation Loc);
   /// Check the level of parallelism of a called function.
@@ -11860,27 +11862,58 @@ public:
   /// directive's associated statement.
   bool isInOpenACCDirectiveStmt();
 
-  /// Transform OpenACC region to OpenMP, and return true if an error occurred.
+  /// Transform OpenACC directives to OpenMP.
   ///
-  /// This function must be called on \p D immediately after Parser and Sema
-  /// have otherwise finished analyzing \p D.
+  /// The first overload must be called on \p D immediately after Parser and
+  /// Sema have otherwise finished analyzing \p D.  It returns true if an error
+  /// occurred.
   ///
-  /// If we've already encountered errors anywhere, this function does nothing
-  /// and returns false (because no additional error occurred).  Otherwise, we
-  /// could end up with redundant diagnostics, some of which might mention
-  /// OpenMP.
+  /// The second overload must be called on \p FD immediately after Parser and
+  /// Sema have otherwise finished analyzing \p FD and its body \p Body but
+  /// before they have attached \p Body to \p FD or popped contexts for \p FD
+  /// and \p Body.  \p HasOrphanedLoopConstructImplier must indicate whether
+  /// \p Body contains any orphaned OpenACC loop construct that implies a
+  /// routine directive on \p FD (in that case, \p FD does not have an explicit
+  /// routine directive).  The second overload returns the body to be attached
+  /// to \p FD: either (1) a version of \p Body with all enclosed OpenACC
+  /// directives transformed by calls to the first overload if transformation is
+  /// appropriate now (see below) and successful or (2) \p Body otherwise.
   ///
-  /// If \p D is enclosed in another OpenACC construct (this includes the case
-  /// when \p D is within a lambda within that construct), then this function
-  /// does nothing and returns false (because this case is not an error).  That
-  /// way, we transform each OpenACC construct to OpenMP only once, in its
-  /// entirety.
+  /// If we've already encountered errors anywhere, either overload does
+  /// nothing, and the return value does not indicate an error (because there is
+  /// no new error).  Otherwise, we could end up with redundant diagnostics,
+  /// some of which might mention OpenMP.
   ///
-  /// Otherwise, this function transforms \p D and all OpenACC directives \p D
-  /// encloses such that, for each such directive, \c getOMPNode then returns
-  /// the corresponding OpenMP directive.  If there is an error during the
-  /// transformation, this function returns true.
+  /// If \p D or \p FD is lexically enclosed in another OpenACC construct (this
+  /// includes the case when \p D is within a lambda within that construct),
+  /// then either overload does nothing, and the return value does not indicate
+  /// an error.  That way, we transform each OpenACC construct to OpenMP only
+  /// once, in its entirety.
+  ///
+  /// If \p D is an orphaned OpenACC loop construct, and if the current function
+  /// in the program so far has neither a routine directive nor an attached body
+  /// (because the current function is still being parsed or analyzed), then the
+  /// first overload does nothing, and the return value does not indicate an
+  /// error.  That way, an orphaned loop construct is not transformed to OpenMP
+  /// until it is known whether the current function has a routine gang
+  /// directive (possibly implied somewhere in the body) and thus whether the
+  /// loop construct has an implicit gang clause (TODO: not yet computed in this
+  /// case but will be in an upcoming patch).
+  ///
+  /// If \p HasOrphanedLoopConstructImplier is false, the second overload does
+  /// nothing and returns \p Body.  That way, time and space are not wasted
+  /// creating a new version of \p Body that is unnecessary because \p Body
+  /// contains no OpenACC directives or because all it does contain were already
+  /// transformed by calls to the first overload.
+  ///
+  /// Otherwise, either overload transforms \p D or \p FD and all OpenACC
+  /// directives it encloses such that, for each such directive, \c getOMPNode
+  /// then returns the corresponding OpenMP directive.
+  ///@{
   bool transformACCToOMP(ACCDirectiveStmt *D);
+  Stmt *transformACCToOMP(FunctionDecl *FD, Stmt *Body,
+                          bool HasOrphanedLoopConstructImplier);
+  ///@}
   /// Transform the OpenACC attribute \p ACCAttr on the function declaration or
   /// definition \p FD to an OpenMP attribute, and attach the latter to \p FD
   /// unless it does not require a translation.
