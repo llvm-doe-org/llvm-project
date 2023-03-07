@@ -114,22 +114,22 @@ this immutability property.
 Background: TreeTransform
 -------------------------
 
-Independently of Clacc, Clang uses the `TreeTransform` facility to
-transform C++ templates for the sake of instantiating them.  When the
-parser reaches a template instantiation in the source code,
-`TreeTransform` builds a transformed copy of the AST subtree that
-represents the template, and it inserts that copy into the AST.  This
-insertion is part of the normal process of extending the AST during
-parsing and so does not violate AST immutability.
+Independently of Clacc, Clang uses the `TreeTransform` facility for multiple
+purposes.  For example, Clang derives `TemplateInstantiator` from
+`TreeTransform` to transform C++ templates for the sake of instantiating them.
+When the parser reaches a template instantiation in the source code,
+`TemplateInstantiator` builds a transformed copy of the AST subtree that
+represents the template, and it inserts that copy into the AST.  This insertion
+is part of the normal process of extending the AST during parsing and so does
+not violate AST immutability.
 
 `TreeTransform`'s design has some convenient properties for Clacc's
 purposes:
 
 * **Extensibility**: `TreeTransform` is a class template employing the
   curiously recurring template pattern (CRTP) for static polymorphism.
-  Thus, it is possible to override default behavior that is reasonable
-  for C++ template instantiation but not for translation from OpenACC
-  to OpenMP.
+  Thus, it is possible to override default behavior that is not reasonable
+  for translation from OpenACC to OpenMP.
 * **Encapsulation of `Sema`**: `TreeTransform`'s interface serves as a
   convenient encapsulation of semantic actions that are normally
   called during parsing.  This encapsulation enables Clacc to call
@@ -151,20 +151,16 @@ However, there are also some caveats to consider for `TreeTransform`:
   unit has completed, it might be necessary to transform the
   translation unit's entire AST in order to rebuild all of the
   necessary transitory semantic metadata.
-* **Permanent semantic data**: Currently, parsing a C++ template
-  permanently associates semantic data with that template's AST
-  subtree in a way that's compatible with later runs of
-  `TreeTransform` for instantiations of that template.  However,
-  there's no guarantee that semantic data that is reasonable for C++
-  template instantiation will be compatible with any arbitrary
-  extension of `TreeTransform`.  For example, we have noticed that, if
-  we write a simple `TreeTransform` extension that merely duplicates
-  an OpenMP region immediately after that region's node is
-  constructed, the default `TreeTransform` implementation does not
-  update the declaration contexts for variable declarations that are
-  local to the duplicate region (see `TreeTransform::TransformDecl`),
-  so those duplicate variables appear to be declared in the original
-  region, resulting in spurious compiler diagnostics.
+* **Permanent semantic data**: As Clang parses source code, it permanently
+  associates some semantic data with that code's AST subtree.  Extensions of
+  `TreeTransform` must then sometimes copy and transform that semantic data
+  while copying and transforming the subtree.  For example, we have noticed
+  that, if we write a simple `TreeTransform` extension that merely duplicates an
+  OpenMP region immediately after that region's node is constructed, the default
+  `TreeTransform` implementation does not update the declaration contexts for
+  variable declarations that are local to the duplicate region (see
+  `TreeTransform::TransformDecl`), so those duplicate variables appear to be
+  declared in the original region, resulting in spurious compiler diagnostics.
 * **Redundant AST subtrees**: As described above, `TreeTransform` is
   designed to construct modified versions of existing subtrees, and it
   is not designed to remove the original subtrees.  This behavior
@@ -366,9 +362,8 @@ Clacc overcomes the `TreeTransform` caveats discussed in the section
   subtree, the exact transitory semantic data needed to construct the
   corresponding OpenMP subtree is present.
 * **Permanent semantic data**: So far, Clacc is able to override
-  specific `TreeTransform` functionality in order to transform
-  semantic data that would be permanent across C++ template
-  instantiation but that must be different between OpenACC and OpenMP
+  specific `TreeTransform` functionality in order to transform permanent
+  semantic data that must be different between OpenACC and OpenMP
   subtrees.
 * **Redundant AST subtrees**: AST traversals are typically based on
   Clang's `RecursiveASTVisitor` facility.  Most AST traversal
