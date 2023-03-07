@@ -11897,8 +11897,7 @@ public:
   /// error.  That way, an orphaned loop construct is not transformed to OpenMP
   /// until it is known whether the current function has a routine gang
   /// directive (possibly implied somewhere in the body) and thus whether the
-  /// loop construct has an implicit gang clause (TODO: not yet computed in this
-  /// case but will be in an upcoming patch).
+  /// loop construct has an implicit gang clause.
   ///
   /// If \p HasOrphanedLoopConstructImplier is false, the second overload does
   /// nothing and returns \p Body.  That way, time and space are not wasted

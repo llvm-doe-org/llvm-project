@@ -671,14 +671,11 @@ void checkSerialLoopInLambda() {
 
 //------------------------------------------------------------------------------
 // Check with multiple impliers.  First one of highest level should be
-// identified.
-//
-// FIXME: Implicit gang clauses are not yet computed in lambdas with routine
-// directives implied by the lambda body.  When they are, atomics will no longer
-// be needed in loops below, and we can just use LOOP like everywhere else.
+// identified.  If the highest level is gang, then an implicit gang clause
+// should be computed for any loop construct without a gang clause.
 //------------------------------------------------------------------------------
 
-// DMP-LABEL: FunctionDecl {{.*}} checkHighLoopLowLoopInLambda 'void ()'
+// DMP-LABEL: FunctionDecl {{.*}} checkGangHighLoopLowLoopInLambda 'void ()'
 //       DMP:   LambdaExpr
 //  DMP-NEXT:     CXXRecordDecl
 //       DMP:       CXXMethodDecl
@@ -697,12 +694,13 @@ void checkSerialLoopInLambda() {
 //  DMP-NEXT:             ACCIndependentClause {{.*}} <implicit>
 //  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
 //  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
-//  DMP-NEXT:             impl: OMPSimdDirective
+//  DMP-NEXT:             ACCGangClause {{.*}} <implicit>
+//  DMP-NEXT:             impl: OMPDistributeSimdDirective
 //   DMP-NOT:               OMP
 //       DMP:               ForStmt
 //       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Gang OMPNodeKind=unknown DirectiveDiscardedForOMP
 //
-//   PRT-LABEL: void checkHighLoopLowLoopInLambda() {
+//   PRT-LABEL: void checkGangHighLoopLowLoopInLambda() {
 //    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
 //  PRT-A-NEXT:     {{^ *}}#pragma acc loop gang{{$}}
 // PRT-AO-NEXT:     {{^ *}}// #pragma omp distribute{{$}}
@@ -710,31 +708,135 @@ void checkSerialLoopInLambda() {
 // PRT-OA-NEXT:     {{^ *}}// #pragma acc loop gang{{$}}
 //    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
 //  PRT-A-NEXT:     {{^ *}}#pragma acc loop vector{{$}}
-// PRT-AO-NEXT:     {{^ *}}// #pragma omp simd{{$}}
-//  PRT-O-NEXT:     {{^ *}}#pragma omp simd{{$}}
+// PRT-AO-NEXT:     {{^ *}}// #pragma omp distribute simd{{$}}
+//  PRT-O-NEXT:     {{^ *}}#pragma omp distribute simd{{$}}
 // PRT-OA-NEXT:     {{^ *}}// #pragma acc loop vector{{$}}
-//    PRT-NEXT:     {{LOOP|for \(.*\) {([^{}]|[[:space:]])*}$}}
+//    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
 //    PRT-NEXT:   });
 //    PRT-NEXT: }
 //
-// EXE-LABEL:checkHighLoopLowLoopInLambda
-//  EXE-NEXT:a[0]=50
-//  EXE-NEXT:a[1]=51
-//  EXE-NEXT:a[2]=52
-//  EXE-NEXT:a[3]=53
-void checkHighLoopLowLoopInLambda() {
-  callLambdaInParallel("checkHighLoopLowLoopInLambda", NUM_GANGS, [](int *a) {
+// EXE-LABEL:checkGangHighLoopLowLoopInLambda
+//  EXE-NEXT:a[0]=20
+//  EXE-NEXT:a[1]=21
+//  EXE-NEXT:a[2]=22
+//  EXE-NEXT:a[3]=23
+void checkGangHighLoopLowLoopInLambda() {
+  callLambdaInParallel("checkGangHighLoopLowLoopInLambda", NUM_GANGS, [](int *a) {
     #pragma acc loop gang
     LOOP
     #pragma acc loop vector
-    for (int i = 0; i < A_SIZE; ++i) {
-      #pragma acc atomic update
-      a[i] += 10;
-    }
+    LOOP
   });
 }
 
-// DMP-LABEL: FunctionDecl {{.*}} checkLowLoopHighLoopInLambda 'void ()'
+// DMP-LABEL: FunctionDecl {{.*}} checkLowLoopGangHighLoopInLambda 'void ()'
+//       DMP:   LambdaExpr
+//  DMP-NEXT:     CXXRecordDecl
+//       DMP:       CXXMethodDecl
+//  DMP-NEXT:         ParmVarDecl
+//  DMP-NEXT:         CompoundStmt
+//       DMP:           ACCLoopDirective
+//  DMP-NEXT:             ACCVectorClause
+//  DMP-NEXT:             ACCIndependentClause {{.*}} <implicit>
+//  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
+//  DMP-NEXT:             ACCGangClause {{.*}} <implicit>
+//  DMP-NEXT:             impl: OMPDistributeSimdDirective
+//   DMP-NOT:               OMP
+//       DMP:               ForStmt
+//       DMP:           ACCLoopDirective
+//  DMP-NEXT:             ACCGangClause
+//  DMP-NEXT:             ACCIndependentClause {{.*}} <implicit>
+//  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
+//  DMP-NEXT:             impl: OMPDistributeDirective
+//   DMP-NOT:               OMP
+//       DMP:               ForStmt
+//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Gang OMPNodeKind=unknown DirectiveDiscardedForOMP
+//
+//   PRT-LABEL: void checkLowLoopGangHighLoopInLambda() {
+//    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
+//  PRT-A-NEXT:     {{^ *}}#pragma acc loop vector{{$}}
+// PRT-AO-NEXT:     {{^ *}}// #pragma omp distribute simd{{$}}
+//  PRT-O-NEXT:     {{^ *}}#pragma omp distribute simd{{$}}
+// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop vector{{$}}
+//    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
+//  PRT-A-NEXT:     {{^ *}}#pragma acc loop gang{{$}}
+// PRT-AO-NEXT:     {{^ *}}// #pragma omp distribute{{$}}
+//  PRT-O-NEXT:     {{^ *}}#pragma omp distribute{{$}}
+// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop gang{{$}}
+//    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
+//    PRT-NEXT:   });
+//    PRT-NEXT: }
+//
+// EXE-LABEL:checkLowLoopGangHighLoopInLambda
+//  EXE-NEXT:a[0]=20
+//  EXE-NEXT:a[1]=21
+//  EXE-NEXT:a[2]=22
+//  EXE-NEXT:a[3]=23
+void checkLowLoopGangHighLoopInLambda() {
+  callLambdaInParallel("checkLowLoopGangHighLoopInLambda", NUM_GANGS, [](int *a) {
+    #pragma acc loop vector
+    LOOP
+    #pragma acc loop gang
+    LOOP
+  });
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} checkNonGangHighLoopLowLoopInLambda 'void ()'
+//       DMP:   LambdaExpr
+//  DMP-NEXT:     CXXRecordDecl
+//       DMP:       CXXMethodDecl
+//  DMP-NEXT:         ParmVarDecl
+//  DMP-NEXT:         CompoundStmt
+//       DMP:           ACCLoopDirective
+//  DMP-NEXT:             ACCWorkerClause
+//  DMP-NEXT:             ACCIndependentClause {{.*}} <implicit>
+//  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
+//  DMP-NEXT:             impl: OMPParallelForDirective
+//   DMP-NOT:               OMP
+//       DMP:               ForStmt
+//       DMP:           ACCLoopDirective
+//  DMP-NEXT:             ACCVectorClause
+//  DMP-NEXT:             ACCIndependentClause {{.*}} <implicit>
+//  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
+//  DMP-NEXT:             impl: OMPSimdDirective
+//   DMP-NOT:               OMP
+//       DMP:               ForStmt
+//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Worker OMPNodeKind=unknown DirectiveDiscardedForOMP
+//
+//   PRT-LABEL: void checkNonGangHighLoopLowLoopInLambda() {
+//    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
+//  PRT-A-NEXT:     {{^ *}}#pragma acc loop worker{{$}}
+// PRT-AO-NEXT:     {{^ *}}// #pragma omp parallel for{{$}}
+//  PRT-O-NEXT:     {{^ *}}#pragma omp parallel for{{$}}
+// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop worker{{$}}
+//    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
+//  PRT-A-NEXT:     {{^ *}}#pragma acc loop vector{{$}}
+// PRT-AO-NEXT:     {{^ *}}// #pragma omp simd{{$}}
+//  PRT-O-NEXT:     {{^ *}}#pragma omp simd{{$}}
+// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop vector{{$}}
+//    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
+//    PRT-NEXT:   });
+//    PRT-NEXT: }
+//
+// EXE-LABEL:checkNonGangHighLoopLowLoopInLambda
+//  EXE-NEXT:a[0]=20
+//  EXE-NEXT:a[1]=21
+//  EXE-NEXT:a[2]=22
+//  EXE-NEXT:a[3]=23
+void checkNonGangHighLoopLowLoopInLambda() {
+  callLambdaInParallel("checkNonGangHighLoopLowLoopInLambda", 1, [](int *a) {
+    #pragma acc loop worker
+    LOOP
+    #pragma acc loop vector
+    LOOP
+  });
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} checkLowLoopNonGangHighLoopInLambda 'void ()'
 //       DMP:   LambdaExpr
 //  DMP-NEXT:     CXXRecordDecl
 //       DMP:       CXXMethodDecl
@@ -749,48 +851,111 @@ void checkHighLoopLowLoopInLambda() {
 //   DMP-NOT:               OMP
 //       DMP:               ForStmt
 //       DMP:           ACCLoopDirective
-//  DMP-NEXT:             ACCGangClause
+//  DMP-NEXT:             ACCWorkerClause
 //  DMP-NEXT:             ACCIndependentClause {{.*}} <implicit>
 //  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
 //  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
-//  DMP-NEXT:             impl: OMPDistributeDirective
+//  DMP-NEXT:             impl: OMPParallelForDirective
 //   DMP-NOT:               OMP
 //       DMP:               ForStmt
-//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Gang OMPNodeKind=unknown DirectiveDiscardedForOMP
+//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Worker OMPNodeKind=unknown DirectiveDiscardedForOMP
 //
-//   PRT-LABEL: void checkLowLoopHighLoopInLambda() {
+//   PRT-LABEL: void checkLowLoopNonGangHighLoopInLambda() {
 //    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
 //  PRT-A-NEXT:     {{^ *}}#pragma acc loop vector{{$}}
 // PRT-AO-NEXT:     {{^ *}}// #pragma omp simd{{$}}
 //  PRT-O-NEXT:     {{^ *}}#pragma omp simd{{$}}
 // PRT-OA-NEXT:     {{^ *}}// #pragma acc loop vector{{$}}
-//    PRT-NEXT:     {{LOOP|for \(.*\) {([^{}]|[[:space:]])*}$}}
-//  PRT-A-NEXT:     {{^ *}}#pragma acc loop gang{{$}}
-// PRT-AO-NEXT:     {{^ *}}// #pragma omp distribute{{$}}
-//  PRT-O-NEXT:     {{^ *}}#pragma omp distribute{{$}}
-// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop gang{{$}}
+//    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
+//  PRT-A-NEXT:     {{^ *}}#pragma acc loop worker{{$}}
+// PRT-AO-NEXT:     {{^ *}}// #pragma omp parallel for{{$}}
+//  PRT-O-NEXT:     {{^ *}}#pragma omp parallel for{{$}}
+// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop worker{{$}}
 //    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
 //    PRT-NEXT:   });
 //    PRT-NEXT: }
 //
-// EXE-LABEL:checkLowLoopHighLoopInLambda
-//  EXE-NEXT:a[0]=50
-//  EXE-NEXT:a[1]=51
-//  EXE-NEXT:a[2]=52
-//  EXE-NEXT:a[3]=53
-void checkLowLoopHighLoopInLambda() {
-  callLambdaInParallel("checkLowLoopHighLoopInLambda", NUM_GANGS, [](int *a) {
+// EXE-LABEL:checkLowLoopNonGangHighLoopInLambda
+//  EXE-NEXT:a[0]=20
+//  EXE-NEXT:a[1]=21
+//  EXE-NEXT:a[2]=22
+//  EXE-NEXT:a[3]=23
+void checkLowLoopNonGangHighLoopInLambda() {
+  callLambdaInParallel("checkLowLoopNonGangHighLoopInLambda", 1, [](int *a) {
     #pragma acc loop vector
-    for (int i = 0; i < A_SIZE; ++i) {
-      #pragma acc atomic update
-      a[i] += 10;
-    }
-    #pragma acc loop gang
+    LOOP
+    #pragma acc loop worker
     LOOP
   });
 }
 
-// DMP-LABEL: FunctionDecl {{.*}} checkHighCallLowCallInLambda 'void ()'
+// DMP-LABEL: FunctionDecl {{.*}} checkGangHighCallLowCallInLambda 'void ()'
+//       DMP:   LambdaExpr
+//  DMP-NEXT:     CXXRecordDecl
+//       DMP:       CXXMethodDecl
+//  DMP-NEXT:         ParmVarDecl
+//  DMP-NEXT:         CompoundStmt
+//  DMP-NEXT:           CallExpr
+//  DMP-NEXT:             ImplicitCastExpr
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'gangFn'
+//       DMP:           CallExpr
+//  DMP-NEXT:             ImplicitCastExpr
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'vectorFn'
+//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Gang OMPNodeKind=unknown DirectiveDiscardedForOMP
+//
+//   PRT-LABEL: void checkGangHighCallLowCallInLambda() {
+//    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
+//    PRT-NEXT:     gangFn(a);
+//    PRT-NEXT:     vectorFn(a);
+//    PRT-NEXT:   });
+//    PRT-NEXT: }
+//
+// EXE-LABEL:checkGangHighCallLowCallInLambda
+//  EXE-NEXT:a[0]=20
+//  EXE-NEXT:a[1]=21
+//  EXE-NEXT:a[2]=22
+//  EXE-NEXT:a[3]=23
+void checkGangHighCallLowCallInLambda() {
+  callLambdaInParallel("checkGangHighCallLowCallInLambda", 1, [](int *a) {
+    gangFn(a);
+    vectorFn(a);
+  });
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} checkLowCallGangHighCallInLambda 'void ()'
+//       DMP:   LambdaExpr
+//  DMP-NEXT:     CXXRecordDecl
+//       DMP:       CXXMethodDecl
+//  DMP-NEXT:         ParmVarDecl
+//  DMP-NEXT:         CompoundStmt
+//  DMP-NEXT:           CallExpr
+//  DMP-NEXT:             ImplicitCastExpr
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'vectorFn'
+//       DMP:           CallExpr
+//  DMP-NEXT:             ImplicitCastExpr
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'gangFn'
+//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Gang OMPNodeKind=unknown DirectiveDiscardedForOMP
+//
+//   PRT-LABEL: void checkLowCallGangHighCallInLambda() {
+//    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
+//    PRT-NEXT:     vectorFn(a);
+//    PRT-NEXT:     gangFn(a);
+//    PRT-NEXT:   });
+//    PRT-NEXT: }
+//
+// EXE-LABEL:checkLowCallGangHighCallInLambda
+//  EXE-NEXT:a[0]=20
+//  EXE-NEXT:a[1]=21
+//  EXE-NEXT:a[2]=22
+//  EXE-NEXT:a[3]=23
+void checkLowCallGangHighCallInLambda() {
+  callLambdaInParallel("checkLowCallGangHighCallInLambda", 1, [](int *a) {
+    vectorFn(a);
+    gangFn(a);
+  });
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} checkNonGangHighCallLowCallInLambda 'void ()'
 //       DMP:   LambdaExpr
 //  DMP-NEXT:     CXXRecordDecl
 //       DMP:       CXXMethodDecl
@@ -804,26 +969,26 @@ void checkLowLoopHighLoopInLambda() {
 //  DMP-NEXT:               DeclRefExpr {{.*}} 'vectorFn'
 //       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Worker OMPNodeKind=unknown DirectiveDiscardedForOMP
 //
-//   PRT-LABEL: void checkHighCallLowCallInLambda() {
+//   PRT-LABEL: void checkNonGangHighCallLowCallInLambda() {
 //    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
 //    PRT-NEXT:     workerFn(a);
 //    PRT-NEXT:     vectorFn(a);
 //    PRT-NEXT:   });
 //    PRT-NEXT: }
 //
-// EXE-LABEL:checkHighCallLowCallInLambda
+// EXE-LABEL:checkNonGangHighCallLowCallInLambda
 //  EXE-NEXT:a[0]=20
 //  EXE-NEXT:a[1]=21
 //  EXE-NEXT:a[2]=22
 //  EXE-NEXT:a[3]=23
-void checkHighCallLowCallInLambda() {
-  callLambdaInParallel("checkHighCallLowCallInLambda", 1, [](int *a) {
+void checkNonGangHighCallLowCallInLambda() {
+  callLambdaInParallel("checkNonGangHighCallLowCallInLambda", 1, [](int *a) {
     workerFn(a);
     vectorFn(a);
   });
 }
 
-// DMP-LABEL: FunctionDecl {{.*}} checkLowCallHighCallInLambda 'void ()'
+// DMP-LABEL: FunctionDecl {{.*}} checkLowCallNonGangHighCallInLambda 'void ()'
 //       DMP:   LambdaExpr
 //  DMP-NEXT:     CXXRecordDecl
 //       DMP:       CXXMethodDecl
@@ -837,26 +1002,26 @@ void checkHighCallLowCallInLambda() {
 //  DMP-NEXT:               DeclRefExpr {{.*}} 'workerFn'
 //       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Worker OMPNodeKind=unknown DirectiveDiscardedForOMP
 //
-//   PRT-LABEL: void checkLowCallHighCallInLambda() {
+//   PRT-LABEL: void checkLowCallNonGangHighCallInLambda() {
 //    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
 //    PRT-NEXT:     vectorFn(a);
 //    PRT-NEXT:     workerFn(a);
 //    PRT-NEXT:   });
 //    PRT-NEXT: }
 //
-// EXE-LABEL:checkLowCallHighCallInLambda
+// EXE-LABEL:checkLowCallNonGangHighCallInLambda
 //  EXE-NEXT:a[0]=20
 //  EXE-NEXT:a[1]=21
 //  EXE-NEXT:a[2]=22
 //  EXE-NEXT:a[3]=23
-void checkLowCallHighCallInLambda() {
-  callLambdaInParallel("checkLowCallHighCallInLambda", 1, [](int *a) {
+void checkLowCallNonGangHighCallInLambda() {
+  callLambdaInParallel("checkLowCallNonGangHighCallInLambda", 1, [](int *a) {
     vectorFn(a);
     workerFn(a);
   });
 }
 
-// DMP-LABEL: FunctionDecl {{.*}} checkHighLoopLowCallInLambda 'void ()'
+// DMP-LABEL: FunctionDecl {{.*}} checkGangHighLoopLowCallInLambda 'void ()'
 //       DMP:   LambdaExpr
 //  DMP-NEXT:     CXXRecordDecl
 //       DMP:       CXXMethodDecl
@@ -875,7 +1040,7 @@ void checkLowCallHighCallInLambda() {
 //  DMP-NEXT:               DeclRefExpr {{.*}} 'workerFn'
 //       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Gang OMPNodeKind=unknown DirectiveDiscardedForOMP
 //
-//   PRT-LABEL: void checkHighLoopLowCallInLambda() {
+//   PRT-LABEL: void checkGangHighLoopLowCallInLambda() {
 //    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
 //  PRT-A-NEXT:     {{^ *}}#pragma acc loop gang{{$}}
 // PRT-AO-NEXT:     {{^ *}}// #pragma omp distribute{{$}}
@@ -886,20 +1051,20 @@ void checkLowCallHighCallInLambda() {
 //    PRT-NEXT:   });
 //    PRT-NEXT: }
 //
-// EXE-LABEL:checkHighLoopLowCallInLambda
+// EXE-LABEL:checkGangHighLoopLowCallInLambda
 //  EXE-NEXT:a[0]=20
 //  EXE-NEXT:a[1]=21
 //  EXE-NEXT:a[2]=22
 //  EXE-NEXT:a[3]=23
-void checkHighLoopLowCallInLambda() {
-  callLambdaInParallel("checkHighLoopLowCallInLambda", 1, [](int *a) {
+void checkGangHighLoopLowCallInLambda() {
+  callLambdaInParallel("checkGangHighLoopLowCallInLambda", 1, [](int *a) {
     #pragma acc loop gang
     LOOP
     workerFn(a);
   });
 }
 
-// DMP-LABEL: FunctionDecl {{.*}} checkLowCallHighLoopInLambda 'void ()'
+// DMP-LABEL: FunctionDecl {{.*}} checkLowCallGangHighLoopInLambda 'void ()'
 //       DMP:   LambdaExpr
 //  DMP-NEXT:     CXXRecordDecl
 //       DMP:       CXXMethodDecl
@@ -918,7 +1083,7 @@ void checkHighLoopLowCallInLambda() {
 //       DMP:               ForStmt
 //       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Gang OMPNodeKind=unknown DirectiveDiscardedForOMP
 //
-//   PRT-LABEL: void checkLowCallHighLoopInLambda() {
+//   PRT-LABEL: void checkLowCallGangHighLoopInLambda() {
 //    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
 //    PRT-NEXT:     workerFn(a);
 //  PRT-A-NEXT:     {{^ *}}#pragma acc loop gang{{$}}
@@ -929,66 +1094,237 @@ void checkHighLoopLowCallInLambda() {
 //    PRT-NEXT:   });
 //    PRT-NEXT: }
 //
-// EXE-LABEL:checkLowCallHighLoopInLambda
+// EXE-LABEL:checkLowCallGangHighLoopInLambda
 //  EXE-NEXT:a[0]=20
 //  EXE-NEXT:a[1]=21
 //  EXE-NEXT:a[2]=22
 //  EXE-NEXT:a[3]=23
-void checkLowCallHighLoopInLambda() {
-  callLambdaInParallel("checkLowCallHighLoopInLambda", 1, [](int *a) {
+void checkLowCallGangHighLoopInLambda() {
+  callLambdaInParallel("checkLowCallGangHighLoopInLambda", 1, [](int *a) {
     workerFn(a);
     #pragma acc loop gang
     LOOP
   });
 }
 
-// DMP-LABEL: FunctionDecl {{.*}} checkHighCallLowLoopInLambda 'void ()'
+// DMP-LABEL: FunctionDecl {{.*}} checkNonGangHighLoopLowCallInLambda 'void ()'
 //       DMP:   LambdaExpr
 //  DMP-NEXT:     CXXRecordDecl
 //       DMP:       CXXMethodDecl
 //  DMP-NEXT:         ParmVarDecl
 //  DMP-NEXT:         CompoundStmt
-//       DMP:           CallExpr
-//  DMP-NEXT:             ImplicitCastExpr
-//  DMP-NEXT:               DeclRefExpr {{.*}} 'gangFn'
 //       DMP:           ACCLoopDirective
-//  DMP-NEXT:             ACCVectorClause
+//  DMP-NEXT:             ACCWorkerClause
 //  DMP-NEXT:             ACCIndependentClause {{.*}} <implicit>
 //  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
 //  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
-//  DMP-NEXT:             impl: OMPSimdDirective
+//  DMP-NEXT:             impl: OMPParallelForDirective
 //   DMP-NOT:               OMP
 //       DMP:               ForStmt
-//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Gang OMPNodeKind=unknown DirectiveDiscardedForOMP
+//       DMP:           CallExpr
+//  DMP-NEXT:             ImplicitCastExpr
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'vectorFn'
+//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Worker OMPNodeKind=unknown DirectiveDiscardedForOMP
 //
-//   PRT-LABEL: void checkHighCallLowLoopInLambda() {
+//   PRT-LABEL: void checkNonGangHighLoopLowCallInLambda() {
 //    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
-//    PRT-NEXT:     gangFn(a);
-//  PRT-A-NEXT:     {{^ *}}#pragma acc loop vector{{$}}
-// PRT-AO-NEXT:     {{^ *}}// #pragma omp simd{{$}}
-//  PRT-O-NEXT:     {{^ *}}#pragma omp simd{{$}}
-// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop vector{{$}}
-//    PRT-NEXT:     {{LOOP|for \(.*\) {([^{}]|[[:space:]])*}$}}
+//  PRT-A-NEXT:     {{^ *}}#pragma acc loop worker{{$}}
+// PRT-AO-NEXT:     {{^ *}}// #pragma omp parallel for{{$}}
+//  PRT-O-NEXT:     {{^ *}}#pragma omp parallel for{{$}}
+// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop worker{{$}}
+//    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
+//    PRT-NEXT:     vectorFn(a);
 //    PRT-NEXT:   });
 //    PRT-NEXT: }
 //
-// EXE-LABEL:checkHighCallLowLoopInLambda
-//  EXE-NEXT:a[0]=50
-//  EXE-NEXT:a[1]=51
-//  EXE-NEXT:a[2]=52
-//  EXE-NEXT:a[3]=53
-void checkHighCallLowLoopInLambda() {
-  callLambdaInParallel("checkHighCallLowLoopInLambda", NUM_GANGS, [](int *a) {
-    gangFn(a);
-    #pragma acc loop vector
-    for (int i = 0; i < A_SIZE; ++i) {
-      #pragma acc atomic update
-      a[i] += 10;
-    }
+// EXE-LABEL:checkNonGangHighLoopLowCallInLambda
+//  EXE-NEXT:a[0]=20
+//  EXE-NEXT:a[1]=21
+//  EXE-NEXT:a[2]=22
+//  EXE-NEXT:a[3]=23
+void checkNonGangHighLoopLowCallInLambda() {
+  callLambdaInParallel("checkNonGangHighLoopLowCallInLambda", 1, [](int *a) {
+    #pragma acc loop worker
+    LOOP
+    vectorFn(a);
   });
 }
 
-// DMP-LABEL: FunctionDecl {{.*}} checkLowLoopHighCallInLambda 'void ()'
+// DMP-LABEL: FunctionDecl {{.*}} checkLowCallNonGangHighLoopInLambda 'void ()'
+//       DMP:   LambdaExpr
+//  DMP-NEXT:     CXXRecordDecl
+//       DMP:       CXXMethodDecl
+//  DMP-NEXT:         ParmVarDecl
+//  DMP-NEXT:         CompoundStmt
+//       DMP:           CallExpr
+//  DMP-NEXT:             ImplicitCastExpr
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'vectorFn'
+//       DMP:           ACCLoopDirective
+//  DMP-NEXT:             ACCWorkerClause
+//  DMP-NEXT:             ACCIndependentClause {{.*}} <implicit>
+//  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
+//  DMP-NEXT:             impl: OMPParallelForDirective
+//   DMP-NOT:               OMP
+//       DMP:               ForStmt
+//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Worker OMPNodeKind=unknown DirectiveDiscardedForOMP
+//
+//   PRT-LABEL: void checkLowCallNonGangHighLoopInLambda() {
+//    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
+//    PRT-NEXT:     vectorFn(a);
+//  PRT-A-NEXT:     {{^ *}}#pragma acc loop worker{{$}}
+// PRT-AO-NEXT:     {{^ *}}// #pragma omp parallel for{{$}}
+//  PRT-O-NEXT:     {{^ *}}#pragma omp parallel for{{$}}
+// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop worker{{$}}
+//    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
+//    PRT-NEXT:   });
+//    PRT-NEXT: }
+//
+// EXE-LABEL:checkLowCallNonGangHighLoopInLambda
+//  EXE-NEXT:a[0]=20
+//  EXE-NEXT:a[1]=21
+//  EXE-NEXT:a[2]=22
+//  EXE-NEXT:a[3]=23
+void checkLowCallNonGangHighLoopInLambda() {
+  callLambdaInParallel("checkLowCallNonGangHighLoopInLambda", 1, [](int *a) {
+    vectorFn(a);
+    #pragma acc loop worker
+    LOOP
+  });
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} checkGangHighCallLowLoopInLambda 'void ()'
+//       DMP:   LambdaExpr
+//  DMP-NEXT:     CXXRecordDecl
+//       DMP:       CXXMethodDecl
+//  DMP-NEXT:         ParmVarDecl
+//  DMP-NEXT:         CompoundStmt
+//       DMP:           CallExpr
+//  DMP-NEXT:             ImplicitCastExpr
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'gangFn'
+//       DMP:           ACCLoopDirective
+//  DMP-NEXT:             ACCVectorClause
+//  DMP-NEXT:             ACCIndependentClause {{.*}} <implicit>
+//  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
+//  DMP-NEXT:             ACCGangClause {{.*}} <implicit>
+//  DMP-NEXT:             impl: OMPDistributeSimdDirective
+//   DMP-NOT:               OMP
+//       DMP:               ForStmt
+//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Gang OMPNodeKind=unknown DirectiveDiscardedForOMP
+//
+//   PRT-LABEL: void checkGangHighCallLowLoopInLambda() {
+//    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
+//    PRT-NEXT:     gangFn(a);
+//  PRT-A-NEXT:     {{^ *}}#pragma acc loop vector{{$}}
+// PRT-AO-NEXT:     {{^ *}}// #pragma omp distribute simd{{$}}
+//  PRT-O-NEXT:     {{^ *}}#pragma omp distribute simd{{$}}
+// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop vector{{$}}
+//    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
+//    PRT-NEXT:   });
+//    PRT-NEXT: }
+//
+// EXE-LABEL:checkGangHighCallLowLoopInLambda
+//  EXE-NEXT:a[0]=20
+//  EXE-NEXT:a[1]=21
+//  EXE-NEXT:a[2]=22
+//  EXE-NEXT:a[3]=23
+void checkGangHighCallLowLoopInLambda() {
+  callLambdaInParallel("checkGangHighCallLowLoopInLambda", NUM_GANGS, [](int *a) {
+    gangFn(a);
+    #pragma acc loop vector
+    LOOP
+  });
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} checkLowLoopGangHighCallInLambda 'void ()'
+//       DMP:   LambdaExpr
+//  DMP-NEXT:     CXXRecordDecl
+//       DMP:       CXXMethodDecl
+//  DMP-NEXT:         ParmVarDecl
+//  DMP-NEXT:         CompoundStmt
+//       DMP:           ACCLoopDirective
+//  DMP-NEXT:             ACCVectorClause
+//  DMP-NEXT:             ACCIndependentClause {{.*}} <implicit>
+//  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
+//  DMP-NEXT:             ACCGangClause {{.*}} <implicit>
+//  DMP-NEXT:             impl: OMPDistributeSimdDirective
+//   DMP-NOT:               OMP
+//       DMP:               ForStmt
+//       DMP:           CallExpr
+//  DMP-NEXT:             ImplicitCastExpr
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'gangFn'
+//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Gang OMPNodeKind=unknown DirectiveDiscardedForOMP
+//
+//   PRT-LABEL: void checkLowLoopGangHighCallInLambda() {
+//    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
+//  PRT-A-NEXT:     {{^ *}}#pragma acc loop vector{{$}}
+// PRT-AO-NEXT:     {{^ *}}// #pragma omp distribute simd{{$}}
+//  PRT-O-NEXT:     {{^ *}}#pragma omp distribute simd{{$}}
+// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop vector{{$}}
+//    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
+//    PRT-NEXT:     gangFn(a);
+//    PRT-NEXT:   });
+//    PRT-NEXT: }
+//
+// EXE-LABEL:checkLowLoopGangHighCallInLambda
+//  EXE-NEXT:a[0]=20
+//  EXE-NEXT:a[1]=21
+//  EXE-NEXT:a[2]=22
+//  EXE-NEXT:a[3]=23
+void checkLowLoopGangHighCallInLambda() {
+  callLambdaInParallel("checkLowLoopGangHighCallInLambda", NUM_GANGS, [](int *a) {
+    #pragma acc loop vector
+    LOOP
+    gangFn(a);
+  });
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} checkNonGangHighCallLowLoopInLambda 'void ()'
+//       DMP:   LambdaExpr
+//  DMP-NEXT:     CXXRecordDecl
+//       DMP:       CXXMethodDecl
+//  DMP-NEXT:         ParmVarDecl
+//  DMP-NEXT:         CompoundStmt
+//       DMP:           CallExpr
+//  DMP-NEXT:             ImplicitCastExpr
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'workerFn'
+//       DMP:           ACCLoopDirective
+//  DMP-NEXT:             ACCVectorClause
+//  DMP-NEXT:             ACCIndependentClause {{.*}} <implicit>
+//  DMP-NEXT:             ACCSharedClause {{.*}} <implicit>
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'a'
+//  DMP-NEXT:             impl: OMPSimdDirective
+//   DMP-NOT:               OMP
+//       DMP:               ForStmt
+//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Worker OMPNodeKind=unknown DirectiveDiscardedForOMP
+//
+//   PRT-LABEL: void checkNonGangHighCallLowLoopInLambda() {
+//    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
+//    PRT-NEXT:     workerFn(a);
+//  PRT-A-NEXT:     {{^ *}}#pragma acc loop vector{{$}}
+// PRT-AO-NEXT:     {{^ *}}// #pragma omp simd{{$}}
+//  PRT-O-NEXT:     {{^ *}}#pragma omp simd{{$}}
+// PRT-OA-NEXT:     {{^ *}}// #pragma acc loop vector{{$}}
+//    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
+//    PRT-NEXT:   });
+//    PRT-NEXT: }
+//
+// EXE-LABEL:checkNonGangHighCallLowLoopInLambda
+//  EXE-NEXT:a[0]=20
+//  EXE-NEXT:a[1]=21
+//  EXE-NEXT:a[2]=22
+//  EXE-NEXT:a[3]=23
+void checkNonGangHighCallLowLoopInLambda() {
+  callLambdaInParallel("checkNonGangHighCallLowLoopInLambda", 1, [](int *a) {
+    workerFn(a);
+    #pragma acc loop vector
+    LOOP
+  });
+}
+
+// DMP-LABEL: FunctionDecl {{.*}} checkLowLoopNonGangHighCallInLambda 'void ()'
 //       DMP:   LambdaExpr
 //  DMP-NEXT:     CXXRecordDecl
 //       DMP:       CXXMethodDecl
@@ -1004,33 +1340,30 @@ void checkHighCallLowLoopInLambda() {
 //       DMP:               ForStmt
 //       DMP:           CallExpr
 //  DMP-NEXT:             ImplicitCastExpr
-//  DMP-NEXT:               DeclRefExpr {{.*}} 'gangFn'
-//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Gang OMPNodeKind=unknown DirectiveDiscardedForOMP
+//  DMP-NEXT:               DeclRefExpr {{.*}} 'workerFn'
+//       DMP:         ACCRoutineDeclAttr {{.*}} Implicit Worker OMPNodeKind=unknown DirectiveDiscardedForOMP
 //
-//   PRT-LABEL: void checkLowLoopHighCallInLambda() {
+//   PRT-LABEL: void checkLowLoopNonGangHighCallInLambda() {
 //    PRT-NEXT:   callLambdaInParallel("{{.*}}", {{.*}}, [](int *a) {
 //  PRT-A-NEXT:     {{^ *}}#pragma acc loop vector{{$}}
 // PRT-AO-NEXT:     {{^ *}}// #pragma omp simd{{$}}
 //  PRT-O-NEXT:     {{^ *}}#pragma omp simd{{$}}
 // PRT-OA-NEXT:     {{^ *}}// #pragma acc loop vector{{$}}
-//    PRT-NEXT:     {{LOOP|for \(.*\) {([^{}]|[[:space:]])*}$}}
-//    PRT-NEXT:     gangFn(a);
+//    PRT-NEXT:     {{LOOP|for \(.*\)[[:space:]].*;$}}
+//    PRT-NEXT:     workerFn(a);
 //    PRT-NEXT:   });
 //    PRT-NEXT: }
 //
-// EXE-LABEL:checkLowLoopHighCallInLambda
-//  EXE-NEXT:a[0]=50
-//  EXE-NEXT:a[1]=51
-//  EXE-NEXT:a[2]=52
-//  EXE-NEXT:a[3]=53
-void checkLowLoopHighCallInLambda() {
-  callLambdaInParallel("checkLowLoopHighCallInLambda", NUM_GANGS, [](int *a) {
+// EXE-LABEL:checkLowLoopNonGangHighCallInLambda
+//  EXE-NEXT:a[0]=20
+//  EXE-NEXT:a[1]=21
+//  EXE-NEXT:a[2]=22
+//  EXE-NEXT:a[3]=23
+void checkLowLoopNonGangHighCallInLambda() {
+  callLambdaInParallel("checkLowLoopNonGangHighCallInLambda", 1, [](int *a) {
     #pragma acc loop vector
-    for (int i = 0; i < A_SIZE; ++i) {
-      #pragma acc atomic update
-      a[i] += 10;
-    }
-    gangFn(a);
+    LOOP
+    workerFn(a);
   });
 }
 
@@ -1473,14 +1806,22 @@ int main() {
   checkAutoLoopInLambda();
   checkAutoGangWorkerVectorLoopInLambda();
   checkSerialLoopInLambda();
-  checkHighLoopLowLoopInLambda();
-  checkLowLoopHighLoopInLambda();
-  checkHighCallLowCallInLambda();
-  checkLowCallHighCallInLambda();
-  checkHighLoopLowCallInLambda();
-  checkLowCallHighLoopInLambda();
-  checkHighCallLowLoopInLambda();
-  checkLowLoopHighCallInLambda();
+  checkGangHighLoopLowLoopInLambda();
+  checkLowLoopGangHighLoopInLambda();
+  checkNonGangHighLoopLowLoopInLambda();
+  checkLowLoopNonGangHighLoopInLambda();
+  checkGangHighCallLowCallInLambda();
+  checkLowCallGangHighCallInLambda();
+  checkNonGangHighCallLowCallInLambda();
+  checkLowCallNonGangHighCallInLambda();
+  checkGangHighLoopLowCallInLambda();
+  checkLowCallGangHighLoopInLambda();
+  checkNonGangHighLoopLowCallInLambda();
+  checkLowCallNonGangHighLoopInLambda();
+  checkGangHighCallLowLoopInLambda();
+  checkLowLoopGangHighCallInLambda();
+  checkNonGangHighCallLowLoopInLambda();
+  checkLowLoopNonGangHighCallInLambda();
   checkGangFnCallingGangLambda();
   checkGangFnCallingWorkerLambda();
   checkGangFnCallingVectorLambda();

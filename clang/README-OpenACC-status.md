@@ -583,11 +583,10 @@ Run-Time Environment Variables
           level of parallelism from that `loop` construct is `seq`.  This
           behavior could change based on committee discussions.
         * Currently, implicit `gang` clauses on the aforementioned `loop`
-          constructs are not implemented, but they might be implemented in the
-          future based on committee discussions.  They will likely be computed
-          after the implicit `routine` directive on the lambda and thus only if
-          the lambda body contains other such calls or `loop` constructs with
-          gang parallelism.
+          constructs are computed after the implicit `routine` directive on the
+          lambda and thus only if the lambda body contains other `loop`
+          constructs or calls with gang parallelism.  This behavior could change
+          based on committee discussions.
     * An implicit `routine` directive has scope throughout the compilation unit
       and thus triggers the above diagnostics for the function definition's body
       as long it's in the same compilation unit.  Caveat:

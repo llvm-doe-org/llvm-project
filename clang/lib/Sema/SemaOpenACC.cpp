@@ -2618,8 +2618,14 @@ Stmt *Sema::ActOnFinishFunctionBodyForOpenACC(FunctionDecl *FD, Stmt *Body) {
     return Body;
   ImplicitRoutineDirInfoTy &ImplicitRoutineDirInfo =
       OpenACCData->ImplicitRoutineDirInfo;
-  if (isLambdaCallOperator(FD))
+  if (isLambdaCallOperator(FD)) {
     ImplicitRoutineDirInfo.fullyDetermineImplicitRoutineDir(FD);
+    ACCRoutineDeclAttr *FnAttr = FD->getAttr<ACCRoutineDeclAttr>();
+    // Implicit gang clauses are not permitted if the routine directive
+    // doesn't specify gang.
+    if (FnAttr && FnAttr->getPartitioning() == ACCRoutineDeclAttr::Gang)
+      ImplicitGangAdder().Visit(Body);
+  }
   return transformACCToOMP(
       FD, Body, ImplicitRoutineDirInfo.hasOrphanedLoopConstructImplier(FD));
 }
@@ -2851,13 +2857,18 @@ StmtResult Sema::ActOnOpenACCLoopDirective(ArrayRef<ACCClause *> Clauses,
       Clauses, AStmt, LCVs, DirStack.getLoopPartitioning(),
       DirStack.getNestedExplicitGangPartitioning());
 
-  // If this is an outermost orphaned loop construct, TransformACCToOMP is about
-  // to run on it, so run ImplicitGangAdder first.
+  // If this is an outermost orphaned loop construct and there's an explicit
+  // routine directive, TransformACCToOMP is about to run on it, so run
+  // ImplicitGangAdder first.
+  //
+  // Normally, an orphaned loop construct must appear in a function with an
+  // explicit routine directive, which must appear before the function
+  // definition.  However, in the case of a lambda, the routine directive can be
+  // implied within the lambda's body and isn't fully determined until the end
+  // of the body.  Moreover, rules might be violated during error recovery.  For
+  // the sake of the last two cases, skip ImplicitGangAdder here if there's no
+  // routine direcive.
   if (!isOpenACCDirectiveStmt(DirStack.getEffectiveParentDirective())) {
-    // An orphaned loop construct must appear in a function with an explicit
-    // routine directive, which must appear before the function definition.
-    // Guard against violations of those rules just in case error recovery
-    // permitted the analysis to reach this point anyway.
     FunctionDecl *CurFnDecl = getCurFunctionDecl(/*AllowLambda=*/true);
     if (CurFnDecl) {
       ACCRoutineDeclAttr *FnAttr = CurFnDecl->getAttr<ACCRoutineDeclAttr>();

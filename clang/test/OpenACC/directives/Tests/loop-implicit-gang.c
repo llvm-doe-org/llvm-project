@@ -1,6 +1,9 @@
 // Check implicit gang clause on "acc parallel loop", on "acc loop" within
 // "acc parallel", and on orphaned "acc loop".
 //
+// Implicit gang clauses due to implicit routine directives are tested in
+// routine-implicit.c.
+//
 // Positive testing for gang reductions appears in loop-reduction.c.  Testing
 // for diagnostics about conflicting gang reductions appears in
 // diagnostics/loop.c.
