@@ -737,7 +737,7 @@ SITargetLowering::SITargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::BUILD_VECTOR, Vec16, Custom);
       setOperationAction(ISD::EXTRACT_VECTOR_ELT, Vec16, Custom);
       setOperationAction(ISD::INSERT_VECTOR_ELT, Vec16, Expand);
-      setOperationAction(ISD::SCALAR_TO_VECTOR, Vec16, Expand);
+      setOperationAction(ISD::SCALAR_TO_VECTOR, Vec16, Custom);
     }
   }
 
@@ -1516,25 +1516,23 @@ bool SITargetLowering::allowsMisalignedMemoryAccessesImpl(
 
   if (AddrSpace == AMDGPUAS::LOCAL_ADDRESS ||
       AddrSpace == AMDGPUAS::REGION_ADDRESS) {
+    // Check if alignment requirements for ds_read/write instructions are
+    // disabled.
+    if (!Subtarget->hasUnalignedDSAccessEnabled() && Alignment < Align(4))
+      return false;
+
     Align RequiredAlignment(PowerOf2Ceil(Size/8)); // Natural alignment.
     if (Subtarget->hasLDSMisalignedBug() && Size > 32 &&
         Alignment < RequiredAlignment)
       return false;
-
-    // Check if alignment requirements for ds_read/write instructions are
-    // disabled.
-    if (Subtarget->hasUnalignedDSAccessEnabled()) {
-      if (IsFast)
-        *IsFast = Alignment != Align(2);
-      return true;
-    }
 
     // Either, the alignment requirements are "enabled", or there is an
     // unaligned LDS access related hardware bug though alignment requirements
     // are "disabled". In either case, we need to check for proper alignment
     // requirements.
     //
-    if (Size == 64) {
+    switch (Size) {
+    case 64:
       // SI has a hardware bug in the LDS / GDS bounds checking: if the base
       // address is negative, then the instruction is incorrectly treated as
       // out-of-bounds even if base + offsets is in bounds. Split vectorized
@@ -1546,31 +1544,70 @@ bool SITargetLowering::allowsMisalignedMemoryAccessesImpl(
       // 8 byte accessing via ds_read/write_b64 require 8-byte alignment, but we
       // can do a 4 byte aligned, 8 byte access in a single operation using
       // ds_read2/write2_b32 with adjacent offsets.
-      bool AlignedBy4 = Alignment >= Align(4);
-      if (IsFast)
-        *IsFast = AlignedBy4;
+      RequiredAlignment = Align(4);
 
-      return AlignedBy4;
-    }
-    if (Size == 96) {
+      if (Subtarget->hasUnalignedDSAccessEnabled()) {
+        // We will either select ds_read_b64/ds_write_b64 or ds_read2_b32/
+        // ds_write2_b32 depending on the alignment. In either case with either
+        // alignment there is no faster way of doing this.
+        if (IsFast)
+          *IsFast = true;
+        return true;
+      }
+
+      break;
+    case 96:
+      if (!Subtarget->hasDS96AndDS128())
+        return false;
+
       // 12 byte accessing via ds_read/write_b96 require 16-byte alignment on
       // gfx8 and older.
-      bool AlignedBy16 = Alignment >= Align(16);
-      if (IsFast)
-        *IsFast = AlignedBy16;
 
-      return AlignedBy16;
-    }
-    if (Size == 128) {
+      if (Subtarget->hasUnalignedDSAccessEnabled()) {
+        // Naturally aligned access is fastest. However, also report it is Fast
+        // if memory is aligned less than DWORD. A narrow load or store will be
+        // be equally slow as a single ds_read_b96/ds_write_b96, but there will
+        // be more of them, so overall we will pay less penalty issuing a single
+        // instruction.
+        if (IsFast)
+          *IsFast = Alignment >= RequiredAlignment || Alignment < Align(4);
+        return true;
+      }
+
+      break;
+    case 128:
+      if (!Subtarget->hasDS96AndDS128() || !Subtarget->useDS128())
+        return false;
+
       // 16 byte accessing via ds_read/write_b128 require 16-byte alignment on
       // gfx8 and older, but  we can do a 8 byte aligned, 16 byte access in a
       // single operation using ds_read2/write2_b64.
-      bool AlignedBy8 = Alignment >= Align(8);
-      if (IsFast)
-        *IsFast = AlignedBy8;
+      RequiredAlignment = Align(8);
 
-      return AlignedBy8;
+      if (Subtarget->hasUnalignedDSAccessEnabled()) {
+        // Naturally aligned access is fastest. However, also report it is Fast
+        // if memory is aligned less than DWORD. A narrow load or store will be
+        // be equally slow as a single ds_read_b128/ds_write_b128, but there
+        // will be more of them, so overall we will pay less penalty issuing a
+        // single instruction.
+        if (IsFast)
+          *IsFast = Alignment >= RequiredAlignment || Alignment < Align(4);
+        return true;
+      }
+
+      break;
+    default:
+      if (Size > 32)
+        return false;
+
+      break;
     }
+
+    if (IsFast)
+      *IsFast = Alignment >= RequiredAlignment;
+
+    return Alignment >= RequiredAlignment ||
+           Subtarget->hasUnalignedDSAccessEnabled();
   }
 
   if (AddrSpace == AMDGPUAS::PRIVATE_ADDRESS) {
@@ -1595,9 +1632,7 @@ bool SITargetLowering::allowsMisalignedMemoryAccessesImpl(
     return AlignedBy4;
   }
 
-  if (Subtarget->hasUnalignedBufferAccessEnabled() &&
-      !(AddrSpace == AMDGPUAS::LOCAL_ADDRESS ||
-        AddrSpace == AMDGPUAS::REGION_ADDRESS)) {
+  if (Subtarget->hasUnalignedBufferAccessEnabled()) {
     // If we have a uniform constant load, it still requires using a slow
     // buffer instruction if unaligned.
     if (IsFast) {
@@ -1627,20 +1662,22 @@ bool SITargetLowering::allowsMisalignedMemoryAccessesImpl(
 bool SITargetLowering::allowsMisalignedMemoryAccesses(
     EVT VT, unsigned AddrSpace, Align Alignment, MachineMemOperand::Flags Flags,
     bool *IsFast) const {
-  if (IsFast)
-    *IsFast = false;
+  bool Allow = allowsMisalignedMemoryAccessesImpl(VT.getSizeInBits(), AddrSpace,
+                                                  Alignment, Flags, IsFast);
 
-  // TODO: I think v3i32 should allow unaligned accesses on CI with DS_READ_B96,
-  // which isn't a simple VT.
-  // Until MVT is extended to handle this, simply check for the size and
-  // rely on the condition below: allow accesses if the size is a multiple of 4.
-  if (VT == MVT::Other || (VT != MVT::Other && VT.getSizeInBits() > 1024 &&
-                           VT.getStoreSize() > 16)) {
-    return false;
+  if (Allow && IsFast && Subtarget->hasUnalignedDSAccessEnabled() &&
+      (AddrSpace == AMDGPUAS::LOCAL_ADDRESS ||
+       AddrSpace == AMDGPUAS::REGION_ADDRESS)) {
+    // Lie it is fast if +unaligned-access-mode is passed so that DS accesses
+    // get vectorized. We could use ds_read2_b*/ds_write2_b* instructions on a
+    // misaligned data which is faster than a pair of ds_read_b*/ds_write_b*
+    // which would be equally misaligned.
+    // This is only used by the common passes, selection always calls the
+    // allowsMisalignedMemoryAccessesImpl version.
+    *IsFast = true;
   }
 
-  return allowsMisalignedMemoryAccessesImpl(VT.getSizeInBits(), AddrSpace,
-                                            Alignment, Flags, IsFast);
+  return Allow;
 }
 
 EVT SITargetLowering::getOptimalMemOpType(
@@ -2410,7 +2447,7 @@ SDValue SITargetLowering::LowerFormalArguments(
     return DAG.getEntryNode();
   }
 
-  Info->allocateModuleLDSGlobal(Fn.getParent());
+  Info->allocateModuleLDSGlobal(Fn);
 
   SmallVector<ISD::InputArg, 16> Splits;
   SmallVector<CCValAssign, 16> ArgLocs;
@@ -4735,6 +4772,8 @@ SDValue SITargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return lowerEXTRACT_VECTOR_ELT(Op, DAG);
   case ISD::VECTOR_SHUFFLE:
     return lowerVECTOR_SHUFFLE(Op, DAG);
+  case ISD::SCALAR_TO_VECTOR:
+    return lowerSCALAR_TO_VECTOR(Op, DAG);
   case ISD::BUILD_VECTOR:
     return lowerBUILD_VECTOR(Op, DAG);
   case ISD::FP_ROUND:
@@ -5731,14 +5770,11 @@ SDValue SITargetLowering::lowerINSERT_VECTOR_ELT(SDValue Op,
   EVT EltVT = VecVT.getVectorElementType();
   unsigned VecSize = VecVT.getSizeInBits();
   unsigned EltSize = EltVT.getSizeInBits();
-
-
-  assert(VecSize <= 64);
-
-  unsigned NumElts = VecVT.getVectorNumElements();
   SDLoc SL(Op);
-  auto KIdx = dyn_cast<ConstantSDNode>(Idx);
 
+  // Specially handle the case of v4i16 with static indexing.
+  unsigned NumElts = VecVT.getVectorNumElements();
+  auto KIdx = dyn_cast<ConstantSDNode>(Idx);
   if (NumElts == 4 && EltSize == 16 && KIdx) {
     SDValue BCVec = DAG.getNode(ISD::BITCAST, SL, MVT::v2i32, Vec);
 
@@ -5766,35 +5802,41 @@ SDValue SITargetLowering::lowerINSERT_VECTOR_ELT(SDValue Op,
     return DAG.getNode(ISD::BITCAST, SL, VecVT, Concat);
   }
 
+  // Static indexing does not lower to stack access, and hence there is no need
+  // for special custom lowering to avoid stack access.
   if (isa<ConstantSDNode>(Idx))
     return SDValue();
 
-  MVT IntVT = MVT::getIntegerVT(VecSize);
-
-  // Avoid stack access for dynamic indexing.
+  // Avoid stack access for dynamic indexing by custom lowering to
   // v_bfi_b32 (v_bfm_b32 16, (shl idx, 16)), val, vec
 
-  // Create a congruent vector with the target value in each element so that
-  // the required element can be masked and ORed into the target vector.
-  SDValue ExtVal = DAG.getNode(ISD::BITCAST, SL, IntVT,
-                               DAG.getSplatBuildVector(VecVT, SL, InsVal));
+  assert(VecSize <= 64 && "Expected target vector size to be <= 64 bits");
 
+  MVT IntVT = MVT::getIntegerVT(VecSize);
+
+  // Convert vector index to bit-index and get the required bit mask.
   assert(isPowerOf2_32(EltSize));
   SDValue ScaleFactor = DAG.getConstant(Log2_32(EltSize), SL, MVT::i32);
-
-  // Convert vector index to bit-index.
   SDValue ScaledIdx = DAG.getNode(ISD::SHL, SL, MVT::i32, Idx, ScaleFactor);
-
-  SDValue BCVec = DAG.getNode(ISD::BITCAST, SL, IntVT, Vec);
   SDValue BFM = DAG.getNode(ISD::SHL, SL, IntVT,
                             DAG.getConstant(0xffff, SL, IntVT),
                             ScaledIdx);
 
+  // 1. Create a congruent vector with the target value in each element.
+  SDValue ExtVal = DAG.getNode(ISD::BITCAST, SL, IntVT,
+                               DAG.getSplatBuildVector(VecVT, SL, InsVal));
+
+  // 2. Mask off all other indicies except the required index within (1).
   SDValue LHS = DAG.getNode(ISD::AND, SL, IntVT, BFM, ExtVal);
+
+  // 3. Mask off the required index within the target vector.
+  SDValue BCVec = DAG.getNode(ISD::BITCAST, SL, IntVT, Vec);
   SDValue RHS = DAG.getNode(ISD::AND, SL, IntVT,
                             DAG.getNOT(SL, BFM, IntVT), BCVec);
 
+  // 4. Get (2) and (3) ORed into the target vector.
   SDValue BFI = DAG.getNode(ISD::OR, SL, IntVT, LHS, RHS);
+
   return DAG.getNode(ISD::BITCAST, SL, VecVT, BFI);
 }
 
@@ -5840,10 +5882,19 @@ SDValue SITargetLowering::lowerEXTRACT_VECTOR_ELT(SDValue Op,
 
   assert(VecSize <= 64);
 
+  MVT IntVT = MVT::getIntegerVT(VecSize);
+
+  // If Vec is just a SCALAR_TO_VECTOR, then use the scalar integer directly.
+  SDValue VecBC = peekThroughBitcasts(Vec);
+  if (VecBC.getOpcode() == ISD::SCALAR_TO_VECTOR) {
+    SDValue Src = VecBC.getOperand(0);
+    Src = DAG.getBitcast(Src.getValueType().changeTypeToInteger(), Src);
+    Vec = DAG.getAnyExtOrTrunc(Src, SL, IntVT);
+  }
+
   unsigned EltSize = EltVT.getSizeInBits();
   assert(isPowerOf2_32(EltSize));
 
-  MVT IntVT = MVT::getIntegerVT(VecSize);
   SDValue ScaleFactor = DAG.getConstant(Log2_32(EltSize), SL, MVT::i32);
 
   // Convert vector index to bit-index (* EltSize)
@@ -5915,6 +5966,22 @@ SDValue SITargetLowering::lowerVECTOR_SHUFFLE(SDValue Op,
   }
 
   return DAG.getNode(ISD::CONCAT_VECTORS, SL, ResultVT, Pieces);
+}
+
+SDValue SITargetLowering::lowerSCALAR_TO_VECTOR(SDValue Op,
+                                                SelectionDAG &DAG) const {
+  SDValue SVal = Op.getOperand(0);
+  EVT ResultVT = Op.getValueType();
+  EVT SValVT = SVal.getValueType();
+  SDValue UndefVal = DAG.getUNDEF(SValVT);
+  SDLoc SL(Op);
+
+  SmallVector<SDValue, 8> VElts;
+  VElts.push_back(SVal);
+  for (int I = 1, E = ResultVT.getVectorNumElements(); I < E; ++I)
+    VElts.push_back(UndefVal);
+
+  return DAG.getBuildVector(ResultVT, SL, VElts);
 }
 
 SDValue SITargetLowering::lowerBUILD_VECTOR(SDValue Op,
@@ -6725,6 +6792,32 @@ SDValue SITargetLowering::lowerSBuffer(EVT VT, SDLoc DL, SDValue Rsrc,
   return Loads[0];
 }
 
+SDValue SITargetLowering::lowerWorkitemID(SelectionDAG &DAG, SDValue Op,
+                                          unsigned Dim,
+                                          const ArgDescriptor &Arg) const {
+  SDLoc SL(Op);
+  MachineFunction &MF = DAG.getMachineFunction();
+  unsigned MaxID = Subtarget->getMaxWorkitemID(MF.getFunction(), Dim);
+  if (MaxID == 0)
+    return DAG.getConstant(0, SL, MVT::i32);
+
+  SDValue Val = loadInputValue(DAG, &AMDGPU::VGPR_32RegClass, MVT::i32,
+                               SDLoc(DAG.getEntryNode()), Arg);
+
+  // Don't bother inserting AssertZext for packed IDs since we're emitting the
+  // masking operations anyway.
+  //
+  // TODO: We could assert the top bit is 0 for the source copy.
+  if (Arg.isMasked())
+    return Val;
+
+  // Preserve the known bits after expansion to a copy.
+  EVT SmallVT =
+      EVT::getIntegerVT(*DAG.getContext(), 32 - countLeadingZeros(MaxID));
+  return DAG.getNode(ISD::AssertZext, SL, MVT::i32, Val,
+                     DAG.getValueType(SmallVT));
+}
+
 SDValue SITargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                                                   SelectionDAG &DAG) const {
   MachineFunction &MF = DAG.getMachineFunction();
@@ -6871,26 +6964,11 @@ SDValue SITargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     return getPreloadedValue(DAG, *MFI, VT,
                              AMDGPUFunctionArgInfo::WORKGROUP_ID_Z);
   case Intrinsic::amdgcn_workitem_id_x:
-    if (Subtarget->getMaxWorkitemID(MF.getFunction(), 0) == 0)
-      return DAG.getConstant(0, DL, MVT::i32);
-
-    return loadInputValue(DAG, &AMDGPU::VGPR_32RegClass, MVT::i32,
-                          SDLoc(DAG.getEntryNode()),
-                          MFI->getArgInfo().WorkItemIDX);
+    return lowerWorkitemID(DAG, Op, 0, MFI->getArgInfo().WorkItemIDX);
   case Intrinsic::amdgcn_workitem_id_y:
-    if (Subtarget->getMaxWorkitemID(MF.getFunction(), 1) == 0)
-      return DAG.getConstant(0, DL, MVT::i32);
-
-    return loadInputValue(DAG, &AMDGPU::VGPR_32RegClass, MVT::i32,
-                          SDLoc(DAG.getEntryNode()),
-                          MFI->getArgInfo().WorkItemIDY);
+    return lowerWorkitemID(DAG, Op, 1, MFI->getArgInfo().WorkItemIDY);
   case Intrinsic::amdgcn_workitem_id_z:
-    if (Subtarget->getMaxWorkitemID(MF.getFunction(), 2) == 0)
-      return DAG.getConstant(0, DL, MVT::i32);
-
-    return loadInputValue(DAG, &AMDGPU::VGPR_32RegClass, MVT::i32,
-                          SDLoc(DAG.getEntryNode()),
-                          MFI->getArgInfo().WorkItemIDZ);
+    return lowerWorkitemID(DAG, Op, 2, MFI->getArgInfo().WorkItemIDZ);
   case Intrinsic::amdgcn_wavefrontsize:
     return DAG.getConstant(MF.getSubtarget<GCNSubtarget>().getWavefrontSize(),
                            SDLoc(Op), MVT::i32);
@@ -8519,27 +8597,15 @@ SDValue SITargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
       llvm_unreachable("unsupported private_element_size");
     }
   } else if (AS == AMDGPUAS::LOCAL_ADDRESS || AS == AMDGPUAS::REGION_ADDRESS) {
-    // Use ds_read_b128 or ds_read_b96 when possible.
-    if (Subtarget->hasDS96AndDS128() &&
-        ((Subtarget->useDS128() && MemVT.getStoreSize() == 16) ||
-         MemVT.getStoreSize() == 12) &&
-        allowsMisalignedMemoryAccessesImpl(MemVT.getSizeInBits(), AS,
-                                           Load->getAlign()))
+    bool Fast = false;
+    auto Flags = Load->getMemOperand()->getFlags();
+    if (allowsMisalignedMemoryAccessesImpl(MemVT.getSizeInBits(), AS,
+                                           Load->getAlign(), Flags, &Fast) &&
+        Fast)
       return SDValue();
 
-    if (NumElements > 2)
+    if (MemVT.isVector())
       return SplitVectorLoad(Op, DAG);
-
-    // SI has a hardware bug in the LDS / GDS bounds checking: if the base
-    // address is negative, then the instruction is incorrectly treated as
-    // out-of-bounds even if base + offsets is in bounds. Split vectorized
-    // loads here to avoid emitting ds_read2_b32. We may re-combine the
-    // load later in the SILoadStoreOptimizer.
-    if (Subtarget->getGeneration() == AMDGPUSubtarget::SOUTHERN_ISLANDS &&
-        NumElements == 2 && MemVT.getStoreSize() == 8 &&
-        Load->getAlignment() < 8) {
-      return SplitVectorLoad(Op, DAG);
-    }
   }
 
   if (!allowsMemoryAccessForAlignment(*DAG.getContext(), DAG.getDataLayout(),
@@ -9030,39 +9096,21 @@ SDValue SITargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
       llvm_unreachable("unsupported private_element_size");
     }
   } else if (AS == AMDGPUAS::LOCAL_ADDRESS || AS == AMDGPUAS::REGION_ADDRESS) {
-    // Use ds_write_b128 or ds_write_b96 when possible.
-    if (Subtarget->hasDS96AndDS128() &&
-        ((Subtarget->useDS128() && VT.getStoreSize() == 16) ||
-         (VT.getStoreSize() == 12)) &&
-        allowsMisalignedMemoryAccessesImpl(VT.getSizeInBits(), AS,
-                                           Store->getAlign()))
+    bool Fast = false;
+    auto Flags = Store->getMemOperand()->getFlags();
+    if (allowsMisalignedMemoryAccessesImpl(VT.getSizeInBits(), AS,
+                                           Store->getAlign(), Flags, &Fast) &&
+        Fast)
       return SDValue();
 
-    if (NumElements > 2)
+    if (VT.isVector())
       return SplitVectorStore(Op, DAG);
 
-    // SI has a hardware bug in the LDS / GDS bounds checking: if the base
-    // address is negative, then the instruction is incorrectly treated as
-    // out-of-bounds even if base + offsets is in bounds. Split vectorized
-    // stores here to avoid emitting ds_write2_b32. We may re-combine the
-    // store later in the SILoadStoreOptimizer.
-    if (!Subtarget->hasUsableDSOffset() &&
-        NumElements == 2 && VT.getStoreSize() == 8 &&
-        Store->getAlignment() < 8) {
-      return SplitVectorStore(Op, DAG);
-    }
-
-    if (!allowsMemoryAccessForAlignment(*DAG.getContext(), DAG.getDataLayout(),
-                                        VT, *Store->getMemOperand())) {
-      if (VT.isVector())
-        return SplitVectorStore(Op, DAG);
-      return expandUnalignedStore(Store, DAG);
-    }
-
-    return SDValue();
-  } else {
-    llvm_unreachable("unhandled address space");
+    return expandUnalignedStore(Store, DAG);
   }
+
+  // Probably an invalid store. If so we'll end up emitting a selection error.
+  return SDValue();
 }
 
 SDValue SITargetLowering::LowerTrig(SDValue Op, SelectionDAG &DAG) const {
@@ -10643,6 +10691,133 @@ static SDValue getMad64_32(SelectionDAG &DAG, const SDLoc &SL,
   return DAG.getNode(ISD::TRUNCATE, SL, VT, Mad);
 }
 
+// Fold (add (mul x, y), z) --> (mad_[iu]64_[iu]32 x, y, z) plus high
+// multiplies, if any.
+//
+// Full 64-bit multiplies that feed into an addition are lowered here instead
+// of using the generic expansion. The generic expansion ends up with
+// a tree of ADD nodes that prevents us from using the "add" part of the
+// MAD instruction. The expansion produced here results in a chain of ADDs
+// instead of a tree.
+SDValue SITargetLowering::tryFoldToMad64_32(SDNode *N,
+                                            DAGCombinerInfo &DCI) const {
+  assert(N->getOpcode() == ISD::ADD);
+
+  SelectionDAG &DAG = DCI.DAG;
+  EVT VT = N->getValueType(0);
+  SDLoc SL(N);
+  SDValue LHS = N->getOperand(0);
+  SDValue RHS = N->getOperand(1);
+
+  if (VT.isVector())
+    return SDValue();
+
+  // S_MUL_HI_[IU]32 was added in gfx9, which allows us to keep the overall
+  // result in scalar registers for uniform values.
+  if (!N->isDivergent() && Subtarget->hasSMulHi())
+    return SDValue();
+
+  unsigned NumBits = VT.getScalarSizeInBits();
+  if (NumBits <= 32 || NumBits > 64)
+    return SDValue();
+
+  if (LHS.getOpcode() != ISD::MUL) {
+    assert(RHS.getOpcode() == ISD::MUL);
+    std::swap(LHS, RHS);
+  }
+
+  // Avoid the fold if it would unduly increase the number of multiplies due to
+  // multiple uses, except on hardware with full-rate multiply-add (which is
+  // part of full-rate 64-bit ops).
+  if (!Subtarget->hasFullRate64Ops()) {
+    unsigned NumUsers = 0;
+    for (SDNode *Use : LHS->uses()) {
+      // There is a use that does not feed into addition, so the multiply can't
+      // be removed. We prefer MUL + ADD + ADDC over MAD + MUL.
+      if (Use->getOpcode() != ISD::ADD)
+        return SDValue();
+
+      // We prefer 2xMAD over MUL + 2xADD + 2xADDC (code density), and prefer
+      // MUL + 3xADD + 3xADDC over 3xMAD.
+      ++NumUsers;
+      if (NumUsers >= 3)
+        return SDValue();
+    }
+  }
+
+  SDValue MulLHS = LHS.getOperand(0);
+  SDValue MulRHS = LHS.getOperand(1);
+  SDValue AddRHS = RHS;
+
+  // Always check whether operands are small unsigned values, since that
+  // knowledge is useful in more cases. Check for small signed values only if
+  // doing so can unlock a shorter code sequence.
+  bool MulLHSUnsigned32 = numBitsUnsigned(MulLHS, DAG) <= 32;
+  bool MulRHSUnsigned32 = numBitsUnsigned(MulRHS, DAG) <= 32;
+
+  bool MulSignedLo = false;
+  if (!MulLHSUnsigned32 || !MulRHSUnsigned32) {
+    MulSignedLo = numBitsSigned(MulLHS, DAG) <= 32 &&
+                  numBitsSigned(MulRHS, DAG) <= 32;
+  }
+
+  // The operands and final result all have the same number of bits. If
+  // operands need to be extended, they can be extended with garbage. The
+  // resulting garbage in the high bits of the mad_[iu]64_[iu]32 result is
+  // truncated away in the end.
+  if (VT != MVT::i64) {
+    MulLHS = DAG.getNode(ISD::ANY_EXTEND, SL, MVT::i64, MulLHS);
+    MulRHS = DAG.getNode(ISD::ANY_EXTEND, SL, MVT::i64, MulRHS);
+    AddRHS = DAG.getNode(ISD::ANY_EXTEND, SL, MVT::i64, AddRHS);
+  }
+
+  // The basic code generated is conceptually straightforward. Pseudo code:
+  //
+  //   accum = mad_64_32 lhs.lo, rhs.lo, accum
+  //   accum.hi = add (mul lhs.hi, rhs.lo), accum.hi
+  //   accum.hi = add (mul lhs.lo, rhs.hi), accum.hi
+  //
+  // The second and third lines are optional, depending on whether the factors
+  // are {sign,zero}-extended or not.
+  //
+  // The actual DAG is noisier than the pseudo code, but only due to
+  // instructions that disassemble values into low and high parts, and
+  // assemble the final result.
+  SDValue Zero = DAG.getConstant(0, SL, MVT::i32);
+  SDValue One = DAG.getConstant(1, SL, MVT::i32);
+
+  auto MulLHSLo = DAG.getNode(ISD::TRUNCATE, SL, MVT::i32, MulLHS);
+  auto MulRHSLo = DAG.getNode(ISD::TRUNCATE, SL, MVT::i32, MulRHS);
+  SDValue Accum =
+      getMad64_32(DAG, SL, MVT::i64, MulLHSLo, MulRHSLo, AddRHS, MulSignedLo);
+
+  if (!MulSignedLo && (!MulLHSUnsigned32 || !MulRHSUnsigned32)) {
+    auto AccumLo = DAG.getNode(ISD::EXTRACT_ELEMENT, SL, MVT::i32, Accum, Zero);
+    auto AccumHi = DAG.getNode(ISD::EXTRACT_ELEMENT, SL, MVT::i32, Accum, One);
+
+    if (!MulLHSUnsigned32) {
+      auto MulLHSHi =
+          DAG.getNode(ISD::EXTRACT_ELEMENT, SL, MVT::i32, MulLHS, One);
+      SDValue MulHi = DAG.getNode(ISD::MUL, SL, MVT::i32, MulLHSHi, MulRHSLo);
+      AccumHi = DAG.getNode(ISD::ADD, SL, MVT::i32, MulHi, AccumHi);
+    }
+
+    if (!MulRHSUnsigned32) {
+      auto MulRHSHi =
+          DAG.getNode(ISD::EXTRACT_ELEMENT, SL, MVT::i32, MulRHS, One);
+      SDValue MulHi = DAG.getNode(ISD::MUL, SL, MVT::i32, MulLHSLo, MulRHSHi);
+      AccumHi = DAG.getNode(ISD::ADD, SL, MVT::i32, MulHi, AccumHi);
+    }
+
+    Accum = DAG.getBuildVector(MVT::v2i32, SL, {AccumLo, AccumHi});
+    Accum = DAG.getBitcast(MVT::i64, Accum);
+  }
+
+  if (VT != MVT::i64)
+    Accum = DAG.getNode(ISD::TRUNCATE, SL, VT, Accum);
+  return Accum;
+}
+
 SDValue SITargetLowering::performAddCombine(SDNode *N,
                                             DAGCombinerInfo &DCI) const {
   SelectionDAG &DAG = DCI.DAG;
@@ -10651,31 +10826,10 @@ SDValue SITargetLowering::performAddCombine(SDNode *N,
   SDValue LHS = N->getOperand(0);
   SDValue RHS = N->getOperand(1);
 
-  if ((LHS.getOpcode() == ISD::MUL || RHS.getOpcode() == ISD::MUL)
-      && Subtarget->hasMad64_32() &&
-      !VT.isVector() && VT.getScalarSizeInBits() > 32 &&
-      VT.getScalarSizeInBits() <= 64) {
-    if (LHS.getOpcode() != ISD::MUL)
-      std::swap(LHS, RHS);
-
-    SDValue MulLHS = LHS.getOperand(0);
-    SDValue MulRHS = LHS.getOperand(1);
-    SDValue AddRHS = RHS;
-
-    // TODO: Maybe restrict if SGPR inputs.
-    if (numBitsUnsigned(MulLHS, DAG) <= 32 &&
-        numBitsUnsigned(MulRHS, DAG) <= 32) {
-      MulLHS = DAG.getZExtOrTrunc(MulLHS, SL, MVT::i32);
-      MulRHS = DAG.getZExtOrTrunc(MulRHS, SL, MVT::i32);
-      AddRHS = DAG.getZExtOrTrunc(AddRHS, SL, MVT::i64);
-      return getMad64_32(DAG, SL, VT, MulLHS, MulRHS, AddRHS, false);
-    }
-
-    if (numBitsSigned(MulLHS, DAG) <= 32 && numBitsSigned(MulRHS, DAG) <= 32) {
-      MulLHS = DAG.getSExtOrTrunc(MulLHS, SL, MVT::i32);
-      MulRHS = DAG.getSExtOrTrunc(MulRHS, SL, MVT::i32);
-      AddRHS = DAG.getSExtOrTrunc(AddRHS, SL, MVT::i64);
-      return getMad64_32(DAG, SL, VT, MulLHS, MulRHS, AddRHS, true);
+  if (LHS.getOpcode() == ISD::MUL || RHS.getOpcode() == ISD::MUL) {
+    if (Subtarget->hasMad64_32()) {
+      if (SDValue Folded = tryFoldToMad64_32(N, DCI))
+        return Folded;
     }
 
     return SDValue();
@@ -11691,47 +11845,6 @@ void SITargetLowering::AdjustInstrPostInstrSelection(MachineInstr &MI,
     return;
   }
 
-  // Replace unused atomics with the no return version.
-  int NoRetAtomicOp = AMDGPU::getAtomicNoRetOp(MI.getOpcode());
-  if (NoRetAtomicOp != -1) {
-    if (!Node->hasAnyUseOfValue(0)) {
-      int CPolIdx = AMDGPU::getNamedOperandIdx(MI.getOpcode(),
-                                               AMDGPU::OpName::cpol);
-      if (CPolIdx != -1) {
-        MachineOperand &CPol = MI.getOperand(CPolIdx);
-        CPol.setImm(CPol.getImm() & ~AMDGPU::CPol::GLC);
-      }
-      MI.removeOperand(0);
-      MI.setDesc(TII->get(NoRetAtomicOp));
-      return;
-    }
-
-    // For mubuf_atomic_cmpswap, we need to have tablegen use an extract_subreg
-    // instruction, because the return type of these instructions is a vec2 of
-    // the memory type, so it can be tied to the input operand.
-    // This means these instructions always have a use, so we need to add a
-    // special case to check if the atomic has only one extract_subreg use,
-    // which itself has no uses.
-    if ((Node->hasNUsesOfValue(1, 0) &&
-         Node->use_begin()->isMachineOpcode() &&
-         Node->use_begin()->getMachineOpcode() == AMDGPU::EXTRACT_SUBREG &&
-         !Node->use_begin()->hasAnyUseOfValue(0))) {
-      Register Def = MI.getOperand(0).getReg();
-
-      // Change this into a noret atomic.
-      MI.setDesc(TII->get(NoRetAtomicOp));
-      MI.removeOperand(0);
-
-      // If we only remove the def operand from the atomic instruction, the
-      // extract_subreg will be left with a use of a vreg without a def.
-      // So we need to insert an implicit_def to avoid machine verifier
-      // errors.
-      BuildMI(*MI.getParent(), MI, MI.getDebugLoc(),
-              TII->get(AMDGPU::IMPLICIT_DEF), Def);
-    }
-    return;
-  }
-
   if (TII->isMIMG(MI) && !MI.mayStore())
     AddIMGInit(MI);
 }
@@ -12296,13 +12409,17 @@ Align SITargetLowering::getPrefLoopAlignment(MachineLoop *ML) const {
   MachineBasicBlock *Exit = ML->getExitBlock();
 
   if (Pre && Exit) {
-    BuildMI(*Pre, Pre->getFirstTerminator(), DebugLoc(),
-            TII->get(AMDGPU::S_INST_PREFETCH))
-      .addImm(1); // prefetch 2 lines behind PC
+    auto PreTerm = Pre->getFirstTerminator();
+    if (PreTerm == Pre->begin() ||
+        std::prev(PreTerm)->getOpcode() != AMDGPU::S_INST_PREFETCH)
+      BuildMI(*Pre, PreTerm, DebugLoc(), TII->get(AMDGPU::S_INST_PREFETCH))
+          .addImm(1); // prefetch 2 lines behind PC
 
-    BuildMI(*Exit, Exit->getFirstNonDebugInstr(), DebugLoc(),
-            TII->get(AMDGPU::S_INST_PREFETCH))
-      .addImm(2); // prefetch 1 line behind PC
+    auto ExitHead = Exit->getFirstNonDebugInstr();
+    if (ExitHead == Exit->end() ||
+        ExitHead->getOpcode() != AMDGPU::S_INST_PREFETCH)
+      BuildMI(*Exit, ExitHead, DebugLoc(), TII->get(AMDGPU::S_INST_PREFETCH))
+          .addImm(2); // prefetch 1 line behind PC
   }
 
   return CacheLineAlign;

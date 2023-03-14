@@ -86,11 +86,12 @@ public:
   unsigned getMinVectorRegisterBitWidth() const;
   ElementCount getMinimumVF(unsigned ElemWidth, bool IsScalable) const;
 
-  bool
-  shouldMaximizeVectorBandwidth(TargetTransformInfo::RegisterKind K) const {
+  bool shouldMaximizeVectorBandwidth() const {
     return true;
   }
-  bool supportsEfficientVectorElementLoadStore() { return false; }
+  bool supportsEfficientVectorElementLoadStore() {
+    return false;
+  }
   bool hasBranchDivergence() {
     return false;
   }
@@ -125,7 +126,7 @@ public:
                                         TTI::TargetCostKind CostKind);
   InstructionCost getShuffleCost(TTI::ShuffleKind Kind, Type *Tp,
                                  ArrayRef<int> Mask, int Index, Type *SubTp,
-                                 ArrayRef<Value *> Args = None);
+                                 ArrayRef<const Value *> Args = None);
   InstructionCost getGatherScatterOpCost(unsigned Opcode, Type *DataTy,
                                          const Value *Ptr, bool VariableMask,
                                          Align Alignment,

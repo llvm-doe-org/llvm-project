@@ -19,11 +19,13 @@
 #include "clang/Driver/Options.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/Option/Arg.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Option/OptTable.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FileUtilities.h"
+#include "llvm/Support/Host.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/raw_ostream.h"
@@ -93,14 +95,13 @@ bool Fortran::frontend::ParseDiagnosticArgs(clang::DiagnosticOptions &opts,
 /// \param [in] opts The target options instance to update
 /// \param [in] args The list of input arguments (from the compiler invocation)
 static void ParseTargetArgs(TargetOptions &opts, llvm::opt::ArgList &args) {
-  opts.triple = args.getLastArgValue(clang::driver::options::OPT_triple);
+  if (const llvm::opt::Arg *a =
+          args.getLastArg(clang::driver::options::OPT_triple))
+    opts.triple = a->getValue();
 }
 
 // Tweak the frontend configuration based on the frontend action
 static void setUpFrontendBasedOnAction(FrontendOptions &opts) {
-  assert(opts.programAction != Fortran::frontend::InvalidAction &&
-      "Fortran frontend action not set!");
-
   if (opts.programAction == DebugDumpParsingLog)
     opts.instrumentedParse = true;
 
@@ -147,6 +148,9 @@ static bool ParseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
       break;
     case clang::driver::options::OPT_emit_llvm:
       opts.programAction = EmitLLVM;
+      break;
+    case clang::driver::options::OPT_emit_llvm_bc:
+      opts.programAction = EmitLLVMBitcode;
       break;
     case clang::driver::options::OPT_emit_obj:
       opts.programAction = EmitObj;
@@ -559,6 +563,15 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &res,
 
   bool success = true;
 
+  // Set the default triple for this CompilerInvocation. This might be
+  // overridden by users with `-triple` (see the call to `ParseTargetArgs`
+  // below).
+  // NOTE: Like in Clang, it would be nice to use option marshalling
+  // for this so that the entire logic for setting-up the triple is in one
+  // place.
+  res.targetOpts().triple =
+      llvm::Triple::normalize(llvm::sys::getDefaultTargetTriple());
+
   // Parse the arguments
   const llvm::opt::OptTable &opts = clang::driver::getDriverOptTable();
   const unsigned includedFlagsBitmask = clang::driver::options::FC1Option;
@@ -593,6 +606,9 @@ bool CompilerInvocation::CreateFromArgs(CompilerInvocation &res,
   success &= parseDiagArgs(res, args, diags);
   res.frontendOpts_.llvmArgs =
       args.getAllArgValues(clang::driver::options::OPT_mllvm);
+
+  res.frontendOpts_.mlirArgs =
+      args.getAllArgValues(clang::driver::options::OPT_mmlir);
 
   return success;
 }

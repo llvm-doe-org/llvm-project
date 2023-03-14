@@ -220,8 +220,8 @@ defm : X86WriteRes<WriteBitTestRegLd,    [ZnALU,ZnAGU], 5, [1,1], 2>;
 defm : X86WriteRes<WriteBitTestSet,      [ZnALU], 2, [1], 2>;
 
 // Bit counts.
-defm : ZnWriteResPair<WriteBSF, [ZnALU], 3>;
-defm : ZnWriteResPair<WriteBSR, [ZnALU], 3>;
+defm : ZnWriteResPair<WriteBSF, [ZnALU], 3, [12], 6, 4, 2>;
+defm : ZnWriteResPair<WriteBSR, [ZnALU], 4, [16], 6, 4, 2>;
 defm : ZnWriteResPair<WriteLZCNT,          [ZnALU], 2>;
 defm : ZnWriteResPair<WriteTZCNT,          [ZnALU], 2>;
 defm : ZnWriteResPair<WritePOPCNT,         [ZnALU], 1>;
@@ -284,16 +284,16 @@ defm : ZnWriteResFpuPair<WriteFAdd64,    [ZnFPU0],  3>;
 defm : ZnWriteResFpuPair<WriteFAdd64X,   [ZnFPU0],  3>;
 defm : ZnWriteResFpuPair<WriteFAdd64Y,   [ZnFPU0],  3>;
 defm : X86WriteResPairUnsupported<WriteFAdd64Z>;
-defm : ZnWriteResFpuPair<WriteFCmp,      [ZnFPU0],  3>;
-defm : ZnWriteResFpuPair<WriteFCmpX,     [ZnFPU0],  3>;
-defm : ZnWriteResFpuPair<WriteFCmpY,     [ZnFPU0],  3>;
+defm : ZnWriteResFpuPair<WriteFCmp,      [ZnFPU01], 1>;
+defm : ZnWriteResFpuPair<WriteFCmpX,     [ZnFPU01], 1>;
+defm : ZnWriteResFpuPair<WriteFCmpY,     [ZnFPU01], 1, [2], 2>;
 defm : X86WriteResPairUnsupported<WriteFCmpZ>;
-defm : ZnWriteResFpuPair<WriteFCmp64,    [ZnFPU0],  3>;
-defm : ZnWriteResFpuPair<WriteFCmp64X,   [ZnFPU0],  3>;
-defm : ZnWriteResFpuPair<WriteFCmp64Y,   [ZnFPU0],  3>;
+defm : ZnWriteResFpuPair<WriteFCmp64,    [ZnFPU01], 1>;
+defm : ZnWriteResFpuPair<WriteFCmp64X,   [ZnFPU01], 1>;
+defm : ZnWriteResFpuPair<WriteFCmp64Y,   [ZnFPU01], 1, [2], 2>;
 defm : X86WriteResPairUnsupported<WriteFCmp64Z>;
-defm : ZnWriteResFpuPair<WriteFCom,      [ZnFPU0],  3>;
-defm : ZnWriteResFpuPair<WriteFComX,     [ZnFPU0],  3>;
+defm : ZnWriteResFpuPair<WriteFCom,      [ZnFPU01,ZnFPU2], 3, [1,1], 2>;
+defm : ZnWriteResFpuPair<WriteFComX,     [ZnFPU01,ZnFPU2], 3, [1,1], 2>;
 defm : ZnWriteResFpuPair<WriteFBlend,    [ZnFPU01], 1>;
 defm : ZnWriteResFpuPair<WriteFBlendY,   [ZnFPU01], 1>;
 defm : X86WriteResPairUnsupported<WriteFBlendZ>;
@@ -1088,12 +1088,11 @@ def : InstRW<[WriteMicrocoded], (instregex "VPGATHER(Q|D)(Q|D)(Y?)rm")>;
 
 // HADD, HSUB PS/PD
 // PHADD|PHSUB (S) W/D.
-def : SchedAlias<WritePHAdd,    ZnWriteMicrocoded>;
-def : SchedAlias<WritePHAddLd,  ZnWriteMicrocoded>;
-def : SchedAlias<WritePHAddX,   ZnWriteMicrocoded>;
-def : SchedAlias<WritePHAddXLd, ZnWriteMicrocoded>;
-def : SchedAlias<WritePHAddY,   ZnWriteMicrocoded>;
-def : SchedAlias<WritePHAddYLd, ZnWriteMicrocoded>;
+defm : ZnWriteResFpuPair<WriteFHAdd, [], 7>;
+defm : ZnWriteResFpuPair<WriteFHAddY, [], 7>;
+defm : ZnWriteResFpuPair<WritePHAdd, [], 3>;
+defm : ZnWriteResFpuPair<WritePHAddX, [], 3>;
+defm : ZnWriteResFpuPair<WritePHAddY, [], 3>;
 
 // PCMPGTQ.
 def ZnWritePCMPGTQr : SchedWriteRes<[ZnFPU03]>;
@@ -1432,12 +1431,6 @@ def ZnWriteSHA256RNDS2Ld : SchedWriteRes<[ZnAGU, ZnFPU1]> {
 def : InstRW<[ZnWriteSHA256RNDS2Ld], (instrs SHA256RNDS2rm)>;
 
 //-- Arithmetic instructions --//
-
-// HADD, HSUB PS/PD
-def : SchedAlias<WriteFHAdd,    ZnWriteMicrocoded>;
-def : SchedAlias<WriteFHAddLd,  ZnWriteMicrocoded>;
-def : SchedAlias<WriteFHAddY,   ZnWriteMicrocoded>;
-def : SchedAlias<WriteFHAddYLd, ZnWriteMicrocoded>;
 
 // VDIVPS.
 // TODO - convert to ZnWriteResFpuPair

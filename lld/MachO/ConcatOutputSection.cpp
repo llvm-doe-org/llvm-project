@@ -334,16 +334,15 @@ void TextOutputSection::finalize() {
             /*noDeadStrip=*/false, /*isWeakDefCanBeHidden=*/false);
       } else {
         r.referent = thunkInfo.sym = make<Defined>(
-            thunkName, /*file=*/nullptr, thunkInfo.isec, /*value=*/0,
-            thunkSize, /*isWeakDef=*/false, /*isExternal=*/false,
-            /*isPrivateExtern=*/true, /*isThumb=*/false,
+            thunkName, /*file=*/nullptr, thunkInfo.isec, /*value=*/0, thunkSize,
+            /*isWeakDef=*/false, /*isExternal=*/false, /*isPrivateExtern=*/true,
+            /*includeInSymtab=*/true, /*isThumb=*/false,
             /*isReferencedDynamically=*/false, /*noDeadStrip=*/false,
             /*isWeakDefCanBeHidden=*/false);
       }
       thunkInfo.sym->used = true;
       target->populateThunk(thunkInfo.isec, funcSym);
       finalizeOne(thunkInfo.isec);
-      fprintf(stderr, "%" PRIx64 "\n", thunkInfo.isec->outSecOff);
       thunks.push_back(thunkInfo.isec);
       ++thunkCount;
     }

@@ -98,8 +98,9 @@ static GlobalVariable *findGlobalCtors(Module &M) {
     if (isa<ConstantPointerNull>(CS->getOperand(1)))
       continue;
 
-    // Must have a function or null ptr.
-    if (!isa<Function>(CS->getOperand(1)))
+    // Can only handle global constructors with no arguments.
+    Function *F = dyn_cast<Function>(CS->getOperand(1));
+    if (!F || F->arg_size() != 0)
       return nullptr;
 
     // Init priority must be standard.
@@ -126,9 +127,8 @@ bool llvm::optimizeGlobalCtorsList(
   bool MadeChange = false;
 
   // Loop over global ctors, optimizing them when we can.
-  unsigned NumCtors = Ctors.size();
-  BitVector CtorsToRemove(NumCtors);
-  for (unsigned i = 0; i != Ctors.size() && NumCtors > 0; ++i) {
+  BitVector CtorsToRemove(Ctors.size());
+  for (unsigned i = 0, e = Ctors.size(); i != e; ++i) {
     Function *F = Ctors[i];
     // Found a null terminator in the middle of the list, prune off the rest of
     // the list.
@@ -145,7 +145,6 @@ bool llvm::optimizeGlobalCtorsList(
     if (ShouldRemove(F)) {
       Ctors[i] = nullptr;
       CtorsToRemove.set(i);
-      NumCtors--;
       MadeChange = true;
       continue;
     }

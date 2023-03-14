@@ -598,30 +598,6 @@ void ASTWriter::WriteTypeAbbrevs() {
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 6));   // Type
   Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 3));   // Quals
   TypeExtQualAbbrev = Stream.EmitAbbrev(std::move(Abv));
-
-  // Abbreviation for TYPE_FUNCTION_PROTO
-  Abv = std::make_shared<BitCodeAbbrev>();
-  Abv->Add(BitCodeAbbrevOp(serialization::TYPE_FUNCTION_PROTO));
-  // FunctionType
-  Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 6));   // ReturnType
-  Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // NoReturn
-  Abv->Add(BitCodeAbbrevOp(0));                         // HasRegParm
-  Abv->Add(BitCodeAbbrevOp(0));                         // RegParm
-  Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 4)); // CC
-  Abv->Add(BitCodeAbbrevOp(0));                         // ProducesResult
-  Abv->Add(BitCodeAbbrevOp(0));                         // NoCallerSavedRegs
-  Abv->Add(BitCodeAbbrevOp(0));                         // NoCfCheck
-  Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1)); // CmseNSCall
-  // FunctionProtoType
-  Abv->Add(BitCodeAbbrevOp(0));                         // IsVariadic
-  Abv->Add(BitCodeAbbrevOp(0));                         // HasTrailingReturn
-  Abv->Add(BitCodeAbbrevOp(0));                         // TypeQuals
-  Abv->Add(BitCodeAbbrevOp(0));                         // RefQualifier
-  Abv->Add(BitCodeAbbrevOp(EST_None));                  // ExceptionSpec
-  Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 6));   // NumParams
-  Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Array));
-  Abv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::VBR, 6));   // Params
-  TypeFunctionProtoAbbrev = Stream.EmitAbbrev(std::move(Abv));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1248,15 +1224,24 @@ void ASTWriter::WriteControlBlock(Preprocessor &PP, ASTContext &Context,
   }
 
   if (WritingModule && WritingModule->Directory) {
-    SmallString<128> BaseDir(WritingModule->Directory->getName());
+    SmallString<128> BaseDir;
+    if (PP.getHeaderSearchInfo().getHeaderSearchOpts().ModuleFileHomeIsCwd) {
+      // Use the current working directory as the base path for all inputs.
+      auto *CWD =
+          Context.getSourceManager().getFileManager().getDirectory(".").get();
+      BaseDir.assign(CWD->getName());
+    } else {
+      BaseDir.assign(WritingModule->Directory->getName());
+    }
     cleanPathForOutput(Context.getSourceManager().getFileManager(), BaseDir);
 
     // If the home of the module is the current working directory, then we
     // want to pick up the cwd of the build process loading the module, not
     // our cwd, when we load this module.
-    if (!PP.getHeaderSearchInfo()
-             .getHeaderSearchOpts()
-             .ModuleMapFileHomeIsCwd ||
+    if (!(PP.getHeaderSearchInfo()
+              .getHeaderSearchOpts()
+              .ModuleMapFileHomeIsCwd ||
+          PP.getHeaderSearchInfo().getHeaderSearchOpts().ModuleFileHomeIsCwd) ||
         WritingModule->Directory->getName() != StringRef(".")) {
       // Module directory.
       auto Abbrev = std::make_shared<BitCodeAbbrev>();
@@ -1485,8 +1470,7 @@ void ASTWriter::WriteControlBlock(Preprocessor &PP, ASTContext &Context,
     unsigned AbbrevCode = Stream.EmitAbbrev(std::move(Abbrev));
 
     SmallString<128> OutputPath(OutputFile);
-
-    SM.getFileManager().makeAbsolutePath(OutputPath);
+    PreparePathForOutput(OutputPath);
     StringRef origDir = llvm::sys::path::parent_path(OutputPath);
 
     RecordData::value_type Record[] = {ORIGINAL_PCH_DIR};
@@ -2872,8 +2856,11 @@ void ASTWriter::WriteSubmodules(Module *WritingModule) {
     {
       auto TopHeaders = Mod->getTopHeaders(PP->getFileManager());
       RecordData::value_type Record[] = {SUBMODULE_TOPHEADER};
-      for (auto *H : TopHeaders)
-        Stream.EmitRecordWithBlob(TopHeaderAbbrev, Record, H->getName());
+      for (auto *H : TopHeaders) {
+        SmallString<128> HeaderName(H->getName());
+        PreparePathForOutput(HeaderName);
+        Stream.EmitRecordWithBlob(TopHeaderAbbrev, Record, HeaderName);
+      }
     }
 
     // Emit the imports.
@@ -3138,6 +3125,7 @@ void ASTWriter::WriteFileDeclIDsMap() {
   for (auto &FileDeclEntry : SortedFileDeclIDs) {
     DeclIDInFileInfo &Info = *FileDeclEntry.second;
     Info.FirstDeclIndex = FileGroupedDeclIDs.size();
+    llvm::stable_sort(Info.DeclIDs);
     for (auto &LocDeclEntry : Info.DeclIDs)
       FileGroupedDeclIDs.push_back(LocDeclEntry.second);
   }
@@ -5489,16 +5477,7 @@ void ASTWriter::associateDeclWithFile(const Decl *D, DeclID ID) {
 
   std::pair<unsigned, serialization::DeclID> LocDecl(Offset, ID);
   LocDeclIDsTy &Decls = Info->DeclIDs;
-
-  if (Decls.empty() || Decls.back().first <= Offset) {
-    Decls.push_back(LocDecl);
-    return;
-  }
-
-  LocDeclIDsTy::iterator I =
-      llvm::upper_bound(Decls, LocDecl, llvm::less_first());
-
-  Decls.insert(I, LocDecl);
+  Decls.push_back(LocDecl);
 }
 
 unsigned ASTWriter::getAnonymousDeclarationNumber(const NamedDecl *D) {

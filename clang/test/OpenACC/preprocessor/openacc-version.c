@@ -2,21 +2,19 @@
 
 // Check that #define _OPENACC is generated as expected.
 //
-// DEFINE: %{check-def}( NDEFS %, NOT_IF_0 %, CFLAGS %) =                      \
-// DEFINE:   %clang -Xclang -verify=none -E -dM %{CFLAGS} %s > %t.out &&       \
-// DEFINE:   %{NOT_IF_0} grep -c '#define _OPENACC' %t.out |                   \
-// DEFINE:     FileCheck -D#N='%{NDEFS}' %s &&                                 \
-// DEFINE:   %{NOT_IF_0} grep -c '#define _OPENACC %acc-version' %t.out |      \
-// DEFINE:     FileCheck -D#N='%{NDEFS}' %s
+// DEFINE: %{check-def}( FC_PRES %, CFLAGS %) =                                \
+// DEFINE:   %clang -Xclang -verify=none -E -dM %{CFLAGS} %s |                 \
+// DEFINE:     FileCheck -DACC_VERSION='%acc-version'                          \
+// DEFINE:               -check-prefixes=CHECK,%{FC_PRES} %s
 //
-//                    NDEFS                NOT_IF_0    CFLAGS
-// RUN: %{check-def}( 0                 %, not      %,                                                    %)
-// RUN: %{check-def}( 1                 %,          %, -fopenacc                                          %)
-// RUN: %{check-def}( %num-off-tgts + 1 %,          %, -fopenacc -fopenmp-targets=%off-tgts -o - %libs-bc %)
+//                    FC_PRES     CFLAGS
+// RUN: %{check-def}( NO-ACC  %,                                                    %)
+// RUN: %{check-def}( ACC     %, -fopenacc                                          %)
+// RUN: %{check-def}( ACC     %, -fopenacc -fopenmp-targets=%off-tgts -o - %libs-bc %)
 //
-// CHECK-NOT: {{.}}
-//     CHECK: [[#N]]
-// CHECK-NOT: {{.}}
+// CHECK-NOT: #define _OPENACC
+//       ACC: {{^}}#define _OPENACC [[ACC_VERSION]]{{$}}
+//   ACC-NOT: #define _OPENACC
 
 // Sanity-check one of those configurations to be sure we can actually use the
 // _OPENACC macro as expected.

@@ -50,6 +50,11 @@ module std [system] {
       header "setjmp.h"
       export *
     }
+    module stdatomic_h {
+      requires cplusplus23
+      header "stdatomic.h"
+      export *
+    }
     // FIXME: <stdalign.h> is missing.
     // <signal.h> provided by C library.
     // <stdarg.h> provided by compiler.
@@ -294,15 +299,24 @@ module std [system] {
       module pop_heap                 { private header "__algorithm/pop_heap.h" }
       module prev_permutation         { private header "__algorithm/prev_permutation.h" }
       module push_heap                { private header "__algorithm/push_heap.h" }
+      module ranges_copy              { private header "__algorithm/ranges_copy.h" }
+      module ranges_copy_backward     { private header "__algorithm/ranges_copy_backward.h" }
+      module ranges_copy_if           { private header "__algorithm/ranges_copy_if.h" }
+      module ranges_copy_n            { private header "__algorithm/ranges_copy_n.h" }
       module ranges_count             { private header "__algorithm/ranges_count.h" }
       module ranges_count_if          { private header "__algorithm/ranges_count_if.h" }
       module ranges_find              { private header "__algorithm/ranges_find.h" }
       module ranges_find_if           { private header "__algorithm/ranges_find_if.h" }
       module ranges_find_if_not       { private header "__algorithm/ranges_find_if_not.h" }
+      module ranges_for_each          { private header "__algorithm/ranges_for_each.h" }
+      module ranges_for_each_n        { private header "__algorithm/ranges_for_each_n.h" }
+      module ranges_is_partitioned    { private header "__algorithm/ranges_is_partitioned.h" }
       module ranges_max               { private header "__algorithm/ranges_max.h" }
       module ranges_max_element       { private header "__algorithm/ranges_max_element.h" }
       module ranges_min               { private header "__algorithm/ranges_min.h" }
       module ranges_min_element       { private header "__algorithm/ranges_min_element.h" }
+      module ranges_minmax            { private header "__algorithm/ranges_minmax.h" }
+      module ranges_minmax_element    { private header "__algorithm/ranges_minmax_element.h" }
       module ranges_mismatch          { private header "__algorithm/ranges_mismatch.h" }
       module ranges_swap_ranges       { private header "__algorithm/ranges_swap_ranges.h" }
       module ranges_transform         { private header "__algorithm/ranges_transform.h" }
@@ -661,6 +675,7 @@ module std [system] {
       module iterator_traits       { private header "__iterator/iterator_traits.h" }
       module mergeable             { private header "__iterator/mergeable.h" }
       module move_iterator         { private header "__iterator/move_iterator.h" }
+      module move_sentinel         { private header "__iterator/move_sentinel.h" }
       module next                  { private header "__iterator/next.h" }
       module ostream_iterator      { private header "__iterator/ostream_iterator.h" }
       module ostreambuf_iterator   {
@@ -713,6 +728,7 @@ module std [system] {
       module allocator                       { private header "__memory/allocator.h" }
       module allocator_arg_t                 { private header "__memory/allocator_arg_t.h" }
       module allocator_traits                { private header "__memory/allocator_traits.h" }
+      module assume_aligned                  { private header "__memory/assume_aligned.h" }
       module auto_ptr                        { private header "__memory/auto_ptr.h" }
       module compressed_pair                 { private header "__memory/compressed_pair.h" }
       module concepts                        { private header "__memory/concepts.h" }
@@ -848,8 +864,10 @@ module std [system] {
       module empty_view             { private header "__ranges/empty_view.h" }
       module enable_borrowed_range  { private header "__ranges/enable_borrowed_range.h" }
       module enable_view            { private header "__ranges/enable_view.h" }
+      module filter_view            { private header "__ranges/filter_view.h" }
       module iota_view              { private header "__ranges/iota_view.h" }
       module join_view              { private header "__ranges/join_view.h" }
+      module lazy_split_view        { private header "__ranges/lazy_split_view.h" }
       module non_propagating_cache  { private header "__ranges/non_propagating_cache.h" }
       module owning_view            { private header "__ranges/owning_view.h" }
       module range_adaptor          { private header "__ranges/range_adaptor.h" }
@@ -868,6 +886,7 @@ module std [system] {
       }
       module view_interface         { private header "__ranges/view_interface.h" }
       module views                  { private header "__ranges/views.h" }
+      module zip_view               { private header "__ranges/zip_view.h" }
     }
   }
   module ratio {
@@ -901,6 +920,7 @@ module std [system] {
     header "span"
     export ranges.__ranges.enable_borrowed_range
     export version
+    module span_fwd { private header "__fwd/span.h" }
   }
   module sstream {
     header "sstream"
@@ -932,6 +952,7 @@ module std [system] {
     export initializer_list
     export __string
     export *
+    module string_view_fwd { private header "__fwd/string_view.h" }
   }
   module strstream {
     header "strstream"

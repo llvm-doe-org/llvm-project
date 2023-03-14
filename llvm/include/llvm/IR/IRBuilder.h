@@ -540,6 +540,11 @@ public:
     return Type::getVoidTy(Context);
   }
 
+  /// Fetch the type representing a pointer.
+  PointerType *getPtrTy(unsigned AddrSpace = 0) {
+    return PointerType::get(Context, AddrSpace);
+  }
+
   /// Fetch the type representing a pointer to an 8-bit integer value.
   PointerType *getInt8PtrTy(unsigned AddrSpace = 0) {
     return Type::getInt8PtrTy(Context, AddrSpace);
@@ -1718,30 +1723,18 @@ public:
   }
 
   Value *CreateGEP(Type *Ty, Value *Ptr, ArrayRef<Value *> IdxList,
-                   const Twine &Name = "") {
-    if (auto *V = Folder.FoldGEP(Ty, Ptr, IdxList, /*IsInBounds=*/false))
+                   const Twine &Name = "", bool IsInBounds = false) {
+    if (auto *V = Folder.FoldGEP(Ty, Ptr, IdxList, IsInBounds))
       return V;
-    return Insert(GetElementPtrInst::Create(Ty, Ptr, IdxList), Name);
+    return Insert(IsInBounds
+                      ? GetElementPtrInst::CreateInBounds(Ty, Ptr, IdxList)
+                      : GetElementPtrInst::Create(Ty, Ptr, IdxList),
+                  Name);
   }
 
   Value *CreateInBoundsGEP(Type *Ty, Value *Ptr, ArrayRef<Value *> IdxList,
                            const Twine &Name = "") {
-    if (auto *V = Folder.FoldGEP(Ty, Ptr, IdxList, /*IsInBounds=*/true))
-      return V;
-    return Insert(GetElementPtrInst::CreateInBounds(Ty, Ptr, IdxList), Name);
-  }
-
-  Value *CreateGEP(Type *Ty, Value *Ptr, Value *Idx, const Twine &Name = "") {
-    if (auto *V = Folder.FoldGEP(Ty, Ptr, {Idx}, /*IsInBounds=*/false))
-      return V;
-    return Insert(GetElementPtrInst::Create(Ty, Ptr, Idx), Name);
-  }
-
-  Value *CreateInBoundsGEP(Type *Ty, Value *Ptr, Value *Idx,
-                           const Twine &Name = "") {
-    if (auto *V = Folder.FoldGEP(Ty, Ptr, {Idx}, /*IsInBounds=*/true))
-      return V;
-    return Insert(GetElementPtrInst::CreateInBounds(Ty, Ptr, Idx), Name);
+    return CreateGEP(Ty, Ptr, IdxList, Name, /* IsInBounds */ true);
   }
 
   Value *CreateConstGEP1_32(Type *Ty, Value *Ptr, unsigned Idx0,
@@ -2321,15 +2314,6 @@ public:
                              const Twine &Name = "") {
     SmallVector<int, 16> IntMask;
     ShuffleVectorInst::getShuffleMask(cast<Constant>(Mask), IntMask);
-    return CreateShuffleVector(V1, V2, IntMask, Name);
-  }
-
-  LLVM_ATTRIBUTE_DEPRECATED(Value *CreateShuffleVector(Value *V1, Value *V2,
-                                                       ArrayRef<uint32_t> Mask,
-                                                       const Twine &Name = ""),
-                            "Pass indices as 'int' instead") {
-    SmallVector<int, 16> IntMask;
-    IntMask.assign(Mask.begin(), Mask.end());
     return CreateShuffleVector(V1, V2, IntMask, Name);
   }
 

@@ -43,12 +43,11 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
     * Enables OpenACC support and source-to-source mode.
     * See the section "Source-to-Source Translation" in
       `README-OpenACC-design.md` for design details.
-* `-fopenmp-targets=<triples>`
+* `-fopenmp-targets=<triples>` or `--offload-arch=<arch>`
     * In traditional compilation mode, specifies offloading device
       instead of targeting host.
     * Not supported for source-to-source mode
-    * See the section "Using" in `../README.md` for a list of tested
-      offloading target triples.
+    * See the section "Using" in `../README.md` for more usage details.
     * See the section "Interaction with OpenMP Support" in
       `README-OpenACC-design.md` for design details.
 * Other OpenMP options
@@ -682,7 +681,7 @@ OpenACC Runtime Library API and Preprocessor
           device that is physically the same device as the host device
           but that is logically treated as a separate offloading
           device with discrete memory.  In particular, this case
-          arises when specfying the host architecture to
+          arises when specifying the host architecture to
           `-fopenmp-targets`.
         * `acc_device_default`: All devices of the current device
           type.  This corresponds to the OpenACC 3.1 ICV

@@ -424,6 +424,7 @@ private:
   LogicalResult codeCompleteDialectName();
   LogicalResult codeCompleteOperationName(StringRef dialectName);
   LogicalResult codeCompletePatternMetadata();
+  LogicalResult codeCompleteIncludeFilename(StringRef curPath);
 
   void codeCompleteCallSignature(ast::Node *parent, unsigned currentNumArgs);
   void codeCompleteOperationOperandsSignature(Optional<StringRef> opName,
@@ -680,6 +681,10 @@ LogicalResult Parser::parseInclude(SmallVectorImpl<ast::Decl *> &decls) {
   SMRange loc = curToken.getLoc();
   consumeToken(Token::directive);
 
+  // Handle code completion of the include file path.
+  if (curToken.is(Token::code_complete_string))
+    return codeCompleteIncludeFilename(curToken.getStringValue());
+
   // Parse the file being included.
   if (!curToken.isString())
     return emitError(loc,
@@ -692,17 +697,16 @@ LogicalResult Parser::parseInclude(SmallVectorImpl<ast::Decl *> &decls) {
   // Check the type of include. If ending with `.pdll`, this is another pdl file
   // to be parsed along with the current module.
   if (filename.endswith(".pdll")) {
-    if (failed(lexer.pushInclude(filename)))
+    if (failed(lexer.pushInclude(filename, fileLoc)))
       return emitError(fileLoc,
                        "unable to open include file `" + filename + "`");
 
     // If we added the include successfully, parse it into the current module.
-    // Make sure to save the current token so that we can restore it when we
-    // finish parsing the nested file.
-    Token oldToken = curToken;
+    // Make sure to update to the next token after we finish parsing the nested
+    // file.
     curToken = lexer.lexToken();
     LogicalResult result = parseModuleBody(decls);
-    curToken = oldToken;
+    curToken = lexer.lexToken();
     return result;
   }
 
@@ -718,6 +722,18 @@ LogicalResult Parser::parseTdInclude(StringRef filename, llvm::SMRange fileLoc,
                                      SmallVectorImpl<ast::Decl *> &decls) {
   llvm::SourceMgr &parserSrcMgr = lexer.getSourceMgr();
 
+  // Use the source manager to open the file, but don't yet add it.
+  std::string includedFile;
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> includeBuffer =
+      parserSrcMgr.OpenIncludeFile(filename.str(), includedFile);
+  if (!includeBuffer)
+    return emitError(fileLoc, "unable to open include file `" + filename + "`");
+
+  // Setup the source manager for parsing the tablegen file.
+  llvm::SourceMgr tdSrcMgr;
+  tdSrcMgr.AddNewSourceBuffer(std::move(*includeBuffer), SMLoc());
+  tdSrcMgr.setIncludeDirs(parserSrcMgr.getIncludeDirs());
+
   // This class provides a context argument for the llvm::SourceMgr diagnostic
   // handler.
   struct DiagHandlerContext {
@@ -727,7 +743,7 @@ LogicalResult Parser::parseTdInclude(StringRef filename, llvm::SMRange fileLoc,
   } handlerContext{*this, filename, fileLoc};
 
   // Set the diagnostic handler for the tablegen source manager.
-  llvm::SrcMgr.setDiagHandler(
+  tdSrcMgr.setDiagHandler(
       [](const llvm::SMDiagnostic &diag, void *rawHandlerContext) {
         auto *ctx = reinterpret_cast<DiagHandlerContext *>(rawHandlerContext);
         (void)ctx->parser.emitError(
@@ -737,26 +753,18 @@ LogicalResult Parser::parseTdInclude(StringRef filename, llvm::SMRange fileLoc,
       },
       &handlerContext);
 
-  // Use the source manager to open the file, but don't yet add it.
-  std::string includedFile;
-  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> includeBuffer =
-      parserSrcMgr.OpenIncludeFile(filename.str(), includedFile);
-  if (!includeBuffer)
-    return emitError(fileLoc, "unable to open include file `" + filename + "`");
-
-  auto processFn = [&](llvm::RecordKeeper &records) {
-    processTdIncludeRecords(records, decls);
-
-    // After we are done processing, move all of the tablegen source buffers to
-    // the main parser source mgr. This allows for directly using source
-    // locations from the .td files without needing to remap them.
-    parserSrcMgr.takeSourceBuffersFrom(llvm::SrcMgr);
-    return false;
-  };
-  if (llvm::TableGenParseFile(std::move(*includeBuffer),
-                              parserSrcMgr.getIncludeDirs(), processFn))
+  // Parse the tablegen file.
+  llvm::RecordKeeper tdRecords;
+  if (llvm::TableGenParseFile(tdSrcMgr, tdRecords))
     return failure();
 
+  // Process the parsed records.
+  processTdIncludeRecords(tdRecords, decls);
+
+  // After we are done processing, move all of the tablegen source buffers to
+  // the main parser source mgr. This allows for directly using source locations
+  // from the .td files without needing to remap them.
+  parserSrcMgr.takeSourceBuffersFrom(tdSrcMgr, fileLoc.End);
   return success();
 }
 
@@ -774,7 +782,7 @@ void Parser::processTdIncludeRecords(llvm::RecordKeeper &tdRecords,
   ods::Context &odsContext = ctx.getODSContext();
   auto addTypeConstraint = [&](const tblgen::NamedTypeConstraint &cst)
       -> const ods::TypeConstraint & {
-    return odsContext.insertTypeConstraint(cst.constraint.getDefName(),
+    return odsContext.insertTypeConstraint(cst.constraint.getUniqueDefName(),
                                            cst.constraint.getSummary(),
                                            cst.constraint.getCPPClassName());
   };
@@ -800,7 +808,7 @@ void Parser::processTdIncludeRecords(llvm::RecordKeeper &tdRecords,
     for (const tblgen::NamedAttribute &attr : op.getAttributes()) {
       odsOp->appendAttribute(
           attr.name, attr.attr.isOptional(),
-          odsContext.insertAttributeConstraint(attr.attr.getAttrDefName(),
+          odsContext.insertAttributeConstraint(attr.attr.getUniqueDefName(),
                                                attr.attr.getSummary(),
                                                attr.attr.getStorageType()));
     }
@@ -843,7 +851,8 @@ void Parser::processTdIncludeRecords(llvm::RecordKeeper &tdRecords,
     StringRef className = def->getValueAsString("cppClassName");
     StringRef cppNamespace = def->getValueAsString("cppNamespace");
     std::string codeBlock =
-        llvm::formatv("llvm::isa<{0}::{1}>(self)", cppNamespace, className)
+        llvm::formatv("return ::mlir::success(llvm::isa<{0}::{1}>(self));",
+                      cppNamespace, className)
             .str();
 
     if (def->isSubClassOf("OpInterface")) {
@@ -888,11 +897,12 @@ Parser::createODSNativePDLLConstraintDecl(const tblgen::Constraint &constraint,
   // Format the condition template.
   tblgen::FmtContext fmtContext;
   fmtContext.withSelf("self");
-  std::string codeBlock =
-      tblgen::tgfmt(constraint.getConditionTemplate(), &fmtContext);
+  std::string codeBlock = tblgen::tgfmt(
+      "return ::mlir::success(" + constraint.getConditionTemplate() + ");",
+      &fmtContext);
 
-  return createODSNativePDLLConstraintDecl<ConstraintT>(constraint.getDefName(),
-                                                        codeBlock, loc, type);
+  return createODSNativePDLLConstraintDecl<ConstraintT>(
+      constraint.getUniqueDefName(), codeBlock, loc, type);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1241,6 +1251,8 @@ FailureOr<T *> Parser::parseUserNativeConstraintOrRewriteDecl(
   } else if (isInline) {
     return emitError(name.getLoc(),
                      "external declarations must be declared in global scope");
+  } else if (curToken.is(Token::error)) {
+    return failure();
   }
   if (failed(parseToken(Token::semicolon,
                         "expected `;` after native declaration")))
@@ -2920,6 +2932,11 @@ LogicalResult Parser::codeCompleteOperationName(StringRef dialectName) {
 
 LogicalResult Parser::codeCompletePatternMetadata() {
   codeCompleteContext->codeCompletePatternMetadata();
+  return failure();
+}
+
+LogicalResult Parser::codeCompleteIncludeFilename(StringRef curPath) {
+  codeCompleteContext->codeCompleteIncludeFilename(curPath);
   return failure();
 }
 

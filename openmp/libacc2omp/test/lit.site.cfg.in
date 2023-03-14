@@ -1,7 +1,7 @@
 @AUTO_GEN_COMMENT@
 
 def filterTgts(tgts):
-    return [tgt for tgt in tgts.split() if not tgt.endswith('-newDriver')]
+    return [tgt for tgt in tgts.split() if not tgt.endswith('-oldDriver')]
 
 config.test_c_compiler = "@OPENMP_TEST_C_COMPILER@"
 config.test_cxx_compiler = "@OPENMP_TEST_CXX_COMPILER@"

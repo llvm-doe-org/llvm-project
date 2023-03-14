@@ -1369,6 +1369,13 @@ Instruction *InstCombinerImpl::visitAdd(BinaryOperator &I) {
     }
   }
 
+  // (A & 2^C1) + A => A & (2^C1 - 1) iff bit C1 in A is a sign bit
+  if (match(&I, m_c_Add(m_And(m_Value(A), m_APInt(C1)), m_Deferred(A))) &&
+      C1->isPowerOf2() && (ComputeNumSignBits(A) > C1->countLeadingZeros())) {
+    Constant *NewMask = ConstantInt::get(RHS->getType(), *C1 - 1);
+    return BinaryOperator::CreateAnd(A, NewMask);
+  }
+
   // A+B --> A|B iff A and B have no bits set in common.
   if (haveNoCommonBitsSet(LHS, RHS, DL, &AC, &I, &DT))
     return BinaryOperator::CreateOr(LHS, RHS);
@@ -2005,6 +2012,37 @@ Instruction *InstCombinerImpl::visitSub(BinaryOperator &I) {
     if (match(Op0, m_OneUse(m_And(m_Specific(Op1), m_Constant(C))))) {
       return BinaryOperator::CreateNeg(
           Builder.CreateAnd(Op1, Builder.CreateNot(C)));
+    }
+  }
+
+  if (auto *II = dyn_cast<MinMaxIntrinsic>(Op1)) {
+    {
+      // sub(add(X,Y), s/umin(X,Y)) --> s/umax(X,Y)
+      // sub(add(X,Y), s/umax(X,Y)) --> s/umin(X,Y)
+      Value *X = II->getLHS();
+      Value *Y = II->getRHS();
+      if (match(Op0, m_c_Add(m_Specific(X), m_Specific(Y))) &&
+          (Op0->hasOneUse() || Op1->hasOneUse())) {
+        Intrinsic::ID InvID = getInverseMinMaxIntrinsic(II->getIntrinsicID());
+        Value *InvMaxMin = Builder.CreateBinaryIntrinsic(InvID, X, Y);
+        return replaceInstUsesWith(I, InvMaxMin);
+      }
+    }
+
+    {
+      // sub(add(X,Y),umin(Y,Z)) --> add(X,usub.sat(Y,Z))
+      // sub(add(X,Z),umin(Y,Z)) --> add(X,usub.sat(Z,Y))
+      Value *X, *Y, *Z;
+      if (match(Op1, m_OneUse(m_UMin(m_Value(Y), m_Value(Z))))) {
+        if (match(Op0, m_OneUse(m_c_Add(m_Specific(Y), m_Value(X)))))
+          return BinaryOperator::CreateAdd(
+              X, Builder.CreateIntrinsic(Intrinsic::usub_sat, I.getType(),
+                                         {Y, Z}));
+        if (match(Op0, m_OneUse(m_c_Add(m_Specific(Z), m_Value(X)))))
+          return BinaryOperator::CreateAdd(
+              X, Builder.CreateIntrinsic(Intrinsic::usub_sat, I.getType(),
+                                         {Z, Y}));
+      }
     }
   }
 

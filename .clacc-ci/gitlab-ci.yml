@@ -94,26 +94,25 @@ stages:
       libomp :: atomic/kmp_atomic_float10_max_min.c
       libomp :: env/kmp_set_dispatch_buf.c
       libomp :: worksharing/for/kmp_set_dispatch_buf.c
-      libomptarget :: nvptx64-nvidia-cuda :: mapping/map_back_race.cpp
       libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
-      libomptarget :: nvptx64-nvidia-cuda :: offloading/info.c
-      libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/close_modifier.c
-      libomptarget :: nvptx64-nvidia-cuda-newDriver :: mapping/map_back_race.cpp
-      libomptarget :: nvptx64-nvidia-cuda-newDriver :: offloading/bug49334.cpp
-      libomptarget :: nvptx64-nvidia-cuda-newDriver :: unified_shared_memory/close_modifier.c
       libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
-      libomptarget :: powerpc64le-ibm-linux-gnu :: unified_shared_memory/close_modifier.c
-      libomptarget :: powerpc64le-ibm-linux-gnu-newDriver :: offloading/bug49334.cpp
-      libomptarget :: powerpc64le-ibm-linux-gnu-newDriver :: unified_shared_memory/close_modifier.c
+      libomptarget :: powerpc64le-ibm-linux-gnu-oldDriver :: offloading/bug49334.cpp
       "
     LIT_XFAIL_NOT:
       "
-      libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/api.c
-      libomptarget :: nvptx64-nvidia-cuda-newDriver :: unified_shared_memory/api.c
+      libomptarget :: nvptx64-nvidia-cuda-oldDriver :: unified_shared_memory/api.c
       "
     VV_COMP_LIT_XFAIL:
       "
-      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1.c.test
+      External/openacc_vv/atomic_capture_minus_equals.c.test
+      External/openacc_vv/atomic_minus_equals.c.test
+      External/openacc_vv/atomic_structured_assign_minus_equals.c.test
+      External/openacc_vv/atomic_structured_assign_x_minus_expr.c.test
+      External/openacc_vv/atomic_structured_minus_equals_assign.c.test
+      External/openacc_vv/atomic_structured_x_minus_expr_assign.c.test
+      External/openacc_vv/atomic_update_minus_equals.c.test
+      External/openacc_vv/atomic_update_x_minus_expr.c.test
+      External/openacc_vv/atomic_x_minus_expr.c.test
       "
     VV_RUN_LIT_XFAIL:
       "
@@ -142,15 +141,22 @@ stages:
     LIT_NPROC_DIVISOR: 1
     LIT_XFAIL:
       "
-      libomptarget :: nvptx64-nvidia-cuda :: offloading/info.c
       libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
-      libomptarget :: nvptx64-nvidia-cuda-newDriver :: offloading/bug49334.cpp
+      libomptarget :: nvptx64-nvidia-cuda-oldDriver :: offloading/bug49334.cpp
       "
     LIT_XFAIL_NOT:
       ""
     VV_COMP_LIT_XFAIL:
       "
-      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1.c.test
+      External/openacc_vv/atomic_capture_minus_equals.c.test
+      External/openacc_vv/atomic_minus_equals.c.test
+      External/openacc_vv/atomic_structured_assign_minus_equals.c.test
+      External/openacc_vv/atomic_structured_assign_x_minus_expr.c.test
+      External/openacc_vv/atomic_structured_minus_equals_assign.c.test
+      External/openacc_vv/atomic_structured_x_minus_expr_assign.c.test
+      External/openacc_vv/atomic_update_minus_equals.c.test
+      External/openacc_vv/atomic_update_x_minus_expr.c.test
+      External/openacc_vv/atomic_x_minus_expr.c.test
       "
     VV_RUN_LIT_XFAIL:
       "
@@ -182,13 +188,14 @@ stages:
     KOKKOS_CMAKE_OPTS: -DKokkos_ARCH_VEGA906=On
     LIT_NPROC_DIVISOR: 1
     LIT_XFAIL:
-      ""
+      "
+      Clang :: Driver/rocm-detect.hip
+      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/parallel-da.c
+      "
     LIT_XFAIL_NOT:
       ""
     VV_COMP_LIT_XFAIL:
-      "
-      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1.c.test
-      "
+      ""
     VV_RUN_LIT_XFAIL:
       "
       External/openacc_vv/acc_map_data.c.test
@@ -252,11 +259,13 @@ stages:
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Debug
     LIT_XFAIL:
       "
+      libomptarget :: x86_64-pc-linux-gnu :: env/base_ptr_ref_count.c
+      libomptarget :: x86_64-pc-linux-gnu-oldDriver :: env/base_ptr_ref_count.c
       libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
       libomptarget :: x86_64-pc-linux-gnu :: unified_shared_memory/close_modifier.c
-      libomptarget :: x86_64-pc-linux-gnu-newDriver :: unified_shared_memory/close_modifier.c
+      libomptarget :: x86_64-pc-linux-gnu-oldDriver :: unified_shared_memory/close_modifier.c
       LLVM :: Other/ChangePrinters/DotCfg/print-changed-dot-cfg.ll
       "
     LIT_XFAIL_NOT:
@@ -492,7 +501,6 @@ z-cleanup-project-builds:
                   -DCMAKE_INSTALL_PREFIX=../install
                   -DLLVM_CCACHE_BUILD=ON
                   -DLLVM_USE_SPLIT_DWARF=true
-                  -DLLVM_USE_LINKER=gold
                   -DCMAKE_C_COMPILER=gcc
                   -DCMAKE_CXX_COMPILER=g++
                   -DGCC_INSTALL_PREFIX=$GCC_DIR

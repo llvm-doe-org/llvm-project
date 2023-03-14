@@ -481,6 +481,8 @@ private:
       return "InitializingStructuredBinding";
     case CodeSynthesisContext::MarkingClassDllexported:
       return "MarkingClassDllexported";
+    case CodeSynthesisContext::BuildingBuiltinDumpStructCall:
+      return "BuildingBuiltinDumpStructCall";
     }
     return "";
   }

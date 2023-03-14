@@ -120,14 +120,6 @@ void AMDGPUInstPrinter::printAddr64(const MCInst *MI, unsigned OpNo,
   printNamedBit(MI, OpNo, O, "addr64");
 }
 
-void AMDGPUInstPrinter::printMBUFOffset(const MCInst *MI, unsigned OpNo,
-                                        raw_ostream &O) {
-  if (MI->getOperand(OpNo).getImm()) {
-    O << " offset:";
-    printU16ImmDecOperand(MI, OpNo, O);
-  }
-}
-
 void AMDGPUInstPrinter::printOffset(const MCInst *MI, unsigned OpNo,
                                     const MCSubtargetInfo &STI,
                                     raw_ostream &O) {
@@ -189,6 +181,13 @@ void AMDGPUInstPrinter::printSMEMOffset(const MCInst *MI, unsigned OpNo,
                                         const MCSubtargetInfo &STI,
                                         raw_ostream &O) {
   O << formatHex(MI->getOperand(OpNo).getImm());
+}
+
+void AMDGPUInstPrinter::printSMEMOffsetMod(const MCInst *MI, unsigned OpNo,
+                                           const MCSubtargetInfo &STI,
+                                           raw_ostream &O) {
+  O << " offset:";
+  printSMEMOffset(MI, OpNo, STI, O);
 }
 
 void AMDGPUInstPrinter::printSMRDLiteralOffset(const MCInst *MI, unsigned OpNo,

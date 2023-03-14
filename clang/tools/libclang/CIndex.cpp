@@ -1442,6 +1442,8 @@ bool CursorVisitor::VisitTemplateParameters(
 bool CursorVisitor::VisitTemplateName(TemplateName Name, SourceLocation Loc) {
   switch (Name.getKind()) {
   case TemplateName::Template:
+  case TemplateName::UsingTemplate:
+  case TemplateName::QualifiedTemplate: // FIXME: Visit nested-name-specifier.
     return Visit(MakeCursorTemplateRef(Name.getAsTemplateDecl(), Loc, TU));
 
   case TemplateName::OverloadedTemplate:
@@ -1458,11 +1460,6 @@ bool CursorVisitor::VisitTemplateName(TemplateName Name, SourceLocation Loc) {
   case TemplateName::DependentTemplate:
     // FIXME: Visit nested-name-specifier.
     return false;
-
-  case TemplateName::QualifiedTemplate:
-    // FIXME: Visit nested-name-specifier.
-    return Visit(MakeCursorTemplateRef(
-        Name.getAsQualifiedTemplateName()->getDecl(), Loc, TU));
 
   case TemplateName::SubstTemplateTemplateParm:
     return Visit(MakeCursorTemplateRef(
@@ -8316,7 +8313,8 @@ CXFile clang_getIncludedFile(CXCursor cursor) {
     return nullptr;
 
   const InclusionDirective *ID = getCursorInclusionDirective(cursor);
-  return const_cast<FileEntry *>(ID->getFile());
+  Optional<FileEntryRef> File = ID->getFile();
+  return const_cast<FileEntry *>(File ? &File->getFileEntry() : nullptr);
 }
 
 unsigned clang_Cursor_getObjCPropertyAttributes(CXCursor C, unsigned reserved) {

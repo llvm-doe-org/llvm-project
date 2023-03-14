@@ -282,8 +282,8 @@ void RISCVFrameLowering::adjustReg(MachineBasicBlock &MBB,
         .setMIFlag(Flag);
   } else {
     unsigned Opc = RISCV::ADD;
-    bool isSub = Val < 0;
-    if (isSub) {
+    bool IsSub = Val < 0;
+    if (IsSub) {
       Val = -Val;
       Opc = RISCV::SUB;
     }
@@ -561,15 +561,11 @@ void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
   MachineBasicBlock::iterator MBBI = MBB.end();
   DebugLoc DL;
   if (!MBB.empty()) {
-    MBBI = MBB.getFirstTerminator();
-    if (MBBI == MBB.end())
-      MBBI = MBB.getLastNonDebugInstr();
-    DL = MBBI->getDebugLoc();
+    MBBI = MBB.getLastNonDebugInstr();
+    if (MBBI != MBB.end())
+      DL = MBBI->getDebugLoc();
 
-    // If this is not a terminator, the actual insert location should be after the
-    // last instruction.
-    if (!MBBI->isTerminator())
-      MBBI = std::next(MBBI);
+    MBBI = MBB.getFirstTerminator();
 
     // If callee-saved registers are saved via libcall, place stack adjustment
     // before this call.
@@ -858,7 +854,6 @@ void RISCVFrameLowering::determineCalleeSaves(MachineFunction &MF,
 
 int64_t
 RISCVFrameLowering::assignRVVStackObjectOffsets(MachineFrameInfo &MFI) const {
-  int64_t Offset = 0;
   // Create a buffer of RVV objects to allocate.
   SmallVector<int, 8> ObjectsToAllocate;
   for (int I = 0, E = MFI.getObjectIndexEnd(); I != E; ++I) {
@@ -872,6 +867,7 @@ RISCVFrameLowering::assignRVVStackObjectOffsets(MachineFrameInfo &MFI) const {
   }
 
   // Allocate all RVV locals and spills
+  int64_t Offset = 0;
   for (int FI : ObjectsToAllocate) {
     // ObjectSize in bytes.
     int64_t ObjectSize = MFI.getObjectSize(FI);

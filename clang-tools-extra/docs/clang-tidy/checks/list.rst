@@ -105,6 +105,7 @@ Clang-Tidy Checks
    `bugprone-terminating-continue <bugprone-terminating-continue.html>`_, "Yes"
    `bugprone-throw-keyword-missing <bugprone-throw-keyword-missing.html>`_,
    `bugprone-too-small-loop-variable <bugprone-too-small-loop-variable.html>`_,
+   `bugprone-unchecked-optional-access <bugprone-unchecked-optional-access.html>`_, "Yes"
    `bugprone-undefined-memory-manipulation <bugprone-undefined-memory-manipulation.html>`_,
    `bugprone-undelegated-constructor <bugprone-undelegated-constructor.html>`_,
    `bugprone-unhandled-exception-at-new <bugprone-unhandled-exception-at-new.html>`_,
@@ -289,6 +290,7 @@ Clang-Tidy Checks
    `performance-unnecessary-value-param <performance-unnecessary-value-param.html>`_, "Yes"
    `portability-restrict-system-includes <portability-restrict-system-includes.html>`_, "Yes"
    `portability-simd-intrinsics <portability-simd-intrinsics.html>`_,
+   `portability-std-allocator-const <portability-std-allocator-const.html>`_,
    `readability-avoid-const-params-in-decls <readability-avoid-const-params-in-decls.html>`_, "Yes"
    `readability-braces-around-statements <readability-braces-around-statements.html>`_, "Yes"
    `readability-const-return-type <readability-const-return-type.html>`_, "Yes"

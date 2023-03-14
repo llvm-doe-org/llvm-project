@@ -406,8 +406,8 @@ public:
   /// according to the assumptions that we've made during the analysis.
   /// The method might also version the pointer stride according to \p Strides,
   /// and add new predicates to \p PSE.
-  void insert(Loop *Lp, Value *Ptr, Type *AccessTy, bool WritePtr,
-              unsigned DepSetId, unsigned ASId, const ValueToValueMap &Strides,
+  void insert(Loop *Lp, Value *Ptr, const SCEV *PtrExpr, Type *AccessTy,
+              bool WritePtr, unsigned DepSetId, unsigned ASId,
               PredicatedScalarEvolution &PSE);
 
   /// No run-time memory checking is necessary.
@@ -575,6 +575,11 @@ public:
     return HasDependenceInvolvingLoopInvariantAddress;
   }
 
+  /// Return the list of stores to invariant addresses.
+  const ArrayRef<StoreInst *> getStoresToInvariantAddresses() const {
+    return StoresToInvariantAddresses;
+  }
+
   /// Used to add runtime SCEV checks. Simplifies SCEV expressions and converts
   /// them to a more usable form.  All SCEV expressions during the analysis
   /// should be re-written (and therefore simplified) according to PSE.
@@ -633,6 +638,9 @@ private:
 
   /// Indicator that there are non vectorizable stores to a uniform address.
   bool HasDependenceInvolvingLoopInvariantAddress = false;
+
+  /// List of stores to invariant addresses.
+  SmallVector<StoreInst *> StoresToInvariantAddresses;
 
   /// The diagnostics report generated for the analysis.  E.g. why we
   /// couldn't analyze the loop.

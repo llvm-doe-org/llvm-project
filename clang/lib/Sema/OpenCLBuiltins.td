@@ -99,11 +99,10 @@ def FuncExtKhrLocalInt32ExtendedAtomics  : FunctionExtension<"cl_khr_local_int32
 def FuncExtKhrInt64BaseAtomics           : FunctionExtension<"cl_khr_int64_base_atomics">;
 def FuncExtKhrInt64ExtendedAtomics       : FunctionExtension<"cl_khr_int64_extended_atomics">;
 def FuncExtKhrMipmapImage                : FunctionExtension<"cl_khr_mipmap_image">;
-def FuncExtKhrMipmapImageReadWrite       : FunctionExtension<"cl_khr_mipmap_image __opencl_c_read_write_images">;
 def FuncExtKhrMipmapImageWrites          : FunctionExtension<"cl_khr_mipmap_image_writes">;
 def FuncExtKhrGlMsaaSharing              : FunctionExtension<"cl_khr_gl_msaa_sharing">;
-def FuncExtKhrGlMsaaSharingReadWrite     : FunctionExtension<"cl_khr_gl_msaa_sharing __opencl_c_read_write_images">;
 
+def FuncExtOpenCLCDeviceEnqueue          : FunctionExtension<"__opencl_c_device_enqueue">;
 def FuncExtOpenCLCGenericAddressSpace    : FunctionExtension<"__opencl_c_generic_address_space">;
 def FuncExtOpenCLCNamedAddressSpaceBuiltins : FunctionExtension<"__opencl_c_named_address_space_builtins">;
 def FuncExtOpenCLCPipes                  : FunctionExtension<"__opencl_c_pipes">;
@@ -243,9 +242,11 @@ class ImageType<Type _Ty, string _AccessQualifier> :
   let IsConst = _Ty.IsConst;
   let IsVolatile = _Ty.IsVolatile;
   let AddrSpace = _Ty.AddrSpace;
-  // Add TypeExtension for "write_only image3d_t".
+  // Add TypeExtensions for writable "image3d_t" and "read_write" image types.
   let Extension = !cond(
       !and(!eq(_Ty.Name, "image3d_t"), !eq(_AccessQualifier, "WO")) : TypeExtension<"cl_khr_3d_image_writes">,
+      !and(!eq(_Ty.Name, "image3d_t"), !eq(_AccessQualifier, "RW")) : TypeExtension<"cl_khr_3d_image_writes __opencl_c_read_write_images">,
+      !eq(_AccessQualifier, "RW") : TypeExtension<"__opencl_c_read_write_images">,
       true : _Ty.Extension);
 }
 
@@ -1454,7 +1455,7 @@ let Extension = FuncExtOpenCLCPipes in {
 // Defined in Builtins.def
 
 // --- Table 33 ---
-let MinVersion = CL20 in {
+let Extension = FuncExtOpenCLCDeviceEnqueue in {
   def : Builtin<"enqueue_marker",
       [Int, Queue, UInt, PointerType<ConstType<ClkEvent>, GenericAS>, PointerType<ClkEvent, GenericAS>]>;
 
@@ -1593,9 +1594,6 @@ multiclass ImageQueryNumMipLevels<string aQual> {
 let Extension = FuncExtKhrMipmapImage in {
   defm : ImageQueryNumMipLevels<"RO">;
   defm : ImageQueryNumMipLevels<"WO">;
-}
-
-let Extension = FuncExtKhrMipmapImageReadWrite in {
   defm : ImageQueryNumMipLevels<"RW">;
 }
 
@@ -1672,9 +1670,6 @@ let Extension = FuncExtKhrGlMsaaSharing in {
   defm : ImageReadMsaa<"RO">;
   defm : ImageQueryMsaa<"RO">;
   defm : ImageQueryMsaa<"WO">;
-}
-
-let Extension = FuncExtKhrGlMsaaSharingReadWrite in {
   defm : ImageReadMsaa<"RW">;
   defm : ImageQueryMsaa<"RW">;
 }

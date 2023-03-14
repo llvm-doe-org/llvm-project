@@ -74,6 +74,22 @@ def ConvertAffineToStandard : Pass<"lower-affine"> {
 }
 
 //===----------------------------------------------------------------------===//
+// AMDGPUToROCDL
+//===----------------------------------------------------------------------===//
+
+def ConvertAMDGPUToROCDL : Pass<"convert-amdgpu-to-rocdl"> {
+  let summary = "Convert AMDGPU dialect to ROCDL dialect";
+  let description = [{
+    This pass converts supported AMDGPU ops to ROCDL dialect intrinsics.
+  }];
+  let constructor = "mlir::createConvertAMDGPUToROCDLPass()";
+  let dependentDialects = [
+    "LLVM::LLVMDialect",
+    "ROCDL::ROCDLDialect",
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // ArithmeticToLLVM
 //===----------------------------------------------------------------------===//
 
@@ -507,6 +523,22 @@ def ConvertMemRefToSPIRV : Pass<"convert-memref-to-spirv", "ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// NVGPUToNVVM
+//===----------------------------------------------------------------------===//
+
+def ConvertNVGPUToNVVM : Pass<"convert-nvgpu-to-nvvm"> {
+  let summary = "Convert NVGPU dialect to NVVM dialect";
+  let description = [{
+    This pass converts supported NVGPU ops to NVVM dialect intrinsics.
+  }];
+  let constructor = "mlir::createConvertNVGPUToNVVMPass()";
+  let dependentDialects = [
+    "NVVM::NVVMDialect",
+  ];
+}
+
+
+//===----------------------------------------------------------------------===//
 // OpenACCToSCF
 //===----------------------------------------------------------------------===//
 
@@ -675,6 +707,20 @@ def ConvertSPIRVToLLVM : Pass<"convert-spirv-to-llvm", "ModuleOp"> {
   let constructor = "mlir::createConvertSPIRVToLLVMPass()";
   let dependentDialects = ["LLVM::LLVMDialect"];
 }
+
+//===----------------------------------------------------------------------===//
+// TensorToLinalg
+//===----------------------------------------------------------------------===//
+
+def ConvertTensorToLinalg : Pass<"convert-tensor-to-linalg", "ModuleOp"> {
+  let summary = "Convert some Tensor dialect ops to Linalg dialect";
+  let constructor = "mlir::createConvertTensorToLinalgPass()";
+  let dependentDialects = [
+    "arith::ArithmeticDialect",
+    "linalg::LinalgDialect",
+  ];
+}
+
 
 //===----------------------------------------------------------------------===//
 // TensorToSPIRV

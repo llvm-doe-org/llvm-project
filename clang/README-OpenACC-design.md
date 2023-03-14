@@ -777,40 +777,36 @@ being fully defined in `openacc.h`.  The front end would translate
 such OpenACC equivalents and compiler builtins to the OpenMP forms
 used now.
 
-`-fopenmp-*`
-------------
+`-fopenmp-*` and `--offload-arch`
+---------------------------------
 
-Clacc permits all `-fopenmp-*` command-line options when OpenACC
-support is enabled.  These options adjust various OpenMP features when
-compiling the OpenMP translation.  To implement this, Clacc extends
-Clang to check if OpenACC support is enabled everywhere it already
-checks if OpenMP support is enabled.  However, so far, only
-`-fopenmp-targets=<triples>` to specify desired offloading targets has
-been tested, and it's only been tested for traditional compilation
-mode.
+Other than `-fopenmp`, Clacc permits all OpenMP-related command-line options
+when OpenACC support is enabled.  These options adjust various OpenMP features
+when compiling the OpenMP translation.  To implement this, Clacc extends Clang
+to check if OpenACC support is enabled everywhere it already checks if OpenMP
+support is enabled.  However, so far, only `-fopenmp-targets=<triples>` and
+`--offload-arch=<arch>` to specify desired offloading targets have been tested,
+and they've only been tested for traditional compilation mode.
 
-It's not clear if `-fopenmp-*` options should be relevant to
-source-to-source mode.  First, some options like
-`-fopenmp-targets=<triples>` affect the OpenMP version Clang selects
-by default, and that can affect semantics, diagnostics, and any
-AST-printed code containing `_OPENMP`, but should Clacc let any of
-that matter when compiling OpenACC?  Second, in experimental
-implementations, we have observed that `-fopenmp-targets=nvptx64` adds
-many declarations to the source code printed for `nvptx64`.  Would
-offload bundling of the various versions of the source code be useful?
+It's not clear if such options should be relevant to source-to-source mode.
+First, some options like `-fopenmp-targets=<triples>` affect the OpenMP version
+Clang selects by default, and that can affect semantics, diagnostics, and any
+AST-printed code containing `_OPENMP`, but should Clacc let any of that matter
+when compiling OpenACC?  Second, in experimental implementations, we have
+observed that `-fopenmp-targets=nvptx64` adds many declarations to the source
+code printed for `nvptx64`.  Would offload bundling of the various versions of
+the source code be useful?
 
-In general, the Clacc user should not have to be aware that OpenMP
-support is being utilized when in traditional compilation mode.
-However, the need to combine `-fopenmp-targets=<triples>` with
-`-fopenacc` to enable offloading, for example, violates that
-principle.  Moreover, diagnostics for `-fopenmp-*` are currently
-expressed in terms of OpenMP even when OpenACC support is enabled.  In
-the future, especially when Clacc is considered for upstreaming, Clacc
-might develop its own `-fopenacc-*` options to be used instead.
-Nevertheless, for now, we have concluded that the Clacc implementation
-will be easier to keep in sync with upstream while the Clacc
-implementation reuses the existing `-fopenmp-*` options with minimal
-modifications.
+In general, the Clacc user should not have to be aware that OpenMP support is
+being utilized when in traditional compilation mode.  However, combining
+`-fopenmp-targets=<triples>` with `-fopenacc` to enable offloading, for example,
+violates that principle.  Moreover, diagnostics for such options are currently
+expressed in terms of OpenMP even when OpenACC support is enabled.  In the
+future, especially when Clacc is considered for upstreaming, Clacc might develop
+its own `-fopenacc-*` options to be used instead.  Nevertheless, for now, we
+have concluded that the Clacc implementation will be easier to keep in sync with
+upstream while the Clacc implementation reuses the existing `-fopenmp-*` options
+with minimal modifications.
 
 `-fopenmp=<lib>`
 ----------------
@@ -2834,8 +2830,8 @@ There are several issues related to the interpretation of the OpenACC
 specification that we need to investigate further:
 
 * The following event types never trigger when offloading is disabled
-  (that is, `-fopenmp-targets` has not been specified), but this
-  behavior is questionable:
+  (that is, `-fopenmp-targets` and `--offload-arch` have not been specified),
+  but this behavior is questionable:
     * `acc_ev_device_init_start`, `acc_ev_device_init_end`
     * `acc_ev_device_shutdown_start`, `acc_ev_device_shutdown_end`
     * `acc_ev_enqueue_upload_start`, `acc_ev_enqueue_upload_end`

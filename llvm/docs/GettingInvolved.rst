@@ -244,7 +244,7 @@ don't find anyone present, chances are they happen to be off that day.
   * - Kristof Beyls
     - General questions on how to contribute to LLVM; organizing meetups;
       submitting talks; and other general LLVM-related topics. Arm/AArch64
-      codegen. LLVM security group.
+      codegen. LLVM security group. LLVM Office Hours.
     - Every 2nd and 4th Wednesday of the month at 9.30am CET, for 30 minutes.
       `ics <https://calendar.google.com/calendar/ical/co0h4ndpvtfe64opn7eraiq3ac%40group.calendar.google.com/public/basic.ics>`__
     - `Jitsi <https://meet.jit.si/KristofBeylsLLVMOfficeHour>`__
@@ -270,6 +270,16 @@ don't find anyone present, chances are they happen to be off that day.
       `ics <https://outlook.office365.com/owa/calendar/5c93bae7d8fc48f5bd150f9efda8806f@anl.gov/4929bd0f955b4f9b82b7bc995cb3b1bf665030567582422766/S-1-8-2190330107-3188380388-3000953923-1819937831/reachcalendar.ics>`__
     - `MS Teams <https://teams.microsoft.com/l/meetup-join/19%3ameeting_MTM2ZDNkNGUtZjg3My00ZDFjLTk5NjctYTIwMmI3MWM4MjFj%40thread.v2/0?context=%7b%22Tid%22%3a%220cfca185-25f7-49e3-8ae7-704d5326e285%22%2c%22Oid%22%3a%220cacfb51-1523-4455-a443-adca936d1af0%22%7d>`__
     - English, German
+  * - Tobias Grosser
+    - General questions on how to contribute to LLVM/MLIR, Polly, Loop Optimization, FPL, Research in LLVM, PhD in CS, Summer of Code.
+    - Monthly, last Monday of the month at 18:00 London time (typically 9am PT), for 30 minutes.
+    - `Video Call <https://meet.grosser.science/LLVMOfficeHours>`__
+    - English, German, Spanish, French
+  * - Anastasia Stulova
+    - Clang internals for C/C++ language extensions and dialects, OpenCL, GPU, SPIR-V, how to contribute, women in compilers. 
+    - Monthly, 2nd Thursday of the month at 17:00 BST - London time (9:00am PT except for 2 weeks in spring), 1 hour slot.
+    - `GoogleMeet <https://meet.google.com/kdy-fdbv-nuk>`__
+    - English, Russian, German (not fluently)
 
 IRC
 ---

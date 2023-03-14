@@ -24,10 +24,10 @@
 //
 // Invalid default ACC_DEVICE_NUM=0 for ACC_DEVICE_TYPE with offloading disabled.
 // RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_TYPE=not_host %, ACC_DEVICE_NUM=0 (default device number) is invalid for ACC_DEVICE_TYPE=not_host %)
-// RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_TYPE=x86_64   %,   ACC_DEVICE_NUM=0 (default device number) is invalid for ACC_DEVICE_TYPE=x86_64 %)
-// RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_TYPE=ppc64le  %,  ACC_DEVICE_NUM=0 (default device number) is invalid for ACC_DEVICE_TYPE=ppc64le %)
-// RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_TYPE=nvidia   %,   ACC_DEVICE_NUM=0 (default device number) is invalid for ACC_DEVICE_TYPE=nvidia %)
-// RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_TYPE=radeon   %,   ACC_DEVICE_NUM=0 (default device number) is invalid for ACC_DEVICE_TYPE=radeon %)
+// RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_TYPE=x86_64   %, ACC_DEVICE_NUM=0 (default device number) is invalid for ACC_DEVICE_TYPE=x86_64   %)
+// RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_TYPE=ppc64le  %, ACC_DEVICE_NUM=0 (default device number) is invalid for ACC_DEVICE_TYPE=ppc64le  %)
+// RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_TYPE=nvidia   %, ACC_DEVICE_NUM=0 (default device number) is invalid for ACC_DEVICE_TYPE=nvidia   %)
+// RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_TYPE=radeon   %, ACC_DEVICE_NUM=0 (default device number) is invalid for ACC_DEVICE_TYPE=radeon   %)
 //
 // Invalid explicit ACC_DEVICE_NUM for ACC_DEVICE_TYPE with offloading disabled.
 // RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled ACC_DEVICE_NUM=1                          %, ACC_DEVICE_NUM=1 is invalid for ACC_DEVICE_TYPE=host (default device type) %)
@@ -44,10 +44,18 @@
 // RUN: %{check}( env ACC_DEVICE_TYPE=%bad-dev-type-acc ACC_DEVICE_NUM=1 %, ACC_DEVICE_NUM=1 is invalid for ACC_DEVICE_TYPE=%bad-dev-type-acc                         %)
 //
 // Invalid ACC_DEVICE_NUM for ACC_DEVICE_TYPE with devices.
-// RUN: %{check}( env ACC_DEVICE_NUM=%dev-type-0-num-devs                                 %, ACC_DEVICE_NUM=%dev-type-0-num-devs is invalid for ACC_DEVICE_TYPE=%dev-type-0-acc (default device type) %)
-// RUN: %{check}( env ACC_DEVICE_TYPE=%dev-type-0-acc ACC_DEVICE_NUM=%dev-type-0-num-devs %, ACC_DEVICE_NUM=%dev-type-0-num-devs is invalid for ACC_DEVICE_TYPE=%dev-type-0-acc                       %)
-// RUN: %{check}( env ACC_DEVICE_TYPE=%dev-type-1-acc ACC_DEVICE_NUM=%dev-type-1-num-devs %, ACC_DEVICE_NUM=%dev-type-1-num-devs is invalid for ACC_DEVICE_TYPE=%dev-type-1-acc                       %)
-// RUN: %{check}( env ACC_DEVICE_TYPE=not_host ACC_DEVICE_NUM=%not-host-num-devs          %, ACC_DEVICE_NUM=%not-host-num-devs is invalid for ACC_DEVICE_TYPE=not_host                                %)
+//
+// TODO: When there are multiple offload device types (the multitarget sub test
+// suite), we currently do not know how LLVM's implementation selects the
+// default offload device type, so we set the offload device type explicitly in
+// that case.  If, one day, we figure out how it's determined, here is one place
+// where we can reintroduce test coverage for that case.  See the related todo
+// in lit.cfg for further details.
+//
+// RUN: %{check}( env %if-multi<ACC_DEVICE_TYPE=%dev-type-0-acc|> ACC_DEVICE_NUM=%dev-type-0-num-devs %, ACC_DEVICE_NUM=%dev-type-0-num-devs is invalid for ACC_DEVICE_TYPE=%dev-type-0-acc%if-multi<| (default device type)> %)
+// RUN: %{check}( env ACC_DEVICE_TYPE=%dev-type-0-acc             ACC_DEVICE_NUM=%dev-type-0-num-devs %, ACC_DEVICE_NUM=%dev-type-0-num-devs is invalid for ACC_DEVICE_TYPE=%dev-type-0-acc                                   %)
+// RUN: %{check}( env ACC_DEVICE_TYPE=%dev-type-1-acc             ACC_DEVICE_NUM=%dev-type-1-num-devs %, ACC_DEVICE_NUM=%dev-type-1-num-devs is invalid for ACC_DEVICE_TYPE=%dev-type-1-acc                                   %)
+// RUN: %{check}( env ACC_DEVICE_TYPE=not_host                    ACC_DEVICE_NUM=%not-host-num-devs   %, ACC_DEVICE_NUM=%not-host-num-devs is invalid for ACC_DEVICE_TYPE=not_host                                            %)
 
 // END.
 

@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <numeric>
@@ -84,23 +85,22 @@ static inline uint64_t checkedMul(uint64_t lhs, uint64_t rhs) {
 ///   ({i}, a[i])
 /// and a rank-5 tensor element like
 ///   ({i,j,k,l,m}, a[i,j,k,l,m])
+/// We use pointer to a shared index pool rather than e.g. a direct
+/// vector since that (1) reduces the per-element memory footprint, and
+/// (2) centralizes the memory reservation and (re)allocation to one place.
 template <typename V>
 struct Element {
-  Element(const std::vector<uint64_t> &ind, V val) : indices(ind), value(val){};
-  std::vector<uint64_t> indices;
+  Element(uint64_t *ind, V val) : indices(ind), value(val){};
+  uint64_t *indices; // pointer into shared index pool
   V value;
-  /// Returns true if indices of e1 < indices of e2.
-  static bool lexOrder(const Element<V> &e1, const Element<V> &e2) {
-    uint64_t rank = e1.indices.size();
-    assert(rank == e2.indices.size());
-    for (uint64_t r = 0; r < rank; r++) {
-      if (e1.indices[r] == e2.indices[r])
-        continue;
-      return e1.indices[r] < e2.indices[r];
-    }
-    return false;
-  }
 };
+
+/// The type of callback functions which receive an element.  We avoid
+/// packaging the coordinates and value together as an `Element` object
+/// because this helps keep code somewhat cleaner.
+template <typename V>
+using ElementConsumer =
+    const std::function<void(const std::vector<uint64_t> &, V)> &;
 
 /// A memory-resident sparse tensor in coordinate scheme (collection of
 /// elements). This data structure is used to read a sparse tensor from
@@ -111,30 +111,62 @@ template <typename V>
 struct SparseTensorCOO {
 public:
   SparseTensorCOO(const std::vector<uint64_t> &szs, uint64_t capacity)
-      : sizes(szs), iteratorLocked(false), iteratorPos(0) {
-    if (capacity)
+      : sizes(szs) {
+    if (capacity) {
       elements.reserve(capacity);
+      indices.reserve(capacity * getRank());
+    }
   }
+
   /// Adds element as indices and value.
   void add(const std::vector<uint64_t> &ind, V val) {
     assert(!iteratorLocked && "Attempt to add() after startIterator()");
+    uint64_t *base = indices.data();
+    uint64_t size = indices.size();
     uint64_t rank = getRank();
     assert(rank == ind.size());
-    for (uint64_t r = 0; r < rank; r++)
+    for (uint64_t r = 0; r < rank; r++) {
       assert(ind[r] < sizes[r]); // within bounds
-    elements.emplace_back(ind, val);
+      indices.push_back(ind[r]);
+    }
+    // This base only changes if indices were reallocated. In that case, we
+    // need to correct all previous pointers into the vector. Note that this
+    // only happens if we did not set the initial capacity right, and then only
+    // for every internal vector reallocation (which with the doubling rule
+    // should only incur an amortized linear overhead).
+    uint64_t *newBase = indices.data();
+    if (newBase != base) {
+      for (uint64_t i = 0, n = elements.size(); i < n; i++)
+        elements[i].indices = newBase + (elements[i].indices - base);
+      base = newBase;
+    }
+    // Add element as (pointer into shared index pool, value) pair.
+    elements.emplace_back(base + size, val);
   }
+
   /// Sorts elements lexicographically by index.
   void sort() {
     assert(!iteratorLocked && "Attempt to sort() after startIterator()");
     // TODO: we may want to cache an `isSorted` bit, to avoid
     // unnecessary/redundant sorting.
-    std::sort(elements.begin(), elements.end(), Element<V>::lexOrder);
+    std::sort(elements.begin(), elements.end(),
+              [this](const Element<V> &e1, const Element<V> &e2) {
+                uint64_t rank = getRank();
+                for (uint64_t r = 0; r < rank; r++) {
+                  if (e1.indices[r] == e2.indices[r])
+                    continue;
+                  return e1.indices[r] < e2.indices[r];
+                }
+                return false;
+              });
   }
+
   /// Returns rank.
   uint64_t getRank() const { return sizes.size(); }
+
   /// Getter for sizes array.
   const std::vector<uint64_t> &getSizes() const { return sizes; }
+
   /// Getter for elements array.
   const std::vector<Element<V>> &getElements() const { return elements; }
 
@@ -143,6 +175,7 @@ public:
     iteratorLocked = true;
     iteratorPos = 0;
   }
+
   /// Get the next element.
   const Element<V> *getNext() {
     assert(iteratorLocked && "Attempt to getNext() before startIterator()");
@@ -172,9 +205,10 @@ public:
 
 private:
   const std::vector<uint64_t> sizes; // per-dimension sizes
-  std::vector<Element<V>> elements;
-  bool iteratorLocked;
-  unsigned iteratorPos;
+  std::vector<Element<V>> elements;  // all COO elements
+  std::vector<uint64_t> indices;     // shared index pool
+  bool iteratorLocked = false;
+  unsigned iteratorPos = 0;
 };
 
 /// Abstract base class for `SparseTensorStorage<P,I,V>`.  This class
@@ -194,6 +228,7 @@ public:
                           const uint64_t *perm, const DimLevelType *sparsity)
       : dimSizes(szs), rev(getRank()),
         dimTypes(sparsity, sparsity + getRank()) {
+    assert(perm && sparsity);
     const uint64_t rank = getRank();
     // Validate parameters.
     assert(rank > 0 && "Trivial shape is unsupported");
@@ -284,6 +319,16 @@ public:
   /// Finishes insertion.
   virtual void endInsert() = 0;
 
+protected:
+  // Since this class is virtual, we must disallow public copying in
+  // order to avoid "slicing".  Since this class has data members,
+  // that means making copying protected.
+  // <https://github.com/isocpp/CppCoreGuidelines/blob/master/CppCoreGuidelines.md#Rc-copy-virtual>
+  SparseTensorStorageBase(const SparseTensorStorageBase &) = default;
+  // Copy-assignment would be implicitly deleted (because `dimSizes`
+  // is const), so we explicitly delete it for clarity.
+  SparseTensorStorageBase &operator=(const SparseTensorStorageBase &) = delete;
+
 private:
   static void fatal(const char *tp) {
     fprintf(stderr, "unsupported %s\n", tp);
@@ -294,6 +339,10 @@ private:
   std::vector<uint64_t> rev;
   const std::vector<DimLevelType> dimTypes;
 };
+
+// Forward.
+template <typename P, typename I, typename V>
+class SparseTensorEnumerator;
 
 /// A memory-resident sparse tensor using a storage scheme based on
 /// per-dimension sparse/dense annotations. This data structure provides a
@@ -417,24 +466,13 @@ public:
   /// sparse tensor in coordinate scheme with the given dimension order.
   ///
   /// Precondition: `perm` must be valid for `getRank()`.
-  SparseTensorCOO<V> *toCOO(const uint64_t *perm) {
-    // Restore original order of the dimension sizes and allocate coordinate
-    // scheme with desired new ordering specified in perm.
-    const uint64_t rank = getRank();
-    const auto &rev = getRev();
-    const auto &sizes = getDimSizes();
-    std::vector<uint64_t> orgsz(rank);
-    for (uint64_t r = 0; r < rank; r++)
-      orgsz[rev[r]] = sizes[r];
-    SparseTensorCOO<V> *coo = SparseTensorCOO<V>::newSparseTensorCOO(
-        rank, orgsz.data(), perm, values.size());
-    // Populate coordinate scheme restored from old ordering and changed with
-    // new ordering. Rather than applying both reorderings during the recursion,
-    // we compute the combine permutation in advance.
-    std::vector<uint64_t> reord(rank);
-    for (uint64_t r = 0; r < rank; r++)
-      reord[r] = perm[rev[r]];
-    toCOO(*coo, reord, 0, 0);
+  SparseTensorCOO<V> *toCOO(const uint64_t *perm) const {
+    SparseTensorEnumerator<P, I, V> enumerator(*this, getRank(), perm);
+    SparseTensorCOO<V> *coo =
+        new SparseTensorCOO<V>(enumerator.permutedSizes(), values.size());
+    enumerator.forallElements([&coo](const std::vector<uint64_t> &ind, V val) {
+      coo->add(ind, val);
+    });
     // TODO: This assertion assumes there are no stored zeros,
     // or if there are then that we don't filter them out.
     // Cf., <https://github.com/llvm/llvm-project/issues/54179>
@@ -517,9 +555,10 @@ private:
   ///     and pointwise less-than).
   void fromCOO(const std::vector<Element<V>> &elements, uint64_t lo,
                uint64_t hi, uint64_t d) {
+    uint64_t rank = getRank();
+    assert(d <= rank && hi <= elements.size());
     // Once dimensions are exhausted, insert the numerical values.
-    assert(d <= getRank() && hi <= elements.size());
-    if (d == getRank()) {
+    if (d == rank) {
       assert(lo < hi);
       values.push_back(elements[lo].value);
       return;
@@ -541,31 +580,6 @@ private:
     }
     // Finalize the sparse pointer structure at this dimension.
     finalizeSegment(d, full);
-  }
-
-  /// Stores the sparse tensor storage scheme into a memory-resident sparse
-  /// tensor in coordinate scheme.
-  void toCOO(SparseTensorCOO<V> &tensor, std::vector<uint64_t> &reord,
-             uint64_t pos, uint64_t d) {
-    assert(d <= getRank());
-    if (d == getRank()) {
-      assert(pos < values.size());
-      tensor.add(idx, values[pos]);
-    } else if (isCompressedDim(d)) {
-      // Sparse dimension.
-      for (uint64_t ii = pointers[d][pos]; ii < pointers[d][pos + 1]; ii++) {
-        idx[reord[d]] = indices[d][ii];
-        toCOO(tensor, reord, ii, d + 1);
-      }
-    } else {
-      // Dense dimension.
-      const uint64_t sz = getDimSizes()[d];
-      const uint64_t off = pos * sz;
-      for (uint64_t i = 0; i < sz; i++) {
-        idx[reord[d]] = i;
-        toCOO(tensor, reord, off + i, d + 1);
-      }
-    }
   }
 
   /// Finalize the sparse pointer structure at this dimension.
@@ -623,11 +637,149 @@ private:
     return -1u;
   }
 
-private:
+  // Allow `SparseTensorEnumerator` to access the data-members (to avoid
+  // the cost of virtual-function dispatch in inner loops), without
+  // making them public to other client code.
+  friend class SparseTensorEnumerator<P, I, V>;
+
   std::vector<std::vector<P>> pointers;
   std::vector<std::vector<I>> indices;
   std::vector<V> values;
   std::vector<uint64_t> idx; // index cursor for lexicographic insertion.
+};
+
+/// A (higher-order) function object for enumerating the elements of some
+/// `SparseTensorStorage` under a permutation.  That is, the `forallElements`
+/// method encapsulates the loop-nest for enumerating the elements of
+/// the source tensor (in whatever order is best for the source tensor),
+/// and applies a permutation to the coordinates/indices before handing
+/// each element to the callback.  A single enumerator object can be
+/// freely reused for several calls to `forallElements`, just so long
+/// as each call is sequential with respect to one another.
+///
+/// N.B., this class stores a reference to the `SparseTensorStorageBase`
+/// passed to the constructor; thus, objects of this class must not
+/// outlive the sparse tensor they depend on.
+///
+/// Design Note: The reason we define this class instead of simply using
+/// `SparseTensorEnumerator<P,I,V>` is because we need to hide/generalize
+/// the `<P,I>` template parameters from MLIR client code (to simplify the
+/// type parameters used for direct sparse-to-sparse conversion).  And the
+/// reason we define the `SparseTensorEnumerator<P,I,V>` subclasses rather
+/// than simply using this class, is to avoid the cost of virtual-method
+/// dispatch within the loop-nest.
+template <typename V>
+class SparseTensorEnumeratorBase {
+public:
+  /// Constructs an enumerator with the given permutation for mapping
+  /// the semantic-ordering of dimensions to the desired target-ordering.
+  ///
+  /// Preconditions:
+  /// * the `tensor` must have the same `V` value type.
+  /// * `perm` must be valid for `rank`.
+  SparseTensorEnumeratorBase(const SparseTensorStorageBase &tensor,
+                             uint64_t rank, const uint64_t *perm)
+      : src(tensor), permsz(src.getRev().size()), reord(getRank()),
+        cursor(getRank()) {
+    assert(perm && "Received nullptr for permutation");
+    assert(rank == getRank() && "Permutation rank mismatch");
+    const auto &rev = src.getRev();        // source stg-order -> semantic-order
+    const auto &sizes = src.getDimSizes(); // in source storage-order
+    for (uint64_t s = 0; s < rank; s++) {  // `s` source storage-order
+      uint64_t t = perm[rev[s]];           // `t` target-order
+      reord[s] = t;
+      permsz[t] = sizes[s];
+    }
+  }
+
+  virtual ~SparseTensorEnumeratorBase() = default;
+
+  // We disallow copying to help avoid leaking the `src` reference.
+  // (In addition to avoiding the problem of slicing.)
+  SparseTensorEnumeratorBase(const SparseTensorEnumeratorBase &) = delete;
+  SparseTensorEnumeratorBase &
+  operator=(const SparseTensorEnumeratorBase &) = delete;
+
+  /// Returns the source/target tensor's rank.  (The source-rank and
+  /// target-rank are always equal since we only support permutations.
+  /// Though once we add support for other dimension mappings, this
+  /// method will have to be split in two.)
+  uint64_t getRank() const { return permsz.size(); }
+
+  /// Returns the target tensor's dimension sizes.
+  const std::vector<uint64_t> &permutedSizes() const { return permsz; }
+
+  /// Enumerates all elements of the source tensor, permutes their
+  /// indices, and passes the permuted element to the callback.
+  /// The callback must not store the cursor reference directly,
+  /// since this function reuses the storage.  Instead, the callback
+  /// must copy it if they want to keep it.
+  virtual void forallElements(ElementConsumer<V> yield) = 0;
+
+protected:
+  const SparseTensorStorageBase &src;
+  std::vector<uint64_t> permsz; // in target order.
+  std::vector<uint64_t> reord;  // source storage-order -> target order.
+  std::vector<uint64_t> cursor; // in target order.
+};
+
+template <typename P, typename I, typename V>
+class SparseTensorEnumerator final : public SparseTensorEnumeratorBase<V> {
+  using Base = SparseTensorEnumeratorBase<V>;
+
+public:
+  /// Constructs an enumerator with the given permutation for mapping
+  /// the semantic-ordering of dimensions to the desired target-ordering.
+  ///
+  /// Precondition: `perm` must be valid for `rank`.
+  SparseTensorEnumerator(const SparseTensorStorage<P, I, V> &tensor,
+                         uint64_t rank, const uint64_t *perm)
+      : Base(tensor, rank, perm) {}
+
+  ~SparseTensorEnumerator() final override = default;
+
+  void forallElements(ElementConsumer<V> yield) final override {
+    forallElements(yield, 0, 0);
+  }
+
+private:
+  /// The recursive component of the public `forallElements`.
+  void forallElements(ElementConsumer<V> yield, uint64_t parentPos,
+                      uint64_t d) {
+    // Recover the `<P,I,V>` type parameters of `src`.
+    const auto &src =
+        static_cast<const SparseTensorStorage<P, I, V> &>(this->src);
+    if (d == Base::getRank()) {
+      assert(parentPos < src.values.size() &&
+             "Value position is out of bounds");
+      // TODO: <https://github.com/llvm/llvm-project/issues/54179>
+      yield(this->cursor, src.values[parentPos]);
+    } else if (src.isCompressedDim(d)) {
+      // Look up the bounds of the `d`-level segment determined by the
+      // `d-1`-level position `parentPos`.
+      const std::vector<P> &pointers_d = src.pointers[d];
+      assert(parentPos + 1 < pointers_d.size() &&
+             "Parent pointer position is out of bounds");
+      const uint64_t pstart = static_cast<uint64_t>(pointers_d[parentPos]);
+      const uint64_t pstop = static_cast<uint64_t>(pointers_d[parentPos + 1]);
+      // Loop-invariant code for looking up the `d`-level coordinates/indices.
+      const std::vector<I> &indices_d = src.indices[d];
+      assert(pstop - 1 < indices_d.size() && "Index position is out of bounds");
+      uint64_t &cursor_reord_d = this->cursor[this->reord[d]];
+      for (uint64_t pos = pstart; pos < pstop; pos++) {
+        cursor_reord_d = static_cast<uint64_t>(indices_d[pos]);
+        forallElements(yield, pos, d + 1);
+      }
+    } else { // Dense dimension.
+      const uint64_t sz = src.getDimSizes()[d];
+      const uint64_t pstart = parentPos * sz;
+      uint64_t &cursor_reord_d = this->cursor[this->reord[d]];
+      for (uint64_t i = 0; i < sz; i++) {
+        cursor_reord_d = i;
+        forallElements(yield, pstart + i, d + 1);
+      }
+    }
+  }
 };
 
 /// Helper to convert string to lower case.
@@ -639,7 +791,7 @@ static char *toLower(char *token) {
 
 /// Read the MME header of a general sparse matrix of type real.
 static void readMMEHeader(FILE *file, char *filename, char *line,
-                          uint64_t *idata, bool *isSymmetric) {
+                          uint64_t *idata, bool *isPattern, bool *isSymmetric) {
   char header[64];
   char object[64];
   char format[64];
@@ -651,15 +803,16 @@ static void readMMEHeader(FILE *file, char *filename, char *line,
     fprintf(stderr, "Corrupt header in %s\n", filename);
     exit(1);
   }
+  // Set properties
+  *isPattern = (strcmp(toLower(field), "pattern") == 0);
   *isSymmetric = (strcmp(toLower(symmetry), "symmetric") == 0);
   // Make sure this is a general sparse matrix.
   if (strcmp(toLower(header), "%%matrixmarket") ||
       strcmp(toLower(object), "matrix") ||
-      strcmp(toLower(format), "coordinate") || strcmp(toLower(field), "real") ||
+      strcmp(toLower(format), "coordinate") ||
+      (strcmp(toLower(field), "real") && !(*isPattern)) ||
       (strcmp(toLower(symmetry), "general") && !(*isSymmetric))) {
-    fprintf(stderr,
-            "Cannot find a general sparse matrix with type real in %s\n",
-            filename);
+    fprintf(stderr, "Cannot find a general sparse matrix in %s\n", filename);
     exit(1);
   }
   // Skip comments.
@@ -726,9 +879,10 @@ static SparseTensorCOO<V> *openSparseTensorCOO(char *filename, uint64_t rank,
   // Perform some file format dependent set up.
   char line[kColWidth];
   uint64_t idata[512];
+  bool isPattern = false;
   bool isSymmetric = false;
   if (strstr(filename, ".mtx")) {
-    readMMEHeader(file, filename, line, idata, &isSymmetric);
+    readMMEHeader(file, filename, line, idata, &isPattern, &isSymmetric);
   } else if (strstr(filename, ".tns")) {
     readExtFROSTTHeader(file, filename, line, idata);
   } else {
@@ -759,7 +913,8 @@ static SparseTensorCOO<V> *openSparseTensorCOO(char *filename, uint64_t rank,
     }
     // The external formats always store the numerical values with the type
     // double, but we cast these values to the sparse tensor object type.
-    double value = strtod(linePtr, &linePtr);
+    // For a pattern tensor, we arbitrarily pick the value 1 for all entries.
+    double value = isPattern ? 1.0 : strtod(linePtr, &linePtr);
     tensor->add(indices, value);
     // We currently chose to deal with symmetric matrices by fully constructing
     // them. In the future, we may want to make symmetry implicit for storage
@@ -1310,6 +1465,30 @@ void *convertToMLIRSparseTensorF32(uint64_t rank, uint64_t nse, uint64_t *shape,
   return toMLIRSparseTensor<float>(rank, nse, shape, values, indices, perm,
                                    sparse);
 }
+void *convertToMLIRSparseTensorI64(uint64_t rank, uint64_t nse, uint64_t *shape,
+                                   int64_t *values, uint64_t *indices,
+                                   uint64_t *perm, uint8_t *sparse) {
+  return toMLIRSparseTensor<int64_t>(rank, nse, shape, values, indices, perm,
+                                     sparse);
+}
+void *convertToMLIRSparseTensorI32(uint64_t rank, uint64_t nse, uint64_t *shape,
+                                   int32_t *values, uint64_t *indices,
+                                   uint64_t *perm, uint8_t *sparse) {
+  return toMLIRSparseTensor<int32_t>(rank, nse, shape, values, indices, perm,
+                                     sparse);
+}
+void *convertToMLIRSparseTensorI16(uint64_t rank, uint64_t nse, uint64_t *shape,
+                                   int16_t *values, uint64_t *indices,
+                                   uint64_t *perm, uint8_t *sparse) {
+  return toMLIRSparseTensor<int16_t>(rank, nse, shape, values, indices, perm,
+                                     sparse);
+}
+void *convertToMLIRSparseTensorI8(uint64_t rank, uint64_t nse, uint64_t *shape,
+                                  int8_t *values, uint64_t *indices,
+                                  uint64_t *perm, uint8_t *sparse) {
+  return toMLIRSparseTensor<int8_t>(rank, nse, shape, values, indices, perm,
+                                    sparse);
+}
 
 /// Converts a sparse tensor to COO-flavored format expressed using C-style
 /// data structures. The expected output parameters are pointers for these
@@ -1340,6 +1519,26 @@ void convertFromMLIRSparseTensorF32(void *tensor, uint64_t *pRank,
                                     uint64_t *pNse, uint64_t **pShape,
                                     float **pValues, uint64_t **pIndices) {
   fromMLIRSparseTensor<float>(tensor, pRank, pNse, pShape, pValues, pIndices);
+}
+void convertFromMLIRSparseTensorI64(void *tensor, uint64_t *pRank,
+                                    uint64_t *pNse, uint64_t **pShape,
+                                    int64_t **pValues, uint64_t **pIndices) {
+  fromMLIRSparseTensor<int64_t>(tensor, pRank, pNse, pShape, pValues, pIndices);
+}
+void convertFromMLIRSparseTensorI32(void *tensor, uint64_t *pRank,
+                                    uint64_t *pNse, uint64_t **pShape,
+                                    int32_t **pValues, uint64_t **pIndices) {
+  fromMLIRSparseTensor<int32_t>(tensor, pRank, pNse, pShape, pValues, pIndices);
+}
+void convertFromMLIRSparseTensorI16(void *tensor, uint64_t *pRank,
+                                    uint64_t *pNse, uint64_t **pShape,
+                                    int16_t **pValues, uint64_t **pIndices) {
+  fromMLIRSparseTensor<int16_t>(tensor, pRank, pNse, pShape, pValues, pIndices);
+}
+void convertFromMLIRSparseTensorI8(void *tensor, uint64_t *pRank,
+                                   uint64_t *pNse, uint64_t **pShape,
+                                   int8_t **pValues, uint64_t **pIndices) {
+  fromMLIRSparseTensor<int8_t>(tensor, pRank, pNse, pShape, pValues, pIndices);
 }
 
 } // extern "C"

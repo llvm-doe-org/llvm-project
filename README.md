@@ -334,13 +334,17 @@ The most relevant `clang` command-line options are as follows:
     * `-fopenacc` enables OpenACC support.  Unless source-to-source
       mode is enabled as discussed below, Clacc translates OpenACC to
       OpenMP and then compiles the OpenMP.
-    * Without `-fopenmp-targets`, the host is targeted.
+    * Without `-fopenmp-targets` or `--offload-arch`, the host is targeted.
     * `-fopenmp-targets=<triples>` specifies desired offloading
       targets.  So far, the following triples have been tested:
         * `x86_64-pc-linux-gnu` for x86_64.
         * `powerpc64le-ibm-linux-gnu` for Power9.
         * `nvptx64-nvidia-cuda` for NVIDIA GPUs.
         * `amdgcn-amd-amdhsa` for AMD GPUs.
+    * `--offload-arch=<arch>` specifies a desired offloading target
+      architecture, such as `sm_35`.  It is not necessary to specify both
+      `-fopenmp-targets` and `--offload-arch` as one can be determined based on
+      the other.
     * In general, options starting with `-fopenmp-` adjust various
       OpenMP features when compiling the OpenMP translation.  So far,
       only `-fopenmp-targets=<triples>` has been tested.
@@ -353,15 +357,15 @@ The most relevant `clang` command-line options are as follows:
     * `-fopenacc-print=acc-omp` is the same except it prints the
       OpenMP in comments and leaves the original OpenACC uncommented.
     * `-fopenacc` is redundant with any of those options.
-    * Options starting with `-fopenmp-` have not been tested in
-      OpenACC source-to-source mode.
+    * `--offload-arch` and options starting with `-fopenmp-` have not been
+      tested in OpenACC source-to-source mode.
 * `-fopenmp` produces an error diagnostic when OpenACC support is
   enabled in either mode as Clacc currently does not support OpenACC
   and OpenMP in the same source.
 
 For brief descriptions of all OpenACC-related and OpenMP-related
 command-line options, run Clacc's `clang -help` and search for
-`openacc` or `openmp`.  The section "Supported Features" in
+`openacc`, `openmp`, or `offload-arch`.  The section "Supported Features" in
 `clang/README-OpenACC-status.md` also provides a full list of
 OpenACC-related command-line options and cross-references to related
 status and design documentation.

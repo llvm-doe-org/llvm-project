@@ -34,7 +34,7 @@ static cl::opt<uint64_t> ProfileSymbolListCutOff(
              "will be used. This is very useful for performance debugging"));
 
 cl::opt<bool> GenerateMergedBaseProfiles(
-    "generate-merged-base-profiles", cl::init(true), cl::ZeroOrMore,
+    "generate-merged-base-profiles", cl::init(false), cl::ZeroOrMore,
     cl::desc("When generating nested context-sensitive profiles, always "
              "generate extra base profile for function with all its context "
              "profiles merged into it."));
@@ -42,8 +42,8 @@ cl::opt<bool> GenerateMergedBaseProfiles(
 namespace llvm {
 namespace sampleprof {
 bool FunctionSamples::ProfileIsProbeBased = false;
-bool FunctionSamples::ProfileIsCSFlat = false;
-bool FunctionSamples::ProfileIsCSNested = false;
+bool FunctionSamples::ProfileIsCS = false;
+bool FunctionSamples::ProfileIsPreInlined = false;
 bool FunctionSamples::UseMD5 = false;
 bool FunctionSamples::HasUniqSuffix = true;
 bool FunctionSamples::ProfileIsFS = false;
@@ -534,11 +534,6 @@ void CSProfileConverter::convertProfiles(CSProfileConverter::FrameNode &Node) {
       SamplesMap[ChildProfile->getName().str()].getContext().setAttribute(
           ContextDuplicatedIntoBase);
     }
-
-    // Contexts coming with a `ContextShouldBeInlined` attribute indicate this
-    // is a preinliner-computed profile.
-    if (OrigChildContext.hasAttribute(ContextShouldBeInlined))
-      FunctionSamples::ProfileIsCSNested = true;
 
     // Remove the original child profile.
     ProfileMap.erase(OrigChildContext);

@@ -4,6 +4,13 @@
 // ACC_DEVICE_TYPE and ACC_DEVICE_NUM) is checked in devices-init.c assuming
 // these routines are correct as checked here, so don't use those environment
 // variables here.
+//
+// TODO: When there are multiple offload device types (the multitarget sub test
+// suite), we currently do not know how LLVM's implementation selects the
+// default offload device type.  If, one day, we figure out how it's determined,
+// we can reintroduce test coverage for that case by replacing all noMULTI and
+// MULTI prefixes with CHECK below.  See the related todo in lit.cfg for further
+// details.
 
 // DEFINE: %{check}( RUN_ENV %, ND_X86_64 %, ND_PPC64LE %, ND_NVPTX64 %,       \
 // DEFINE:           ND_AMDGCN %, DEV_TYPE_INIT %, ND_DEV_TYPE_INIT %) =       \
@@ -13,7 +20,8 @@
 // DEFINE:     -DDEV_TYPE_INIT=acc_device_%{DEV_TYPE_INIT} -D#DEV_NUM_INIT=0   \
 // DEFINE:     -D#ND_DEV_TYPE_INIT=%{ND_DEV_TYPE_INIT}                         \
 // DEFINE:     -D#ND_NVIDIA=%{ND_NVPTX64} -D#ND_RADEON=%{ND_AMDGCN}            \
-// DEFINE:     -D#ND_X86_64=%{ND_X86_64} -D#ND_PPC64LE=%{ND_PPC64LE}
+// DEFINE:     -D#ND_X86_64=%{ND_X86_64} -D#ND_PPC64LE=%{ND_PPC64LE}           \
+// DEFINE:     -check-prefixes=CHECK,%if-multi<|no>MULTI
 
 // RUN: %clang-acc -o %t.exe %s
 //                RUN_ENV                            ND_X86_64           ND_PPC64LE           ND_NVPTX64           ND_AMDGCN           DEV_TYPE_INIT      ND_DEV_TYPE_INIT
@@ -31,29 +39,34 @@
 #include <stdlib.h>
 #include <string.h>
 
-//  CHECK-NOT:{{.}}
-//      CHECK:initially:
-// CHECK-NEXT:    acc_get_device_type() = [[DEV_TYPE_INIT]]
-// CHECK-NEXT:    acc_get_device_num([[DEV_TYPE_INIT]]) = [[#DEV_NUM_INIT]]
-// CHECK-NEXT:    acc_get_num_devices([[DEV_TYPE_INIT]]) = [[#ND_DEV_TYPE_INIT]]
-// CHECK-NEXT:acc_device_none has 0:
-// CHECK-NEXT:acc_device_host has 1:
-// CHECK-NEXT:    0: num=0, type=acc_device_host, on acc_device_host
-// CHECK-NEXT:acc_device_default has [[#ND_DEV_TYPE_INIT]]:
-// CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on [a-z0-9_]+)+}}
-// CHECK-NEXT:acc_device_current has 1:
-// CHECK-NEXT:    0: num=0, type=[[DEV_TYPE_INIT]], on [[DEV_TYPE_INIT]]
-// CHECK-NEXT:acc_device_nvidia has [[#ND_NVIDIA]]:
-// CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_nvidia, on acc_device_nvidia)*}}
-// CHECK-NEXT:acc_device_radeon has [[#ND_RADEON]]:
-// CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_radeon, on acc_device_radeon)*}}
-// CHECK-NEXT:acc_device_x86_64 has [[#ND_X86_64]]:
-// CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_x86_64, on acc_device_x86_64)*}}
-// CHECK-NEXT:acc_device_ppc64le has [[#ND_PPC64LE]]:
-// CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_ppc64le, on acc_device_ppc64le)*}}
-// CHECK-NEXT:acc_device_not_host has [[#ND_NOT_HOST:ND_NVIDIA + ND_RADEON + ND_X86_64 + ND_PPC64LE]]:
-// CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on [a-z0-9_]+, on acc_device_not_host)*}}
-//  CHECK-NOT:{{.}}
+//    CHECK-NOT:{{.}}
+//        CHECK:initially:
+// noMULTI-NEXT:    acc_get_device_type() = [[DEV_TYPE_INIT]]
+//   MULTI-NEXT:    acc_get_device_type() = {{.*}}
+// noMULTI-NEXT:    acc_get_device_num([[DEV_TYPE_INIT]]) = [[#DEV_NUM_INIT]]
+//   MULTI-NEXT:    acc_get_device_num({{.*}}) = [[#DEV_NUM_INIT]]
+// noMULTI-NEXT:    acc_get_num_devices([[DEV_TYPE_INIT]]) = [[#ND_DEV_TYPE_INIT]]
+//   MULTI-NEXT:    acc_get_num_devices({{.*}}) = {{.*}}
+//   CHECK-NEXT:acc_device_none has 0:
+//   CHECK-NEXT:acc_device_host has 1:
+//   CHECK-NEXT:    0: num=0, type=acc_device_host, on acc_device_host
+// noMULTI-NEXT:acc_device_default has [[#ND_DEV_TYPE_INIT]]:
+//   MULTI-NEXT:acc_device_default has {{.*}}:
+//   CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on [a-z0-9_]+)+}}
+//   CHECK-NEXT:acc_device_current has 1:
+// noMULTI-NEXT:    0: num=0, type=[[DEV_TYPE_INIT]], on [[DEV_TYPE_INIT]]
+//   MULTI-NEXT:    0: num=0, type={{.*}}, on {{.*}}
+//   CHECK-NEXT:acc_device_nvidia has [[#ND_NVIDIA]]:
+//   CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_nvidia, on acc_device_nvidia)*}}
+//   CHECK-NEXT:acc_device_radeon has [[#ND_RADEON]]:
+//   CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_radeon, on acc_device_radeon)*}}
+//   CHECK-NEXT:acc_device_x86_64 has [[#ND_X86_64]]:
+//   CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_x86_64, on acc_device_x86_64)*}}
+//   CHECK-NEXT:acc_device_ppc64le has [[#ND_PPC64LE]]:
+//   CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=acc_device_ppc64le, on acc_device_ppc64le)*}}
+//   CHECK-NEXT:acc_device_not_host has [[#ND_NOT_HOST:ND_NVIDIA + ND_RADEON + ND_X86_64 + ND_PPC64LE]]:
+//   CHECK-SAME:{{([[:space:]]+[0-9]+: num=[0-9]+, type=[a-z0-9_]+, on [a-z0-9_]+, on acc_device_not_host)*}}
+//    CHECK-NOT:{{.}}
 
 static const char *deviceTypeToStr(acc_device_t DevType) {
   switch (DevType) {

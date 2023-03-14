@@ -14,6 +14,7 @@
 #include "llvm/MC/MCParser/MCAsmLexer.h"
 #include "llvm/MC/MCParser/MCParsedAsmOperand.h"
 #include "llvm/MC/MCParser/MCTargetAsmParser.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -42,6 +43,11 @@ class LoongArchAsmParser : public MCTargetAsmParser {
                                uint64_t &ErrorInfo,
                                bool MatchingInlineAsm) override;
 
+  unsigned checkTargetMatchPredicate(MCInst &Inst) override;
+
+  unsigned validateTargetOperandClass(MCParsedAsmOperand &Op,
+                                      unsigned Kind) override;
+
   bool generateImmOutOfRangeError(OperandVector &Operands, uint64_t ErrorInfo,
                                   int64_t Lower, int64_t Upper, Twine Msg);
 
@@ -62,6 +68,7 @@ class LoongArchAsmParser : public MCTargetAsmParser {
 public:
   enum LoongArchMatchResultTy {
     Match_Dummy = FIRST_TARGET_MATCH_RESULT_TY,
+    Match_RequiresMsbNotLessThanLsb,
 #define GET_OPERAND_DIAGNOSTIC_TYPES
 #include "LoongArchGenAsmMatcher.inc"
 #undef GET_OPERAND_DIAGNOSTIC_TYPES
@@ -110,6 +117,7 @@ public:
   bool isReg() const override { return Kind == KindTy::Register; }
   bool isImm() const override { return Kind == KindTy::Immediate; }
   bool isMem() const override { return false; }
+  void setReg(MCRegister PhysReg) { Reg.RegNum = PhysReg; }
 
   static bool evaluateConstantImm(const MCExpr *Expr, int64_t &Imm) {
     if (auto CE = dyn_cast<MCConstantExpr>(Expr)) {
@@ -245,9 +253,22 @@ public:
 #define GET_MNEMONIC_SPELL_CHECKER
 #include "LoongArchGenAsmMatcher.inc"
 
+static MCRegister convertFPR32ToFPR64(MCRegister Reg) {
+  assert(Reg >= LoongArch::F0 && Reg <= LoongArch::F31 && "Invalid register");
+  return Reg - LoongArch::F0 + LoongArch::F0_64;
+}
+
+// Attempts to match Name as a register (either using the default name or
+// alternative ABI names), setting RegNo to the matching register. Upon
+// failure, returns true and sets RegNo to 0.
 static bool matchRegisterNameHelper(MCRegister &RegNo, StringRef Name) {
   RegNo = MatchRegisterName(Name);
-
+  // The 32-bit and 64-bit FPRs have the same asm name. Check that the initial
+  // match always matches the 32-bit variant, and not the 64-bit one.
+  assert(!(RegNo >= LoongArch::F0_64 && RegNo <= LoongArch::F31_64));
+  // The default FPR register class is based on the tablegen enum ordering.
+  static_assert(LoongArch::F0 < LoongArch::F0_64,
+                "FPR matching must be updated");
   if (RegNo == LoongArch::NoRegister)
     RegNo = MatchRegisterAltName(Name);
 
@@ -351,6 +372,51 @@ bool LoongArchAsmParser::processInstruction(MCInst &Inst, SMLoc IDLoc,
   return false;
 }
 
+unsigned LoongArchAsmParser::checkTargetMatchPredicate(MCInst &Inst) {
+  switch (Inst.getOpcode()) {
+  default:
+    break;
+  case LoongArch::BSTRINS_W:
+  case LoongArch::BSTRINS_D:
+  case LoongArch::BSTRPICK_W:
+  case LoongArch::BSTRPICK_D: {
+    unsigned Opc = Inst.getOpcode();
+    const signed Msb =
+        (Opc == LoongArch::BSTRINS_W || Opc == LoongArch::BSTRINS_D)
+            ? Inst.getOperand(3).getImm()
+            : Inst.getOperand(2).getImm();
+    const signed Lsb =
+        (Opc == LoongArch::BSTRINS_W || Opc == LoongArch::BSTRINS_D)
+            ? Inst.getOperand(4).getImm()
+            : Inst.getOperand(3).getImm();
+    if (Msb < Lsb)
+      return Match_RequiresMsbNotLessThanLsb;
+    return Match_Success;
+  }
+  }
+
+  return Match_Success;
+}
+
+unsigned
+LoongArchAsmParser::validateTargetOperandClass(MCParsedAsmOperand &AsmOp,
+                                               unsigned Kind) {
+  LoongArchOperand &Op = static_cast<LoongArchOperand &>(AsmOp);
+  if (!Op.isReg())
+    return Match_InvalidOperand;
+
+  MCRegister Reg = Op.getReg();
+  // As the parser couldn't differentiate an FPR32 from an FPR64, coerce the
+  // register from FPR32 to FPR64 if necessary.
+  if (LoongArchMCRegisterClasses[LoongArch::FPR32RegClassID].contains(Reg) &&
+      Kind == MCK_FPR64) {
+    Op.setReg(convertFPR32ToFPR64(Reg));
+    return Match_Success;
+  }
+
+  return Match_InvalidOperand;
+}
+
 bool LoongArchAsmParser::generateImmOutOfRangeError(
     OperandVector &Operands, uint64_t ErrorInfo, int64_t Lower, int64_t Upper,
     Twine Msg = "immediate must be an integer in the range") {
@@ -418,6 +484,11 @@ bool LoongArchAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   switch (Result) {
   default:
     break;
+  case Match_RequiresMsbNotLessThanLsb: {
+    SMLoc ErrorStart = Operands[3]->getStartLoc();
+    return Error(ErrorStart, "msb is less than lsb",
+                 SMRange(ErrorStart, Operands[4]->getEndLoc()));
+  }
   case Match_InvalidUImm2:
     return generateImmOutOfRangeError(Operands, ErrorInfo, /*Lower=*/0,
                                       /*Upper=*/(1 << 2) - 1);

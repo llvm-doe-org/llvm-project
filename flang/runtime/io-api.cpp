@@ -1176,7 +1176,7 @@ bool IONAME(InputCharacter)(
 }
 
 bool IONAME(InputAscii)(Cookie cookie, char *x, std::size_t length) {
-  return IONAME(InputCharacter(cookie, x, length, 1));
+  return IONAME(InputCharacter)(cookie, x, length, 1);
 }
 
 bool IONAME(OutputLogical)(Cookie cookie, bool truth) {
@@ -1280,6 +1280,9 @@ template <typename INT>
 static enum Iostat CheckUnitNumberInRangeImpl(INT unit, bool handleError,
     char *ioMsg, std::size_t ioMsgLength, const char *sourceFile,
     int sourceLine) {
+  static_assert(sizeof(INT) >= sizeof(ExternalUnit),
+      "only intended to be used when the INT to ExternalUnit conversion is "
+      "narrowing");
   if (unit != static_cast<ExternalUnit>(unit)) {
     Terminator oom{sourceFile, sourceLine};
     IoErrorHandler errorHandler{oom};
