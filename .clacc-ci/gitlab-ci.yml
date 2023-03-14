@@ -384,8 +384,10 @@ leconte (cleanup):
       artifacts: false
     - job: leconte (vv)
       artifacts: false
+      optional: true
     - job: leconte (kokkos)
       artifacts: false
+      optional: true
 
 oswald02 (cleanup):
   extends: [.oswald02, .cleanup]
@@ -394,8 +396,10 @@ oswald02 (cleanup):
       artifacts: false
     - job: oswald02 (vv)
       artifacts: false
+      optional: true
     - job: oswald02 (kokkos)
       artifacts: false
+      optional: true
 
 explorer (cleanup):
   extends: [.explorer, .cleanup]
@@ -404,8 +408,10 @@ explorer (cleanup):
       artifacts: false
     - job: explorer (vv)
       artifacts: false
+      optional: true
     - job: explorer (kokkos)
       artifacts: false
+      optional: true
 
 milan (cleanup):
   extends: [.milan, .cleanup]
@@ -414,8 +420,10 @@ milan (cleanup):
       artifacts: false
     - job: milan (vv)
       artifacts: false
+      optional: true
     - job: milan (kokkos)
       artifacts: false
+      optional: true
 
 no-asserts (cleanup):
   extends: [.no-asserts, .cleanup]
@@ -424,8 +432,10 @@ no-asserts (cleanup):
       artifacts: false
     - job: no-asserts (vv)
       artifacts: false
+      optional: true
     - job: no-asserts (kokkos)
       artifacts: false
+      optional: true
 
 debug (cleanup):
   extends: [.debug, .cleanup]
@@ -434,8 +444,10 @@ debug (cleanup):
       artifacts: false
     - job: debug (vv)
       artifacts: false
+      optional: true
     - job: debug (kokkos)
       artifacts: false
+      optional: true
 
 leconte (manual cleanup):
   extends: [.leconte, .manual-cleanup]
@@ -768,6 +780,15 @@ debug (test):
       artifacts: false
 
 #-------------------------------------------------------------------------------
+# Clacc-only jobs.
+#-------------------------------------------------------------------------------
+
+.clacc:
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ '^\(clacc\|jdenny-openacc\)' &&
+          $CI_COMMIT_BRANCH !~ '^clacc/llvm.org-ci/'
+
+#-------------------------------------------------------------------------------
 # vv
 #
 # Clone llvm-test-suite.git and the OpenACC V&V suite, and run the latter via
@@ -775,7 +796,7 @@ debug (test):
 #-------------------------------------------------------------------------------
 
 .vv:
-  extends: .non-utility
+  extends: [.non-utility, .clacc]
   stage: vv
   script:
     # Systems without a GPU omit -fopenmp-targets, and this causes linking
@@ -957,7 +978,7 @@ debug (vv):
 #-------------------------------------------------------------------------------
 
 .kokkos:
-  extends: .non-utility
+  extends: [.non-utility, .clacc]
   stage: kokkos
   script:
     # Systems without a GPU omit -fopenmp-targets, and this causes linking
