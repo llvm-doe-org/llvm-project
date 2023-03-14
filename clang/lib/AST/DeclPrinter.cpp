@@ -331,7 +331,8 @@ void DeclPrinter::prettyPrintPragmas(Decl *D) {
         // prints it to avoid merge conflicts in tests.  TODO: However, we need
         // to come to terms with why inherited attributes should be printed as
         // that seems to indicate they weren't specified in the original source.
-        // See related todo in DeclPrinter::VisitDeclContext.
+        // See related todo in DeclPrinter::VisitFunctionTemplateDecl and
+        // DeclPrinter::VisitDeclContext.
       }
       switch (A->getKind()) {
 #define ATTR(X)
@@ -573,7 +574,8 @@ void DeclPrinter::VisitDeclContext(DeclContext *DC, bool Indent) {
       // prints it to avoid merge conflicts in tests.  TODO: However, we need
       // to come to terms with why inherited attributes should be printed as
       // that seems to indicate they weren't specified in the original source.
-      // See related todo in DeclPrinter::prettyPrintPragmas.
+      // See related todos in DeclPrinter::VisitFunctionTemplateDecl and
+      // DeclPrinter::prettyPrintPragmas.
       OpenACCPrintKind PrintMode = OpenACCPrint_OMP;
       if (Attr->getIsOpenACCTranslation())
         PrintMode =
@@ -1262,8 +1264,30 @@ void DeclPrinter::VisitFunctionTemplateDecl(FunctionTemplateDecl *D) {
   VisitRedeclarableTemplateDecl(D);
   // Declare target attribute is special one, natural spelling for the pragma
   // assumes "ending" construct so print it here.
-  if (D->getTemplatedDecl()->hasAttr<OMPDeclareTargetDeclAttr>())
-    Out << "#pragma omp end declare target\n";
+  if (OMPDeclareTargetDeclAttr *Attr =
+          D->getTemplatedDecl()->getAttr<OMPDeclareTargetDeclAttr>()) {
+    // If this isn't an OpenACC translation, print exactly the way upstream
+    // prints it to avoid merge conflicts in tests.  TODO: However, we need
+    // to come to terms with why inherited attributes should be printed as
+    // that seems to indicate they weren't specified in the original source.
+    // See related todos in DeclPrinter::VisitDeclContext and
+    // DeclPrinter::prettyPrintPragmas.
+    OpenACCPrintKind PrintMode = OpenACCPrint_OMP;
+    if (Attr->getIsOpenACCTranslation())
+      PrintMode = Attr->isInherited() ? OpenACCPrint_ACC : Policy.OpenACCPrint;
+    switch (PrintMode) {
+    case OpenACCPrint_ACC_OMP:
+      this->Indent() << "// #pragma omp end declare target\n";
+      break;
+    case OpenACCPrint_OMP:
+    case OpenACCPrint_OMP_ACC:
+    case OpenACCPrint_OMP_HEAD:
+      this->Indent() << "#pragma omp end declare target\n";
+      break;
+    case OpenACCPrint_ACC:
+      break;
+    }
+  }
 
   // Never print "instantiations" for deduction guides (they don't really
   // have them).

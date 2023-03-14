@@ -2,6 +2,9 @@
 //
 // Clang used to report an error diagnostic claiming the routine directive
 // wasn't followed by a lone function prototype or definition.
+//
+// Clang also used to miss the "omp end declare target" in source-to-source
+// mode.
 
 // REDEFINE: %{dmp:fc:args} = -strict-whitespace
 // REDEFINE: %{exe:fc:args} = -strict-whitespace -match-full-lines \
@@ -78,8 +81,7 @@ private:
   //    PRT-NEXT:       arr[i] += {{(this->)?}}inc;
   //    PRT-NEXT:   }
   //  PRT-O-NEXT:   {{^ *}}#pragma omp end declare target{{$}}
-  // FIXME: This is missing:
-  // XRT-AO-NEXT:   {{^ *}}// #pragma omp end declare target{{$}}
+  // PRT-AO-NEXT:   {{^ *}}// #pragma omp end declare target{{$}}
   //
   //      EXE:arr[0]=10
   // EXE-NEXT:arr[1]=11
