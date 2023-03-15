@@ -785,8 +785,8 @@ debug (test):
 
 .clacc:
   rules:
-    - if: $CI_COMMIT_BRANCH =~ '^\(clacc\|jdenny-openacc\)' &&
-          $CI_COMMIT_BRANCH !~ '^clacc/llvm.org-ci/'
+    - if: $CI_COMMIT_BRANCH =~ /^(clacc|jdenny-openacc)/ &&
+          $CI_COMMIT_BRANCH !~ /^clacc\/llvm.org-ci\//
 
 #-------------------------------------------------------------------------------
 # vv
