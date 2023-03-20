@@ -1012,7 +1012,7 @@ private:
         I.getParent()->getFirstInsertionPt() == I.getParent()->end())
       return PI.setAborted(&I);
 
-    // TODO: We could use SimplifyInstruction here to fold PHINodes and
+    // TODO: We could use simplifyInstruction here to fold PHINodes and
     // SelectInsts. However, doing so requires to change the current
     // dead-operand-tracking mechanism. For instance, suppose neither loading
     // from %U nor %other traps. Then "load (select undef, %U, %other)" does not
@@ -1983,12 +1983,21 @@ static bool isIntegerWideningViableForSlice(const Slice &S,
   uint64_t RelBegin = S.beginOffset() - AllocBeginOffset;
   uint64_t RelEnd = S.endOffset() - AllocBeginOffset;
 
+  Use *U = S.getUse();
+
+  // Lifetime intrinsics operate over the whole alloca whose sizes are usually
+  // larger than other load/store slices (RelEnd > Size). But lifetime are
+  // always promotable and should not impact other slices' promotability of the
+  // partition.
+  if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(U->getUser())) {
+    if (II->isLifetimeStartOrEnd() || II->isDroppable())
+      return true;
+  }
+
   // We can't reasonably handle cases where the load or store extends past
   // the end of the alloca's type and into its padding.
   if (RelEnd > Size)
     return false;
-
-  Use *U = S.getUse();
 
   if (LoadInst *LI = dyn_cast<LoadInst>(U->getUser())) {
     if (LI->isVolatile())
@@ -2044,9 +2053,6 @@ static bool isIntegerWideningViableForSlice(const Slice &S,
       return false;
     if (!S.isSplittable())
       return false; // Skip any unsplittable intrinsics.
-  } else if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(U->getUser())) {
-    if (!II->isLifetimeStartOrEnd() && !II->isDroppable())
-      return false;
   } else {
     return false;
   }
@@ -2880,7 +2886,7 @@ private:
     assert((IsDest && II.getRawDest() == OldPtr) ||
            (!IsDest && II.getRawSource() == OldPtr));
 
-    MaybeAlign SliceAlign = getSliceAlign();
+    Align SliceAlign = getSliceAlign();
 
     // For unsplit intrinsics, we simply modify the source and destination
     // pointers in place. This isn't just an optimization, it is a matter of

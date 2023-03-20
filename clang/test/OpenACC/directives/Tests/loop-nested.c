@@ -50,7 +50,7 @@ int main() {
   // Loop nest is entirely sequential.
   //--------------------------------------------------
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "seq > seq > seq\n"
   // PRT-LABEL: printf("seq > seq > seq\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: seq > seq > seq
@@ -176,7 +176,7 @@ int main() {
   // Loop nest has explicit gang only.
   //--------------------------------------------------
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "seq > gang > seq\n"
   // PRT-LABEL: printf("seq > gang > seq\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: seq > gang > seq
@@ -292,7 +292,7 @@ int main() {
   // Loop nest has explicit worker only.
   //--------------------------------------------------
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "seq > worker > seq\n"
   // PRT-LABEL: printf("seq > worker > seq\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: seq > worker > seq
@@ -417,7 +417,7 @@ int main() {
   // Loop nest has explicit vector only.
   //--------------------------------------------------
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "seq > vector > seq\n"
   // PRT-LABEL: printf("seq > vector > seq\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: seq > vector > seq
@@ -542,7 +542,7 @@ int main() {
   // Loop nest has explicit gang and worker.
   //--------------------------------------------------
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "gang > seq > worker\n"
   // PRT-LABEL: printf("gang > seq > worker\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: gang > seq > worker
@@ -658,7 +658,7 @@ int main() {
   }
 #endif
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "seq > gang worker > seq\n"
   // PRT-LABEL: printf("seq > gang worker > seq\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: seq > gang worker > seq
@@ -783,7 +783,7 @@ int main() {
   // Loop nest has explicit gang and vector.
   //--------------------------------------------------
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "gang > seq > vector\n"
   // PRT-LABEL: printf("gang > seq > vector\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: gang > seq > vector
@@ -899,7 +899,7 @@ int main() {
   }
 #endif
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "seq > gang vector > seq\n"
   // PRT-LABEL: printf("seq > gang vector > seq\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: seq > gang vector > seq
@@ -1024,7 +1024,7 @@ int main() {
   // Loop nest has explicit worker and vector.
   //--------------------------------------------------
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "worker > seq > vector\n"
   // PRT-LABEL: printf("worker > seq > vector\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: worker > seq > vector
@@ -1149,7 +1149,7 @@ int main() {
   }
 #endif
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "seq > worker vector > seq\n"
   // PRT-LABEL: printf("seq > worker vector > seq\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: seq > worker vector > seq
@@ -1283,7 +1283,7 @@ int main() {
   // Loop nest has explicit gang, worker, and vector.
   //--------------------------------------------------
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "gang > worker > vector\n"
   // PRT-LABEL: printf("gang > worker > vector\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: gang > worker > vector
@@ -1400,7 +1400,7 @@ int main() {
   }
 #endif
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "gang worker > seq > vector\n"
   // PRT-LABEL: printf("gang worker > seq > vector\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: gang worker > seq > vector
@@ -1526,7 +1526,7 @@ int main() {
   }
 #endif
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "gang > seq > worker vector\n"
   // PRT-LABEL: printf("gang > seq > worker vector\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: gang > seq > worker vector
@@ -1651,7 +1651,7 @@ int main() {
   }
 #endif
 
-  // DMP_LABEL: CallExpr
+  // DMP-LABEL: StringLiteral {{.*}} "seq > gang worker vector > seq\n"
   // PRT-LABEL: printf("seq > gang worker vector > seq\n");
   //   EXE-NOT: {{.}}
   // EXE-LABEL: seq > gang worker vector > seq

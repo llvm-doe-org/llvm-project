@@ -12,7 +12,7 @@ func.func @m16n8k16_fp16(%arg0: vector<4x2xf16>, %arg1: vector<2x2xf16>, %arg2: 
   // CHECK: llvm.extractvalue %{{.*}}[1] : !llvm.array<2 x vector<2xf16>>
   // CHECK-NOT llvm.extractvalue
   // CHECK: [[d:%.+]] = nvvm.mma.sync
-  // CHECK-SAME: shape = {k = 16 : i32, m = 16 : i32, n  = 8 : i32}
+  // CHECK-SAME: shape = #nvvm.shape<m = 16, n = 8, k = 16>
   %d = nvgpu.mma.sync (%arg0, %arg1, %arg2) {mmaShape = [16, 8, 16]} : (vector<4x2xf16>, vector<2x2xf16>, vector<2x2xf16>) -> vector<2x2xf16>    
   // CHECK-DAG: llvm.extractvalue [[d]][0] : !llvm.struct<(vector<2xf16>, vector<2xf16>)>    
   // CHECK-DAG: llvm.extractvalue [[d]][1] : !llvm.struct<(vector<2xf16>, vector<2xf16>)>
@@ -30,7 +30,7 @@ func.func @m16n8k16_fp16(%arg0: vector<4x2xf16>, %arg1: vector<2x2xf16>, %arg2: 
 func.func @m16n8k16_fp16_fp32(%arg0: vector<4x2xf16>, %arg1: vector<2x2xf16>, %arg2: vector<2x2xf32>) -> vector<2x2xf32> {
   // We just need to check the mma instruction and the manipulatin of the result.
   // CHECK: [[d:%.+]] = nvvm.mma.sync
-  // CHECK-SAME: shape = {k = 16 : i32, m = 16 : i32, n  = 8 : i32}
+  // CHECK-SAME: shape = #nvvm.shape<m = 16, n = 8, k = 16>
   // CHECK-SAME: (vector<2xf16>, vector<2xf16>, f32) -> !llvm.struct<(f32, f32, f32, f32)>
   %d = nvgpu.mma.sync (%arg0, %arg1, %arg2) {mmaShape = [16, 8, 16]} : (vector<4x2xf16>, vector<2x2xf16>, vector<2x2xf32>) -> vector<2x2xf32>    
   // CHECK: [[undef:%.+]] = llvm.mlir.undef : vector<2xf32>
@@ -61,7 +61,7 @@ func.func @m16n8k8_fp16(%arg0: vector<2x2xf16>, %arg1: vector<1x2xf16>, %arg2: v
   // CHECK: llvm.extractvalue %{{.*}}[1] : !llvm.array<2 x vector<2xf16>>
   // CHECK-NOT llvm.extractvalue
   // CHECK: [[d:%.+]] = nvvm.mma.sync
-  // CHECK-SAME: shape = {k = 8 : i32, m = 16 : i32, n  = 8 : i32}
+  // CHECK-SAME: shape = #nvvm.shape<m = 16, n = 8, k = 8>
   %d = nvgpu.mma.sync (%arg0, %arg1, %arg2) {mmaShape = [16, 8, 8]} : (vector<2x2xf16>, vector<1x2xf16>, vector<2x2xf16>) -> vector<2x2xf16>    
   // CHECK-DAG: llvm.extractvalue [[d]][0] : !llvm.struct<(vector<2xf16>, vector<2xf16>)>    
   // CHECK-DAG: llvm.extractvalue [[d]][1] : !llvm.struct<(vector<2xf16>, vector<2xf16>)>
@@ -95,8 +95,56 @@ func.func @m16n8k32_int8(%arg0: vector<4x4xi8>, %arg1: vector<2x4xi8>, %arg2: ve
   // CHECK-SAME: intOverflowBehavior = #nvvm.mma_int_overflow<satfinite>
   // CHECK-SAME: multiplicandAPtxType = #nvvm.mma_type<s8>
   // CHECK-SAME: multiplicandBPtxType = #nvvm.mma_type<s8>
-  // CHECK-SAME: shape = {k = 32 : i32, m = 16 : i32, n = 8 : i32}
+  // CHECK-SAME: shape = #nvvm.shape<m = 16, n = 8, k = 32>
   %d = nvgpu.mma.sync (%arg0, %arg1, %arg2) {mmaShape = [16, 8, 32]} : (vector<4x4xi8>, vector<2x4xi8>, vector<2x2xi32>) -> vector<2x2xi32>
+  return %d : vector<2x2xi32>
+}
+
+// -----
+
+// CHECK-LABEL: @m16n8k32_i4
+func.func @m16n8k32_i4(%arg0: vector<2x8xi4>, %arg1: vector<1x8xi4>, %arg2: vector<2x2xi32>) -> vector<2x2xi32> {
+  // CHECK: [[el:%.+]] = llvm.extractvalue %{{.*}}[{{.*}}] : !llvm.array<2 x vector<8xi4>>
+  // CHECK: llvm.bitcast [[el]] : vector<8xi4> to i32
+  // CHECK: [[el:%.+]] = llvm.extractvalue %{{.*}}[{{.*}}] : !llvm.array<2 x vector<8xi4>>
+  // CHECK: llvm.bitcast [[el]] : vector<8xi4> to i32    
+  // CHECK: [[el:%.+]] = llvm.extractvalue %{{.*}}[{{.*}}] : !llvm.array<1 x vector<8xi4>>
+  // CHECK: llvm.bitcast [[el]] : vector<8xi4> to i32  
+  // CHECK: [[el:%.+]] = llvm.extractvalue %{{.*}}[{{.*}}] : !llvm.array<2 x vector<2xi32>>
+  // CHECK: [[el:%.+]] = llvm.extractvalue %{{.*}}[{{.*}}] : !llvm.array<2 x vector<2xi32>>
+  // CHECK: [[d:%.+]] = nvvm.mma.sync
+  // CHECK-SAME: intOverflowBehavior = #nvvm.mma_int_overflow<satfinite>
+  // CHECK-SAME: multiplicandAPtxType = #nvvm.mma_type<s4>
+  // CHECK-SAME: multiplicandBPtxType = #nvvm.mma_type<s4>
+  // CHECK-SAME: shape = #nvvm.shape<m = 16, n = 8, k = 32>
+  %d = nvgpu.mma.sync (%arg0, %arg1, %arg2) {mmaShape = [16, 8, 32]} : (vector<2x8xi4>, vector<1x8xi4>, vector<2x2xi32>) -> vector<2x2xi32>
+  return %d : vector<2x2xi32>
+}
+
+// -----
+
+// CHECK-LABEL: @m16n8k64_i4
+func.func @m16n8k64_i4(%arg0: vector<4x8xi4>, %arg1: vector<2x8xi4>, %arg2: vector<2x2xi32>) -> vector<2x2xi32> {
+  // CHECK: [[el:%.+]] = llvm.extractvalue %{{.*}}[{{.*}}] : !llvm.array<4 x vector<8xi4>>
+  // CHECK: llvm.bitcast [[el]] : vector<8xi4> to i32
+  // CHECK: [[el:%.+]] = llvm.extractvalue %{{.*}}[{{.*}}] : !llvm.array<4 x vector<8xi4>>
+  // CHECK: llvm.bitcast [[el]] : vector<8xi4> to i32
+  // CHECK: [[el:%.+]] = llvm.extractvalue %{{.*}}[{{.*}}] : !llvm.array<4 x vector<8xi4>>
+  // CHECK: llvm.bitcast [[el]] : vector<8xi4> to i32
+  // CHECK: [[el:%.+]] = llvm.extractvalue %{{.*}}[{{.*}}] : !llvm.array<4 x vector<8xi4>>
+  // CHECK: llvm.bitcast [[el]] : vector<8xi4> to i32
+  // CHECK: [[el:%.+]] = llvm.extractvalue %{{.*}}[{{.*}}] : !llvm.array<2 x vector<8xi4>>
+  // CHECK: llvm.bitcast [[el]] : vector<8xi4> to i32
+  // CHECK: [[el:%.+]] = llvm.extractvalue %{{.*}}[{{.*}}] : !llvm.array<2 x vector<8xi4>>
+  // CHECK: llvm.bitcast [[el]] : vector<8xi4> to i32
+  // CHECK: [[el:%.+]] = llvm.extractvalue %{{.*}}[{{.*}}] : !llvm.array<2 x vector<2xi32>>
+  // CHECK: [[el:%.+]] = llvm.extractvalue %{{.*}}[{{.*}}] : !llvm.array<2 x vector<2xi32>>
+  // CHECK: [[d:%.+]] = nvvm.mma.sync
+  // CHECK-SAME: intOverflowBehavior = #nvvm.mma_int_overflow<satfinite>
+  // CHECK-SAME: multiplicandAPtxType = #nvvm.mma_type<s4>
+  // CHECK-SAME: multiplicandBPtxType = #nvvm.mma_type<s4>
+  // CHECK-SAME: shape = #nvvm.shape<m = 16, n = 8, k = 64>
+  %d = nvgpu.mma.sync (%arg0, %arg1, %arg2) {mmaShape = [16, 8, 64]} : (vector<4x8xi4>, vector<2x8xi4>, vector<2x2xi32>) -> vector<2x2xi32>
   return %d : vector<2x2xi32>
 }
 
@@ -108,7 +156,7 @@ func.func @m8n8k4_f64(%arg0: vector<1x1xf64>, %arg1: vector<1x1xf64>, %arg2: vec
   // CHECK: llvm.extractvalue
   // CHECK: llvm.extractvalue
   // CHECK: [[d:%.+]] = nvvm.mma.sync A[{{%.+}}] B[{{%.+}}] C[{{%.+}}, {{%.+}}]
-  // CHECK-SAME: shape = {k = 4 : i32, m = 8 : i32, n = 8 : i32}
+  // CHECK-SAME: shape = #nvvm.shape<m = 8, n = 8, k = 4>
   %d = nvgpu.mma.sync (%arg0, %arg1, %arg2) {mmaShape = [8, 8, 4]} : (vector<1x1xf64>, vector<1x1xf64>, vector<1x2xf64>) -> vector<1x2xf64>
   // CHECK: llvm.mlir.undef : vector<2xf64>
   // CHECK-DAG: llvm.extractvalue [[d]][0] : !llvm.struct<(f64, f64)>    
@@ -169,7 +217,7 @@ func.func @m16n8k4_tf32(%arg0: vector<2x1xf32>, %arg1: vector<1x1xf32>, %arg2: v
   // CHECK: [[d:%.+]] = nvvm.mma.sync A[{{%.+}}, {{%.+}}] B[{{%.+}}] C[{{%.+}}, {{%.+}}, {{%.+}}, {{%.+}}]
   // CHECK-SAME: multiplicandAPtxType = #nvvm.mma_type<tf32>
   // CHECK-SAME: multiplicandBPtxType = #nvvm.mma_type<tf32>
-  // CHECK-SAME: shape = {k = 4 : i32, m = 16 : i32, n = 8 : i32}
+  // CHECK-SAME: shape = #nvvm.shape<m = 16, n = 8, k = 4>
   // CHECK-SAME: -> !llvm.struct<(f32, f32, f32, f32)>  
   %d = nvgpu.mma.sync (%arg0, %arg1, %arg2) {mmaShape = [16, 8, 4]} : (vector<2x1xf32>, vector<1x1xf32>, vector<4x1xf32>) -> vector<4x1xf32>  
   // CHECK: [[el:%.+]] = llvm.extractvalue [[d]][0]
@@ -217,5 +265,30 @@ func.func @async_cp(
   // CHECK: nvvm.cp.async.shared.global %{{.*}}, %{{.*}}, 16 {bypass_l1}
   %2 = nvgpu.device_async_copy %src[%i, %i], %dst[%i, %i, %i], 4 {bypassL1}: memref<128x128xf32> to memref<3x16x128xf32, 3>
   return
+}
+
+// -----
+
+// CHECK-LABEL: @async_cp_i4(
+// CHECK-SAME: %[[IDX:[a-zA-Z0-9_]+]]: index)
+func.func @async_cp_i4(
+  %src: memref<128x64xi4>, %dst: memref<128x128xi4, 3>, %i : index) -> !nvgpu.device.async.token {
+  // CHECK: %[[IDX1:.*]] = builtin.unrealized_conversion_cast %[[IDX]] : index to i64
+  // CHECK-DAG: %[[BASEDST:.*]] = llvm.extractvalue %{{.*}}[1] : !llvm.struct<(ptr<i4, 3>, ptr<i4, 3>, i64, array<2 x i64>, array<2 x i64>)>
+  // CHECK-DAG: %[[S0:.*]] = llvm.mlir.constant(128 : index) : i64
+  // CHECK-DAG: %[[LI:.*]] = llvm.mul %[[IDX1]], %[[S0]] : i64    
+  // CHECK-DAG: %[[FI1:.*]] = llvm.add %[[LI]], %[[IDX1]] : i64
+  // CHECK-DAG: %[[ADDRESSDST:.*]] = llvm.getelementptr %[[BASEDST]][%[[FI1]]] : (!llvm.ptr<i4, 3>, i64) -> !llvm.ptr<i4, 3>
+  // CHECK-DAG: %[[CAST0:.*]] = llvm.bitcast %[[ADDRESSDST]] : !llvm.ptr<i4, 3> to !llvm.ptr<i8, 3>
+  // CHECK-DAG: %[[BASESRC:.*]] = llvm.extractvalue %{{.*}}[1] : !llvm.struct<(ptr<i4>, ptr<i4>, i64, array<2 x i64>, array<2 x i64>)>
+  // CHECK-DAG: %[[S2:.*]] = llvm.mlir.constant(64 : index) : i64
+  // CHECK-DAG: %[[FI2:.*]] = llvm.mul %[[IDX1]], %[[S2]]  : i64
+  // CHECK-DAG: %[[FI3:.*]] = llvm.add %[[FI2]], %[[IDX1]]  : i64
+  // CHECK-DAG: %[[ADDRESSSRC:.*]] = llvm.getelementptr %[[BASESRC]][%[[FI3]]] : (!llvm.ptr<i4>, i64) -> !llvm.ptr<i4>
+  // CHECK-DAG: %[[CAST1:.*]] = llvm.bitcast %[[ADDRESSSRC]] : !llvm.ptr<i4> to !llvm.ptr<i8>
+  // CHECK-DAG: %[[CAST2:.*]] = llvm.addrspacecast %[[CAST1]] : !llvm.ptr<i8> to !llvm.ptr<i8, 1>
+  // CHECK-DAG: nvvm.cp.async.shared.global %[[CAST0]], %[[CAST2]], 16
+  %0 = nvgpu.device_async_copy %src[%i, %i], %dst[%i, %i], 32 : memref<128x64xi4> to memref<128x128xi4, 3>
+  return %0 : !nvgpu.device.async.token
 }
 

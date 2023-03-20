@@ -67,8 +67,9 @@ static ToolChain::RTTIMode CalculateRTTIMode(const ArgList &Args,
       return ToolChain::RM_Disabled;
   }
 
-  // -frtti is default, except for the PS4.
-  return (Triple.isPS4()) ? ToolChain::RM_Disabled : ToolChain::RM_Enabled;
+  // -frtti is default, except for the PS4/PS5 and DriverKit.
+  bool NoRTTI = Triple.isPS() || Triple.isDriverKit();
+  return NoRTTI ? ToolChain::RM_Disabled : ToolChain::RM_Enabled;
 }
 
 ToolChain::ToolChain(const Driver &D, const llvm::Triple &T,
@@ -103,6 +104,34 @@ bool ToolChain::useIntegratedAs() const {
   return Args.hasFlag(options::OPT_fintegrated_as,
                       options::OPT_fno_integrated_as,
                       IsIntegratedAssemblerDefault());
+}
+
+bool ToolChain::useIntegratedBackend() const {
+  assert(
+      ((IsIntegratedBackendDefault() && IsIntegratedBackendSupported()) ||
+       (!IsIntegratedBackendDefault() || IsNonIntegratedBackendSupported())) &&
+      "(Non-)integrated backend set incorrectly!");
+
+  bool IBackend = Args.hasFlag(options::OPT_fintegrated_objemitter,
+                               options::OPT_fno_integrated_objemitter,
+                               IsIntegratedBackendDefault());
+
+  // Diagnose when integrated-objemitter options are not supported by this
+  // toolchain.
+  unsigned DiagID;
+  if ((IBackend && !IsIntegratedBackendSupported()) ||
+      (!IBackend && !IsNonIntegratedBackendSupported()))
+    DiagID = clang::diag::err_drv_unsupported_opt_for_target;
+  else
+    DiagID = clang::diag::warn_drv_unsupported_opt_for_target;
+  Arg *A = Args.getLastArg(options::OPT_fno_integrated_objemitter);
+  if (A && !IsNonIntegratedBackendSupported())
+    D.Diag(DiagID) << A->getAsString(Args) << Triple.getTriple();
+  A = Args.getLastArg(options::OPT_fintegrated_objemitter);
+  if (A && !IsIntegratedBackendSupported())
+    D.Diag(DiagID) << A->getAsString(Args) << Triple.getTriple();
+
+  return IBackend;
 }
 
 bool ToolChain::useRelaxRelocations() const {
@@ -913,6 +942,14 @@ void ToolChain::addExternCSystemIncludeIfExists(const ArgList &DriverArgs,
   }
 }
 
+/*static*/ std::string ToolChain::concat(StringRef Path, const Twine &A,
+                                         const Twine &B, const Twine &C,
+                                         const Twine &D) {
+  SmallString<128> Result(Path);
+  llvm::sys::path::append(Result, llvm::sys::path::Style::posix, A, B, C, D);
+  return std::string(Result);
+}
+
 std::string ToolChain::detectLibcxxVersion(StringRef IncludePath) const {
   std::error_code EC;
   int MaxVersion = 0;
@@ -1042,7 +1079,7 @@ SanitizerMask ToolChain::getSupportedSanitizers() const {
   if (getTriple().getArch() == llvm::Triple::x86 ||
       getTriple().getArch() == llvm::Triple::x86_64 ||
       getTriple().getArch() == llvm::Triple::arm || getTriple().isWasm() ||
-      getTriple().isAArch64())
+      getTriple().isAArch64() || getTriple().isRISCV())
     Res |= SanitizerKind::CFIICall;
   if (getTriple().getArch() == llvm::Triple::x86_64 ||
       getTriple().isAArch64(64) || getTriple().isRISCV())

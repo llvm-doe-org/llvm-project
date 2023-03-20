@@ -97,16 +97,16 @@ define void @sext_v32i8_v32i32(<32 x i8>* %x, <32 x i32>* %z) {
 ; LMULMAX2-NEXT:    vsetivli zero, 16, e8, m2, ta, mu
 ; LMULMAX2-NEXT:    vslidedown.vi v10, v8, 16
 ; LMULMAX2-NEXT:    vsetivli zero, 8, e8, m1, ta, mu
-; LMULMAX2-NEXT:    vslidedown.vi v9, v10, 8
+; LMULMAX2-NEXT:    vslidedown.vi v14, v10, 8
 ; LMULMAX2-NEXT:    vsetivli zero, 8, e32, m2, ta, mu
-; LMULMAX2-NEXT:    vsext.vf4 v14, v9
-; LMULMAX2-NEXT:    vsext.vf4 v16, v8
+; LMULMAX2-NEXT:    vsext.vf4 v16, v14
+; LMULMAX2-NEXT:    vsext.vf4 v14, v8
 ; LMULMAX2-NEXT:    vsext.vf4 v8, v10
 ; LMULMAX2-NEXT:    addi a0, a1, 64
 ; LMULMAX2-NEXT:    vse32.v v8, (a0)
-; LMULMAX2-NEXT:    vse32.v v16, (a1)
+; LMULMAX2-NEXT:    vse32.v v14, (a1)
 ; LMULMAX2-NEXT:    addi a0, a1, 96
-; LMULMAX2-NEXT:    vse32.v v14, (a0)
+; LMULMAX2-NEXT:    vse32.v v16, (a0)
 ; LMULMAX2-NEXT:    addi a0, a1, 32
 ; LMULMAX2-NEXT:    vse32.v v12, (a0)
 ; LMULMAX2-NEXT:    ret
@@ -217,7 +217,7 @@ define void @trunc_v8i8_v8i32(<8 x i32>* %x, <8 x i8>* %z) {
 ; LMULMAX1-NEXT:    vncvt.x.x.w v9, v9
 ; LMULMAX1-NEXT:    vsetvli zero, zero, e8, mf4, ta, mu
 ; LMULMAX1-NEXT:    vncvt.x.x.w v9, v9
-; LMULMAX1-NEXT:    vsetivli zero, 8, e8, mf2, ta, mu
+; LMULMAX1-NEXT:    vsetivli zero, 8, e8, mf2, tu, mu
 ; LMULMAX1-NEXT:    vslideup.vi v8, v9, 4
 ; LMULMAX1-NEXT:    vse8.v v8, (a1)
 ; LMULMAX1-NEXT:    ret

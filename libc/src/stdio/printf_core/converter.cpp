@@ -24,7 +24,7 @@
 namespace __llvm_libc {
 namespace printf_core {
 
-void convert(Writer *writer, FormatSection to_conv) {
+void convert(Writer *writer, const FormatSection &to_conv) {
   if (!to_conv.has_conv) {
     writer->write(to_conv.raw_string, to_conv.raw_len);
     return;
@@ -42,7 +42,7 @@ void convert(Writer *writer, FormatSection to_conv) {
   case 'd':
   case 'i':
   case 'u':
-    // convert_int(writer, to_conv);
+    convert_int(writer, to_conv);
     return;
   case 'o':
     // convert_oct(writer, to_conv);

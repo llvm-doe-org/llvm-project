@@ -71,8 +71,7 @@ pythonize_bool(LIBCXX_BUILD_EXTERNAL_THREAD_LIBRARY)
 pythonize_bool(LIBCXX_DEBUG_BUILD)
 pythonize_bool(LIBCXX_ENABLE_PARALLEL_ALGORITHMS)
 
-# By default, for non-standalone builds, libcxx and libcxxabi share a library
-# directory.
+# By default, libcxx and libcxxabi share a library directory.
 if (NOT LIBCXX_CXX_ABI_LIBRARY_PATH)
   set(LIBCXX_CXX_ABI_LIBRARY_PATH "${LIBCXX_LIBRARY_DIR}" CACHE PATH
       "The path to libc++abi library.")
@@ -100,10 +99,6 @@ endif()
 
 if (NOT LIBCXX_ENABLE_RTTI)
   serialize_lit_param(enable_rtti False)
-endif()
-
-if (NOT LIBCXX_ENABLE_DEBUG_MODE_SUPPORT)
-  serialize_lit_param(enable_debug_tests False)
 endif()
 
 if (LIBCXX_ENABLE_ASSERTIONS)

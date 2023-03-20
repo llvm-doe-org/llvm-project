@@ -163,10 +163,10 @@ struct CHRStats {
 
 // RegInfo - some properties of a Region.
 struct RegInfo {
-  RegInfo() : R(nullptr), HasBranch(false) {}
-  RegInfo(Region *RegionIn) : R(RegionIn), HasBranch(false) {}
-  Region *R;
-  bool HasBranch;
+  RegInfo() = default;
+  RegInfo(Region *RegionIn) : R(RegionIn) {}
+  Region *R = nullptr;
+  bool HasBranch = false;
   SmallVector<SelectInst *, 8> Selects;
 };
 
@@ -1974,7 +1974,15 @@ void CHR::addToMergedCondition(bool IsTrueBiased, Value *Cond,
       Cond = IRB.CreateXor(ConstantInt::getTrue(F.getContext()), Cond);
   }
 
-  MergedCondition = IRB.CreateAnd(MergedCondition, Cond);
+  // Select conditions can be poison, while branching on poison is immediate
+  // undefined behavior. As such, we need to freeze potentially poisonous
+  // conditions derived from selects.
+  if (isa<SelectInst>(BranchOrSelect) &&
+      !isGuaranteedNotToBeUndefOrPoison(Cond))
+    Cond = IRB.CreateFreeze(Cond);
+
+  // Use logical and to avoid propagating poison from later conditions.
+  MergedCondition = IRB.CreateLogicalAnd(MergedCondition, Cond);
 }
 
 void CHR::transformScopes(SmallVectorImpl<CHRScope *> &CHRScopes) {

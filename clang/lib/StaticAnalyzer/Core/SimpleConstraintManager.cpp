@@ -44,7 +44,7 @@ ProgramStateRef SimpleConstraintManager::assumeInternal(ProgramStateRef State,
 ProgramStateRef SimpleConstraintManager::assume(ProgramStateRef State,
                                                 NonLoc Cond, bool Assumption) {
   State = assumeAux(State, Cond, Assumption);
-  if (NotifyAssumeClients && EE)
+  if (EE)
     return EE->processAssume(State, Cond, Assumption);
   return State;
 }
@@ -91,7 +91,7 @@ ProgramStateRef SimpleConstraintManager::assumeAux(ProgramStateRef State,
   } // end switch
 }
 
-ProgramStateRef SimpleConstraintManager::assumeInclusiveRange(
+ProgramStateRef SimpleConstraintManager::assumeInclusiveRangeInternal(
     ProgramStateRef State, NonLoc Value, const llvm::APSInt &From,
     const llvm::APSInt &To, bool InRange) {
 

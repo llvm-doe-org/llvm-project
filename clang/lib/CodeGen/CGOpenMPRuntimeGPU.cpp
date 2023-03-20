@@ -1206,20 +1206,17 @@ CGOpenMPRuntimeGPU::CGOpenMPRuntimeGPU(CodeGenModule &CGM)
     llvm_unreachable("OpenMP can only handle device code.");
 
   llvm::OpenMPIRBuilder &OMPBuilder = getOMPBuilder();
-  // FIXME: The check for AMDGCN below appears in Clacc but not upstream main.
-  // It's a workaround for <https://github.com/llvm/llvm-project/issues/54801>
-  // to fix a set of failures in Clacc's OpenACC test suite when running on
-  // ExCL's explorer.  It should be removed when that bug is resolved upstream.
-  if (!CGM.getLangOpts().OMPHostIRFile.empty() || CGM.getTriple().isAMDGCN()) {
-    OMPBuilder.createGlobalFlag(CGM.getLangOpts().OpenMPTargetDebug,
-                                "__omp_rtl_debug_kind");
-    OMPBuilder.createGlobalFlag(CGM.getLangOpts().OpenMPTeamSubscription,
-                                "__omp_rtl_assume_teams_oversubscription");
-    OMPBuilder.createGlobalFlag(CGM.getLangOpts().OpenMPThreadSubscription,
-                                "__omp_rtl_assume_threads_oversubscription");
-    OMPBuilder.createGlobalFlag(CGM.getLangOpts().OpenMPNoThreadState,
-                                "__omp_rtl_assume_no_thread_state");
-  }
+  if (CGM.getLangOpts().NoGPULib || CGM.getLangOpts().OMPHostIRFile.empty())
+    return;
+
+  OMPBuilder.createGlobalFlag(CGM.getLangOpts().OpenMPTargetDebug,
+                              "__omp_rtl_debug_kind");
+  OMPBuilder.createGlobalFlag(CGM.getLangOpts().OpenMPTeamSubscription,
+                              "__omp_rtl_assume_teams_oversubscription");
+  OMPBuilder.createGlobalFlag(CGM.getLangOpts().OpenMPThreadSubscription,
+                              "__omp_rtl_assume_threads_oversubscription");
+  OMPBuilder.createGlobalFlag(CGM.getLangOpts().OpenMPNoThreadState,
+                              "__omp_rtl_assume_no_thread_state");
 }
 
 void CGOpenMPRuntimeGPU::emitProcBindClause(CodeGenFunction &CGF,

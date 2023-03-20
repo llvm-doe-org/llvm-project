@@ -76,20 +76,20 @@ end:
   ret void
 }
 
-define i8 @PR23333(i8 addrspace(1)* %ptr) {
+define i8 @PR23333(ptr addrspace(1) %ptr) {
 ; CHECK-LABEL: @PR23333(
-; CHECK-NEXT:    [[CMP:%.*]] = icmp eq i8 addrspace(1)* [[PTR:%.*]], null
+; CHECK-NEXT:    [[CMP:%.*]] = icmp eq ptr addrspace(1) [[PTR:%.*]], null
 ; CHECK-NEXT:    br i1 [[CMP]], label [[TAKEN:%.*]], label [[END:%.*]]
 ; CHECK:       taken:
 ; CHECK-NEXT:    ret i8 1
 ; CHECK:       end:
 ; CHECK-NEXT:    ret i8 0
 ;
-  %cmp = icmp eq i8 addrspace(1)* %ptr, null
+  %cmp = icmp eq ptr addrspace(1) %ptr, null
   br i1 %cmp, label %taken, label %end
 
 taken:
-  %cmp2 = icmp ne i8 addrspace(1)* %ptr, null
+  %cmp2 = icmp ne ptr addrspace(1) %ptr, null
   %res = select i1 %cmp2, i8 2, i8 1
   ret i8 %res
 
@@ -279,10 +279,7 @@ define void @implies_or(i32 %a, i32 %b, i1 %x) {
 ; CHECK-NEXT:    [[CMP1:%.*]] = icmp eq i32 [[A:%.*]], [[B:%.*]]
 ; CHECK-NEXT:    br i1 [[CMP1]], label [[END:%.*]], label [[TAKEN:%.*]]
 ; CHECK:       taken:
-; CHECK-NEXT:    [[CMP2:%.*]] = icmp ne i32 [[A]], [[B]]
-; CHECK-NEXT:    [[OR:%.*]] = or i1 [[CMP2]], [[X:%.*]]
-; CHECK-NEXT:    [[C:%.*]] = select i1 [[OR]], i32 20, i32 0
-; CHECK-NEXT:    call void @foo(i32 [[C]])
+; CHECK-NEXT:    call void @foo(i32 20)
 ; CHECK-NEXT:    br label [[END]]
 ; CHECK:       end:
 ; CHECK-NEXT:    ret void
@@ -306,10 +303,7 @@ define void @implies_or_comm(i32 %a, i32 %b, i1 %x) {
 ; CHECK-NEXT:    [[CMP1:%.*]] = icmp eq i32 [[A:%.*]], [[B:%.*]]
 ; CHECK-NEXT:    br i1 [[CMP1]], label [[END:%.*]], label [[TAKEN:%.*]]
 ; CHECK:       taken:
-; CHECK-NEXT:    [[CMP2:%.*]] = icmp ne i32 [[A]], [[B]]
-; CHECK-NEXT:    [[OR:%.*]] = or i1 [[X:%.*]], [[CMP2]]
-; CHECK-NEXT:    [[C:%.*]] = select i1 [[OR]], i32 20, i32 0
-; CHECK-NEXT:    call void @foo(i32 [[C]])
+; CHECK-NEXT:    call void @foo(i32 20)
 ; CHECK-NEXT:    br label [[END]]
 ; CHECK:       end:
 ; CHECK-NEXT:    ret void
@@ -333,10 +327,7 @@ define void @implies_or_branch_comm(i32 %a, i32 %b, i1 %x) {
 ; CHECK-NEXT:    [[CMP1:%.*]] = icmp ne i32 [[A:%.*]], [[B:%.*]]
 ; CHECK-NEXT:    br i1 [[CMP1]], label [[TAKEN:%.*]], label [[END:%.*]]
 ; CHECK:       taken:
-; CHECK-NEXT:    [[CMP2:%.*]] = icmp ne i32 [[A]], [[B]]
-; CHECK-NEXT:    [[OR:%.*]] = or i1 [[CMP2]], [[X:%.*]]
-; CHECK-NEXT:    [[C:%.*]] = select i1 [[OR]], i32 20, i32 0
-; CHECK-NEXT:    call void @foo(i32 [[C]])
+; CHECK-NEXT:    call void @foo(i32 20)
 ; CHECK-NEXT:    br label [[END]]
 ; CHECK:       end:
 ; CHECK-NEXT:    ret void
@@ -384,10 +375,7 @@ define void @implies_logical_or_comm(i32 %a, i32 %b, i1 %x) {
 ; CHECK-NEXT:    [[CMP1:%.*]] = icmp eq i32 [[A:%.*]], [[B:%.*]]
 ; CHECK-NEXT:    br i1 [[CMP1]], label [[END:%.*]], label [[TAKEN:%.*]]
 ; CHECK:       taken:
-; CHECK-NEXT:    [[CMP2:%.*]] = icmp ne i32 [[A]], [[B]]
-; CHECK-NEXT:    [[OR:%.*]] = select i1 [[X:%.*]], i1 true, i1 [[CMP2]]
-; CHECK-NEXT:    [[C:%.*]] = select i1 [[OR]], i32 20, i32 0
-; CHECK-NEXT:    call void @foo(i32 [[C]])
+; CHECK-NEXT:    call void @foo(i32 20)
 ; CHECK-NEXT:    br label [[END]]
 ; CHECK:       end:
 ; CHECK-NEXT:    ret void
@@ -438,10 +426,7 @@ define void @implies_not_and(i32 %a, i32 %b, i1 %x) {
 ; CHECK-NEXT:    [[CMP1:%.*]] = icmp eq i32 [[A:%.*]], [[B:%.*]]
 ; CHECK-NEXT:    br i1 [[CMP1]], label [[END:%.*]], label [[TAKEN:%.*]]
 ; CHECK:       taken:
-; CHECK-NEXT:    [[CMP2:%.*]] = icmp eq i32 [[A]], [[B]]
-; CHECK-NEXT:    [[AND:%.*]] = and i1 [[CMP2]], [[X:%.*]]
-; CHECK-NEXT:    [[C:%.*]] = select i1 [[AND]], i32 20, i32 0
-; CHECK-NEXT:    call void @foo(i32 [[C]])
+; CHECK-NEXT:    call void @foo(i32 0)
 ; CHECK-NEXT:    br label [[END]]
 ; CHECK:       end:
 ; CHECK-NEXT:    ret void
@@ -465,10 +450,7 @@ define void @implies_not_and_comm(i32 %a, i32 %b, i1 %x) {
 ; CHECK-NEXT:    [[CMP1:%.*]] = icmp eq i32 [[A:%.*]], [[B:%.*]]
 ; CHECK-NEXT:    br i1 [[CMP1]], label [[END:%.*]], label [[TAKEN:%.*]]
 ; CHECK:       taken:
-; CHECK-NEXT:    [[CMP2:%.*]] = icmp eq i32 [[A]], [[B]]
-; CHECK-NEXT:    [[AND:%.*]] = and i1 [[X:%.*]], [[CMP2]]
-; CHECK-NEXT:    [[C:%.*]] = select i1 [[AND]], i32 20, i32 0
-; CHECK-NEXT:    call void @foo(i32 [[C]])
+; CHECK-NEXT:    call void @foo(i32 0)
 ; CHECK-NEXT:    br label [[END]]
 ; CHECK:       end:
 ; CHECK-NEXT:    ret void
@@ -492,10 +474,7 @@ define void @implies_not_and_branch_comm(i32 %a, i32 %b, i1 %x) {
 ; CHECK-NEXT:    [[CMP1:%.*]] = icmp ne i32 [[A:%.*]], [[B:%.*]]
 ; CHECK-NEXT:    br i1 [[CMP1]], label [[TAKEN:%.*]], label [[END:%.*]]
 ; CHECK:       taken:
-; CHECK-NEXT:    [[CMP2:%.*]] = icmp eq i32 [[A]], [[B]]
-; CHECK-NEXT:    [[AND:%.*]] = and i1 [[CMP2]], [[X:%.*]]
-; CHECK-NEXT:    [[C:%.*]] = select i1 [[AND]], i32 20, i32 0
-; CHECK-NEXT:    call void @foo(i32 [[C]])
+; CHECK-NEXT:    call void @foo(i32 0)
 ; CHECK-NEXT:    br label [[END]]
 ; CHECK:       end:
 ; CHECK-NEXT:    ret void
@@ -543,10 +522,7 @@ define void @implies_not_logical_and_comm(i32 %a, i32 %b, i1 %x) {
 ; CHECK-NEXT:    [[CMP1:%.*]] = icmp eq i32 [[A:%.*]], [[B:%.*]]
 ; CHECK-NEXT:    br i1 [[CMP1]], label [[END:%.*]], label [[TAKEN:%.*]]
 ; CHECK:       taken:
-; CHECK-NEXT:    [[CMP2:%.*]] = icmp eq i32 [[A]], [[B]]
-; CHECK-NEXT:    [[AND:%.*]] = select i1 [[X:%.*]], i1 [[CMP2]], i1 false
-; CHECK-NEXT:    [[C:%.*]] = select i1 [[AND]], i32 20, i32 0
-; CHECK-NEXT:    call void @foo(i32 [[C]])
+; CHECK-NEXT:    call void @foo(i32 0)
 ; CHECK-NEXT:    br label [[END]]
 ; CHECK:       end:
 ; CHECK-NEXT:    ret void

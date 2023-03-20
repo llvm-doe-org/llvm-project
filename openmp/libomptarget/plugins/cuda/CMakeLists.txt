@@ -29,10 +29,6 @@ libomptarget_say("Building CUDA offloading plugin.")
 # Define the suffix for the runtime messaging dumps.
 add_definitions(-DTARGET_NAME=CUDA)
 
-include_directories(
-  ${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIRS}
-)
-
 set(LIBOMPTARGET_DLOPEN_LIBCUDA OFF)
 option(LIBOMPTARGET_FORCE_DLOPEN_LIBCUDA "Build with dlopened libcuda" ${LIBOMPTARGET_DLOPEN_LIBCUDA})
 
@@ -69,6 +65,11 @@ if(OPENMP_CLANG_LIB_SUBDIR)
   install(TARGETS "omptarget.rtl.cuda" LIBRARY DESTINATION
           "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
 endif()
+
+target_include_directories(omptarget.rtl.cuda PRIVATE
+  ${LIBOMPTARGET_INCLUDE_DIR}
+  ${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIRS}
+)
 
 target_link_libraries(omptarget.rtl.cuda
   elf_common

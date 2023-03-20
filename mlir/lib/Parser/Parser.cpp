@@ -189,7 +189,7 @@ InFlightDiagnostic Parser::emitWrongTokenError(const Twine &message) {
   StringRef startOfBuffer(bufferStart, curPtr - bufferStart);
 
   // Back up over entirely blank lines.
-  while (1) {
+  while (true) {
     // Back up until we see a \n, but don't look past the buffer start.
     startOfBuffer = startOfBuffer.rtrim(" \t");
 
@@ -2105,7 +2105,7 @@ ParseResult TopLevelOperationParser::parseAttributeAliasDef() {
 
 /// Parse a type alias declaration.
 ///
-///   type-alias-def ::= '!' alias-name `=` 'type' type
+///   type-alias-def ::= '!' alias-name `=` type
 ///
 ParseResult TopLevelOperationParser::parseTypeAliasDef() {
   assert(getToken().is(Token::exclamation_identifier));
@@ -2119,12 +2119,10 @@ ParseResult TopLevelOperationParser::parseTypeAliasDef() {
   if (aliasName.contains('.'))
     return emitError("type names with a '.' are reserved for "
                      "dialect-defined names");
-
   consumeToken(Token::exclamation_identifier);
 
-  // Parse the '=' and 'type'.
-  if (parseToken(Token::equal, "expected '=' in type alias definition") ||
-      parseToken(Token::kw_type, "expected 'type' in type alias definition"))
+  // Parse the '='.
+  if (parseToken(Token::equal, "expected '=' in type alias definition"))
     return failure();
 
   // Parse the type.

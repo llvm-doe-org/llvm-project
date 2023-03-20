@@ -248,6 +248,8 @@ public:
   /// w.r.t. what they should expand to.
   enum class AtomicExpansionKind {
     None,    // Don't expand the instruction.
+    CastToInteger,    // Cast the atomic instruction to another type, e.g. from
+                      // floating-point to integer type.
     LLSC,    // Expand the instruction into loadlinked/storeconditional; used
              // by ARM/AArch64.
     LLOnly,  // Expand the (load) instruction into just a load-linked, which has
@@ -1388,7 +1390,9 @@ public:
 
   // Returns true if VT is a legal index type for masked gathers/scatters
   // on this target
-  virtual bool shouldRemoveExtendFromGSIndex(EVT VT) const { return false; }
+  virtual bool shouldRemoveExtendFromGSIndex(EVT IndexVT, EVT DataVT) const {
+    return false;
+  }
 
   /// Return how the condition code should be treated: either it is legal, needs
   /// to be expanded to some other code sequence, or the target has a custom
@@ -2045,10 +2049,27 @@ public:
     return AtomicExpansionKind::None;
   }
 
+  /// Returns how the given (atomic) load should be cast by the IR-level
+  /// AtomicExpand pass.
+  virtual AtomicExpansionKind shouldCastAtomicLoadInIR(LoadInst *LI) const {
+    if (LI->getType()->isFloatingPointTy())
+      return AtomicExpansionKind::CastToInteger;
+    return AtomicExpansionKind::None;
+  }
+
   /// Returns how the given (atomic) store should be expanded by the IR-level
   /// AtomicExpand pass into. For instance AtomicExpansionKind::Expand will try
   /// to use an atomicrmw xchg.
   virtual AtomicExpansionKind shouldExpandAtomicStoreInIR(StoreInst *SI) const {
+    return AtomicExpansionKind::None;
+  }
+
+  /// Returns how the given (atomic) store should be cast by the IR-level
+  /// AtomicExpand pass into. For instance AtomicExpansionKind::CastToInteger
+  /// will try to cast the operands to integer values.
+  virtual AtomicExpansionKind shouldCastAtomicStoreInIR(StoreInst *SI) const {
+    if (SI->getValueOperand()->getType()->isFloatingPointTy())
+      return AtomicExpansionKind::CastToInteger;
     return AtomicExpansionKind::None;
   }
 
@@ -2064,6 +2085,18 @@ public:
   virtual AtomicExpansionKind shouldExpandAtomicRMWInIR(AtomicRMWInst *RMW) const {
     return RMW->isFloatingPointOperation() ?
       AtomicExpansionKind::CmpXChg : AtomicExpansionKind::None;
+  }
+
+  /// Returns how the given atomic atomicrmw should be cast by the IR-level
+  /// AtomicExpand pass.
+  virtual AtomicExpansionKind
+  shouldCastAtomicRMWIInIR(AtomicRMWInst *RMWI) const {
+    if (RMWI->getOperation() == AtomicRMWInst::Xchg &&
+        (RMWI->getValOperand()->getType()->isFloatingPointTy() ||
+         RMWI->getValOperand()->getType()->isPointerTy()))
+      return AtomicExpansionKind::CastToInteger;
+
+    return AtomicExpansionKind::None;
   }
 
   /// On some platforms, an AtomicRMW that never actually modifies the value
@@ -2282,6 +2315,12 @@ protected:
     }
   }
 
+  void setLoadExtAction(ArrayRef<unsigned> ExtTypes, MVT ValVT,
+                        ArrayRef<MVT> MemVTs, LegalizeAction Action) {
+    for (auto MemVT : MemVTs)
+      setLoadExtAction(ExtTypes, ValVT, MemVT, Action);
+  }
+
   /// Indicate that the specified truncating store does not work with the
   /// specified type and indicate what to do about it.
   void setTruncStoreAction(MVT ValVT, MVT MemVT, LegalizeAction Action) {
@@ -2294,8 +2333,16 @@ protected:
   ///
   /// NOTE: All indexed mode loads are initialized to Expand in
   /// TargetLowering.cpp
-  void setIndexedLoadAction(unsigned IdxMode, MVT VT, LegalizeAction Action) {
-    setIndexedModeAction(IdxMode, VT, IMAB_Load, Action);
+  void setIndexedLoadAction(ArrayRef<unsigned> IdxModes, MVT VT,
+                            LegalizeAction Action) {
+    for (auto IdxMode : IdxModes)
+      setIndexedModeAction(IdxMode, VT, IMAB_Load, Action);
+  }
+
+  void setIndexedLoadAction(ArrayRef<unsigned> IdxModes, ArrayRef<MVT> VTs,
+                            LegalizeAction Action) {
+    for (auto VT : VTs)
+      setIndexedLoadAction(IdxModes, VT, Action);
   }
 
   /// Indicate that the specified indexed store does or does not work with the
@@ -2303,8 +2350,16 @@ protected:
   ///
   /// NOTE: All indexed mode stores are initialized to Expand in
   /// TargetLowering.cpp
-  void setIndexedStoreAction(unsigned IdxMode, MVT VT, LegalizeAction Action) {
-    setIndexedModeAction(IdxMode, VT, IMAB_Store, Action);
+  void setIndexedStoreAction(ArrayRef<unsigned> IdxModes, MVT VT,
+                             LegalizeAction Action) {
+    for (auto IdxMode : IdxModes)
+      setIndexedModeAction(IdxMode, VT, IMAB_Store, Action);
+  }
+
+  void setIndexedStoreAction(ArrayRef<unsigned> IdxModes, ArrayRef<MVT> VTs,
+                             LegalizeAction Action) {
+    for (auto VT : VTs)
+      setIndexedStoreAction(IdxModes, VT, Action);
   }
 
   /// Indicate that the specified indexed masked load does or does not work with
@@ -3484,6 +3539,7 @@ public:
 
   /// Determines the optimal series of memory ops to replace the memset / memcpy.
   /// Return true if the number of memory ops is below the threshold (Limit).
+  /// Note that this is always the case when Limit is ~0.
   /// It returns the types of the sequence of memory ops to perform
   /// memset / memcpy by reference.
   virtual bool
@@ -4868,10 +4924,6 @@ public:
   // fact that this can be implemented as a ctlz/srl pair, so that the dag
   // combiner can fold the new nodes.
   SDValue lowerCmpEqZeroToCtlzSrl(SDValue Op, SelectionDAG &DAG) const;
-
-  /// Give targets the chance to reduce the number of distinct addresing modes.
-  ISD::MemIndexType getCanonicalIndexType(ISD::MemIndexType IndexType,
-                                          EVT MemVT, SDValue Offsets) const;
 
 private:
   SDValue foldSetCCWithAnd(EVT VT, SDValue N0, SDValue N1, ISD::CondCode Cond,

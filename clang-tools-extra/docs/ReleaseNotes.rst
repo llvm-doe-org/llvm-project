@@ -106,6 +106,10 @@ Improvements to clang-tidy
   means it is advised to use YAML's block style initiated by the pipe character `|` for the `Checks`
   section in order to benefit from the easier syntax that works without commas.
 
+- Fixed a regression introduced in clang-tidy 14.0.0, which prevented NOLINTs
+  from suppressing diagnostics associated with macro arguments. This fixes
+  `Issue 55134 <https://github.com/llvm/llvm-project/issues/55134>`_.
+
 New checks
 ^^^^^^^^^^
 
@@ -152,6 +156,9 @@ Changes in existing checks
   <clang-tidy/checks/bugprone-sizeof-expression>` when `sizeof(...)` is
   compared against a `__int128_t`.
 
+- Made :doc:`cert-oop57-cpp <clang-tidy/checks/cert-oop57-cpp>` more sensitive
+  by checking for an arbitrary expression in the second argument of ``memset``.
+
 - Improved :doc:`cppcoreguidelines-prefer-member-initializer
   <clang-tidy/checks/cppcoreguidelines-prefer-member-initializer>` check.
 
@@ -170,6 +177,15 @@ Changes in existing checks
   <clang-tidy/checks/misc-redundant-expression>` involving assignments in
   conditions. This fixes `Issue 35853 <https://github.com/llvm/llvm-project/issues/35853>`_.
 
+- Fixed a false positive in :doc:`modernize-deprecated-headers
+  <clang-tidy/checks/modernize-deprecated-headers>` involving including
+  C header files from C++ files wrapped by ``extern "C" { ... }`` blocks.
+  Such includes will be ignored by now.
+  By default now it doesn't warn for including deprecated headers from header
+  files, since that header file might be used from C source files. By passing
+  the ``CheckHeaderFile=true`` option if header files of the project only
+  included by C++ source files.
+
 - Improved :doc:`performance-inefficient-vector-operation
   <clang-tidy/checks/performance-inefficient-vector-operation>` to work when
   the vector is a member of a structure.
@@ -184,6 +200,23 @@ Changes in existing checks
 - Fixed a false positive in :doc:`readability-non-const-parameter
   <clang-tidy/checks/readability-non-const-parameter>` when the parameter is
   referenced by an lvalue.
+
+- Expanded :doc:`readability-simplify-boolean-expr
+  <clang-tidy/checks/readability-simplify-boolean-expr>` to simplify expressions
+  using DeMorgan's Theorem.
+
+- Fixed a crash in :doc:`performance-unnecessary-value-param
+  <clang-tidy/checks/readability-suspicious-call-argument>` when the specialization
+  template has an unnecessary value parameter. Removed the fix for a template.
+
+- Fixed bugs in :doc:`bugprone-use-after-move
+  <clang-tidy/checks/bugprone-use-after-move>`:
+
+  - Treat a move in a lambda capture as happening in the function that defines
+    the lambda, not within the body of the lambda (as we were previously doing
+    erroneously).
+
+  - Don't emit an erroneous warning on self-moves.
 
 Removed checks
 ^^^^^^^^^^^^^^
@@ -206,7 +239,7 @@ The improvements are...
 Improvements to pp-trace
 ------------------------
 
-The improvements are...
+- Added `HashLoc` information to `InclusionDirective` callback output.
 
 Clang-tidy Visual Studio plugin
 -------------------------------

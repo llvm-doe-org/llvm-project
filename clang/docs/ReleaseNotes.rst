@@ -110,12 +110,12 @@ Bug Fixes
   `51414 <https://github.com/llvm/llvm-project/issues/51414>`_,
   `51416 <https://github.com/llvm/llvm-project/issues/51416>`_,
   and `51641 <https://github.com/llvm/llvm-project/issues/51641>`_.
-- The builtin function __builtin_dump_struct would crash clang when the target 
+- The builtin function __builtin_dump_struct would crash clang when the target
   struct contains a bitfield. It now correctly handles bitfields.
   This fixes Issue `Issue 54462 <https://github.com/llvm/llvm-project/issues/54462>`_.
 - Statement expressions are now disabled in default arguments in general.
   This fixes Issue `Issue 53488 <https://github.com/llvm/llvm-project/issues/53488>`_.
-- According to `CWG 1394 <https://wg21.link/cwg1394>`_ and 
+- According to `CWG 1394 <https://wg21.link/cwg1394>`_ and
   `C++20 [dcl.fct.def.general]p2 <https://timsong-cpp.github.io/cppwp/n4868/dcl.fct.def#general-2.sentence-3>`_,
   Clang should not diagnose incomplete types in function definitions if the function body is "= delete;".
   This fixes Issue `Issue 52802 <https://github.com/llvm/llvm-project/issues/52802>`_.
@@ -149,6 +149,27 @@ Bug Fixes
   because there is no way to fully qualify the enumerator name, so this
   "extension" was unintentional and useless. This fixes
   `Issue 42372 <https://github.com/llvm/llvm-project/issues/42372>`_.
+- Clang will now find and emit a call to an allocation function in a
+  promise_type body for coroutines if there is any allocation function
+  declaration in the scope of promise_type. Additionally, to implement CWG2585,
+  a coroutine will no longer generate a call to a global allocation function
+  with the signature (std::size_t, p0, ..., pn).
+  This fixes Issue `Issue 54881 <https://github.com/llvm/llvm-project/issues/54881>`_.
+- Implement `CWG 2394 <https://wg21.link/cwg2394>`_: Const class members
+  may be initialized with a defaulted default constructor under the same
+  conditions it would be allowed for a const object elsewhere.
+- ``__has_unique_object_representations`` no longer reports that ``_BitInt`` types
+  have unique object representations if they have padding bits.
+- Unscoped and scoped enumeration types can no longer be initialized from a
+  brace-init-list containing a single element of a different scoped enumeration
+  type.
+- Allow use of an elaborated type specifier as a ``_Generic`` selection
+  association in C++ mode. This fixes
+  `Issue 55562 <https://github.com/llvm/llvm-project/issues/55562>`_.
+- Clang will allow calling a ``consteval`` function in a default argument. This
+  fixes `Issue 48230 <https://github.com/llvm/llvm-project/issues/48230>`_.
+- Fixed memory leak due to ``VarTemplateSpecializationDecl`` using
+  ``TemplateArgumentListInfo`` instead of ``ASTTemplateArgumentListInfo``.
 
 Improvements to Clang's diagnostics
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -232,6 +253,9 @@ Improvements to Clang's diagnostics
   suggest ``#else`` as an alternative. ``#elifdef`` and ``#elifndef`` are only
   suggested when in C2x or C++2b mode. Fixes
   `Issue 51598 <https://github.com/llvm/llvm-project/issues/51598>`_.
+- The ``-Wdeprecated`` diagnostic will now warn on out-of-line ``constexpr``
+  declarations downgraded to definitions in C++1z, in addition to the
+  existing warning on out-of-line ``const`` declarations.
 
 Non-comprehensive list of changes in this release
 -------------------------------------------------
@@ -262,6 +286,18 @@ New Compiler Flags
   the parameter list were ``void``. There is no ``-fknr-functions`` or
   ``-fno-no-knr-functions`` flag; this feature cannot be disabled in language
   modes where it is required, such as C++ or C2x.
+- A new ARM pass to workaround Cortex-A57 Erratum 1742098 and Cortex-A72 Erratum
+  1655431 can be enabled using ``-mfix-cortex-a57-aes-1742098`` or
+  ``-mfix-cortex-a72-aes-1655431``. The pass is enabled when using either of
+  these cpus with ``-mcpu=`` and can be disabled using
+  ``-mno-fix-cortex-a57-aes-1742098`` or ``-mno-fix-cortex-a72-aes-1655431``.
+- Added the ``-fexperimental-max-bitint-width=`` option to increase the maximum
+  allowed bit width of ``_BitInt`` types beyond the default of 128 bits. Some
+  operations, such as division or float-to-integer conversion, on ``_BitInt``
+  types with more than 128 bits currently crash clang. This option will be
+  removed in the future once clang supports all such operations.
+- Added the ``-print-diagnostic-options`` option, which prints a list of
+  warnings the compiler supports.
 
 Deprecated Compiler Flags
 -------------------------
@@ -281,6 +317,9 @@ New Pragmas in Clang
 - Added support for MSVC's ``#pragma function``, which tells the compiler to
   generate calls to functions listed in the pragma instead of using the
   builtins.
+- Added support for MSVC's ``#pragma alloc_text``. The pragma names the code
+  section functions are placed in. The pragma only applies to functions with
+  C linkage.
 
 - ...
 
@@ -307,6 +346,13 @@ Attribute Changes in Clang
 - The ``__declspec(naked)`` attribute can no longer be written on a member
   function in Microsoft compatibility mode, matching the behavior of cl.exe.
 
+- Attribute ``no_builtin`` should now affect the generated code. It now disables
+  builtins (corresponding to the specific names listed in the attribute) in the
+  body of the function the attribute is on.
+
+- When the ``weak`` attribute is applied to a const qualified variable clang no longer
+  tells the backend it is allowed to optimize based on initializer value.
+
 Windows Support
 ---------------
 
@@ -315,6 +361,11 @@ Windows Support
   turned on. With this addition, clang-cl can be used in Visual Studio for the
   JustMyCode feature. Note, you may need to manually add ``/JMC`` as additional
   compile options in the Visual Studio since it currently assumes clang-cl does not support ``/JMC``.
+
+- Implemented generation of SEH unwind information on ARM. (C++ exception
+  handling in MSVC mode is still unimplemented though.)
+
+- Switched MinGW mode on ARM to use SEH instead of DWARF for unwind information.
 
 AIX Support
 -----------
@@ -359,6 +410,8 @@ C++ Language Changes in Clang
   of clang; use the ``-fclang-abi-compat=14`` option to get the old mangling.
 - Preprocessor character literals with a ``u8`` prefix are now correctly treated as
   unsigned character literals. This fixes `Issue 54886 <https://github.com/llvm/llvm-project/issues/54886>`_.
+- Stopped allowing constraints on non-template functions to be compliant with
+  dcl.decl.general p4.
 
 C++20 Feature Support
 ^^^^^^^^^^^^^^^^^^^^^
@@ -402,6 +455,16 @@ OpenCL C Language Changes in Clang
 ABI Changes in Clang
 --------------------
 
+- GCC doesn't pack non-POD members in packed structs unless the packed
+  attribute is also specified on the member. Clang historically did perform
+  such packing. Clang now matches the gcc behavior (except on Darwin and PS4).
+  You can switch back to the old ABI behavior with the flag:
+  ``-fclang-abi-compat=14.0``.
+- When compiling C for ARM or AArch64, a zero-length bitfield in a ``struct``
+  (e.g. ``int : 0``) no longer prevents the structure from being considered a
+  homogeneous floating-point or vector aggregate. The new behavior agrees with
+  the AAPCS specification, and matches the similar bug fix in GCC 12.1.
+
 OpenMP Support in Clang
 -----------------------
 
@@ -414,6 +477,9 @@ CUDA Support in Clang
 
 X86 Support in Clang
 --------------------
+
+- Support ``-mharden-sls=[none|all|return|indirect-jmp]`` for straight-line
+  speculation hardening.
 
 DWARF Support in Clang
 ----------------------
@@ -471,10 +537,17 @@ libclang
 
 Static Analyzer
 ---------------
+- `New CTU implementation
+  <https://discourse.llvm.org/t/rfc-much-faster-cross-translation-unit-ctu-analysis-implementation/61728>`_
+  that keeps the slow-down around 2x compared to the single-TU analysis, even
+  in case of complex C++ projects. Still, it finds the majority of the "old"
+  CTU findings. Besides, not more than ~3% of the bug reports are lost compared
+  to single-TU analysis, the lost reports are highly likely to be false
+  positives.
 
 - Added a new checker ``alpha.unix.cstring.UninitializedRead`` this will check for uninitialized reads
   from common memory copy/manipulation functions such as ``memcpy``, ``mempcpy``, ``memmove``, ``memcmp``, `
-  `strcmp``, ``strncmp``, ``strcpy``, ``strlen``, ``strsep`` and many more. Although 
+  `strcmp``, ``strncmp``, ``strcpy``, ``strlen``, ``strsep`` and many more. Although
   this checker currently is in list of alpha checkers due to a false positive.
 
 .. _release-notes-ubsan:

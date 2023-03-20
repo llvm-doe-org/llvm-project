@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "mlir/Dialect/GPU/GPUDialect.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -24,13 +24,14 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace mlir::gpu;
 
-#include "mlir/Dialect/GPU/GPUOpsDialect.cpp.inc"
+#include "mlir/Dialect/GPU/IR/GPUOpsDialect.cpp.inc"
 
 //===----------------------------------------------------------------------===//
 // MMAMatrixType
@@ -120,11 +121,11 @@ void GPUDialect::initialize() {
   addTypes<MMAMatrixType>();
   addOperations<
 #define GET_OP_LIST
-#include "mlir/Dialect/GPU/GPUOps.cpp.inc"
+#include "mlir/Dialect/GPU/IR/GPUOps.cpp.inc"
       >();
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "mlir/Dialect/GPU/GPUOpsAttributes.cpp.inc"
+#include "mlir/Dialect/GPU/IR/GPUOpsAttributes.cpp.inc"
       >();
   addInterfaces<GPUInlinerInterface>();
 }
@@ -711,21 +712,15 @@ void LaunchFuncOp::build(OpBuilder &builder, OperationState &result,
                       builder.getI32VectorAttr(segmentSizes));
 }
 
-unsigned LaunchFuncOp::getNumKernelOperands() {
-  return getNumOperands() - asyncDependencies().size() - kNumConfigOperands -
-         (dynamicSharedMemorySize() ? 1 : 0);
-}
-
 StringAttr LaunchFuncOp::getKernelModuleName() {
   return kernel().getRootReference();
 }
 
 StringAttr LaunchFuncOp::getKernelName() { return kernel().getLeafReference(); }
 
-Value LaunchFuncOp::getKernelOperand(unsigned i) {
-  return getOperand(asyncDependencies().size() + kNumConfigOperands +
-                    (dynamicSharedMemorySize() ? 1 : 0) + i);
-}
+unsigned LaunchFuncOp::getNumKernelOperands() { return operands().size(); }
+
+Value LaunchFuncOp::getKernelOperand(unsigned i) { return operands()[i]; }
 
 KernelDim3 LaunchFuncOp::getGridSizeOperandValues() {
   auto operands = getOperands().drop_front(asyncDependencies().size());
@@ -1111,6 +1106,48 @@ LogicalResult MemcpyOp::verify() {
   return success();
 }
 
+namespace {
+
+/// Erases a common case of copy ops where a destination value is used only by
+/// the copy op, alloc and dealloc ops.
+struct EraseTrivialCopyOp : public OpRewritePattern<MemcpyOp> {
+  using OpRewritePattern<MemcpyOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MemcpyOp op,
+                                PatternRewriter &rewriter) const override {
+    Value dest = op.dst();
+    Operation *destDefOp = dest.getDefiningOp();
+    // `dest` must be defined by an op having Allocate memory effect in order to
+    // perform the folding.
+    if (!destDefOp ||
+        !hasSingleEffect<MemoryEffects::Allocate>(destDefOp, dest))
+      return failure();
+    // We can erase `op` iff `dest` has no other use apart from its
+    // use by `op` and dealloc ops.
+    if (llvm::any_of(dest.getUsers(), [op, dest](Operation *user) {
+          return user != op &&
+                 !hasSingleEffect<MemoryEffects::Free>(user, dest);
+        }))
+      return failure();
+    // We can perform the folding if and only if op has a single async
+    // dependency and produces an async token as result, or if it does not have
+    // any async dependency and does not produce any async token result.
+    if (op.asyncDependencies().size() > 1 ||
+        ((op.asyncDependencies().empty() && op.asyncToken()) ||
+         (!op.asyncDependencies().empty() && !op.asyncToken())))
+      return failure();
+    rewriter.replaceOp(op, op.asyncDependencies());
+    return success();
+  }
+};
+
+} // end anonymous namespace
+
+void MemcpyOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.add<EraseTrivialCopyOp>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // GPU_SubgroupMmaLoadMatrixOp
 //===----------------------------------------------------------------------===//
@@ -1361,11 +1398,11 @@ void AllocOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.add<SimplifyDimOfAllocOp>(context);
 }
 
-#include "mlir/Dialect/GPU/GPUOpInterfaces.cpp.inc"
-#include "mlir/Dialect/GPU/GPUOpsEnums.cpp.inc"
+#include "mlir/Dialect/GPU/IR/GPUOpInterfaces.cpp.inc"
+#include "mlir/Dialect/GPU/IR/GPUOpsEnums.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "mlir/Dialect/GPU/GPUOpsAttributes.cpp.inc"
+#include "mlir/Dialect/GPU/IR/GPUOpsAttributes.cpp.inc"
 
 #define GET_OP_CLASSES
-#include "mlir/Dialect/GPU/GPUOps.cpp.inc"
+#include "mlir/Dialect/GPU/IR/GPUOps.cpp.inc"

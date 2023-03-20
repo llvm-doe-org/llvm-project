@@ -9,9 +9,9 @@
 #include "clang-pseudo/DirectiveTree.h"
 #include "clang-pseudo/Forest.h"
 #include "clang-pseudo/GLR.h"
-#include "clang-pseudo/Grammar.h"
-#include "clang-pseudo/LRTable.h"
 #include "clang-pseudo/Token.h"
+#include "clang-pseudo/grammar/Grammar.h"
+#include "clang-pseudo/grammar/LRTable.h"
 #include "clang/Basic/LangOptions.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -58,8 +58,9 @@ public:
 
     clang::pseudo::ForestArena Arena;
     clang::pseudo::GSS GSS;
-    auto &Root = glrParse(ParseableStream,
-                          clang::pseudo::ParseParams{*G, T, Arena, GSS});
+    auto &Root =
+        glrParse(ParseableStream, clang::pseudo::ParseParams{*G, T, Arena, GSS},
+                 *G->findNonterminal("translation-unit"));
     if (Print)
       llvm::outs() << Root.dumpRecursive(*G);
   }

@@ -1128,14 +1128,43 @@ private:
       if (!isStaticStrideOrOffset(offset))
         return rewriter.notifyMatchFailure(reshapeOp,
                                            "dynamic offset is unsupported");
-      if (!llvm::all_of(strides, isStaticStrideOrOffset))
-        return rewriter.notifyMatchFailure(reshapeOp,
-                                           "dynamic strides are unsupported");
 
       desc.setConstantOffset(rewriter, loc, offset);
-      for (unsigned i = 0, e = targetMemRefType.getRank(); i < e; ++i) {
-        desc.setConstantSize(rewriter, loc, i, targetMemRefType.getDimSize(i));
-        desc.setConstantStride(rewriter, loc, i, strides[i]);
+
+      assert(targetMemRefType.getLayout().isIdentity() &&
+             "Identity layout map is a precondition of a valid reshape op");
+
+      Value stride = nullptr;
+      int64_t targetRank = targetMemRefType.getRank();
+      for (auto i : llvm::reverse(llvm::seq<int64_t>(0, targetRank))) {
+        if (!ShapedType::isDynamicStrideOrOffset(strides[i])) {
+          // If the stride for this dimension is dynamic, then use the product
+          // of the sizes of the inner dimensions.
+          stride = createIndexConstant(rewriter, loc, strides[i]);
+        } else if (!stride) {
+          // `stride` is null only in the first iteration of the loop.  However,
+          // since the target memref has an identity layout, we can safely set
+          // the innermost stride to 1.
+          stride = createIndexConstant(rewriter, loc, 1);
+        }
+
+        Value dimSize;
+        int64_t size = targetMemRefType.getDimSize(i);
+        // If the size of this dimension is dynamic, then load it at runtime
+        // from the shape operand.
+        if (!ShapedType::isDynamic(size)) {
+          dimSize = createIndexConstant(rewriter, loc, size);
+        } else {
+          Value shapeOp = reshapeOp.shape();
+          Value index = createIndexConstant(rewriter, loc, i);
+          dimSize = rewriter.create<memref::LoadOp>(loc, shapeOp, index);
+        }
+
+        desc.setSize(rewriter, loc, i, dimSize);
+        desc.setStride(rewriter, loc, i, stride);
+
+        // Prepare the stride value for the next dimension.
+        stride = rewriter.create<LLVM::MulOp>(loc, stride, dimSize);
       }
 
       *descriptor = desc;
@@ -1848,6 +1877,12 @@ struct ViewOpLowering : public ConvertOpToLLVMPattern<memref::ViewOp> {
       return viewOp.emitWarning("cannot cast to non-strided shape"), failure();
     assert(offset == 0 && "expected offset to be 0");
 
+    // Target memref must be contiguous in memory (innermost stride is 1), or
+    // empty (special case when at least one of the memref dimensions is 0).
+    if (!strides.empty() && (strides.back() != 1 && strides.back() != 0))
+      return viewOp.emitWarning("cannot cast to non-contiguous shape"),
+             failure();
+
     // Create the descriptor.
     MemRefDescriptor sourceMemRef(adaptor.source());
     auto targetMemRef = MemRefDescriptor::undef(rewriter, loc, targetDescTy);
@@ -1884,9 +1919,6 @@ struct ViewOpLowering : public ConvertOpToLLVMPattern<memref::ViewOp> {
       return rewriter.replaceOp(viewOp, {targetMemRef}), success();
 
     // Fields 4 and 5: Update sizes and strides.
-    if (strides.back() != 1)
-      return viewOp.emitWarning("cannot cast to non-contiguous shape"),
-             failure();
     Value stride = nullptr, nextSize = nullptr;
     for (int i = viewMemRefType.getRank() - 1; i >= 0; --i) {
       // Update size.

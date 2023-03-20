@@ -16,6 +16,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState_Fwd.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
+#include "llvm/ADT/ScopeExit.h"
 
 using namespace clang;
 using namespace ento;
@@ -42,12 +43,29 @@ ConditionTruthVal ConstraintManager::checkNull(ProgramStateRef State,
   return {};
 }
 
+template <typename AssumeFunction>
 ConstraintManager::ProgramStatePair
-ConstraintManager::assumeDual(ProgramStateRef State, DefinedSVal Cond) {
-  ProgramStateRef StTrue = assumeInternal(State, Cond, true);
+ConstraintManager::assumeDualImpl(ProgramStateRef &State,
+                                  AssumeFunction &Assume) {
+  if (LLVM_UNLIKELY(State->isPosteriorlyOverconstrained()))
+    return {State, State};
+
+  // Assume functions might recurse (see `reAssume` or `tryRearrange`). During
+  // the recursion the State might not change anymore, that means we reached a
+  // fixpoint.
+  // We avoid infinite recursion of assume calls by checking already visited
+  // States on the stack of assume function calls.
+  const ProgramState *RawSt = State.get();
+  if (LLVM_UNLIKELY(AssumeStack.contains(RawSt)))
+    return {State, State};
+  AssumeStack.push(RawSt);
+  auto AssumeStackBuilder =
+      llvm::make_scope_exit([this]() { AssumeStack.pop(); });
+
+  ProgramStateRef StTrue = Assume(true);
 
   if (!StTrue) {
-    ProgramStateRef StFalse = assumeInternal(State, Cond, false);
+    ProgramStateRef StFalse = Assume(false);
     if (LLVM_UNLIKELY(!StFalse)) { // both infeasible
       ProgramStateRef StInfeasible = State->cloneAsPosteriorlyOverconstrained();
       assert(StInfeasible->isPosteriorlyOverconstrained());
@@ -63,7 +81,7 @@ ConstraintManager::assumeDual(ProgramStateRef State, DefinedSVal Cond) {
     return ProgramStatePair(nullptr, StFalse);
   }
 
-  ProgramStateRef StFalse = assumeInternal(State, Cond, false);
+  ProgramStateRef StFalse = Assume(false);
   if (!StFalse) {
     return ProgramStatePair(StTrue, nullptr);
   }
@@ -71,8 +89,35 @@ ConstraintManager::assumeDual(ProgramStateRef State, DefinedSVal Cond) {
   return ProgramStatePair(StTrue, StFalse);
 }
 
+ConstraintManager::ProgramStatePair
+ConstraintManager::assumeDual(ProgramStateRef State, DefinedSVal Cond) {
+  auto AssumeFun = [&](bool Assumption) {
+    return assumeInternal(State, Cond, Assumption);
+  };
+  return assumeDualImpl(State, AssumeFun);
+}
+
+ConstraintManager::ProgramStatePair
+ConstraintManager::assumeInclusiveRangeDual(ProgramStateRef State, NonLoc Value,
+                                            const llvm::APSInt &From,
+                                            const llvm::APSInt &To) {
+  auto AssumeFun = [&](bool Assumption) {
+    return assumeInclusiveRangeInternal(State, Value, From, To, Assumption);
+  };
+  return assumeDualImpl(State, AssumeFun);
+}
+
 ProgramStateRef ConstraintManager::assume(ProgramStateRef State,
                                           DefinedSVal Cond, bool Assumption) {
   ConstraintManager::ProgramStatePair R = assumeDual(State, Cond);
   return Assumption ? R.first : R.second;
+}
+
+ProgramStateRef
+ConstraintManager::assumeInclusiveRange(ProgramStateRef State, NonLoc Value,
+                                        const llvm::APSInt &From,
+                                        const llvm::APSInt &To, bool InBound) {
+  ConstraintManager::ProgramStatePair R =
+      assumeInclusiveRangeDual(State, Value, From, To);
+  return InBound ? R.first : R.second;
 }

@@ -320,6 +320,7 @@ arm::FloatABI arm::getDefaultFloatABI(const llvm::Triple &Triple) {
   case llvm::Triple::MacOSX:
   case llvm::Triple::IOS:
   case llvm::Triple::TvOS:
+  case llvm::Triple::DriverKit:
     // Darwin defaults to "softfp" for v6 and v7.
     if (Triple.isWatchABI())
       return FloatABI::Hard;
@@ -867,8 +868,8 @@ fp16_fml_fallthrough:
           DisableComdat = true;
           continue;
         }
-        D.Diag(diag::err_invalid_sls_hardening)
-            << Scope << A->getAsString(Args);
+        D.Diag(diag::err_drv_unsupported_option_argument)
+            << A->getOption().getName() << Scope;
         break;
       }
     }

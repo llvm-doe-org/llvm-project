@@ -29,9 +29,6 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
 
       libomptarget_say("Building ${tmachine_name} offloading plugin.")
 
-      include_directories(${LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIR})
-      include_directories(${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR})
-
       # Set the -I for headers from the runtime.
       include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../../runtime/src)
 
@@ -68,6 +65,11 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
           LIBRARY DESTINATION
           "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
       endif()
+
+      target_include_directories( "omptarget.rtl.${tmachine_libname}" PRIVATE
+        ${LIBOMPTARGET_INCLUDE_DIR}
+        ${LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIR}
+        ${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR})
 
       target_link_libraries(
         "omptarget.rtl.${tmachine_libname}"

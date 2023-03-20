@@ -36,10 +36,6 @@ def warn_drv_avr_mcu_not_specified : Warning<
   "no target microcontroller specified on command line, cannot "
   "link standard libraries, please pass -mmcu=<mcu name>">,
   InGroup<AVRRtlibLinkingQuirks>;
-def warn_drv_avr_gcc_not_found: Warning<
-  "no avr-gcc installation can be found on the system, "
-  "cannot link standard libraries">,
-  InGroup<AVRRtlibLinkingQuirks>;
 def warn_drv_avr_libc_not_found: Warning<
   "no avr-libc installation can be found on the system, "
   "cannot link standard libraries">,
@@ -212,6 +208,8 @@ def err_drv_invalid_libcxx_deployment : Error<
   "invalid deployment target for -stdlib=libc++ (requires %0 or later)">;
 def err_drv_invalid_argument_to_option : Error<
   "invalid argument '%0' to -%1">;
+def err_drv_missing_sanitizer_ignorelist : Error<
+  "missing sanitizer ignorelist: '%0'">;
 def err_drv_malformed_sanitizer_ignorelist : Error<
   "malformed sanitizer ignorelist: '%0'">;
 def err_drv_malformed_sanitizer_coverage_allowlist : Error<
@@ -412,7 +410,7 @@ def warn_missing_sysroot : Warning<"no such sysroot directory: '%0'">,
   InGroup<DiagGroup<"missing-sysroot">>;
 def warn_incompatible_sysroot : Warning<"using sysroot for '%0' but targeting '%1'">,
   InGroup<DiagGroup<"incompatible-sysroot">>;
-def warn_debug_compression_unavailable : Warning<"cannot compress debug sections (zlib not installed)">,
+def warn_debug_compression_unavailable : Warning<"cannot compress debug sections (zlib not enabled)">,
   InGroup<DiagGroup<"debug-compression-unavailable">>;
 def warn_drv_disabling_vptr_no_rtti_default : Warning<
   "implicitly disabling vptr sanitizer because rtti wasn't enabled">,
@@ -424,12 +422,8 @@ def warn_ignoring_verify_debuginfo_preserve_export : Warning<
   "ignoring -fverify-debuginfo-preserve-export=%0 because "
   "-fverify-debuginfo-preserve wasn't enabled">,
   InGroup<UnusedCommandLineArgument>;
-def err_invalid_branch_protection: Error <
-  "invalid branch protection option '%0' in '%1'">;
 def warn_unsupported_branch_protection: Warning <
   "invalid branch protection option '%0' in '%1'">, InGroup<BranchProtection>;
-def err_invalid_sls_hardening : Error<
-  "invalid sls hardening option '%0' in '%1'">;
 def err_sls_hardening_arm_not_supported : Error<
   "-mharden-sls is only supported on armv7-a or later">;
 
@@ -546,8 +540,8 @@ def warn_drv_unable_to_find_directory_expected : Warning<
   "unable to find %0 directory, expected to be in '%1'">,
   InGroup<InvalidOrNonExistentDirectory>, DefaultIgnore;
 
-def warn_drv_ps4_force_pic : Warning<
-  "option '%0' was ignored by the PS4 toolchain, using '-fPIC'">,
+def warn_drv_ps_force_pic : Warning<
+  "option '%0' was ignored by the %1 toolchain, using '-fPIC'">,
   InGroup<OptionIgnored>;
 
 def warn_drv_ps_sdk_dir : Warning<
@@ -670,6 +664,8 @@ def err_drv_target_variant_invalid : Error<
 
 def err_drv_invalid_directx_shader_module : Error<
   "invalid profile : %0">;
+def err_drv_dxc_missing_target_profile : Error<
+  "target profile option (-T) is missing">;
 
 def err_drv_invalid_range_dxil_validator_version : Error<
   "invalid validator version : %0\n"

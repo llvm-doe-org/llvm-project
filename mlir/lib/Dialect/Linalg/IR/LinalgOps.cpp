@@ -130,7 +130,8 @@ parseCommonStructuredOpParts(OpAsmParser &parser, OperationState &result,
   SmallVector<OpAsmParser::UnresolvedOperand, 4> inputsOperands,
       outputsOperands;
 
-  parser.parseOptionalAttrDict(result.attributes);
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
 
   if (succeeded(parser.parseOptionalKeyword("ins"))) {
     if (parser.parseLParen())
@@ -918,7 +919,7 @@ struct DeduplicateAndRemoveDeadOperandsAndResults
       // - it is not used in the payload, and
       // - the corresponding indexing maps are not needed for loop bound
       //   computation.
-      for (auto outputOpOperand :
+      for (const auto &outputOpOperand :
            llvm::enumerate(genericOp.getOutputOperands())) {
         unprocessedIndexingMaps = unprocessedIndexingMaps.drop_front();
         Value result = genericOp.getResult(outputOpOperand.index());
@@ -984,7 +985,8 @@ struct DeduplicateAndRemoveDeadOperandsAndResults
       SmallVector<Value> newYieldVals;
       YieldOp origYieldOp = cast<YieldOp>(block->getTerminator());
       rewriter.setInsertionPoint(origYieldOp);
-      for (auto yieldOpOperands : llvm::enumerate(origYieldOp.values())) {
+      for (const auto &yieldOpOperands :
+           llvm::enumerate(origYieldOp.values())) {
         if (!droppedOutputs.count(yieldOpOperands.index())) {
           newYieldVals.push_back(yieldOpOperands.value());
           continue;
@@ -996,7 +998,7 @@ struct DeduplicateAndRemoveDeadOperandsAndResults
     // Replace all live uses of the op.
     SmallVector<Value> replacementsVals(genericOp->getNumResults(), nullptr);
     unsigned newResultNum = 0;
-    for (auto result : llvm::enumerate(genericOp.getResults()))
+    for (const auto &result : llvm::enumerate(genericOp.getResults()))
       if (!droppedOutputs.count(result.index()))
         replacementsVals[result.index()] = newOp.getResult(newResultNum++);
     rewriter.replaceOp(genericOp, replacementsVals);

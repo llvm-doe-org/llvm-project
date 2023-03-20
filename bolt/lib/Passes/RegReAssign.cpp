@@ -26,14 +26,11 @@ namespace opts {
 extern cl::OptionCategory BoltOptCategory;
 extern cl::opt<bool> UpdateDebugSections;
 
-static cl::opt<bool>
-AggressiveReAssign("use-aggr-reg-reassign",
-  cl::desc("use register liveness analysis to try to find more opportunities "
-           "for -reg-reassign optimization"),
-  cl::init(false),
-  cl::ZeroOrMore,
-  cl::cat(BoltOptCategory));
-
+static cl::opt<bool> AggressiveReAssign(
+    "use-aggr-reg-reassign",
+    cl::desc("use register liveness analysis to try to find more opportunities "
+             "for -reg-reassign optimization"),
+    cl::cat(BoltOptCategory));
 }
 
 namespace llvm {
@@ -349,6 +346,7 @@ bool RegReAssign::conservativePassOverFunction(BinaryFunction &Function) {
 
   LLVM_DEBUG(dbgs() << "\n ** Swapping " << BC.MRI->getName(RBX) << " with "
                     << BC.MRI->getName(Candidate) << "\n\n");
+  (void)BC;
   swap(Function, RBX, Candidate);
   FuncsChanged.insert(&Function);
   return true;

@@ -62,6 +62,11 @@ set(hip_files
   __clang_hip_runtime_wrapper.h
   )
 
+set(hlsl_files
+  hlsl.h
+  hlsl/hlsl_basic_types.h
+  )
+
 set(mips_msa_files
   msa.h
   )
@@ -212,6 +217,7 @@ set(files
   ${cuda_files}
   ${hexagon_files}
   ${hip_files}
+  ${hlsl_files}
   ${mips_msa_files}
   ${opencl_files}
   ${ppc_files}
@@ -366,12 +372,13 @@ set_target_properties("clang-resource-headers" PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${output_dir}")
 add_dependencies("clang-resource-headers"
                  "core-resource-headers"
-                 "arm-common-headers"
+                 "arm-common-resource-headers"
                  "arm-resource-headers"
                  "aarch64-resource-headers"
                  "cuda-resource-headers"
                  "hexagon-resource-headers"
                  "hip-resource-headers"
+                 "hlsl-resource-headers"
                  "mips-resource-headers"
                  "ppc-resource-headers"
                  "ppc-htm-resource-headers"
@@ -387,7 +394,7 @@ add_dependencies("clang-resource-headers"
 
 # Core/common headers
 add_header_target("core-resource-headers" ${core_files})
-add_header_target("arm-common-headers" "${arm_common_files};${arm_common_generated_files}")
+add_header_target("arm-common-resource-headers" "${arm_common_files};${arm_common_generated_files}")
 
 # Architecture/platform specific targets
 add_header_target("arm-resource-headers" "${arm_only_files};${arm_only_generated_files}")
@@ -405,6 +412,7 @@ add_header_target("webassembly-resource-headers" "${webassembly_files}")
 add_header_target("x86-resource-headers" "${x86_files}")
 
 # Other header groupings
+add_header_target("hlsl-resource-headers" ${hlsl_files})
 add_header_target("opencl-resource-headers" ${opencl_files})
 add_header_target("openmp-resource-headers" ${openmp_wrapper_files})
 add_header_target("windows-resource-headers" ${windows_only_files})
@@ -539,6 +547,12 @@ install(
   COMPONENT x86-resource-headers)
 
 install(
+  FILES ${hlsl_files}
+  DESTINATION ${header_install_dir}
+  EXCLUDE_FROM_ALL
+  COMPONENT hlsl-resource-headers)
+
+install(
   FILES ${opencl_files}
   DESTINATION ${header_install_dir}
   EXCLUDE_FROM_ALL
@@ -546,7 +560,7 @@ install(
 
 install(
   FILES ${openmp_wrapper_files}
-  DESTINATION ${header_install_dir}
+  DESTINATION ${header_install_dir}/openmp_wrappers
   EXCLUDE_FROM_ALL
   COMPONENT openmp-resource-headers)
 
@@ -557,7 +571,7 @@ install(
   COMPONENT utility-resource-headers)
 
 install(
-  FILES ${windows_files}
+  FILES ${windows_only_files}
   DESTINATION ${header_install_dir}
   EXCLUDE_FROM_ALL
   COMPONENT windows-resource-headers)
@@ -614,6 +628,9 @@ if (NOT LLVM_ENABLE_IDE)
                            DEPENDS webassembly-resource-headers
                            COMPONENT webassembly-resource-headers)
 
+  add_llvm_install_targets(install-hlsl-resource-headers
+                           DEPENDS hlsl-resource-headers
+                           COMPONENT hlsl-resource-headers)
   add_llvm_install_targets(install-opencl-resource-headers
                            DEPENDS opencl-resource-headers
                            COMPONENT opencl-resource-headers)
@@ -621,7 +638,7 @@ if (NOT LLVM_ENABLE_IDE)
                            DEPENDS openmp-resource-headers
                            COMPONENT openmp-resource-headers)
   add_llvm_install_targets(install-windows-resource-headers
-                           DEPENDS window-resource-headers
+                           DEPENDS windows-resource-headers
                            COMPONENT windows-resource-headers)
   add_llvm_install_targets(install-utility-resource-headers
                            DEPENDS utility-resource-headers

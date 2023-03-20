@@ -2002,7 +2002,7 @@ EmitCheckedMixedSignMultiply(CodeGenFunction &CGF, const clang::Expr *Op1,
     // Signed overflow occurs if the result is greater than INT_MAX or lesser
     // than INT_MIN, i.e when |Result| > (INT_MAX + IsNegative).
     auto IntMax =
-        llvm::APInt::getSignedMaxValue(ResultInfo.Width).zextOrSelf(OpWidth);
+        llvm::APInt::getSignedMaxValue(ResultInfo.Width).zext(OpWidth);
     llvm::Value *MaxResult =
         CGF.Builder.CreateAdd(llvm::ConstantInt::get(OpTy, IntMax),
                               CGF.Builder.CreateZExt(IsNegative, OpTy));
@@ -3507,6 +3507,17 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
                         E->getArg(0)->getExprLoc(), FD, 0);
     Builder.CreateMemSet(Dest, ByteVal, SizeVal, false);
     return RValue::get(Dest.getPointer());
+  }
+  case Builtin::BI__builtin_memset_inline: {
+    Address Dest = EmitPointerWithAlignment(E->getArg(0));
+    Value *ByteVal =
+        Builder.CreateTrunc(EmitScalarExpr(E->getArg(1)), Builder.getInt8Ty());
+    uint64_t Size =
+        E->getArg(2)->EvaluateKnownConstInt(getContext()).getZExtValue();
+    EmitNonNullArgCheck(RValue::get(Dest.getPointer()), E->getArg(0)->getType(),
+                        E->getArg(0)->getExprLoc(), FD, 0);
+    Builder.CreateMemSetInline(Dest, ByteVal, Size);
+    return RValue::get(nullptr);
   }
   case Builtin::BI__builtin___memset_chk: {
     // fold __builtin_memset_chk(x, y, cst1, cst2) to memset iff cst1<=cst2.
@@ -7783,6 +7794,11 @@ Value *CodeGenFunction::EmitARMBuiltinExpr(unsigned BuiltinID,
                                       AccessKind);
   }
 
+  if (BuiltinID == ARM::BI__builtin_sponentry) {
+    llvm::Function *F = CGM.getIntrinsic(Intrinsic::sponentry, AllocaInt8PtrTy);
+    return Builder.CreateCall(F);
+  }
+
   // Handle MSVC intrinsics before argument evaluation to prevent double
   // evaluation.
   if (Optional<MSVCIntrin> MsvcIntId = translateArmToMsvcIntrin(BuiltinID))
@@ -9950,6 +9966,55 @@ Value *CodeGenFunction::EmitAArch64BuiltinExpr(unsigned BuiltinID,
     HigherBits = Builder.CreateIntCast(HigherBits, ResType, IsSigned);
 
     return HigherBits;
+  }
+
+  if (BuiltinID == AArch64::BI__writex18byte ||
+      BuiltinID == AArch64::BI__writex18word ||
+      BuiltinID == AArch64::BI__writex18dword ||
+      BuiltinID == AArch64::BI__writex18qword) {
+    llvm::Type *IntTy = ConvertType(E->getArg(1)->getType());
+
+    // Read x18 as i8*
+    LLVMContext &Context = CGM.getLLVMContext();
+    llvm::Metadata *Ops[] = {llvm::MDString::get(Context, "x18")};
+    llvm::MDNode *RegName = llvm::MDNode::get(Context, Ops);
+    llvm::Value *Metadata = llvm::MetadataAsValue::get(Context, RegName);
+    llvm::Function *F =
+        CGM.getIntrinsic(llvm::Intrinsic::read_register, {Int64Ty});
+    llvm::Value *X18 = Builder.CreateCall(F, Metadata);
+    X18 = Builder.CreateIntToPtr(X18, llvm::PointerType::get(Int8Ty, 0));
+
+    // Store val at x18 + offset
+    Value *Offset = Builder.CreateZExt(EmitScalarExpr(E->getArg(0)), Int64Ty);
+    Value *Ptr = Builder.CreateGEP(Int8Ty, X18, Offset);
+    Ptr = Builder.CreatePointerCast(Ptr, llvm::PointerType::get(IntTy, 0));
+    Value *Val = EmitScalarExpr(E->getArg(1));
+    StoreInst *Store = Builder.CreateAlignedStore(Val, Ptr, CharUnits::One());
+    return Store;
+  }
+
+  if (BuiltinID == AArch64::BI__readx18byte ||
+      BuiltinID == AArch64::BI__readx18word ||
+      BuiltinID == AArch64::BI__readx18dword ||
+      BuiltinID == AArch64::BI__readx18qword) {
+    llvm::Type *IntTy = ConvertType(E->getType());
+
+    // Read x18 as i8*
+    LLVMContext &Context = CGM.getLLVMContext();
+    llvm::Metadata *Ops[] = {llvm::MDString::get(Context, "x18")};
+    llvm::MDNode *RegName = llvm::MDNode::get(Context, Ops);
+    llvm::Value *Metadata = llvm::MetadataAsValue::get(Context, RegName);
+    llvm::Function *F =
+        CGM.getIntrinsic(llvm::Intrinsic::read_register, {Int64Ty});
+    llvm::Value *X18 = Builder.CreateCall(F, Metadata);
+    X18 = Builder.CreateIntToPtr(X18, llvm::PointerType::get(Int8Ty, 0));
+
+    // Load x18 + offset
+    Value *Offset = Builder.CreateZExt(EmitScalarExpr(E->getArg(0)), Int64Ty);
+    Value *Ptr = Builder.CreateGEP(Int8Ty, X18, Offset);
+    Ptr = Builder.CreatePointerCast(Ptr, llvm::PointerType::get(IntTy, 0));
+    LoadInst *Load = Builder.CreateAlignedLoad(IntTy, Ptr, CharUnits::One());
+    return Load;
   }
 
   // Handle MSVC intrinsics before argument evaluation to prevent double
@@ -18629,6 +18694,26 @@ Value *CodeGenFunction::EmitWebAssemblyBuiltinExpr(unsigned BuiltinID,
     }
     Function *Callee = CGM.getIntrinsic(IntNo);
     return Builder.CreateCall(Callee, {Vec});
+  }
+  case WebAssembly::BI__builtin_wasm_relaxed_q15mulr_s_i16x8: {
+    Value *LHS = EmitScalarExpr(E->getArg(0));
+    Value *RHS = EmitScalarExpr(E->getArg(1));
+    Function *Callee = CGM.getIntrinsic(Intrinsic::wasm_relaxed_q15mulr_signed);
+    return Builder.CreateCall(Callee, {LHS, RHS});
+  }
+  case WebAssembly::BI__builtin_wasm_dot_i8x16_i7x16_s_i16x8: {
+    Value *LHS = EmitScalarExpr(E->getArg(0));
+    Value *RHS = EmitScalarExpr(E->getArg(1));
+    Function *Callee = CGM.getIntrinsic(Intrinsic::wasm_dot_i8x16_i7x16_signed);
+    return Builder.CreateCall(Callee, {LHS, RHS});
+  }
+  case WebAssembly::BI__builtin_wasm_dot_i8x16_i7x16_add_s_i32x4: {
+    Value *LHS = EmitScalarExpr(E->getArg(0));
+    Value *RHS = EmitScalarExpr(E->getArg(1));
+    Value *Acc = EmitScalarExpr(E->getArg(2));
+    Function *Callee =
+        CGM.getIntrinsic(Intrinsic::wasm_dot_i8x16_i7x16_add_signed);
+    return Builder.CreateCall(Callee, {LHS, RHS, Acc});
   }
   default:
     return nullptr;

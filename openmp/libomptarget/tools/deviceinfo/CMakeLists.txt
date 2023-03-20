@@ -19,6 +19,9 @@ llvm_update_compile_flags(llvm-omp-device-info)
 # Set the -I for headers from the runtime.
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../../runtime/src)
 
+target_include_directories(llvm-omp-device-info PRIVATE
+  ${LIBOMPTARGET_INCLUDE_DIR}
+)
 target_link_libraries(llvm-omp-device-info PRIVATE
   omp
   omptarget
