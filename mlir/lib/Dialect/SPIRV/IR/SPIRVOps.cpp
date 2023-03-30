@@ -28,6 +28,7 @@
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/bit.h"
 
@@ -187,7 +188,7 @@ parseEnumStrAttr(EnumClass &value, OpAsmParser &parser,
     return parser.emitError(loc, "invalid ")
            << attrName << " attribute specification: " << attrVal;
   }
-  value = attrOptional.getValue();
+  value = *attrOptional;
   return success();
 }
 
@@ -869,7 +870,7 @@ static ParseResult parseGroupNonUniformArithmeticOp(OpAsmParser &parser,
   if (parser.resolveOperand(valueInfo, resultType, state.operands))
     return failure();
 
-  if (clusterSizeInfo.hasValue()) {
+  if (clusterSizeInfo) {
     Type i32Type = parser.getBuilder().getIntegerType(32);
     if (parser.resolveOperand(*clusterSizeInfo, i32Type, state.operands))
       return failure();
@@ -2384,44 +2385,43 @@ Operation::operand_range spirv::FunctionCallOp::getArgOperands() {
 }
 
 //===----------------------------------------------------------------------===//
-// spv.GLSLFClampOp
+// spv.GLFClampOp
 //===----------------------------------------------------------------------===//
 
-ParseResult spirv::GLSLFClampOp::parse(OpAsmParser &parser,
-                                       OperationState &result) {
+ParseResult spirv::GLFClampOp::parse(OpAsmParser &parser,
+                                     OperationState &result) {
   return parseOneResultSameOperandTypeOp(parser, result);
 }
-void spirv::GLSLFClampOp::print(OpAsmPrinter &p) { printOneResultOp(*this, p); }
+void spirv::GLFClampOp::print(OpAsmPrinter &p) { printOneResultOp(*this, p); }
 
 //===----------------------------------------------------------------------===//
-// spv.GLSLUClampOp
+// spv.GLUClampOp
 //===----------------------------------------------------------------------===//
 
-ParseResult spirv::GLSLUClampOp::parse(OpAsmParser &parser,
-                                       OperationState &result) {
+ParseResult spirv::GLUClampOp::parse(OpAsmParser &parser,
+                                     OperationState &result) {
   return parseOneResultSameOperandTypeOp(parser, result);
 }
-void spirv::GLSLUClampOp::print(OpAsmPrinter &p) { printOneResultOp(*this, p); }
+void spirv::GLUClampOp::print(OpAsmPrinter &p) { printOneResultOp(*this, p); }
 
 //===----------------------------------------------------------------------===//
-// spv.GLSLSClampOp
+// spv.GLSClampOp
 //===----------------------------------------------------------------------===//
 
-ParseResult spirv::GLSLSClampOp::parse(OpAsmParser &parser,
-                                       OperationState &result) {
+ParseResult spirv::GLSClampOp::parse(OpAsmParser &parser,
+                                     OperationState &result) {
   return parseOneResultSameOperandTypeOp(parser, result);
 }
-void spirv::GLSLSClampOp::print(OpAsmPrinter &p) { printOneResultOp(*this, p); }
+void spirv::GLSClampOp::print(OpAsmPrinter &p) { printOneResultOp(*this, p); }
 
 //===----------------------------------------------------------------------===//
-// spv.GLSLFmaOp
+// spv.GLFmaOp
 //===----------------------------------------------------------------------===//
 
-ParseResult spirv::GLSLFmaOp::parse(OpAsmParser &parser,
-                                    OperationState &result) {
+ParseResult spirv::GLFmaOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseOneResultSameOperandTypeOp(parser, result);
 }
-void spirv::GLSLFmaOp::print(OpAsmPrinter &p) { printOneResultOp(*this, p); }
+void spirv::GLFmaOp::print(OpAsmPrinter &p) { printOneResultOp(*this, p); }
 
 //===----------------------------------------------------------------------===//
 // spv.GlobalVariable
@@ -2496,7 +2496,7 @@ void spirv::GlobalVariableOp::print(OpAsmPrinter &printer) {
   // Print optional initializer
   if (auto initializer = this->initializer()) {
     printer << " " << kInitializerAttrName << '(';
-    printer.printSymbolName(initializer.getValue());
+    printer.printSymbolName(*initializer);
     printer << ')';
     elidedAttrs.push_back(kInitializerAttrName);
   }
@@ -2545,7 +2545,7 @@ LogicalResult spirv::GroupBroadcastOp::verify() {
     return emitOpError("execution scope must be 'Workgroup' or 'Subgroup'");
 
   if (auto localIdTy = localid().getType().dyn_cast<VectorType>())
-    if (!(localIdTy.getNumElements() == 2 || localIdTy.getNumElements() == 3))
+    if (localIdTy.getNumElements() != 2 && localIdTy.getNumElements() != 3)
       return emitOpError("localid is a vector and can be with only "
                          " 2 or 3 components, actual number is ")
              << localIdTy.getNumElements();
@@ -2837,6 +2837,58 @@ ParseResult spirv::GroupNonUniformUMinOp::parse(OpAsmParser &parser,
 }
 void spirv::GroupNonUniformUMinOp::print(OpAsmPrinter &p) {
   printGroupNonUniformArithmeticOp(*this, p);
+}
+
+//===----------------------------------------------------------------------===//
+// spv.ISubBorrowOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult spirv::ISubBorrowOp::verify() {
+  auto resultType = getType().cast<spirv::StructType>();
+  if (resultType.getNumElements() != 2)
+    return emitOpError("expected result struct type containing two members");
+
+  SmallVector<Type, 4> types;
+  types.push_back(operand1().getType());
+  types.push_back(operand2().getType());
+  types.push_back(resultType.getElementType(0));
+  types.push_back(resultType.getElementType(1));
+  if (!llvm::is_splat(types))
+    return emitOpError(
+        "expected all operand types and struct member types are the same");
+
+  return success();
+}
+
+ParseResult spirv::ISubBorrowOp::parse(OpAsmParser &parser,
+                                       OperationState &state) {
+  SmallVector<OpAsmParser::UnresolvedOperand, 2> operands;
+  if (parser.parseOptionalAttrDict(state.attributes) ||
+      parser.parseOperandList(operands) || parser.parseColon())
+    return failure();
+
+  Type resultType;
+  auto loc = parser.getCurrentLocation();
+  if (parser.parseType(resultType))
+    return failure();
+
+  auto structType = resultType.dyn_cast<spirv::StructType>();
+  if (!structType || structType.getNumElements() != 2)
+    return parser.emitError(loc, "expected spv.struct type with two members");
+
+  SmallVector<Type, 2> operandTypes(2, structType.getElementType(0));
+  if (parser.resolveOperands(operands, operandTypes, loc, state.operands))
+    return failure();
+
+  state.addTypes(resultType);
+  return success();
+}
+
+void spirv::ISubBorrowOp::print(OpAsmPrinter &printer) {
+  printer << ' ';
+  printer.printOptionalAttrDict((*this)->getAttrs());
+  printer.printOperands((*this)->getOperands());
+  printer << " : " << getType();
 }
 
 //===----------------------------------------------------------------------===//
@@ -4123,10 +4175,10 @@ LogicalResult spirv::SpecConstantOperationOp::verifyRegions() {
 }
 
 //===----------------------------------------------------------------------===//
-// spv.GLSL.FrexpStruct
+// spv.GL.FrexpStruct
 //===----------------------------------------------------------------------===//
 
-LogicalResult spirv::GLSLFrexpStructOp::verify() {
+LogicalResult spirv::GLFrexpStructOp::verify() {
   spirv::StructType structTy = result().getType().dyn_cast<spirv::StructType>();
 
   if (structTy.getNumElements() != 2)
@@ -4148,10 +4200,10 @@ LogicalResult spirv::GLSLFrexpStructOp::verify() {
   if (exponentVecTy) {
     IntegerType componentIntTy =
         exponentVecTy.getElementType().dyn_cast<IntegerType>();
-    if (!(componentIntTy && componentIntTy.getWidth() == 32))
+    if (!componentIntTy || componentIntTy.getWidth() != 32)
       return emitError("member one of the resulting struct type must"
                        "be a scalar or vector of 32 bit integer type");
-  } else if (!(exponentIntTy && exponentIntTy.getWidth() == 32)) {
+  } else if (!exponentIntTy || exponentIntTy.getWidth() != 32) {
     return emitError("member one of the resulting struct type "
                      "must be a scalar or vector of 32 bit integer type");
   }
@@ -4169,10 +4221,10 @@ LogicalResult spirv::GLSLFrexpStructOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// spv.GLSL.Ldexp
+// spv.GL.Ldexp
 //===----------------------------------------------------------------------===//
 
-LogicalResult spirv::GLSLLdexpOp::verify() {
+LogicalResult spirv::GLLdexpOp::verify() {
   Type significandType = x().getType();
   Type exponentType = exp().getType();
 
@@ -4269,9 +4321,9 @@ LogicalResult spirv::ImageQuerySizeOp::verify() {
   case spirv::Dim::Dim2D:
   case spirv::Dim::Dim3D:
   case spirv::Dim::Cube:
-    if (!(samplingInfo == spirv::ImageSamplingInfo::MultiSampled ||
-          samplerInfo == spirv::ImageSamplerUseInfo::SamplerUnknown ||
-          samplerInfo == spirv::ImageSamplerUseInfo::NoSampler))
+    if (samplingInfo != spirv::ImageSamplingInfo::MultiSampled &&
+        samplerInfo != spirv::ImageSamplerUseInfo::SamplerUnknown &&
+        samplerInfo != spirv::ImageSamplerUseInfo::NoSampler)
       return emitError(
           "if Dim is 1D, 2D, 3D, or Cube, "
           "it must also have either an MS of 1 or a Sampled of 0 or 2");

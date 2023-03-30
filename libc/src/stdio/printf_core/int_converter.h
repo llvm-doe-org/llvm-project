@@ -9,7 +9,8 @@
 #ifndef LLVM_LIBC_SRC_STDIO_PRINTF_CORE_INT_CONVERTER_H
 #define LLVM_LIBC_SRC_STDIO_PRINTF_CORE_INT_CONVERTER_H
 
-#include "src/__support/CPP/Limits.h"
+#include "src/__support/integer_to_string.h"
+#include "src/stdio/printf_core/converter_utils.h"
 #include "src/stdio/printf_core/core_structs.h"
 #include "src/stdio/printf_core/writer.h"
 
@@ -19,22 +20,11 @@
 namespace __llvm_libc {
 namespace printf_core {
 
-void inline convert_int(Writer *writer, const FormatSection &to_conv) {
+int inline convert_int(Writer *writer, const FormatSection &to_conv) {
   static constexpr size_t BITS_IN_BYTE = 8;
   static constexpr size_t BITS_IN_NUM = sizeof(uintmax_t) * BITS_IN_BYTE;
 
-  // This approximates the number of digits it takes to represent an integer of
-  // a certain number of bits. The calculation is floor((bits * 5) / 16)
-  // 32 -> 10 (actually needs 10)
-  // 64 -> 20 (actually needs 20)
-  // 128 -> 40 (actually needs 39)
-  // This estimation grows slightly faster than the actual value, but is close
-  // enough.
-
-  static constexpr size_t BUFF_LEN =
-      ((sizeof(uintmax_t) * BITS_IN_BYTE * 5) / 16);
   uintmax_t num = to_conv.conv_val_raw;
-  char buffer[BUFF_LEN];
   bool is_negative = false;
   FormatFlags flags = to_conv.flags;
 
@@ -52,46 +42,10 @@ void inline convert_int(Writer *writer, const FormatSection &to_conv) {
     }
   }
 
-  switch (to_conv.length_modifier) {
-  case LengthModifier::none:
-    num = num & cpp::NumericLimits<unsigned int>::max();
-    break;
+  num = apply_length_modifier(num, to_conv.length_modifier);
 
-  case LengthModifier::l:
-    num = num & cpp::NumericLimits<unsigned long>::max();
-    break;
-  case LengthModifier::ll:
-  case LengthModifier::L:
-    num = num & cpp::NumericLimits<unsigned long long>::max();
-    break;
-  case LengthModifier::h:
-    num = num & cpp::NumericLimits<unsigned short>::max();
-    break;
-  case LengthModifier::hh:
-    num = num & cpp::NumericLimits<unsigned char>::max();
-    break;
-  case LengthModifier::z:
-    num = num & cpp::NumericLimits<size_t>::max();
-    break;
-  case LengthModifier::t:
-    // We don't have unsigned ptrdiff so uintptr_t is used, since we need an
-    // unsigned type and ptrdiff is usually the same size as a pointer.
-    static_assert(sizeof(ptrdiff_t) == sizeof(uintptr_t));
-    num = num & cpp::NumericLimits<uintptr_t>::max();
-    break;
-  case LengthModifier::j:
-    // j is intmax, so no mask is necessary.
-    break;
-  }
-
-  // buff_cur can never reach 0, since the buffer is sized to always be able to
-  // contain the whole integer. This means that bounds checking it should be
-  // unnecessary.
-  size_t buff_cur = BUFF_LEN;
-  for (; num > 0 /* && buff_cur > 0 */; --buff_cur, num /= 10)
-    buffer[buff_cur - 1] = (num % 10) + '0';
-
-  size_t digits_written = BUFF_LEN - buff_cur;
+  auto const int_to_str = integer_to_string(num);
+  size_t digits_written = int_to_str.str().size();
 
   char sign_char = 0;
 
@@ -120,12 +74,6 @@ void inline convert_int(Writer *writer, const FormatSection &to_conv) {
       if (zeroes < 0)
         zeroes = 0;
       spaces = 0;
-    } else if (digits_written < 1) {
-      // If no precision is specified, precision defaults to 1. This means that
-      // if the integer passed to the conversion is 0, a 0 will be printed.
-      // Example: ("%3d", 0) -> "  0"
-      zeroes = 1;
-      spaces = to_conv.min_width - zeroes - sign_char_len;
     } else {
       // If there are enough digits to pass over the precision, just write the
       // number, padded by spaces.
@@ -137,6 +85,12 @@ void inline convert_int(Writer *writer, const FormatSection &to_conv) {
     // spaces. Example: ("%5.4d", 10000) -> "10000"
     // If the check for if zeroes is negative was not there, spaces would be
     // incorrectly evaluated as 1.
+    //
+    // The standard treats the case when num and precision are both zeroes as
+    // special - it requires that no characters are produced. So, we adjust for
+    // that special case first.
+    if (num == 0 && to_conv.precision == 0)
+      digits_written = 0;
     zeroes = to_conv.precision - digits_written; // a negative value means 0
     if (zeroes < 0)
       zeroes = 0;
@@ -148,24 +102,27 @@ void inline convert_int(Writer *writer, const FormatSection &to_conv) {
   if ((flags & FormatFlags::LEFT_JUSTIFIED) == FormatFlags::LEFT_JUSTIFIED) {
     // If left justified it goes sign zeroes digits spaces
     if (sign_char != 0)
-      writer->write(&sign_char, 1);
+      RET_IF_RESULT_NEGATIVE(writer->write(&sign_char, 1));
     if (zeroes > 0)
-      writer->write_chars('0', zeroes);
+      RET_IF_RESULT_NEGATIVE(writer->write_chars('0', zeroes));
     if (digits_written > 0)
-      writer->write(buffer + buff_cur, digits_written);
+      RET_IF_RESULT_NEGATIVE(
+          writer->write(int_to_str.str().data(), digits_written));
     if (spaces > 0)
-      writer->write_chars(' ', spaces);
+      RET_IF_RESULT_NEGATIVE(writer->write_chars(' ', spaces));
   } else {
     // Else it goes spaces sign zeroes digits
     if (spaces > 0)
-      writer->write_chars(' ', spaces);
+      RET_IF_RESULT_NEGATIVE(writer->write_chars(' ', spaces));
     if (sign_char != 0)
-      writer->write(&sign_char, 1);
+      RET_IF_RESULT_NEGATIVE(writer->write(&sign_char, 1));
     if (zeroes > 0)
-      writer->write_chars('0', zeroes);
+      RET_IF_RESULT_NEGATIVE(writer->write_chars('0', zeroes));
     if (digits_written > 0)
-      writer->write(buffer + buff_cur, digits_written);
+      RET_IF_RESULT_NEGATIVE(
+          writer->write(int_to_str.str().data(), digits_written));
   }
+  return WRITE_OK;
 }
 
 } // namespace printf_core

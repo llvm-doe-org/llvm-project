@@ -1356,9 +1356,6 @@ public:
   }
 };
 
-// Defined in Statepoint.h -- NOT a subclass of IntrinsicInst
-class GCStatepointInst;
-
 /// Common base class for representing values projected from a statepoint.
 /// Currently, the only projections available are gc.result and gc.relocate.
 class GCProjectionInst : public IntrinsicInst {
@@ -1381,7 +1378,7 @@ public:
   }
 
   /// The statepoint with which this gc.relocate is associated.
-  const GCStatepointInst *getStatepoint() const;
+  const Value *getStatepoint() const;
 };
 
 /// Represents calls to the gc.relocate intrinsic.

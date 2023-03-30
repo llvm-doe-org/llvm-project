@@ -268,17 +268,20 @@ int main() {
 }
 ```
 
+If you see an error for any of the above examples, try appending `-L` followed
+by the root `lib` directory of your Clacc install directory to the end of the
+`clang` command line.  The problem is that `clang` sometimes tries to link
+systems libraries (e.g., `/usr/lib64/libomptarget.so`) instead of the libraries
+that were built and installed for it.  This problem is inherited from LLVM
+upstream and is not unique to Clacc.
+
 ## Usage from a Build Directory
 
 Most Clacc users should work from the install directory, as described
 in the previous section.  However, if you plan to modify Clacc, it
 might be easier to work from the build directory instead.  Doing so
 requires setting many environment variables and command-line options
-to ensure `clang` finds its own libraries and header files regardless
-of any like-named files that happen to be installed in system
-directories.  Not setting those can produce unexpected behavior at
-compile time or run time.  This complexity is inherited from LLVM
-upstream and is not unique to Clacc.
+to ensure `clang` finds its own libraries and header files.
 
 For example, to compile and run for an NVIDIA GPU, where `$CLACC_BUILD_DIR` is
 the `build` directory created when following [the above build procedure from
@@ -286,9 +289,10 @@ Git](#from-git):
 
 ```
 $ export PATH=$CLACC_BUILD_DIR/bin:$PATH
-$ export LD_LIBRARY_PATH=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src:$LD_LIBRARY_PATH
+$ export LD_LIBRARY_PATH=$CLACC_BUILD_DIR/lib:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src:$LD_LIBRARY_PATH
 $ clang -fopenacc -fopenmp-targets=nvptx64-nvidia-cuda \
   --libomptarget-nvptx-bc-path=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
+  -L $CLACC_BUILD_DIR/lib \
   -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
   -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
   -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
@@ -303,6 +307,7 @@ For an AMD GPU, change the Clang command line to:
 ```
 $ clang -fopenacc -fopenmp-targets=amdgcn-amd-amdhsa \
   --libomptarget-amdgcn-bc-path=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
+  -L $CLACC_BUILD_DIR/lib \
   -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
   -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
   -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \

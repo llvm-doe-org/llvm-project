@@ -659,7 +659,7 @@ void Writer::scanRelocations() {
       }
       if (auto *sym = r.referent.dyn_cast<Symbol *>()) {
         if (auto *undefined = dyn_cast<Undefined>(sym))
-          treatUndefinedSymbol(*undefined);
+          treatUndefinedSymbol(*undefined, isec, r.offset);
         // treatUndefinedSymbol() can replace sym with a DylibSymbol; re-check.
         if (!isa<Undefined>(sym) && validateSymbolRelocation(sym, isec, r))
           prepareSymbolRelocation(sym, isec, r);
@@ -1126,13 +1126,16 @@ void Writer::writeUuid() {
 }
 
 void Writer::writeCodeSignature() {
-  if (codeSignatureSection)
+  if (codeSignatureSection) {
+    TimeTraceScope timeScope("Write code signature");
     codeSignatureSection->writeHashes(buffer->getBufferStart());
+  }
 }
 
 void Writer::writeOutputFile() {
   TimeTraceScope timeScope("Write output file");
   openFile();
+  reportPendingUndefinedSymbols();
   if (errorCount())
     return;
   writeSections();
@@ -1155,11 +1158,16 @@ template <class LP> void Writer::run() {
   scanRelocations();
 
   // Do not proceed if there was an undefined symbol.
+  reportPendingUndefinedSymbols();
   if (errorCount())
     return;
 
   if (in.stubHelper->isNeeded())
     in.stubHelper->setup();
+
+  if (in.objCImageInfo->isNeeded())
+    in.objCImageInfo->finalizeContents();
+
   // At this point, we should know exactly which output sections are needed,
   // courtesy of scanSymbols() and scanRelocations().
   createOutputSections<LP>();
@@ -1206,6 +1214,7 @@ void macho::createSyntheticSections() {
   in.stubs = make<StubsSection>();
   in.stubHelper = make<StubHelperSection>();
   in.unwindInfo = makeUnwindInfoSection();
+  in.objCImageInfo = make<ObjCImageInfoSection>();
 
   // This section contains space for just a single word, and will be used by
   // dyld to cache an address to the image loader it uses.

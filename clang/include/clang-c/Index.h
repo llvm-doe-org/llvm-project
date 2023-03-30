@@ -2631,37 +2631,57 @@ enum CXCursorKind {
    */
   CXCursor_OMPTargetParallelGenericLoopDirective = 299,
 
+  /** OpenMP parallel masked directive.
+   */
+  CXCursor_OMPParallelMaskedDirective = 300,
+
+  /** OpenMP masked taskloop directive.
+   */
+  CXCursor_OMPMaskedTaskLoopDirective = 301,
+
+  /** OpenMP masked taskloop simd directive.
+   */
+  CXCursor_OMPMaskedTaskLoopSimdDirective = 302,
+
+  /** OpenMP parallel masked taskloop directive.
+   */
+  CXCursor_OMPParallelMaskedTaskLoopDirective = 303,
+
+  /** OpenMP parallel masked taskloop simd directive.
+   */
+  CXCursor_OMPParallelMaskedTaskLoopSimdDirective = 304,
+
   /** OpenACC update directive.
    */
-  CXCursor_ACCUpdateDirective = 300,
+  CXCursor_ACCUpdateDirective = 305,
 
   /** OpenACC enter data directive.
    */
-  CXCursor_ACCEnterDataDirective = 301,
+  CXCursor_ACCEnterDataDirective = 306,
 
   /** OpenACC exit data directive.
    */
-  CXCursor_ACCExitDataDirective = 302,
+  CXCursor_ACCExitDataDirective = 307,
 
   /** OpenACC data directive.
    */
-  CXCursor_ACCDataDirective = 303,
+  CXCursor_ACCDataDirective = 308,
 
   /** OpenACC parallel directive.
    */
-  CXCursor_ACCParallelDirective = 304,
+  CXCursor_ACCParallelDirective = 309,
 
   /** OpenACC loop directive.
    */
-  CXCursor_ACCLoopDirective = 305,
+  CXCursor_ACCLoopDirective = 310,
 
   /** OpenACC parallel loop directive.
    */
-  CXCursor_ACCParallelLoopDirective = 306,
+  CXCursor_ACCParallelLoopDirective = 311,
 
   /** OpenACC atomic directive.
    */
-  CXCursor_ACCAtomicDirective = 307,
+  CXCursor_ACCAtomicDirective = 312,
 
   CXCursor_LastStmt = CXCursor_ACCAtomicDirective,
 

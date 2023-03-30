@@ -17,7 +17,7 @@
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/SCF/SCF.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/Dialect/Vector/Transforms/VectorDistribution.h"
 #include "mlir/Dialect/Vector/Transforms/VectorTransforms.h"
@@ -356,8 +356,7 @@ struct TestVectorUnrollingPatterns
   }
 
   ListOption<int64_t> unrollOrder{*this, "unroll-order",
-                                  llvm::cl::desc("set the unroll order"),
-                                  llvm::cl::ZeroOrMore};
+                                  llvm::cl::desc("set the unroll order")};
 
   Option<bool> unrollBasedOnType{
       *this, "unroll-based-on-type",
@@ -413,7 +412,7 @@ struct TestVectorDistributePatterns
                                   perm, ctx);
         Optional<mlir::vector::DistributeOps> ops = distributPointwiseVectorOp(
             builder, op.getOperation(), ids, mul, map);
-        if (ops.hasValue()) {
+        if (ops) {
           SmallPtrSet<Operation *, 1> extractOp({ops->extract, ops->insert});
           op.getResult().replaceAllUsesExcept(ops->insert.getResult(),
                                               extractOp);
@@ -474,7 +473,7 @@ struct TestVectorToLoopPatterns
       Optional<mlir::vector::DistributeOps> ops = distributPointwiseVectorOp(
           builder, op.getOperation(), {forOp.getInductionVar()}, {multiplicity},
           map);
-      if (ops.hasValue()) {
+      if (ops) {
         SmallPtrSet<Operation *, 1> extractOp({ops->extract, ops->insert});
         op.getResult().replaceAllUsesExcept(ops->insert.getResult(), extractOp);
       }
@@ -804,6 +803,21 @@ static Value allocateGlobalSharedMemory(Location loc, OpBuilder &builder,
   return builder.create<memref::GetGlobalOp>(loc, memrefType, symbolName);
 }
 
+static Value warpReduction(Location loc, OpBuilder &builder, Value input,
+                           CombiningKind kind, uint32_t size) {
+  Value laneVal = input;
+  // Parallel reduction using butterfly shuffles.
+  for (uint64_t i = 1; i < size; i <<= 1) {
+    Value shuffled = builder
+                         .create<gpu::ShuffleOp>(loc, laneVal, i,
+                                                 /*width=*/size,
+                                                 /*mode=*/gpu::ShuffleMode::XOR)
+                         .result();
+    laneVal = makeArithReduction(builder, loc, kind, laneVal, shuffled);
+  }
+  return laneVal;
+}
+
 struct TestVectorDistribution
     : public PassWrapper<TestVectorDistribution, OperationPass<func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestVectorDistribution)
@@ -835,6 +849,10 @@ struct TestVectorDistribution
                             llvm::cl::desc("Test hoist uniform"),
                             llvm::cl::init(false)};
 
+  Option<bool> propagateDistribution{
+      *this, "propagate-distribution",
+      llvm::cl::desc("Test distribution propgation"), llvm::cl::init(false)};
+
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
 
@@ -862,7 +880,12 @@ struct TestVectorDistribution
       populateDistributeTransferWriteOpPatterns(patterns, distributionFn);
       (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
     }
-
+    if (propagateDistribution) {
+      RewritePatternSet patterns(ctx);
+      vector::populatePropagateWarpVectorDistributionPatterns(patterns);
+      vector::populateDistributeReduction(patterns, warpReduction);
+      (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    }
     WarpExecuteOnLane0LoweringOptions options;
     options.warpAllocationFn = allocateGlobalSharedMemory;
     options.warpSyncronizationFn = [](Location loc, OpBuilder &builder,

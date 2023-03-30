@@ -732,6 +732,8 @@ private:
                               SourceLocation PragmaLocation);
   bool HandlePragmaMSAllocText(StringRef PragmaName,
                                SourceLocation PragmaLocation);
+  bool HandlePragmaMSOptimize(StringRef PragmaName,
+                              SourceLocation PragmaLocation);
 
   /// Handle the annotation token produced for
   /// #pragma align...
@@ -1045,7 +1047,7 @@ private:
   /// If the next token is not a semicolon, this emits the specified diagnostic,
   /// or, if there's just some closing-delimiter noise (e.g., ')' or ']') prior
   /// to the semicolon, consumes that extra token.
-  bool ExpectAndConsumeSemi(unsigned DiagID);
+  bool ExpectAndConsumeSemi(unsigned DiagID , StringRef TokenUsed = "");
 
   /// The kind of extra semi diagnostic to emit.
   enum ExtraSemiKind {
@@ -2079,7 +2081,8 @@ private:
       SourceLocation *TrailingElseLoc = nullptr);
   StmtResult ParseStatementOrDeclarationAfterAttributes(
       StmtVector &Stmts, ParsedStmtContext StmtCtx,
-      SourceLocation *TrailingElseLoc, ParsedAttributes &Attrs);
+      SourceLocation *TrailingElseLoc, ParsedAttributes &DeclAttrs,
+      ParsedAttributes &DeclSpecAttrs);
   StmtResult ParseExprStatement(ParsedStmtContext StmtCtx);
   StmtResult ParseLabeledStatement(ParsedAttributes &Attrs,
                                    ParsedStmtContext StmtCtx);
@@ -2328,15 +2331,18 @@ private:
 
   DeclGroupPtrTy ParseDeclaration(DeclaratorContext Context,
                                   SourceLocation &DeclEnd,
-                                  ParsedAttributes &Attrs,
+                                  ParsedAttributes &DeclAttrs,
+                                  ParsedAttributes &DeclSpecAttrs,
                                   SourceLocation *DeclSpecStart = nullptr);
   DeclGroupPtrTy
   ParseSimpleDeclaration(DeclaratorContext Context, SourceLocation &DeclEnd,
-                         ParsedAttributes &Attrs, bool RequireSemi,
+                         ParsedAttributes &DeclAttrs,
+                         ParsedAttributes &DeclSpecAttrs, bool RequireSemi,
                          ForRangeInit *FRI = nullptr,
                          SourceLocation *DeclSpecStart = nullptr);
   bool MightBeDeclarator(DeclaratorContext Context);
   DeclGroupPtrTy ParseDeclGroup(ParsingDeclSpec &DS, DeclaratorContext Context,
+                                ParsedAttributes &Attrs,
                                 SourceLocation *DeclEnd = nullptr,
                                 ForRangeInit *FRI = nullptr);
   Decl *ParseDeclarationAfterDeclarator(Declarator &D,
@@ -3369,31 +3375,34 @@ public:
   // OpenACC: Directives and clauses.
 
   /// Parses declarative OpenACC directive not in C++ class member list.
-  DeclGroupPtrTy ParseOpenACCDeclarativeDirective(DeclaratorContext Context,
-                                                  ParsedAttributes &Attrs);
+  DeclGroupPtrTy
+  ParseOpenACCDeclarativeDirective(DeclaratorContext Context,
+                                   ParsedAttributes &DeclAttrs,
+                                   ParsedAttributes &DeclSpecAttrs);
   /// Parses declarative OpenACC directive not in C++ class member list, but the
   /// starting \c annot_pragma_openacc (whose location is \p StartLoc) and
   /// directive kind (\p DKind) have already been parsed.  Stores the location
   /// of the declaration's last token (semicolon) in \p EndLoc.
-  DeclGroupPtrTy ParseOpenACCDeclarativeDirective(DeclaratorContext Context,
-                                                  ParsedAttributes &Attrs,
-                                                  SourceLocation StartLoc,
-                                                  OpenACCDirectiveKind DKind,
-                                                  SourceLocation &EndLoc);
+  DeclGroupPtrTy ParseOpenACCDeclarativeDirective(
+      DeclaratorContext Context, ParsedAttributes &DeclAttrs,
+      ParsedAttributes &DeclSpecAttrs, SourceLocation StartLoc,
+      OpenACCDirectiveKind DKind, SourceLocation &EndLoc);
   /// Parses declarative OpenACC directive in C++ class member list.
-  DeclGroupPtrTy ParseOpenACCDeclarativeDirective(ParsedAttributes &Attrs,
+  DeclGroupPtrTy ParseOpenACCDeclarativeDirective(ParsedAttributes &AccessAttrs,
                                                   AccessSpecifier AS,
                                                   DeclSpec::TST TagType,
                                                   Decl *Tag);
   /// Used by the other \c ParseOpenACCDeclarativeDirective functions.
   DeclGroupPtrTy ParseOpenACCDeclarativeDirective(
-      DeclaratorContext Context, ParsedAttributes &Attrs, AccessSpecifier AS,
+      DeclaratorContext Context, ParsedAttributes &DeclAttrs,
+      ParsedAttributes &DeclSpecAttrs, AccessSpecifier AS,
       DeclSpec::TST TagType, Decl *Tag, SourceLocation StartLoc,
       OpenACCDirectiveKind DKind, SourceLocation &EndLoc);
   /// Parses OpenACC executable directives or constructs.
   ///
   /// \param StmtCtx The context in which we're parsing the directive.
-  StmtResult ParseOpenACCDirectiveStmt(ParsedAttributes &Attrs,
+  StmtResult ParseOpenACCDirectiveStmt(ParsedAttributes &DeclAttrs,
+                                       ParsedAttributes &DeclSpecAttrs,
                                        ParsedStmtContext StmtCtx);
   /// Parses clauses for directive of kind \a Kind.
   ///

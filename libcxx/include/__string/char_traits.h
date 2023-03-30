@@ -516,8 +516,6 @@ char_traits<char8_t>::find(const char_type* __s, size_t __n, const char_type& __
 
 #endif // _LIBCPP_HAS_NO_CHAR8_T
 
-#ifndef _LIBCPP_HAS_NO_UNICODE_CHARS
-
 template <>
 struct _LIBCPP_TEMPLATE_VIS char_traits<char16_t>
 {
@@ -698,8 +696,6 @@ char_traits<char32_t>::find(const char_type* __s, size_t __n, const char_type& _
     return nullptr;
 }
 
-#endif // _LIBCPP_HAS_NO_UNICODE_CHARS
-
 // helper fns for basic_string and string_view
 
 // __str_find
@@ -806,9 +802,7 @@ __str_rfind(const _CharT *__p, _SizeT __sz,
         __pos += __n;
     else
         __pos = __sz;
-    const _CharT* __r = _VSTD::__find_end(
-                  __p, __p + __pos, __s, __s + __n, _Traits::eq,
-                        random_access_iterator_tag(), random_access_iterator_tag());
+    const _CharT* __r = std::__find_end_classic(__p, __p + __pos, __s, __s + __n, _Traits::eq);
     if (__n > 0 && __r == __p + __pos)
         return __npos;
     return static_cast<_SizeT>(__r - __p);

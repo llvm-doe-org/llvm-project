@@ -32,23 +32,11 @@ target_link_libraries(acc2omp
     omp omptarget ${CMAKE_DL_LIBS}
   PRIVATE
     "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports/acc2omp.txt")
-if(OPENMP_CLANG_LIB_SUBDIR AND NOT OPENMP_STANDALONE_BUILD)
-  add_custom_command(TARGET acc2omp POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-      $<TARGET_FILE_DIR:acc2omp>/${OPENMP_CLANG_LIB_SUBDIR}
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:acc2omp>
-      $<TARGET_FILE_DIR:acc2omp>/${OPENMP_CLANG_LIB_SUBDIR}
-  )
-endif()
 
 # Install libacc2omp everywhere LLVM's libomp is installed.  See
 # acc2omp-backend.h header comments for further discussion.
 install(TARGETS acc2omp LIBRARY COMPONENT acc2omp
   DESTINATION "${OPENMP_INSTALL_LIBDIR}")
-if(OPENMP_CLANG_LIB_SUBDIR)
-  install(TARGETS acc2omp LIBRARY COMPONENT acc2omp DESTINATION
-    "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
-endif()
 
 # Set the -I for headers from the runtime.
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -57,6 +45,12 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../runtime/src)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../runtime/src)
 
 # Install the OpenACC standard headers and libacc2omp headers.
+if(${OPENMP_STANDALONE_BUILD})
+  set(LIBACC2OMP_HEADERS_INSTALL_PATH "${CMAKE_INSTALL_INCLUDEDIR}")
+else()
+  string(REGEX MATCH "[0-9]+\\.[0-9]+(\\.[0-9]+)?" CLANG_VERSION ${PACKAGE_VERSION})
+  set(LIBACC2OMP_HEADERS_INSTALL_PATH "${OPENMP_INSTALL_LIBDIR}/clang/${CLANG_VERSION}/include")
+endif()
 install(
   FILES
     ${CMAKE_CURRENT_BINARY_DIR}/openacc.h
@@ -64,16 +58,7 @@ install(
     ${CMAKE_CURRENT_BINARY_DIR}/acc2omp-handlers.h
     ${CMAKE_CURRENT_BINARY_DIR}/acc2omp-backend.h
   DESTINATION
-    include
-)
-install(
-  FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/openacc.h
-    ${CMAKE_CURRENT_BINARY_DIR}/acc_prof.h
-    ${CMAKE_CURRENT_BINARY_DIR}/acc2omp-handlers.h
-    ${CMAKE_CURRENT_BINARY_DIR}/acc2omp-backend.h
-  DESTINATION
-    "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_INCLUDE_SUBDIR}"
+    "${LIBACC2OMP_HEADERS_INSTALL_PATH}"
 )
 
 # Make this available for testing.

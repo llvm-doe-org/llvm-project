@@ -12,54 +12,43 @@
 
 libomptarget_say("Building offloading runtime library libomptarget.")
 
-set(LIBOMPTARGET_SRC_FILES
-  ${CMAKE_CURRENT_SOURCE_DIR}/api.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/device.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/interface.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/interop.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/omptarget.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/rtl.cpp
-)
-
 if(LIBOMP_OMPT_SUPPORT_IN_LIBOMPTARGET)
-  list(APPEND LIBOMPTARGET_SRC_FILES ${CMAKE_CURRENT_SOURCE_DIR}/ompt-target.cpp)
+  list(APPEND LIBOMPTARGET_OMPT_SRC_FILES ompt-target.cpp)
   list(APPEND LIBOMPTARGET_LLVM_INCLUDE_DIRS ${LIBOMP_INCLUDE_DIR})
 endif()
 
-set(LIBOMPTARGET_SRC_FILES ${LIBOMPTARGET_SRC_FILES} PARENT_SCOPE)
+add_llvm_library(omptarget
+  SHARED
 
-# Build libomptarget library with libdl dependency.
-add_library(omptarget SHARED ${LIBOMPTARGET_SRC_FILES})
-set_target_properties(omptarget PROPERTIES INSTALL_RPATH "$ORIGIN" BUILD_RPATH "$ORIGIN")
-if (OPENMP_ENABLE_LIBOMPTARGET_PROFILING)
-  # Add LLVMSupport dependency if profiling is enabled.
-  # Linking with LLVM component libraries also requires
-  # aligning the compile flags.
-  llvm_update_compile_flags(omptarget)
-  target_compile_definitions(omptarget PUBLIC OMPTARGET_PROFILE_ENABLED)
-  target_link_libraries(omptarget PRIVATE LLVMSupport)
-endif()
-target_include_directories(omptarget PRIVATE
-  ${LIBOMPTARGET_INCLUDE_DIR})
-target_link_libraries(omptarget PRIVATE
+  api.cpp
+  device.cpp
+  interface.cpp
+  interop.cpp
+  omptarget.cpp
+  rtl.cpp
+  LegacyAPI.cpp
+  ${LIBOMPTARGET_OMPT_SRC_FILES}
+
+  ADDITIONAL_HEADER_DIRS
+  ${LIBOMPTARGET_INCLUDE_DIR}
+
+  LINK_COMPONENTS
+  Support
+  Object
+
+  LINK_LIBS 
+  PRIVATE
   ${CMAKE_DL_LIBS}
-  "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports")
-if(OPENMP_CLANG_LIB_SUBDIR)
-  add_custom_command(TARGET omptarget POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-      $<TARGET_FILE_DIR:omptarget>/${OPENMP_CLANG_LIB_SUBDIR}
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:omptarget>
-      $<TARGET_FILE_DIR:omptarget>/${OPENMP_CLANG_LIB_SUBDIR}
-  )
-endif()
+  "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports"
+  NO_INSTALL_RPATH
+)
 
-# Install libomptarget under the lib destination folder.
-install(TARGETS omptarget LIBRARY COMPONENT omptarget
-  DESTINATION "${OPENMP_INSTALL_LIBDIR}")
-if(OPENMP_CLANG_LIB_SUBDIR)
-  install(TARGETS omptarget LIBRARY COMPONENT omptarget DESTINATION
-    "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
-endif()
+target_include_directories(omptarget PRIVATE ${LIBOMPTARGET_INCLUDE_DIR})
+
+# libomptarget.so needs to be aware of where the plugins live as they
+# are now separated in the build directory.
+set_target_properties(omptarget PROPERTIES INSTALL_RPATH "$ORIGIN" BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
+install(TARGETS omptarget LIBRARY COMPONENT omptarget DESTINATION "${OPENMP_INSTALL_LIBDIR}")
 
 # Set the -I for headers from the runtime.
 include_directories(

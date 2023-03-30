@@ -10,8 +10,10 @@
 #include "mlir/Dialect/PDL/IR/PDLTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Operation.h"
-#include "llvm/ADT/ScopeExit.h"
-#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "transform-dialect"
+#define DBGS() (llvm::dbgs() << "[" DEBUG_TYPE "] ")
 
 using namespace mlir;
 
@@ -53,7 +55,7 @@ Value transform::TransformState::getHandleForPayloadOp(Operation *op) const {
 LogicalResult transform::TransformState::tryEmplaceReverseMapping(
     Mappings &map, Operation *operation, Value handle) {
   auto insertionResult = map.reverse.insert({operation, handle});
-  if (!insertionResult.second) {
+  if (!insertionResult.second && insertionResult.first->second != handle) {
     InFlightDiagnostic diag = operation->emitError()
                               << "operation tracked by two handles";
     diag.attachNote(handle.getLoc()) << "handle";
@@ -180,22 +182,42 @@ LogicalResult transform::TransformState::checkAndRecordHandleInvalidation(
       return isa<MemoryEffects::Free>(effect.getEffect()) &&
              effect.getValue() == target.get();
     };
-    if (llvm::find_if(effects, consumesTarget) != effects.end())
+    if (llvm::any_of(effects, consumesTarget))
       recordHandleInvalidation(target);
   }
   return success();
 }
 
-LogicalResult
+DiagnosedSilenceableFailure
 transform::TransformState::applyTransform(TransformOpInterface transform) {
-  if (options.getExpensiveChecksEnabled() &&
-      failed(checkAndRecordHandleInvalidation(transform))) {
-    return failure();
+  LLVM_DEBUG(DBGS() << "applying: " << transform << "\n");
+  if (options.getExpensiveChecksEnabled()) {
+    if (failed(checkAndRecordHandleInvalidation(transform)))
+      return DiagnosedSilenceableFailure::definiteFailure();
+
+    for (OpOperand &operand : transform->getOpOperands()) {
+      if (!isHandleConsumed(operand.get(), transform))
+        continue;
+
+      DenseSet<Operation *> seen;
+      for (Operation *op : getPayloadOps(operand.get())) {
+        if (!seen.insert(op).second) {
+          DiagnosedSilenceableFailure diag =
+              transform.emitSilenceableError()
+              << "a handle passed as operand #" << operand.getOperandNumber()
+              << " and consumed by this operation points to a payload "
+                 "operation more than once";
+          diag.attachNote(op->getLoc()) << "repeated target op";
+          return diag;
+        }
+      }
+    }
   }
 
   transform::TransformResults results(transform->getNumResults());
-  if (failed(transform.apply(results, *this)))
-    return failure();
+  DiagnosedSilenceableFailure result(transform.apply(results, *this));
+  if (!result.succeeded())
+    return result;
 
   // Remove the mapping for the operand if it is consumed by the operation. This
   // allows us to catch use-after-free with assertions later on.
@@ -219,10 +241,10 @@ transform::TransformState::applyTransform(TransformOpInterface transform) {
            "payload IR association for a value other than the result of the "
            "current transform op");
     if (failed(setPayloadOps(result, results.get(result.getResultNumber()))))
-      return failure();
+      return DiagnosedSilenceableFailure::definiteFailure();
   }
 
-  return success();
+  return DiagnosedSilenceableFailure::success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -273,15 +295,14 @@ transform::TransformResults::get(unsigned resultNumber) const {
 //===----------------------------------------------------------------------===//
 
 LogicalResult transform::detail::mapPossibleTopLevelTransformOpBlockArguments(
-    TransformState &state, Operation *op) {
+    TransformState &state, Operation *op, Region &region) {
   SmallVector<Operation *> targets;
   if (op->getNumOperands() != 0)
     llvm::append_range(targets, state.getPayloadOps(op->getOperand(0)));
   else
     targets.push_back(state.getTopLevel());
 
-  return state.mapBlockArguments(op->getRegion(0).front().getArgument(0),
-                                 targets);
+  return state.mapBlockArguments(region.front().getArgument(0), targets);
 }
 
 LogicalResult
@@ -293,8 +314,8 @@ transform::detail::verifyPossibleTopLevelTransformOpTrait(Operation *op) {
          "should implement TransformOpInterface to have "
          "PossibleTopLevelTransformOpTrait");
 
-  if (op->getNumRegions() != 1)
-    return op->emitOpError() << "expects one region";
+  if (op->getNumRegions() < 1)
+    return op->emitOpError() << "expects at least one region";
 
   Region *bodyRegion = &op->getRegion(0);
   if (!llvm::hasNItems(*bodyRegion, 1))
@@ -321,6 +342,71 @@ transform::detail::verifyPossibleTopLevelTransformOpTrait(Operation *op) {
   }
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Memory effects.
+//===----------------------------------------------------------------------===//
+
+void transform::consumesHandle(
+    ValueRange handles,
+    SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
+  for (Value handle : handles) {
+    effects.emplace_back(MemoryEffects::Read::get(), handle,
+                         TransformMappingResource::get());
+    effects.emplace_back(MemoryEffects::Free::get(), handle,
+                         TransformMappingResource::get());
+  }
+}
+
+/// Returns `true` if the given list of effects instances contains an instance
+/// with the effect type specified as template parameter.
+template <typename EffectTy, typename ResourceTy = SideEffects::DefaultResource>
+static bool hasEffect(ArrayRef<MemoryEffects::EffectInstance> effects) {
+  return llvm::any_of(effects, [](const MemoryEffects::EffectInstance &effect) {
+    return isa<EffectTy>(effect.getEffect()) &&
+           isa<ResourceTy>(effect.getResource());
+  });
+}
+
+bool transform::isHandleConsumed(Value handle,
+                                 transform::TransformOpInterface transform) {
+  auto iface = cast<MemoryEffectOpInterface>(transform.getOperation());
+  SmallVector<MemoryEffects::EffectInstance> effects;
+  iface.getEffectsOnValue(handle, effects);
+  return hasEffect<MemoryEffects::Read, TransformMappingResource>(effects) &&
+         hasEffect<MemoryEffects::Free, TransformMappingResource>(effects);
+}
+
+void transform::producesHandle(
+    ValueRange handles,
+    SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
+  for (Value handle : handles) {
+    effects.emplace_back(MemoryEffects::Allocate::get(), handle,
+                         TransformMappingResource::get());
+    effects.emplace_back(MemoryEffects::Write::get(), handle,
+                         TransformMappingResource::get());
+  }
+}
+
+void transform::onlyReadsHandle(
+    ValueRange handles,
+    SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
+  for (Value handle : handles) {
+    effects.emplace_back(MemoryEffects::Read::get(), handle,
+                         TransformMappingResource::get());
+  }
+}
+
+void transform::modifiesPayload(
+    SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
+  effects.emplace_back(MemoryEffects::Read::get(), PayloadIRResource::get());
+  effects.emplace_back(MemoryEffects::Write::get(), PayloadIRResource::get());
+}
+
+void transform::onlyReadsPayload(
+    SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
+  effects.emplace_back(MemoryEffects::Read::get(), PayloadIRResource::get());
 }
 
 //===----------------------------------------------------------------------===//

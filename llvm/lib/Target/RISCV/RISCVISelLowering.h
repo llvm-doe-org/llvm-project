@@ -41,6 +41,21 @@ enum NodeType : unsigned {
   BuildPairF64,
   SplitF64,
   TAIL,
+
+  // Add the Lo 12 bits from an address. Selected to ADDI.
+  ADD_LO,
+  // Get the Hi 20 bits from an address. Selected to LUI.
+  HI,
+
+  // Represents an AUIPC+ADDI pair. Selected to PseudoLLA.
+  LLA,
+
+  // Selected as PseudoAddTPRel. Used to emit a TP-relative relocation.
+  ADD_TPREL,
+
+  // Load address.
+  LA_TLS_GD,
+
   // Multiply high for signedxunsigned.
   MULHSU,
   // RV64I shifts, directly matching the semantics of the named RISC-V
@@ -227,7 +242,10 @@ enum NodeType : unsigned {
   FNEG_VL,
   FABS_VL,
   FSQRT_VL,
-  FMA_VL,
+  VFMADD_VL,
+  VFNMADD_VL,
+  VFMSUB_VL,
+  VFNMSUB_VL,
   FCOPYSIGN_VL,
   SMIN_VL,
   SMAX_VL,
@@ -277,8 +295,8 @@ enum NodeType : unsigned {
   VMCLR_VL,
   VMSET_VL,
 
-  // Matches the semantics of vrgather.vx and vrgather.vv with an extra operand
-  // for VL.
+  // Matches the semantics of vrgather.vx and vrgather.vv with extra operands
+  // for passthru and VL. Operands are (src, index, mask, passthru, vl).
   VRGATHER_VX_VL,
   VRGATHER_VV_VL,
   VRGATHEREI16_VV_VL,
@@ -314,6 +332,10 @@ enum NodeType : unsigned {
   // WARNING: Do not add anything in the end unless you want the node to
   // have memop! In fact, starting from FIRST_TARGET_MEMORY_OPCODE all
   // opcodes will be thought as target memory ops!
+
+  // Load address.
+  LA = ISD::FIRST_TARGET_MEMORY_OPCODE,
+  LA_TLS_IE,
 };
 } // namespace RISCVISD
 
@@ -354,6 +376,7 @@ public:
       SelectionDAG &DAG) const override;
   bool shouldSinkOperands(Instruction *I,
                           SmallVectorImpl<Use *> &Ops) const override;
+  bool shouldScalarizeBinop(SDValue VecOp) const override;
   bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
   bool isFPImmLegal(const APFloat &Imm, EVT VT,
                     bool ForCodeSize) const override;
@@ -400,6 +423,8 @@ public:
                                            const APInt &DemandedElts,
                                            const SelectionDAG &DAG,
                                            unsigned Depth) const override;
+
+  const Constant *getTargetConstantFromLoad(LoadSDNode *LD) const override;
 
   // This method returns the name of a target specific DAG node.
   const char *getTargetNodeName(unsigned Opcode) const override;
@@ -496,9 +521,7 @@ public:
                     SmallVectorImpl<SDValue> &InVals) const override;
 
   bool shouldConvertConstantLoadToIntImm(const APInt &Imm,
-                                         Type *Ty) const override {
-    return true;
-  }
+                                         Type *Ty) const override;
   bool mayBeEmittedAsTailCall(const CallInst *CI) const override;
   bool shouldConsiderGEPOffsetSplit() const override { return true; }
 
@@ -574,6 +597,8 @@ public:
                                           const MachineBasicBlock *MBB,
                                           unsigned uid,
                                           MCContext &Ctx) const override;
+
+  bool isVScaleKnownToBeAPowerOfTwo() const override;
 
 private:
   /// RISCVCCAssignFn - This target-specific function extends the default

@@ -48,9 +48,11 @@ variables:
   # Which commits to use for OpenACC V&V testing.
   VV_LLVM_TEST_SUITE_COMMIT: da5c250df731c259bd6f15f05ab93f3f7b902b63
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
+  VV_CFLAGS:
   KOKKOS_COMMIT: 43a105744fa67a3810fe7fbc29315a9e349047a1
   KOKKOS_TESTS_COMMIT: a883ce8d4806b9ad1a1696ccb1e83f8a043f5be5
   KOKKOS_CMAKE_OPTS:
+  KOKKOS_CFLAGS:
 
 stages:
   - setup
@@ -70,6 +72,19 @@ stages:
 # choices that are hopefully orthogonal to the architecture.
 #-------------------------------------------------------------------------------
 
+# leconte has a /usr/lib64/libomptarget.so that, at least since July, 2022,
+# LLVM/Clang OpenMP support wants to pick up instead of the libomptarget.so
+# built for it.  That breaks most tests in the libomptarget and OpenACC test
+# suites unless we add -L$BUILD_DIR/build/lib in their lit configs.  In the case
+# of libomptarget, we do this via OPENMP_TEST_FLAGS below until the direct lit
+# config fix is upstreamed.  In the case of OpenACC, we modified the lit config
+# directly.
+#
+# Below, we add -L$BUILD_DIR/install/lib when building the OpenACC V&V suite and
+# Kokkos using the LLVM install, or they break similarly.  Obviously, it would
+# be better for users if Clang's OpenMP support could work from its own install
+# directory without being reminded where it is.  Hopefully that will be sorted
+# out upstream one day.
 .leconte:
   tags: [shell, leconte]
   variables:
@@ -80,29 +95,43 @@ stages:
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
-    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
+    CMAKE_BUILD_OPTS:
+      -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
+      -DOPENMP_TEST_FLAGS=-L$BUILD_DIR/build/lib
     LLVM_ENABLE_PROJECTS: "clang"
     LLVM_ENABLE_RUNTIMES: "openmp"
     CPU_TRIPLE: "powerpc64le-ibm-linux-gnu"
     CPU_COUNT:  4
     GPU_TRIPLE: "nvptx64-nvidia-cuda"
     GPU_COUNT:  6
+    VV_CFLAGS: -L$BUILD_DIR/install/lib
     KOKKOS_CMAKE_OPTS: -DKokkos_ARCH_VOLTA70=On
+    KOKKOS_CFLAGS: -L$BUILD_DIR/install/lib
     LIT_NPROC_DIVISOR: 4
-    LIT_XFAIL:
+    TEST_LIT_XFAIL:
       "
       libomp :: atomic/kmp_atomic_float10_max_min.c
       libomp :: env/kmp_set_dispatch_buf.c
-      libomp :: worksharing/for/kmp_set_dispatch_buf.c
-      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug51781.c
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/wtime.c
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug51781.c
       libomptarget :: nvptx64-nvidia-cuda-oldDriver :: offloading/bug49334.cpp
-      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: offloading/bug49334.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu-oldDriver :: offloading/bug49334.cpp
       "
-    LIT_XFAIL_NOT:
+    TEST_LIT_XFAIL_NOT:
       "
       libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/api.c
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: unified_shared_memory/api.c
       libomptarget :: nvptx64-nvidia-cuda-oldDriver :: unified_shared_memory/api.c
+      "
+    TEST_LIT_FILTER_OUT_LIST:
+      "
+      libomp :: worksharing/for/kmp_set_dispatch_buf.c
+      libomptarget :: nvptx64-nvidia-cuda :: mapping/map_back_race.cpp
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug49334.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
       "
     VV_COMP_LIT_XFAIL:
       ""
@@ -131,13 +160,20 @@ stages:
     GPU_COUNT:  1
     KOKKOS_CMAKE_OPTS: -DKokkos_ARCH_PASCAL60=On
     LIT_NPROC_DIVISOR: 1
-    LIT_XFAIL:
+    TEST_LIT_XFAIL:
       "
-      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug51781.c
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/wtime.c
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug51781.c
       libomptarget :: nvptx64-nvidia-cuda-oldDriver :: offloading/bug49334.cpp
       "
-    LIT_XFAIL_NOT:
+    TEST_LIT_XFAIL_NOT:
       ""
+    TEST_LIT_FILTER_OUT_LIST:
+      "
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug49334.cpp
+      "
     VV_COMP_LIT_XFAIL:
       ""
     VV_RUN_LIT_XFAIL:
@@ -169,14 +205,17 @@ stages:
     GPU_COUNT:  2
     KOKKOS_CMAKE_OPTS: -DKokkos_ARCH_VEGA906=On
     LIT_NPROC_DIVISOR: 1
-    LIT_XFAIL:
+    TEST_LIT_XFAIL:
       "
-      Clang :: Driver/rocm-detect.hip
       Clang :: OpenACC/directives/amdgcn-amd-amdhsa/parallel-da.c
       libomptarget :: amdgcn-amd-amdhsa-oldDriver :: offloading/cuda_no_devices.c
       "
-    LIT_XFAIL_NOT:
+    TEST_LIT_XFAIL_NOT:
       ""
+    TEST_LIT_FILTER_OUT_LIST:
+      "
+      Clang :: Driver/rocm-detect.hip
+      "
     VV_COMP_LIT_XFAIL:
       ""
     VV_RUN_LIT_XFAIL:
@@ -200,9 +239,11 @@ stages:
     LLVM_ENABLE_RUNTIMES: "openmp"
     CPU_TRIPLE: "x86_64-pc-linux-gnu"
     CPU_COUNT: 4
-    LIT_XFAIL:
+    TEST_LIT_XFAIL:
       ""
-    LIT_XFAIL_NOT:
+    TEST_LIT_XFAIL_NOT:
+      ""
+    TEST_LIT_FILTER_OUT_LIST:
       ""
     VV_COMP_LIT_XFAIL:
       ""
@@ -217,12 +258,14 @@ stages:
   variables:
     BUILD_ID: no-asserts
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=False
-    LIT_XFAIL:
+    TEST_LIT_XFAIL:
       "
       Clang :: Headers/wasm.c
       LLVM :: Analysis/CostModel/X86/interleaved-store-accesses-with-gaps.ll
       "
-    LIT_XFAIL_NOT:
+    TEST_LIT_XFAIL_NOT:
+      ""
+    TEST_LIT_FILTER_OUT_LIST:
       ""
     VV_COMP_LIT_XFAIL:
       ""
@@ -237,15 +280,18 @@ stages:
   variables:
     BUILD_ID: debug
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Debug
-    LIT_XFAIL:
+    TEST_LIT_XFAIL:
       "
       libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
       libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
       libomptarget :: x86_64-pc-linux-gnu :: unified_shared_memory/close_modifier.c
+      libomptarget :: x86_64-pc-linux-gnu-LTO :: unified_shared_memory/close_modifier.c
       libomptarget :: x86_64-pc-linux-gnu-oldDriver :: unified_shared_memory/close_modifier.c
       "
-    LIT_XFAIL_NOT:
+    TEST_LIT_XFAIL_NOT:
+      ""
+    TEST_LIT_FILTER_OUT_LIST:
       ""
     VV_COMP_LIT_XFAIL:
       ""
@@ -687,15 +733,21 @@ debug (build):
     #...........................................................................
     - echo -e "\e[0Ksection_start:`date +%s`:run_regression_tests[collapsed=true]\r\e[0KRun regression test suite"
     - export LIT_XFAIL=`
-        echo "$LIT_XFAIL"
+        echo "$TEST_LIT_XFAIL"
         | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
       `
     - export LIT_XFAIL_NOT=`
-        echo "$LIT_XFAIL_NOT"
+        echo "$TEST_LIT_XFAIL_NOT"
         | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
+      `
+    - export LIT_FILTER_OUT=`
+        echo "$TEST_LIT_FILTER_OUT_LIST"
+        | sed -e 's/\([^:]\)  *\([^:]\)/\1|\2/g' -e 's/^ */^(/' -e 's/ *$/)$/'
+              -e 's/\./\\./g'
       `
     - echo "$LIT_XFAIL"
     - echo "$LIT_XFAIL_NOT"
+    - echo "$LIT_FILTER_OUT"
     - NPROC=`nproc`
     - echo "$NPROC"
     - echo "$LIT_NPROC_DIVISOR"
@@ -703,7 +755,7 @@ debug (build):
       LIT_OPTS="
         --timeout 2400 -j `expr $NPROC / $LIT_NPROC_DIVISOR`
         --ignore-fail --xunit-xml-output $CI_PROJECT_DIR/check-all.xml
-        --show-xfail
+        --show-xfail --show-excluded --show-skipped
       "
       $NINJA -l `nproc` $CHECK_TARGETS
       |& tee $CI_PROJECT_DIR/check-all-log.txt
@@ -834,7 +886,7 @@ debug (test):
     # features.  The V&V suite is a convenient way to check for unexpected
     # issues with the incomplete implementations.
     - export VV_CFLAGS="-fopenacc -fopenacc-fake-async-wait
-                        -fopenacc-fake-tile-clause -lm"
+                        -fopenacc-fake-tile-clause -lm $VV_CFLAGS"
     - if test x"$GPU_TRIPLE" != x; then
         export VV_CFLAGS="$VV_CFLAGS -fopenmp-targets=$GPU_TRIPLE";
       fi
@@ -987,6 +1039,7 @@ debug (vv):
     - time $CMAKE -G Ninja
         -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
         -DCMAKE_CXX_STANDARD=17
+        -DCMAKE_CXX_FLAGS="$KOKKOS_CFLAGS"
         -DCMAKE_INSTALL_PREFIX=`pwd`/../install
         -DCMAKE_BINARY_DIR=`pwd`
         -DKokkos_ENABLE_OPENACC=On
@@ -1028,7 +1081,7 @@ debug (vv):
     - time $CMAKE -G Ninja
         -DKokkos_ROOT=$BUILD_DIR/kokkos/kokkos/install
         -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
-        -DCMAKE_CXX_FLAGS='-DVERIFY -O3 -lm'
+        -DCMAKE_CXX_FLAGS="-DVERIFY -O3 -lm $KOKKOS_CFLAGS"
         ..
     - echo $NINJA
     - $NINJA --version
@@ -1047,7 +1100,7 @@ debug (vv):
     - time $CMAKE -G Ninja
         -DKokkos_ROOT=$BUILD_DIR/kokkos/kokkos/install
         -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
-        -DCMAKE_CXX_FLAGS='-DVERIFY -O3 -lm'
+        -DCMAKE_CXX_FLAGS="-DVERIFY -O3 -lm $KOKKOS_CFLAGS"
         ..
     - echo $NINJA
     - $NINJA --version
@@ -1066,7 +1119,7 @@ debug (vv):
     - time $CMAKE -G Ninja
         -DKokkos_ROOT=$BUILD_DIR/kokkos/kokkos/install
         -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
-        -DCMAKE_CXX_FLAGS='-DVERIFY -O3 -lm'
+        -DCMAKE_CXX_FLAGS="-DVERIFY -O3 -lm $KOKKOS_CFLAGS"
         ..
     - echo $NINJA
     - $NINJA --version
@@ -1084,7 +1137,7 @@ debug (vv):
     - time $CMAKE -G Ninja
         -DKokkos_ROOT=$BUILD_DIR/kokkos/kokkos/install
         -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
-        -DCMAKE_CXX_FLAGS='-DVERIFY -O3 -lm'
+        -DCMAKE_CXX_FLAGS="-DVERIFY -O3 -lm $KOKKOS_CFLAGS"
         ..
     - echo $NINJA
     - $NINJA --version
@@ -1106,7 +1159,7 @@ debug (vv):
     - time $CMAKE -G Ninja
         -DKokkos_ROOT=$BUILD_DIR/kokkos/kokkos/install
         -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
-        -DCMAKE_CXX_FLAGS='-DVERIFY -DDSTEP=4500 -O3 -lm'
+        -DCMAKE_CXX_FLAGS="-DVERIFY -DDSTEP=4500 -O3 -lm $KOKKOS_CFLAGS"
         ..
     - echo $NINJA
     - $NINJA --version
@@ -1128,7 +1181,7 @@ debug (vv):
     - time $CMAKE -G Ninja
         -DKokkos_ROOT=$BUILD_DIR/kokkos/kokkos/install
         -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
-        -DCMAKE_CXX_FLAGS='-DVERIFY -DDSTEP=4499 -DEPSILON=1e-3 -O3 -lm'
+        -DCMAKE_CXX_FLAGS="-DVERIFY -DDSTEP=4499 -DEPSILON=1e-3 -O3 -lm $KOKKOS_CFLAGS"
         ..
     - echo $NINJA
     - $NINJA --version
@@ -1146,7 +1199,7 @@ debug (vv):
     - time $CMAKE -G Ninja
         -DKokkos_ROOT=$BUILD_DIR/kokkos/kokkos/install
         -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
-        -DCMAKE_CXX_FLAGS='-O3 -lm'
+        -DCMAKE_CXX_FLAGS="-O3 -lm $KOKKOS_CFLAGS"
         ..
     - echo $NINJA
     - $NINJA --version

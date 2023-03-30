@@ -44,41 +44,38 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
         add_definitions("-DTARGET_OMP_DEVICE_T=${target_omp_device_t}")
       endif()
 
-      add_library("omptarget.rtl.${tmachine_libname}" SHARED
-        ${CMAKE_CURRENT_SOURCE_DIR}/../generic-elf-64bit/src/rtl.cpp)
-      if(OPENMP_CLANG_LIB_SUBDIR AND NOT OPENMP_STANDALONE_BUILD)
-        add_custom_command(TARGET "omptarget.rtl.${tmachine_libname}"
-          POST_BUILD
-          COMMAND ${CMAKE_COMMAND} -E make_directory
-            $<TARGET_FILE_DIR:omptarget.rtl.${tmachine_libname}>/${OPENMP_CLANG_LIB_SUBDIR}
-          COMMAND ${CMAKE_COMMAND} -E copy
-            $<TARGET_FILE:omptarget.rtl.${tmachine_libname}>
-            $<TARGET_FILE_DIR:omptarget.rtl.${tmachine_libname}>/${OPENMP_CLANG_LIB_SUBDIR}
-        )
-      endif()
+      add_llvm_library("omptarget.rtl.${tmachine_libname}"
+        SHARED
 
-      # Install plugin under the lib destination folder.
-      install(TARGETS "omptarget.rtl.${tmachine_libname}"
-        LIBRARY DESTINATION "${OPENMP_INSTALL_LIBDIR}")
-      if(OPENMP_CLANG_LIB_SUBDIR)
-        install(TARGETS "omptarget.rtl.${tmachine_libname}"
-          LIBRARY DESTINATION
-          "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
-      endif()
+        ${CMAKE_CURRENT_SOURCE_DIR}/../generic-elf-64bit/src/rtl.cpp
 
-      target_include_directories( "omptarget.rtl.${tmachine_libname}" PRIVATE
+        ADDITIONAL_HEADER_DIRS
         ${LIBOMPTARGET_INCLUDE_DIR}
         ${LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIR}
-        ${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR})
+        ${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR}
 
-      target_link_libraries(
-        "omptarget.rtl.${tmachine_libname}"
+        LINK_LIBS 
+        PRIVATE
         elf_common
         ${LIBOMPTARGET_DEP_LIBFFI_LIBRARIES}
         ${LIBOMPTARGET_DEP_LIBELF_LIBRARIES}
         dl
         ${OPENMP_PTHREAD_LIB}
-        "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/../exports")
+        "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/../exports"
+
+        NO_INSTALL_RPATH
+      )
+
+      # Install plugin under the lib destination folder.
+      install(TARGETS "omptarget.rtl.${tmachine_libname}"
+        LIBRARY DESTINATION "${OPENMP_INSTALL_LIBDIR}")
+      set_target_properties("omptarget.rtl.${tmachine_libname}" PROPERTIES 
+        INSTALL_RPATH "$ORIGIN" BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
+
+      target_include_directories( "omptarget.rtl.${tmachine_libname}" PRIVATE
+        ${LIBOMPTARGET_INCLUDE_DIR}
+        ${LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIR}
+        ${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR})
 
       list(APPEND LIBOMPTARGET_TESTED_PLUGINS
         "omptarget.rtl.${tmachine_libname}")
@@ -86,6 +83,8 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
       # Report to the parent scope that we are building a plugin.
       set(LIBOMPTARGET_SYSTEM_TARGETS
         "${LIBOMPTARGET_SYSTEM_TARGETS} ${tmachine_triple} ${tmachine_triple}-oldDriver" PARENT_SCOPE)
+      set(LIBOMPTARGET_SYSTEM_TARGETS
+        "${LIBOMPTARGET_SYSTEM_TARGETS} ${tmachine_triple} ${tmachine_triple}-LTO" PARENT_SCOPE)
       set(LIBOMPTARGET_TESTED_PLUGINS
         "${LIBOMPTARGET_TESTED_PLUGINS}" PARENT_SCOPE)
 

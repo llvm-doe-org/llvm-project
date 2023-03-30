@@ -40,45 +40,63 @@ endif()
 if (LIBOMPTARGET_CAN_LINK_LIBCUDA AND NOT LIBOMPTARGET_FORCE_DLOPEN_LIBCUDA)
   libomptarget_say("Building CUDA plugin linked against libcuda")
   include_directories(${LIBOMPTARGET_DEP_CUDA_INCLUDE_DIRS})
-  add_library(omptarget.rtl.cuda SHARED src/rtl.cpp)
-  set (LIBOMPTARGET_DEP_LIBRARIES ${LIBOMPTARGET_DEP_CUDA_DRIVER_LIBRARIES})
+  add_llvm_library(omptarget.rtl.cuda SHARED
+
+    src/rtl.cpp
+
+    ADDITIONAL_HEADER_DIRS
+    ${LIBOMPTARGET_INCLUDE_DIR}
+    ${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIRS}
+
+    LINK_LIBS
+    PRIVATE
+    elf_common
+    MemoryManager
+    ${LIBOMPTARGET_DEP_CUDA_DRIVER_LIBRARIES}
+    ${LIBOMPTARGET_DEP_LIBELF_LIBRARIES}
+    ${OPENMP_PTHREAD_LIB}
+    "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/../exports"
+    "-Wl,-z,defs"
+
+    NO_INSTALL_RPATH
+  )
 else()
   libomptarget_say("Building CUDA plugin for dlopened libcuda")
   include_directories(dynamic_cuda)
-  add_library(omptarget.rtl.cuda SHARED src/rtl.cpp dynamic_cuda/cuda.cpp)
-  set (LIBOMPTARGET_DEP_LIBRARIES ${CMAKE_DL_LIBS})
-endif()
-if(OPENMP_CLANG_LIB_SUBDIR AND NOT OPENMP_STANDALONE_BUILD)
-  add_custom_command(TARGET "omptarget.rtl.cuda"
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-      $<TARGET_FILE_DIR:omptarget.rtl.cuda>/${OPENMP_CLANG_LIB_SUBDIR}
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:omptarget.rtl.cuda>
-      $<TARGET_FILE_DIR:omptarget.rtl.cuda>/${OPENMP_CLANG_LIB_SUBDIR}
+  add_llvm_library(omptarget.rtl.cuda 
+    SHARED
+
+    src/rtl.cpp
+    dynamic_cuda/cuda.cpp
+
+    ADDITIONAL_HEADER_DIRS
+    ${LIBOMPTARGET_INCLUDE_DIR}
+    ${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIRS}
+
+    LINK_LIBS
+    PRIVATE
+    elf_common
+    MemoryManager
+    ${CMAKE_DL_LIBS}
+    ${LIBOMPTARGET_DEP_LIBELF_LIBRARIES}
+    ${OPENMP_PTHREAD_LIB}
+    "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/../exports"
+    "-Wl,-z,defs"
+
+    NO_INSTALL_RPATH
   )
 endif()
 add_dependencies(omptarget.rtl.cuda omptarget.devicertl.nvptx)
 
 # Install plugin under the lib destination folder.
 install(TARGETS omptarget.rtl.cuda LIBRARY DESTINATION "${OPENMP_INSTALL_LIBDIR}")
-if(OPENMP_CLANG_LIB_SUBDIR)
-  install(TARGETS "omptarget.rtl.cuda" LIBRARY DESTINATION
-          "${OPENMP_INSTALL_LIBDIR}/${OPENMP_CLANG_LIB_SUBDIR}")
-endif()
+set_target_properties(omptarget.rtl.cuda PROPERTIES 
+  INSTALL_RPATH "$ORIGIN" BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
 
 target_include_directories(omptarget.rtl.cuda PRIVATE
   ${LIBOMPTARGET_INCLUDE_DIR}
   ${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIRS}
 )
-
-target_link_libraries(omptarget.rtl.cuda
-  elf_common
-  MemoryManager
-  ${LIBOMPTARGET_DEP_LIBRARIES}
-  ${LIBOMPTARGET_DEP_LIBELF_LIBRARIES}
-  ${OPENMP_PTHREAD_LIB}
-  "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/../exports"
-  "-Wl,-z,defs")
 
 # Set the -I for headers from the runtime.
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../../runtime/src)
@@ -90,6 +108,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../../runtime/src)
 if (LIBOMPTARGET_CAN_LINK_LIBCUDA OR LIBOMPTARGET_FORCE_DLOPEN_LIBCUDA)
   libomptarget_say("Enable tests using CUDA plugin")
   set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS} nvptx64-nvidia-cuda nvptx64-nvidia-cuda-oldDriver" PARENT_SCOPE)
+  set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS} nvptx64-nvidia-cuda nvptx64-nvidia-cuda-LTO" PARENT_SCOPE)
   list(APPEND LIBOMPTARGET_TESTED_PLUGINS "omptarget.rtl.cuda")
   set(LIBOMPTARGET_TESTED_PLUGINS "${LIBOMPTARGET_TESTED_PLUGINS}" PARENT_SCOPE)
 else()

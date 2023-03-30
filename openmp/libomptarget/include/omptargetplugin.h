@@ -36,6 +36,12 @@ int32_t __tgt_rtl_get_device_type();
 // having to load the library, which can be expensive.
 int32_t __tgt_rtl_is_valid_binary(__tgt_device_image *Image);
 
+// This provides the same functionality as __tgt_rtl_is_valid_binary except we
+// also use additional information to determine if the image is valid. This
+// allows us to determine if an image has a compatible architecture.
+int32_t __tgt_rtl_is_valid_binary_info(__tgt_device_image *Image,
+                                       __tgt_image_info *Info);
+
 // Return an integer other than zero if the data can be exchaned from SrcDevId
 // to DstDevId. If it is data exchangable, the device plugin should provide
 // function to move data from source device to destination device directly.
@@ -83,24 +89,24 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr,
 // of success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_submit(
     int32_t ID, void *TargetPtr, void *HostPtr, int64_t Size
-    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi));
 
 int32_t __tgt_rtl_data_submit_async(
     int32_t ID, void *TargetPtr, void *HostPtr, int64_t Size,
     __tgt_async_info *AsyncInfo
-    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi));
 
 // Retrieve the data content from the target device using its address. In case
 // of success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_retrieve(
     int32_t ID, void *HostPtr, void *TargetPtr, int64_t Size
-    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi));
 
 // Asynchronous version of __tgt_rtl_data_retrieve
 int32_t __tgt_rtl_data_retrieve_async(
     int32_t ID, void *HostPtr, void *TargetPtr, int64_t Size,
     __tgt_async_info *AsyncInfo
-    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi));
 
 // Copy the data content from one target device to another target device using
 // its address. This operation does not need to copy data back to host and then
@@ -127,13 +133,13 @@ int32_t __tgt_rtl_data_delete(int32_t ID, void *TargetPtr);
 // case of success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_run_target_region(
     int32_t ID, void *Entry, void **Args, ptrdiff_t *Offsets, int32_t NumArgs
-    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi));
 
 // Asynchronous version of __tgt_rtl_run_target_region
 int32_t __tgt_rtl_run_target_region_async(
     int32_t ID, void *Entry, void **Args, ptrdiff_t *Offsets, int32_t NumArgs,
     __tgt_async_info *AsyncInfo
-    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi));
 
 // Similar to __tgt_rtl_run_target_region, but additionally specify the
 // number of teams to be created and a number of threads in each team. If
@@ -142,15 +148,15 @@ int32_t __tgt_rtl_run_target_region_async(
 // case, it is synchronous.
 int32_t __tgt_rtl_run_target_team_region(
     int32_t ID, void *Entry, void **Args, ptrdiff_t *Offsets, int32_t NumArgs,
-    int32_t NumTeams, int32_t ThreadLimit, uint64_t loop_tripcount
-    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
+    int32_t NumTeams, int32_t ThreadLimit, uint64_t LoopTripcount
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi));
 
 // Asynchronous version of __tgt_rtl_run_target_team_region
 int32_t __tgt_rtl_run_target_team_region_async(
     int32_t ID, void *Entry, void **Args, ptrdiff_t *Offsets, int32_t NumArgs,
-    int32_t NumTeams, int32_t ThreadLimit, uint64_t loop_tripcount,
+    int32_t NumTeams, int32_t ThreadLimit, uint64_t LoopTripcount,
     __tgt_async_info *AsyncInfo
-    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi));
 
 // Device synchronization. In case of success, return zero. Otherwise, return an
 // error code.

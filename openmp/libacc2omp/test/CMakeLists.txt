@@ -27,7 +27,8 @@ string(REGEX MATCHALL "([^\ ]+\ |[^\ ]+$)" SYSTEM_TARGETS
        "${LIBOMPTARGET_SYSTEM_TARGETS}")
 foreach(CURRENT_TARGET IN LISTS SYSTEM_TARGETS)
   string(STRIP "${CURRENT_TARGET}" CURRENT_TARGET)
-  if (NOT CURRENT_TARGET MATCHES "-oldDriver$")
+  if (NOT CURRENT_TARGET MATCHES "-oldDriver$" AND
+      NOT CURRENT_TARGET MATCHES "-LTO$")
     add_openmp_testsuite(check-libacc2omp-${CURRENT_TARGET}
       "Running libacc2omp tests" ${CMAKE_CURRENT_BINARY_DIR}/${CURRENT_TARGET}
       DEPENDS acc2omp)

@@ -24,6 +24,7 @@ exports_files([
     "LICENSE.TXT",
     "include/mlir/Dialect/LLVMIR/LLVMOps.td",
     "run_lit.sh",
+    "utils/textmate/mlir.json",
 ])
 
 filegroup(
@@ -350,6 +351,7 @@ cc_library(
     includes = ["include"],
     deps = [
         ":IR",
+        ":Parser",
         ":Support",
         "//llvm:Support",
     ],
@@ -382,7 +384,7 @@ mlir_c_api_cc_library(
         "include/mlir-c/IntegerSet.h",
         "include/mlir-c/Interfaces.h",
         "include/mlir-c/Pass.h",
-        "include/mlir-c/Registration.h",
+        "include/mlir-c/RegisterEverything.h",
         "include/mlir-c/Support.h",
         "include/mlir/CAPI/AffineExpr.h",
         "include/mlir/CAPI/AffineMap.h",
@@ -403,6 +405,7 @@ mlir_c_api_cc_library(
     ],
     includes = ["include"],
     deps = [
+        ":AsmParser",
         ":ConversionPassIncGen",
         ":FuncDialect",
         ":InferTypeOpInterface",
@@ -642,9 +645,9 @@ mlir_c_api_cc_library(
 )
 
 mlir_c_api_cc_library(
-    name = "CAPIRegistration",
-    srcs = ["lib/CAPI/Registration/Registration.cpp"],
-    hdrs = ["include/mlir-c/Registration.h"],
+    name = "CAPIRegisterEverything",
+    srcs = ["lib/CAPI/RegisterEverything/RegisterEverything.cpp"],
+    hdrs = ["include/mlir-c/RegisterEverything.h"],
     capi_deps = [
         ":CAPIIR",
     ],
@@ -742,7 +745,6 @@ cc_library(
         ":CAPIGPU",
         ":CAPIIR",
         ":CAPIInterfaces",
-        ":CAPIRegistration",
         ":MLIRBindingsPythonHeadersAndDeps",
         "//llvm:Support",
         "@pybind11",
@@ -764,7 +766,6 @@ cc_library(
         ":CAPIDebugHeaders",
         ":CAPIGPUHeaders",
         ":CAPIIRHeaders",
-        ":CAPIRegistrationHeaders",
         ":MLIRBindingsPythonHeaders",
         "//llvm:Support",
         "@pybind11",
@@ -786,7 +787,6 @@ cc_library(
         ":CAPIGPUObjects",
         ":CAPIIRObjects",
         ":CAPIInterfacesObjects",
-        ":CAPIRegistrationObjects",
     ],
 )
 
@@ -823,7 +823,6 @@ cc_binary(
     deps = [
         ":CAPIIR",
         ":CAPILinalg",
-        ":CAPIRegistration",
         ":MLIRBindingsPythonHeadersAndDeps",
     ],
 )
@@ -842,7 +841,6 @@ cc_binary(
     deps = [
         ":CAPIIR",
         ":CAPIQuant",
-        ":CAPIRegistration",
         ":MLIRBindingsPythonHeadersAndDeps",
     ],
 )
@@ -860,29 +858,8 @@ cc_binary(
     ],
     deps = [
         ":CAPIIR",
-        ":CAPIRegistration",
         ":CAPISparseTensor",
         ":MLIRBindingsPythonHeadersAndDeps",
-    ],
-)
-
-# Dynamic library with the MLIR Conversions Python extension.
-cc_binary(
-    name = "_mlirConversions.so",
-    srcs = ["lib/Bindings/Python/Conversions/Conversions.cpp"],
-    copts = PYBIND11_COPTS,
-    features = PYBIND11_FEATURES,
-    linkshared = 1,
-    linkstatic = 0,
-    tags = [
-        "manual",  # External dependency
-        "nobuildkite",  # TODO(gcmn): Add support for this target
-    ],
-    deps = [
-        ":CAPIConversion",
-        ":MLIRBindingsPythonHeadersAndDeps",
-        "@pybind11",
-        "@python_runtime//:headers",
     ],
 )
 
@@ -900,26 +877,6 @@ cc_binary(
     ],
     deps = [
         ":CAPIExecutionEngine",
-        ":MLIRBindingsPythonHeadersAndDeps",
-        "@pybind11",
-        "@python_runtime//:headers",
-    ],
-)
-
-# Dynamic library with the MLIR Transforms Python extension.
-cc_binary(
-    name = "_mlirTransforms.so",
-    srcs = ["lib/Bindings/Python/Transforms/Transforms.cpp"],
-    copts = PYBIND11_COPTS,
-    features = PYBIND11_FEATURES,
-    linkshared = 1,
-    linkstatic = 0,
-    tags = [
-        "manual",  # External dependency
-        "nobuildkite",  # TODO(gcmn): Add support for this target
-    ],
-    deps = [
-        ":CAPITransforms",
         ":MLIRBindingsPythonHeadersAndDeps",
         "@pybind11",
         "@python_runtime//:headers",
@@ -1026,6 +983,13 @@ td_library(
 td_library(
     name = "LoopLikeInterfaceTdFiles",
     srcs = ["include/mlir/Interfaces/LoopLikeInterface.td"],
+    includes = ["include"],
+    deps = [":OpBaseTdFiles"],
+)
+
+td_library(
+    name = "ParallelCombiningOpInterfaceTdFiles",
+    srcs = ["include/mlir/Interfaces/ParallelCombiningOpInterface.td"],
     includes = ["include"],
     deps = [":OpBaseTdFiles"],
 )
@@ -1801,11 +1765,12 @@ gentbl_cc_library(
 
 td_library(
     name = "SCFTdFiles",
-    srcs = ["include/mlir/Dialect/SCF/SCFOps.td"],
+    srcs = ["include/mlir/Dialect/SCF/IR/SCFOps.td"],
     includes = ["include"],
     deps = [
         ":ControlFlowInterfacesTdFiles",
         ":LoopLikeInterfaceTdFiles",
+        ":ParallelCombiningOpInterfaceTdFiles",
         ":SideEffectInterfacesTdFiles",
         ":ViewLikeInterfaceTdFiles",
     ],
@@ -1817,23 +1782,23 @@ gentbl_cc_library(
     tbl_outs = [
         (
             ["-gen-op-decls"],
-            "include/mlir/Dialect/SCF/SCFOps.h.inc",
+            "include/mlir/Dialect/SCF/IR/SCFOps.h.inc",
         ),
         (
             ["-gen-op-defs"],
-            "include/mlir/Dialect/SCF/SCFOps.cpp.inc",
+            "include/mlir/Dialect/SCF/IR/SCFOps.cpp.inc",
         ),
         (
             ["-gen-dialect-decls"],
-            "include/mlir/Dialect/SCF/SCFOpsDialect.h.inc",
+            "include/mlir/Dialect/SCF/IR/SCFOpsDialect.h.inc",
         ),
         (
             ["-gen-dialect-defs"],
-            "include/mlir/Dialect/SCF/SCFOpsDialect.cpp.inc",
+            "include/mlir/Dialect/SCF/IR/SCFOpsDialect.cpp.inc",
         ),
     ],
     tblgen = ":mlir-tblgen",
-    td_file = "include/mlir/Dialect/SCF/SCFOps.td",
+    td_file = "include/mlir/Dialect/SCF/IR/SCFOps.td",
     deps = [":SCFTdFiles"],
 )
 
@@ -1846,11 +1811,11 @@ gentbl_cc_library(
                 "-gen-pass-decls",
                 "-name=SCF",
             ],
-            "include/mlir/Dialect/SCF/Passes.h.inc",
+            "include/mlir/Dialect/SCF/Transforms/Passes.h.inc",
         ),
     ],
     tblgen = ":mlir-tblgen",
-    td_file = "include/mlir/Dialect/SCF/Passes.td",
+    td_file = "include/mlir/Dialect/SCF/Transforms/Passes.td",
     deps = [":PassBaseTdFiles"],
 )
 
@@ -1860,13 +1825,9 @@ cc_library(
         "lib/Dialect/SCF/Transforms/*.cpp",
         "lib/Dialect/SCF/Transforms/*.h",
     ]),
-    hdrs = [
-        "include/mlir/Dialect/SCF/BufferizableOpInterfaceImpl.h",
-        "include/mlir/Dialect/SCF/Passes.h",
-        "include/mlir/Dialect/SCF/Patterns.h",
-        "include/mlir/Dialect/SCF/TileUsingInterface.h",
-        "include/mlir/Dialect/SCF/Transforms.h",
-    ],
+    hdrs = glob([
+        "include/mlir/Dialect/SCF/Transforms/*.h",
+    ]),
     includes = ["include"],
     deps = [
         ":AffineAnalysis",
@@ -1884,6 +1845,7 @@ cc_library(
         ":SCFUtils",
         ":Support",
         ":TensorDialect",
+        ":TensorTransforms",
         ":TilingInterface",
         ":Transforms",
         "//llvm:Support",
@@ -2084,6 +2046,7 @@ cc_library(
         "lib/Dialect/SparseTensor/Transforms/*.h",
     ]),
     hdrs = [
+        "include/mlir/Dialect/SparseTensor/Transforms/BufferizableOpInterfaceImpl.h",
         "include/mlir/Dialect/SparseTensor/Transforms/Passes.h",
         "include/mlir/ExecutionEngine/SparseTensorUtils.h",
     ],
@@ -2092,6 +2055,7 @@ cc_library(
         ":AffineDialect",
         ":ArithmeticDialect",
         ":BufferizationDialect",
+        ":BufferizationTransforms",
         ":ComplexDialect",
         ":FuncDialect",
         ":FuncTransforms",
@@ -2107,6 +2071,7 @@ cc_library(
         ":SparseTensorDialect",
         ":SparseTensorPassIncGen",
         ":SparseTensorUtils",
+        ":Support",
         ":TensorDialect",
         ":Transforms",
         ":VectorDialect",
@@ -2142,7 +2107,7 @@ cc_library(
 
 td_library(
     name = "NVGPUTdFiles",
-    srcs = ["include/mlir/Dialect/NVGPU/NVGPU.td"],
+    srcs = ["include/mlir/Dialect/NVGPU/IR/NVGPU.td"],
     includes = ["include"],
     deps = [
         ":SideEffectInterfacesTdFiles",
@@ -2158,22 +2123,22 @@ gentbl_cc_library(
                 "-gen-dialect-decls",
                 "-dialect=nvgpu",
             ],
-            "include/mlir/Dialect/NVGPU/NVGPUDialect.h.inc",
+            "include/mlir/Dialect/NVGPU/IR/NVGPUDialect.h.inc",
         ),
         (
             [
                 "-gen-dialect-defs",
                 "-dialect=nvgpu",
             ],
-            "include/mlir/Dialect/NVGPU/NVGPUDialect.cpp.inc",
+            "include/mlir/Dialect/NVGPU/IR/NVGPUDialect.cpp.inc",
         ),
         (
             ["-gen-op-decls"],
-            "include/mlir/Dialect/NVGPU/NVGPU.h.inc",
+            "include/mlir/Dialect/NVGPU/IR/NVGPU.h.inc",
         ),
         (
             ["-gen-op-defs"],
-            "include/mlir/Dialect/NVGPU/NVGPU.cpp.inc",
+            "include/mlir/Dialect/NVGPU/IR/NVGPU.cpp.inc",
         ),
         (
             ["-gen-op-doc"],
@@ -2181,20 +2146,68 @@ gentbl_cc_library(
         ),
     ],
     tblgen = ":mlir-tblgen",
-    td_file = "include/mlir/Dialect/NVGPU/NVGPU.td",
+    td_file = "include/mlir/Dialect/NVGPU/IR/NVGPU.td",
     deps = [":NVGPUTdFiles"],
+)
+
+gentbl_cc_library(
+    name = "NVGPUPassIncGen",
+    strip_include_prefix = "include",
+    tbl_outs = [
+        (
+            [
+                "-gen-pass-decls",
+                "-name=NVGPU",
+            ],
+            "include/mlir/Dialect/NVGPU/Passes.h.inc",
+        ),
+    ],
+    tblgen = ":mlir-tblgen",
+    td_file = "include/mlir/Dialect/NVGPU/Passes.td",
+    deps = [":PassBaseTdFiles"],
 )
 
 cc_library(
     name = "NVGPUDialect",
     srcs = ["lib/Dialect/NVGPU/IR/NVGPUDialect.cpp"],
-    hdrs = ["include/mlir/Dialect/NVGPU/NVGPUDialect.h"],
+    hdrs = ["include/mlir/Dialect/NVGPU/IR/NVGPUDialect.h"],
     includes = ["include"],
     deps = [
         ":GPUDialect",
         ":IR",
         ":NVGPUIncGen",
+        ":NVGPUPassIncGen",
         ":SideEffectInterfaces",
+        "//llvm:Core",
+        "//llvm:Support",
+    ],
+)
+
+cc_library(
+    name = "NVGPUTransforms",
+    srcs = [
+        "lib/Dialect/NVGPU/Transforms/OptimizeSharedMemory.cpp",
+        "lib/Dialect/NVGPU/Transforms/PassDetail.h",
+    ],
+    hdrs = [
+        "include/mlir/Dialect/NVGPU/Passes.h",
+        "include/mlir/Dialect/NVGPU/Transforms/Transforms.h",
+    ],
+    includes = ["include"],
+    deps = [
+        ":AffineDialect",
+        ":ArithmeticDialect",
+        ":FuncDialect",
+        ":GPUDialect",
+        ":IR",
+        ":MemRefDialect",
+        ":NVGPUDialect",
+        ":NVGPUPassIncGen",
+        ":Pass",
+        ":SideEffectInterfaces",
+        ":Support",
+        ":Transforms",
+        ":VectorDialect",
         "//llvm:Core",
         "//llvm:Support",
     ],
@@ -2557,7 +2570,6 @@ cc_library(
         ":TosaToTensor",
         ":VectorToGPU",
         ":VectorToLLVM",
-        ":VectorToROCDL",
         ":VectorToSCF",
         ":VectorToSPIRV",
     ],
@@ -2636,19 +2648,13 @@ cc_library(
     name = "SCFDialect",
     srcs = glob(
         [
-            "lib/Dialect/SCF/*.cpp",
-            "lib/Dialect/SCF/*.h",
+            "lib/Dialect/SCF/IR/*.cpp",
+            "lib/Dialect/SCF/IR/*.h",
         ],
     ),
     hdrs = glob(
         [
-            "include/mlir/Dialect/SCF/*.h",
-        ],
-        exclude = [
-            "include/mlir/Dialect/SCF/BufferizableOpInterfaceImpl.h",
-            "include/mlir/Dialect/SCF/Patterns.h",
-            "include/mlir/Dialect/SCF/TileUsingInterface.h",
-            "include/mlir/Dialect/SCF/Transforms.h",
+            "include/mlir/Dialect/SCF/IR/*.h",
         ],
     ),
     includes = ["include"],
@@ -2662,6 +2668,7 @@ cc_library(
         ":IR",
         ":LoopLikeInterface",
         ":MemRefDialect",
+        ":ParallelCombiningOpInterface",
         ":Pass",
         ":SCFIncGen",
         ":SCFPassIncGen",
@@ -2720,6 +2727,18 @@ cc_library(
     deps = [
         ":IR",
         ":LoopLikeInterfaceIncGen",
+        "//llvm:Support",
+    ],
+)
+
+cc_library(
+    name = "ParallelCombiningOpInterface",
+    srcs = ["lib/Interfaces/ParallelCombiningOpInterface.cpp"],
+    hdrs = ["include/mlir/Interfaces/ParallelCombiningOpInterface.h"],
+    includes = ["include"],
+    deps = [
+        ":IR",
+        ":ParallelCombiningOpInterfaceIncGen",
         "//llvm:Support",
     ],
 )
@@ -2794,6 +2813,14 @@ gentbl_cc_library(
         (
             ["-gen-dialect-defs"],
             "include/mlir/Dialect/Shape/IR/ShapeOpsDialect.cpp.inc",
+        ),
+        (
+            ["-gen-typedef-decls"],
+            "include/mlir/Dialect/Shape/IR/ShapeOpsTypes.h.inc",
+        ),
+        (
+            ["-gen-typedef-defs"],
+            "include/mlir/Dialect/Shape/IR/ShapeOpsTypes.cpp.inc",
         ),
     ],
     tblgen = ":mlir-tblgen",
@@ -3218,9 +3245,9 @@ cc_library(
     ),
     includes = ["include"],
     deps = [
+        ":AsmParser",
         ":IR",
         ":MlirLspServerSupportLib",
-        ":Parser",
         ":Support",
         "//llvm:Support",
     ],
@@ -3251,11 +3278,29 @@ cc_library(
 )
 
 cc_library(
-    name = "ParserTokenKinds",
+    name = "AsmParserTokenKinds",
     # strip_include_prefix does not apply to textual_hdrs.
-    hdrs = ["lib/Parser/TokenKinds.def"],
-    strip_include_prefix = "lib/Parser",
-    textual_hdrs = ["lib/Parser/TokenKinds.def"],
+    hdrs = ["lib/AsmParser/TokenKinds.def"],
+    strip_include_prefix = "lib/AsmParser",
+    textual_hdrs = ["lib/AsmParser/TokenKinds.def"],
+)
+
+cc_library(
+    name = "AsmParser",
+    srcs = glob([
+        "lib/AsmParser/*.cpp",
+        "lib/AsmParser/*.h",
+    ]),
+    hdrs = glob([
+        "include/mlir/AsmParser/*.h",
+    ]),
+    includes = ["include"],
+    deps = [
+        ":AsmParserTokenKinds",
+        ":IR",
+        ":Support",
+        "//llvm:Support",
+    ],
 )
 
 cc_library(
@@ -3269,8 +3314,8 @@ cc_library(
     ]),
     includes = ["include"],
     deps = [
+        ":AsmParser",
         ":IR",
-        ":ParserTokenKinds",
         ":Support",
         "//llvm:Support",
     ],
@@ -3352,6 +3397,7 @@ cc_library(
     ),
     includes = ["include"],
     deps = [
+        ":CallOpInterfaces",
         ":ControlFlowInterfaces",
         ":DataLayoutInterfaces",
         ":IR",
@@ -3396,6 +3442,7 @@ cc_library(
     hdrs = glob(["include/mlir/Dialect/LLVMIR/Transforms/*.h"]),
     includes = ["include"],
     deps = [
+        ":FuncDialect",
         ":IR",
         ":LLVMDialect",
         ":LLVMPassIncGen",
@@ -3417,6 +3464,7 @@ td_library(
         ":DLTIDialectTdFiles",
         ":DataLayoutInterfacesTdFiles",
         ":FunctionInterfacesTdFiles",
+        ":InferIntRangeInterfaceTdFiles",
         ":LLVMOpsTdFiles",
         ":OpBaseTdFiles",
         ":SideEffectInterfacesTdFiles",
@@ -3508,6 +3556,7 @@ cc_library(
         ":GPUBaseIncGen",
         ":GPUOpsIncGen",
         ":IR",
+        ":InferIntRangeInterface",
         ":InferTypeOpInterface",
         ":LLVMDialect",
         ":MemRefDialect",
@@ -3561,6 +3610,7 @@ cc_library(
     deps = [
         ":ArithmeticDialect",
         ":AsyncDialect",
+        ":AsmParser",
         ":ControlFlowDialect",
         ":DLTIDialect",
         ":AffineUtils",
@@ -3601,6 +3651,7 @@ td_library(
     ],
     includes = ["include"],
     deps = [
+        ":CallInterfacesTdFiles",
         ":ControlFlowInterfacesTdFiles",
         ":FunctionInterfacesTdFiles",
         ":InferTypeOpInterfaceTdFiles",
@@ -3698,6 +3749,7 @@ cc_library(
         ":LLVMCommonConversion",
         ":Pass",
         ":ROCDLDialect",
+        ":Support",
         ":Transforms",
         "//llvm:Support",
     ],
@@ -3723,30 +3775,6 @@ cc_library(
         ":Pass",
         ":Transforms",
         "//llvm:Support",
-    ],
-)
-
-cc_library(
-    name = "VectorToROCDL",
-    srcs = [
-        "lib/Conversion/VectorToROCDL/VectorToROCDL.cpp",
-        ":ConversionPassDetail",
-    ],
-    hdrs = ["include/mlir/Conversion/VectorToROCDL/VectorToROCDL.h"],
-    includes = ["include"],
-    deps = [
-        ":ConversionPassIncGen",
-        ":FuncDialect",
-        ":FuncToLLVM",
-        ":GPUDialect",
-        ":IR",
-        ":LLVMCommonConversion",
-        ":LLVMDialect",
-        ":MemRefToLLVM",
-        ":Pass",
-        ":ROCDLDialect",
-        ":Transforms",
-        ":VectorDialect",
     ],
 )
 
@@ -3817,7 +3845,6 @@ cc_library(
         ":Transforms",
         ":VectorDialect",
         ":VectorToLLVM",
-        ":VectorToROCDL",
         ":VectorToSCF",
         "//llvm:Support",
     ],
@@ -4107,14 +4134,6 @@ gentbl_cc_library(
         (
             ["-gen-enum-defs"],
             "include/mlir/Dialect/LLVMIR/NVVMOpsEnums.cpp.inc",
-        ),
-        (
-            ["-gen-struct-attr-decls"],
-            "include/mlir/Dialect/LLVMIR/NVVMOpsStructs.h.inc",
-        ),
-        (
-            ["-gen-struct-attr-defs"],
-            "include/mlir/Dialect/LLVMIR/NVVMOpsStructs.cpp.inc",
         ),
         (
             [
@@ -4844,6 +4863,7 @@ td_library(
         ":ControlFlowInterfacesTdFiles",
         ":InferTypeOpInterfaceTdFiles",
         ":OpBaseTdFiles",
+        ":ParallelCombiningOpInterfaceTdFiles",
         ":SideEffectInterfacesTdFiles",
         ":TilingInterfaceTdFiles",
         ":ViewLikeInterfaceTdFiles",
@@ -4900,6 +4920,7 @@ cc_library(
         ":DialectUtils",
         ":IR",
         ":InferTypeOpInterface",
+        ":ParallelCombiningOpInterface",
         ":SideEffectInterfaces",
         ":TensorOpsIncGen",
         ":TilingInterface",
@@ -4996,6 +5017,7 @@ cc_library(
         ":SCFDialect",
         ":TensorDialect",
         ":TensorPassIncGen",
+        ":TilingInterface",
         ":Transforms",
         "//llvm:Support",
     ],
@@ -5161,6 +5183,24 @@ gentbl_cc_library(
     tblgen = ":mlir-tblgen",
     td_file = "include/mlir/Interfaces/LoopLikeInterface.td",
     deps = [":LoopLikeInterfaceTdFiles"],
+)
+
+gentbl_cc_library(
+    name = "ParallelCombiningOpInterfaceIncGen",
+    strip_include_prefix = "include",
+    tbl_outs = [
+        (
+            ["-gen-op-interface-decls"],
+            "include/mlir/Interfaces/ParallelCombiningOpInterface.h.inc",
+        ),
+        (
+            ["-gen-op-interface-defs"],
+            "include/mlir/Interfaces/ParallelCombiningOpInterface.cpp.inc",
+        ),
+    ],
+    tblgen = ":mlir-tblgen",
+    td_file = "include/mlir/Interfaces/ParallelCombiningOpInterface.td",
+    deps = [":ParallelCombiningOpInterfaceTdFiles"],
 )
 
 gentbl_cc_library(
@@ -5786,17 +5826,12 @@ cc_library(
             "lib/Analysis/*/*.cpp",
             "lib/Analysis/*/*.h",
         ],
-        exclude = [
-            "lib/Analysis/Vector*.cpp",
-            "lib/Analysis/Vector*.h",
-        ],
     ),
     hdrs = glob(
         [
             "include/mlir/Analysis/*.h",
             "include/mlir/Analysis/*/*.h",
         ],
-        exclude = ["include/mlir/Analysis/Vector*.h"],
     ),
     includes = ["include"],
     deps = [
@@ -6218,7 +6253,9 @@ cc_library(
         ":MemRefToSPIRV",
         ":MemRefTransforms",
         ":NVGPUDialect",
+        ":NVGPUPassIncGen",
         ":NVGPUToNVVM",
+        ":NVGPUTransforms",
         ":NVVMDialect",
         ":OpenACCDialect",
         ":OpenMPDialect",
@@ -6260,7 +6297,6 @@ cc_library(
         ":TransformsPassIncGen",
         ":VectorDialect",
         ":VectorToLLVM",
-        ":VectorToROCDL",
         ":VectorToSCF",
         ":VectorToSPIRV",
         ":VectorTransforms",
@@ -6488,6 +6524,7 @@ cc_binary(
         ":GPUTransforms",
         ":LLVMCommonConversion",
         ":LLVMDialect",
+        ":LLVMIRTransforms",
         ":LLVMToLLVMIRTranslation",
         ":MemRefDialect",
         ":MemRefToLLVM",
@@ -6575,6 +6612,7 @@ cc_binary(
         "tools/mlir-linalg-ods-gen/mlir-linalg-ods-yaml-gen.cpp",
     ],
     deps = [
+        ":AsmParser",
         ":IR",
         ":Parser",
         ":Support",
@@ -6723,6 +6761,7 @@ td_library(
         "include/mlir/Dialect/OpenMP/OmpCommon.td",
         "include/mlir/Dialect/OpenMP/OpenMPOps.td",
         "include/mlir/Dialect/OpenMP/OpenMPOpsInterfaces.td",
+        "include/mlir/Dialect/OpenMP/OpenMPTypeInterfaces.td",
     ],
     deps = [
         ":LLVMOpsTdFiles",
@@ -6765,14 +6804,6 @@ gentbl_cc_library(
             "include/mlir/Dialect/OpenMP/OpenMPOpsDialect.cpp.inc",
         ),
         (
-            ["-gen-type-interface-decls"],
-            "include/mlir/Dialect/OpenMP/OpenMPTypeInterfaces.h.inc",
-        ),
-        (
-            ["-gen-type-interface-defs"],
-            "include/mlir/Dialect/OpenMP/OpenMPTypeInterfaces.cpp.inc",
-        ),
-        (
             [
                 "-gen-attrdef-decls",
                 "-attrdefs-dialect=omp",
@@ -6793,6 +6824,24 @@ gentbl_cc_library(
     ],
     tblgen = ":mlir-tblgen",
     td_file = "include/mlir/Dialect/OpenMP/OpenMPOps.td",
+    deps = [":OpenMPOpsTdFiles"],
+)
+
+gentbl_cc_library(
+    name = "OpenMPTypeInterfacesIncGen",
+    strip_include_prefix = "include",
+    tbl_outs = [
+        (
+            ["-gen-type-interface-decls"],
+            "include/mlir/Dialect/OpenMP/OpenMPTypeInterfaces.h.inc",
+        ),
+        (
+            ["-gen-type-interface-defs"],
+            "include/mlir/Dialect/OpenMP/OpenMPTypeInterfaces.cpp.inc",
+        ),
+    ],
+    tblgen = ":mlir-tblgen",
+    td_file = "include/mlir/Dialect/OpenMP/OpenMPTypeInterfaces.td",
     deps = [":OpenMPOpsTdFiles"],
 )
 
@@ -6832,6 +6881,7 @@ cc_library(
         ":LLVMDialect",
         ":OpenMPInterfacesIncGen",
         ":OpenMPOpsIncGen",
+        ":OpenMPTypeInterfacesIncGen",
         "//llvm:Support",
     ],
 )
@@ -7098,6 +7148,14 @@ gentbl_cc_library(
             ["-gen-op-defs"],
             "include/mlir/Dialect/Linalg/TransformOps/LinalgTransformOps.cpp.inc",
         ),
+        (
+            ["-gen-enum-decls"],
+            "include/mlir/Dialect/Linalg/TransformOps/LinalgTransformOpsEnums.h.inc",
+        ),
+        (
+            ["-gen-enum-defs"],
+            "include/mlir/Dialect/Linalg/TransformOps/LinalgTransformOpsEnums.cpp.inc",
+        ),
     ],
     tblgen = ":mlir-tblgen",
     td_file = "include/mlir/Dialect/Linalg/TransformOps/LinalgTransformOps.td",
@@ -7277,6 +7335,7 @@ cc_library(
         ":ConversionPassIncGen",
         ":FuncDialect",
         ":IR",
+        ":LLVMDialect",
         ":LinalgDialect",
         ":LinalgTransforms",
         ":MemRefDialect",
@@ -7323,6 +7382,7 @@ cc_library(
         ":AffineDialect",
         ":ArithmeticDialect",
         ":ArithmeticUtils",
+        ":AsmParser",
         ":BufferizationDialect",
         ":ComplexDialect",
         ":ControlFlowInterfaces",
@@ -7359,6 +7419,10 @@ cc_library(
     ],
     includes = ["include"],
     deps = [
+        ":AffineDialect",
+        ":ArithmeticDialect",
+        ":AsmParser",
+        ":ControlFlowDialect",
         ":IR",
         ":LinalgDialect",
         ":LinalgTransformOpsIncGen",
@@ -7366,6 +7430,7 @@ cc_library(
         ":PDLDialect",
         ":Parser",
         ":SideEffectInterfaces",
+        ":TilingInterface",
         ":TransformDialect",
         ":TransformUtils",
         "//llvm:Support",
@@ -7439,6 +7504,7 @@ cc_library(
         ":ArithmeticDialect",
         ":ArithmeticUtils",
         ":DialectUtils",
+        ":FuncDialect",
         ":IR",
         ":LinalgAnalysis",
         ":LinalgDialect",
@@ -7708,14 +7774,6 @@ gentbl_cc_library(
             "include/mlir/Dialect/Tosa/IR/TosaOps.cpp.inc",
         ),
         (
-            ["-gen-struct-attr-decls"],
-            "include/mlir/Dialect/Tosa/IR/TosaStructs.h.inc",
-        ),
-        (
-            ["-gen-struct-attr-defs"],
-            "include/mlir/Dialect/Tosa/IR/TosaStructs.cpp.inc",
-        ),
-        (
             ["-gen-dialect-decls"],
             "include/mlir/Dialect/Tosa/IR/TosaOpsDialect.h.inc",
         ),
@@ -7902,6 +7960,7 @@ cc_library(
         "lib/Conversion/TosaToTensor",
     ],
     deps = [
+        ":ArithmeticDialect",
         ":ConversionPassIncGen",
         ":FuncDialect",
         ":IR",
@@ -8210,6 +8269,7 @@ td_library(
     includes = ["include"],
     deps = [
         ":CastInterfacesTdFiles",
+        ":InferIntRangeInterfaceTdFiles",
         ":InferTypeOpInterfaceTdFiles",
         ":OpBaseTdFiles",
         ":SideEffectInterfacesTdFiles",
@@ -8305,7 +8365,9 @@ cc_library(
         ":ArithmeticCanonicalizationIncGen",
         ":ArithmeticOpsIncGen",
         ":CommonFolders",
+        ":DialectUtils",
         ":IR",
+        ":InferIntRangeInterface",
         ":InferTypeOpInterface",
         ":SideEffectInterfaces",
         ":VectorInterfaces",
@@ -8342,12 +8404,15 @@ cc_library(
     ],
     includes = ["include"],
     deps = [
+        ":Analysis",
         ":ArithmeticDialect",
         ":ArithmeticPassIncGen",
+        ":ArithmeticUtils",
         ":BufferizationDialect",
         ":BufferizationTransforms",
         ":FuncDialect",
         ":IR",
+        ":InferIntRangeInterface",
         ":MemRefDialect",
         ":Pass",
         ":TransformUtils",
@@ -8925,6 +8990,7 @@ cc_library(
         ":IR",
         ":InferTypeOpInterface",
         ":MemRefDialect",
+        ":SparseTensorDialect",
         ":Support",
         ":TensorDialect",
         "//llvm:Support",
@@ -9156,11 +9222,11 @@ cc_library(
     hdrs = glob(["include/mlir/Tools/PDLL/CodeGen/*.h"]),
     includes = ["include"],
     deps = [
+        ":AsmParser",
         ":IR",
         ":PDLDialect",
         ":PDLLAST",
         ":PDLLODS",
-        ":Parser",
         ":Support",
         "//llvm:Support",
     ],

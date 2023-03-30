@@ -1,7 +1,8 @@
 @AUTO_GEN_COMMENT@
 
 def filterTgts(tgts):
-    return [tgt for tgt in tgts.split() if not tgt.endswith('-oldDriver')]
+    return [tgt for tgt in tgts.split() if not tgt.endswith('-oldDriver') and
+                                           not tgt.endswith('-LTO')]
 
 config.test_c_compiler = "@OPENMP_TEST_C_COMPILER@"
 config.test_cxx_compiler = "@OPENMP_TEST_CXX_COMPILER@"
@@ -16,6 +17,7 @@ config.libacc2omp_system_targets = filterTgts("@LIBOMPTARGET_SYSTEM_TARGETS@")
 config.libacc2omp_current_target = "@CURRENT_TARGET@"
 config.libomp_dir = "@LIBOMP_LIBRARY_DIR@"
 config.libomptarget_dir = "@LIBOMPTARGET_LIBRARY_DIR@"
+config.llvm_lib_directory = "@LIBOMPTARGET_LLVM_LIBRARY_DIR@"
 config.acc2omp_header_directory = "@CMAKE_CURRENT_BINARY_DIR@/../src"
 config.omp_header_directory = "@CMAKE_CURRENT_BINARY_DIR@/../../runtime/src"
 config.host_arch = "@CMAKE_SYSTEM_PROCESSOR@"
