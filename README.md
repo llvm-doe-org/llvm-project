@@ -256,18 +256,6 @@ $ clang -fopenacc -fopenmp-targets=amdgcn-amd-amdhsa test.c && ./a.out
 Hello World: 2
 ```
 
-To use source-to-source mode:
-
-```
-$ clang -fopenacc-print=omp test.c
-#include <stdio.h>
-int main() {
-  #pragma omp target teams num_teams(2)
-  printf("Hello World\n");
-  return 0;
-}
-```
-
 If you see an error for any of the above examples, try appending `-L` followed
 by the root `lib` directory of your Clacc install directory to the end of the
 `clang` command line.  The problem is that `clang` sometimes tries to link
