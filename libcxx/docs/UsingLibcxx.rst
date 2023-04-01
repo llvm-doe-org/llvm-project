@@ -163,7 +163,7 @@ Replacing the default assertion handler is done by defining the following functi
 
 .. code-block:: cpp
 
-  void __libcpp_assertion_handler(char const* file, int line, char const* expression, char const* message)
+  void __libcpp_assertion_handler(char const* format, ...)
 
 This mechanism is similar to how one can replace the default definition of ``operator new``
 and ``operator delete``. For example:
@@ -173,8 +173,12 @@ and ``operator delete``. For example:
   // In HelloWorldHandler.cpp
   #include <version> // must include any libc++ header before defining the handler (C compatibility headers excluded)
 
-  void std::__libcpp_assertion_handler(char const* file, int line, char const* expression, char const* message) {
-    std::printf("Assertion %s failed at %s:%d, more info: %s", expression, file, line, message);
+  void std::__libcpp_assertion_handler(char const* format, ...) {
+    va_list list;
+    va_start(list, format);
+    std::vfprintf(stderr, format, list);
+    va_end(list);
+
     std::abort();
   }
 
@@ -440,3 +444,20 @@ distributions with types other than ``short``, ``int``, ``long``, ``long long``,
 undefined. As an extension, libc++ supports instantiating ``binomial_distribution``, ``discrete_distribution``,
 ``geometric_distribution``, ``negative_binomial_distribution``, ``poisson_distribution``, and ``uniform_int_distribution``
 with ``int8_t``, ``__int128_t`` and their unsigned versions.
+
+Extended integral type support
+------------------------------
+
+Several platforms support the 128-bit integral types ``__int128_t`` and
+``__uint128_t``. When these types are present they can be used in the headers
+as required by the Standard:
+
+* ``<bits>``
+* ``<charconv>``
+* ``<functional>``
+* ``<type_traits>``
+
+As an extension these types can be used in the following headers:
+
+* ``<format>``
+* ``<random>``

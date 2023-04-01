@@ -769,8 +769,8 @@ static constexpr IntrinsicHandler handlers[]{
      &I::genGetCommandArgument,
      {{{"number", asValue},
        {"value", asBox, handleDynamicOptional},
-       {"length", asAddr},
-       {"status", asAddr},
+       {"length", asBox, handleDynamicOptional},
+       {"status", asAddr, handleDynamicOptional},
        {"errmsg", asBox, handleDynamicOptional}}},
      /*isElemental=*/false},
     {"get_environment_variable",
@@ -1208,15 +1208,12 @@ static constexpr MathOperation mathOperations[] = {
     {"aint", "llvm.trunc.f32", genF32F32FuncType, genLibCall},
     {"aint", "llvm.trunc.f64", genF64F64FuncType, genLibCall},
     {"aint", "llvm.trunc.f80", genF80F80FuncType, genLibCall},
-    {"aint", "llvm.trunc.f128", genF128F128FuncType, genLibCall},
     // llvm.round behaves the same way as libm's round.
     {"anint", "llvm.round.f32", genF32F32FuncType,
      genMathOp<mlir::LLVM::RoundOp>},
     {"anint", "llvm.round.f64", genF64F64FuncType,
      genMathOp<mlir::LLVM::RoundOp>},
     {"anint", "llvm.round.f80", genF80F80FuncType,
-     genMathOp<mlir::LLVM::RoundOp>},
-    {"anint", "llvm.round.f128", genF128F128FuncType,
      genMathOp<mlir::LLVM::RoundOp>},
     {"atan", "atanf", genF32F32FuncType, genMathOp<mlir::math::AtanOp>},
     {"atan", "atan", genF64F64FuncType, genMathOp<mlir::math::AtanOp>},
@@ -2781,38 +2778,32 @@ void IntrinsicLibrary::genGetCommandArgument(
   if (!number)
     fir::emitFatalError(loc, "expected NUMBER parameter");
 
-  if (isStaticallyPresent(value) || isStaticallyPresent(status) ||
-      isStaticallyPresent(errmsg)) {
-    mlir::Type boxNoneTy = fir::BoxType::get(builder.getNoneType());
-    mlir::Value valBox =
-        isStaticallyPresent(value)
-            ? fir::getBase(value)
-            : builder.create<fir::AbsentOp>(loc, boxNoneTy).getResult();
-    mlir::Value errBox =
-        isStaticallyPresent(errmsg)
-            ? fir::getBase(errmsg)
-            : builder.create<fir::AbsentOp>(loc, boxNoneTy).getResult();
-    mlir::Value stat =
-        fir::runtime::genArgumentValue(builder, loc, number, valBox, errBox);
-    if (isStaticallyPresent(status)) {
-      mlir::Value statAddr = fir::getBase(status);
-      mlir::Value statIsPresentAtRuntime =
-          builder.genIsNotNullAddr(loc, statAddr);
-      builder.genIfThen(loc, statIsPresentAtRuntime)
-          .genThen(
-              [&]() { builder.createStoreWithConvert(loc, stat, statAddr); })
-          .end();
-    }
-  }
-  if (isStaticallyPresent(length)) {
-    mlir::Value lenAddr = fir::getBase(length);
-    mlir::Value lenIsPresentAtRuntime = builder.genIsNotNullAddr(loc, lenAddr);
-    builder.genIfThen(loc, lenIsPresentAtRuntime)
-        .genThen([&]() {
-          mlir::Value len =
-              fir::runtime::genArgumentLength(builder, loc, number);
-          builder.createStoreWithConvert(loc, len, lenAddr);
-        })
+  // If none of the optional parameters are present, do nothing.
+  if (!isStaticallyPresent(value) && !isStaticallyPresent(length) &&
+      !isStaticallyPresent(status) && !isStaticallyPresent(errmsg))
+    return;
+
+  mlir::Type boxNoneTy = fir::BoxType::get(builder.getNoneType());
+  mlir::Value valBox =
+      isStaticallyPresent(value)
+          ? fir::getBase(value)
+          : builder.create<fir::AbsentOp>(loc, boxNoneTy).getResult();
+  mlir::Value lenBox =
+      isStaticallyPresent(length)
+          ? fir::getBase(length)
+          : builder.create<fir::AbsentOp>(loc, boxNoneTy).getResult();
+  mlir::Value errBox =
+      isStaticallyPresent(errmsg)
+          ? fir::getBase(errmsg)
+          : builder.create<fir::AbsentOp>(loc, boxNoneTy).getResult();
+  mlir::Value stat = fir::runtime::genGetCommandArgument(
+      builder, loc, number, valBox, lenBox, errBox);
+  if (isStaticallyPresent(status)) {
+    mlir::Value statAddr = fir::getBase(status);
+    mlir::Value statIsPresentAtRuntime =
+        builder.genIsNotNullAddr(loc, statAddr);
+    builder.genIfThen(loc, statIsPresentAtRuntime)
+        .genThen([&]() { builder.createStoreWithConvert(loc, stat, statAddr); })
         .end();
   }
 }

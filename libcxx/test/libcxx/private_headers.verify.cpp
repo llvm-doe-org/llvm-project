@@ -37,6 +37,7 @@ END-SCRIPT
 // DO NOT MANUALLY EDIT ANYTHING BETWEEN THE MARKERS BELOW
 // GENERATED-MARKER
 #include <__algorithm/adjacent_find.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/adjacent_find.h'}}
+#include <__algorithm/algorithm_family.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/algorithm_family.h'}}
 #include <__algorithm/all_of.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/all_of.h'}}
 #include <__algorithm/any_of.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/any_of.h'}}
 #include <__algorithm/binary_search.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/binary_search.h'}}
@@ -217,6 +218,7 @@ END-SCRIPT
 #include <__algorithm/unique.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/unique.h'}}
 #include <__algorithm/unique_copy.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/unique_copy.h'}}
 #include <__algorithm/unwrap_iter.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/unwrap_iter.h'}}
+#include <__algorithm/unwrap_range.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/unwrap_range.h'}}
 #include <__algorithm/upper_bound.h> // expected-error@*:* {{use of private header from outside its module: '__algorithm/upper_bound.h'}}
 #include <__availability> // expected-error@*:* {{use of private header from outside its module: '__availability'}}
 #include <__bit/bit_cast.h> // expected-error@*:* {{use of private header from outside its module: '__bit/bit_cast.h'}}
@@ -415,6 +417,7 @@ END-SCRIPT
 #include <__memory/ranges_uninitialized_algorithms.h> // expected-error@*:* {{use of private header from outside its module: '__memory/ranges_uninitialized_algorithms.h'}}
 #include <__memory/raw_storage_iterator.h> // expected-error@*:* {{use of private header from outside its module: '__memory/raw_storage_iterator.h'}}
 #include <__memory/shared_ptr.h> // expected-error@*:* {{use of private header from outside its module: '__memory/shared_ptr.h'}}
+#include <__memory/swap_allocator.h> // expected-error@*:* {{use of private header from outside its module: '__memory/swap_allocator.h'}}
 #include <__memory/temporary_buffer.h> // expected-error@*:* {{use of private header from outside its module: '__memory/temporary_buffer.h'}}
 #include <__memory/uninitialized_algorithms.h> // expected-error@*:* {{use of private header from outside its module: '__memory/uninitialized_algorithms.h'}}
 #include <__memory/unique_ptr.h> // expected-error@*:* {{use of private header from outside its module: '__memory/unique_ptr.h'}}

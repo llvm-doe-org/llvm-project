@@ -110,20 +110,16 @@ stages:
     LIT_NPROC_DIVISOR: 4
     TEST_LIT_XFAIL:
       "
-      libomp :: atomic/kmp_atomic_float10_max_min.c
       libomp :: env/kmp_set_dispatch_buf.c
-      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug51781.c
-      libomptarget :: nvptx64-nvidia-cuda :: offloading/wtime.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug51781.c
-      libomptarget :: nvptx64-nvidia-cuda-oldDriver :: offloading/bug49334.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: offloading/bug49334.cpp
-      libomptarget :: powerpc64le-ibm-linux-gnu-oldDriver :: offloading/bug49334.cpp
+      Clang :: CodeGen/attr-maybeundef-template.cpp
+      Clang :: CodeGen/attr-maybeundef.c
       "
     TEST_LIT_XFAIL_NOT:
       "
       libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/api.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: unified_shared_memory/api.c
-      libomptarget :: nvptx64-nvidia-cuda-oldDriver :: unified_shared_memory/api.c
       "
     TEST_LIT_FILTER_OUT_LIST:
       "
@@ -162,16 +158,15 @@ stages:
     LIT_NPROC_DIVISOR: 1
     TEST_LIT_XFAIL:
       "
-      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug51781.c
-      libomptarget :: nvptx64-nvidia-cuda :: offloading/wtime.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug51781.c
-      libomptarget :: nvptx64-nvidia-cuda-oldDriver :: offloading/bug49334.cpp
       "
     TEST_LIT_XFAIL_NOT:
       ""
     TEST_LIT_FILTER_OUT_LIST:
       "
+      libomptarget :: nvptx64-nvidia-cuda :: mapping/map_back_race.cpp
       libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/map_back_race.cpp
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug49334.cpp
       "
     VV_COMP_LIT_XFAIL:
@@ -208,7 +203,6 @@ stages:
     TEST_LIT_XFAIL:
       "
       Clang :: OpenACC/directives/amdgcn-amd-amdhsa/parallel-da.c
-      libomptarget :: amdgcn-amd-amdhsa-oldDriver :: offloading/cuda_no_devices.c
       "
     TEST_LIT_XFAIL_NOT:
       ""
@@ -259,10 +253,7 @@ stages:
     BUILD_ID: no-asserts
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=False
     TEST_LIT_XFAIL:
-      "
-      Clang :: Headers/wasm.c
-      LLVM :: Analysis/CostModel/X86/interleaved-store-accesses-with-gaps.ll
-      "
+      ""
     TEST_LIT_XFAIL_NOT:
       ""
     TEST_LIT_FILTER_OUT_LIST:
@@ -282,12 +273,8 @@ stages:
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Debug
     TEST_LIT_XFAIL:
       "
-      libomptarget :: x86_64-pc-linux-gnu :: offloading/bug49334.cpp
-      libomptarget :: x86_64-pc-linux-gnu :: offloading/memory_manager.cpp
-      libomptarget :: x86_64-pc-linux-gnu :: offloading/parallel_offloading_map.cpp
       libomptarget :: x86_64-pc-linux-gnu :: unified_shared_memory/close_modifier.c
       libomptarget :: x86_64-pc-linux-gnu-LTO :: unified_shared_memory/close_modifier.c
-      libomptarget :: x86_64-pc-linux-gnu-oldDriver :: unified_shared_memory/close_modifier.c
       "
     TEST_LIT_XFAIL_NOT:
       ""

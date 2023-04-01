@@ -29,6 +29,7 @@
 #include "clang/Sema/DeclSpec.h"
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/Overload.h"
+#include "clang/Sema/RISCVIntrinsicManager.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/Sema.h"
@@ -926,6 +927,14 @@ bool Sema::LookupBuiltin(LookupResult &R) {
                                                 Index.second);
           return true;
         }
+      }
+
+      if (DeclareRISCVVBuiltins) {
+        if (!RVIntrinsicManager)
+          RVIntrinsicManager = CreateRISCVIntrinsicManager(*this);
+
+        if (RVIntrinsicManager->CreateIntrinsicIfFound(R, II, PP))
+          return true;
       }
 
       // If this is a builtin on this (or all) targets, create the decl.
@@ -1911,12 +1920,7 @@ bool LookupResult::isReachableSlow(Sema &SemaRef, NamedDecl *D) {
   // If D comes from a module and SemaRef doesn't own a module, it implies D
   // comes from another TU. In case SemaRef owns a module, we could judge if D
   // comes from another TU by comparing the module unit.
-  //
-  // FIXME: It would look better if we have direct method to judge whether D is
-  // in another TU.
-  if (SemaRef.getCurrentModule() &&
-      SemaRef.getCurrentModule()->getTopLevelModule() ==
-          DeclModule->getTopLevelModule())
+  if (SemaRef.isModuleUnitOfCurrentTU(DeclModule))
     return true;
 
   // [module.reach]/p3:
