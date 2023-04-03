@@ -19,6 +19,7 @@
 #include <__functional/hash.h>
 #include <__iterator/iterator_traits.h>
 #include <__memory/swap_allocator.h>
+#include <__type_traits/can_extract_key.h>
 #include <__utility/swap.h>
 #include <cmath>
 #include <initializer_list>
@@ -2279,7 +2280,7 @@ __hash_table<_Tp, _Hash, _Equal, _Alloc>::__do_rehash(size_type __nbc)
                     else
                     {
                         __next_pointer __np = __cp;
-                        if _LIBCPP_CONSTEXPR_AFTER_CXX14 (!_UniqueKeys)
+                        if _LIBCPP_CONSTEXPR_SINCE_CXX17 (!_UniqueKeys)
                         {
                             for (; __np->__next_ != nullptr &&
                                    key_eq()(__cp->__upcast()->__value_,

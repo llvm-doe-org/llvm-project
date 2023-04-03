@@ -37,77 +37,65 @@ cc_library(
 
 cc_library(
     name = "__support_cpp_array",
-    hdrs = ["src/__support/CPP/Array.h"],
+    hdrs = ["src/__support/CPP/array.h"],
     deps = [":libc_root"],
 )
 
 cc_library(
-    name = "__support_cpp_array_ref",
-    hdrs = ["src/__support/CPP/ArrayRef.h"],
-    deps = [
-        ":__support_cpp_array",
-        ":__support_cpp_type_traits",
-        ":libc_root",
-    ],
-)
-
-cc_library(
     name = "__support_cpp_bit",
-    hdrs = ["src/__support/CPP/Bit.h"],
+    hdrs = ["src/__support/CPP/bit.h"],
     deps = [":libc_root"],
 )
 
 cc_library(
     name = "__support_cpp_bitset",
-    hdrs = ["src/__support/CPP/Bitset.h"],
+    hdrs = ["src/__support/CPP/bitset.h"],
     deps = [":libc_root"],
 )
 
 cc_library(
     name = "__support_cpp_functional",
-    hdrs = ["src/__support/CPP/Functional.h"],
+    hdrs = ["src/__support/CPP/functional.h"],
     deps = [":libc_root"],
 )
 
 cc_library(
     name = "__support_cpp_limits",
-    hdrs = ["src/__support/CPP/Limits.h"],
-    deps = [":libc_root", "__support_cpp_uint"],
-)
-
-cc_library(
-    name = "__support_cpp_string_view",
-    hdrs = ["src/__support/CPP/StringView.h"],
+    hdrs = ["src/__support/CPP/limits.h"],
     deps = [":libc_root"],
 )
 
 cc_library(
-    name = "__support_cpp_uint",
-    hdrs = [
-        "src/__support/CPP/UInt.h",
-    ],
-    deps = [":libc_root","__support_cpp_array"],
+    name = "__support_cpp_optional",
+    hdrs = ["src/__support/CPP/optional.h"],
+    deps = [":libc_root"],
 )
 
 cc_library(
-    name = "__support_cpp_uint128",
-    hdrs = [
-        "src/__support/CPP/UInt128.h",
+    name = "__support_cpp_span",
+    hdrs = ["src/__support/CPP/span.h"],
+    deps = [
+        "__support_cpp_array",
+        "__support_cpp_type_traits",
+        ":libc_root",
     ],
-    deps = [":libc_root",":__support_cpp_uint"],
+)
+
+cc_library(
+    name = "__support_cpp_string_view",
+    hdrs = ["src/__support/CPP/string_view.h"],
+    deps = [":libc_root"],
 )
 
 cc_library(
     name = "__support_cpp_type_traits",
-    hdrs = [
-        "src/__support/CPP/TypeTraits.h",
-    ],
-    deps = [":libc_root","__support_cpp_uint"],
+    hdrs = ["src/__support/CPP/type_traits.h"],
+    deps = [":libc_root"],
 )
 
 cc_library(
     name = "__support_cpp_utility",
-    hdrs = ["src/__support/CPP/Utility.h"],
+    hdrs = ["src/__support/CPP/utility.h"],
     deps = [
         ":__support_cpp_type_traits",
         ":libc_root",
@@ -125,6 +113,26 @@ cc_library(
     hdrs = ["src/__support/CPP/atomic.h"],
     deps = [
         ":__support_cpp_type_traits",
+        ":libc_root",
+    ],
+)
+
+cc_library(
+    name = "__support_uint",
+    hdrs = ["src/__support/UInt.h"],
+    deps = [
+        "__support_cpp_array",
+        "__support_cpp_limits",
+        "__support_cpp_type_traits",
+        ":libc_root",
+    ],
+)
+
+cc_library(
+    name = "__support_cpp_uint128",
+    hdrs = ["src/__support/UInt128.h"],
+    deps = [
+        ":__support_uint",
         ":libc_root",
     ],
 )
@@ -443,16 +451,6 @@ cc_library(
 )
 
 cc_library(
-    name = "sincosf_utils",
-    srcs = ["src/math/generic/sincosf_data.cpp"],
-    hdrs = ["src/math/generic/sincosf_utils.h"],
-    deps = [
-        ":libc_root",
-        ":math_utils",
-    ],
-)
-
-cc_library(
     name = "common_constants",
     srcs = ["src/math/generic/common_constants.cpp"],
     hdrs = ["src/math/generic/common_constants.h"],
@@ -473,6 +471,18 @@ cc_library(
         ":__support_fputil_multiply_add",
         ":__support_fputil_nearest_integer",
         ":libc_root",
+    ],
+)
+
+cc_library(
+    name = "sincosf_utils",
+    hdrs = ["src/math/generic/sincosf_utils.h"],
+    deps = [
+        ":__support_common",
+        ":__support_fputil",
+        ":__support_fputil_polyeval",
+        ":libc_root",
+        ":range_reduction",
     ],
 )
 
@@ -636,7 +646,8 @@ libc_math_function(name = "fmaxl")
 libc_math_function(
     name = "cosf",
     additional_deps = [
-        ":math_utils",
+        ":__support_fputil_fma",
+        ":__support_fputil_multiply_add",
         ":sincosf_utils",
     ],
 )
@@ -644,7 +655,8 @@ libc_math_function(
 libc_math_function(
     name = "sincosf",
     additional_deps = [
-        ":math_utils",
+        ":__support_fputil_fma",
+        ":__support_fputil_multiply_add",
         ":sincosf_utils",
     ],
 )
@@ -655,8 +667,8 @@ libc_math_function(
         ":__support_fputil_fma",
         ":__support_fputil_multiply_add",
         ":__support_fputil_polyeval",
-        ":common_constants",
         ":range_reduction",
+        ":sincosf_utils",
     ],
 )
 

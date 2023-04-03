@@ -559,8 +559,7 @@ objcopy::parseObjcopyOptions(ArrayRef<const char *> RawArgsArr,
   ObjcopyOptTable T;
 
   const char *const *DashDash =
-      std::find_if(RawArgsArr.begin(), RawArgsArr.end(),
-                   [](StringRef Str) { return Str == "--"; });
+      llvm::find_if(RawArgsArr, [](StringRef Str) { return Str == "--"; });
   ArrayRef<const char *> ArgsArr = makeArrayRef(RawArgsArr.begin(), DashDash);
   if (DashDash != RawArgsArr.end())
     DashDash = std::next(DashDash);
@@ -722,27 +721,16 @@ objcopy::parseObjcopyOptions(ArrayRef<const char *> RawArgsArr,
   if (const auto *A = InputArgs.getLastArg(OBJCOPY_compress_debug_sections)) {
     Config.CompressionType = StringSwitch<DebugCompressionType>(A->getValue())
                                  .Case("zlib", DebugCompressionType::Z)
-                                 .Case("zstd", DebugCompressionType::Zstd)
                                  .Default(DebugCompressionType::None);
-    switch (Config.CompressionType) {
-    case DebugCompressionType::None:
+    if (Config.CompressionType == DebugCompressionType::None)
       return createStringError(
           errc::invalid_argument,
           "invalid or unsupported --compress-debug-sections format: %s",
           A->getValue());
-    case DebugCompressionType::Z:
-      if (!compression::zlib::isAvailable())
-        return createStringError(
-            errc::invalid_argument,
-            "LLVM was not compiled with LLVM_ENABLE_ZLIB: cannot compress");
-      break;
-    case DebugCompressionType::Zstd:
-      if (!compression::zstd::isAvailable())
-        return createStringError(
-            errc::invalid_argument,
-            "LLVM was not compiled with LLVM_ENABLE_ZSTD: cannot compress");
-      break;
-    }
+    if (!compression::zlib::isAvailable())
+      return createStringError(
+          errc::invalid_argument,
+          "LLVM was not compiled with LLVM_ENABLE_ZLIB: can not compress");
   }
 
   Config.AddGnuDebugLink = InputArgs.getLastArgValue(OBJCOPY_add_gnu_debuglink);
@@ -1209,7 +1197,15 @@ objcopy::parseBitcodeStripOptions(ArrayRef<const char *> ArgsArr,
   // We only support -r for now, which removes all bitcode sections and
   // the __LLVM segment if it's now empty.
   cantFail(Config.ToRemove.addMatcher(NameOrPattern::create(
+      "__LLVM,__asm", MatchStyle::Literal, ErrorCallback)));
+  cantFail(Config.ToRemove.addMatcher(NameOrPattern::create(
+      "__LLVM,__bitcode", MatchStyle::Literal, ErrorCallback)));
+  cantFail(Config.ToRemove.addMatcher(NameOrPattern::create(
       "__LLVM,__bundle", MatchStyle::Literal, ErrorCallback)));
+  cantFail(Config.ToRemove.addMatcher(NameOrPattern::create(
+      "__LLVM,__cmdline", MatchStyle::Literal, ErrorCallback)));
+  cantFail(Config.ToRemove.addMatcher(NameOrPattern::create(
+      "__LLVM,__swift_cmdline", MatchStyle::Literal, ErrorCallback)));
   MachOConfig.EmptySegmentsToRemove.insert("__LLVM");
 
   DC.CopyConfigs.push_back(std::move(ConfigMgr));
@@ -1223,8 +1219,7 @@ Expected<DriverConfig>
 objcopy::parseStripOptions(ArrayRef<const char *> RawArgsArr,
                            function_ref<Error(Error)> ErrorCallback) {
   const char *const *DashDash =
-      std::find_if(RawArgsArr.begin(), RawArgsArr.end(),
-                   [](StringRef Str) { return Str == "--"; });
+      llvm::find_if(RawArgsArr, [](StringRef Str) { return Str == "--"; });
   ArrayRef<const char *> ArgsArr = makeArrayRef(RawArgsArr.begin(), DashDash);
   if (DashDash != RawArgsArr.end())
     DashDash = std::next(DashDash);

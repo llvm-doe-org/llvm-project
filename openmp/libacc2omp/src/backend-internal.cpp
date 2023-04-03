@@ -16,7 +16,6 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
-#include <dlfcn.h>
 
 acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId) {
   acc2omp_msg_t Msg = {MsgId, nullptr};

@@ -397,34 +397,41 @@ namespace {
 class OffsetGetter {
 public:
   explicit OffsetGetter(InputSectionBase &sec) {
-    if (auto *eh = dyn_cast<EhInputSection>(&sec))
-      pieces = eh->pieces;
+    if (auto *eh = dyn_cast<EhInputSection>(&sec)) {
+      cies = eh->cies;
+      fdes = eh->fdes;
+      i = cies.begin();
+      j = fdes.begin();
+    }
   }
 
   // Translates offsets in input sections to offsets in output sections.
   // Given offset must increase monotonically. We assume that Piece is
   // sorted by inputOff.
   uint64_t get(uint64_t off) {
-    if (pieces.empty())
+    if (cies.empty())
       return off;
 
-    while (i != pieces.size() && pieces[i].inputOff + pieces[i].size <= off)
-      ++i;
-    if (i == pieces.size())
-      fatal(".eh_frame: relocation is not in any piece");
-
-    // Pieces must be contiguous, so there must be no holes in between.
-    assert(pieces[i].inputOff <= off && "Relocation not in any piece");
+    while (j != fdes.end() && j->inputOff <= off)
+      ++j;
+    auto it = j;
+    if (j == fdes.begin() || j[-1].inputOff + j[-1].size <= off) {
+      while (i != cies.end() && i->inputOff <= off)
+        ++i;
+      if (i == cies.begin() || i[-1].inputOff + i[-1].size <= off)
+        fatal(".eh_frame: relocation is not in any piece");
+      it = i;
+    }
 
     // Offset -1 means that the piece is dead (i.e. garbage collected).
-    if (pieces[i].outputOff == -1)
+    if (it[-1].outputOff == -1)
       return -1;
-    return pieces[i].outputOff + off - pieces[i].inputOff;
+    return it[-1].outputOff + (off - it[-1].inputOff);
   }
 
 private:
-  ArrayRef<EhSectionPiece> pieces;
-  size_t i = 0;
+  ArrayRef<EhSectionPiece> cies, fdes;
+  ArrayRef<EhSectionPiece>::iterator i, j;
 };
 
 // This class encapsulates states needed to scan relocations for one
@@ -666,7 +673,7 @@ static const Symbol *getAlternativeSpelling(const Undefined &sym,
   for (auto &it : map)
     if (name.equals_insensitive(it.first))
       return it.second;
-  for (Symbol *sym : symtab->symbols())
+  for (Symbol *sym : symtab->getSymbols())
     if (!sym->isUndefined() && name.equals_insensitive(sym->getName()))
       return sym;
 
@@ -692,7 +699,7 @@ static const Symbol *getAlternativeSpelling(const Undefined &sym,
         break;
       }
     if (!s)
-      for (Symbol *sym : symtab->symbols())
+      for (Symbol *sym : symtab->getSymbols())
         if (canSuggestExternCForCXX(name, sym->getName())) {
           s = sym;
           break;
@@ -805,9 +812,9 @@ void elf::reportUndefinedSymbols() {
   }
 
   // Enable spell corrector for the first 2 diagnostics.
-  for (auto it : enumerate(undefs))
-    if (!it.value().locs.empty())
-      reportUndefinedSymbol(it.value(), it.index() < 2);
+  for (const auto &[i, undef] : llvm::enumerate(undefs))
+    if (!undef.locs.empty())
+      reportUndefinedSymbol(undef, i < 2);
   undefs.clear();
 }
 
@@ -1690,7 +1697,7 @@ void elf::postScanRelocations() {
   }
 
   assert(symAux.empty());
-  for (Symbol *sym : symtab->symbols())
+  for (Symbol *sym : symtab->getSymbols())
     fn(*sym);
 
   // Local symbols may need the aforementioned non-preemptible ifunc and GOT
@@ -1705,7 +1712,8 @@ static bool mergeCmp(const InputSection *a, const InputSection *b) {
   if (a->outSecOff < b->outSecOff)
     return true;
 
-  if (a->outSecOff == b->outSecOff) {
+  // FIXME dyn_cast<ThunkSection> is non-null for any SyntheticSection.
+  if (a->outSecOff == b->outSecOff && a != b) {
     auto *ta = dyn_cast<ThunkSection>(a);
     auto *tb = dyn_cast<ThunkSection>(b);
 

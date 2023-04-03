@@ -55,7 +55,7 @@ Parser::parseCommaSeparatedList(Delimiter delimiter,
   case Delimiter::OptionalParen:
     if (getToken().isNot(Token::l_paren))
       return success();
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case Delimiter::Paren:
     if (parseToken(Token::l_paren, "expected '('" + contextMessage))
       return failure();
@@ -67,7 +67,7 @@ Parser::parseCommaSeparatedList(Delimiter delimiter,
     // Check for absent list.
     if (getToken().isNot(Token::less))
       return success();
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case Delimiter::LessGreater:
     if (parseToken(Token::less, "expected '<'" + contextMessage))
       return success();
@@ -78,7 +78,7 @@ Parser::parseCommaSeparatedList(Delimiter delimiter,
   case Delimiter::OptionalSquare:
     if (getToken().isNot(Token::l_square))
       return success();
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case Delimiter::Square:
     if (parseToken(Token::l_square, "expected '['" + contextMessage))
       return failure();
@@ -89,7 +89,7 @@ Parser::parseCommaSeparatedList(Delimiter delimiter,
   case Delimiter::OptionalBraces:
     if (getToken().isNot(Token::l_brace))
       return success();
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case Delimiter::Braces:
     if (parseToken(Token::l_brace, "expected '{'" + contextMessage))
       return failure();
@@ -238,6 +238,15 @@ ParseResult Parser::parseToken(Token::Kind expectedToken,
 
 /// Parse an optional integer value from the stream.
 OptionalParseResult Parser::parseOptionalInteger(APInt &result) {
+  // Parse `false` and `true` keywords as 0 and 1 respectively.
+  if (consumeIf(Token::kw_false)) {
+    result = false;
+    return success();
+  } else if (consumeIf(Token::kw_true)) {
+    result = true;
+    return success();
+  }
+
   Token curToken = getToken();
   if (curToken.isNot(Token::integer, Token::minus))
     return llvm::None;
@@ -338,6 +347,17 @@ Parser::parseResourceHandle(const OpAsmDialectInterface *dialect,
 
   name = entry.first;
   return entry.second;
+}
+
+FailureOr<AsmDialectResourceHandle>
+Parser::parseResourceHandle(Dialect *dialect) {
+  const auto *interface = dyn_cast<OpAsmDialectInterface>(dialect);
+  if (!interface) {
+    return emitError() << "dialect '" << dialect->getNamespace()
+                       << "' does not expect resource handles";
+  }
+  StringRef resourceName;
+  return parseResourceHandle(interface, resourceName);
 }
 
 //===----------------------------------------------------------------------===//

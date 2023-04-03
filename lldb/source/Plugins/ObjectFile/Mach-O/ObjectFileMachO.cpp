@@ -533,8 +533,13 @@ public:
       case GPRRegSet:
         // On ARM, the CPSR register is also included in the count but it is
         // not included in gpr.r so loop until (count-1).
-        for (uint32_t i = 0; i < (count - 1); ++i) {
-          gpr.r[i] = data.GetU32(&offset);
+
+        // Prevent static analysis warnings by explicitly contstraining 'count'
+        // to acceptable range. Handle possible underflow of count-1
+        if (count > 0 && count <= sizeof(gpr.r) / sizeof(gpr.r[0])) {
+          for (uint32_t i = 0; i < (count - 1); ++i) {
+            gpr.r[i] = data.GetU32(&offset);
+          }
         }
         // Save cpsr explicitly.
         gpr.cpsr = data.GetU32(&offset);
@@ -544,7 +549,7 @@ public:
         break;
 
       case FPURegSet: {
-        uint8_t *fpu_reg_buf = (uint8_t *)&fpu.floats.s[0];
+        uint8_t *fpu_reg_buf = (uint8_t *)&fpu.floats;
         const int fpu_reg_buf_size = sizeof(fpu.floats);
         if (data.ExtractBytes(offset, fpu_reg_buf_size, eByteOrderLittle,
                               fpu_reg_buf) == fpu_reg_buf_size) {
@@ -936,6 +941,17 @@ bool ObjectFileMachO::MagicBytesMatch(DataBufferSP data_sp,
   data.SetData(data_sp, data_offset, data_length);
   lldb::offset_t offset = 0;
   uint32_t magic = data.GetU32(&offset);
+
+  offset += 4; // cputype
+  offset += 4; // cpusubtype
+  uint32_t filetype = data.GetU32(&offset);
+
+  // A fileset has a Mach-O header but is not an
+  // individual file and must be handled via an
+  // ObjectContainer plugin.
+  if (filetype == llvm::MachO::MH_FILESET)
+    return false;
+
   return MachHeaderSizeFromMagic(magic) != 0;
 }
 
@@ -4077,7 +4093,7 @@ void ObjectFileMachO::ParseSymtab(Symtab &symtab) {
         case N_ECOML:
           // end common (local name): 0,,n_sect,0,address
           symbol_section = section_info.GetSection(nlist.n_sect, nlist.n_value);
-          LLVM_FALLTHROUGH;
+          [[fallthrough]];
 
         case N_ECOMM:
           // end common: name,,n_sect,0,0
@@ -4109,7 +4125,7 @@ void ObjectFileMachO::ParseSymtab(Symtab &symtab) {
         switch (n_type) {
         case N_INDR: {
           const char *reexport_name_cstr = strtab_data.PeekCStr(nlist.n_value);
-          if (reexport_name_cstr && reexport_name_cstr[0]) {
+          if (reexport_name_cstr && reexport_name_cstr[0] && symbol_name) {
             type = eSymbolTypeReExported;
             ConstString reexport_name(reexport_name_cstr +
                                       ((reexport_name_cstr[0] == '_') ? 1 : 0));
@@ -4128,7 +4144,7 @@ void ObjectFileMachO::ParseSymtab(Symtab &symtab) {
                                        ((symbol_name[0] == '_') ? 1 : 0));
             undefined_name_to_desc[undefined_name] = nlist.n_desc;
           }
-          LLVM_FALLTHROUGH;
+          [[fallthrough]];
 
         case N_PBUD:
           type = eSymbolTypeUndefined;
@@ -5600,7 +5616,8 @@ bool ObjectFileMachO::GetCorefileMainBinaryInfo(addr_t &value,
             }
 
             if (m_data.CopyData(offset, sizeof(uuid_t), raw_uuid) != 0) {
-              uuid = UUID::fromOptionalData(raw_uuid, sizeof(uuid_t));
+              if (!uuid_is_null(raw_uuid))
+                uuid = UUID::fromOptionalData(raw_uuid, sizeof(uuid_t));
               // convert the "main bin spec" type into our
               // ObjectFile::BinaryType enum
               switch (binspec_type) {
@@ -6334,6 +6351,12 @@ static offset_t CreateAllImageInfosPayload(
           continue;
         ConstString name = section->GetName();
         segment_vmaddr seg_vmaddr;
+        // This is the uncommon case where strncpy is exactly
+        // the right one, doesn't need to be nul terminated.
+        // The segment name in a Mach-O LC_SEGMENT/LC_SEGMENT_64 is char[16] and
+        // is not guaranteed to be nul-terminated if all 16 characters are
+        // used.
+        // coverity[buffer_size_warning]
         strncpy(seg_vmaddr.segname, name.AsCString(),
                 sizeof(seg_vmaddr.segname));
         seg_vmaddr.vmaddr = vmaddr;
@@ -6725,8 +6748,11 @@ bool ObjectFileMachO::SaveCore(const lldb::ProcessSP &process_sp,
           buffer.PutHex32(sizeof(llvm::MachO::note_command));
           char namebuf[16];
           memset(namebuf, 0, sizeof(namebuf));
-          // this is the uncommon case where strncpy is exactly
+          // This is the uncommon case where strncpy is exactly
           // the right one, doesn't need to be nul terminated.
+          // LC_NOTE name field is char[16] and is not guaranteed to be
+          // nul-terminated.
+          // coverity[buffer_size_warning]
           strncpy(namebuf, lcnote->name.c_str(), sizeof(namebuf));
           buffer.PutRawBytes(namebuf, sizeof(namebuf));
           buffer.PutHex64(lcnote->payload_file_offset);
@@ -6884,8 +6910,9 @@ ObjectFileMachO::GetCorefileAllImageInfos() {
         }
         uint32_t imgcount = m_data.GetU32(&offset);
         uint64_t entries_fileoff = m_data.GetU64(&offset);
-        offset += 4; // uint32_t entries_size;
-        offset += 4; // uint32_t unused;
+        // 'entries_size' is not used, nor is the 'unused' entry.
+        //  offset += 4; // uint32_t entries_size;
+        //  offset += 4; // uint32_t unused;
 
         offset = entries_fileoff;
         for (uint32_t i = 0; i < imgcount; i++) {
@@ -6901,7 +6928,8 @@ ObjectFileMachO::GetCorefileAllImageInfos() {
 
           MachOCorefileImageEntry image_entry;
           image_entry.filename = (const char *)m_data.GetCStr(&filepath_offset);
-          image_entry.uuid = UUID::fromData(uuid, sizeof(uuid_t));
+          if (!uuid_is_null(uuid))
+            image_entry.uuid = UUID::fromData(uuid, sizeof(uuid_t));
           image_entry.load_address = load_address;
           image_entry.currently_executing = currently_executing;
 
@@ -6932,9 +6960,11 @@ ObjectFileMachO::GetCorefileAllImageInfos() {
 
           MachOCorefileImageEntry image_entry;
           image_entry.filename = filename;
-          image_entry.uuid = UUID::fromData(uuid, sizeof(uuid_t));
+          if (!uuid_is_null(uuid))
+            image_entry.uuid = UUID::fromData(uuid, sizeof(uuid_t));
           image_entry.load_address = load_address;
           image_entry.slide = slide;
+          image_entry.currently_executing = true;
           image_infos.all_image_infos.push_back(image_entry);
         }
       }
@@ -6951,42 +6981,41 @@ bool ObjectFileMachO::LoadCoreFileImages(lldb_private::Process &process) {
 
   ModuleList added_modules;
   for (const MachOCorefileImageEntry &image : image_infos.all_image_infos) {
-    ModuleSpec module_spec;
-    module_spec.GetUUID() = image.uuid;
-    if (image.filename.empty()) {
-      char namebuf[80];
-      if (image.load_address != LLDB_INVALID_ADDRESS)
-        snprintf(namebuf, sizeof(namebuf), "mem-image-0x%" PRIx64,
-                 image.load_address);
-      else
-        snprintf(namebuf, sizeof(namebuf), "mem-image+0x%" PRIx64, image.slide);
-      module_spec.GetFileSpec() = FileSpec(namebuf);
-    } else {
-      module_spec.GetFileSpec() = FileSpec(image.filename.c_str());
-    }
-    if (image.currently_executing) {
+    ModuleSP module_sp;
+
+    if (!image.filename.empty()) {
       Status error;
-      Symbols::DownloadObjectAndSymbolFile(module_spec, error, true);
-      if (FileSystem::Instance().Exists(module_spec.GetFileSpec())) {
-        process.GetTarget().GetOrCreateModule(module_spec, false);
+      ModuleSpec module_spec;
+      module_spec.GetUUID() = image.uuid;
+      module_spec.GetFileSpec() = FileSpec(image.filename.c_str());
+      if (image.currently_executing) {
+        Symbols::DownloadObjectAndSymbolFile(module_spec, error, true);
+        if (FileSystem::Instance().Exists(module_spec.GetFileSpec())) {
+          process.GetTarget().GetOrCreateModule(module_spec, false);
+        }
       }
-    }
-    Status error;
-    ModuleSP module_sp =
-        process.GetTarget().GetOrCreateModule(module_spec, false, &error);
-    if (!module_sp.get() || !module_sp->GetObjectFile()) {
+      module_sp =
+          process.GetTarget().GetOrCreateModule(module_spec, false, &error);
+      process.GetTarget().GetImages().AppendIfNeeded(module_sp,
+                                                     false /* notify */);
+    } else {
       if (image.load_address != LLDB_INVALID_ADDRESS) {
-        module_sp = process.ReadModuleFromMemory(module_spec.GetFileSpec(),
-                                                 image.load_address);
+        module_sp = DynamicLoader::LoadBinaryWithUUIDAndAddress(
+            &process, image.uuid, image.load_address,
+            false /* value_is_offset */, image.currently_executing,
+            false /* notify */);
+      } else if (image.slide != LLDB_INVALID_ADDRESS) {
+        module_sp = DynamicLoader::LoadBinaryWithUUIDAndAddress(
+            &process, image.uuid, image.slide, true /* value_is_offset */,
+            image.currently_executing, false /* notify */);
       }
     }
+
     if (module_sp.get()) {
       // Will call ModulesDidLoad with all modules once they've all
       // been added to the Target with load addresses.  Don't notify
       // here, before the load address is set.
-      const bool notify = false;
-      process.GetTarget().GetImages().AppendIfNeeded(module_sp, notify);
-      added_modules.Append(module_sp, notify);
+      added_modules.Append(module_sp, false /* notify */);
       if (image.segment_load_addresses.size() > 0) {
         if (log) {
           std::string uuidstr = image.uuid.GetAsString();

@@ -32,14 +32,11 @@ namespace clang {
 namespace dataflow {
 
 struct DataflowAnalysisOptions {
-  /// Determines whether to apply the built-in transfer functions.
+  /// Options for the built-in transfer functions, or empty to not apply them.
   // FIXME: Remove this option once the framework supports composing analyses
   // (at which point the built-in transfer functions can be simply a standalone
   // analysis).
-  bool ApplyBuiltinTransfer = true;
-
-  /// Only has an effect if `ApplyBuiltinTransfer` is true.
-  TransferOptions BuiltinTransferOptions;
+  llvm::Optional<TransferOptions> BuiltinTransferOpts = TransferOptions{};
 };
 
 /// Type-erased lattice element container.
@@ -87,13 +84,11 @@ public:
   virtual void transferTypeErased(const Stmt *, TypeErasedLattice &,
                                   Environment &) = 0;
 
-  /// Determines whether to apply the built-in transfer functions, which model
-  /// the heap and stack in the `Environment`.
-  bool applyBuiltinTransfer() const { return Options.ApplyBuiltinTransfer; }
-
-  /// Returns the options to be passed to the built-in transfer functions.
-  TransferOptions builtinTransferOptions() const {
-    return Options.BuiltinTransferOptions;
+  /// If the built-in transfer functions (which model the heap and stack in the
+  /// `Environment`) are to be applied, returns the options to be passed to
+  /// them. Otherwise returns empty.
+  llvm::Optional<TransferOptions> builtinTransferOptions() const {
+    return Options.BuiltinTransferOpts;
   }
 };
 
@@ -121,7 +116,7 @@ struct TypeErasedDataflowAnalysisState {
 ///   `llvm::None` represent basic blocks that are not evaluated yet.
 TypeErasedDataflowAnalysisState transferBlock(
     const ControlFlowContext &CFCtx,
-    std::vector<llvm::Optional<TypeErasedDataflowAnalysisState>> &BlockStates,
+    llvm::ArrayRef<llvm::Optional<TypeErasedDataflowAnalysisState>> BlockStates,
     const CFGBlock &Block, const Environment &InitEnv,
     TypeErasedDataflowAnalysis &Analysis,
     std::function<void(const CFGStmt &,
@@ -138,7 +133,8 @@ llvm::Expected<std::vector<llvm::Optional<TypeErasedDataflowAnalysisState>>>
 runTypeErasedDataflowAnalysis(
     const ControlFlowContext &CFCtx, TypeErasedDataflowAnalysis &Analysis,
     const Environment &InitEnv,
-    std::function<void(const Stmt *, const TypeErasedDataflowAnalysisState &)>
+    std::function<void(const CFGStmt &,
+                       const TypeErasedDataflowAnalysisState &)>
         PostVisitStmt = nullptr);
 
 } // namespace dataflow

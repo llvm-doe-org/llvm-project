@@ -126,9 +126,9 @@ def My_IntegerAttr : MyDialect_Attr<"Integer", "int"> {
     An integer attribute is a literal attribute that represents an integral
     value of the specified integer type.
   }];
-  /// Here we've defined two parameters, one is the `self` type of the attribute
-  /// (i.e. the type of the Attribute itself), and the other is the integer value
-  /// of the attribute.
+  /// Here we've defined two parameters, one is a "self" type parameter, and the
+  /// other is the integer value of the attribute. The self type parameter is
+  /// specially handled by the assembly format.
   let parameters = (ins AttributeSelfTypeParameter<"">:$type, "APInt":$value);
 
   /// Here we've defined a custom builder for the type, that removes the need to pass
@@ -146,6 +146,8 @@ def My_IntegerAttr : MyDialect_Attr<"Integer", "int"> {
   ///
   ///    #my.int<50> : !my.int<32> // a 32-bit integer of value 50.
   ///
+  /// Note that the self type parameter is not included in the assembly format.
+  /// Its value is derived from the optional trailing type on all attributes.
   let assemblyFormat = "`<` $value `>`";
 
   /// Indicate that our attribute will add additional verification to the parameters.
@@ -271,9 +273,8 @@ MLIR includes several specialized classes for common situations:
 - `ArrayRefOfSelfAllocationParameter<arrayOf, descriptionOfParam>` for arrays of
   objects which self-allocate as per the last specialization.
 
-- `AttributeSelfTypeParameter` is a special AttrParameter that corresponds to
-  the `Type` of the attribute. Only one parameter of the attribute may be of
-  this parameter type.
+- `AttributeSelfTypeParameter` is a special `AttrParameter` that represents
+  parameters derived from the optional trailing type on attributes.
 
 ### Traits
 
@@ -702,6 +703,54 @@ available through `$_ctxt`. E.g.
 DefaultValuedParameter<"IntegerType", "IntegerType::get($_ctxt, 32)">
 ```
 
+The value of parameters that appear __before__ the default-valued parameter in
+the parameter declaration list are available as substitutions. E.g.
+
+```tablegen
+let parameters = (ins
+  "IntegerAttr":$value,
+  DefaultValuedParameter<"Type", "$value.getType()">:$type
+);
+```
+
+###### Attribute Self Type Parameter
+
+An attribute optionally has a trailing type after the assembly format of the
+attribute value itself. MLIR parses over the attribute value and optionally
+parses a colon-type before passing the `Type` into the dialect parser hook.
+
+```
+dialect-attribute  ::= `#` dialect-namespace `<` attr-data `>`
+                       (`:` type)?
+                     | `#` alias-name pretty-dialect-sym-body? (`:` type)?
+```
+
+`AttributeSelfTypeParameter` is an attribute parameter specially handled by the
+assembly format generator. Only one such parameter can be specified, and its
+value is derived from the trailing type. This parameter's default value is
+`NoneType::get($_ctxt)`.
+
+In order for the type to be printed by
+MLIR, however, the attribute must implement `TypedAttrInterface`. For example,
+
+```tablegen
+// This attribute has only a self type parameter.
+def MyExternAttr : AttrDef<MyDialect, "MyExtern", [TypedAttrInterface]> {
+  let parameters = (AttributeSelfTypeParameter<"">:$type);
+  let mnemonic = "extern";
+  let assemblyFormat = "";
+}
+```
+
+This attribute can look like:
+
+```mlir
+#my_dialect.extern // none
+#my_dialect.extern : i32
+#my_dialect.extern : tensor<4xi32>
+#my_dialect.extern : !my_dialect.my_type
+```
+
 ##### Assembly Format Directives
 
 Attribute and type assembly formats have the following directives:
@@ -845,6 +894,19 @@ void printStringParam(AsmPrinter &printer, StringRef value);
 
 The custom parser is considered to have failed if it returns failure or if any
 bound parameters have failure values afterwards.
+
+A string of C++ code can be used as a `custom` directive argument. When
+generating the custom parser and printer call, the string is pasted as a
+function argument. For example, `parseBar` and `printBar` can be re-used with
+a constant integer:
+
+```tablegen
+let parameters = (ins "int":$bar);
+let assemblyFormat = [{ custom<Bar>($foo, "1") }];
+```
+
+The string is pasted verbatim but with substitutions for `$_builder` and
+`$_ctxt`. String literals can be used to parameterize custom directives.
 
 ### Verification
 

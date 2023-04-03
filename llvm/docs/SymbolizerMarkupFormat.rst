@@ -184,7 +184,7 @@ human-readable symbolic form.
     {{{symbol:_ZN7Mangled4NameEv}}}
     {{{symbol:foobar}}}
 
-``{{{pc:%p}}}``, ``{{{pc:%p:ra}}}``, ``{{{pc:%p:pc}}}`` [#not_yet_implemented]_
+``{{{pc:%p}}}``, ``{{{pc:%p:ra}}}``, ``{{{pc:%p:pc}}}``
 
   Here ``%p`` is the memory address of a code location. It might be presented as a
   function name and source location. The second two forms distinguish the kind of
@@ -195,7 +195,7 @@ human-readable symbolic form.
     {{{pc:0x12345678}}}
     {{{pc:0xffffffff9abcdef0}}}
 
-``{{{data:%p}}}`` [#not_yet_implemented]_
+``{{{data:%p}}}``
 
   Here ``%p`` is the memory address of a data location. It might be presented as
   the name of a global variable at that location.

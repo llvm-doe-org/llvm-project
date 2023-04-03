@@ -1033,9 +1033,9 @@ namespace llvm {
     bool canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
                           const MachineFunction &MF) const override;
 
-    bool isCheapToSpeculateCttz() const override;
+    bool isCheapToSpeculateCttz(Type *Ty) const override;
 
-    bool isCheapToSpeculateCtlz() const override;
+    bool isCheapToSpeculateCtlz(Type *Ty) const override;
 
     bool isCtlzFast() const override;
 
@@ -1239,15 +1239,6 @@ namespace llvm {
     bool isLegalAddImmediate(int64_t Imm) const override;
 
     bool isLegalStoreImmediate(int64_t Imm) const override;
-
-    /// Return the cost of the scaling factor used in the addressing
-    /// mode represented by AM for this target, for a load/store
-    /// of the specified type.
-    /// If the AM is supported, the return value must be >= 0.
-    /// If the AM is not supported, it returns a negative value.
-    InstructionCost getScalingFactorCost(const DataLayout &DL,
-                                         const AddrMode &AM, Type *Ty,
-                                         unsigned AS) const override;
 
     /// This is used to enable splatted operand transforms for vector shifts
     /// and vector funnel shifts.
@@ -1460,6 +1451,8 @@ namespace llvm {
 
     bool supportSwiftError() const override;
 
+    bool supportKCFIBundles() const override { return true; }
+
     bool hasStackProbeSymbol(MachineFunction &MF) const override;
     bool hasInlineStackProbe(MachineFunction &MF) const override;
     StringRef getStackProbeSymbolName(MachineFunction &MF) const override;
@@ -1598,6 +1591,7 @@ namespace llvm {
     SDValue lowerFaddFsub(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerFP_EXTEND(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerFP_ROUND(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerFP_TO_BF16(SDValue Op, SelectionDAG &DAG) const;
 
     SDValue
     LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
@@ -1620,6 +1614,17 @@ namespace llvm {
     void insertCopiesSplitCSR(
       MachineBasicBlock *Entry,
       const SmallVectorImpl<MachineBasicBlock *> &Exits) const override;
+
+    bool
+    splitValueIntoRegisterParts(SelectionDAG &DAG, const SDLoc &DL, SDValue Val,
+                                SDValue *Parts, unsigned NumParts, MVT PartVT,
+                                Optional<CallingConv::ID> CC) const override;
+
+    SDValue
+    joinRegisterPartsIntoValue(SelectionDAG &DAG, const SDLoc &DL,
+                               const SDValue *Parts, unsigned NumParts,
+                               MVT PartVT, EVT ValueVT,
+                               Optional<CallingConv::ID> CC) const override;
 
     bool isUsedByReturnOnly(SDNode *N, SDValue &Chain) const override;
 

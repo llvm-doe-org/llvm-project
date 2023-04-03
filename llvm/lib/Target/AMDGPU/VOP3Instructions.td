@@ -596,6 +596,7 @@ class ThreeOp_i32_Pats <SDPatternOperator op1, SDPatternOperator op2, Instructio
 def : ThreeOp_i32_Pats<cshl_32, add, V_LSHL_ADD_U32_e64>;
 def : ThreeOp_i32_Pats<add, cshl_32, V_ADD_LSHL_U32_e64>;
 def : ThreeOp_i32_Pats<add, add, V_ADD3_U32_e64>;
+def : ThreeOp_i32_Pats<ptradd, ptradd, V_ADD3_U32_e64>;
 def : ThreeOp_i32_Pats<cshl_32, or, V_LSHL_OR_B32_e64>;
 def : ThreeOp_i32_Pats<and, or, V_AND_OR_B32_e64>;
 def : ThreeOp_i32_Pats<or, or, V_OR3_B32_e64>;
@@ -768,10 +769,10 @@ class VOP3_DOT_Profile<VOPProfile P, VOP3Features Features = VOP3_REGULAR> : VOP
   let HasSrc2Mods = 1;
   let Src0ModDPP = FPVRegInputMods;
   let Src1ModDPP = FPVRegInputMods;
-  let Src2ModVOP3DPP = FPVRegInputMods;
+  let Src2ModVOP3DPP = FP16InputMods;
   let InsVOP3OpSel = getInsVOP3OpSel<Src0RC64, Src1RC64, Src2RC64, NumSrcArgs,
-                                     HasClamp, HasOMod, FPVRegInputMods,
-                                     FPVRegInputMods, FPVRegInputMods>.ret;
+                                     HasClamp, HasOMod, FP16InputMods,
+                                     FP16InputMods, FP16InputMods>.ret;
   let AsmVOP3OpSel = getAsmVOP3OpSel<NumSrcArgs, HasClamp, 1, 1, 1>.ret;
 }
 

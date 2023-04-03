@@ -671,7 +671,7 @@ bool llvm::runIPSCCP(
       findReturnsToZap(*F, ReturnsToZap, Solver);
   }
 
-  for (auto F : Solver.getMRVFunctionsTracked()) {
+  for (auto *F : Solver.getMRVFunctionsTracked()) {
     assert(F->getReturnType()->isStructTy() &&
            "The return type should be a struct");
     StructType *STy = cast<StructType>(F->getReturnType());
@@ -681,9 +681,9 @@ bool llvm::runIPSCCP(
 
   // Zap all returns which we've identified as zap to change.
   SmallSetVector<Function *, 8> FuncZappedReturn;
-  for (unsigned i = 0, e = ReturnsToZap.size(); i != e; ++i) {
-    Function *F = ReturnsToZap[i]->getParent()->getParent();
-    ReturnsToZap[i]->setOperand(0, UndefValue::get(F->getReturnType()));
+  for (ReturnInst *RI : ReturnsToZap) {
+    Function *F = RI->getParent()->getParent();
+    RI->setOperand(0, UndefValue::get(F->getReturnType()));
     // Record all functions that are zapped.
     FuncZappedReturn.insert(F);
   }
@@ -705,7 +705,7 @@ bool llvm::runIPSCCP(
 
   // If we inferred constant or undef values for globals variables, we can
   // delete the global and any stores that remain to it.
-  for (auto &I : make_early_inc_range(Solver.getTrackedGlobals())) {
+  for (const auto &I : make_early_inc_range(Solver.getTrackedGlobals())) {
     GlobalVariable *GV = I.first;
     if (isOverdefined(I.second))
       continue;

@@ -73,6 +73,22 @@ add_fp_unittest(
 )
 
 add_fp_unittest(
+  tanf_test
+  NEED_MPFR
+  SUITE
+    libc_math_unittests
+  SRCS
+    tanf_test.cpp
+  HDRS
+    sdcomp26094.h
+  DEPENDS
+    libc.include.errno
+    libc.src.math.tanf
+    libc.src.__support.CPP.array
+    libc.src.__support.FPUtil.fputil
+)
+
+add_fp_unittest(
   fabs_test
   NEED_MPFR
   SUITE
@@ -1311,6 +1327,50 @@ add_fp_unittest(
     expxf_test.cpp
   DEPENDS
     libc.src.math.generic.common_constants
+    libc.src.__support.FPUtil.fputil
+)
+
+add_fp_unittest(
+  coshf_test
+  NEED_MPFR
+  SUITE
+    libc_math_unittests
+  SRCS
+    coshf_test.cpp
+  HDRS
+    sdcomp26094.h
+  DEPENDS
+    libc.include.errno
+    libc.src.math.coshf
+    libc.src.__support.CPP.array
+    libc.src.__support.FPUtil.fputil
+)
+
+add_fp_unittest(
+  sinhf_test
+  NEED_MPFR
+  SUITE
+    libc_math_unittests
+  SRCS
+    sinhf_test.cpp
+  HDRS
+    sdcomp26094.h
+  DEPENDS
+    libc.include.errno
+    libc.src.math.sinhf
+    libc.src.__support.CPP.array
+    libc.src.__support.FPUtil.fputil
+)
+
+add_fp_unittest(
+  tanhf_test
+  NEED_MPFR
+  SUITE
+    libc_math_unittests
+  SRCS
+    tanhf_test.cpp
+  DEPENDS
+    libc.src.math.tanhf
     libc.src.__support.FPUtil.fputil
 )
 

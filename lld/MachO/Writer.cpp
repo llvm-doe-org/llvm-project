@@ -575,37 +575,6 @@ void Writer::treatSpecialUndefineds() {
   }
 }
 
-// Add stubs and bindings where necessary (e.g. if the symbol is a
-// DylibSymbol.)
-static void prepareBranchTarget(Symbol *sym) {
-  if (auto *dysym = dyn_cast<DylibSymbol>(sym)) {
-    if (in.stubs->addEntry(dysym)) {
-      if (sym->isWeakDef()) {
-        in.binding->addEntry(dysym, in.lazyPointers->isec,
-                             sym->stubsIndex * target->wordSize);
-        in.weakBinding->addEntry(sym, in.lazyPointers->isec,
-                                 sym->stubsIndex * target->wordSize);
-      } else {
-        in.lazyBinding->addEntry(dysym);
-      }
-    }
-  } else if (auto *defined = dyn_cast<Defined>(sym)) {
-    if (defined->isExternalWeakDef()) {
-      if (in.stubs->addEntry(sym)) {
-        in.rebase->addEntry(in.lazyPointers->isec,
-                            sym->stubsIndex * target->wordSize);
-        in.weakBinding->addEntry(sym, in.lazyPointers->isec,
-                                 sym->stubsIndex * target->wordSize);
-      }
-    } else if (defined->interposable) {
-      if (in.stubs->addEntry(sym))
-        in.lazyBinding->addEntry(sym);
-    }
-  } else {
-    llvm_unreachable("invalid branch target symbol type");
-  }
-}
-
 // Can a symbol's address can only be resolved at runtime?
 static bool needsBinding(const Symbol *sym) {
   if (isa<DylibSymbol>(sym))
@@ -621,7 +590,8 @@ static void prepareSymbolRelocation(Symbol *sym, const InputSection *isec,
   const RelocAttrs &relocAttrs = target->getRelocAttrs(r.type);
 
   if (relocAttrs.hasAttr(RelocAttrBits::BRANCH)) {
-    prepareBranchTarget(sym);
+    if (needsBinding(sym))
+      in.stubs->addEntry(sym);
   } else if (relocAttrs.hasAttr(RelocAttrBits::GOT)) {
     if (relocAttrs.hasAttr(RelocAttrBits::POINTER) || needsBinding(sym))
       in.got->addEntry(sym);
@@ -695,6 +665,9 @@ void Writer::scanSymbols() {
         continue;
       dysym->getFile()->refState =
           std::max(dysym->getFile()->refState, dysym->getRefState());
+    } else if (isa<Undefined>(sym)) {
+      if (sym->getName().startswith(ObjCStubsSection::symbolPrefix))
+        in.objcStubs->addEntry(sym);
     }
   }
 
@@ -1158,13 +1131,15 @@ void Writer::writeOutputFile() {
 
 template <class LP> void Writer::run() {
   treatSpecialUndefineds();
-  if (config->entry && !isa<Undefined>(config->entry))
-    prepareBranchTarget(config->entry);
+  if (config->entry && needsBinding(config->entry))
+    in.stubs->addEntry(config->entry);
 
   // Canonicalization of all pointers to InputSections should be handled by
   // these two scan* methods. I.e. from this point onward, for all live
   // InputSections, we should have `isec->canonical() == isec`.
   scanSymbols();
+  if (in.objcStubs->isNeeded())
+    in.objcStubs->setup();
   scanRelocations();
 
   // Do not proceed if there was an undefined symbol.
@@ -1208,9 +1183,12 @@ void macho::resetWriter() { LCDylib::resetInstanceCount(); }
 void macho::createSyntheticSections() {
   in.header = make<MachHeaderSection>();
   if (config->dedupLiterals)
-    in.cStringSection = make<DeduplicatedCStringSection>();
+    in.cStringSection =
+        make<DeduplicatedCStringSection>(section_names::cString);
   else
-    in.cStringSection = make<CStringSection>();
+    in.cStringSection = make<CStringSection>(section_names::cString);
+  in.objcMethnameSection =
+      make<DeduplicatedCStringSection>(section_names::objcMethname);
   in.wordLiteralSection =
       config->dedupLiterals ? make<WordLiteralSection>() : nullptr;
   in.rebase = make<RebaseSection>();
@@ -1223,6 +1201,7 @@ void macho::createSyntheticSections() {
   in.lazyPointers = make<LazyPointerSection>();
   in.stubs = make<StubsSection>();
   in.stubHelper = make<StubHelperSection>();
+  in.objcStubs = make<ObjCStubsSection>();
   in.unwindInfo = makeUnwindInfoSection();
   in.objCImageInfo = make<ObjCImageInfoSection>();
 

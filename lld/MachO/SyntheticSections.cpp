@@ -24,6 +24,7 @@
 #include "llvm/Support/LEB128.h"
 #include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/xxhash.h"
 
 #if defined(__APPLE__)
 #include <sys/mman.h>
@@ -658,11 +659,38 @@ void StubsSection::writeTo(uint8_t *buf) const {
 
 void StubsSection::finalize() { isFinal = true; }
 
-bool StubsSection::addEntry(Symbol *sym) {
+static void addBindingsForStub(Symbol *sym) {
+  if (auto *dysym = dyn_cast<DylibSymbol>(sym)) {
+    if (sym->isWeakDef()) {
+      in.binding->addEntry(dysym, in.lazyPointers->isec,
+                           sym->stubsIndex * target->wordSize);
+      in.weakBinding->addEntry(sym, in.lazyPointers->isec,
+                               sym->stubsIndex * target->wordSize);
+    } else {
+      in.lazyBinding->addEntry(dysym);
+    }
+  } else if (auto *defined = dyn_cast<Defined>(sym)) {
+    if (defined->isExternalWeakDef()) {
+      in.rebase->addEntry(in.lazyPointers->isec,
+                          sym->stubsIndex * target->wordSize);
+      in.weakBinding->addEntry(sym, in.lazyPointers->isec,
+                               sym->stubsIndex * target->wordSize);
+    } else if (defined->interposable) {
+      in.lazyBinding->addEntry(sym);
+    } else {
+      llvm_unreachable("invalid stub target");
+    }
+  } else {
+    llvm_unreachable("invalid stub target symbol type");
+  }
+}
+
+void StubsSection::addEntry(Symbol *sym) {
   bool inserted = entries.insert(sym);
-  if (inserted)
+  if (inserted) {
     sym->stubsIndex = entries.size() - 1;
-  return inserted;
+    addBindingsForStub(sym);
+  }
 }
 
 StubHelperSection::StubHelperSection()
@@ -714,6 +742,84 @@ void StubHelperSection::setup() {
                     /*isThumb=*/false, /*isReferencedDynamically=*/false,
                     /*noDeadStrip=*/false);
   dyldPrivate->used = true;
+}
+
+ObjCStubsSection::ObjCStubsSection()
+    : SyntheticSection(segment_names::text, section_names::objcStubs) {
+  flags = S_ATTR_SOME_INSTRUCTIONS | S_ATTR_PURE_INSTRUCTIONS;
+  align = target->objcStubsAlignment;
+}
+
+void ObjCStubsSection::addEntry(Symbol *sym) {
+  assert(sym->getName().startswith(symbolPrefix) && "not an objc stub");
+  // Ensure our lookup string has the length of the actual string + the null
+  // terminator to mirror
+  StringRef methname =
+      StringRef(sym->getName().data() + symbolPrefix.size(),
+                sym->getName().size() - symbolPrefix.size() + 1);
+  offsets.push_back(
+      in.objcMethnameSection->getStringOffset(methname).outSecOff);
+  Defined *newSym = replaceSymbol<Defined>(
+      sym, sym->getName(), nullptr, isec,
+      /*value=*/symbols.size() * target->objcStubsFastSize,
+      /*size=*/target->objcStubsFastSize,
+      /*isWeakDef=*/false, /*isExternal=*/true, /*isPrivateExtern=*/true,
+      /*includeInSymtab=*/true, /*isThumb=*/false,
+      /*isReferencedDynamically=*/false, /*noDeadStrip=*/false);
+  symbols.push_back(newSym);
+}
+
+void ObjCStubsSection::setup() {
+  Symbol *objcMsgSend = symtab->addUndefined("_objc_msgSend", /*file=*/nullptr,
+                                             /*isWeakRef=*/false);
+  objcMsgSend->used = true;
+  in.got->addEntry(objcMsgSend);
+  assert(objcMsgSend->isInGot());
+  objcMsgSendGotIndex = objcMsgSend->gotIndex;
+
+  size_t size = offsets.size() * target->wordSize;
+  uint8_t *selrefsData = bAlloc().Allocate<uint8_t>(size);
+  for (size_t i = 0, n = offsets.size(); i < n; ++i)
+    write64le(&selrefsData[i * target->wordSize], offsets[i]);
+
+  in.objcSelrefs =
+      makeSyntheticInputSection(segment_names::data, section_names::objcSelrefs,
+                                S_LITERAL_POINTERS | S_ATTR_NO_DEAD_STRIP,
+                                ArrayRef<uint8_t>{selrefsData, size},
+                                /*align=*/target->wordSize);
+  in.objcSelrefs->live = true;
+
+  for (size_t i = 0, n = offsets.size(); i < n; ++i) {
+    in.objcSelrefs->relocs.push_back(
+        {/*type=*/target->unsignedRelocType,
+         /*pcrel=*/false, /*length=*/3,
+         /*offset=*/static_cast<uint32_t>(i * target->wordSize),
+         /*addend=*/offsets[i] * in.objcMethnameSection->align,
+         /*referent=*/in.objcMethnameSection->isec});
+  }
+
+  in.objcSelrefs->parent =
+      ConcatOutputSection::getOrCreateForInput(in.objcSelrefs);
+  inputSections.push_back(in.objcSelrefs);
+  in.objcSelrefs->isFinal = true;
+}
+
+uint64_t ObjCStubsSection::getSize() const {
+  return target->objcStubsFastSize * symbols.size();
+}
+
+void ObjCStubsSection::writeTo(uint8_t *buf) const {
+  assert(in.objcSelrefs->live);
+  assert(in.objcSelrefs->isFinal);
+
+  uint64_t stubOffset = 0;
+  for (size_t i = 0, n = symbols.size(); i < n; ++i) {
+    Defined *sym = symbols[i];
+    target->writeObjCMsgSendStub(buf + stubOffset, sym, in.objcStubs->addr,
+                                 stubOffset, in.objcSelrefs->getVA(), i,
+                                 in.got->addr, objcMsgSendGotIndex);
+    stubOffset += target->objcStubsFastSize;
+  }
 }
 
 LazyPointerSection::LazyPointerSection()
@@ -1307,8 +1413,7 @@ void CodeSignatureSection::writeHashes(uint8_t *buf) const {
   uint8_t *hashes = buf + fileOff + allHeadersSize;
   parallelFor(0, getBlockCount(), [&](size_t i) {
     sha256(buf + i * blockSize,
-           std::min(static_cast<size_t>(fileOff - i * blockSize),
-                    static_cast<size_t>(blockSize)),
+           std::min(static_cast<size_t>(fileOff - i * blockSize), blockSize),
            hashes + i * hashSize);
   });
 #if defined(__APPLE__)
@@ -1424,8 +1529,8 @@ void BitcodeBundleSection::writeTo(uint8_t *buf) const {
   remove(xarPath);
 }
 
-CStringSection::CStringSection()
-    : SyntheticSection(segment_names::text, section_names::cString) {
+CStringSection::CStringSection(const char *name)
+    : SyntheticSection(segment_names::text, name) {
   flags = S_CSTRING_LITERALS;
 }
 
@@ -1549,6 +1654,16 @@ void DeduplicatedCStringSection::writeTo(uint8_t *buf) const {
     if (!data.empty())
       memcpy(buf + off, data.data(), data.size());
   }
+}
+
+DeduplicatedCStringSection::StringOffset
+DeduplicatedCStringSection::getStringOffset(StringRef str) const {
+  // StringPiece uses 31 bits to store the hashes, so we replicate that
+  uint32_t hash = xxHash64(str) & 0x7fffffff;
+  auto offset = stringOffsetMap.find(CachedHashStringRef(str, hash));
+  assert(offset != stringOffsetMap.end() &&
+         "Looked-up strings should always exist in section");
+  return offset->second;
 }
 
 // This section is actually emitted as __TEXT,__const by ld64, but clang may

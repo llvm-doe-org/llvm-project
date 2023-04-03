@@ -164,9 +164,13 @@ def AttrC : TestAttr<"TestF"> {
 
 /// Test attribute with self type parameter
 
-// ATTR: TestGAttr::parse
-// ATTR:   return TestGAttr::get
-// ATTR:     odsType
+// ATTR-LABEL: Attribute TestGAttr::parse
+// ATTR: if (odsType)
+// ATTR:   if (auto reqType = odsType.dyn_cast<::mlir::Type>())
+// ATTR:     _result_type = reqType
+// ATTR: TestGAttr::get
+// ATTR-NEXT: *_result_a
+// ATTR-NEXT: _result_type.value_or(::mlir::NoneType::get(
 def AttrD : TestAttr<"TestG"> {
   let parameters = (ins "int":$a, AttributeSelfTypeParameter<"">:$type);
   let mnemonic = "attr_d";
@@ -550,4 +554,20 @@ def TypeK : TestType<"TestM"> {
   let parameters = (ins ConvertFromStorageParameter:$a);
   let mnemonic = "type_k";
   let assemblyFormat = "$a";
+}
+
+// TYPE-LABEL: ::mlir::Type TestNType::parse
+// TYPE: parseFoo(
+// TYPE-NEXT: _result_a,
+// TYPE-NEXT: 1);
+
+// TYPE-LABEL: void TestNType::print
+// TYPE: printFoo(
+// TYPE-NEXT: getA(),
+// TYPE-NEXT: 1);
+
+def TypeL : TestType<"TestN"> {
+  let parameters = (ins "int":$a);
+  let mnemonic = "type_l";
+  let assemblyFormat = [{ custom<Foo>($a, "1") }];
 }

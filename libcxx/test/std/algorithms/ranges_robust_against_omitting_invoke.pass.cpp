@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++03, c++11, c++14, c++17
-// UNSUPPORTED: libcpp-has-no-incomplete-ranges
 
 // <algorithm>
 //
@@ -67,7 +66,7 @@ constexpr bool test_all() {
 
   Bar a{Foo{1}};
   Bar b{Foo{2}};
-  //Bar c{Foo{3}};
+  Bar c{Foo{3}};
 
   Foo x{2};
   size_t count = 1;
@@ -116,8 +115,8 @@ constexpr bool test_all() {
   test(std::ranges::includes, in, in2, &Foo::binary_pred, &Bar::val, &Bar::val);
   test(std::ranges::is_heap, in, &Foo::binary_pred, &Bar::val);
   test(std::ranges::is_heap_until, in, &Foo::binary_pred, &Bar::val);
-  //std::ranges::clamp(b, a, c, &Foo::binary_pred);
-  //test(std::ranges::is_permutation, in, in2, &Foo::binary_pred, &Bar::val, &Bar::val);
+  std::ranges::clamp(b, a, c, &Foo::binary_pred, &Bar::val);
+  test(std::ranges::is_permutation, in, in2, &Foo::binary_pred, &Bar::val, &Bar::val);
   test(std::ranges::for_each, in, &Foo::unary_pred, &Bar::val);
   std::ranges::for_each_n(in.begin(), count, &Foo::unary_pred, &Bar::val);
   // `copy`, `copy_n` and `copy_backward` have neither a projection nor a predicate.
@@ -129,20 +128,20 @@ constexpr bool test_all() {
     test(std::ranges::transform, in, out_transform.begin(), &Foo::unary_pred, &Bar::val);
   }
   // Whether `ranges::generate{,_n}` invokes `gen` via `std::invoke` is not observable.
-  //test(std::ranges::remove_copy, in, out, x, &Bar::val);
-  //test(std::ranges::remove_copy_if, in, out, &Foo::unary_pred, &Bar::val);
+  test(std::ranges::remove_copy, in, out, x, &Bar::val);
+  test(std::ranges::remove_copy_if, in, out, &Foo::unary_pred, &Bar::val);
   // `replace*` algorithms only use the projection to compare the elements, not to write them.
   test(std::ranges::replace, in, x, a, &Bar::val);
   test(std::ranges::replace_if, in, &Foo::unary_pred, a, &Bar::val);
-  //test(std::ranges::replace_copy, in, out, x, a, &Bar::val);
-  //test(std::ranges::replace_copy_if, in, out, pred, a, &Bar::val);
+  test(std::ranges::replace_copy, in, out, x, a, &Bar::val);
+  test(std::ranges::replace_copy_if, in, out, &Foo::unary_pred, a, &Bar::val);
   // `swap_ranges` has neither a projection nor a predicate.
   // `reverse_copy` has neither a projection nor a predicate.
   // `rotate_copy` has neither a projection nor a predicate.
-  // `sample` has no requirement that the given generator be invoked via `std::invoke`.
-  //test(std::ranges::unique_copy, in, out, &Foo::binary_pred, &Bar::val);
+  // For `sample`, whether the given generator is invoked via `std::invoke` is not observable.
+  test(std::ranges::unique_copy, in, out, &Foo::binary_pred, &Bar::val);
   test(std::ranges::partition_copy, in, out, out2, &Foo::unary_pred, &Bar::val);
-  //test(std::ranges::partial_sort_copy, in, in2, &Foo::binary_pred, &Bar::val);
+  test(std::ranges::partial_sort_copy, in, in2, &Foo::binary_pred, &Bar::val, &Bar::val);
   test(std::ranges::merge, in, in2, out, &Foo::binary_pred, &Bar::val, &Bar::val);
   test(std::ranges::set_difference, in, in2, out, &Foo::binary_pred, &Bar::val, &Bar::val);
   test(std::ranges::set_intersection, in, in2, out, &Foo::binary_pred, &Bar::val, &Bar::val);
@@ -152,8 +151,8 @@ constexpr bool test_all() {
   test(std::ranges::remove_if, in, &Foo::unary_pred, &Bar::val);
   // `reverse` has neither a projection nor a predicate.
   // `rotate` has neither a projection nor a predicate.
-  // `shuffle` has neither a projection nor a predicate.
-  //test(std::ranges::unique, in, &Foo::binary_pred, &Bar::val);
+  // For `shuffle`, whether the given generator is invoked via `std::invoke` is not observable.
+  test(std::ranges::unique, in, &Foo::binary_pred, &Bar::val);
   test(std::ranges::partition, in, &Foo::unary_pred, &Bar::val);
   if (!std::is_constant_evaluated())
     test(std::ranges::stable_partition, in, &Foo::unary_pred, &Bar::val);
@@ -168,8 +167,8 @@ constexpr bool test_all() {
   test(std::ranges::push_heap, in, &Foo::binary_pred, &Bar::val);
   test(std::ranges::pop_heap, in, &Foo::binary_pred, &Bar::val);
   test(std::ranges::sort_heap, in, &Foo::binary_pred, &Bar::val);
-  //test(std::ranges::prev_permutation, in, &Foo::binary_pred, &Bar::val);
-  //test(std::ranges::next_permutation, in, &Foo::binary_pred, &Bar::val);
+  test(std::ranges::prev_permutation, in, &Foo::binary_pred, &Bar::val);
+  test(std::ranges::next_permutation, in, &Foo::binary_pred, &Bar::val);
 
   return true;
 }

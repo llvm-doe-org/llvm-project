@@ -36,8 +36,9 @@
 
 // EMPTY-NOT:{{.}}
 
-// Hopefully all dlopen and dlsym implementations give descriptive error
-// messages that include the library name and the symbol name if it's undefined.
+// Hopefully all dlopen-like and dlsym-like implementations give descriptive
+// error messages that include the library name and the symbol name if it's
+// undefined.
 //         ERR: OMP: Error #[[#]]: failure using library from ACC_PROFLIB:
 //     ERR-DAG: [[FILE]]
 // ERR-SYM-DAG: acc_register_library

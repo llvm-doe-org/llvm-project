@@ -492,7 +492,7 @@ SDValue VectorLegalizer::LegalizeOp(SDValue Op) {
     if (LowerOperationWrapper(Node, ResultVals))
       break;
     LLVM_DEBUG(dbgs() << "Could not custom legalize node\n");
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case TargetLowering::Expand:
     LLVM_DEBUG(dbgs() << "Expanding\n");
     Expand(Node, ResultVals);
@@ -594,7 +594,8 @@ void VectorLegalizer::Promote(SDNode *Node, SmallVectorImpl<SDValue> &Results) {
   if ((VT.isFloatingPoint() && NVT.isFloatingPoint()) ||
       (VT.isVector() && VT.getVectorElementType().isFloatingPoint() &&
        NVT.isVector() && NVT.getVectorElementType().isFloatingPoint()))
-    Res = DAG.getNode(ISD::FP_ROUND, dl, VT, Res, DAG.getIntPtrConstant(0, dl));
+    Res = DAG.getNode(ISD::FP_ROUND, dl, VT, Res,
+                      DAG.getIntPtrConstant(0, dl, /*isTarget=*/true));
   else
     Res = DAG.getNode(ISD::BITCAST, dl, VT, Res);
 

@@ -60,7 +60,9 @@ public:
     // Update the indent level cache size so that we can rely on it
     // having the right size in adjustToUnmodifiedline.
     skipLine(Line, /*UnknownIndent=*/true);
-    if (Line.InPPDirective) {
+    if (Line.InPPDirective ||
+        (Style.IndentPPDirectives == FormatStyle::PPDIS_BeforeHash &&
+         Line.Type == LT_CommentAbovePPDirective)) {
       unsigned IndentWidth =
           (Style.PPIndentWidth >= 0) ? Style.PPIndentWidth : Style.IndentWidth;
       Indent = Line.Level * IndentWidth + AdditionalIndent;
@@ -1297,7 +1299,7 @@ unsigned UnwrappedLineFormatter::format(
 
     // We continue formatting unchanged lines to adjust their indent, e.g. if a
     // scope was added. However, we need to carefully stop doing this when we
-    // exit the scope of affected lines to prevent indenting a the entire
+    // exit the scope of affected lines to prevent indenting the entire
     // remaining file if it currently missing a closing brace.
     bool PreviousRBrace =
         PreviousLine && PreviousLine->startsWith(tok::r_brace);

@@ -143,6 +143,10 @@ def : PatFprFpr<fsub, FSUB_S, FPR32>;
 def : PatFprFpr<fmul, FMUL_S, FPR32>;
 def : PatFprFpr<fdiv, FDIV_S, FPR32>;
 def : PatFpr<fneg, FNEG_S, FPR32>;
+def : PatFpr<fabs, FABS_S, FPR32>;
+def : PatFpr<fsqrt, FSQRT_S, FPR32>;
+
+def : Pat<(fdiv fpimm1, (fsqrt FPR32:$fj)), (FRSQRT_S FPR32:$fj)>;
 
 /// Setcc
 
@@ -194,10 +198,12 @@ def : PatFPSelectcc<SETUO,  FCMP_CUN_S,  FSEL_S, FPR32>;
 /// Loads
 
 defm : LdPat<load, FLD_S, f32>;
+def : RegRegLdPat<load, FLDX_S, f32>;
 
 /// Stores
 
 defm : StPat<store, FST_S, FPR32, f32>;
+def : RegRegStPat<store, FSTX_S, FPR32, f32>;
 
 /// Floating point constants
 

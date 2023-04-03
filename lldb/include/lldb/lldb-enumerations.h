@@ -1161,15 +1161,18 @@ enum SaveCoreStyle {
 
 /// Events that might happen during a trace session.
 enum TraceEvent {
-  /// Tracing was disabled for some time due to a software trigger
+  /// Tracing was disabled for some time due to a software trigger.
   eTraceEventDisabledSW,
-  /// Tracing was disable for some time due to a hardware trigger
+  /// Tracing was disable for some time due to a hardware trigger.
   eTraceEventDisabledHW,
   /// Event due to CPU change for a thread. This event is also fired when
   /// suddenly it's not possible to identify the cpu of a given thread.
   eTraceEventCPUChanged,
-  /// Event due to a CPU HW clock tick
+  /// Event due to a CPU HW clock tick.
   eTraceEventHWClockTick,
+  /// The underlying tracing technology emitted a synchronization event used by
+  /// trace processors.
+  eTraceEventSyncPoint,
 };
 
 // Enum used to identify which kind of item a \a TraceCursor is pointing at
@@ -1178,6 +1181,19 @@ enum TraceItemKind {
   eTraceItemKindEvent,
   eTraceItemKindInstruction,
 };
+
+/// Enum to indicate the reference point when invoking
+/// \a TraceCursor::Seek().
+/// The following values are inspired by \a std::istream::seekg.
+enum TraceCursorSeekType {
+  /// The beginning of the trace, i.e the oldest item.
+  eTraceCursorSeekTypeBeginning = 0,
+  /// The current position in the trace.
+  eTraceCursorSeekTypeCurrent,
+  /// The end of the trace, i.e the most recent item.
+  eTraceCursorSeekTypeEnd
+};
+
 
 } // namespace lldb
 

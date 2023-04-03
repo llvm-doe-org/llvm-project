@@ -35,10 +35,7 @@ variables:
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
   LLVM_TARGETS_TO_BUILD: all
-  # check-all is supposed to include check-openmp.  However, D121276 broke that
-  # upstream.  D121647 was supposed to fix it but what landed didn't fix it.
-  # Until it gets fixed, work around it by running both.
-  CHECK_TARGETS: check-all check-openmp
+  CHECK_TARGETS: check-all
   # The number of tests launched at once is `nproc` / $LIT_NPROC_DIVISOR.
   LIT_NPROC_DIVISOR: 1
   # Sometimes a build process gets stuck for a long time, and sometimes a test
@@ -113,8 +110,6 @@ stages:
       libomp :: env/kmp_set_dispatch_buf.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug51781.c
       libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: offloading/bug49334.cpp
-      Clang :: CodeGen/attr-maybeundef-template.cpp
-      Clang :: CodeGen/attr-maybeundef.c
       "
     TEST_LIT_XFAIL_NOT:
       "

@@ -1733,7 +1733,7 @@ GDBRemoteCommunicationServerLLGS::Handle_vCont(
       if (thread_action.signal == 0)
         return SendIllFormedResponse(
             packet, "Could not parse signal in vCont packet C action");
-      LLVM_FALLTHROUGH;
+      [[fallthrough]];
 
     case 'c':
       // Continue
@@ -1745,7 +1745,7 @@ GDBRemoteCommunicationServerLLGS::Handle_vCont(
       if (thread_action.signal == 0)
         return SendIllFormedResponse(
             packet, "Could not parse signal in vCont packet S action");
-      LLVM_FALLTHROUGH;
+      [[fallthrough]];
 
     case 's':
       // Step
@@ -1762,6 +1762,7 @@ GDBRemoteCommunicationServerLLGS::Handle_vCont(
       break;
     }
 
+    // If there's no thread-id (e.g. "vCont;c"), it's "p-1.-1".
     lldb::pid_t pid = StringExtractorGDBRemote::AllProcesses;
     lldb::tid_t tid = StringExtractorGDBRemote::AllThreads;
 
@@ -1770,7 +1771,7 @@ GDBRemoteCommunicationServerLLGS::Handle_vCont(
       // Consume the separator.
       packet.GetChar();
 
-      auto pid_tid = packet.GetPidTid(StringExtractorGDBRemote::AllProcesses);
+      auto pid_tid = packet.GetPidTid(LLDB_INVALID_PROCESS_ID);
       if (!pid_tid)
         return SendIllFormedResponse(packet, "Malformed thread-id");
 
@@ -1784,29 +1785,35 @@ GDBRemoteCommunicationServerLLGS::Handle_vCont(
           packet, "'t' action not supported for individual threads");
     }
 
-    if (pid == StringExtractorGDBRemote::AllProcesses) {
-      if (m_debugged_processes.size() > 1)
-        return SendIllFormedResponse(
-            packet, "Resuming multiple processes not supported yet");
+    // If we get TID without PID, it's the current process.
+    if (pid == LLDB_INVALID_PROCESS_ID) {
       if (!m_continue_process) {
-        LLDB_LOG(log, "no debugged process");
+        LLDB_LOG(log, "no process selected via Hc");
         return SendErrorResponse(0x36);
       }
       pid = m_continue_process->GetID();
     }
 
+    assert(pid != LLDB_INVALID_PROCESS_ID);
     if (tid == StringExtractorGDBRemote::AllThreads)
       tid = LLDB_INVALID_THREAD_ID;
-
     thread_action.tid = tid;
 
-    thread_actions[pid].Append(thread_action);
+    if (pid == StringExtractorGDBRemote::AllProcesses) {
+      if (tid != LLDB_INVALID_THREAD_ID)
+        return SendIllFormedResponse(
+            packet, "vCont: p-1 is not valid with a specific tid");
+      for (auto &process_it : m_debugged_processes)
+        thread_actions[process_it.first].Append(thread_action);
+    } else
+      thread_actions[pid].Append(thread_action);
   }
 
   assert(thread_actions.size() >= 1);
-  if (thread_actions.size() > 1)
+  if (thread_actions.size() > 1 && !m_non_stop)
     return SendIllFormedResponse(
-        packet, "Resuming multiple processes not supported yet");
+        packet,
+        "Resuming multiple processes is supported in non-stop mode only");
 
   for (std::pair<lldb::pid_t, ResumeActionList> x : thread_actions) {
     auto process_it = m_debugged_processes.find(x.first);
@@ -2434,7 +2441,7 @@ GDBRemoteCommunicationServerLLGS::Handle_I(StringExtractorGDBRemote &packet) {
     // remote host
     ConnectionStatus status;
     Status error;
-    m_stdio_communication.Write(tmp, read, status, &error);
+    m_stdio_communication.WriteAll(tmp, read, status, &error);
     if (error.Fail()) {
       return SendErrorResponse(0x15);
     }

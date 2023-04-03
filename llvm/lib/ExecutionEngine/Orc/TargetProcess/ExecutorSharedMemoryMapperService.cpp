@@ -52,7 +52,7 @@ namespace rt_bootstrap {
 
 Expected<std::pair<ExecutorAddr, std::string>>
 ExecutorSharedMemoryMapperService::reserve(uint64_t Size) {
-#if defined(LLVM_ON_UNIX) || defined(_WIN32)
+#if (defined(LLVM_ON_UNIX) && !defined(__ANDROID__)) || defined(_WIN32)
 
 #if defined(LLVM_ON_UNIX)
 
@@ -125,7 +125,7 @@ ExecutorSharedMemoryMapperService::reserve(uint64_t Size) {
 
 Expected<ExecutorAddr> ExecutorSharedMemoryMapperService::initialize(
     ExecutorAddr Reservation, tpctypes::SharedMemoryFinalizeRequest &FR) {
-#if defined(LLVM_ON_UNIX) || defined(_WIN32)
+#if (defined(LLVM_ON_UNIX) && !defined(__ANDROID__)) || defined(_WIN32)
 
   ExecutorAddr MinAddr(~0ULL);
 
@@ -198,6 +198,17 @@ Error ExecutorSharedMemoryMapperService::deinitialize(
         AllErr = joinErrors(std::move(AllErr), std::move(Err));
       }
 
+      // Remove the allocation from the allocation list of its reservation
+      for (auto &Reservation : Reservations) {
+        auto AllocationIt =
+            std::find(Reservation.second.Allocations.begin(),
+                      Reservation.second.Allocations.end(), Base);
+        if (AllocationIt != Reservation.second.Allocations.end()) {
+          Reservation.second.Allocations.erase(AllocationIt);
+          break;
+        }
+      }
+
       Allocations.erase(Base);
     }
   }
@@ -207,7 +218,7 @@ Error ExecutorSharedMemoryMapperService::deinitialize(
 
 Error ExecutorSharedMemoryMapperService::release(
     const std::vector<ExecutorAddr> &Bases) {
-#if defined(LLVM_ON_UNIX) || defined(_WIN32)
+#if (defined(LLVM_ON_UNIX) && !defined(__ANDROID__)) || defined(_WIN32)
   Error Err = Error::success();
 
   for (auto Base : Bases) {
@@ -241,6 +252,7 @@ Error ExecutorSharedMemoryMapperService::release(
                                            errno, std::generic_category())));
 
 #elif defined(_WIN32)
+    (void)Size;
 
     if (!UnmapViewOfFile(Base.toPtr<void *>()))
       Err = joinErrors(std::move(Err),
@@ -263,19 +275,15 @@ Error ExecutorSharedMemoryMapperService::release(
 }
 
 Error ExecutorSharedMemoryMapperService::shutdown() {
-  std::vector<ExecutorAddr> ReservationAddrs;
-  if (!Reservations.empty()) {
-    std::lock_guard<std::mutex> Lock(Mutex);
-    {
-      ReservationAddrs.reserve(Reservations.size());
-      for (const auto &R : Reservations) {
-        ReservationAddrs.push_back(ExecutorAddr::fromPtr(R.getFirst()));
-      }
-    }
-  }
-  return release(ReservationAddrs);
+  if (Reservations.empty())
+    return Error::success();
 
-  return Error::success();
+  std::vector<ExecutorAddr> ReservationAddrs;
+  ReservationAddrs.reserve(Reservations.size());
+  for (const auto &R : Reservations)
+    ReservationAddrs.push_back(ExecutorAddr::fromPtr(R.getFirst()));
+
+  return release(std::move(ReservationAddrs));
 }
 
 void ExecutorSharedMemoryMapperService::addBootstrapSymbols(

@@ -15,9 +15,10 @@
 #include "AsmParserImpl.h"
 #include "mlir/AsmParser/AsmParserState.h"
 #include "mlir/IR/AffineMap.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinTypes.h"
-#include "mlir/IR/Dialect.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/DialectResourceBlobManager.h"
 #include "mlir/IR/IntegerSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Endian.h"
@@ -41,8 +42,6 @@ using namespace mlir::detail;
 ///                      (tensor-type | vector-type)
 ///                    | `sparse` `<` attribute-value `,` attribute-value `>`
 ///                      `:` (tensor-type | vector-type)
-///                    | `opaque` `<` dialect-namespace  `,` hex-string-literal
-///                      `>` `:` (tensor-type | vector-type)
 ///                    | extended-attribute
 ///
 Attribute Parser::parseAttribute(Type type) {
@@ -72,8 +71,6 @@ Attribute Parser::parseAttribute(Type type) {
   // Parse an array attribute.
   case Token::l_square: {
     consumeToken(Token::l_square);
-    if (consumeIf(Token::colon))
-      return parseDenseArrayAttr();
     SmallVector<Attribute, 4> elements;
     auto parseElt = [&]() -> ParseResult {
       elements.push_back(parseAttribute());
@@ -96,6 +93,14 @@ Attribute Parser::parseAttribute(Type type) {
   // Parse a dense elements attribute.
   case Token::kw_dense:
     return parseDenseElementsAttr(type);
+
+  // Parse a dense resource elements attribute.
+  case Token::kw_dense_resource:
+    return parseDenseResourceElementsAttr(type);
+
+  // Parse a dense array attribute.
+  case Token::kw_array:
+    return parseDenseArrayAttr(type);
 
   // Parse a dictionary attribute.
   case Token::l_brace: {
@@ -137,10 +142,6 @@ Attribute Parser::parseAttribute(Type type) {
       return Attribute();
     return locAttr;
   }
-
-  // Parse an opaque elements attribute.
-  case Token::kw_opaque:
-    return parseOpaqueElementsAttr(type);
 
   // Parse a sparse elements attribute.
   case Token::kw_sparse:
@@ -224,7 +225,7 @@ Attribute Parser::parseAttribute(Type type) {
     // better error message.
     Type type;
     OptionalParseResult result = parseOptionalType(type);
-    if (!result.hasValue())
+    if (!result.has_value())
       return emitWrongTokenError("expected attribute value"), Attribute();
     return failed(*result) ? Attribute() : TypeAttr::get(type);
   }
@@ -241,9 +242,9 @@ OptionalParseResult Parser::parseOptionalAttribute(Attribute &attribute,
   case Token::kw_affine_map:
   case Token::kw_affine_set:
   case Token::kw_dense:
+  case Token::kw_dense_resource:
   case Token::kw_false:
   case Token::kw_loc:
-  case Token::kw_opaque:
   case Token::kw_sparse:
   case Token::kw_true:
   case Token::kw_unit:
@@ -258,7 +259,7 @@ OptionalParseResult Parser::parseOptionalAttribute(Attribute &attribute,
     // Parse an optional type attribute.
     Type type;
     OptionalParseResult result = parseOptionalType(type);
-    if (result.hasValue() && succeeded(*result))
+    if (result.has_value() && succeeded(*result))
       attribute = TypeAttr::get(type);
     return result;
   }
@@ -834,18 +835,28 @@ public:
 } // namespace
 
 /// Parse a dense array attribute.
-Attribute Parser::parseDenseArrayAttr() {
-  auto typeLoc = getToken().getLoc();
-  auto type = parseType();
-  if (!type)
+Attribute Parser::parseDenseArrayAttr(Type type) {
+  consumeToken(Token::kw_array);
+  SMLoc typeLoc = getToken().getLoc();
+  if (parseToken(Token::less, "expected '<' after 'array'") ||
+      (!type && !(type = parseType())))
     return {};
   CustomAsmParser parser(*this);
   Attribute result;
   // Check for empty list.
-  bool isEmptyList = getToken().is(Token::r_square);
+  bool isEmptyList = getToken().is(Token::greater);
+  if (!isEmptyList &&
+      parseToken(Token::colon, "expected ':' after dense array type"))
+    return {};
 
   if (auto intType = type.dyn_cast<IntegerType>()) {
     switch (type.getIntOrFloatBitWidth()) {
+    case 1:
+      if (isEmptyList)
+        result = DenseBoolArrayAttr::get(parser.getContext(), {});
+      else
+        result = DenseBoolArrayAttr::parseWithoutBraces(parser, Type{});
+      break;
     case 8:
       if (isEmptyList)
         result = DenseI8ArrayAttr::get(parser.getContext(), {});
@@ -871,7 +882,7 @@ Attribute Parser::parseDenseArrayAttr() {
         result = DenseI64ArrayAttr::parseWithoutBraces(parser, Type{});
       break;
     default:
-      emitError(typeLoc, "expected i8, i16, i32, or i64 but got: ") << type;
+      emitError(typeLoc, "expected i1, i8, i16, i32, or i64 but got: ") << type;
       return {};
     }
   } else if (auto floatType = type.dyn_cast<FloatType>()) {
@@ -896,10 +907,8 @@ Attribute Parser::parseDenseArrayAttr() {
     emitError(typeLoc, "expected integer or float type, got: ") << type;
     return {};
   }
-  if (!consumeIf(Token::r_square)) {
-    emitError("expected ']' to close an array attribute");
+  if (parseToken(Token::greater, "expected '>' to close an array attribute"))
     return {};
-  }
   return result;
 }
 
@@ -928,35 +937,37 @@ Attribute Parser::parseDenseElementsAttr(Type attrType) {
   return literalParser.getAttr(loc, type);
 }
 
-/// Parse an opaque elements attribute.
-Attribute Parser::parseOpaqueElementsAttr(Type attrType) {
-  SMLoc loc = getToken().getLoc();
-  consumeToken(Token::kw_opaque);
-  if (parseToken(Token::less, "expected '<' after 'opaque'"))
+Attribute Parser::parseDenseResourceElementsAttr(Type attrType) {
+  auto loc = getToken().getLoc();
+  consumeToken(Token::kw_dense_resource);
+  if (parseToken(Token::less, "expected '<' after 'dense_resource'"))
     return nullptr;
 
-  if (getToken().isNot(Token::string))
-    return (emitError("expected dialect namespace"), nullptr);
-
-  std::string name = getToken().getStringValue();
-  consumeToken(Token::string);
-
-  if (parseToken(Token::comma, "expected ','"))
+  // Parse the resource handle.
+  FailureOr<AsmDialectResourceHandle> rawHandle =
+      parseResourceHandle(getContext()->getLoadedDialect<BuiltinDialect>());
+  if (failed(rawHandle) || parseToken(Token::greater, "expected '>'"))
     return nullptr;
 
-  Token hexTok = getToken();
-  if (parseToken(Token::string, "elements hex string should start with '0x'") ||
-      parseToken(Token::greater, "expected '>'"))
-    return nullptr;
-  auto type = parseElementsLiteralType(attrType);
-  if (!type)
-    return nullptr;
+  auto *handle = dyn_cast<DenseResourceElementsHandle>(&*rawHandle);
+  if (!handle)
+    return emitError(loc, "invalid `dense_resource` handle type"), nullptr;
 
-  std::string data;
-  if (parseElementAttrHexValues(*this, hexTok, data))
+  // Parse the type of the attribute if the user didn't provide one.
+  SMLoc typeLoc = loc;
+  if (!attrType) {
+    typeLoc = getToken().getLoc();
+    if (parseToken(Token::colon, "expected ':'") || !(attrType = parseType()))
+      return nullptr;
+  }
+
+  ShapedType shapedType = attrType.dyn_cast<ShapedType>();
+  if (!shapedType) {
+    emitError(typeLoc, "`dense_resource` expected a shaped type");
     return nullptr;
-  return getChecked<OpaqueElementsAttr>(loc, builder.getStringAttr(name), type,
-                                        data);
+  }
+
+  return DenseResourceElementsAttr::get(shapedType, *handle);
 }
 
 /// Shaped type for elements attribute.

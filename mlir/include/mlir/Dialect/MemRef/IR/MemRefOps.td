@@ -66,7 +66,7 @@ class AllocLikeOp<string mnemonic,
                        // The symbolic operands (the ones in square brackets)
                        // bind to the symbols of the memref's layout map.
                        Variadic<Index>:$symbolOperands,
-                       Confined<OptionalAttr<I64Attr>,
+                       ConfinedAttr<OptionalAttr<I64Attr>,
                                 [IntMinValue<0>]>:$alignment);
   let results = (outs Res<AnyMemRef, "", [MemAlloc<resource>]>:$memref);
 
@@ -86,7 +86,7 @@ class AllocLikeOp<string mnemonic,
       $_state.addOperands(dynamicSizes);
       $_state.addOperands(symbolOperands);
       $_state.addAttribute(getOperandSegmentSizeAttr(),
-          $_builder.getI32VectorAttr({
+          $_builder.getDenseI32ArrayAttr({
               static_cast<int32_t>(dynamicSizes.size()),
               static_cast<int32_t>(symbolOperands.size())}));
       if (alignment)
@@ -123,7 +123,7 @@ def AssumeAlignmentOp : MemRef_Op<"assume_alignment"> {
     optimization only, and the optimization is best-effort.
   }];
   let arguments = (ins AnyMemRef:$memref,
-                       Confined<I32Attr, [IntPositive]>:$alignment);
+                       ConfinedAttr<I32Attr, [IntPositive]>:$alignment);
   let results = (outs);
 
   let assemblyFormat = "$memref `,` $alignment attr-dict `:` type($memref)";
@@ -694,6 +694,71 @@ def MemRef_DmaWaitOp : MemRef_Op<"dma_wait"> {
 }
 
 //===----------------------------------------------------------------------===//
+// ExtractMetadataOp
+//===----------------------------------------------------------------------===//
+
+def MemRef_ExtractStridedMetadataOp : MemRef_Op<"extract_strided_metadata",
+    [SameVariadicResultSize]> {
+  let summary = "Extracts a buffer base with offset and strides";
+  let description = [{
+    Extracts a base buffer, offset and strides. This op allows additional layers
+    of transformations and foldings to be added as lowering progresses from
+    higher-level dialect to lower-level dialects such as the LLVM dialect.
+
+    The op requires a strided memref source operand. If the source operand is not
+    a strided memref, then verification fails.
+
+    This operation is also useful for completeness to the existing memref.dim op.
+    While accessing strides, offsets and the base pointer independently is not
+    available, this is useful for composing with its natural complement op: 
+    `memref.reinterpret_cast`.
+
+    Intended Use Cases:
+
+    The main use case is to expose the logic for manipulate memref metadata at a
+    higher level than the LLVM dialect. 
+    This makes lowering more progressive and brings the following benefits:
+      - not all users of MLIR want to lower to LLVM and the information to e.g.
+        lower to library calls---like libxsmm---or to SPIR-V was not available.
+      - foldings and canonicalizations can happen at a higher level in MLIR: 
+        before this op existed, lowering to LLVM would create large amounts of 
+        LLVMIR. Even when LLVM does a good job at folding the low-level IR from
+        a performance perspective, it is unnecessarily opaque and inefficient to
+        send unkempt IR to LLVM.
+
+    Example:
+
+    ```mlir
+      %base, %offset, %sizes:2, %strides:2 = 
+        memref.extract_strided_metadata %memref : 
+          memref<10x?xf32>, index, index, index, index, index
+
+      // After folding, the type of %m2 can be memref<10x?xf32> and further 
+      // folded to %memref.
+      %m2 = memref.reinterpret_cast %base to
+          offset: [%offset],
+          sizes: [%sizes#0, %sizes#1],
+          strides: [%strides#0, %strides#1]
+        : memref<f32> to memref<?x?xf32, offset: ?, strides: [?, ?]>
+    ```
+  }];
+
+  let arguments = (ins
+    AnyStridedMemRef:$source
+  );
+  let results = (outs
+    AnyStridedMemRefOfRank<0>:$base_buffer,
+    Index:$offset,
+    Variadic<Index>:$sizes,
+    Variadic<Index>:$strides
+  );
+
+  let assemblyFormat = [{
+    $source `:` type($source) `->` type(results) attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // GenericAtomicRMWOp
 //===----------------------------------------------------------------------===//
 
@@ -965,7 +1030,7 @@ def MemRef_PrefetchOp : MemRef_Op<"prefetch"> {
 
   let arguments = (ins AnyMemRef:$memref, Variadic<Index>:$indices,
                        BoolAttr:$isWrite,
-                       Confined<I32Attr, [IntMinValue<0>,
+                       ConfinedAttr<I32Attr, [IntMinValue<0>,
                                           IntMaxValue<3>]>:$localityHint,
                        BoolAttr:$isDataCache);
 
@@ -1023,11 +1088,14 @@ def MemRef_ReinterpretCastOp
 
   let assemblyFormat = [{
     $source `to` `offset` `` `:`
-    custom<OperandsOrIntegersOffsetsOrStridesList>($offsets, $static_offsets)
+    custom<DynamicIndexList>($offsets, $static_offsets,
+                               "ShapedType::kDynamicStrideOrOffset")
     `` `,` `sizes` `` `:`
-    custom<OperandsOrIntegersSizesList>($sizes, $static_sizes) `` `,` `strides`
-    `` `:`
-    custom<OperandsOrIntegersOffsetsOrStridesList>($strides, $static_strides)
+    custom<DynamicIndexList>($sizes, $static_sizes,
+                               "ShapedType::kDynamicSize")
+    `` `,` `strides` `` `:`
+    custom<DynamicIndexList>($strides, $static_strides,
+                               "ShapedType::kDynamicStrideOrOffset")
     attr-dict `:` type($source) `to` type($result)
   }];
 
@@ -1572,7 +1640,6 @@ def SubViewOp : MemRef_OpWithOffsetSizesAndStrides<"subview", [
     %3 = memref.subview %2[3, 4, 2][1, 6, 3][1, 1, 1] :
       memref<8x16x4xf32> to memref<6x3xf32, offset: 210, strides: [4, 1]>
     ```
-    }
   }];
 
   let arguments = (ins AnyMemRef:$source,
@@ -1586,9 +1653,12 @@ def SubViewOp : MemRef_OpWithOffsetSizesAndStrides<"subview", [
 
   let assemblyFormat = [{
     $source ``
-    custom<OperandsOrIntegersOffsetsOrStridesList>($offsets, $static_offsets)
-    custom<OperandsOrIntegersSizesList>($sizes, $static_sizes)
-    custom<OperandsOrIntegersOffsetsOrStridesList>($strides, $static_strides)
+    custom<DynamicIndexList>($offsets, $static_offsets,
+                               "ShapedType::kDynamicStrideOrOffset")
+    custom<DynamicIndexList>($sizes, $static_sizes,
+                               "ShapedType::kDynamicSize")
+    custom<DynamicIndexList>($strides, $static_strides,
+                               "ShapedType::kDynamicStrideOrOffset")
     attr-dict `:` type($source) `to` type($result)
   }];
 

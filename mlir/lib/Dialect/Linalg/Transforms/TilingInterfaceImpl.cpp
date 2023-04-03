@@ -50,7 +50,7 @@ static LogicalResult inlinePayload(OpBuilder &b, LinalgOp linalgOp,
   map.map(body->getArguments(), argValues);
   for (auto &op : body->without_terminator()) {
     if (auto indexOp = dyn_cast<IndexOp>(&op)) {
-      map.map(indexOp.getResult(), ivs[indexOp.dim()]);
+      map.map(indexOp.getResult(), ivs[indexOp.getDim()]);
       continue;
     }
     b.clone(op, map);
@@ -108,11 +108,10 @@ struct LinalgOpTilingInterface
         linalgOp.createFlatListOfOperandDims(b, loc);
     AffineMap map = linalgOp.getShapesToLoopsMap();
 
-    IRRewriter rewriter(b);
     return llvm::to_vector(
         llvm::map_range(map.getResults(), [&](AffineExpr loopExpr) {
-          OpFoldResult ofr = makeComposedFoldedAffineApply(
-              rewriter, loc, loopExpr, allShapesSizes);
+          OpFoldResult ofr =
+              makeComposedFoldedAffineApply(b, loc, loopExpr, allShapesSizes);
           return Range{b.getIndexAttr(0), ofr, b.getIndexAttr(1)};
         }));
   }
@@ -156,22 +155,18 @@ struct LinalgOpTilingInterface
 
     AffineExpr d0;
     bindDims(b.getContext(), d0);
-    IRRewriter rewriter(b);
     SmallVector<OpFoldResult> subShapeSizes =
         llvm::to_vector(llvm::map_range(sizes, [&](OpFoldResult ofr) {
-          return makeComposedFoldedAffineApply(rewriter, loc, d0 - 1, ofr);
+          return makeComposedFoldedAffineApply(b, loc, d0 - 1, ofr);
         }));
 
     OpOperand *outOperand = linalgOp.getOutputOperand(resultNumber);
-    Value sliceOpResult =
-        makeTiledShape(b, loc, outOperand->get(), sizes,
-                       linalgOp.getTiedIndexingMap(outOperand), offsets,
-                       /*ubs*/ {}, subShapeSizes, true);
-    auto sliceOp = sliceOpResult.getDefiningOp<tensor::ExtractSliceOp>();
-    if (!sliceOp)
-      return failure();
-    resultOffsets = sliceOp.getMixedOffsets();
-    resultSizes = sliceOp.getMixedSizes();
+    SliceParameters sliceParams =
+        computeSliceParameters(b, loc, outOperand->get(), sizes,
+                               linalgOp.getTiedIndexingMap(outOperand), offsets,
+                               /*ubs*/ {}, subShapeSizes, true);
+    resultOffsets = sliceParams.offsets;
+    resultSizes = sliceParams.sizes;
     return success();
   }
 
@@ -265,8 +260,7 @@ static void registerOne(MLIRContext *ctx) {
 /// Variadic helper function.
 template <typename... OpTypes>
 static void registerAll(MLIRContext *ctx) {
-  // FIXME: In c++17 this can be simplified by using 'fold expressions'.
-  (void)std::initializer_list<int>{0, (registerOne<OpTypes>(ctx), 0)...};
+  (registerOne<OpTypes>(ctx), ...);
 }
 
 #define GET_OP_LIST

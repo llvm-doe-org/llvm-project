@@ -575,7 +575,7 @@ static bool hoistAndMergeSGPRInits(unsigned Reg,
   // Try to schedule SGPR initializations as early as possible in the MBB.
   for (auto &Init : Inits) {
     auto &Defs = Init.second;
-    for (auto MI : Defs) {
+    for (auto *MI : Defs) {
       auto MBB = MI->getParent();
       MachineInstr &BoundaryMI = *getFirstNonPrologue(MBB, TII);
       MachineBasicBlock::reverse_iterator B(BoundaryMI);
@@ -920,11 +920,11 @@ void SIFixSGPRCopies::analyzeVGPRToSGPRCopy(V2SCopyInfo& Info) {
       }
     } else if (Inst->getNumExplicitDefs() != 0) {
       Register Reg = Inst->getOperand(0).getReg();
-      if (TRI->isSGPRReg(*MRI, Reg))
+      if (TRI->isSGPRReg(*MRI, Reg) && !TII->isVALU(*Inst))
         for (auto &U : MRI->use_instructions(Reg))
           Users.push_back(&U);
     }
-    for (auto U : Users) {
+    for (auto *U : Users) {
       if (TII->isSALU(*U))
         Info.SChain.insert(U);
       AnalysisWorklist.push_back(U);
@@ -1001,7 +1001,7 @@ void SIFixSGPRCopies::lowerVGPR2SGPRCopies(MachineFunction &MF) {
       if (!needProcessing(*MI))
         continue;
 
-      if ((MI->isRegSequence() || MI->isPHI()) && !SiblingPenalty.count(MI)) {
+      if (MI->isRegSequence() || MI->isPHI()) {
         MachineBasicBlock::iterator J = I;
         if (TRI->isSGPRClass(TII->getOpRegClass(*MI, 0))) {
           for (MachineOperand &MO : MI->operands()) {

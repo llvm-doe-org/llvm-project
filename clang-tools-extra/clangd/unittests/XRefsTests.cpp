@@ -1801,7 +1801,7 @@ TEST(FindImplementations, Inheritance) {
   }
 }
 
-TEST(FindImplementations, CaptureDefintion) {
+TEST(FindImplementations, CaptureDefinition) {
   llvm::StringRef Test = R"cpp(
     struct Base {
       virtual void F^oo();
@@ -2088,6 +2088,14 @@ TEST(FindReferences, WithinAST) {
           ns::S s;
           bar<ns::S>(s);
           [[f^oo]](s);
+        }
+      )cpp",
+      R"cpp(// unresolved member expression
+        struct Foo {
+          template <typename T> void $decl[[b^ar]](T t); 
+        };
+        template <typename T> void test(Foo F, T t) {
+          F.[[bar]](t);
         }
       )cpp",
 

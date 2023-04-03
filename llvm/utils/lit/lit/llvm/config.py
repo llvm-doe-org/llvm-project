@@ -58,10 +58,12 @@ class LLVMConfig(object):
 
         self.with_system_environment([
             'ASAN_SYMBOLIZER_PATH',
+            'HWASAN_SYMBOLIZER_PATH',
             'MSAN_SYMBOLIZER_PATH',
             'TSAN_SYMBOLIZER_PATH',
             'UBSAN_SYMBOLIZER_PATH'
             'ASAN_OPTIONS',
+            'HWASAN_OPTIONS',
             'MSAN_OPTIONS',
             'TSAN_OPTIONS',
             'UBSAN_OPTIONS',
@@ -100,6 +102,8 @@ class LLVMConfig(object):
         sanitizers = frozenset(x.lower() for x in sanitizers.split(';'))
         if 'address' in sanitizers:
             features.add('asan')
+        if 'hwaddress' in sanitizers:
+            features.add('hwasan')
         if 'memory' in sanitizers or 'memorywithorigins' in sanitizers:
             features.add('msan')
         if 'undefined' in sanitizers:
@@ -108,9 +112,6 @@ class LLVMConfig(object):
         have_zlib = getattr(config, 'have_zlib', None)
         if have_zlib:
             features.add('zlib')
-        have_zstd = getattr(config, 'have_zstd', None)
-        if have_zstd:
-            features.add('zstd')
 
         # Check if we should run long running tests.
         long_tests = lit_config.params.get('run_long_tests', None)

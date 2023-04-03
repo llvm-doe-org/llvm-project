@@ -210,9 +210,6 @@ private:
 };
 pthread_mutex_t KernelArgPool::Mutex = PTHREAD_MUTEX_INITIALIZER;
 
-std::unordered_map<std::string /*kernel*/, std::unique_ptr<KernelArgPool>>
-    KernelArgPoolMap;
-
 /// Use a single entity to encode a kernel and a set of flags
 struct KernelTy {
   llvm::omp::OMPTgtExecModeFlags ExecutionMode;
@@ -224,7 +221,9 @@ struct KernelTy {
   KernelTy(llvm::omp::OMPTgtExecModeFlags ExecutionMode, int16_t ConstWgSize,
            int32_t DeviceId, void *CallStackAddr, const char *Name,
            uint32_t KernargSegmentSize,
-           hsa_amd_memory_pool_t &KernArgMemoryPool)
+           hsa_amd_memory_pool_t &KernArgMemoryPool,
+           std::unordered_map<std::string, std::unique_ptr<KernelArgPool>>
+               &KernelArgPoolMap)
       : ExecutionMode(ExecutionMode), ConstWGSize(ConstWgSize),
         DeviceId(DeviceId), CallStackAddr(CallStackAddr), Name(Name) {
     DP("Construct kernelinfo: ExecMode %d\n", ExecutionMode);
@@ -237,10 +236,6 @@ struct KernelTy {
     }
   }
 };
-
-/// List that contains all the kernels.
-/// FIXME: we may need this to be per device and per library.
-std::list<KernelTy> KernelsList;
 
 template <typename Callback> static hsa_status_t findAgents(Callback CB) {
 
@@ -455,6 +450,12 @@ public:
   std::shared_timed_mutex LoadRunLock;
 
   int NumberOfDevices = 0;
+
+  /// List that contains all the kernels.
+  /// FIXME: we may need this to be per device and per library.
+  std::list<KernelTy> KernelsList;
+  std::unordered_map<std::string /*kernel*/, std::unique_ptr<KernelArgPool>>
+      KernelArgPoolMap;
 
   // GPU devices
   std::vector<hsa_agent_t> HSAAgents;
@@ -857,7 +858,6 @@ public:
            "Unexpected device id!");
     FuncGblEntries[DeviceId].emplace_back();
     FuncOrGblEntryTy &E = FuncGblEntries[DeviceId].back();
-    // KernelArgPoolMap.clear();
     E.Entries.clear();
     E.Table.EntriesBegin = E.Table.EntriesEnd = 0;
   }
@@ -1116,19 +1116,6 @@ pthread_mutex_t SignalPoolT::mutex = PTHREAD_MUTEX_INITIALIZER;
 static RTLDeviceInfoTy *DeviceInfoState = nullptr;
 static RTLDeviceInfoTy &DeviceInfo() { return *DeviceInfoState; }
 
-int32_t __tgt_rtl_init_plugin() {
-  DeviceInfoState = new RTLDeviceInfoTy;
-  return (DeviceInfoState && DeviceInfoState->ConstructionSucceeded)
-             ? OFFLOAD_SUCCESS
-             : OFFLOAD_FAIL;
-}
-
-int32_t __tgt_rtl_deinit_plugin() {
-  if (DeviceInfoState)
-    delete DeviceInfoState;
-  return OFFLOAD_SUCCESS;
-}
-
 namespace {
 
 int32_t dataRetrieve(int32_t DeviceId, void *HstPtr, void *TgtPtr, int64_t Size,
@@ -1174,7 +1161,7 @@ int32_t dataRetrieve(int32_t DeviceId, void *HstPtr, void *TgtPtr, int64_t Size,
     }
 #endif
   Err = DeviceInfo().freesignalpoolMemcpyD2H(HstPtr, TgtPtr, (size_t)Size,
-                                           DeviceId);
+                                             DeviceId);
 #if OMPT_SUPPORT
     if (OmptApi->ompt_target_enabled->ompt_callback_target_data_op_emi) {
       OmptApi->ompt_target_callbacks->ompt_callback(
@@ -1241,7 +1228,7 @@ int32_t dataSubmit(int32_t DeviceId, void *TgtPtr, void *HstPtr, int64_t Size,
     }
 #endif
   Err = DeviceInfo().freesignalpoolMemcpyH2D(TgtPtr, HstPtr, (size_t)Size,
-                                           DeviceId);
+                                             DeviceId);
 #if OMPT_SUPPORT
     if (OmptApi->ompt_target_enabled->ompt_callback_target_data_op_emi) {
       OmptApi->ompt_target_callbacks->ompt_callback(
@@ -1574,8 +1561,9 @@ int32_t runRegionLocked(int32_t DeviceId, void *TgtEntryPtr, void **TgtArgs,
     KernelArgPool *ArgPool = nullptr;
     void *KernArg = nullptr;
     {
-      auto It = KernelArgPoolMap.find(std::string(KernelInfo->Name));
-      if (It != KernelArgPoolMap.end()) {
+      auto It =
+          DeviceInfo().KernelArgPoolMap.find(std::string(KernelInfo->Name));
+      if (It != DeviceInfo().KernelArgPoolMap.end()) {
         ArgPool = (It->second).get();
       }
     }
@@ -1613,8 +1601,8 @@ int32_t runRegionLocked(int32_t DeviceId, void *TgtEntryPtr, void **TgtArgs,
         // under a multiple reader lock, not a writer lock.
         static pthread_mutex_t HostcallInitLock = PTHREAD_MUTEX_INITIALIZER;
         pthread_mutex_lock(&HostcallInitLock);
-        uint64_t Buffer = hostrpc_assign_buffer(DeviceInfo().HSAAgents[DeviceId],
-                                                Queue, DeviceId);
+        uint64_t Buffer = hostrpc_assign_buffer(
+            DeviceInfo().HSAAgents[DeviceId], Queue, DeviceId);
         pthread_mutex_unlock(&HostcallInitLock);
         if (!Buffer) {
           DP("hostrpc_assign_buffer failed, gpu would dereference null and "
@@ -1984,7 +1972,7 @@ struct DeviceEnvironment {
         }
 
         return DeviceInfo().freesignalpoolMemcpyH2D(StatePtr, &HostDeviceEnv,
-                                                  StatePtrSize, DeviceId);
+                                                    StatePtrSize, DeviceId);
       }
     }
     return HSA_STATUS_SUCCESS;
@@ -2145,6 +2133,20 @@ bool IsImageCompatibleWithEnv(const char *ImgInfo, std::string EnvInfo) {
 }
 
 extern "C" {
+
+int32_t __tgt_rtl_init_plugin() {
+  DeviceInfoState = new RTLDeviceInfoTy;
+  return (DeviceInfoState && DeviceInfoState->ConstructionSucceeded)
+             ? OFFLOAD_SUCCESS
+             : OFFLOAD_FAIL;
+}
+
+int32_t __tgt_rtl_deinit_plugin() {
+  if (DeviceInfoState)
+    delete DeviceInfoState;
+  return OFFLOAD_SUCCESS;
+}
+
 int32_t __tgt_rtl_is_valid_binary(__tgt_device_image *Image) {
   return elfMachineIdIsAmdgcn(Image);
 }
@@ -2228,7 +2230,8 @@ int32_t __tgt_rtl_init_device(int DeviceId) {
 
   if (print_kernel_trace & STARTUP_DETAILS)
     DP("Device#%-2d CU's: %2d %s\n", DeviceId,
-       DeviceInfo().ComputeUnits[DeviceId], DeviceInfo().GPUName[DeviceId].c_str());
+       DeviceInfo().ComputeUnits[DeviceId],
+       DeviceInfo().GPUName[DeviceId].c_str());
 
   // Query attributes to determine number of threads/block and blocks/grid.
   uint16_t WorkgroupMaxDim[3];
@@ -2240,7 +2243,8 @@ int32_t __tgt_rtl_init_device(int DeviceId) {
        RTLDeviceInfoTy::DefaultNumTeams);
   } else if (WorkgroupMaxDim[0] <= RTLDeviceInfoTy::HardTeamLimit) {
     DeviceInfo().GroupsPerDevice[DeviceId] = WorkgroupMaxDim[0];
-    DP("Using %d ROCm blocks per grid\n", DeviceInfo().GroupsPerDevice[DeviceId]);
+    DP("Using %d ROCm blocks per grid\n",
+       DeviceInfo().GroupsPerDevice[DeviceId]);
   } else {
     DeviceInfo().GroupsPerDevice[DeviceId] = RTLDeviceInfoTy::HardTeamLimit;
     DP("Max ROCm blocks per grid %d exceeds the hard team limit %d, capping "
@@ -2395,8 +2399,9 @@ __tgt_target_table *__tgt_rtl_load_binary_locked(int32_t DeviceId,
     return NULL;
 
   {
-    auto Env = DeviceEnvironment(DeviceId, DeviceInfo().NumberOfDevices,
-                                 DeviceInfo().Env.DynamicMemSize, Image, ImgSize);
+    auto Env =
+        DeviceEnvironment(DeviceId, DeviceInfo().NumberOfDevices,
+                          DeviceInfo().Env.DynamicMemSize, Image, ImgSize);
 
     auto &KernelInfo = DeviceInfo().KernelInfoTable[DeviceId];
     auto &SymbolInfo = DeviceInfo().SymbolInfoTable[DeviceId];
@@ -2489,8 +2494,8 @@ __tgt_target_table *__tgt_rtl_load_binary_locked(int32_t DeviceId,
         }
 
         // write ptr to device memory so it can be used by later kernels
-        Err = DeviceInfo().freesignalpoolMemcpyH2D(StatePtr, &Ptr, sizeof(void *),
-                                                 DeviceId);
+        Err = DeviceInfo().freesignalpoolMemcpyH2D(StatePtr, &Ptr,
+                                                   sizeof(void *), DeviceId);
         if (Err != HSA_STATUS_SUCCESS) {
           DP("memcpy install of state_ptr failed\n");
           return NULL;
@@ -2554,7 +2559,7 @@ __tgt_target_table *__tgt_rtl_load_binary_locked(int32_t DeviceId,
         // can access host addresses directly. There is no longer a
         // need for device copies.
         Err = DeviceInfo().freesignalpoolMemcpyH2D(Varptr, E->addr,
-                                                 sizeof(void *), DeviceId);
+                                                   sizeof(void *), DeviceId);
         if (Err != HSA_STATUS_SUCCESS)
           DP("Error when copying USM\n");
         DP("Copy linked variable host address (" DPxMOD ")"
@@ -2714,11 +2719,12 @@ __tgt_target_table *__tgt_rtl_load_binary_locked(int32_t DeviceId,
     }
     check("Loading computation property", Err);
 
-    KernelsList.push_back(KernelTy(ExecModeVal, WGSizeVal, DeviceId,
-                                   CallStackAddr, E->name, KernargSegmentSize,
-                                   DeviceInfo().KernArgPool));
+    DeviceInfo().KernelsList.push_back(
+        KernelTy(ExecModeVal, WGSizeVal, DeviceId, CallStackAddr, E->name,
+                 KernargSegmentSize, DeviceInfo().KernArgPool,
+                 DeviceInfo().KernelArgPoolMap));
     __tgt_offload_entry Entry = *E;
-    Entry.addr = (void *)&KernelsList.back();
+    Entry.addr = (void *)&DeviceInfo().KernelsList.back();
     DeviceInfo().addOffloadEntry(DeviceId, Entry);
     DP("Entry point %ld maps to %s\n", E - HostBegin, E->name);
   }
@@ -2730,13 +2736,22 @@ void *__tgt_rtl_data_alloc(int DeviceId, int64_t Size, void *, int32_t Kind) {
   void *Ptr = NULL;
   assert(DeviceId < DeviceInfo().NumberOfDevices && "Device ID too large");
 
-  if (Kind != TARGET_ALLOC_DEFAULT) {
+  hsa_amd_memory_pool_t MemoryPool;
+  switch (Kind) {
+  case TARGET_ALLOC_DEFAULT:
+    // GPU memory
+    MemoryPool = DeviceInfo().getDeviceMemoryPool(DeviceId);
+    break;
+  case TARGET_ALLOC_HOST:
+    // non-migratable memory accessible by host and device(s)
+    MemoryPool = DeviceInfo().getHostMemoryPool();
+    break;
+  default:
     REPORT("Invalid target data allocation kind or requested allocator not "
            "implemented yet\n");
     return NULL;
   }
 
-  hsa_amd_memory_pool_t MemoryPool = DeviceInfo().getDeviceMemoryPool(DeviceId);
   hsa_status_t Err = hsa_amd_memory_pool_allocate(MemoryPool, Size, 0, &Ptr);
   DP("Tgt alloc data %ld bytes, (tgt:%016llx).\n", Size,
      (long long unsigned)(Elf64_Addr)Ptr);
@@ -2797,6 +2812,7 @@ int32_t __tgt_rtl_data_retrieve_async(
 
 int32_t __tgt_rtl_data_delete(int DeviceId, void *TgtPtr) {
   assert(DeviceId < DeviceInfo().NumberOfDevices && "Device ID too large");
+  // HSA can free pointers allocated from different types of memory pool.
   hsa_status_t Err;
   DP("Tgt free data (tgt:%016llx).\n", (long long unsigned)(Elf64_Addr)TgtPtr);
   Err = core::Runtime::Memfree(TgtPtr);

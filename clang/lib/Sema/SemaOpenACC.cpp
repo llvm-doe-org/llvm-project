@@ -4472,15 +4472,15 @@ static PosIntResult IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
   if (!Result) {
     if (ErrorIfNotConst) {
       SemaRef.Diag(Loc, diag::err_acc_clause_not_ice)
-          << getOpenACCName(CKind) << ArgName.hasValue()
-          << ArgName.getValueOr("") << ValExpr->getSourceRange();
+          << getOpenACCName(CKind) << ArgName.has_value()
+          << ArgName.value_or("") << ValExpr->getSourceRange();
       return PosIntError;
     }
     return PosIntNonConst;
   }
   if (!Result->isStrictlyPositive()) {
     SemaRef.Diag(Loc, diag::err_acc_clause_not_positive_ice)
-        << getOpenACCName(CKind) << ArgName.hasValue() << ArgName.getValueOr("")
+        << getOpenACCName(CKind) << ArgName.has_value() << ArgName.value_or("")
         << ValExpr->getSourceRange();
     return PosIntError;
   }

@@ -25,7 +25,7 @@
 _LIBCPP_BEGIN_NAMESPACE_STD
 
 template <class _AlgPolicy, class _Predicate, class _ForwardIterator, class _Distance, class _Pair>
-_ForwardIterator
+_LIBCPP_HIDE_FROM_ABI _ForwardIterator
 __stable_partition_impl(_ForwardIterator __first, _ForwardIterator __last, _Predicate __pred,
                    _Distance __len, _Pair __p, forward_iterator_tag __fit)
 {
@@ -108,13 +108,13 @@ __stable_partition_impl(_ForwardIterator __first, _ForwardIterator __last, _Pred
 __second_half_done:
     // TTTFFFFFTTTTTFFFFF
     // f  ff   m    sf   l
-    return std::__rotate<_AlgPolicy>(__first_false, __m, __second_false, __fit);
+    return std::__rotate<_AlgPolicy>(__first_false, __m, __second_false).first;
     // TTTTTTTTFFFFFFFFFF
     //         |
 }
 
 template <class _AlgPolicy, class _Predicate, class _ForwardIterator>
-_ForwardIterator
+_LIBCPP_HIDE_FROM_ABI _ForwardIterator
 __stable_partition_impl(_ForwardIterator __first, _ForwardIterator __last, _Predicate __pred,
                    forward_iterator_tag)
 {
@@ -253,13 +253,13 @@ __first_half_done:
 __second_half_done:
     // TTTFFFFFTTTTTFFFFF
     // f  ff   m    sf  l
-    return std::__rotate<_AlgPolicy>(__first_false, __m, __second_false, __bit);
+    return std::__rotate<_AlgPolicy>(__first_false, __m, __second_false).first;
     // TTTTTTTTFFFFFFFFFF
     //         |
 }
 
 template <class _AlgPolicy, class _Predicate, class _BidirectionalIterator>
-_BidirectionalIterator
+_LIBCPP_HIDE_FROM_ABI _BidirectionalIterator
 __stable_partition_impl(_BidirectionalIterator __first, _BidirectionalIterator __last, _Predicate __pred,
                    bidirectional_iterator_tag)
 {

@@ -149,6 +149,10 @@ def : PatFprFpr<fsub, FSUB_D, FPR64>;
 def : PatFprFpr<fmul, FMUL_D, FPR64>;
 def : PatFprFpr<fdiv, FDIV_D, FPR64>;
 def : PatFpr<fneg, FNEG_D, FPR64>;
+def : PatFpr<fabs, FABS_D, FPR64>;
+def : PatFpr<fsqrt, FSQRT_D, FPR64>;
+
+def : Pat<(fdiv fpimm1, (fsqrt FPR64:$fj)), (FRSQRT_D FPR64:$fj)>;
 
 /// Setcc
 
@@ -194,10 +198,12 @@ def : PatFPSelectcc<SETUO,  FCMP_CUN_D,  FSEL_D, FPR64>;
 /// Loads
 
 defm : LdPat<load, FLD_D, f64>;
+def : RegRegLdPat<load, FLDX_D, f64>;
 
 /// Stores
 
 defm : StPat<store, FST_D, FPR64, f64>;
+def : RegRegStPat<store, FSTX_D, FPR64, f64>;
 
 /// FP conversion operations
 

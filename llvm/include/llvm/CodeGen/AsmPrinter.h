@@ -194,6 +194,9 @@ private:
 protected:
   MCSymbol *CurrentFnBegin = nullptr;
 
+  /// For dso_local functions, the current $local alias for the function.
+  MCSymbol *CurrentFnBeginLocal = nullptr;
+
   /// A vector of all debug/EH info emitters we should use. This vector
   /// maintains ownership of the emitters.
   std::vector<HandlerInfo> Handlers;
@@ -400,6 +403,9 @@ public:
   void emitStackUsage(const MachineFunction &MF);
 
   void emitBBAddrMapSection(const MachineFunction &MF);
+
+  void emitKCFITrapEntry(const MachineFunction &MF, const MCSymbol *Symbol);
+  virtual void emitKCFITypeId(const MachineFunction &MF);
 
   void emitPseudoProbe(const MachineInstr &MI);
 

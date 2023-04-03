@@ -625,20 +625,28 @@ collectMacroDefinitions(const PreprocessorOptions &PPOpts,
   }
 }
 
+enum OptionValidation {
+  OptionValidateNone,
+  OptionValidateContradictions,
+  OptionValidateStrictMatches,
+};
+
 /// Check the preprocessor options deserialized from the control block
 /// against the preprocessor options in an existing preprocessor.
 ///
 /// \param Diags If non-null, produce diagnostics for any mismatches incurred.
-/// \param Validate If true, validate preprocessor options. If false, allow
-///        macros defined by \p ExistingPPOpts to override those defined by
-///        \p PPOpts in SuggestedPredefines.
-static bool checkPreprocessorOptions(const PreprocessorOptions &PPOpts,
-                                     const PreprocessorOptions &ExistingPPOpts,
-                                     DiagnosticsEngine *Diags,
-                                     FileManager &FileMgr,
-                                     std::string &SuggestedPredefines,
-                                     const LangOptions &LangOpts,
-                                     bool Validate = true) {
+/// \param Validation If set to OptionValidateNone, ignore differences in
+///        preprocessor options. If set to OptionValidateContradictions,
+///        require that options passed both in the AST file and on the command
+///        line (-D or -U) match, but tolerate options missing in one or the
+///        other. If set to OptionValidateContradictions, require that there
+///        are no differences in the options between the two.
+static bool checkPreprocessorOptions(
+    const PreprocessorOptions &PPOpts,
+    const PreprocessorOptions &ExistingPPOpts, DiagnosticsEngine *Diags,
+    FileManager &FileMgr, std::string &SuggestedPredefines,
+    const LangOptions &LangOpts,
+    OptionValidation Validation = OptionValidateContradictions) {
   // Check macro definitions.
   MacroDefinitionsMap ASTFileMacros;
   collectMacroDefinitions(PPOpts, ASTFileMacros);
@@ -654,7 +662,15 @@ static bool checkPreprocessorOptions(const PreprocessorOptions &PPOpts,
     // Check whether we know anything about this macro name or not.
     llvm::StringMap<std::pair<StringRef, bool /*IsUndef*/>>::iterator Known =
         ASTFileMacros.find(MacroName);
-    if (!Validate || Known == ASTFileMacros.end()) {
+    if (Validation == OptionValidateNone || Known == ASTFileMacros.end()) {
+      if (Validation == OptionValidateStrictMatches) {
+        // If strict matches are requested, don't tolerate any extra defines on
+        // the command line that are missing in the AST file.
+        if (Diags) {
+          Diags->Report(diag::err_pch_macro_def_undef) << MacroName << true;
+        }
+        return true;
+      }
       // FIXME: Check whether this identifier was referenced anywhere in the
       // AST file. If so, we should reject the AST file. Unfortunately, this
       // information isn't in the control block. What shall we do about it?
@@ -685,8 +701,10 @@ static bool checkPreprocessorOptions(const PreprocessorOptions &PPOpts,
 
     // If the macro was #undef'd in both, or if the macro bodies are identical,
     // it's fine.
-    if (Existing.second || Existing.first == Known->second.first)
+    if (Existing.second || Existing.first == Known->second.first) {
+      ASTFileMacros.erase(Known);
       continue;
+    }
 
     // The macro bodies differ; complain.
     if (Diags) {
@@ -695,9 +713,20 @@ static bool checkPreprocessorOptions(const PreprocessorOptions &PPOpts,
     }
     return true;
   }
+  if (Validation == OptionValidateStrictMatches) {
+    // If strict matches are requested, don't tolerate any extra defines in
+    // the AST file that are missing on the command line.
+    for (const auto &MacroName : ASTFileMacros.keys()) {
+      if (Diags) {
+        Diags->Report(diag::err_pch_macro_def_undef) << MacroName << false;
+      }
+      return true;
+    }
+  }
 
   // Check whether we're using predefines.
-  if (PPOpts.UsePredefines != ExistingPPOpts.UsePredefines && Validate) {
+  if (PPOpts.UsePredefines != ExistingPPOpts.UsePredefines &&
+      Validation != OptionValidateNone) {
     if (Diags) {
       Diags->Report(diag::err_pch_undef) << ExistingPPOpts.UsePredefines;
     }
@@ -706,7 +735,8 @@ static bool checkPreprocessorOptions(const PreprocessorOptions &PPOpts,
 
   // Detailed record is important since it is used for the module cache hash.
   if (LangOpts.Modules &&
-      PPOpts.DetailedRecord != ExistingPPOpts.DetailedRecord && Validate) {
+      PPOpts.DetailedRecord != ExistingPPOpts.DetailedRecord &&
+      Validation != OptionValidateNone) {
     if (Diags) {
       Diags->Report(diag::err_pch_pp_detailed_record) << PPOpts.DetailedRecord;
     }
@@ -767,13 +797,9 @@ bool SimpleASTReaderListener::ReadPreprocessorOptions(
                                   const PreprocessorOptions &PPOpts,
                                   bool Complain,
                                   std::string &SuggestedPredefines) {
-  return checkPreprocessorOptions(PPOpts,
-                                  PP.getPreprocessorOpts(),
-                                  nullptr,
-                                  PP.getFileManager(),
-                                  SuggestedPredefines,
-                                  PP.getLangOpts(),
-                                  false);
+  return checkPreprocessorOptions(PPOpts, PP.getPreprocessorOpts(), nullptr,
+                                  PP.getFileManager(), SuggestedPredefines,
+                                  PP.getLangOpts(), OptionValidateNone);
 }
 
 /// Check the header search options deserialized from the control block
@@ -1276,10 +1302,10 @@ void ASTReader::Error(llvm::Error &&Err) const {
         switch (NumArgs) {
         case 3:
           Arg3 = Diag.getStringArg(2);
-          LLVM_FALLTHROUGH;
+          [[fallthrough]];
         case 2:
           Arg2 = Diag.getStringArg(1);
-          LLVM_FALLTHROUGH;
+          [[fallthrough]];
         case 1:
           Arg1 = Diag.getStringArg(0);
         }
@@ -1394,41 +1420,6 @@ llvm::Error ASTReader::ReadSourceManagerBlock(ModuleFile &F) {
       return llvm::Error::success();
     }
   }
-}
-
-/// If a header file is not found at the path that we expect it to be
-/// and the PCH file was moved from its original location, try to resolve the
-/// file by assuming that header+PCH were moved together and the header is in
-/// the same place relative to the PCH.
-static std::string
-resolveFileRelativeToOriginalDir(const std::string &Filename,
-                                 const std::string &OriginalDir,
-                                 const std::string &CurrDir) {
-  assert(OriginalDir != CurrDir &&
-         "No point trying to resolve the file if the PCH dir didn't change");
-
-  using namespace llvm::sys;
-
-  SmallString<128> filePath(Filename);
-  fs::make_absolute(filePath);
-  assert(path::is_absolute(OriginalDir));
-  SmallString<128> currPCHPath(CurrDir);
-
-  path::const_iterator fileDirI = path::begin(path::parent_path(filePath)),
-                       fileDirE = path::end(path::parent_path(filePath));
-  path::const_iterator origDirI = path::begin(OriginalDir),
-                       origDirE = path::end(OriginalDir);
-  // Skip the common path components from filePath and OriginalDir.
-  while (fileDirI != fileDirE && origDirI != origDirE &&
-         *fileDirI == *origDirI) {
-    ++fileDirI;
-    ++origDirI;
-  }
-  for (; origDirI != origDirE; ++origDirI)
-    path::append(currPCHPath, "..");
-  path::append(currPCHPath, fileDirI, fileDirE);
-  path::append(currPCHPath, path::filename(Filename));
-  return std::string(currPCHPath.str());
 }
 
 bool ASTReader::ReadSLocEntry(int ID) {
@@ -2333,16 +2324,6 @@ InputFile ASTReader::getInputFile(ModuleFile &F, unsigned ID, bool Complain) {
   OptionalFileEntryRefDegradesToFileEntryPtr File =
       expectedToOptional(FileMgr.getFileRef(Filename, /*OpenFile=*/false));
 
-  // If we didn't find the file, resolve it relative to the
-  // original directory from which this AST file was created.
-  if (!File && !F.OriginalDir.empty() && !F.BaseDirectory.empty() &&
-      F.OriginalDir != F.BaseDirectory) {
-    std::string Resolved = resolveFileRelativeToOriginalDir(
-        std::string(Filename), F.OriginalDir, F.BaseDirectory);
-    if (!Resolved.empty())
-      File = expectedToOptional(FileMgr.getFileRef(Resolved));
-  }
-
   // For an overridden file, create a virtual file with the stored
   // size/timestamp.
   if ((Overridden || Transient) && !File)
@@ -2895,11 +2876,6 @@ ASTReader::ReadControlBlock(ModuleFile &F,
 
     case ORIGINAL_FILE_ID:
       F.OriginalSourceFileID = FileID::get(Record[0]);
-      break;
-
-    case ORIGINAL_PCH_DIR:
-      F.OriginalDir = std::string(Blob);
-      ResolveImportedPath(F, F.OriginalDir);
       break;
 
     case MODULE_NAME:
@@ -4401,6 +4377,11 @@ ASTReader::ASTReadResult ASTReader::ReadAST(StringRef FileName,
         Unresolved.Mod->Imports.insert(ResolvedMod);
       continue;
 
+    case UnresolvedModuleRef::Affecting:
+      if (ResolvedMod)
+        Unresolved.Mod->AffectingModules.insert(ResolvedMod);
+      continue;
+
     case UnresolvedModuleRef::Export:
       if (ResolvedMod || Unresolved.IsWildcard)
         Unresolved.Mod->Exports.push_back(
@@ -5139,16 +5120,19 @@ namespace {
     const PreprocessorOptions &ExistingPPOpts;
     std::string ExistingModuleCachePath;
     FileManager &FileMgr;
+    bool StrictOptionMatches;
 
   public:
     SimplePCHValidator(const LangOptions &ExistingLangOpts,
                        const TargetOptions &ExistingTargetOpts,
                        const PreprocessorOptions &ExistingPPOpts,
-                       StringRef ExistingModuleCachePath, FileManager &FileMgr)
+                       StringRef ExistingModuleCachePath, FileManager &FileMgr,
+                       bool StrictOptionMatches)
         : ExistingLangOpts(ExistingLangOpts),
           ExistingTargetOpts(ExistingTargetOpts),
           ExistingPPOpts(ExistingPPOpts),
-          ExistingModuleCachePath(ExistingModuleCachePath), FileMgr(FileMgr) {}
+          ExistingModuleCachePath(ExistingModuleCachePath), FileMgr(FileMgr),
+          StrictOptionMatches(StrictOptionMatches) {}
 
     bool ReadLanguageOptions(const LangOptions &LangOpts, bool Complain,
                              bool AllowCompatibleDifferences) override {
@@ -5173,9 +5157,11 @@ namespace {
     bool ReadPreprocessorOptions(const PreprocessorOptions &PPOpts,
                                  bool Complain,
                                  std::string &SuggestedPredefines) override {
-      return checkPreprocessorOptions(PPOpts, ExistingPPOpts, /*Diags=*/nullptr,
-                                      FileMgr, SuggestedPredefines,
-                                      ExistingLangOpts);
+      return checkPreprocessorOptions(
+          PPOpts, ExistingPPOpts, /*Diags=*/nullptr, FileMgr,
+          SuggestedPredefines, ExistingLangOpts,
+          StrictOptionMatches ? OptionValidateStrictMatches
+                              : OptionValidateContradictions);
     }
   };
 
@@ -5452,9 +5438,11 @@ bool ASTReader::isAcceptableASTFile(StringRef Filename, FileManager &FileMgr,
                                     const LangOptions &LangOpts,
                                     const TargetOptions &TargetOpts,
                                     const PreprocessorOptions &PPOpts,
-                                    StringRef ExistingModuleCachePath) {
+                                    StringRef ExistingModuleCachePath,
+                                    bool RequireStrictOptionMatches) {
   SimplePCHValidator validator(LangOpts, TargetOpts, PPOpts,
-                               ExistingModuleCachePath, FileMgr);
+                               ExistingModuleCachePath, FileMgr,
+                               RequireStrictOptionMatches);
   return !readASTFileControlBlock(Filename, FileMgr, PCHContainerRdr,
                                   /*FindModuleFileExtensions=*/false,
                                   validator,
@@ -5687,6 +5675,18 @@ llvm::Error ASTReader::ReadSubmoduleBlock(ModuleFile &F,
         Unresolved.Mod = CurrentModule;
         Unresolved.ID = Record[Idx];
         Unresolved.Kind = UnresolvedModuleRef::Import;
+        Unresolved.IsWildcard = false;
+        UnresolvedModuleRefs.push_back(Unresolved);
+      }
+      break;
+
+    case SUBMODULE_AFFECTING_MODULES:
+      for (unsigned Idx = 0; Idx != Record.size(); ++Idx) {
+        UnresolvedModuleRef Unresolved;
+        Unresolved.File = &F;
+        Unresolved.Mod = CurrentModule;
+        Unresolved.ID = Record[Idx];
+        Unresolved.Kind = UnresolvedModuleRef::Affecting;
         Unresolved.IsWildcard = false;
         UnresolvedModuleRefs.push_back(Unresolved);
       }
@@ -8705,8 +8705,9 @@ ASTReader::getSourceDescriptor(unsigned ID) {
     ModuleFile &MF = ModuleMgr.getPrimaryModule();
     StringRef ModuleName = llvm::sys::path::filename(MF.OriginalSourceFileName);
     StringRef FileName = llvm::sys::path::filename(MF.FileName);
-    return ASTSourceDescriptor(ModuleName, MF.OriginalDir, FileName,
-                               MF.Signature);
+    return ASTSourceDescriptor(ModuleName,
+                               llvm::sys::path::parent_path(MF.FileName),
+                               FileName, MF.Signature);
   }
   return None;
 }

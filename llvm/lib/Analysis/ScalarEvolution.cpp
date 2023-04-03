@@ -126,6 +126,7 @@
 #include <cstdlib>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -241,6 +242,11 @@ static cl::opt<bool>
     EnableFiniteLoopControl("scalar-evolution-finite-loop", cl::Hidden,
                             cl::desc("Handle <= and >= in finite loops"),
                             cl::init(true));
+
+static cl::opt<bool> UseContextForNoWrapFlagInference(
+    "scalar-evolution-use-context-for-no-wrap-flag-strenghening", cl::Hidden,
+    cl::desc("Infer nuw/nsw flags using context where suitable"),
+    cl::init(true));
 
 //===----------------------------------------------------------------------===//
 //                           SCEV class definitions
@@ -2285,7 +2291,8 @@ CollectAddOperandsWithScales(DenseMap<const SCEV *, APInt> &M,
 }
 
 bool ScalarEvolution::willNotOverflow(Instruction::BinaryOps BinOp, bool Signed,
-                                      const SCEV *LHS, const SCEV *RHS) {
+                                      const SCEV *LHS, const SCEV *RHS,
+                                      const Instruction *CtxI) {
   const SCEV *(ScalarEvolution::*Operation)(const SCEV *, const SCEV *,
                                             SCEV::NoWrapFlags, unsigned);
   switch (BinOp) {
@@ -2316,7 +2323,30 @@ bool ScalarEvolution::willNotOverflow(Instruction::BinaryOps BinOp, bool Signed,
   const SCEV *LHSB = (this->*Extension)(LHS, WideTy, 0);
   const SCEV *RHSB = (this->*Extension)(RHS, WideTy, 0);
   const SCEV *B = (this->*Operation)(LHSB, RHSB, SCEV::FlagAnyWrap, 0);
-  return A == B;
+  if (A == B)
+    return true;
+  // Can we use context to prove the fact we need?
+  if (!CtxI)
+    return false;
+  // We can prove that add(x, constant) doesn't wrap if isKnownPredicateAt can
+  // guarantee that x <= max_int - constant at the given context.
+  // TODO: Support other operations.
+  if (BinOp != Instruction::Add)
+    return false;
+  auto *RHSC = dyn_cast<SCEVConstant>(RHS);
+  // TODO: Lift this limitation.
+  if (!RHSC)
+    return false;
+  APInt C = RHSC->getAPInt();
+  // TODO: Also lift this limitation.
+  if (Signed && C.isNegative())
+    return false;
+  unsigned NumBits = C.getBitWidth();
+  APInt Max =
+      Signed ? APInt::getSignedMaxValue(NumBits) : APInt::getMaxValue(NumBits);
+  APInt Limit = Max - C;
+  ICmpInst::Predicate Pred = Signed ? ICmpInst::ICMP_SLE : ICmpInst::ICMP_ULE;
+  return isKnownPredicateAt(Pred, LHS, getConstant(Limit), CtxI);
 }
 
 Optional<SCEV::NoWrapFlags>
@@ -2343,16 +2373,18 @@ ScalarEvolution::getStrengthenedNoWrapFlagsFromBinOp(
   const SCEV *LHS = getSCEV(OBO->getOperand(0));
   const SCEV *RHS = getSCEV(OBO->getOperand(1));
 
+  const Instruction *CtxI =
+      UseContextForNoWrapFlagInference ? dyn_cast<Instruction>(OBO) : nullptr;
   if (!OBO->hasNoUnsignedWrap() &&
       willNotOverflow((Instruction::BinaryOps)OBO->getOpcode(),
-                      /* Signed */ false, LHS, RHS)) {
+                      /* Signed */ false, LHS, RHS, CtxI)) {
     Flags = ScalarEvolution::setFlags(Flags, SCEV::FlagNUW);
     Deduced = true;
   }
 
   if (!OBO->hasNoSignedWrap() &&
       willNotOverflow((Instruction::BinaryOps)OBO->getOpcode(),
-                      /* Signed */ true, LHS, RHS)) {
+                      /* Signed */ true, LHS, RHS, CtxI)) {
     Flags = ScalarEvolution::setFlags(Flags, SCEV::FlagNSW);
     Deduced = true;
   }
@@ -4958,6 +4990,10 @@ ScalarEvolution::proveNoSignedWrapViaInduction(const SCEVAddRecExpr *AR) {
   if (!AR->isAffine())
     return Result;
 
+  // This function can be expensive, only try to prove NSW once per AddRec.
+  if (!SignedWrapViaInductionTried.insert(AR).second)
+    return Result;
+
   const SCEV *Step = AR->getStepRecurrence(*this);
   const Loop *L = AR->getLoop();
 
@@ -5978,7 +6014,7 @@ const SCEV *ScalarEvolution::createNodeForSelectOrPHIInstWithICmpInstCond(
   case ICmpInst::ICMP_ULT:
   case ICmpInst::ICMP_ULE:
     std::swap(LHS, RHS);
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case ICmpInst::ICMP_SGT:
   case ICmpInst::ICMP_SGE:
   case ICmpInst::ICMP_UGT:
@@ -6031,7 +6067,7 @@ const SCEV *ScalarEvolution::createNodeForSelectOrPHIInstWithICmpInstCond(
   case ICmpInst::ICMP_NE:
     // x != 0 ? x+y : C+y  ->  x == 0 ? C+y : x+y
     std::swap(TrueVal, FalseVal);
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case ICmpInst::ICMP_EQ:
     // x == 0 ? C+y : x+y  ->  umax(x, C)+y   iff C u<= 1
     if (getTypeSizeInBits(LHS->getType()) <= getTypeSizeInBits(I->getType()) &&
@@ -7254,7 +7290,8 @@ ScalarEvolution::getOperandsToCreate(Value *V, SmallVectorImpl<Value *> &Ops) {
   if (auto BO = MatchBinaryOp(U, DT)) {
     bool IsConstArg = isa<ConstantInt>(BO->RHS);
     switch (BO->Opcode) {
-    case Instruction::Add: {
+    case Instruction::Add:
+    case Instruction::Mul: {
       // For additions and multiplications, traverse add/mul chains for which we
       // can potentially create a single SCEV, to reduce the number of
       // get{Add,Mul}Expr calls.
@@ -7267,29 +7304,23 @@ ScalarEvolution::getOperandsToCreate(Value *V, SmallVectorImpl<Value *> &Ops) {
         }
         Ops.push_back(BO->RHS);
         auto NewBO = MatchBinaryOp(BO->LHS, DT);
-        if (!NewBO || (NewBO->Opcode != Instruction::Add &&
-                       NewBO->Opcode != Instruction::Sub)) {
+        if (!NewBO ||
+            (U->getOpcode() == Instruction::Add &&
+             (NewBO->Opcode != Instruction::Add &&
+              NewBO->Opcode != Instruction::Sub)) ||
+            (U->getOpcode() == Instruction::Mul &&
+             NewBO->Opcode != Instruction::Mul)) {
           Ops.push_back(BO->LHS);
           break;
         }
-        BO = NewBO;
-      } while (true);
-      return nullptr;
-    }
-
-    case Instruction::Mul: {
-      do {
-        if (BO->Op) {
-          if (BO->Op != V && getExistingSCEV(BO->Op)) {
-            Ops.push_back(BO->Op);
+        // CreateSCEV calls getNoWrapFlagsFromUB, which under certain conditions
+        // requires a SCEV for the LHS.
+        if (NewBO->Op && (NewBO->IsNSW || NewBO->IsNUW)) {
+          auto *I = dyn_cast<Instruction>(NewBO->Op);
+          if (I && programUndefinedIfPoison(I)) {
+            Ops.push_back(BO->LHS);
             break;
           }
-        }
-        Ops.push_back(BO->RHS);
-        auto NewBO = MatchBinaryOp(BO->LHS, DT);
-        if (!NewBO || NewBO->Opcode != Instruction::Mul) {
-          Ops.push_back(BO->LHS);
-          break;
         }
         BO = NewBO;
       } while (true);
@@ -8056,12 +8087,12 @@ unsigned ScalarEvolution::getSmallConstantTripMultiple(const Loop *L) {
   SmallVector<BasicBlock *, 8> ExitingBlocks;
   L->getExitingBlocks(ExitingBlocks);
 
-  Optional<unsigned> Res = None;
+  Optional<unsigned> Res;
   for (auto *ExitingBB : ExitingBlocks) {
     unsigned Multiple = getSmallConstantTripMultiple(L, ExitingBB);
     if (!Res)
       Res = Multiple;
-    Res = (unsigned)GreatestCommonDivisor64(*Res, Multiple);
+    Res = (unsigned)std::gcd(*Res, Multiple);
   }
   return Res.value_or(1);
 }
@@ -10019,7 +10050,7 @@ SolveQuadraticAddRecRange(const SCEVAddRecExpr *AddRec,
                       << Bound << " (before multiplying by " << M << ")\n");
     Bound *= M; // The quadratic equation multiplier.
 
-    Optional<APInt> SO = None;
+    Optional<APInt> SO;
     if (BitWidth > 1) {
       LLVM_DEBUG(dbgs() << "SolveQuadraticAddRecRange: solving for "
                            "signed overflow\n");
@@ -10726,8 +10757,8 @@ ScalarEvolution::getMonotonicPredicateTypeImpl(const SCEVAddRecExpr *LHS,
 Optional<ScalarEvolution::LoopInvariantPredicate>
 ScalarEvolution::getLoopInvariantPredicate(ICmpInst::Predicate Pred,
                                            const SCEV *LHS, const SCEV *RHS,
-                                           const Loop *L) {
-
+                                           const Loop *L,
+                                           const Instruction *CtxI) {
   // If there is a loop-invariant, force it into the RHS, otherwise bail out.
   if (!isLoopInvariant(RHS, L)) {
     if (!isLoopInvariant(LHS, L))
@@ -10764,10 +10795,49 @@ ScalarEvolution::getLoopInvariantPredicate(ICmpInst::Predicate Pred,
   bool Increasing = *MonotonicType == ScalarEvolution::MonotonicallyIncreasing;
   auto P = Increasing ? Pred : ICmpInst::getInversePredicate(Pred);
 
-  if (!isLoopBackedgeGuardedByCond(L, P, LHS, RHS))
-    return None;
+  if (isLoopBackedgeGuardedByCond(L, P, LHS, RHS))
+    return ScalarEvolution::LoopInvariantPredicate(Pred, ArLHS->getStart(),
+                                                   RHS);
 
-  return ScalarEvolution::LoopInvariantPredicate(Pred, ArLHS->getStart(), RHS);
+  if (!CtxI)
+    return None;
+  // Try to prove via context.
+  // TODO: Support other cases.
+  switch (Pred) {
+  default:
+    break;
+  case ICmpInst::ICMP_ULE:
+  case ICmpInst::ICMP_ULT: {
+    assert(ArLHS->hasNoUnsignedWrap() && "Is a requirement of monotonicity!");
+    // Given preconditions
+    // (1) ArLHS does not cross the border of positive and negative parts of
+    //     range because of:
+    //     - Positive step; (TODO: lift this limitation)
+    //     - nuw - does not cross zero boundary;
+    //     - nsw - does not cross SINT_MAX boundary;
+    // (2) ArLHS <s RHS
+    // (3) RHS >=s 0
+    // we can replace the loop variant ArLHS <u RHS condition with loop
+    // invariant Start(ArLHS) <u RHS.
+    //
+    // Because of (1) there are two options:
+    // - ArLHS is always negative. It means that ArLHS <u RHS is always false;
+    // - ArLHS is always non-negative. Because of (3) RHS is also non-negative.
+    //   It means that ArLHS <s RHS <=> ArLHS <u RHS.
+    //   Because of (2) ArLHS <u RHS is trivially true.
+    // All together it means that ArLHS <u RHS <=> Start(ArLHS) >=s 0.
+    // We can strengthen this to Start(ArLHS) <u RHS.
+    auto SignFlippedPred = ICmpInst::getFlippedSignednessPredicate(Pred);
+    if (ArLHS->hasNoSignedWrap() && ArLHS->isAffine() &&
+        isKnownPositive(ArLHS->getStepRecurrence(*this)) &&
+        isKnownNonNegative(RHS) &&
+        isKnownPredicateAt(SignFlippedPred, ArLHS, RHS, CtxI))
+      return ScalarEvolution::LoopInvariantPredicate(Pred, ArLHS->getStart(),
+                                                     RHS);
+  }
+  }
+
+  return None;
 }
 
 Optional<ScalarEvolution::LoopInvariantPredicate>
@@ -10928,7 +10998,7 @@ bool ScalarEvolution::isKnownPredicateViaNoOverflow(ICmpInst::Predicate Pred,
 
   case ICmpInst::ICMP_SGE:
     std::swap(LHS, RHS);
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case ICmpInst::ICMP_SLE:
     // (X + C1)<nsw> s<= (X + C2)<nsw> if C1 s<= C2.
     if (MatchBinaryAddToConst(LHS, RHS, C1, C2, SCEV::FlagNSW) && C1.sle(C2))
@@ -10938,7 +11008,7 @@ bool ScalarEvolution::isKnownPredicateViaNoOverflow(ICmpInst::Predicate Pred,
 
   case ICmpInst::ICMP_SGT:
     std::swap(LHS, RHS);
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case ICmpInst::ICMP_SLT:
     // (X + C1)<nsw> s< (X + C2)<nsw> if C1 s< C2.
     if (MatchBinaryAddToConst(LHS, RHS, C1, C2, SCEV::FlagNSW) && C1.slt(C2))
@@ -10948,7 +11018,7 @@ bool ScalarEvolution::isKnownPredicateViaNoOverflow(ICmpInst::Predicate Pred,
 
   case ICmpInst::ICMP_UGE:
     std::swap(LHS, RHS);
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case ICmpInst::ICMP_ULE:
     // (X + C1)<nuw> u<= (X + C2)<nuw> for C1 u<= C2.
     if (MatchBinaryAddToConst(RHS, LHS, C2, C1, SCEV::FlagNUW) && C1.ule(C2))
@@ -10958,7 +11028,7 @@ bool ScalarEvolution::isKnownPredicateViaNoOverflow(ICmpInst::Predicate Pred,
 
   case ICmpInst::ICMP_UGT:
     std::swap(LHS, RHS);
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case ICmpInst::ICMP_ULT:
     // (X + C1)<nuw> u< (X + C2)<nuw> if C1 u< C2.
     if (MatchBinaryAddToConst(RHS, LHS, C2, C1, SCEV::FlagNUW) && C1.ult(C2))
@@ -11485,7 +11555,7 @@ bool ScalarEvolution::isImpliedCondBalancedTypes(
           if (isImpliedCondOperands(Pred, LHS, RHS, V, getConstant(SharperMin),
                                     CtxI))
             return true;
-          LLVM_FALLTHROUGH;
+          [[fallthrough]];
 
         case ICmpInst::ICMP_SGT:
         case ICmpInst::ICMP_UGT:
@@ -11508,7 +11578,7 @@ bool ScalarEvolution::isImpliedCondBalancedTypes(
           if (isImpliedCondOperands(CmpInst::getSwappedPredicate(Pred), RHS,
                                     LHS, V, getConstant(SharperMin), CtxI))
             return true;
-          LLVM_FALLTHROUGH;
+          [[fallthrough]];
 
         case ICmpInst::ICMP_SLT:
         case ICmpInst::ICMP_ULT:
@@ -11964,7 +12034,7 @@ static bool IsKnownPredicateViaMinOrMax(ScalarEvolution &SE,
 
   case ICmpInst::ICMP_SGE:
     std::swap(LHS, RHS);
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case ICmpInst::ICMP_SLE:
     return
         // min(A, ...) <= A
@@ -11974,7 +12044,7 @@ static bool IsKnownPredicateViaMinOrMax(ScalarEvolution &SE,
 
   case ICmpInst::ICMP_UGE:
     std::swap(LHS, RHS);
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case ICmpInst::ICMP_ULE:
     return
         // min(A, ...) <= A
@@ -12161,7 +12231,7 @@ static bool isKnownPredicateExtendIdiom(ICmpInst::Predicate Pred,
   switch (Pred) {
   case ICmpInst::ICMP_SGE:
     std::swap(LHS, RHS);
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case ICmpInst::ICMP_SLE: {
     // If operand >=s 0 then ZExt == SExt.  If operand <s 0 then SExt <s ZExt.
     const SCEVSignExtendExpr *SExt = dyn_cast<SCEVSignExtendExpr>(LHS);
@@ -12172,7 +12242,7 @@ static bool isKnownPredicateExtendIdiom(ICmpInst::Predicate Pred,
   }
   case ICmpInst::ICMP_UGE:
     std::swap(LHS, RHS);
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case ICmpInst::ICMP_ULE: {
     // If operand >=s 0 then ZExt == SExt.  If operand <s 0 then ZExt <u SExt.
     const SCEVZeroExtendExpr *ZExt = dyn_cast<SCEVZeroExtendExpr>(LHS);
@@ -13473,7 +13543,7 @@ ScalarEvolution::computeBlockDisposition(const SCEV *S, const BasicBlock *BB) {
       return DoesNotDominateBlock;
 
     // Fall through into SCEVNAryExpr handling.
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   }
   case scAddExpr:
   case scMulExpr:
@@ -13584,8 +13654,10 @@ void ScalarEvolution::forgetMemoizedResultsImpl(const SCEV *S) {
   HasRecMap.erase(S);
   MinTrailingZerosCache.erase(S);
 
-  if (auto *AR = dyn_cast<SCEVAddRecExpr>(S))
+  if (auto *AR = dyn_cast<SCEVAddRecExpr>(S)) {
     UnsignedWrapViaInductionTried.erase(AR);
+    SignedWrapViaInductionTried.erase(AR);
+  }
 
   auto ExprIt = ExprValueMap.find(S);
   if (ExprIt != ExprValueMap.end()) {

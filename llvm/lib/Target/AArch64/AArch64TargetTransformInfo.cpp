@@ -102,7 +102,7 @@ cl::opt<TailFoldingKind, true, cl::parser<std::string>> SVETailFolding(
         "\nsimple      Use tail-folding for simple loops (not reductions or "
         "recurrences)"
         "\nreductions  Use tail-folding for loops containing reductions"
-        "\nrecurrences Use tail-folding for loops containing first order "
+        "\nrecurrences Use tail-folding for loops containing fixed order "
         "recurrences"),
     cl::location(TailFoldingKindLoc));
 
@@ -309,7 +309,7 @@ AArch64TTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
   case Intrinsic::smax: {
     static const auto ValidMinMaxTys = {MVT::v8i8,  MVT::v16i8, MVT::v4i16,
                                         MVT::v8i16, MVT::v2i32, MVT::v4i32};
-    auto LT = TLI->getTypeLegalizationCost(DL, RetTy);
+    auto LT = getTypeLegalizationCost(RetTy);
     // v2i64 types get converted to cmp+bif hence the cost of 2
     if (LT.second == MVT::v2i64)
       return LT.first * 2;
@@ -324,7 +324,7 @@ AArch64TTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
     static const auto ValidSatTys = {MVT::v8i8,  MVT::v16i8, MVT::v4i16,
                                      MVT::v8i16, MVT::v2i32, MVT::v4i32,
                                      MVT::v2i64};
-    auto LT = TLI->getTypeLegalizationCost(DL, RetTy);
+    auto LT = getTypeLegalizationCost(RetTy);
     // This is a base cost of 1 for the vadd, plus 3 extract shifts if we
     // need to extend the type, as it uses shr(qadd(shl, shl)).
     unsigned Instrs =
@@ -337,14 +337,14 @@ AArch64TTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
     static const auto ValidAbsTys = {MVT::v8i8,  MVT::v16i8, MVT::v4i16,
                                      MVT::v8i16, MVT::v2i32, MVT::v4i32,
                                      MVT::v2i64};
-    auto LT = TLI->getTypeLegalizationCost(DL, RetTy);
+    auto LT = getTypeLegalizationCost(RetTy);
     if (any_of(ValidAbsTys, [&LT](MVT M) { return M == LT.second; }))
       return LT.first;
     break;
   }
   case Intrinsic::experimental_stepvector: {
     InstructionCost Cost = 1; // Cost of the `index' instruction
-    auto LT = TLI->getTypeLegalizationCost(DL, RetTy);
+    auto LT = getTypeLegalizationCost(RetTy);
     // Legalisation of illegal vectors involves an `index' instruction plus
     // (LT.first - 1) vector adds.
     if (LT.first > 1) {
@@ -368,7 +368,7 @@ AArch64TTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
         {Intrinsic::bitreverse, MVT::v1i64, 2},
         {Intrinsic::bitreverse, MVT::v2i64, 2},
     };
-    const auto LegalisationCost = TLI->getTypeLegalizationCost(DL, RetTy);
+    const auto LegalisationCost = getTypeLegalizationCost(RetTy);
     const auto *Entry =
         CostTableLookup(BitreverseTbl, ICA.getID(), LegalisationCost.second);
     if (Entry) {
@@ -394,7 +394,7 @@ AArch64TTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
         {ISD::CTPOP, MVT::v8i8,  1},
         {ISD::CTPOP, MVT::i32,   5},
     };
-    auto LT = TLI->getTypeLegalizationCost(DL, RetTy);
+    auto LT = getTypeLegalizationCost(RetTy);
     MVT MTy = LT.second;
     if (const auto *Entry = CostTableLookup(CtpopCostTbl, ISD::CTPOP, MTy)) {
       // Extra cost of +1 when illegal vector types are legalized by promoting
@@ -451,7 +451,7 @@ AArch64TTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
     if (ICA.getArgTypes().empty())
       break;
     bool IsSigned = ICA.getID() == Intrinsic::fptosi_sat;
-    auto LT = TLI->getTypeLegalizationCost(DL, ICA.getArgTypes()[0]);
+    auto LT = getTypeLegalizationCost(ICA.getArgTypes()[0]);
     EVT MTy = TLI->getValueType(DL, RetTy);
     // Check for the legal types, which are where the size of the input and the
     // output are the same, or we are using cvt f64->i32 or f32->i64.
@@ -1534,7 +1534,7 @@ bool AArch64TTIImpl::isWideningInstruction(Type *DstTy, unsigned Opcode,
 
   // Legalize the destination type and ensure it can be used in a widening
   // operation.
-  auto DstTyL = TLI->getTypeLegalizationCost(DL, DstTy);
+  auto DstTyL = getTypeLegalizationCost(DstTy);
   unsigned DstElTySize = DstTyL.second.getScalarSizeInBits();
   if (!DstTyL.second.isVector() || DstElTySize != DstTy->getScalarSizeInBits())
     return false;
@@ -1542,7 +1542,7 @@ bool AArch64TTIImpl::isWideningInstruction(Type *DstTy, unsigned Opcode,
   // Legalize the source type and ensure it can be used in a widening
   // operation.
   auto *SrcTy = toVectorTy(Extend->getSrcTy());
-  auto SrcTyL = TLI->getTypeLegalizationCost(DL, SrcTy);
+  auto SrcTyL = getTypeLegalizationCost(SrcTy);
   unsigned SrcElTySize = SrcTyL.second.getScalarSizeInBits();
   if (!SrcTyL.second.isVector() || SrcElTySize != SrcTy->getScalarSizeInBits())
     return false;
@@ -1899,7 +1899,7 @@ InstructionCost AArch64TTIImpl::getExtractWithExtendCost(unsigned Opcode,
       getVectorInstrCost(Instruction::ExtractElement, VecTy, Index);
 
   // Legalize the types.
-  auto VecLT = TLI->getTypeLegalizationCost(DL, VecTy);
+  auto VecLT = getTypeLegalizationCost(VecTy);
   auto DstVT = TLI->getValueType(DL, Dst);
   auto SrcVT = TLI->getValueType(DL, Src);
   TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput;
@@ -1954,7 +1954,7 @@ InstructionCost AArch64TTIImpl::getVectorInstrCost(unsigned Opcode, Type *Val,
 
   if (Index != -1U) {
     // Legalize the type.
-    std::pair<InstructionCost, MVT> LT = TLI->getTypeLegalizationCost(DL, Val);
+    std::pair<InstructionCost, MVT> LT = getTypeLegalizationCost(Val);
 
     // This type is legalized to a scalar type.
     if (!LT.second.isVector())
@@ -1978,77 +1978,68 @@ InstructionCost AArch64TTIImpl::getVectorInstrCost(unsigned Opcode, Type *Val,
 
 InstructionCost AArch64TTIImpl::getArithmeticInstrCost(
     unsigned Opcode, Type *Ty, TTI::TargetCostKind CostKind,
-    TTI::OperandValueKind Opd1Info, TTI::OperandValueKind Opd2Info,
-    TTI::OperandValueProperties Opd1PropInfo,
-    TTI::OperandValueProperties Opd2PropInfo, ArrayRef<const Value *> Args,
+    TTI::OperandValueInfo Op1Info, TTI::OperandValueInfo Op2Info,
+    ArrayRef<const Value *> Args,
     const Instruction *CxtI) {
+
   // TODO: Handle more cost kinds.
   if (CostKind != TTI::TCK_RecipThroughput)
-    return BaseT::getArithmeticInstrCost(Opcode, Ty, CostKind, Opd1Info,
-                                         Opd2Info, Opd1PropInfo,
-                                         Opd2PropInfo, Args, CxtI);
+    return BaseT::getArithmeticInstrCost(Opcode, Ty, CostKind, Op1Info,
+                                         Op2Info, Args, CxtI);
 
   // Legalize the type.
-  std::pair<InstructionCost, MVT> LT = TLI->getTypeLegalizationCost(DL, Ty);
+  std::pair<InstructionCost, MVT> LT = getTypeLegalizationCost(Ty);
   int ISD = TLI->InstructionOpcodeToISD(Opcode);
 
   switch (ISD) {
   default:
-    return BaseT::getArithmeticInstrCost(Opcode, Ty, CostKind, Opd1Info,
-                                         Opd2Info, Opd1PropInfo, Opd2PropInfo);
+    return BaseT::getArithmeticInstrCost(Opcode, Ty, CostKind, Op1Info,
+                                         Op2Info);
   case ISD::SDIV:
-    if (Opd2Info == TargetTransformInfo::OK_UniformConstantValue &&
-        Opd2PropInfo == TargetTransformInfo::OP_PowerOf2) {
+    if (Op2Info.isConstant() && Op2Info.isUniform() && Op2Info.isPowerOf2()) {
       // On AArch64, scalar signed division by constants power-of-two are
       // normally expanded to the sequence ADD + CMP + SELECT + SRA.
       // The OperandValue properties many not be same as that of previous
       // operation; conservatively assume OP_None.
       InstructionCost Cost = getArithmeticInstrCost(
-          Instruction::Add, Ty, CostKind, Opd1Info, Opd2Info,
-          TargetTransformInfo::OP_None, TargetTransformInfo::OP_None);
-      Cost += getArithmeticInstrCost(Instruction::Sub, Ty, CostKind, Opd1Info,
-                                     Opd2Info, TargetTransformInfo::OP_None,
-                                     TargetTransformInfo::OP_None);
+          Instruction::Add, Ty, CostKind,
+          Op1Info.getNoProps(), Op2Info.getNoProps());
+      Cost += getArithmeticInstrCost(Instruction::Sub, Ty, CostKind,
+                                     Op1Info.getNoProps(), Op2Info.getNoProps());
       Cost += getArithmeticInstrCost(
-          Instruction::Select, Ty, CostKind, Opd1Info, Opd2Info,
-          TargetTransformInfo::OP_None, TargetTransformInfo::OP_None);
-      Cost += getArithmeticInstrCost(Instruction::AShr, Ty, CostKind, Opd1Info,
-                                     Opd2Info, TargetTransformInfo::OP_None,
-                                     TargetTransformInfo::OP_None);
+          Instruction::Select, Ty, CostKind,
+          Op1Info.getNoProps(), Op2Info.getNoProps());
+      Cost += getArithmeticInstrCost(Instruction::AShr, Ty, CostKind,
+                                     Op1Info.getNoProps(), Op2Info.getNoProps());
       return Cost;
     }
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case ISD::UDIV: {
-    if (Opd2Info == TargetTransformInfo::OK_UniformConstantValue) {
+    if (Op2Info.isConstant() && Op2Info.isUniform()) {
       auto VT = TLI->getValueType(DL, Ty);
       if (TLI->isOperationLegalOrCustom(ISD::MULHU, VT)) {
         // Vector signed division by constant are expanded to the
         // sequence MULHS + ADD/SUB + SRA + SRL + ADD, and unsigned division
         // to MULHS + SUB + SRL + ADD + SRL.
         InstructionCost MulCost = getArithmeticInstrCost(
-            Instruction::Mul, Ty, CostKind, Opd1Info, Opd2Info,
-            TargetTransformInfo::OP_None, TargetTransformInfo::OP_None);
+            Instruction::Mul, Ty, CostKind, Op1Info.getNoProps(), Op2Info.getNoProps());
         InstructionCost AddCost = getArithmeticInstrCost(
-            Instruction::Add, Ty, CostKind, Opd1Info, Opd2Info,
-            TargetTransformInfo::OP_None, TargetTransformInfo::OP_None);
+            Instruction::Add, Ty, CostKind, Op1Info.getNoProps(), Op2Info.getNoProps());
         InstructionCost ShrCost = getArithmeticInstrCost(
-            Instruction::AShr, Ty, CostKind, Opd1Info, Opd2Info,
-            TargetTransformInfo::OP_None, TargetTransformInfo::OP_None);
+            Instruction::AShr, Ty, CostKind, Op1Info.getNoProps(), Op2Info.getNoProps());
         return MulCost * 2 + AddCost * 2 + ShrCost * 2 + 1;
       }
     }
 
     InstructionCost Cost = BaseT::getArithmeticInstrCost(
-        Opcode, Ty, CostKind, Opd1Info, Opd2Info, Opd1PropInfo, Opd2PropInfo);
+        Opcode, Ty, CostKind, Op1Info, Op2Info);
     if (Ty->isVectorTy()) {
       // On AArch64, vector divisions are not supported natively and are
       // expanded into scalar divisions of each pair of elements.
       Cost += getArithmeticInstrCost(Instruction::ExtractElement, Ty, CostKind,
-                                     Opd1Info, Opd2Info, Opd1PropInfo,
-                                     Opd2PropInfo);
+                                     Op1Info, Op2Info);
       Cost += getArithmeticInstrCost(Instruction::InsertElement, Ty, CostKind,
-                                     Opd1Info, Opd2Info, Opd1PropInfo,
-                                     Opd2PropInfo);
+                                     Op1Info, Op2Info);
       // TODO: if one of the arguments is scalar, then it's not necessary to
       // double the cost of handling the vector elements.
       Cost += Cost;
@@ -2090,8 +2081,8 @@ InstructionCost AArch64TTIImpl::getArithmeticInstrCost(
     if (!Ty->getScalarType()->isFP128Ty())
       return 2 * LT.first;
 
-    return BaseT::getArithmeticInstrCost(Opcode, Ty, CostKind, Opd1Info,
-                                         Opd2Info, Opd1PropInfo, Opd2PropInfo);
+    return BaseT::getArithmeticInstrCost(Opcode, Ty, CostKind, Op1Info,
+                                         Op2Info);
   }
 }
 
@@ -2150,7 +2141,7 @@ InstructionCost AArch64TTIImpl::getCmpSelInstrCost(unsigned Opcode, Type *ValTy,
           MVT::v4i32, MVT::v2i64, MVT::v2f32, MVT::v4f32, MVT::v2f64};
       static const auto ValidFP16MinMaxTys = {MVT::v4f16, MVT::v8f16};
 
-      auto LT = TLI->getTypeLegalizationCost(DL, ValTy);
+      auto LT = getTypeLegalizationCost(ValTy);
       if (any_of(ValidMinMaxTys, [&LT](MVT M) { return M == LT.second; }) ||
           (ST->hasFullFP16() &&
            any_of(ValidFP16MinMaxTys, [&LT](MVT M) { return M == LT.second; })))
@@ -2210,7 +2201,7 @@ AArch64TTIImpl::getMaskedMemoryOpCost(unsigned Opcode, Type *Src,
   if (useNeonVector(Src))
     return BaseT::getMaskedMemoryOpCost(Opcode, Src, Alignment, AddressSpace,
                                         CostKind);
-  auto LT = TLI->getTypeLegalizationCost(DL, Src);
+  auto LT = getTypeLegalizationCost(Src);
   if (!LT.first.isValid())
     return InstructionCost::getInvalid();
 
@@ -2235,7 +2226,7 @@ InstructionCost AArch64TTIImpl::getGatherScatterOpCost(
     return BaseT::getGatherScatterOpCost(Opcode, DataTy, Ptr, VariableMask,
                                          Alignment, CostKind, I);
   auto *VT = cast<VectorType>(DataTy);
-  auto LT = TLI->getTypeLegalizationCost(DL, DataTy);
+  auto LT = getTypeLegalizationCost(DataTy);
   if (!LT.first.isValid())
     return InstructionCost::getInvalid();
 
@@ -2249,7 +2240,8 @@ InstructionCost AArch64TTIImpl::getGatherScatterOpCost(
 
   ElementCount LegalVF = LT.second.getVectorElementCount();
   InstructionCost MemOpCost =
-      getMemoryOpCost(Opcode, VT->getElementType(), Alignment, 0, CostKind, I);
+      getMemoryOpCost(Opcode, VT->getElementType(), Alignment, 0, CostKind,
+                      {TTI::OK_AnyValue, TTI::OP_None}, I);
   // Add on an overhead cost for using gathers/scatters.
   // TODO: At the moment this is applied unilaterally for all CPUs, but at some
   // point we may want a per-CPU overhead.
@@ -2265,6 +2257,7 @@ InstructionCost AArch64TTIImpl::getMemoryOpCost(unsigned Opcode, Type *Ty,
                                                 MaybeAlign Alignment,
                                                 unsigned AddressSpace,
                                                 TTI::TargetCostKind CostKind,
+                                                TTI::OperandValueInfo OpInfo,
                                                 const Instruction *I) {
   EVT VT = TLI->getValueType(DL, Ty, true);
   // Type legalization can't handle structs
@@ -2272,7 +2265,7 @@ InstructionCost AArch64TTIImpl::getMemoryOpCost(unsigned Opcode, Type *Ty,
     return BaseT::getMemoryOpCost(Opcode, Ty, Alignment, AddressSpace,
                                   CostKind);
 
-  auto LT = TLI->getTypeLegalizationCost(DL, Ty);
+  auto LT = getTypeLegalizationCost(Ty);
   if (!LT.first.isValid())
     return InstructionCost::getInvalid();
 
@@ -2617,7 +2610,7 @@ InstructionCost
 AArch64TTIImpl::getMinMaxReductionCost(VectorType *Ty, VectorType *CondTy,
                                        bool IsUnsigned,
                                        TTI::TargetCostKind CostKind) {
-  std::pair<InstructionCost, MVT> LT = TLI->getTypeLegalizationCost(DL, Ty);
+  std::pair<InstructionCost, MVT> LT = getTypeLegalizationCost(Ty);
 
   if (LT.second.getScalarType() == MVT::f16 && !ST->hasFullFP16())
     return BaseT::getMinMaxReductionCost(Ty, CondTy, IsUnsigned, CostKind);
@@ -2641,7 +2634,7 @@ AArch64TTIImpl::getMinMaxReductionCost(VectorType *Ty, VectorType *CondTy,
 
 InstructionCost AArch64TTIImpl::getArithmeticReductionCostSVE(
     unsigned Opcode, VectorType *ValTy, TTI::TargetCostKind CostKind) {
-  std::pair<InstructionCost, MVT> LT = TLI->getTypeLegalizationCost(DL, ValTy);
+  std::pair<InstructionCost, MVT> LT = getTypeLegalizationCost(ValTy);
   InstructionCost LegalizationCost = 0;
   if (LT.first > 1) {
     Type *LegalVTy = EVT(LT.second).getTypeForEVT(ValTy->getContext());
@@ -2690,7 +2683,7 @@ AArch64TTIImpl::getArithmeticReductionCost(unsigned Opcode, VectorType *ValTy,
   if (isa<ScalableVectorType>(ValTy))
     return getArithmeticReductionCostSVE(Opcode, ValTy, CostKind);
 
-  std::pair<InstructionCost, MVT> LT = TLI->getTypeLegalizationCost(DL, ValTy);
+  std::pair<InstructionCost, MVT> LT = getTypeLegalizationCost(ValTy);
   MVT MTy = LT.second;
   int ISD = TLI->InstructionOpcodeToISD(Opcode);
   assert(ISD && "Invalid opcode");
@@ -2709,6 +2702,7 @@ AArch64TTIImpl::getArithmeticReductionCost(unsigned Opcode, VectorType *ValTy,
       {ISD::ADD, MVT::v4i16,  2},
       {ISD::ADD, MVT::v8i16,  2},
       {ISD::ADD, MVT::v4i32,  2},
+      {ISD::ADD, MVT::v2i64,  2},
       {ISD::OR,  MVT::v8i8,  15},
       {ISD::OR,  MVT::v16i8, 17},
       {ISD::OR,  MVT::v4i16,  7},
@@ -2781,7 +2775,14 @@ InstructionCost AArch64TTIImpl::getSpliceCost(VectorType *Tp, int Index) {
       { TTI::SK_Splice, MVT::nxv2f64,  1 },
   };
 
-  std::pair<InstructionCost, MVT> LT = TLI->getTypeLegalizationCost(DL, Tp);
+  // The code-generator is currently not able to handle scalable vectors
+  // of <vscale x 1 x eltty> yet, so return an invalid cost to avoid selecting
+  // it. This change will be removed when code-generation for these types is
+  // sufficiently reliable.
+  if (Tp->getElementCount() == ElementCount::getScalable(1))
+    return InstructionCost::getInvalid();
+
+  std::pair<InstructionCost, MVT> LT = getTypeLegalizationCost(Tp);
   Type *LegalVTy = EVT(LT.second).getTypeForEVT(Tp->getContext());
   TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput;
   EVT PromotedVT = LT.second.getScalarType() == MVT::i1
@@ -2815,10 +2816,11 @@ InstructionCost AArch64TTIImpl::getSpliceCost(VectorType *Tp, int Index) {
 
 InstructionCost AArch64TTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
                                                VectorType *Tp,
-                                               ArrayRef<int> Mask, int Index,
-                                               VectorType *SubTp,
+                                               ArrayRef<int> Mask,
+                                               TTI::TargetCostKind CostKind,
+                                               int Index, VectorType *SubTp,
                                                ArrayRef<const Value *> Args) {
-  std::pair<InstructionCost, MVT> LT = TLI->getTypeLegalizationCost(DL, Tp);
+  std::pair<InstructionCost, MVT> LT = getTypeLegalizationCost(Tp);
   // If we have a Mask, and the LT is being legalized somehow, split the Mask
   // into smaller vectors and sum the cost of each shuffle.
   if (!Mask.empty() && isa<FixedVectorType>(Tp) && LT.second.isVector() &&
@@ -2874,7 +2876,7 @@ InstructionCost AArch64TTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
       if (NumSources <= 2)
         Cost += getShuffleCost(NumSources <= 1 ? TTI::SK_PermuteSingleSrc
                                                : TTI::SK_PermuteTwoSrc,
-                               NTp, NMask, 0, nullptr, Args);
+                               NTp, NMask, CostKind, 0, nullptr, Args);
       else if (any_of(enumerate(NMask), [&](const auto &ME) {
                  return ME.value() % LTNumElts == ME.index();
                }))
@@ -2905,8 +2907,7 @@ InstructionCost AArch64TTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
 
   if (Kind == TTI::SK_Broadcast || Kind == TTI::SK_Transpose ||
       Kind == TTI::SK_Select || Kind == TTI::SK_PermuteSingleSrc ||
-      Kind == TTI::SK_Reverse) {
-
+      Kind == TTI::SK_Reverse || Kind == TTI::SK_Splice) {
     static const CostTblEntry ShuffleTbl[] = {
       // Broadcast shuffle kinds can be performed with 'dup'.
       { TTI::SK_Broadcast, MVT::v8i8,  1 },
@@ -2967,6 +2968,21 @@ InstructionCost AArch64TTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
       { TTI::SK_Reverse, MVT::v4f16, 1 }, // REV64
       { TTI::SK_Reverse, MVT::v4i16, 1 }, // REV64
       { TTI::SK_Reverse, MVT::v8i8, 1 }, // REV64
+      // Splice can all be lowered as `ext`.
+      { TTI::SK_Splice, MVT::v2i32, 1 },
+      { TTI::SK_Splice, MVT::v4i32, 1 },
+      { TTI::SK_Splice, MVT::v2i64, 1 },
+      { TTI::SK_Splice, MVT::v2f32, 1 },
+      { TTI::SK_Splice, MVT::v4f32, 1 },
+      { TTI::SK_Splice, MVT::v2f64, 1 },
+      { TTI::SK_Splice, MVT::v8f16, 1 },
+      { TTI::SK_Splice, MVT::v8bf16, 1 },
+      { TTI::SK_Splice, MVT::v8i16, 1 },
+      { TTI::SK_Splice, MVT::v16i8, 1 },
+      { TTI::SK_Splice, MVT::v4bf16, 1 },
+      { TTI::SK_Splice, MVT::v4f16, 1 },
+      { TTI::SK_Splice, MVT::v4i16, 1 },
+      { TTI::SK_Splice, MVT::v8i8, 1 },
       // Broadcast shuffle kinds for scalable vectors
       { TTI::SK_Broadcast, MVT::nxv16i8,  1 },
       { TTI::SK_Broadcast, MVT::nxv8i16,  1 },
@@ -3015,8 +3031,7 @@ InstructionCost AArch64TTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
   // move, so long as the inserted vector is "aligned".
   if (Kind == TTI::SK_InsertSubvector && LT.second.isFixedLengthVector() &&
       LT.second.getSizeInBits() <= 128 && SubTp) {
-    std::pair<InstructionCost, MVT> SubLT =
-        TLI->getTypeLegalizationCost(DL, SubTp);
+    std::pair<InstructionCost, MVT> SubLT = getTypeLegalizationCost(SubTp);
     if (SubLT.second.isVector()) {
       int NumElts = LT.second.getVectorNumElements();
       int NumSubElts = SubLT.second.getVectorNumElements();
@@ -3025,22 +3040,52 @@ InstructionCost AArch64TTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
     }
   }
 
-  return BaseT::getShuffleCost(Kind, Tp, Mask, Index, SubTp);
+  return BaseT::getShuffleCost(Kind, Tp, Mask, CostKind, Index, SubTp);
 }
 
 bool AArch64TTIImpl::preferPredicateOverEpilogue(
     Loop *L, LoopInfo *LI, ScalarEvolution &SE, AssumptionCache &AC,
-    TargetLibraryInfo *TLI, DominatorTree *DT, LoopVectorizationLegality *LVL) {
+    TargetLibraryInfo *TLI, DominatorTree *DT, LoopVectorizationLegality *LVL,
+    InterleavedAccessInfo *IAI) {
   if (!ST->hasSVE() || TailFoldingKindLoc == TailFoldingKind::TFDisabled)
+    return false;
+
+  // We don't currently support vectorisation with interleaving for SVE - with
+  // such loops we're better off not using tail-folding. This gives us a chance
+  // to fall back on fixed-width vectorisation using NEON's ld2/st2/etc.
+  if (IAI->hasGroups())
     return false;
 
   TailFoldingKind Required; // Defaults to 0.
   if (LVL->getReductionVars().size())
     Required.add(TailFoldingKind::TFReductions);
-  if (LVL->getFirstOrderRecurrences().size())
+  if (LVL->getFixedOrderRecurrences().size())
     Required.add(TailFoldingKind::TFRecurrences);
   if (!Required)
     Required.add(TailFoldingKind::TFSimple);
 
   return (TailFoldingKindLoc & Required) == Required;
+}
+
+InstructionCost
+AArch64TTIImpl::getScalingFactorCost(Type *Ty, GlobalValue *BaseGV,
+                                     int64_t BaseOffset, bool HasBaseReg,
+                                     int64_t Scale, unsigned AddrSpace) const {
+  // Scaling factors are not free at all.
+  // Operands                     | Rt Latency
+  // -------------------------------------------
+  // Rt, [Xn, Xm]                 | 4
+  // -------------------------------------------
+  // Rt, [Xn, Xm, lsl #imm]       | Rn: 4 Rm: 5
+  // Rt, [Xn, Wm, <extend> #imm]  |
+  TargetLoweringBase::AddrMode AM;
+  AM.BaseGV = BaseGV;
+  AM.BaseOffs = BaseOffset;
+  AM.HasBaseReg = HasBaseReg;
+  AM.Scale = Scale;
+  if (getTLI()->isLegalAddressingMode(DL, AM, Ty, AddrSpace))
+    // Scale represents reg2 * scale, thus account for 1 if
+    // it is not equal to 0 or 1.
+    return AM.Scale != 0 && AM.Scale != 1;
+  return -1;
 }

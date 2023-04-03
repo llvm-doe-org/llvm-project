@@ -13,6 +13,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace mlir;
 using namespace mlir::sparse_tensor;
@@ -48,7 +49,7 @@ Attribute SparseTensorEncodingAttr::parse(AsmParser &parser, Type type) {
     return {};
   // Process the data from the parsed dictionary value into struct-like data.
   SmallVector<SparseTensorEncodingAttr::DimLevelType, 4> dlt;
-  AffineMap map = {};
+  AffineMap dimOrd = {};
   unsigned ptr = 0;
   unsigned ind = 0;
   for (const NamedAttribute &attr : dict) {
@@ -71,8 +72,6 @@ Attribute SparseTensorEncodingAttr::parse(AsmParser &parser, Type type) {
           dlt.push_back(SparseTensorEncodingAttr::DimLevelType::Dense);
         } else if (strVal == "compressed") {
           dlt.push_back(SparseTensorEncodingAttr::DimLevelType::Compressed);
-        } else if (strVal == "singleton") {
-          dlt.push_back(SparseTensorEncodingAttr::DimLevelType::Singleton);
         } else {
           parser.emitError(parser.getNameLoc(),
                            "unexpected dimension level type: ")
@@ -87,7 +86,7 @@ Attribute SparseTensorEncodingAttr::parse(AsmParser &parser, Type type) {
                          "expected an affine map for dimension ordering");
         return {};
       }
-      map = affineAttr.getValue();
+      dimOrd = affineAttr.getValue();
     } else if (attr.getName() == "pointerBitWidth") {
       auto intAttr = attr.getValue().dyn_cast<IntegerAttr>();
       if (!intAttr) {
@@ -112,7 +111,7 @@ Attribute SparseTensorEncodingAttr::parse(AsmParser &parser, Type type) {
   }
   // Construct struct-like storage for attribute.
   return parser.getChecked<SparseTensorEncodingAttr>(parser.getContext(), dlt,
-                                                     map, ptr, ind);
+                                                     dimOrd, ptr, ind);
 }
 
 void SparseTensorEncodingAttr::print(AsmPrinter &printer) const {
@@ -126,18 +125,19 @@ void SparseTensorEncodingAttr::print(AsmPrinter &printer) const {
     case DimLevelType::Compressed:
       printer << "\"compressed\"";
       break;
-    case DimLevelType::Singleton:
-      printer << "\"singleton\"";
-      break;
     }
     if (i != e - 1)
       printer << ", ";
   }
   printer << " ]";
-  if (getDimOrdering())
+  // Print remaining members only for non-default values.
+  if (getDimOrdering() && !getDimOrdering().isIdentity())
     printer << ", dimOrdering = affine_map<" << getDimOrdering() << ">";
-  printer << ", pointerBitWidth = " << getPointerBitWidth()
-          << ", indexBitWidth = " << getIndexBitWidth() << " }>";
+  if (getPointerBitWidth())
+    printer << ", pointerBitWidth = " << getPointerBitWidth();
+  if (getIndexBitWidth())
+    printer << ", indexBitWidth = " << getIndexBitWidth();
+  printer << " }>";
 }
 
 LogicalResult SparseTensorEncodingAttr::verify(
@@ -352,6 +352,69 @@ LogicalResult UnaryOp::verify() {
         verifyNumBlockArgs(this, absent, "absent", TypeRange{}, outputType);
     if (failed(regionResult))
       return regionResult;
+  }
+
+  return success();
+}
+
+LogicalResult ConcatenateOp::verify() {
+  auto dstTp = getType().cast<RankedTensorType>();
+  uint64_t concatDim = getDimension().getZExtValue();
+  unsigned rank = dstTp.getRank();
+
+  if (getInputs().size() <= 1)
+    return emitError("Need at least two tensors to concatenate.");
+
+  for (auto type : getInputs().getTypes()) {
+    auto shape = type.cast<RankedTensorType>().getShape();
+    for (auto dim : shape) {
+      if (dim == ShapedType::kDynamicSize)
+        return emitError("Only statically-sized input tensors are supported.");
+    }
+  }
+
+  if (concatDim >= rank)
+    return emitError(llvm::formatv(
+        "Failed to concatentate tensors with rank={0} on dimension={1}.", rank,
+        concatDim));
+
+  for (size_t i = 0; i < getInputs().size(); i++) {
+    Value input = getInputs()[i];
+    auto inputRank = input.getType().cast<RankedTensorType>().getRank();
+    if (inputRank != rank)
+      return emitError(
+          llvm::formatv("The input tensor ${0} has a different rank (rank={1}) "
+                        "from the output tensor (rank={2}).",
+                        i, inputRank, rank));
+  }
+
+  for (unsigned i = 0; i < rank; i++) {
+    auto dstDim = dstTp.getShape()[i];
+    if (i == concatDim) {
+      if (dstDim != ShapedType::kDynamicSize) {
+        unsigned sumDim = 0;
+        for (auto src : getInputs()) {
+          // If we reach here, all inputs should have static shapes.
+          auto d = src.getType().cast<RankedTensorType>().getShape()[i];
+          sumDim += d;
+        }
+        // If all dimension are statically known, the sum of all the input
+        // dimensions should be equal to the output dimension.
+        if (sumDim != dstDim)
+          return emitError(
+              "The concatenation dimension of the output tensor should be the "
+              "sum of all the concatenation dimensions of the input tensors.");
+      }
+    } else {
+      int prev = dstDim;
+      for (auto src : getInputs()) {
+        auto d = src.getType().cast<RankedTensorType>().getShape()[i];
+        if (prev != ShapedType::kDynamicSize && d != prev)
+          return emitError("All dimensions (expect for the concatenating one) "
+                           "should be equal.");
+        prev = d;
+      }
+    }
   }
 
   return success();

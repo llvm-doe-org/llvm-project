@@ -4,8 +4,9 @@
  * handling of certain OpenMP runtime events.
  *
  * Because libacc2omp isn't necessarily linked when OpenACC support isn't
- * desired, the OpenMP runtime uses dlsym to find the functions in this
- * interface, so this header provides typedefs for them rather than prototypes.
+ * desired, the OpenMP runtime uses a dlsym-like implementation to find the
+ * functions in this interface, so this header provides typedefs for them rather
+ * than prototypes.
  *
  * (For a discussion of OpenMP runtime entry points that libacc2omp must call,
  * see acc2omp-backend.h.)
@@ -67,8 +68,8 @@ typedef void (*acc2omp_set_omp_default_device_t)(void);
 /// OpenMP runtime.  It has the \c weak attribute, so it and thus all
 /// \c acc_register_library definitions might be ignored if another
 /// \c ompt_start_tool is linked.  Otherwise, it indeed calls
-/// \c acc2omp_ompt_start_tool and then, if the result is \c NULL, uses \c dlsym
-/// to search for another \c ompt_start_tool.
+/// \c acc2omp_ompt_start_tool and then, if the result is \c NULL, uses a
+/// dlsym-like implementation to search for another \c ompt_start_tool.
 ///
 /// If the user wants to ensure his \c acc_register_library functions are
 /// called, perhaps when using a different OpenMP runtime that doesn't call

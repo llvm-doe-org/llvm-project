@@ -1490,6 +1490,35 @@ void OmpAttributeVisitor::Post(const parser::Name &name) {
         }
       }
     }
+    std::vector<Symbol *> defaultDSASymbols;
+    for (int dirDepth{0}; dirDepth < (int)dirContext_.size(); ++dirDepth) {
+      DirContext &dirContext = dirContext_[dirDepth];
+      bool hasDataSharingAttr{false};
+      for (auto symMap : dirContext.objectWithDSA) {
+        // if the `symbol` already has a data-sharing attribute
+        if (symMap.first->name() == name.symbol->name()) {
+          hasDataSharingAttr = true;
+          break;
+        }
+      }
+      if (hasDataSharingAttr) {
+        if (defaultDSASymbols.size())
+          symbol = &MakeAssocSymbol(symbol->name(), *defaultDSASymbols.back(),
+              context_.FindScope(dirContext.directiveSource));
+        continue;
+      }
+
+      if (dirContext.defaultDSA == semantics::Symbol::Flag::OmpPrivate ||
+          dirContext.defaultDSA == semantics::Symbol::Flag::OmpFirstPrivate) {
+        Symbol *hostSymbol = defaultDSASymbols.size() ? defaultDSASymbols.back()
+                                                      : &symbol->GetUltimate();
+        defaultDSASymbols.push_back(
+            DeclarePrivateAccessEntity(*hostSymbol, dirContext.defaultDSA,
+                context_.FindScope(dirContext.directiveSource)));
+      } else if (defaultDSASymbols.size())
+        symbol = &MakeAssocSymbol(symbol->name(), *defaultDSASymbols.back(),
+            context_.FindScope(dirContext.directiveSource));
+    }
   } // within OpenMP construct
 }
 
@@ -1852,8 +1881,7 @@ void OmpAttributeVisitor::CheckLabelContext(const parser::CharBlock source,
 bool OmpAttributeVisitor::HasSymbolInEnclosingScope(
     const Symbol &symbol, Scope &scope) {
   const auto symbols{scope.parent().GetSymbols()};
-  auto it{std::find(symbols.begin(), symbols.end(), symbol)};
-  return it != symbols.end();
+  return llvm::is_contained(symbols, symbol);
 }
 
 } // namespace Fortran::semantics

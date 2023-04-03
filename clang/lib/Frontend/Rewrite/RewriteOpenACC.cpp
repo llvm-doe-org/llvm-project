@@ -77,19 +77,19 @@ class RewriteOpenACC : public ASTConsumer,
     // expansion, findNextToken refuses to look for the next token and returns
     // None.  Assume the final semicolon is the next token and is thus within
     // the expansion, and so refuse to rewrite.
-    if (!Next.hasValue()) {
+    if (!Next.has_value()) {
       reportError(RecordedEnd);
       return SourceLocation();
     }
     // If Next is an identifier, assume it's a macro whose expansion's first
     // token is the final semicolon, and so refuse to rewrite.
-    if (Next.getValue().getKind() == tok::raw_identifier) {
-      reportError(Next.getValue().getLocation());
+    if (Next.value().getKind() == tok::raw_identifier) {
+      reportError(Next.value().getLocation());
       return SourceLocation();
     }
-    assert(Next.getValue().getKind() == tok::semi &&
+    assert(Next.value().getKind() == tok::semi &&
            "expected semicolon at end of OpenACC associated code");
-    SourceLocation SemiLoc = Next.getValue().getLocation();
+    SourceLocation SemiLoc = Next.value().getLocation();
     assert(SM.getCharacterData(SemiLoc)[0] == ';' &&
            "expected tok::semi to look like a semicolon");
     assert(Rewrite.isRewritable(SemiLoc) &&

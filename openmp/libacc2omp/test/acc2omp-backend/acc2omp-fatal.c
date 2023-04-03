@@ -40,9 +40,10 @@
 // - The libacc2omp-backend-test prefix.
 // - The default message for acc2omp_msg_acc_proflib_fail.
 // - The file name, which demonstrates that the message received its argument.
-//   (If any dlopen implementation doesn't include the file name in the
-//   diagnostic produced by dlerror, this test will unintentionally fail for
-//   it, but hopefully no such implementation exists.)
+//   (If any dlopen-like implementation doesn't include the file name in the
+//   diagnostic produced by the corresponding dlerror-like implementation, this
+//   test will unintentionally fail for it, but hopefully no such implementation
+//   exists.)
 //
 // ERR-NOT: {{.}}
 //     ERR: {{^}}libacc2omp-backend-test: fatal error: failure using library from ACC_PROFLIB:{{.*}}[[FILE]]{{.*$}}

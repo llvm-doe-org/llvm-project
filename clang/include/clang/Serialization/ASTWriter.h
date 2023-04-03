@@ -455,7 +455,7 @@ private:
 
   void WriteBlockInfoBlock();
   void WriteControlBlock(Preprocessor &PP, ASTContext &Context,
-                         StringRef isysroot, StringRef OutputFile);
+                         StringRef isysroot);
 
   /// Write out the signature and diagnostic options, and return the signature.
   ASTFileSignature writeUnhashedControlBlock(Preprocessor &PP,
@@ -533,7 +533,7 @@ private:
   void WriteDecl(ASTContext &Context, Decl *D);
 
   ASTFileSignature WriteASTCore(Sema &SemaRef, StringRef isysroot,
-                                StringRef OutputFile, Module *WritingModule);
+                                Module *WritingModule);
 
 public:
   /// Create a new precompiled header writer that outputs to
