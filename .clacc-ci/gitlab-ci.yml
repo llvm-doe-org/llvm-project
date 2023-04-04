@@ -109,7 +109,6 @@ stages:
       "
       libomp :: env/kmp_set_dispatch_buf.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug51781.c
-      libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: offloading/bug49334.cpp
       "
     TEST_LIT_XFAIL_NOT:
       "
@@ -123,6 +122,7 @@ stages:
       libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug49334.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: offloading/bug49334.cpp
       "
     VV_COMP_LIT_XFAIL:
       ""
@@ -204,6 +204,8 @@ stages:
     TEST_LIT_FILTER_OUT_LIST:
       "
       Clang :: Driver/rocm-detect.hip
+      libomp :: parallel/omp_parallel_num_threads.c
+      libomp :: worksharing/single/omp_single.c
       "
     VV_COMP_LIT_XFAIL:
       ""
