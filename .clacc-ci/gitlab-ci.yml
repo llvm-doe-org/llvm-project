@@ -35,7 +35,7 @@ variables:
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
   LLVM_TARGETS_TO_BUILD: all
-  CHECK_TARGETS: check-all
+  CHECK_TARGETS: check-all check-openmp
   # The number of tests launched at once is `nproc` / $LIT_NPROC_DIVISOR.
   LIT_NPROC_DIVISOR: 1
   # Sometimes a build process gets stuck for a long time, and sometimes a test
@@ -108,6 +108,8 @@ stages:
     TEST_LIT_XFAIL:
       "
       libomp :: env/kmp_set_dispatch_buf.c
+      libomptarget :: nvptx64-nvidia-cuda :: mapping/target_has_device_addr.c
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_has_device_addr.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug51781.c
       "
     TEST_LIT_XFAIL_NOT:
@@ -128,8 +130,6 @@ stages:
       ""
     VV_RUN_LIT_XFAIL:
       "
-      External/openacc_vv/acc_map_data.c.test
-      External/openacc_vv/acc_unmap_data.c.test
       "
 
 .oswald02:
@@ -153,6 +153,8 @@ stages:
     LIT_NPROC_DIVISOR: 1
     TEST_LIT_XFAIL:
       "
+      libomptarget :: nvptx64-nvidia-cuda :: mapping/target_has_device_addr.c
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_has_device_addr.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug51781.c
       "
     TEST_LIT_XFAIL_NOT:
@@ -168,8 +170,6 @@ stages:
       ""
     VV_RUN_LIT_XFAIL:
       "
-      External/openacc_vv/acc_map_data.c.test
-      External/openacc_vv/acc_unmap_data.c.test
       "
 
 .explorer:
@@ -211,8 +211,6 @@ stages:
       ""
     VV_RUN_LIT_XFAIL:
       "
-      External/openacc_vv/acc_map_data.c.test
-      External/openacc_vv/acc_unmap_data.c.test
       External/openacc_vv/atomic_capture_expr_plus_x.c.test
       "
 
@@ -269,10 +267,7 @@ stages:
     BUILD_ID: debug
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Debug
     TEST_LIT_XFAIL:
-      "
-      libomptarget :: x86_64-pc-linux-gnu :: unified_shared_memory/close_modifier.c
-      libomptarget :: x86_64-pc-linux-gnu-LTO :: unified_shared_memory/close_modifier.c
-      "
+      ""
     TEST_LIT_XFAIL_NOT:
       ""
     TEST_LIT_FILTER_OUT_LIST:

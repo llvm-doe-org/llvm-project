@@ -57,6 +57,9 @@ def time_trace_granularity_eq: Joined<["--"], "time-trace-granularity=">,
 def deduplicate_literals: Flag<["--"], "deduplicate-literals">,
     HelpText<"Enable literal deduplication. This is implied by --icf={safe,all}">,
     Group<grp_lld>;
+def dead_strip_duplicates: Flag<["--"], "dead-strip-duplicates">,
+    HelpText<"Do not error on duplicate symbols that will be dead stripped.">,
+    Group<grp_lld>;
 def print_dylib_search: Flag<["--"], "print-dylib-search">,
     HelpText<"Print which paths lld searched when trying to find dylibs">,
     Group<grp_lld>;
@@ -984,6 +987,10 @@ def objc_stubs_fast : Flag<["-"], "objc_stubs_fast">,
 def objc_stubs_small : Flag<["-"], "objc_stubs_small">,
     HelpText<"Produce smaller stubs for Objective-C method calls with more jumps.">,
     Group<grp_rare>;
+def dyld_env : Separate<["-"], "dyld_env">,
+    MetaVarName<"<dyld_env_var>">,
+    HelpText<"Specifies a LC_DYLD_ENVIRONMENT variable value pair.">,
+    Group<grp_rare>;
 
 def grp_deprecated : OptionGroup<"deprecated">, HelpText<"DEPRECATED">;
 
@@ -1212,10 +1219,6 @@ def debug_snapshot : Flag<["-"], "debug_snapshot">,
     Group<grp_undocumented>;
 def demangle : Flag<["-"], "demangle">,
     HelpText<"Demangle symbol names in diagnostics">;
-def dyld_env : Flag<["-"], "dyld_env">,
-    HelpText<"This option is undocumented in ld64">,
-    Flags<[HelpHidden]>,
-    Group<grp_undocumented>;
 def encryptable : Flag<["-"], "encryptable">,
     HelpText<"Generate the LC_ENCRYPTION_INFO load command">,
     Group<grp_undocumented>;
@@ -1246,11 +1249,11 @@ def force_symbols_coalesce_list : Flag<["-"], "force_symbols_coalesce_list">,
     HelpText<"This option is undocumented in ld64">,
     Flags<[HelpHidden]>,
     Group<grp_undocumented>;
-def force_symbols_not_weak_list : Flag<["-"], "force_symbols_not_weak_list">,
+def force_symbols_not_weak_list : Separate<["-"], "force_symbols_not_weak_list">,
     HelpText<"This option is undocumented in ld64">,
     Flags<[HelpHidden]>,
     Group<grp_undocumented>;
-def force_symbols_weak_list : Flag<["-"], "force_symbols_weak_list">,
+def force_symbols_weak_list : Separate<["-"], "force_symbols_weak_list">,
     HelpText<"This option is undocumented in ld64">,
     Flags<[HelpHidden]>,
     Group<grp_undocumented>;
@@ -1273,8 +1276,7 @@ def ignore_optimization_hints : Flag<["-"], "ignore_optimization_hints">,
     HelpText<"Ignore Linker Optimization Hints">,
     Group<grp_undocumented>;
 def init_offsets : Flag<["-"], "init_offsets">,
-    HelpText<"This option is undocumented in ld64">,
-    Flags<[HelpHidden]>,
+    HelpText<"Store __TEXT segment offsets of static initializers">,
     Group<grp_undocumented>;
 def keep_dwarf_unwind : Flag<["-"], "keep_dwarf_unwind">,
     HelpText<"This option is undocumented in ld64">,

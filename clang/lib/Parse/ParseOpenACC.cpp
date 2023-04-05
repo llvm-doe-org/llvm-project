@@ -56,8 +56,8 @@ OpenACCDirectiveKind parseOpenACCDirectiveKind(Parser &P) {
   if (DKind == ACCD_unknown)
     return ACCD_unknown;
 
-  for (unsigned I = 0; I < llvm::array_lengthof(F); ++I) {
-    if (DKind != F[I][0])
+  for (const auto &I : F) {
+    if (DKind != I[0])
       continue;
 
     Tok = P.getPreprocessor().LookAhead(0);
@@ -68,9 +68,9 @@ OpenACCDirectiveKind parseOpenACCDirectiveKind(Parser &P) {
     if (SDKind == ACCD_unknown)
       continue;
 
-    if (SDKind == F[I][1]) {
+    if (SDKind == I[1]) {
       P.ConsumeToken();
-      DKind = F[I][2];
+      DKind = I[2];
     }
   }
   return DKind < ACCD_unknown ? static_cast<OpenACCDirectiveKind>(DKind)

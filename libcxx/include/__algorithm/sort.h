@@ -22,8 +22,9 @@
 #include <__functional/operations.h>
 #include <__functional/ranges_operations.h>
 #include <__iterator/iterator_traits.h>
+#include <__memory/destruct_n.h>
+#include <__memory/unique_ptr.h>
 #include <climits>
-#include <memory>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -682,7 +683,7 @@ inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20
 void __sort_impl(_RandomAccessIterator __first, _RandomAccessIterator __last, _Comp& __comp) {
   std::__debug_randomize_range<_AlgPolicy>(__first, __last);
 
-  using _Comp_ref = typename __comp_ref_type<_Comp>::type;
+  using _Comp_ref = __comp_ref_type<_Comp>;
   if (__libcpp_is_constant_evaluated()) {
     std::__partial_sort<_AlgPolicy>(__first, __last, __last, __comp);
 

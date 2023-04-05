@@ -1612,6 +1612,12 @@ void TextNodeDumper::VisitTemplateTypeParmType(const TemplateTypeParmType *T) {
   dumpDeclRef(T->getDecl());
 }
 
+void TextNodeDumper::VisitSubstTemplateTypeParmType(
+    const SubstTemplateTypeParmType *T) {
+  if (auto PackIndex = T->getPackIndex())
+    OS << " pack_index " << *PackIndex;
+}
+
 void TextNodeDumper::VisitAutoType(const AutoType *T) {
   if (T->isDecltypeAuto())
     OS << " decltype(auto)";
@@ -2423,4 +2429,12 @@ void TextNodeDumper::VisitCompoundStmt(const CompoundStmt *S) {
   VisitStmt(S);
   if (S->hasStoredFPFeatures())
     printFPOptions(S->getStoredFPFeatures());
+}
+
+void TextNodeDumper::VisitHLSLBufferDecl(const HLSLBufferDecl *D) {
+  if (D->isCBuffer())
+    OS << " cbuffer";
+  else
+    OS << " tbuffer";
+  dumpName(D);
 }

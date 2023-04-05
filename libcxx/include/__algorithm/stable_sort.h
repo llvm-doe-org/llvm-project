@@ -16,8 +16,12 @@
 #include <__algorithm/sort.h>
 #include <__config>
 #include <__iterator/iterator_traits.h>
+#include <__memory/destruct_n.h>
+#include <__memory/temporary_buffer.h>
+#include <__memory/unique_ptr.h>
 #include <__utility/move.h>
-#include <memory>
+#include <__utility/pair.h>
+#include <new>
 #include <type_traits>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
@@ -223,8 +227,7 @@ _LIBCPP_SUPPRESS_DEPRECATED_POP
       __h.reset(__buf.first);
   }
 
-  using _Comp_ref = typename __comp_ref_type<_Compare>::type;
-  std::__stable_sort<_AlgPolicy, _Comp_ref>(__first, __last, __comp, __len, __buf.first, __buf.second);
+  std::__stable_sort<_AlgPolicy, __comp_ref_type<_Compare> >(__first, __last, __comp, __len, __buf.first, __buf.second);
 }
 
 template <class _RandomAccessIterator, class _Compare>

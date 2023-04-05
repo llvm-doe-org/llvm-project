@@ -695,10 +695,10 @@ void InitListChecker::FillInEmptyInitForField(unsigned Init, FieldDecl *Field,
         //   member of reference type uninitialized, the program is
         //   ill-formed.
         SemaRef.Diag(Loc, diag::err_init_reference_member_uninitialized)
-          << Field->getType()
-          << ILE->getSyntacticForm()->getSourceRange();
-        SemaRef.Diag(Field->getLocation(),
-                     diag::note_uninit_reference_member);
+            << Field->getType()
+            << (ILE->isSyntacticForm() ? ILE : ILE->getSyntacticForm())
+                   ->getSourceRange();
+        SemaRef.Diag(Field->getLocation(), diag::note_uninit_reference_member);
       }
       hadError = true;
       return;
@@ -5977,7 +5977,7 @@ void InitializationSequence::InitializeFrom(Sema &S,
        !Context.hasSameUnqualifiedType(SourceType, DestType))) {
 
     llvm::SmallVector<Expr *> InitArgs;
-    for (auto Arg : Args) {
+    for (auto *Arg : Args) {
       if (Arg->getType()->isExtVectorType()) {
         const auto *VTy = Arg->getType()->castAs<ExtVectorType>();
         unsigned Elm = VTy->getNumElements();
@@ -9884,6 +9884,7 @@ static void DiagnoseNarrowingInInitList(Sema &S,
     SCS = &ICS.UserDefined.After;
     break;
   case ImplicitConversionSequence::AmbiguousConversion:
+  case ImplicitConversionSequence::StaticObjectArgumentConversion:
   case ImplicitConversionSequence::EllipsisConversion:
   case ImplicitConversionSequence::BadConversion:
     return;

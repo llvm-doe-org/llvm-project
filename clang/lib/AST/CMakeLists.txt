@@ -93,6 +93,7 @@ add_clang_library(clangAST
   MicrosoftMangle.cpp
   NestedNameSpecifier.cpp
   NSAPI.cpp
+  ODRDiagsEmitter.cpp
   ODRHash.cpp
   OpenACCClause.cpp
   OpenMPClause.cpp

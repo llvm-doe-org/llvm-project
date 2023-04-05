@@ -41,9 +41,7 @@ static const char *RTLNames[] = {
 
 PluginManager *PM;
 
-#if OMPTARGET_PROFILE_ENABLED
 static char *ProfileTraceFile = nullptr;
-#endif
 
 __attribute__((constructor(101))) void init() {
   DP("Init target library!\n");
@@ -62,36 +60,16 @@ __attribute__((constructor(101))) void init() {
 
   PM = new PluginManager(UseEventsForAtomicTransfers);
 
-#ifdef OMPTARGET_PROFILE_ENABLED
   ProfileTraceFile = getenv("LIBOMPTARGET_PROFILE");
   // TODO: add a configuration option for time granularity
   if (ProfileTraceFile)
     timeTraceProfilerInitialize(500 /* us */, "libomptarget");
-#endif
 }
 
 __attribute__((destructor(101))) void deinit() {
   DP("Deinit target library!\n");
-
-  for (auto *R : PM->RTLs.UsedRTLs) {
-    // Plugins can either destroy their local state using global variables
-    // or attribute(destructor) functions or by implementing deinit_plugin
-    // The hazard with plugin local destructors is they may be called before
-    // or after this destructor. If the plugin is destroyed using global
-    // state before this library finishes calling into it the plugin is
-    // likely to crash. If good fortune means the plugin outlives this
-    // library then there may be no crash.
-    // Using deinit_plugin and no global destructors from the plugin works.
-    if (R->deinit_plugin) {
-      if (R->deinit_plugin() != OFFLOAD_SUCCESS) {
-        DP("Failure deinitializing RTL %s!\n", R->RTLName.c_str());
-      }
-    }
-  }
-
   delete PM;
 
-#ifdef OMPTARGET_PROFILE_ENABLED
   if (ProfileTraceFile) {
     // TODO: add env var for file output
     if (auto E = timeTraceProfilerWrite(ProfileTraceFile, "-"))
@@ -99,7 +77,6 @@ __attribute__((destructor(101))) void deinit() {
 
     timeTraceProfilerCleanup();
   }
-#endif
 }
 
 void RTLsTy::loadRTLs() {
@@ -703,6 +680,13 @@ void RTLsTy::unregisterLib(__tgt_bin_desc *Desc) {
   PM->TblMapMtx.unlock();
 
   // TODO: Write some RTL->unload_image(...) function?
+  for (auto *R : UsedRTLs) {
+    if (R->deinit_plugin) {
+      if (R->deinit_plugin() != OFFLOAD_SUCCESS) {
+        DP("Failure deinitializing RTL %s!\n", R->RTLName.c_str());
+      }
+    }
+  }
 
   // As mentioned above, to avoid deadlock, do not dispatch callbacks within
   // locks .

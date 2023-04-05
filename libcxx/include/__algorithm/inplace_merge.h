@@ -23,7 +23,11 @@
 #include <__iterator/distance.h>
 #include <__iterator/iterator_traits.h>
 #include <__iterator/reverse_iterator.h>
-#include <memory>
+#include <__memory/destruct_n.h>
+#include <__memory/temporary_buffer.h>
+#include <__memory/unique_ptr.h>
+#include <__utility/pair.h>
+#include <new>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -233,9 +237,8 @@ _LIBCPP_SUPPRESS_DEPRECATED_POP
 template <class _BidirectionalIterator, class _Compare>
 inline _LIBCPP_HIDE_FROM_ABI void inplace_merge(
     _BidirectionalIterator __first, _BidirectionalIterator __middle, _BidirectionalIterator __last, _Compare __comp) {
-  typedef typename __comp_ref_type<_Compare>::type _Comp_ref;
   std::__inplace_merge<_ClassicAlgPolicy>(
-      std::move(__first), std::move(__middle), std::move(__last), static_cast<_Comp_ref>(__comp));
+      std::move(__first), std::move(__middle), std::move(__last), static_cast<__comp_ref_type<_Compare> >(__comp));
 }
 
 template <class _BidirectionalIterator>

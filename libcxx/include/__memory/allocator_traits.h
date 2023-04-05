@@ -28,12 +28,12 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 
 #define _LIBCPP_ALLOCATOR_TRAITS_HAS_XXX(NAME, PROPERTY)                \
     template <class _Tp, class = void> struct NAME : false_type { };    \
-    template <class _Tp>               struct NAME<_Tp, typename __void_t<typename _Tp:: PROPERTY >::type> : true_type { }
+    template <class _Tp>               struct NAME<_Tp, __void_t<typename _Tp:: PROPERTY > > : true_type { }
 
 // __pointer
 _LIBCPP_ALLOCATOR_TRAITS_HAS_XXX(__has_pointer, pointer);
 template <class _Tp, class _Alloc,
-          class _RawAlloc = typename remove_reference<_Alloc>::type,
+          class _RawAlloc = __libcpp_remove_reference_t<_Alloc>,
           bool = __has_pointer<_RawAlloc>::value>
 struct __pointer {
     using type _LIBCPP_NODEBUG = typename _RawAlloc::pointer;
@@ -152,9 +152,7 @@ _LIBCPP_SUPPRESS_DEPRECATED_PUSH
 template <class _Tp, class _Up, class = void>
 struct __has_rebind_other : false_type { };
 template <class _Tp, class _Up>
-struct __has_rebind_other<_Tp, _Up, typename __void_t<
-    typename _Tp::template rebind<_Up>::other
->::type> : true_type { };
+struct __has_rebind_other<_Tp, _Up, __void_t<typename _Tp::template rebind<_Up>::other> > : true_type { };
 
 template <class _Tp, class _Up, bool = __has_rebind_other<_Tp, _Up>::value>
 struct __allocator_traits_rebind {

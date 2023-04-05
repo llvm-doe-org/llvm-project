@@ -2241,11 +2241,11 @@ int main() {
 
   // At one time, an assert failed due to the use of arrNoSize.
   int arrNoSize[]; // expected-noacc-error {{definition of variable with array type needs an explicit size or an initializer}}
-  #pragma acc parallel LOOP
+  #pragma acc parallel LOOP // expected-note {{'copy' clause implied here}}
   #if ADD_LOOP_TO_PAR
   for (int i = 0; i < 2; ++i)
   #endif
-    arrNoSize;
+    arrNoSize; // expected-error {{variable in implied 'copy' clause cannot have incomplete type 'int[]'}}
 
   return 0;
 }

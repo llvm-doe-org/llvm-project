@@ -248,7 +248,7 @@ struct __member_pointer_traits_imp<_Rp _Class::*, false, true>
 
 template <class _MP>
 struct __member_pointer_traits
-    : public __member_pointer_traits_imp<typename remove_cv<_MP>::type,
+    : public __member_pointer_traits_imp<__remove_cv_t<_MP>,
                     is_member_function_pointer<_MP>::value,
                     is_member_object_pointer<_MP>::value>
 {
@@ -406,10 +406,10 @@ struct __invokable_r
   // or incomplete array types as required by the standard.
   using _Result = decltype(__try_call<_Fp, _Args...>(0));
 
-  using type = typename conditional<
+  using type = __conditional_t<
       _IsNotSame<_Result, __nat>::value,
-      typename conditional< is_void<_Ret>::value, true_type, __is_core_convertible<_Result, _Ret> >::type,
-      false_type >::type;
+      __conditional_t<is_void<_Ret>::value, true_type, __is_core_convertible<_Result, _Ret> >,
+      false_type>;
   static const bool value = type::value;
 };
 template <class _Fp, class ..._Args>

@@ -49,6 +49,8 @@ extern void handleTargetOutcome(bool Success, ident_t *Loc);
 extern bool checkDeviceAndCtors(int64_t &DeviceID, ident_t *Loc);
 extern void *targetAllocExplicit(size_t Size, int DeviceNum, int Kind,
                                  const char *Name);
+extern void targetFreeExplicit(void *DevicePtr, int DeviceNum, int Kind,
+                               const char *Name);
 
 extern const char *deviceTypeToString(omp_device_t DevType);
 
@@ -189,7 +191,6 @@ printKernelArguments(const ident_t *Loc, const int64_t DeviceId,
   }
 }
 
-#ifdef OMPTARGET_PROFILE_ENABLED
 #include "llvm/Support/TimeProfiler.h"
 #define TIMESCOPE() llvm::TimeTraceScope TimeScope(__FUNCTION__)
 #define TIMESCOPE_WITH_IDENT(IDENT)                                            \
@@ -202,6 +203,5 @@ printKernelArguments(const ident_t *Loc, const int64_t DeviceId,
 #define TIMESCOPE()
 #define TIMESCOPE_WITH_IDENT(IDENT)
 #define TIMESCOPE_WITH_NAME_AND_IDENT(NAME, IDENT)
-#endif
 
 #endif

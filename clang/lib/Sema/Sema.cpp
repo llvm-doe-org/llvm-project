@@ -46,6 +46,7 @@
 #include "clang/Sema/TemplateInstCallback.h"
 #include "clang/Sema/TypoCorrection.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/TimeProfiler.h"
 
@@ -185,20 +186,19 @@ const uint64_t Sema::MaximumAlignment;
 
 Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
            TranslationUnitKind TUKind, CodeCompleteConsumer *CodeCompleter)
-    : ExternalSource(nullptr), isMultiplexExternalSource(false),
-      CurFPFeatures(pp.getLangOpts()), LangOpts(pp.getLangOpts()), PP(pp),
-      Context(ctxt), Consumer(consumer), Diags(PP.getDiagnostics()),
-      SourceMgr(PP.getSourceManager()), CollectStats(false),
-      CodeCompleter(CodeCompleter), CurContext(nullptr),
+    : ExternalSource(nullptr), CurFPFeatures(pp.getLangOpts()),
+      LangOpts(pp.getLangOpts()), PP(pp), Context(ctxt), Consumer(consumer),
+      Diags(PP.getDiagnostics()), SourceMgr(PP.getSourceManager()),
+      CollectStats(false), CodeCompleter(CodeCompleter), CurContext(nullptr),
       OriginalLexicalContext(nullptr), MSStructPragmaOn(false),
       MSPointerToMemberRepresentationMethod(
           LangOpts.getMSPointerToMemberRepresentationMethod()),
       VtorDispStack(LangOpts.getVtorDispMode()),
       AlignPackStack(AlignPackInfo(getLangOpts().XLPragmaPack)),
       DataSegStack(nullptr), BSSSegStack(nullptr), ConstSegStack(nullptr),
-      CodeSegStack(nullptr), FpPragmaStack(FPOptionsOverride()),
-      CurInitSeg(nullptr), VisContext(nullptr),
-      PragmaAttributeCurrentTargetDecl(nullptr),
+      CodeSegStack(nullptr), StrictGuardStackCheckStack(false),
+      FpPragmaStack(FPOptionsOverride()), CurInitSeg(nullptr),
+      VisContext(nullptr), PragmaAttributeCurrentTargetDecl(nullptr),
       IsBuildingRecoveryCallExpr(false), LateTemplateParser(nullptr),
       LateTemplateParserCleanup(nullptr), OpaqueParser(nullptr), IdResolver(pp),
       StdExperimentalNamespaceCache(nullptr), StdInitializerList(nullptr),
@@ -477,10 +477,6 @@ Sema::~Sema() {
         = dyn_cast_or_null<ExternalSemaSource>(Context.getExternalSource()))
     ExternalSema->ForgetSema();
 
-  // If Sema's ExternalSource is the multiplexer - we own it.
-  if (isMultiplexExternalSource)
-    delete ExternalSource;
-
   // Delete cached satisfactions.
   std::vector<ConstraintSatisfaction *> Satisfactions;
   Satisfactions.reserve(Satisfactions.size());
@@ -557,12 +553,10 @@ void Sema::addExternalSource(ExternalSemaSource *E) {
     return;
   }
 
-  if (isMultiplexExternalSource)
-    static_cast<MultiplexExternalSemaSource*>(ExternalSource)->addSource(*E);
-  else {
-    ExternalSource = new MultiplexExternalSemaSource(*ExternalSource, *E);
-    isMultiplexExternalSource = true;
-  }
+  if (auto *Ex = dyn_cast<MultiplexExternalSemaSource>(ExternalSource))
+    Ex->AddSource(E);
+  else
+    ExternalSource = new MultiplexExternalSemaSource(ExternalSource.get(), E);
 }
 
 /// Print out statistics about the semantic analysis.
@@ -589,10 +583,7 @@ void Sema::diagnoseNullableToNonnullConversion(QualType DstType,
   Diag(Loc, diag::warn_nullability_lost) << SrcType << DstType;
 }
 
-void Sema::diagnoseZeroToNullptrConversion(CastKind Kind, const Expr* E) {
-  if (Diags.isIgnored(diag::warn_zero_as_null_pointer_constant,
-                      E->getBeginLoc()))
-    return;
+void Sema::diagnoseZeroToNullptrConversion(CastKind Kind, const Expr *E) {
   // nullptr only exists from C++11 on, so don't warn on its absence earlier.
   if (!getLangOpts().CPlusPlus11)
     return;
@@ -600,6 +591,10 @@ void Sema::diagnoseZeroToNullptrConversion(CastKind Kind, const Expr* E) {
   if (Kind != CK_NullToPointer && Kind != CK_NullToMemberPointer)
     return;
   if (E->IgnoreParenImpCasts()->getType()->isNullPtrType())
+    return;
+
+  if (Diags.isIgnored(diag::warn_zero_as_null_pointer_constant,
+                      E->getBeginLoc()))
     return;
 
   // Don't diagnose the conversion from a 0 literal to a null pointer argument
@@ -1298,8 +1293,8 @@ void Sema::ActOnEndOfTranslationUnit() {
   //   translation unit, with an initializer equal to 0.
   llvm::SmallSet<VarDecl *, 32> Seen;
   for (TentativeDefinitionsType::iterator
-            T = TentativeDefinitions.begin(ExternalSource),
-         TEnd = TentativeDefinitions.end();
+           T = TentativeDefinitions.begin(ExternalSource.get()),
+           TEnd = TentativeDefinitions.end();
        T != TEnd; ++T) {
     VarDecl *VD = (*T)->getActingDefinition();
 
@@ -1329,7 +1324,7 @@ void Sema::ActOnEndOfTranslationUnit() {
       Consumer.CompleteTentativeDefinition(VD);
   }
 
-  for (auto D : ExternalDeclarations) {
+  for (auto *D : ExternalDeclarations) {
     if (!D || D->isInvalidDecl() || D->getPreviousDecl() || !D->isUsed())
       continue;
 
@@ -1343,8 +1338,9 @@ void Sema::ActOnEndOfTranslationUnit() {
   if (!Diags.hasErrorOccurred() && TUKind != TU_Module) {
     // Output warning for unused file scoped decls.
     for (UnusedFileScopedDeclsType::iterator
-           I = UnusedFileScopedDecls.begin(ExternalSource),
-           E = UnusedFileScopedDecls.end(); I != E; ++I) {
+             I = UnusedFileScopedDecls.begin(ExternalSource.get()),
+             E = UnusedFileScopedDecls.end();
+         I != E; ++I) {
       if (ShouldRemoveFromUnused(this, *I))
         continue;
 
@@ -1797,7 +1793,7 @@ void Sema::emitDeferredDiags() {
     return;
 
   DeferredDiagnosticsEmitter DDE(*this);
-  for (auto D : DeclsToCheckForDeferredDiags)
+  for (auto *D : DeclsToCheckForDeferredDiags)
     DDE.checkRecordedDecl(D);
 }
 
@@ -2690,4 +2686,27 @@ Sema::FPFeaturesStateRAII::~FPFeaturesStateRAII() {
   S.CurFPFeatures = OldFPFeaturesState;
   S.FpPragmaStack.CurrentValue = OldOverrides;
   S.PP.setCurrentFPEvalMethod(OldFPPragmaLocation, OldEvalMethod);
+}
+
+bool Sema::isDeclaratorFunctionLike(Declarator &D) {
+  assert(D.getCXXScopeSpec().isSet() &&
+         "can only be called for qualified names");
+
+  auto LR = LookupResult(*this, D.getIdentifier(), D.getBeginLoc(),
+                         LookupOrdinaryName, forRedeclarationInCurContext());
+  DeclContext *DC = computeDeclContext(D.getCXXScopeSpec(),
+                                       !D.getDeclSpec().isFriendSpecified());
+  if (!DC)
+    return false;
+
+  LookupQualifiedName(LR, DC);
+  bool Result = std::all_of(LR.begin(), LR.end(), [](Decl *Dcl) {
+    if (NamedDecl *ND = dyn_cast<NamedDecl>(Dcl)) {
+      ND = ND->getUnderlyingDecl();
+      return isa<FunctionDecl>(ND) || isa<FunctionTemplateDecl>(ND) ||
+             isa<UsingDecl>(ND);
+    }
+    return false;
+  });
+  return Result;
 }

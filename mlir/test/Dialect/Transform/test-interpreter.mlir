@@ -550,6 +550,7 @@ transform.with_pdl_patterns {
 
 func.func @foo() {
   "op" () { target_me } : () -> ()
+  // expected-note @below {{when applied to this op}}
   "op" () : () -> ()
   return
 }
@@ -566,6 +567,7 @@ transform.with_pdl_patterns {
   transform.sequence %arg0 failures(propagate) {
   ^bb0(%arg1: !pdl.operation):
     %0 = pdl_match @some in %arg1
+    // expected-error @below {{failed to apply}}
     transform.test_mixed_sucess_and_silenceable %0
   }
 }
@@ -727,3 +729,36 @@ transform.with_pdl_patterns {
     transform.test_print_remark_at_operand %results, "transform applied"
   }
 }
+
+// -----
+
+func.func @get_parent_for_op_no_loop(%arg0: index, %arg1: index) {
+  // expected-remark @below {{found muli}}
+  %0 = arith.muli %arg0, %arg1 : index  
+  arith.addi %0, %arg1 : index  
+  return
+}
+
+transform.sequence failures(propagate) {
+^bb1(%arg1: !pdl.operation):
+  %addi = transform.structured.match ops{["arith.addi"]} in %arg1
+  %muli = get_producer_of_operand %addi[0]
+  transform.test_print_remark_at_operand %muli, "found muli"
+}
+
+// -----
+
+func.func @get_parent_for_op_no_loop(%arg0: index, %arg1: index) {
+  // expected-note @below {{target op}}
+  %0 = arith.muli %arg0, %arg1 : index  
+  return
+}
+
+transform.sequence failures(propagate) {
+^bb1(%arg1: !pdl.operation):
+  %muli = transform.structured.match ops{["arith.muli"]} in %arg1
+  // expected-error @below {{could not find a producer for operand number: 0 of}}
+  %bbarg = get_producer_of_operand %muli[0]
+
+}
+

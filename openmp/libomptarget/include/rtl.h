@@ -58,7 +58,7 @@ struct RTLInfoTy {
   typedef int32_t(data_exchange_ty)(int32_t, void *, int32_t, void *, int64_t);
   typedef int32_t(data_exchange_async_ty)(int32_t, void *, int32_t, void *,
                                           int64_t, __tgt_async_info *);
-  typedef int32_t(data_delete_ty)(int32_t, void *);
+  typedef int32_t(data_delete_ty)(int32_t, void *, int32_t);
   typedef int32_t(run_region_ty)(
       int32_t, void *, void **, ptrdiff_t *, int32_t
       OMPT_SUPPORT_IF(, const ompt_plugin_api_t *ompt_api));
@@ -102,9 +102,9 @@ struct RTLInfoTy {
 #endif
 
   // Functions implemented in the RTL.
+  get_device_type_ty *get_device_type = nullptr;
   init_plugin_ty *init_plugin = nullptr;
   deinit_plugin_ty *deinit_plugin = nullptr;
-  get_device_type_ty *get_device_type = nullptr;
   is_valid_binary_ty *is_valid_binary = nullptr;
   is_valid_binary_info_ty *is_valid_binary_info = nullptr;
   is_data_exchangable_ty *is_data_exchangable = nullptr;

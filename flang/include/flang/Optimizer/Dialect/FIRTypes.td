@@ -75,25 +75,24 @@ def fir_BoxType : FIR_Type<"Box", "box"> {
     to) whether the entity is an array, its size, or what type it has.
   }];
 
-  let parameters = (ins "mlir::Type":$eleTy, "mlir::AffineMapAttr":$map);
+  let parameters = (ins "mlir::Type":$eleTy);
 
   let skipDefaultBuilders = 1;
 
   let builders = [
     TypeBuilderWithInferredContext<(ins
-        "mlir::Type":$eleTy,
-        CArg<"mlir::AffineMapAttr", "{}">:$map), [{
-      return Base::get(eleTy.getContext(), eleTy, map);
+        "mlir::Type":$eleTy), [{
+      return Base::get(eleTy.getContext(), eleTy);
     }]>,
   ];
 
   let extraClassDeclaration = [{
     mlir::Type getElementType() const { return getEleTy(); }
-    mlir::AffineMapAttr getLayoutMap() const { return getMap(); }
   }];
 
   let genVerifyDecl = 1;
-  let hasCustomAssemblyFormat = 1;
+
+  let assemblyFormat = "`<` $eleTy `>`";
 }
 
 def fir_CharacterType : FIR_Type<"Character", "char"> {
@@ -132,7 +131,7 @@ def fir_CharacterType : FIR_Type<"Character", "char"> {
     /// Character LEN is a runtime value.
     bool hasDynamicLen() { return getLen() == unknownLen(); }
 
-    /// Character LEN is a compile-time cpnstant value.
+    /// Character LEN is a compile-time constant value.
     bool hasConstantLen() { return !hasDynamicLen(); }
   }];
 }

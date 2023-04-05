@@ -115,6 +115,8 @@ static std::map<void *, size_t> DeviceAllocSizes;
 
 EXTERN void *omp_target_alloc(size_t Size, int DeviceNum) {
   OMPT_DEFINE_IDENT(omp_target_alloc);
+  // targetAllocExplicit might have device initialization callbacks, so set the
+  // trigger ident for it.
   OMPT_SET_TRIGGER_IDENT();
   void *Ptr = targetAllocExplicit(Size, DeviceNum, TARGET_ALLOC_DEFAULT,
                                   __func__);
@@ -165,20 +167,8 @@ EXTERN void *llvm_omp_target_alloc_shared(size_t Size, int DeviceNum) {
   return targetAllocExplicit(Size, DeviceNum, TARGET_ALLOC_SHARED, __func__);
 }
 
-EXTERN void *llvm_omp_target_dynamic_shared_alloc() { return nullptr; }
-EXTERN void *llvm_omp_get_dynamic_shared() { return nullptr; }
-
-EXTERN void omp_target_free(void *DevicePtr, int DeviceNum) {
+EXTERN void omp_target_free(void *Ptr, int DeviceNum) {
   OMPT_DEFINE_IDENT(omp_target_free);
-  TIMESCOPE();
-  DP("Call to omp_target_free for device %d and address " DPxMOD "\n",
-     DeviceNum, DPxPTR(DevicePtr));
-
-  if (!DevicePtr) {
-    DP("Call to omp_target_free with NULL ptr\n");
-    return;
-  }
-
   // OpenMP 5.1, sec. 3.8.2 "omp_target_free", p. 415, L11-12:
   // "The target-data-free-begin event occurs before a thread initiates a data
   // free on a target device.  The target-data-free-end event occurs after a
@@ -192,33 +182,9 @@ EXTERN void omp_target_free(void *DevicePtr, int DeviceNum) {
   //
   // TODO: We have not implemented the ompt_scope_end callback because we don't
   // need it for OpenACC support.
-  if (DeviceNum == omp_get_initial_device()) {
-#if OMPT_SUPPORT
-    DeviceAllocSizesMtx.lock();
-    auto AllocSizeItr = DeviceAllocSizes.find(DevicePtr);
-    size_t AllocSize = 0;
-    if (AllocSizeItr != DeviceAllocSizes.end()) {
-      AllocSize = AllocSizeItr->second;
-      DeviceAllocSizes.erase(AllocSizeItr);
-    }
-    DeviceAllocSizesMtx.unlock();
-    OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(ompt_scope_begin, delete,
-                                              /*SrcPtr=*/NULL, DeviceNum,
-                                              DevicePtr, DeviceNum, AllocSize);
-#endif
-    free(DevicePtr);
-    DP("omp_target_free deallocated host ptr\n");
-    return;
-  }
-
-  if (!deviceIsReady(DeviceNum)) {
-    DP("omp_target_free returns, nothing to do\n");
-    return;
-  }
-
 #if OMPT_SUPPORT
   DeviceAllocSizesMtx.lock();
-  auto AllocSizeItr = DeviceAllocSizes.find(DevicePtr);
+  auto AllocSizeItr = DeviceAllocSizes.find(Ptr);
   size_t AllocSize = 0;
   if (AllocSizeItr != DeviceAllocSizes.end()) {
     AllocSize = AllocSizeItr->second;
@@ -226,12 +192,26 @@ EXTERN void omp_target_free(void *DevicePtr, int DeviceNum) {
   }
   DeviceAllocSizesMtx.unlock();
   OMPT_DISPATCH_CALLBACK_TARGET_DATA_OP_EMI(
-      ompt_scope_begin, delete, /*SrcPtr=*/NULL, omp_get_initial_device(),
-      DevicePtr, DeviceNum, AllocSize);
+      ompt_scope_begin, delete, /*SrcPtr=*/NULL, omp_get_initial_device(), Ptr,
+      DeviceNum, AllocSize);
 #endif
-  PM->Devices[DeviceNum]->deleteData(DevicePtr);
-  DP("omp_target_free deallocated device ptr\n");
+  targetFreeExplicit(Ptr, DeviceNum, TARGET_ALLOC_DEFAULT, __func__);
 }
+
+EXTERN void llvm_omp_target_free_device(void *Ptr, int DeviceNum) {
+  return targetFreeExplicit(Ptr, DeviceNum, TARGET_ALLOC_DEVICE, __func__);
+}
+
+EXTERN void llvm_omp_target_free_host(void *Ptr, int DeviceNum) {
+  return targetFreeExplicit(Ptr, DeviceNum, TARGET_ALLOC_HOST, __func__);
+}
+
+EXTERN void llvm_omp_target_free_shared(void *Ptre, int DeviceNum) {
+  return targetFreeExplicit(Ptre, DeviceNum, TARGET_ALLOC_SHARED, __func__);
+}
+
+EXTERN void *llvm_omp_target_dynamic_shared_alloc() { return nullptr; }
+EXTERN void *llvm_omp_get_dynamic_shared() { return nullptr; }
 
 EXTERN int omp_target_is_present(const void *Ptr, int DeviceNum) {
   TIMESCOPE();
@@ -268,13 +248,7 @@ EXTERN int omp_target_is_present(const void *Ptr, int DeviceNum) {
       Device.getTgtPtrBegin(const_cast<void *>(Ptr), 1, IsLast,
                             /*UpdateRefCount=*/false,
                             /*UseHoldRefCount=*/false, IsHostPtr);
-  int Rc = (TPR.TargetPointer != NULL);
-  // Under unified memory the host pointer can be returned by the
-  // getTgtPtrBegin() function which means that there is no device
-  // corresponding point for ptr. This function should return false
-  // in that situation.
-  if (PM->RTLs.RequiresFlags & OMP_REQ_UNIFIED_SHARED_MEMORY)
-    Rc = !IsHostPtr;
+  int Rc = TPR.isPresent();
   DP("Call to omp_target_is_present returns %d\n", Rc);
   return Rc;
 }
@@ -339,9 +313,9 @@ EXTERN int omp_target_is_accessible(const void *Ptr, size_t Size,
       Device.getTgtPtrBegin(const_cast<void *>(Ptr), Size, IsLast,
                             /*UpdateRefCount=*/false, /*UseHoldRefCount=*/false,
                             IsHostPtr, /*MustContain=*/true);
-  int rc = (TPR.TargetPointer != NULL);
-  DP("Call to omp_target_is_accessible returns %d\n", rc);
-  return rc;
+  int Rc = TPR.isPresent();
+  DP("Call to omp_target_is_accessible returns %d\n", Rc);
+  return Rc;
 }
 
 EXTERN void *omp_get_mapped_ptr(const void *Ptr, int DeviceNum) {
@@ -379,7 +353,7 @@ EXTERN void *omp_get_mapped_ptr(const void *Ptr, int DeviceNum) {
       Device.getTgtPtrBegin(const_cast<void *>(Ptr), /*Size=*/0, IsLast,
                             /*UpdateRefCount=*/false, /*UseHoldRefCount=*/false,
                             IsHostPtr);
-  void *TgtPtr = TPR.TargetPointer;
+  void *TgtPtr = TPR.isPresent() ? TPR.TargetPointer : nullptr;
   // Return nullptr in the case of unified shared memory.
   //
   // TODO: This seems to be implied by the named "mapped" instead of
