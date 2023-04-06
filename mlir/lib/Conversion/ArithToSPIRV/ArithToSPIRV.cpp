@@ -990,6 +990,7 @@ void mlir::arith::populateArithToSPIRVPatterns(
     TypeCastingOpPattern<arith::SIToFPOp, spirv::ConvertSToFOp>,
     TypeCastingOpPattern<arith::FPToSIOp, spirv::ConvertFToSOp>,
     TypeCastingOpPattern<arith::IndexCastOp, spirv::SConvertOp>,
+    TypeCastingOpPattern<arith::IndexCastUIOp, spirv::UConvertOp>,
     TypeCastingOpPattern<arith::BitcastOp, spirv::BitcastOp>,
     CmpIOpBooleanPattern, CmpIOpPattern,
     CmpFOpNanNonePattern, CmpFOpPattern,
@@ -1044,6 +1045,9 @@ struct ConvertArithToSPIRVPass
     typeConverter.addSourceMaterialization(addUnrealizedCast);
     typeConverter.addTargetMaterialization(addUnrealizedCast);
     target->addLegalOp<UnrealizedConversionCastOp>();
+
+    // Fail hard when there are any remaining 'arith' ops.
+    target->addIllegalDialect<arith::ArithDialect>();
 
     RewritePatternSet patterns(&getContext());
     arith::populateArithToSPIRVPatterns(typeConverter, patterns);

@@ -401,6 +401,9 @@ CODEGENOPT(EmitCodeView, 1, 0)
 /// Whether to emit the .debug$H section containing hashes of CodeView types.
 CODEGENOPT(CodeViewGHash, 1, 0)
 
+/// Whether to emit the compiler path and command line into the CodeView debug information.
+CODEGENOPT(CodeViewCommandLine, 1, 0)
+
 /// The kind of inlining to perform.
 ENUM_CODEGENOPT(Inlining, InliningMethod, 2, NormalInlining)
 
@@ -491,6 +494,10 @@ ENUM_CODEGENOPT(ZeroCallUsedRegs, llvm::ZeroCallUsedRegs::ZeroCallUsedRegsKind,
 
 /// Whether to use opaque pointers.
 CODEGENOPT(OpaquePointers, 1, 0)
+
+/// Modify C++ ABI to returning `this` pointer from constructors and
+/// non-deleting destructors. (No effect on Microsoft ABI.)
+CODEGENOPT(CtorDtorReturnThis, 1, 0)
 
 #undef CODEGENOPT
 #undef ENUM_CODEGENOPT

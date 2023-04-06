@@ -1193,6 +1193,35 @@ void AArch64InstPrinter::printRegWithShiftExtend(const MCInst *MI,
   }
 }
 
+template <int EltSize>
+void AArch64InstPrinter::printPredicateAsCounter(const MCInst *MI,
+                                                 unsigned OpNum,
+                                                 const MCSubtargetInfo &STI,
+                                                 raw_ostream &O) {
+  unsigned Reg = MI->getOperand(OpNum).getReg();
+
+  assert(Reg <= AArch64::P15 && "Unsupported predicate register");
+  O << "pn" << (Reg - AArch64::P0);
+  switch (EltSize) {
+  case 0:
+    break;
+  case 8:
+    O << ".b";
+    break;
+  case 16:
+    O << ".h";
+    break;
+  case 32:
+    O << ".s";
+    break;
+  case 64:
+    O << ".d";
+    break;
+  default:
+    llvm_unreachable("Unsupported element size");
+  }
+}
+
 void AArch64InstPrinter::printCondCode(const MCInst *MI, unsigned OpNum,
                                        const MCSubtargetInfo &STI,
                                        raw_ostream &O) {
@@ -1221,6 +1250,15 @@ void AArch64InstPrinter::printImmScale(const MCInst *MI, unsigned OpNum,
                                        raw_ostream &O) {
   O << markup("<imm:") << '#'
     << formatImm(Scale * MI->getOperand(OpNum).getImm()) << markup(">");
+}
+
+template <int Scale, int Offset>
+void AArch64InstPrinter::printImmRangeScale(const MCInst *MI, unsigned OpNum,
+                                            const MCSubtargetInfo &STI,
+                                            raw_ostream &O) {
+  unsigned FirstImm = Scale * MI->getOperand(OpNum).getImm();
+  O << formatImm(FirstImm);
+  O << ":" << formatImm(FirstImm + Offset);
 }
 
 void AArch64InstPrinter::printUImm12Offset(const MCInst *MI, unsigned OpNum,
@@ -1466,17 +1504,31 @@ void AArch64InstPrinter::printVectorList(const MCInst *MI, unsigned OpNum,
     Reg = MRI.getMatchingSuperReg(Reg, AArch64::dsub, &FPR128RC);
   }
 
-  for (unsigned i = 0; i < NumRegs; ++i, Reg = getNextVectorRegister(Reg)) {
-    if (MRI.getRegClass(AArch64::ZPRRegClassID).contains(Reg))
-      printRegName(O, Reg);
-    else
-      printRegName(O, Reg, AArch64::vreg);
+  if (MRI.getRegClass(AArch64::ZPRRegClassID).contains(Reg) && NumRegs > 1 &&
+      // Do not print the range when the last register is lower than the first.
+      // Because it is a wrap-around register.
+      Reg < getNextVectorRegister(Reg, NumRegs - 1)) {
+    printRegName(O, Reg);
     O << LayoutSuffix;
-
-    if (i + 1 != NumRegs)
-      O << ", ";
+    if (NumRegs > 1) {
+      // Set of two sve registers should be separated by ','
+      StringRef split_char = NumRegs == 2 ? ", " : " - ";
+      O << split_char;
+      printRegName(O, (getNextVectorRegister(Reg, NumRegs - 1)));
+      O << LayoutSuffix;
+    }
+  } else {
+    for (unsigned i = 0; i < NumRegs; ++i, Reg = getNextVectorRegister(Reg)) {
+      // wrap-around sve register
+      if (MRI.getRegClass(AArch64::ZPRRegClassID).contains(Reg))
+        printRegName(O, Reg);
+      else
+        printRegName(O, Reg, AArch64::vreg);
+      O << LayoutSuffix;
+      if (i + 1 != NumRegs)
+        O << ", ";
+    }
   }
-
   O << " }";
 }
 
@@ -1718,6 +1770,21 @@ void AArch64InstPrinter::printSVEPattern(const MCInst *MI, unsigned OpNum,
     O << Pat->Name;
   else
     O << markup("<imm:") << '#' << formatImm(Val) << markup(">");
+}
+
+void AArch64InstPrinter::printSVEVecLenSpecifier(const MCInst *MI,
+                                                 unsigned OpNum,
+                                                 const MCSubtargetInfo &STI,
+                                                 raw_ostream &O) {
+  unsigned Val = MI->getOperand(OpNum).getImm();
+  // Pattern has only 1 bit
+  if (Val > 1)
+    llvm_unreachable("Invalid vector length specifier");
+  if (auto Pat =
+          AArch64SVEVecLenSpecifier::lookupSVEVECLENSPECIFIERByEncoding(Val))
+    O << Pat->Name;
+  else
+    llvm_unreachable("Invalid vector length specifier");
 }
 
 template <char suffix>

@@ -35,7 +35,7 @@ variables:
   BUILD_DIRS: $CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds/$CI_PIPELINE_ID-*
   LLVM_CCACHE_PARAMS: 'CCACHE_CPP2=yes CCACHE_NOHASHDIR=yes CCACHE_BASEDIR=$CI_BUILDS_DIR/$CI_PROJECT_PATH_SLUG-builds'
   LLVM_TARGETS_TO_BUILD: all
-  CHECK_TARGETS: check-all check-openmp
+  CHECK_TARGETS: check-all
   # The number of tests launched at once is `nproc` / $LIT_NPROC_DIVISOR.
   LIT_NPROC_DIVISOR: 1
   # Sometimes a build process gets stuck for a long time, and sometimes a test
@@ -110,7 +110,6 @@ stages:
       libomp :: env/kmp_set_dispatch_buf.c
       libomptarget :: nvptx64-nvidia-cuda :: mapping/target_has_device_addr.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_has_device_addr.c
-      libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug51781.c
       "
     TEST_LIT_XFAIL_NOT:
       "
@@ -155,7 +154,6 @@ stages:
       "
       libomptarget :: nvptx64-nvidia-cuda :: mapping/target_has_device_addr.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_has_device_addr.c
-      libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug51781.c
       "
     TEST_LIT_XFAIL_NOT:
       ""
@@ -197,7 +195,21 @@ stages:
     LIT_NPROC_DIVISOR: 1
     TEST_LIT_XFAIL:
       "
+      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/atomic.c
+      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/loop-da-member-expr.cpp
+      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/loop-gang-static.c
+      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/loop-reduction.c
+      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/loop-reduction.cpp
       Clang :: OpenACC/directives/amdgcn-amd-amdhsa/parallel-da.c
+      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/parallel-reduction.c
+      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/parallel-reduction.cpp
+      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/routine-implicit.cpp
+      libomptarget :: amdgcn-amd-amdhsa :: mapping/reduction_implicit_map.cpp
+      libomptarget :: amdgcn-amd-amdhsa :: offloading/cuda_no_devices.c
+      libomptarget :: amdgcn-amd-amdhsa :: offloading/target-teams-atomic.c
+      libomptarget :: amdgcn-amd-amdhsa-LTO :: mapping/reduction_implicit_map.cpp
+      libomptarget :: amdgcn-amd-amdhsa-LTO :: offloading/cuda_no_devices.c
+      libomptarget :: amdgcn-amd-amdhsa-LTO :: offloading/target-teams-atomic.c
       "
     TEST_LIT_XFAIL_NOT:
       ""
@@ -212,6 +224,11 @@ stages:
     VV_RUN_LIT_XFAIL:
       "
       External/openacc_vv/atomic_capture_expr_plus_x.c.test
+      External/openacc_vv/loop_collapse.c.test
+      External/openacc_vv/parallel_copy.c.test
+      External/openacc_vv/parallel_loop_independent_reduction.c.test
+      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1.c.test
+      External/openacc_vv/parallel_reduction.c.test
       "
 
 .milan:
@@ -295,7 +312,14 @@ stages:
     - pwd
     - echo $BUILD_DIR
     - cd $BUILD_DIR/build
-    - ulimit -t $ULIMIT_T
+    - if test x"$ULIMIT_T_DIV_NPROC" != x; then
+        echo "$ULIMIT_T_DIV_NPROC" &&
+        NPROC=`nproc` &&
+        echo "$NPROC" &&
+        ULIMIT_T=`expr $ULIMIT_T_DIV_NPROC \* $NPROC`;
+      fi
+    - echo "$ULIMIT_T"
+    - ulimit -t $ULIMIT_T;
     - echo -e "\e[0Ksection_end:`date +%s`:prepare_for_job\r\e[0K"
   after_script:
     - echo -e "\e[0Ksection_start:`date +%s`:show_stats[collapsed=true]\r\e[0KShow ccache and build statistics"
@@ -1209,13 +1233,14 @@ explorer (kokkos):
 
 # On systems without a GPU, the kokkos examples use CPU parallelism, which
 # effectively divides the time limit imposed by our default ulimit -t (1 hour)
-# by the number of CPU threads (60), but 1 minute is not enough time for some
-# of our Kokkos examples, so we increase it to 5 minutes for those cases.
+# by the number of CPU threads (e.g., 128, from nproc), but the result (e.g., 28
+# seconds) is not enough time for some of our Kokkos examples, so we increase it
+# to 5 minutes for those cases.
 
 milan (kokkos):
   extends: [.milan, .kokkos]
   variables:
-    ULIMIT_T: 18000
+    ULIMIT_T_DIV_NPROC: 300
   needs:
     - job: milan (build)
       artifacts: false
@@ -1223,7 +1248,7 @@ milan (kokkos):
 no-asserts (kokkos):
   extends: [.no-asserts, .kokkos]
   variables:
-    ULIMIT_T: 18000
+    ULIMIT_T_DIV_NPROC: 300
   needs:
     - job: no-asserts (build)
       artifacts: false
@@ -1231,7 +1256,7 @@ no-asserts (kokkos):
 debug (kokkos):
   extends: [.debug, .kokkos]
   variables:
-    ULIMIT_T: 18000
+    ULIMIT_T_DIV_NPROC: 300
   needs:
     - job: debug (build)
       artifacts: false

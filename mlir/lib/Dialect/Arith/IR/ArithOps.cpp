@@ -24,6 +24,31 @@ using namespace mlir;
 using namespace mlir::arith;
 
 //===----------------------------------------------------------------------===//
+// Floating point op parse/print helpers
+//===----------------------------------------------------------------------===//
+static ParseResult parseArithFastMathAttr(OpAsmParser &parser,
+                                          Attribute &attr) {
+  if (succeeded(
+          parser.parseOptionalKeyword(FastMathFlagsAttr::getMnemonic()))) {
+    attr = FastMathFlagsAttr::parse(parser, Type{});
+    return success(static_cast<bool>(attr));
+  } else {
+    // No fastmath attribute mnemonic present - defer attribute creation and use
+    // the default value.
+    return success();
+  }
+}
+
+static void printArithFastMathAttr(OpAsmPrinter &printer, Operation *op,
+                                   FastMathFlagsAttr fmAttr) {
+  // Elide printing the fastmath attribute when fastmath=none
+  if (fmAttr && (fmAttr.getValue() != FastMathFlags::none)) {
+    printer << " " << FastMathFlagsAttr::getMnemonic();
+    fmAttr.print(printer);
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // Pattern helpers
 //===----------------------------------------------------------------------===//
 
@@ -1261,8 +1286,7 @@ OpFoldResult arith::FPToSIOp::fold(ArrayRef<Attribute> operands) {
 // IndexCastOp
 //===----------------------------------------------------------------------===//
 
-bool arith::IndexCastOp::areCastCompatible(TypeRange inputs,
-                                           TypeRange outputs) {
+static bool areIndexCastCompatible(TypeRange inputs, TypeRange outputs) {
   if (!areValidCastInputsAndOutputs(inputs, outputs))
     return false;
 
@@ -1273,6 +1297,11 @@ bool arith::IndexCastOp::areCastCompatible(TypeRange inputs,
 
   return (srcType.isIndex() && dstType.isSignlessInteger()) ||
          (srcType.isSignlessInteger() && dstType.isIndex());
+}
+
+bool arith::IndexCastOp::areCastCompatible(TypeRange inputs,
+                                           TypeRange outputs) {
+  return areIndexCastCompatible(inputs, outputs);
 }
 
 OpFoldResult arith::IndexCastOp::fold(ArrayRef<Attribute> operands) {
@@ -1288,6 +1317,30 @@ OpFoldResult arith::IndexCastOp::fold(ArrayRef<Attribute> operands) {
 void arith::IndexCastOp::getCanonicalizationPatterns(
     RewritePatternSet &patterns, MLIRContext *context) {
   patterns.add<IndexCastOfIndexCast, IndexCastOfExtSI>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// IndexCastUIOp
+//===----------------------------------------------------------------------===//
+
+bool arith::IndexCastUIOp::areCastCompatible(TypeRange inputs,
+                                             TypeRange outputs) {
+  return areIndexCastCompatible(inputs, outputs);
+}
+
+OpFoldResult arith::IndexCastUIOp::fold(ArrayRef<Attribute> operands) {
+  // index_castui(constant) -> constant
+  // A little hack because we go through int. Otherwise, the size of the
+  // constant might need to change.
+  if (auto value = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return IntegerAttr::get(getType(), value.getValue().getZExtValue());
+
+  return {};
+}
+
+void arith::IndexCastUIOp::getCanonicalizationPatterns(
+    RewritePatternSet &patterns, MLIRContext *context) {
+  patterns.add<IndexCastUIOfIndexCastUI, IndexCastUIOfExtUI>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1453,7 +1506,7 @@ OpFoldResult arith::CmpIOp::fold(ArrayRef<Attribute> operands) {
     Pred origPred = getPredicate();
     for (auto pred : invPreds) {
       if (origPred == pred.first) {
-        setPredicateAttr(CmpIPredicateAttr::get(getContext(), pred.second));
+        setPredicate(pred.second);
         Value lhs = getLhs();
         Value rhs = getRhs();
         getLhsMutable().assign(rhs);

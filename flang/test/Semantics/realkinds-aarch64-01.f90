@@ -1,5 +1,4 @@
 ! RUN: %python %S/test_modfile.py %s %flang_fc1 -triple aarch64-unknown-linux-gnu
-! REQUIRES: aarch64-registered-target
 
 module m1
   logical, parameter :: realpcheck = 16 == selected_real_kind(16)

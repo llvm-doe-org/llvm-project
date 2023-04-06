@@ -92,6 +92,23 @@ func.func @vector_index_cast(%arg0: vector<2xindex>, %arg1: vector<2xi1>) {
   return
 }
 
+func.func @index_castui(%arg0: index, %arg1: i1) {
+// CHECK: = llvm.trunc %0 : i{{.*}} to i1
+  %0 = arith.index_castui %arg0: index to i1
+// CHECK-NEXT: = llvm.zext %arg1 : i1 to i{{.*}}
+  %1 = arith.index_castui %arg1: i1 to index
+  return
+}
+
+// CHECK-LABEL: @vector_index_castui
+func.func @vector_index_castui(%arg0: vector<2xindex>, %arg1: vector<2xi1>) {
+// CHECK: = llvm.trunc %{{.*}} : vector<2xi{{.*}}> to vector<2xi1>
+  %0 = arith.index_castui %arg0: vector<2xindex> to vector<2xi1>
+// CHECK-NEXT: = llvm.zext %{{.*}} : vector<2xi1> to vector<2xi{{.*}}>
+  %1 = arith.index_castui %arg1: vector<2xi1> to vector<2xindex>
+  return
+}
+
 // Checking conversion of signed integer types to floating point.
 // CHECK-LABEL: @sitofp
 func.func @sitofp(%arg0 : i32, %arg1 : i64) {
@@ -430,4 +447,21 @@ func.func @minmaxf(%arg0 : f32, %arg1 : f32) -> f32 {
   // CHECK: = "llvm.intr.maxnum"(%arg0, %arg1) : (f32, f32) -> f32
   %1 = arith.maxf %arg0, %arg1 : f32
   return %0 : f32
+}
+
+// -----
+
+// CHECK-LABEL: @fastmath
+func.func @fastmath(%arg0: f32, %arg1: f32, %arg2: i32) {
+// CHECK: {{.*}} = llvm.fadd %arg0, %arg1  {fastmathFlags = #llvm.fastmath<fast>} : f32
+// CHECK: {{.*}} = llvm.fmul %arg0, %arg1  {fastmathFlags = #llvm.fastmath<fast>} : f32
+// CHECK: {{.*}} = llvm.fneg %arg0  {fastmathFlags = #llvm.fastmath<fast>} : f32
+// CHECK: {{.*}} = llvm.fadd %arg0, %arg1  : f32
+// CHECK: {{.*}} = llvm.fadd %arg0, %arg1  {fastmathFlags = #llvm.fastmath<nnan, ninf>} : f32
+  %0 = arith.addf %arg0, %arg1 fastmath<fast> : f32
+  %1 = arith.mulf %arg0, %arg1 fastmath<fast> : f32
+  %2 = arith.negf %arg0 fastmath<fast> : f32
+  %3 = arith.addf %arg0, %arg1 fastmath<none> : f32
+  %4 = arith.addf %arg0, %arg1 fastmath<nnan,ninf> : f32
+  return
 }
