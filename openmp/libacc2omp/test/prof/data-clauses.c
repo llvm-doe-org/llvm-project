@@ -218,8 +218,7 @@ int main() {
   // OUT-OFF:acc_ev_device_shutdown_start
   // OUT-OFF:acc_ev_device_shutdown_end
   //
-  //      OUT-OFF:acc_ev_runtime_shutdown
-  // OUT-HOST-PAR:acc_ev_runtime_shutdown
+  // OUT:acc_ev_runtime_shutdown
 
   return 0;
 }

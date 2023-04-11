@@ -44,7 +44,7 @@ llvm::Triple::ArchType darwin::getArchTypeForMachOArchName(StringRef Str) {
 
   // The matching this routine does is fairly pointless, since it is neither the
   // complete architecture list, nor a reasonable subset. The problem is that
-  // historically the driver driver accepts this and also ties its -march=
+  // historically the driver accepts this and also ties its -march=
   // handling to the architecture name, so we need to be careful before removing
   // support for it.
 
@@ -59,7 +59,7 @@ llvm::Triple::ArchType darwin::getArchTypeForMachOArchName(StringRef Str) {
       .Cases("pentium", "pentpro", "pentIIm3", "pentIIm5", "pentium4",
              llvm::Triple::x86)
       .Cases("x86_64", "x86_64h", llvm::Triple::x86_64)
-      // This is derived from the driver driver.
+      // This is derived from the driver.
       .Cases("arm", "armv4t", "armv5", "armv6", "armv6m", llvm::Triple::arm)
       .Cases("armv7", "armv7em", "armv7k", "armv7m", llvm::Triple::arm)
       .Cases("armv7s", "xscale", llvm::Triple::arm)
@@ -2187,17 +2187,20 @@ void Darwin::AddDeploymentTarget(DerivedArgList &Args) const {
 
   unsigned Major, Minor, Micro;
   bool HadExtra;
+  // The major version should not be over this number.
+  const unsigned MajorVersionLimit = 1000;
   // Set the tool chain target information.
   if (Platform == MacOS) {
     if (!Driver::GetReleaseVersion(OSTarget->getOSVersion(), Major, Minor,
                                    Micro, HadExtra) ||
-        HadExtra || Major < 10 || Major >= 100 || Minor >= 100 || Micro >= 100)
+        HadExtra || Major < 10 || Major >= MajorVersionLimit || Minor >= 100 ||
+        Micro >= 100)
       getDriver().Diag(diag::err_drv_invalid_version_number)
           << OSTarget->getAsString(Args, Opts);
   } else if (Platform == IPhoneOS) {
     if (!Driver::GetReleaseVersion(OSTarget->getOSVersion(), Major, Minor,
                                    Micro, HadExtra) ||
-        HadExtra || Major >= 100 || Minor >= 100 || Micro >= 100)
+        HadExtra || Major >= MajorVersionLimit || Minor >= 100 || Micro >= 100)
       getDriver().Diag(diag::err_drv_invalid_version_number)
           << OSTarget->getAsString(Args, Opts);
     ;
@@ -2229,19 +2232,20 @@ void Darwin::AddDeploymentTarget(DerivedArgList &Args) const {
   } else if (Platform == TvOS) {
     if (!Driver::GetReleaseVersion(OSTarget->getOSVersion(), Major, Minor,
                                    Micro, HadExtra) ||
-        HadExtra || Major >= 100 || Minor >= 100 || Micro >= 100)
+        HadExtra || Major >= MajorVersionLimit || Minor >= 100 || Micro >= 100)
       getDriver().Diag(diag::err_drv_invalid_version_number)
           << OSTarget->getAsString(Args, Opts);
   } else if (Platform == WatchOS) {
     if (!Driver::GetReleaseVersion(OSTarget->getOSVersion(), Major, Minor,
                                    Micro, HadExtra) ||
-        HadExtra || Major >= 10 || Minor >= 100 || Micro >= 100)
+        HadExtra || Major >= MajorVersionLimit || Minor >= 100 || Micro >= 100)
       getDriver().Diag(diag::err_drv_invalid_version_number)
           << OSTarget->getAsString(Args, Opts);
   } else if (Platform == DriverKit) {
     if (!Driver::GetReleaseVersion(OSTarget->getOSVersion(), Major, Minor,
                                    Micro, HadExtra) ||
-        HadExtra || Major < 19 || Major >= 100 || Minor >= 100 || Micro >= 100)
+        HadExtra || Major < 19 || Major >= MajorVersionLimit || Minor >= 100 ||
+        Micro >= 100)
       getDriver().Diag(diag::err_drv_invalid_version_number)
           << OSTarget->getAsString(Args, Opts);
   } else
@@ -2388,8 +2392,8 @@ void DarwinClang::AddClangCXXStdlibIncludeArgs(
   //        Also check whether this is used for setting library search paths.
   ToolChain::AddClangCXXStdlibIncludeArgs(DriverArgs, CC1Args);
 
-  if (DriverArgs.hasArg(options::OPT_nostdlibinc) ||
-      DriverArgs.hasArg(options::OPT_nostdincxx))
+  if (DriverArgs.hasArg(options::OPT_nostdinc, options::OPT_nostdlibinc,
+                        options::OPT_nostdincxx))
     return;
 
   llvm::SmallString<128> Sysroot = GetEffectiveSysroot(DriverArgs);
@@ -2662,7 +2666,7 @@ DerivedArgList *MachO::TranslateArgs(const DerivedArgList &Args,
   }
 
   // Add the arch options based on the particular spelling of -arch, to match
-  // how the driver driver works.
+  // how the driver works.
   if (!BoundArch.empty()) {
     StringRef Name = BoundArch;
     const Option MCpu = Opts.getOption(options::OPT_mcpu_EQ);

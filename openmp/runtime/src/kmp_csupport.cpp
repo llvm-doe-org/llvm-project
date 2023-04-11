@@ -1961,18 +1961,14 @@ int ompc_get_team_size(int level) {
 
 /* OpenMP 5.0 Affinity Format API */
 void KMP_EXPAND_NAME(ompc_set_affinity_format)(char const *format) {
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   __kmp_strncpy_truncate(__kmp_affinity_format, KMP_AFFINITY_FORMAT_SIZE,
                          format, KMP_STRLEN(format) + 1);
 }
 
 size_t KMP_EXPAND_NAME(ompc_get_affinity_format)(char *buffer, size_t size) {
   size_t format_size;
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   format_size = KMP_STRLEN(__kmp_affinity_format);
   if (buffer && size) {
     __kmp_strncpy_truncate(buffer, size, __kmp_affinity_format,
@@ -4391,9 +4387,7 @@ void omp_free(void *ptr, omp_allocator_handle_t allocator) {
 /* end of OpenMP 5.1 Memory Management routines */
 
 int __kmpc_get_target_offload(void) {
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize(/*ForOffload=*/true);
-  }
+  __kmp_serial_initialize(/*OffloadImpossible=*/false);
   return __kmp_target_offload;
 }
 
@@ -4405,8 +4399,7 @@ int __kmpc_pause_resource(kmp_pause_status_t level) {
 }
 
 void __kmpc_error(ident_t *loc, int severity, const char *message) {
-  if (!__kmp_init_serial)
-    __kmp_serial_initialize();
+  __kmp_serial_initialize();
 
   KMP_ASSERT(severity == severity_warning || severity == severity_fatal);
 

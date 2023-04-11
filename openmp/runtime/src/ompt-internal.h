@@ -45,7 +45,7 @@ typedef struct ompt_callbacks_internal_s {
 #define ompt_event_macro(event, callback, eventid)                             \
   callback ompt_callback(event);
 
-  FOREACH_OMPT_HOST_EVENT(ompt_event_macro)
+  FOREACH_OMPT_EVENT(ompt_event_macro)
 
 #undef ompt_event_macro
 } ompt_callbacks_internal_t;

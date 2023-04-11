@@ -237,8 +237,7 @@ struct LocIndex {
   }
 
   template<typename IntT> static LocIndex fromRawInteger(IntT ID) {
-    static_assert(std::is_unsigned<IntT>::value &&
-                      sizeof(ID) == sizeof(uint64_t),
+    static_assert(std::is_unsigned_v<IntT> && sizeof(ID) == sizeof(uint64_t),
                   "Cannot convert raw integer to LocIndex");
     return {static_cast<u32_location_t>(ID >> 32),
             static_cast<u32_index_t>(ID)};
@@ -1116,7 +1115,7 @@ VarLocBasedLDV::OpenRangesSet::getEntryValueBackup(DebugVariable Var) {
   if (It != EntryValuesBackupVars.end())
     return It->second;
 
-  return llvm::None;
+  return std::nullopt;
 }
 
 void VarLocBasedLDV::collectIDsForRegs(VarLocsInRange &Collected,
@@ -1622,7 +1621,7 @@ Optional<VarLocBasedLDV::VarLoc::SpillLoc>
 VarLocBasedLDV::isRestoreInstruction(const MachineInstr &MI,
                                       MachineFunction *MF, Register &Reg) {
   if (!MI.hasOneMemOperand())
-    return None;
+    return std::nullopt;
 
   // FIXME: Handle folded restore instructions with more than one memory
   // operand.
@@ -1630,7 +1629,7 @@ VarLocBasedLDV::isRestoreInstruction(const MachineInstr &MI,
     Reg = MI.getOperand(0).getReg();
     return extractSpillBaseRegAndOffset(MI);
   }
-  return None;
+  return std::nullopt;
 }
 
 /// A spilled register may indicate that we have to end the current range of

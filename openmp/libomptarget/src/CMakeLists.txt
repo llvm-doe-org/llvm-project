@@ -12,7 +12,7 @@
 
 libomptarget_say("Building offloading runtime library libomptarget.")
 
-if(LIBOMP_OMPT_SUPPORT_IN_LIBOMPTARGET)
+if(LIBOMPTARGET_OMPT_SUPPORT)
   list(APPEND LIBOMPTARGET_OMPT_SRC_FILES ompt-target.cpp)
   list(APPEND LIBOMPTARGET_LLVM_INCLUDE_DIRS ${LIBOMP_INCLUDE_DIR})
 endif()
@@ -25,6 +25,7 @@ add_llvm_library(omptarget
   interface.cpp
   interop.cpp
   omptarget.cpp
+  ompt_callback.cpp
   rtl.cpp
   LegacyAPI.cpp
   ${LIBOMPTARGET_OMPT_SRC_FILES}

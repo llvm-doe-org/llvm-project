@@ -59,7 +59,7 @@ llvm::raw_ostream &PutAttrs(llvm::raw_ostream &, Attrs,
 
 static llvm::raw_ostream &PutAttr(llvm::raw_ostream &, Attr);
 static llvm::raw_ostream &PutType(llvm::raw_ostream &, const DeclTypeSpec &);
-static llvm::raw_ostream &PutLower(llvm::raw_ostream &, const std::string &);
+static llvm::raw_ostream &PutLower(llvm::raw_ostream &, std::string_view);
 static std::error_code WriteFile(
     const std::string &, const std::string &, bool = true);
 static bool FileContentsMatch(
@@ -687,7 +687,7 @@ void ModFileWriter::PutProcEntity(llvm::raw_ostream &os, const Symbol &symbol) {
     return;
   }
   const auto &details{symbol.get<ProcEntityDetails>()};
-  const ProcInterface &interface{details.interface()};
+  const ProcInterface &interface { details.interface() };
   Attrs attrs{symbol.attrs()};
   if (details.passName()) {
     attrs.reset(Attr::PASS);
@@ -797,7 +797,7 @@ llvm::raw_ostream &PutType(llvm::raw_ostream &os, const DeclTypeSpec &type) {
   return PutLower(os, type.AsFortran());
 }
 
-llvm::raw_ostream &PutLower(llvm::raw_ostream &os, const std::string &str) {
+llvm::raw_ostream &PutLower(llvm::raw_ostream &os, std::string_view str) {
   for (char c : str) {
     os << parser::ToLowerCaseLetter(c);
   }

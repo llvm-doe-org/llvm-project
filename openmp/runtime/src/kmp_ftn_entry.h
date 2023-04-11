@@ -90,9 +90,7 @@ int FTN_STDCALL FTN_GET_STACKSIZE(void) {
 #ifdef KMP_STUB
   return (int)__kmps_get_stacksize();
 #else
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   return (int)__kmp_stksize;
 #endif
 }
@@ -101,9 +99,7 @@ size_t FTN_STDCALL FTN_GET_STACKSIZE_S(void) {
 #ifdef KMP_STUB
   return __kmps_get_stacksize();
 #else
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   return __kmp_stksize;
 #endif
 }
@@ -197,9 +193,7 @@ int FTN_STDCALL FTN_GET_LIBRARY(void) {
 #ifdef KMP_STUB
   return __kmps_get_library();
 #else
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   return ((int)__kmp_library);
 #endif
 }
@@ -467,9 +461,7 @@ void FTN_STDCALL KMP_EXPAND_NAME_IF_APPEND(FTN_SET_AFFINITY_FORMAT)(
 #ifdef KMP_STUB
   return;
 #else
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   ConvertedString cformat(format, size);
   // Since the __kmp_affinity_format variable is a C string, do not
   // use the fortran strncpy function
@@ -490,9 +482,7 @@ size_t FTN_STDCALL KMP_EXPAND_NAME_IF_APPEND(FTN_GET_AFFINITY_FORMAT)(
   return 0;
 #else
   size_t format_size;
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   format_size = KMP_STRLEN(__kmp_affinity_format);
   if (buffer && size) {
     __kmp_fortran_strncpy_truncate(buffer, size, __kmp_affinity_format,
@@ -617,9 +607,7 @@ int FTN_STDCALL FTN_GET_NUM_KNOWN_THREADS(void) {
 #ifdef KMP_STUB
   return 1;
 #else
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   /* NOTE: this is not syncronized, so it can change at any moment */
   /* NOTE: this number also includes threads preallocated in hot-teams */
   return TCR_4(__kmp_nth);
@@ -796,9 +784,7 @@ int FTN_STDCALL KMP_EXPAND_NAME(FTN_GET_THREAD_LIMIT)(void) {
 #else
   int gtid;
   kmp_info_t *thread;
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
 
   gtid = __kmp_entry_gtid();
   thread = __kmp_threads[gtid];
@@ -1336,9 +1322,7 @@ double FTN_STDCALL KMP_EXPAND_NAME(FTN_GET_WTIME)(void) {
 #if !KMP_OS_LINUX
   // We don't need library initialization to get the time on Linux* OS. The
   // routine can be used to measure library initialization time on Linux* OS now
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
 #endif
   __kmp_elapsed(&data);
   return data;
@@ -1350,9 +1334,7 @@ double FTN_STDCALL KMP_EXPAND_NAME(FTN_GET_WTICK)(void) {
   return __kmps_get_wtick();
 #else
   double data;
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   __kmp_elapsed_tick(&data);
   return data;
 #endif
@@ -1420,9 +1402,7 @@ int FTN_STDCALL KMP_EXPAND_NAME(FTN_GET_CANCELLATION)(void) {
   return 0 /* false */;
 #else
   // initialize the library if needed
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   return __kmp_omp_cancellation;
 #endif
 }
@@ -1440,9 +1420,7 @@ int FTN_STDCALL KMP_EXPAND_NAME(FTN_GET_MAX_TASK_PRIORITY)(void) {
 #ifdef KMP_STUB
   return 0;
 #else
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   return __kmp_max_task_priority;
 #endif
 }
@@ -1508,9 +1486,7 @@ void FTN_STDCALL FTN_SET_NUM_TEAMS(int KMP_DEREF num_teams) {
 #ifdef KMP_STUB
 // Nothing.
 #else
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   __kmp_set_num_teams(KMP_DEREF num_teams);
 #endif
 }
@@ -1518,9 +1494,7 @@ int FTN_STDCALL FTN_GET_MAX_TEAMS(void) {
 #ifdef KMP_STUB
   return 1;
 #else
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   return __kmp_get_max_teams();
 #endif
 }
@@ -1529,9 +1503,7 @@ void FTN_STDCALL FTN_SET_TEAMS_THREAD_LIMIT(int KMP_DEREF limit) {
 #ifdef KMP_STUB
 // Nothing.
 #else
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   __kmp_set_teams_thread_limit(KMP_DEREF limit);
 #endif
 }
@@ -1539,9 +1511,7 @@ int FTN_STDCALL FTN_GET_TEAMS_THREAD_LIMIT(void) {
 #ifdef KMP_STUB
   return 1;
 #else
-  if (!__kmp_init_serial) {
-    __kmp_serial_initialize();
-  }
+  __kmp_serial_initialize();
   return __kmp_get_teams_thread_limit();
 #endif
 }

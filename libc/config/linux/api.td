@@ -106,6 +106,7 @@ def MathAPI : PublicAPI<"math.h"> {
     SimpleMacroDef<"MATH_ERREXCEPT", "2">,
     MathErrHandlingMacro,
 
+    SimpleMacroDef<"HUGE_VAL", "__builtin_huge_val()">,
     SimpleMacroDef<"INFINITY", "__builtin_inff()">,
     SimpleMacroDef<"NAN", "__builtin_nanf(\"\")">,
 
@@ -172,7 +173,14 @@ def StdlibAPI : PublicAPI<"stdlib.h"> {
 }
 
 def TimeAPI : PublicAPI<"time.h"> {
-  let Types = ["clock_t", "time_t", "struct tm", "struct timespec", "clockid_t",];
+  let Types = [
+    "clock_t",
+    "time_t",
+    "struct tm",
+    "struct timespec",
+    "struct timeval",
+    "clockid_t",
+  ];
 }
 
 def ErrnoAPI : PublicAPI<"errno.h"> {
@@ -207,6 +215,7 @@ def SysMManAPI : PublicAPI<"sys/mman.h"> {
 
 def SignalAPI : PublicAPI<"signal.h"> {
   let Types = [
+    "sig_atomic_t",
     "sigset_t",
     "struct sigaction",
     "union sigval",
@@ -285,7 +294,8 @@ def SysResourceAPI : PublicAPI<"sys/resource.h"> {
 
 def SysStatAPI : PublicAPI<"sys/stat.h"> {
   let Types = ["mode_t", "dev_t", "ino_t", "nlink_t", "uid_t", "gid_t", "off_t",
-               "struct timespec", "blksize_t", "blkcnt_t", "struct stat"];
+               "struct timespec", "struct timeval", "blksize_t", "blkcnt_t",
+               "struct stat"];
 }
 
 def SysWaitAPI : PublicAPI<"sys/wait.h"> {

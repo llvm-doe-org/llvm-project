@@ -56,6 +56,7 @@ class ELFObjectFileBase : public ObjectFile {
   SubtargetFeatures getMIPSFeatures() const;
   SubtargetFeatures getARMFeatures() const;
   SubtargetFeatures getRISCVFeatures() const;
+  SubtargetFeatures getLoongArchFeatures() const;
 
   StringRef getAMDGPUCPUName() const;
 
@@ -772,6 +773,9 @@ Expected<uint32_t> ELFObjectFile<ELFT>::getSymbolFlags(DataRefImpl Sym) const {
 
   if (isExportedToOtherDSO(ESym))
     Result |= SymbolRef::SF_Exported;
+
+  if (ESym->getType() == ELF::STT_GNU_IFUNC)
+    Result |= SymbolRef::SF_Indirect;
 
   if (ESym->getVisibility() == ELF::STV_HIDDEN)
     Result |= SymbolRef::SF_Hidden;

@@ -195,21 +195,7 @@ stages:
     LIT_NPROC_DIVISOR: 1
     TEST_LIT_XFAIL:
       "
-      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/atomic.c
-      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/loop-da-member-expr.cpp
-      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/loop-gang-static.c
-      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/loop-reduction.c
-      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/loop-reduction.cpp
       Clang :: OpenACC/directives/amdgcn-amd-amdhsa/parallel-da.c
-      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/parallel-reduction.c
-      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/parallel-reduction.cpp
-      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/routine-implicit.cpp
-      libomptarget :: amdgcn-amd-amdhsa :: mapping/reduction_implicit_map.cpp
-      libomptarget :: amdgcn-amd-amdhsa :: offloading/cuda_no_devices.c
-      libomptarget :: amdgcn-amd-amdhsa :: offloading/target-teams-atomic.c
-      libomptarget :: amdgcn-amd-amdhsa-LTO :: mapping/reduction_implicit_map.cpp
-      libomptarget :: amdgcn-amd-amdhsa-LTO :: offloading/cuda_no_devices.c
-      libomptarget :: amdgcn-amd-amdhsa-LTO :: offloading/target-teams-atomic.c
       "
     TEST_LIT_XFAIL_NOT:
       ""
@@ -224,11 +210,6 @@ stages:
     VV_RUN_LIT_XFAIL:
       "
       External/openacc_vv/atomic_capture_expr_plus_x.c.test
-      External/openacc_vv/loop_collapse.c.test
-      External/openacc_vv/parallel_copy.c.test
-      External/openacc_vv/parallel_loop_independent_reduction.c.test
-      External/openacc_vv/parallel_loop_reduction_add_general_type_check_pt1.c.test
-      External/openacc_vv/parallel_reduction.c.test
       "
 
 .milan:

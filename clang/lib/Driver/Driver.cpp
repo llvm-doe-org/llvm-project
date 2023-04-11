@@ -182,7 +182,7 @@ std::string Driver::GetResourcesPath(StringRef BinaryPath,
     // ../lib gets us to lib/ in both cases.
     P = llvm::sys::path::parent_path(Dir);
     llvm::sys::path::append(P, CLANG_INSTALL_LIBDIR_BASENAME, "clang",
-                            CLANG_VERSION_STRING);
+                            CLANG_VERSION_MAJOR_STRING);
   }
 
   return std::string(P.str());
@@ -220,7 +220,11 @@ Driver::Driver(StringRef ClangExecutable, StringRef TargetTriple,
   SystemConfigDir = CLANG_CONFIG_FILE_SYSTEM_DIR;
 #endif
 #if defined(CLANG_CONFIG_FILE_USER_DIR)
-  UserConfigDir = CLANG_CONFIG_FILE_USER_DIR;
+  {
+    SmallString<128> P;
+    llvm::sys::fs::expand_tilde(CLANG_CONFIG_FILE_USER_DIR, P);
+    UserConfigDir = static_cast<std::string>(P);
+  }
 #endif
 
   // Compute the path to the resource directory.
@@ -705,7 +709,7 @@ static driver::LTOKind parseLTOMode(Driver &D, const llvm::opt::ArgList &Args,
 
   if (LTOMode == LTOK_Unknown) {
     D.Diag(diag::err_drv_unsupported_option_argument)
-        << A->getOption().getName() << A->getValue();
+        << A->getSpelling() << A->getValue();
     return LTOK_None;
   }
   return LTOMode;
@@ -737,7 +741,7 @@ Driver::OpenMPRuntimeKind Driver::getOpenMPRuntime(const ArgList &Args) const {
   if (RT == OMPRT_Unknown) {
     if (A)
       Diag(diag::err_drv_unsupported_option_argument)
-          << A->getOption().getName() << A->getValue();
+          << A->getSpelling() << A->getValue();
     else
       // FIXME: We could use a nicer diagnostic here.
       Diag(diag::err_drv_unsupported_opt) << "-fopenmp";
@@ -976,11 +980,6 @@ bool Driver::readConfigFile(StringRef FileName,
   if (ContainErrors)
     return true;
 
-  if (NewOptions->hasArg(options::OPT_config)) {
-    Diag(diag::err_drv_nested_config_file);
-    return true;
-  }
-
   // Claim all arguments that come from a configuration file so that the driver
   // does not warn on any that is unused.
   for (Arg *A : *NewOptions)
@@ -1019,8 +1018,8 @@ bool Driver::loadConfigFiles() {
     }
     if (CLOptions->hasArg(options::OPT_config_user_dir_EQ)) {
       SmallString<128> CfgDir;
-      CfgDir.append(
-          CLOptions->getLastArgValue(options::OPT_config_user_dir_EQ));
+      llvm::sys::fs::expand_tilde(
+          CLOptions->getLastArgValue(options::OPT_config_user_dir_EQ), CfgDir);
       if (CfgDir.empty() || getVFS().makeAbsolute(CfgDir))
         UserConfigDir.clear();
       else
@@ -1217,9 +1216,6 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
 
   // FIXME: This stuff needs to go into the Compilation, not the driver.
   bool CCCPrintPhases;
-
-  // Silence driver warnings if requested
-  Diags.setIgnoreAllWarnings(Args.hasArg(options::OPT_w));
 
   // -canonical-prefixes, -no-canonical-prefixes are used very early in main.
   Args.ClaimAllArgs(options::OPT_canonical_prefixes);
@@ -1533,6 +1529,11 @@ bool Driver::getCrashDiagnosticFile(StringRef ReproCrashFilename,
   return false;
 }
 
+static const char BugReporMsg[] =
+    "\n********************\n\n"
+    "PLEASE ATTACH THE FOLLOWING FILES TO THE BUG REPORT:\n"
+    "Preprocessed source(s) and associated run script(s) are located at:";
+
 // When clang crashes, produce diagnostic information including the fully
 // preprocessed source file(s).  Request that the developer attach the
 // diagnostic information to a bug report.
@@ -1587,6 +1588,29 @@ void Driver::generateCompilationDiagnostics(
 
   // Suppress tool output.
   C.initCompilationForDiagnostics();
+
+  // If lld failed, rerun it again with --reproduce.
+  if (IsLLD) {
+    const char *TmpName = CreateTempFile(C, "linker-crash", "tar");
+    Command NewLLDInvocation = Cmd;
+    llvm::opt::ArgStringList ArgList = NewLLDInvocation.getArguments();
+    StringRef ReproduceOption =
+        C.getDefaultToolChain().getTriple().isWindowsMSVCEnvironment()
+            ? "/reproduce:"
+            : "--reproduce=";
+    ArgList.push_back(Saver.save(Twine(ReproduceOption) + TmpName).data());
+    NewLLDInvocation.replaceArguments(std::move(ArgList));
+
+    // Redirect stdout/stderr to /dev/null.
+    NewLLDInvocation.Execute({None, {""}, {""}}, nullptr, nullptr);
+    Diag(clang::diag::note_drv_command_failed_diag_msg) << BugReporMsg;
+    Diag(clang::diag::note_drv_command_failed_diag_msg) << TmpName;
+    Diag(clang::diag::note_drv_command_failed_diag_msg)
+        << "\n\n********************";
+    if (Report)
+      Report->TemporaryFiles.push_back(TmpName);
+    return;
+  }
 
   // Construct the list of inputs.
   InputList Inputs;
@@ -1665,22 +1689,6 @@ void Driver::generateCompilationDiagnostics(
     return;
   }
 
-  // If lld failed, rerun it again with --reproduce.
-  if (IsLLD) {
-    const char *TmpName = CreateTempFile(C, "linker-crash", "tar");
-    Command NewLLDInvocation = Cmd;
-    llvm::opt::ArgStringList ArgList = NewLLDInvocation.getArguments();
-    StringRef ReproduceOption =
-        C.getDefaultToolChain().getTriple().isWindowsMSVCEnvironment()
-            ? "/reproduce:"
-            : "--reproduce=";
-    ArgList.push_back(Saver.save(Twine(ReproduceOption) + TmpName).data());
-    NewLLDInvocation.replaceArguments(std::move(ArgList));
-
-    // Redirect stdout/stderr to /dev/null.
-    NewLLDInvocation.Execute({None, {""}, {""}}, nullptr, nullptr);
-  }
-
   const ArgStringList &TempFiles = C.getTempFiles();
   if (TempFiles.empty()) {
     Diag(clang::diag::note_drv_command_failed_diag_msg)
@@ -1688,10 +1696,7 @@ void Driver::generateCompilationDiagnostics(
     return;
   }
 
-  Diag(clang::diag::note_drv_command_failed_diag_msg)
-      << "\n********************\n\n"
-         "PLEASE ATTACH THE FOLLOWING FILES TO THE BUG REPORT:\n"
-         "Preprocessed source(s) and associated run script(s) are located at:";
+  Diag(clang::diag::note_drv_command_failed_diag_msg) << BugReporMsg;
 
   SmallString<128> VFS;
   SmallString<128> ReproCrashFilename;
@@ -2444,7 +2449,7 @@ bool Driver::DiagnoseInputExistence(const DerivedArgList &Args, StringRef Value,
   // they can be influenced by linker flags the clang driver might not
   // understand.
   // Examples:
-  // - `clang-cl main.cc ole32.lib` in a a non-MSVC shell will make the driver
+  // - `clang-cl main.cc ole32.lib` in a non-MSVC shell will make the driver
   //   module look for an MSVC installation in the registry. (We could ask
   //   the MSVCToolChain object if it can find `ole32.lib`, but the logic to
   //   look in the registry might move into lld-link in the future so that
@@ -3955,7 +3960,6 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
           : nullptr;
 
   // Construct the actions to perform.
-  HeaderModulePrecompileJobAction *HeaderModuleAction = nullptr;
   ExtractAPIJobAction *ExtractAPIAction = nullptr;
   ActionList LinkerInputs;
   ActionList MergerInputs;
@@ -4010,16 +4014,6 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
         break;
       }
 
-      // Each precompiled header file after a module file action is a module
-      // header of that same module file, rather than being compiled to a
-      // separate PCH.
-      if (Phase == phases::Precompile && HeaderModuleAction &&
-          getPrecompiledType(InputType) == types::TY_PCH) {
-        HeaderModuleAction->addModuleHeaderInput(Current);
-        Current = nullptr;
-        break;
-      }
-
       if (Phase == phases::Precompile && ExtractAPIAction) {
         ExtractAPIAction->addHeaderInput(Current);
         Current = nullptr;
@@ -4036,9 +4030,7 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
       if (NewCurrent == Current)
         continue;
 
-      if (auto *HMA = dyn_cast<HeaderModulePrecompileJobAction>(NewCurrent))
-        HeaderModuleAction = HMA;
-      else if (auto *EAA = dyn_cast<ExtractAPIJobAction>(NewCurrent))
+      if (auto *EAA = dyn_cast<ExtractAPIJobAction>(NewCurrent))
         ExtractAPIAction = EAA;
 
       Current = NewCurrent;
@@ -4524,9 +4516,6 @@ Action *Driver::ConstructPhaseAction(
       OutputTy = types::TY_Nothing;
     }
 
-    if (ModName)
-      return C.MakeAction<HeaderModulePrecompileJobAction>(Input, OutputTy,
-                                                           ModName);
     return C.MakeAction<PrecompileJobAction>(Input, OutputTy);
   }
   case phases::Compile: {
@@ -4677,7 +4666,7 @@ void Driver::BuildJobs(Compilation &C) const {
 
   if (CCPrintProcessStats) {
     C.setPostCallback([=](const Command &Cmd, int Res) {
-      Optional<llvm::sys::ProcessStatistics> ProcStat =
+      std::optional<llvm::sys::ProcessStatistics> ProcStat =
           Cmd.getProcessStatistics();
       if (!ProcStat)
         return;
@@ -5304,10 +5293,6 @@ InputInfoList Driver::BuildJobsForActionNoCache(
   // input.
   if (JA->getType() == types::TY_dSYM)
     BaseInput = InputInfos[0].getFilename();
-
-  // ... and in header module compilations, which use the module name.
-  if (auto *ModuleJA = dyn_cast<HeaderModulePrecompileJobAction>(JA))
-    BaseInput = ModuleJA->getModuleName();
 
   // Append outputs of offload device jobs to the input list
   if (!OffloadDependencesInputInfo.empty())

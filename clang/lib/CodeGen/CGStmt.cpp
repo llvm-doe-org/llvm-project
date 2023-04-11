@@ -254,6 +254,9 @@ void CodeGenFunction::EmitStmt(const Stmt *S, ArrayRef<const Attr *> Attrs) {
   case Stmt::OMPTaskyieldDirectiveClass:
     EmitOMPTaskyieldDirective(cast<OMPTaskyieldDirective>(*S));
     break;
+  case Stmt::OMPErrorDirectiveClass:
+    EmitOMPErrorDirective(cast<OMPErrorDirective>(*S));
+    break;
   case Stmt::OMPBarrierDirectiveClass:
     EmitOMPBarrierDirective(cast<OMPBarrierDirective>(*S));
     break;
@@ -728,11 +731,10 @@ void CodeGenFunction::EmitAttributedStmt(const AttributedStmt &S) {
       break;
     }
   }
-  SaveAndRestore<bool> save_nomerge(InNoMergeAttributedStmt, nomerge);
-  SaveAndRestore<bool> save_noinline(InNoInlineAttributedStmt, noinline);
-  SaveAndRestore<bool> save_alwaysinline(InAlwaysInlineAttributedStmt,
-                                         alwaysinline);
-  SaveAndRestore<const CallExpr *> save_musttail(MustTailCall, musttail);
+  SaveAndRestore save_nomerge(InNoMergeAttributedStmt, nomerge);
+  SaveAndRestore save_noinline(InNoInlineAttributedStmt, noinline);
+  SaveAndRestore save_alwaysinline(InAlwaysInlineAttributedStmt, alwaysinline);
+  SaveAndRestore save_musttail(MustTailCall, musttail);
   EmitStmt(S.getSubStmt(), S.getAttrs());
 }
 

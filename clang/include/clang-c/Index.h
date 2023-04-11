@@ -1983,37 +1983,41 @@ enum CXCursorKind {
    */
   CXCursor_OMPParallelMaskedTaskLoopSimdDirective = 304,
 
+  /** OpenMP error directive.
+   */
+  CXCursor_OMPErrorDirective = 305,
+
   /** OpenACC update directive.
    */
-  CXCursor_ACCUpdateDirective = 305,
+  CXCursor_ACCUpdateDirective = 306,
 
   /** OpenACC enter data directive.
    */
-  CXCursor_ACCEnterDataDirective = 306,
+  CXCursor_ACCEnterDataDirective = 307,
 
   /** OpenACC exit data directive.
    */
-  CXCursor_ACCExitDataDirective = 307,
+  CXCursor_ACCExitDataDirective = 308,
 
   /** OpenACC data directive.
    */
-  CXCursor_ACCDataDirective = 308,
+  CXCursor_ACCDataDirective = 309,
 
   /** OpenACC parallel directive.
    */
-  CXCursor_ACCParallelDirective = 309,
+  CXCursor_ACCParallelDirective = 310,
 
   /** OpenACC loop directive.
    */
-  CXCursor_ACCLoopDirective = 310,
+  CXCursor_ACCLoopDirective = 311,
 
   /** OpenACC parallel loop directive.
    */
-  CXCursor_ACCParallelLoopDirective = 311,
+  CXCursor_ACCParallelLoopDirective = 312,
 
   /** OpenACC atomic directive.
    */
-  CXCursor_ACCAtomicDirective = 312,
+  CXCursor_ACCAtomicDirective = 313,
 
   CXCursor_LastStmt = CXCursor_ACCAtomicDirective,
 
@@ -4344,6 +4348,31 @@ CINDEX_LINKAGE unsigned clang_CXXMethod_isVirtual(CXCursor C);
  * Is not.
  */
 CINDEX_LINKAGE unsigned clang_CXXMethod_isCopyAssignmentOperator(CXCursor C);
+
+/**
+ * Determine if a C++ member function is a move-assignment operator,
+ * returning 1 if such is the case and 0 otherwise.
+ *
+ * > A move-assignment operator `X::operator=` is a non-static,
+ * > non-template member function of _class_ `X` with exactly one
+ * > parameter of type `X&&`, `const X&&`, `volatile X&&` or `const
+ * > volatile X&&`.
+ *
+ * That is, for example, the `operator=` in:
+ *
+ *    class Foo {
+ *        bool operator=(const volatile Foo&&);
+ *    };
+ *
+ * Is a move-assignment operator, while the `operator=` in:
+ *
+ *    class Bar {
+ *        bool operator=(const int&&);
+ *    };
+ *
+ * Is not.
+ */
+CINDEX_LINKAGE unsigned clang_CXXMethod_isMoveAssignmentOperator(CXCursor C);
 
 /**
  * Determine if a C++ record is abstract, i.e. whether a class or struct

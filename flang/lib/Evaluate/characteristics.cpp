@@ -506,9 +506,7 @@ static std::optional<Procedure> CharacterizeProcedure(
               }
               return intrinsic;
             }
-            const semantics::ProcInterface &interface {
-              proc.interface()
-            };
+            const semantics::ProcInterface &interface { proc.interface() };
             if (const semantics::Symbol * interfaceSymbol{interface.symbol()}) {
               auto interface {
                 CharacterizeProcedure(*interfaceSymbol, context, seenProcs)
@@ -1002,7 +1000,7 @@ bool Procedure::IsCompatibleWith(const Procedure &actual, std::string *whyNot,
       auto sep{": "s};
       *whyNot = "incompatible procedure attributes";
       differences.IterateOverMembers([&](Attr x) {
-        *whyNot += sep + EnumToString(x);
+        *whyNot += sep + std::string{EnumToString(x)};
         sep = ", ";
       });
     }

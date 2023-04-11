@@ -160,7 +160,6 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::CXXPseudoDestructorExprClass:
   case Expr::UnaryExprOrTypeTraitExprClass:
   case Expr::CXXNewExprClass:
-  case Expr::CXXThisExprClass:
   case Expr::CXXNullPtrLiteralExprClass:
   case Expr::ImaginaryLiteralClass:
   case Expr::GNUNullExprClass:
@@ -205,6 +204,10 @@ static Cl::Kinds ClassifyInternal(ASTContext &Ctx, const Expr *E) {
   case Expr::RequiresExprClass:
   case Expr::ACCStarExprClass:
     return Cl::CL_PRValue;
+
+  // Make HLSL this reference-like
+  case Expr::CXXThisExprClass:
+    return Lang.HLSL ? Cl::CL_LValue : Cl::CL_PRValue;
 
   case Expr::ConstantExprClass:
     return ClassifyInternal(Ctx, cast<ConstantExpr>(E)->getSubExpr());

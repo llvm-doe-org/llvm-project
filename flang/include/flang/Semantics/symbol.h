@@ -625,28 +625,27 @@ public:
   bool IsSubprogram() const;
   bool IsFromModFile() const;
   bool HasExplicitInterface() const {
-    return common::visit(common::visitors{
-                             [](const SubprogramDetails &) { return true; },
-                             [](const SubprogramNameDetails &) { return true; },
-                             [&](const ProcEntityDetails &x) {
-                               return attrs_.test(Attr::INTRINSIC) ||
-                                   x.HasExplicitInterface();
-                             },
-                             [](const ProcBindingDetails &x) {
-                               return x.symbol().HasExplicitInterface();
-                             },
-                             [](const UseDetails &x) {
-                               return x.symbol().HasExplicitInterface();
-                             },
-                             [](const HostAssocDetails &x) {
-                               return x.symbol().HasExplicitInterface();
-                             },
-                             [](const GenericDetails &x) {
-                               return x.specific() &&
-                                   x.specific()->HasExplicitInterface();
-                             },
-                             [](const auto &) { return false; },
-                         },
+    return common::visit(
+        common::visitors{
+            [](const SubprogramDetails &) { return true; },
+            [](const SubprogramNameDetails &) { return true; },
+            [&](const ProcEntityDetails &x) {
+              return attrs_.test(Attr::INTRINSIC) || x.HasExplicitInterface();
+            },
+            [](const ProcBindingDetails &x) {
+              return x.symbol().HasExplicitInterface();
+            },
+            [](const UseDetails &x) {
+              return x.symbol().HasExplicitInterface();
+            },
+            [](const HostAssocDetails &x) {
+              return x.symbol().HasExplicitInterface();
+            },
+            [](const GenericDetails &x) {
+              return x.specific() && x.specific()->HasExplicitInterface();
+            },
+            [](const auto &) { return false; },
+        },
         details_);
   }
 
@@ -699,7 +698,7 @@ private:
   Details details_;
 
   Symbol() {} // only created in class Symbols
-  const std::string GetDetailsName() const;
+  std::string GetDetailsName() const;
   friend llvm::raw_ostream &operator<<(llvm::raw_ostream &, const Symbol &);
   friend llvm::raw_ostream &DumpForUnparse(
       llvm::raw_ostream &, const Symbol &, bool);

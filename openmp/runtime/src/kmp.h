@@ -3095,6 +3095,7 @@ static inline bool __kmp_is_hybrid_cpu() { return false; }
 #endif
 
 extern volatile int __kmp_init_serial;
+extern volatile int __kmp_init_acc_host_only;
 extern volatile int __kmp_init_gtid;
 extern volatile int __kmp_init_common;
 extern volatile int __kmp_need_register_serial;
@@ -3415,8 +3416,8 @@ extern std::atomic<kmp_int32> __kmp_task_counter;
 extern void __kmp_print_storage_map_gtid(int gtid, void *p1, void *p2,
                                          size_t size, char const *format, ...);
 
-extern void __kmp_serial_initialize(bool ForOffload = false);
-extern void __kmp_middle_initialize(void);
+extern void __kmp_serial_initialize(bool OffloadImpossible = true);
+extern void __kmp_middle_initialize(bool OffloadImpossible = true);
 extern void __kmp_parallel_initialize(void);
 
 extern void __kmp_internal_begin(void);
@@ -3616,7 +3617,7 @@ extern void __kmp_check_stack_overlap(kmp_info_t *thr);
 extern void __kmp_expand_host_name(char *buffer, size_t size);
 extern void __kmp_expand_file_name(char *result, size_t rlen, char *pattern);
 
-#if KMP_ARCH_X86 || KMP_ARCH_X86_64 || (KMP_OS_WINDOWS && KMP_ARCH_AARCH64)
+#if KMP_ARCH_X86 || KMP_ARCH_X86_64 || (KMP_OS_WINDOWS && (KMP_ARCH_AARCH64 || KMP_ARCH_ARM))
 extern void
 __kmp_initialize_system_tick(void); /* Initialize timer tick value */
 #endif
@@ -3655,6 +3656,8 @@ static inline void __kmp_assign_root_init_mask() {
   }
 }
 static inline void __kmp_reset_root_init_mask(int gtid) {
+  if (!KMP_AFFINITY_CAPABLE())
+    return;
   kmp_info_t *th = __kmp_threads[gtid];
   kmp_root_t *r = th->th.th_root;
   if (r->r.r_uber_thread == th && r->r.r_affinity_assigned) {

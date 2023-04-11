@@ -1322,14 +1322,6 @@ bool Parser::HandlePragmaMSAllocText(StringRef PragmaName,
   return true;
 }
 
-namespace {
-struct PragmaLoopHintInfo {
-  Token PragmaName;
-  Token Option;
-  ArrayRef<Token> Toks;
-};
-} // end anonymous namespace
-
 static std::string PragmaLoopHintString(Token PragmaName, Token Option) {
   StringRef Str = PragmaName.getIdentifierInfo()->getName();
   std::string ClangLoopStr("clang loop ");

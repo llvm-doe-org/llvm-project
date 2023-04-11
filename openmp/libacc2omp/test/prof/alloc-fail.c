@@ -10,13 +10,12 @@
 // DEFINE:   FileCheck -input-file %t.out %s                                   \
 // DEFINE:     -match-full-lines -strict-whitespace -allow-empty               \
 // DEFINE:     -implicit-check-not=acc_ev_                                     \
-// DEFINE:     -check-prefixes=OUT,OUT-%if-host<HOST|OFF>-PRE-ENV              \
-// DEFINE:     -check-prefixes=OUT-%{HOST_OR_OFF_POST_ENV}-POST-ENV            \
-// DEFINE:     -check-prefixes=OUT-%if-host<HOST|OFF>-THEN-%{HOST_OR_OFF_POST_ENV}
+// DEFINE:     -check-prefixes=OUT,OUT-%{HOST_OR_OFF_POST_ENV}-POST-ENV
 
-// RUN: %{check}(                                 %, %if-host<HOST|OFF> %, %if-host<|%not --crash> %)
-// RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled %, HOST               %,                         %)
-// RUN: %{check}( env ACC_DEVICE_TYPE=host        %, HOST               %,                         %)
+//                RUN_ENV                            HOST_OR_OFF_POST_ENV    NOT_IF_OFF_POST_ENV
+// RUN: %{check}(                                 %, %if-host<HOST|OFF>   %, %if-host<|%not --crash> %)
+// RUN: %{check}( env OMP_TARGET_OFFLOAD=disabled %, HOST                 %,                         %)
+// RUN: %{check}( env ACC_DEVICE_TYPE=host        %, HOST                 %,                         %)
 //
 // END.
 
@@ -56,7 +55,7 @@ int main() {
 //  OUT-OFF-POST-ENV:acc_ev_enter_data_end
 //  OUT-OFF-POST-ENV:acc_ev_enter_data_start
 //  OUT-OFF-POST-ENV:acc_ev_enter_data_end
-// OUT-OFF-THEN-HOST:acc_ev_runtime_shutdown
+// OUT-HOST-POST-ENV:acc_ev_runtime_shutdown
 
 //               ERR-NOT:{{.}}
 //                   ERR:addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]

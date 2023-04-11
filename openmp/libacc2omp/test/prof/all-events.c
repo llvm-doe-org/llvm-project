@@ -102,9 +102,9 @@
 //
 // DEFINE: %{check-run-envs}( CHECK_RUN_ENV %, EXE %, SRC_FILE %) = \
 //                             EXE       SRC_FILE       RUN_ENV                            ENV_FC
-// DEFINE:   %{CHECK_RUN_ENV}( %{EXE} %, %{SRC_FILE} %,                                 %, %if-host<HOST|OFF>,%if-host<HOST|OFF>-%{DIR_FC1},%if-host<HOST|OFF>-%{DIR_FC2},%if-host<HOST|OFF>-%{DIR_FC3},TGT-%dev-type-0-omp,TGT-%dev-type-0-omp-%{DIR_FC1},TGT-%dev-type-0-omp-%{DIR_FC2},TGT-%dev-type-0-omp-%{DIR_FC3},%if-host<HOST|OFF>-BEFORE-ENV,%if-host<HOST|OFF>-BEFORE-ENV-%{DIR_FC2} %) && \
-// DEFINE:   %{CHECK_RUN_ENV}( %{EXE} %, %{SRC_FILE} %, env OMP_TARGET_OFFLOAD=disabled %, HOST,HOST-%{DIR_FC1},HOST-%{DIR_FC2},%if-host<HOST|OFF>-BEFORE-ENV,%if-host<HOST|OFF>-BEFORE-ENV-%{DIR_FC2} %) && \
-// DEFINE:   %{CHECK_RUN_ENV}( %{EXE} %, %{SRC_FILE} %, env ACC_DEVICE_TYPE=host        %, HOST,HOST-%{DIR_FC1},HOST-%{DIR_FC2},%if-host<HOST|OFF>-BEFORE-ENV,%if-host<HOST|OFF>-BEFORE-ENV-%{DIR_FC2} %)
+// DEFINE:   %{CHECK_RUN_ENV}( %{EXE} %, %{SRC_FILE} %,                                 %, %if-host<HOST|OFF>,%if-host<HOST|OFF>-%{DIR_FC1},%if-host<HOST|OFF>-%{DIR_FC2},%if-host<HOST|OFF>-%{DIR_FC3},TGT-%dev-type-0-omp,TGT-%dev-type-0-omp-%{DIR_FC1},TGT-%dev-type-0-omp-%{DIR_FC2},TGT-%dev-type-0-omp-%{DIR_FC3} %) && \
+// DEFINE:   %{CHECK_RUN_ENV}( %{EXE} %, %{SRC_FILE} %, env OMP_TARGET_OFFLOAD=disabled %, HOST,HOST-%{DIR_FC1},HOST-%{DIR_FC2} %) && \
+// DEFINE:   %{CHECK_RUN_ENV}( %{EXE} %, %{SRC_FILE} %, env ACC_DEVICE_TYPE=host        %, HOST,HOST-%{DIR_FC1},HOST-%{DIR_FC2} %)
 
 // Check both traditional compilation mode and source-to-source mode followed by
 // OpenMP compilation.  This is important because, in the latter case, some
@@ -1325,36 +1325,20 @@ int main() {
 
 // Runtime shutdown.
 //
-// HOST-BEFORE-ENV-HASPAR-NEXT:acc_ev_runtime_shutdown
-// HOST-BEFORE-ENV-HASPAR-NEXT:  acc_prof_info
-// HOST-BEFORE-ENV-HASPAR-NEXT:    event_type=5, valid_bytes=72, version=[[VERSION]],
-// HOST-BEFORE-ENV-HASPAR-NEXT:    device_type=acc_device_host, device_number=0,
-// HOST-BEFORE-ENV-HASPAR-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-// HOST-BEFORE-ENV-HASPAR-NEXT:    src_file=(null), func_name=(null),
-// HOST-BEFORE-ENV-HASPAR-NEXT:    line_no=0, end_line_no=0,
-// HOST-BEFORE-ENV-HASPAR-NEXT:    func_line_no=0, func_end_line_no=0
-// HOST-BEFORE-ENV-HASPAR-NEXT:  acc_other_event_info
-// HOST-BEFORE-ENV-HASPAR-NEXT:    event_type=5, valid_bytes=24,
-// HOST-BEFORE-ENV-HASPAR-NEXT:    parent_construct=acc_construct_runtime_api,
-// HOST-BEFORE-ENV-HASPAR-NEXT:    implicit=1, tool_info=(nil)
-// HOST-BEFORE-ENV-HASPAR-NEXT:  acc_api_info
-// HOST-BEFORE-ENV-HASPAR-NEXT:    device_api=0, valid_bytes=12,
-// HOST-BEFORE-ENV-HASPAR-NEXT:    device_type=acc_device_host
-//
-// OFF-BEFORE-ENV-NEXT:acc_ev_runtime_shutdown
-// OFF-BEFORE-ENV-NEXT:  acc_prof_info
-// OFF-BEFORE-ENV-NEXT:    event_type=5, valid_bytes=72, version=[[VERSION]],
-// OFF-BEFORE-ENV-NEXT:    device_type=acc_device_host, device_number=0,
-// OFF-BEFORE-ENV-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
-// OFF-BEFORE-ENV-NEXT:    src_file=(null), func_name=(null),
-// OFF-BEFORE-ENV-NEXT:    line_no=0, end_line_no=0,
-// OFF-BEFORE-ENV-NEXT:    func_line_no=0, func_end_line_no=0
-// OFF-BEFORE-ENV-NEXT:  acc_other_event_info
-// OFF-BEFORE-ENV-NEXT:    event_type=5, valid_bytes=24,
-// OFF-BEFORE-ENV-NEXT:    parent_construct=acc_construct_runtime_api,
-// OFF-BEFORE-ENV-NEXT:    implicit=1, tool_info=(nil)
-// OFF-BEFORE-ENV-NEXT:  acc_api_info
-// OFF-BEFORE-ENV-NEXT:    device_api=0, valid_bytes=12,
-// OFF-BEFORE-ENV-NEXT:    device_type=acc_device_host
+// CHECK-NEXT:acc_ev_runtime_shutdown
+// CHECK-NEXT:  acc_prof_info
+// CHECK-NEXT:    event_type=5, valid_bytes=72, version=[[VERSION]],
+// CHECK-NEXT:    device_type=acc_device_host, device_number=0,
+// CHECK-NEXT:    thread_id=[[THREAD_ID]], async=acc_async_sync, async_queue=[[ASYNC_QUEUE]],
+// CHECK-NEXT:    src_file=(null), func_name=(null),
+// CHECK-NEXT:    line_no=0, end_line_no=0,
+// CHECK-NEXT:    func_line_no=0, func_end_line_no=0
+// CHECK-NEXT:  acc_other_event_info
+// CHECK-NEXT:    event_type=5, valid_bytes=24,
+// CHECK-NEXT:    parent_construct=acc_construct_runtime_api,
+// CHECK-NEXT:    implicit=1, tool_info=(nil)
+// CHECK-NEXT:  acc_api_info
+// CHECK-NEXT:    device_api=0, valid_bytes=12,
+// CHECK-NEXT:    device_type=acc_device_host
 
 // CHECK-NOT:{{.}}

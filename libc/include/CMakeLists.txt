@@ -69,7 +69,7 @@ add_gen_header(
 )
 
 add_gen_header(
-  assert_h
+  assert
   DEF_FILE assert.h.def
   GEN_HDR assert.h
   DEPENDS
@@ -106,6 +106,7 @@ add_gen_header(
     .llvm-libc-types.clockid_t
     .llvm-libc-types.struct_tm
     .llvm-libc-types.struct_timespec
+    .llvm-libc-types.struct_timeval
 )
 
 add_gen_header(
@@ -144,10 +145,11 @@ add_gen_header(
     ../config/${LIBC_TARGET_OS}/signal.h.in
   DEPENDS
     .llvm-libc-macros.signal_macros
-    .llvm-libc-types.struct_sigaction
     .llvm-libc-types.__sighandler_t
-    .llvm-libc-types.stack_t
     .llvm-libc-types.sigset_t
+    .llvm-libc-types.sig_atomic_t
+    .llvm-libc-types.stack_t
+    .llvm-libc-types.struct_sigaction
     .llvm-libc-types.pid_t
 )
 
@@ -158,8 +160,10 @@ add_gen_header(
   DEPENDS
     .llvm_libc_common_h
     .llvm-libc-macros.file_seek_macros
+    .llvm-libc-macros.stdio_macros
     .llvm-libc-types.cookie_io_functions_t
     .llvm-libc-types.FILE
+    .llvm-libc-types.off_t
     .llvm-libc-types.size_t
 )
 
