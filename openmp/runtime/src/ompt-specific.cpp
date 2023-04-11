@@ -193,7 +193,7 @@ ompt_task_info_t *__ompt_get_scheduling_taskinfo(int depth) {
 //----------------------------------------------------------
 
 void __ompt_force_initialization() {
-  __kmp_serial_initialize(/*OffloadImpossible=*/false);
+  __kmp_serial_initialize(/*DevListReady=*/false);
 }
 
 //----------------------------------------------------------

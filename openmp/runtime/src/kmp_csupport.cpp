@@ -4387,7 +4387,7 @@ void omp_free(void *ptr, omp_allocator_handle_t allocator) {
 /* end of OpenMP 5.1 Memory Management routines */
 
 int __kmpc_get_target_offload(void) {
-  __kmp_serial_initialize(/*OffloadImpossible=*/false);
+  __kmp_serial_initialize(/*DevListReady=*/false);
   return __kmp_target_offload;
 }
 

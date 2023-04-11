@@ -152,7 +152,7 @@ libomp_start_tool(ompt_target_callbacks_active_t *libomptarget_ompt_enabled,
                   ompt_target_callbacks_internal_t *libomptarget_ompt_callbacks)
 {
   if (!TCR_4(__kmp_init_middle)) {
-    __kmp_middle_initialize(/*OffloadImpossible=*/false);
+    __kmp_middle_initialize(/*DevListReady=*/false);
   }
   bool ret = false;
   libomptarget_ompt_enabled->enabled = ompt_enabled.enabled;

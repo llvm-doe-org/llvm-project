@@ -12,7 +12,6 @@
 
 #include "llvm/Object/OffloadBinary.h"
 
-#include "acc2omp-handlers.h"
 #include "device.h"
 #include "ompt-target.h"
 #include "private.h"
@@ -525,18 +524,6 @@ void RTLsTy::registerLib(__tgt_bin_desc *Desc) {
   PM->RTLsMtx.unlock();
 
   DP("Done registering entries!\n");
-
-  // Adjust the default device according to OpenACC environment variables unless
-  // OMP_DEFAULT_DEVICE overrides them.
-  if (!getenv("OMP_DEFAULT_DEVICE")) {
-    auto DynlibHandle = std::make_unique<llvm::sys::DynamicLibrary>(
-        llvm::sys::DynamicLibrary::getPermanentLibrary(nullptr));
-    acc2omp_set_omp_default_device_t acc2omp_set_omp_default_device =
-        (acc2omp_set_omp_default_device_t)DynlibHandle->getAddressOfSymbol(
-            "acc2omp_set_omp_default_device");
-    if (acc2omp_set_omp_default_device)
-      acc2omp_set_omp_default_device();
-  }
 }
 
 void RTLsTy::unregisterLib(__tgt_bin_desc *Desc) {

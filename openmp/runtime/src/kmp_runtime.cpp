@@ -227,25 +227,24 @@ int __kmp_get_global_thread_id() {
 }
 
 // Check the default device according to OpenACC environment variables unless
-// either (1) OMP_DEFAULT_DEVICE overrides them or (2) !OffloadImpossible,
-// meaning offloading might be enabled and so acc2omp_set_omp_default_device
-// might be called later after the device list has been populated.  If it turns
-// out offloading is not enabled, then __kmp_do_init_acc_host_only must be
-// called again but with OffloadImpossible=true after that's determined.
+// either (1) OMP_DEFAULT_DEVICE overrides them or (2) !DevListReady, meaning
+// offloading might be enabled but the full device list might not be populated
+// yet.  In the latter case, __kmp_do_init_acc must be called later with
+// DevListReady=true after the device list is populated.
 //
-// __kmp_do_init_acc_host_only must be called after __kmp_init_serial = TRUE, or
-// the call to acc2omp_set_omp_default_device here will deadlock when it calls
-// OpenMP routines that try to perform runtime initialization.
-static void __kmp_do_init_acc_host_only(bool OffloadImpossible = true) {
-  if (__kmp_init_acc_host_only || !OffloadImpossible ||
-      getenv("OMP_DEFAULT_DEVICE"))
+// __kmp_do_init_acc must be called after __kmp_init_serial = TRUE, or the call
+// to acc2omp_set_omp_default_device here will deadlock when it calls OpenMP
+// routines that try to perform runtime initialization.
+static void __kmp_do_init_acc(bool DevListReady = true) {
+  if (__kmp_init_acc || !DevListReady || getenv("OMP_DEFAULT_DEVICE"))
     return;
   // We must set this before calling acc2omp_set_omp_default_device or we'll
   // find ourselves back here again in an infinite recursion.
-  __kmp_init_acc_host_only = TRUE;
-  // acc2omp_set_omp_default_device should not actually change the default
-  // device as host is the only possibility, but it might produce a runtime
-  // error if host isn't what's specified by OpenACC environment variables.
+  __kmp_init_acc = TRUE;
+  // If offloading is disabled, acc2omp_set_omp_default_device should not
+  // actually change the default device as host is the only possibility, but it
+  // might produce a runtime error if host isn't what's specified by OpenACC
+  // environment variables.
   acc2omp_set_omp_default_device_t acc2omp_set_omp_default_device =
       (acc2omp_set_omp_default_device_t)dlsym(RTLD_DEFAULT,
                                               "acc2omp_set_omp_default_device");
@@ -286,12 +285,12 @@ int __kmp_get_global_thread_id_reg() {
     } else {
       gtid = __kmp_register_root(FALSE);
     }
-    __kmp_do_init_acc_host_only();
+    __kmp_do_init_acc();
     __kmp_release_bootstrap_lock(&__kmp_initz_lock);
     /*__kmp_printf( "+++ %d\n", gtid ); */ /* GROO */
-  } else if (!__kmp_init_acc_host_only) {
+  } else if (!__kmp_init_acc) {
     __kmp_acquire_bootstrap_lock(&__kmp_initz_lock);
-    __kmp_do_init_acc_host_only();
+    __kmp_do_init_acc();
     __kmp_release_bootstrap_lock(&__kmp_initz_lock);
   }
 
@@ -7400,24 +7399,24 @@ static void __kmp_do_serial_initialize() {
   KA_TRACE(10, ("__kmp_do_serial_initialize: exit\n"));
 }
 
-void __kmp_serial_initialize(bool OffloadImpossible) {
-  if (__kmp_init_serial && __kmp_init_acc_host_only)
+void __kmp_serial_initialize(bool DevListReady) {
+  if (__kmp_init_serial && __kmp_init_acc)
     return;
   __kmp_acquire_bootstrap_lock(&__kmp_initz_lock);
   if (!__kmp_init_serial)
     __kmp_do_serial_initialize();
-  __kmp_do_init_acc_host_only(OffloadImpossible);
+  __kmp_do_init_acc(DevListReady);
   __kmp_release_bootstrap_lock(&__kmp_initz_lock);
 }
 
-static void __kmp_do_middle_initialize(bool OffloadImpossible = true) {
+static void __kmp_do_middle_initialize(bool DevListReady = true) {
   int i, j;
   int prev_dflt_team_nth;
 
   if (!__kmp_init_serial) {
     __kmp_do_serial_initialize();
   }
-  __kmp_do_init_acc_host_only(OffloadImpossible);
+  __kmp_do_init_acc(DevListReady);
 
   KA_TRACE(10, ("__kmp_middle_initialize: enter\n"));
 
@@ -7518,7 +7517,7 @@ static void __kmp_do_middle_initialize(bool OffloadImpossible = true) {
   KA_TRACE(10, ("__kmp_do_middle_initialize: exit\n"));
 }
 
-void __kmp_middle_initialize(bool OffloadImpossible) {
+void __kmp_middle_initialize(bool DevListReady) {
   if (__kmp_init_middle) {
     return;
   }
@@ -7527,7 +7526,7 @@ void __kmp_middle_initialize(bool OffloadImpossible) {
     __kmp_release_bootstrap_lock(&__kmp_initz_lock);
     return;
   }
-  __kmp_do_middle_initialize(OffloadImpossible);
+  __kmp_do_middle_initialize(DevListReady);
   __kmp_release_bootstrap_lock(&__kmp_initz_lock);
 }
 
@@ -9112,7 +9111,7 @@ void __kmp_omp_display_env(int verbose) {
   __kmp_acquire_bootstrap_lock(&__kmp_initz_lock);
   if (__kmp_init_serial == 0)
     __kmp_do_serial_initialize();
-  __kmp_do_init_acc_host_only();
+  __kmp_do_init_acc();
   __kmp_display_env_impl(!verbose, verbose);
   __kmp_release_bootstrap_lock(&__kmp_initz_lock);
 }

@@ -42,16 +42,9 @@ add_llvm_library(omptarget
   "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports"
   NO_INSTALL_RPATH
 )
-
 target_include_directories(omptarget PRIVATE ${LIBOMPTARGET_INCLUDE_DIR})
 
 # libomptarget.so needs to be aware of where the plugins live as they
 # are now separated in the build directory.
 set_target_properties(omptarget PROPERTIES INSTALL_RPATH "$ORIGIN" BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
 install(TARGETS omptarget LIBRARY COMPONENT omptarget DESTINATION "${OPENMP_INSTALL_LIBDIR}")
-
-# Set the -I for headers from the runtime.
-include_directories(
-  ${CMAKE_CURRENT_BINARY_DIR}/../../runtime/src
-  ${CMAKE_CURRENT_BINARY_DIR}/../../libacc2omp/src
-)

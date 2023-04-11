@@ -46,9 +46,14 @@ extern "C" {
 ///   (e.g., \c acc2omp_fatal).
 ///
 /// LLVM's OpenMP runtime currently chooses to skip calling
-/// \c acc2omp_set_omp_default_device when the \c OMP_DEFAULT_DEVICE environment
-/// variable is set.  In this way, OpenMP mechanisms are treated as lower-level
-/// mechanisms that override OpenACC mechanisms.
+/// \c acc2omp_set_omp_default_device when:
+/// - The \c OMP_DEFAULT_DEVICE environment variable is set.  In this way,
+///   OpenMP mechanisms are treated as lower-level mechanisms that override
+///   OpenACC mechanisms.
+/// - The runtime is never entered from the application's OpenACC code.  That
+///   is, simply compiling with -fopenacc isn't sufficient to trigger checking
+///   of OpenACC environment variables at run time.  The application must
+///   actually execute OpenACC code.
 typedef void (*acc2omp_set_omp_default_device_t)(void);
 
 /// Type for \c acc2omp_ompt_start_tool, which handles OpenACC Profiling

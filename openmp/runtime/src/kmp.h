@@ -3095,7 +3095,7 @@ static inline bool __kmp_is_hybrid_cpu() { return false; }
 #endif
 
 extern volatile int __kmp_init_serial;
-extern volatile int __kmp_init_acc_host_only;
+extern volatile int __kmp_init_acc;
 extern volatile int __kmp_init_gtid;
 extern volatile int __kmp_init_common;
 extern volatile int __kmp_need_register_serial;
@@ -3416,8 +3416,8 @@ extern std::atomic<kmp_int32> __kmp_task_counter;
 extern void __kmp_print_storage_map_gtid(int gtid, void *p1, void *p2,
                                          size_t size, char const *format, ...);
 
-extern void __kmp_serial_initialize(bool OffloadImpossible = true);
-extern void __kmp_middle_initialize(bool OffloadImpossible = true);
+extern void __kmp_serial_initialize(bool DevListReady = true);
+extern void __kmp_middle_initialize(bool DevListReady = true);
 extern void __kmp_parallel_initialize(void);
 
 extern void __kmp_internal_begin(void);
