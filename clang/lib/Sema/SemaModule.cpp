@@ -320,7 +320,7 @@ Sema::ActOnModuleDecl(SourceLocation StartLoc, SourceLocation ModuleLoc,
       Diag(Path[0].second, diag::err_module_redefinition) << ModuleName;
       if (M->DefinitionLoc.isValid())
         Diag(M->DefinitionLoc, diag::note_prev_module_definition);
-      else if (Optional<FileEntryRef> FE = M->getASTFile())
+      else if (OptionalFileEntryRef FE = M->getASTFile())
         Diag(M->DefinitionLoc, diag::note_prev_module_definition_from_ast_file)
             << FE->getName();
       Mod = M;
@@ -836,7 +836,7 @@ static llvm::Optional<UnnamedDeclKind> getUnnamedDeclKind(Decl *D) {
   if (isa<UsingDirectiveDecl>(D))
     return UnnamedDeclKind::UsingDirective;
   // Everything else either introduces one or more names or is ill-formed.
-  return llvm::None;
+  return std::nullopt;
 }
 
 unsigned getUnnamedDeclDiag(UnnamedDeclKind UDK, bool InBlock) {

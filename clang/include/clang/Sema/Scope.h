@@ -146,6 +146,10 @@ public:
     /// parsed. If such a scope is a ContinueScope, it's invalid to jump to the
     /// continue block from here.
     ConditionVarScope = 0x8000000,
+
+    /// This is a scope of some OpenMP directive with
+    /// order clause which specifies concurrent
+    OpenMPOrderClauseScope = 0x10000000,
   };
 
 private:
@@ -221,7 +225,7 @@ private:
   ///  1) pointer to VarDecl that denotes NRVO candidate itself.
   ///  2) nullptr value means that NRVO is not allowed in this scope
   ///     (e.g. return a function parameter).
-  ///  3) None value means that there is no NRVO candidate in this scope
+  ///  3) std::nullopt value means that there is no NRVO candidate in this scope
   ///     (i.e. there are no return statements in this scope).
   Optional<VarDecl *> NRVO;
 
@@ -492,6 +496,12 @@ public:
   bool isOpenMPLoopScope() const {
     const Scope *P = getParent();
     return P && P->isOpenMPLoopDirectiveScope();
+  }
+
+  /// Determine whether this scope is some OpenMP directive with
+  /// order clause which specifies concurrent scope.
+  bool isOpenMPOrderClauseScope() const {
+    return getFlags() & Scope::OpenMPOrderClauseScope;
   }
 
   /// Determines whether this scope is the OpenACC directive scope

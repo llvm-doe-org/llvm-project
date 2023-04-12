@@ -301,6 +301,9 @@ enum NodeType : unsigned {
   //  vcpop.m with additional mask and VL operands.
   VCPOP_VL,
 
+  //  vfirst.m with additional mask and VL operands.
+  VFIRST_VL,
+
   // Reads value of CSR.
   // The first operand is a chain pointer. The second specifies address of the
   // required CSR. Two results are produced, the read value and the new chain
@@ -380,6 +383,8 @@ public:
 
   bool isIntDivCheap(EVT VT, AttributeList Attr) const override;
 
+  bool preferScalarizeSplat(unsigned Opc) const override;
+
   bool softPromoteHalfType() const override { return true; }
 
   /// Return the register type for a given MVT, ensuring vectors are treated
@@ -392,6 +397,9 @@ public:
   unsigned getNumRegistersForCallingConv(LLVMContext &Context,
                                          CallingConv::ID CC,
                                          EVT VT) const override;
+
+  bool shouldFoldSelectWithIdentityConstant(unsigned BinOpcode,
+                                            EVT VT) const override;
 
   /// Return true if the given shuffle mask can be codegen'd directly, or if it
   /// should be stack expanded.
@@ -612,7 +620,7 @@ private:
                                ISD::ArgFlagsTy ArgFlags, CCState &State,
                                bool IsFixed, bool IsRet, Type *OrigTy,
                                const RISCVTargetLowering &TLI,
-                               Optional<unsigned> FirstMaskArgument);
+                               std::optional<unsigned> FirstMaskArgument);
 
   void analyzeInputArgs(MachineFunction &MF, CCState &CCInfo,
                         const SmallVectorImpl<ISD::InputArg> &Ins, bool IsRet,
@@ -729,6 +737,10 @@ private:
   bool shouldNormalizeToSelectSequence(LLVMContext &, EVT) const override {
     return false;
   };
+
+  /// For available scheduling models FDIV + two independent FMULs are much
+  /// faster than two FDIVs.
+  unsigned combineRepeatedFPDivisors() const override;
 };
 namespace RISCVVIntrinsicsTable {
 

@@ -93,7 +93,19 @@ static Value *mergeDistinctValues(QualType Type, Value &Val1,
                                   Environment::ValueModel &Model) {
   // Join distinct boolean values preserving information about the constraints
   // in the respective path conditions.
-  if (auto *Expr1 = dyn_cast<BoolValue>(&Val1)) {
+  if (Type->isBooleanType()) {
+    // FIXME: The type check above is a workaround and should be unnecessary.
+    // However, right now we can end up with BoolValue's in integer-typed
+    // variables due to our incorrect handling of boolean-to-integer casts (we
+    // just propagate the BoolValue to the result of the cast). For example:
+    // std::optional<bool> o;
+    //
+    //
+    // int x;
+    // if (o.has_value()) {
+    //   x = o.value();
+    // }
+    auto *Expr1 = cast<BoolValue>(&Val1);
     auto *Expr2 = cast<BoolValue>(&Val2);
     auto &MergedVal = MergedEnv.makeAtomicBoolValue();
     MergedEnv.addToFlowCondition(MergedEnv.makeOr(
@@ -233,6 +245,15 @@ Environment::Environment(DataflowAnalysisContext &DACtx,
       }
     }
   }
+
+  // Look for global variable references in the constructor-initializers.
+  if (const auto *CtorDecl = dyn_cast<CXXConstructorDecl>(&DeclCtx)) {
+    for (const auto *Init : CtorDecl->inits()) {
+      const Expr *E = Init->getInit();
+      assert(E != nullptr);
+      initGlobalVars(*E, *this);
+    }
+  }
 }
 
 bool Environment::canDescend(unsigned MaxDepth,
@@ -370,15 +391,18 @@ LatticeJoinEffect Environment::widen(const Environment &PrevEnv,
 
   auto Effect = LatticeJoinEffect::Unchanged;
 
-  // By the API, `PrevEnv` <= `*this`, meaning `join(PrevEnv, *this) =
-  // *this`. That guarantees that these maps are subsets of the maps in
-  // `PrevEnv`. So, we don't need change their current values to widen (in
-  // contrast to `join`).
+  // By the API, `PrevEnv` is a previous version of the environment for the same
+  // block, so we have some guarantees about its shape. In particular, it will
+  // be the result of a join or widen operation on previous values for this
+  // block. For `DeclToLoc` and `ExprToLoc`, join guarantees that these maps are
+  // subsets of the maps in `PrevEnv`. So, as long as we maintain this property
+  // here, we don't need change their current values to widen.
   //
-  // FIXME: The above is violated for `MemberLocToStruct`, because `join` can
-  // cause the map size to increase (when we add fresh data in places of
-  // conflict). Once this issue with join is resolved, re-enable the assertion
-  // below or replace with something that captures the desired invariant.
+  // FIXME: `MemberLocToStruct` does not share the above property, because
+  // `join` can cause the map size to increase (when we add fresh data in places
+  // of conflict). Once this issue with join is resolved, re-enable the
+  // assertion below or replace with something that captures the desired
+  // invariant.
   assert(DeclToLoc.size() <= PrevEnv.DeclToLoc.size());
   assert(ExprToLoc.size() <= PrevEnv.ExprToLoc.size());
   // assert(MemberLocToStruct.size() <= PrevEnv.MemberLocToStruct.size());
@@ -444,10 +468,6 @@ LatticeJoinEffect Environment::join(const Environment &Other,
 
   JoinedEnv.MemberLocToStruct =
       intersectDenseMaps(MemberLocToStruct, Other.MemberLocToStruct);
-  assert(JoinedEnv.MemberLocToStruct.size() <=
-         std::min(MemberLocToStruct.size(), Other.MemberLocToStruct.size()));
-
-  intersectDenseMaps(MemberLocToStruct, Other.MemberLocToStruct);
   if (MemberLocToStruct.size() != JoinedEnv.MemberLocToStruct.size())
     Effect = LatticeJoinEffect::Changed;
 

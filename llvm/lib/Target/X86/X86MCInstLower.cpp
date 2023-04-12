@@ -20,7 +20,6 @@
 #include "X86RegisterInfo.h"
 #include "X86ShuffleDecodeConstantPool.h"
 #include "X86Subtarget.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
@@ -65,8 +64,8 @@ class X86MCInstLower {
 public:
   X86MCInstLower(const MachineFunction &MF, X86AsmPrinter &asmprinter);
 
-  Optional<MCOperand> LowerMachineOperand(const MachineInstr *MI,
-                                          const MachineOperand &MO) const;
+  std::optional<MCOperand> LowerMachineOperand(const MachineInstr *MI,
+                                               const MachineOperand &MO) const;
   void Lower(const MachineInstr *MI, MCInst &OutMI) const;
 
   MCSymbol *GetSymbolFromOperand(const MachineOperand &MO) const;
@@ -428,7 +427,7 @@ static unsigned getRetOpcode(const X86Subtarget &Subtarget) {
   return Subtarget.is64Bit() ? X86::RET64 : X86::RET32;
 }
 
-Optional<MCOperand>
+std::optional<MCOperand>
 X86MCInstLower::LowerMachineOperand(const MachineInstr *MI,
                                     const MachineOperand &MO) const {
   switch (MO.getType()) {
@@ -1025,14 +1024,7 @@ void X86AsmPrinter::LowerTlsAddr(X86MCInstLower &MCInstLowering,
 
   const MCSymbolRefExpr *Sym = MCSymbolRefExpr::create(
       MCInstLowering.GetSymbolFromOperand(MI.getOperand(3)), SRVK, Ctx);
-
-  // As of binutils 2.32, ld has a bogus TLS relaxation error when the GD/LD
-  // code sequence using R_X86_64_GOTPCREL (instead of R_X86_64_GOTPCRELX) is
-  // attempted to be relaxed to IE/LE (binutils PR24784). Work around the bug by
-  // only using GOT when GOTPCRELX is enabled.
-  // TODO Delete the workaround when GOTPCRELX becomes commonplace.
-  bool UseGot = MMI->getModule()->getRtLibUseGOT() &&
-                Ctx.getAsmInfo()->canRelaxRelocations();
+  const bool UseGot = MMI->getModule()->getRtLibUseGOT();
 
   if (Is64Bits) {
     bool NeedsPadding = SRVK == MCSymbolRefExpr::VK_TLSGD;

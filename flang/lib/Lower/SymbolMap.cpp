@@ -92,7 +92,8 @@ Fortran::lower::SymMap::lookupImpliedDo(Fortran::lower::SymMap::AcDoVar var) {
 }
 
 llvm::Optional<fir::FortranVariableOpInterface>
-Fortran::lower::SymMap::lookupVariableDefinition(semantics::SymbolRef sym) {
+Fortran::lower::SymMap::lookupVariableDefinition(semantics::SymbolRef symRef) {
+  Fortran::semantics::SymbolRef sym = symRef.get().GetUltimate();
   for (auto jmap = symbolMapStack.rbegin(), jend = symbolMapStack.rend();
        jmap != jend; ++jmap) {
     auto iter = jmap->find(&*sym);
@@ -101,10 +102,10 @@ Fortran::lower::SymMap::lookupVariableDefinition(semantics::SymbolRef sym) {
               std::get_if<fir::FortranVariableOpInterface>(&iter->second))
         return *varDef;
       else
-        return llvm::None;
+        return std::nullopt;
     }
   }
-  return llvm::None;
+  return std::nullopt;
 }
 
 llvm::raw_ostream &

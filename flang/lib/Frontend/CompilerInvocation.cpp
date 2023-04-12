@@ -139,7 +139,7 @@ static void parseCodeGenArgs(Fortran::frontend::CodeGenOptions &opts,
                   .Case("ropi", llvm::Reloc::ROPI)
                   .Case("rwpi", llvm::Reloc::RWPI)
                   .Case("ropi-rwpi", llvm::Reloc::ROPI_RWPI)
-                  .Default(llvm::None);
+                  .Default(std::nullopt);
     if (RM.has_value())
       opts.setRelocationModel(*RM);
     else
@@ -726,6 +726,16 @@ static bool parseFloatingPointArgs(CompilerInvocation &invoc,
 
   if (args.getLastArg(clang::driver::options::OPT_freciprocal_math)) {
     opts.ReciprocalMath = true;
+  }
+
+  if (args.getLastArg(clang::driver::options::OPT_ffast_math)) {
+    opts.NoHonorInfs = true;
+    opts.NoHonorNaNs = true;
+    opts.AssociativeMath = true;
+    opts.ReciprocalMath = true;
+    opts.ApproxFunc = true;
+    opts.NoSignedZeros = true;
+    opts.setFPContractMode(LangOptions::FPM_Fast);
   }
 
   return true;

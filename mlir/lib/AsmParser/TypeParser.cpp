@@ -44,7 +44,7 @@ OptionalParseResult Parser::parseOptionalType(Type &type) {
     return failure(!(type = parseType()));
 
   default:
-    return llvm::None;
+    return std::nullopt;
   }
 }
 
@@ -273,7 +273,7 @@ Type Parser::parseNonFunctionType() {
     auto width = getToken().getIntTypeBitwidth();
     if (!width.has_value())
       return (emitError("invalid integer width"), nullptr);
-    if (width.value() > IntegerType::kMaxWidth) {
+    if (*width > IntegerType::kMaxWidth) {
       emitError(getToken().getLoc(), "integer bitwidth is limited to ")
           << IntegerType::kMaxWidth << " bits";
       return nullptr;

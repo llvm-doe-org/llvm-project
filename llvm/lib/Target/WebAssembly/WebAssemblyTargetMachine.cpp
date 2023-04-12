@@ -32,6 +32,7 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/LowerAtomicPass.h"
 #include "llvm/Transforms/Utils.h"
+#include <optional>
 using namespace llvm;
 
 #define DEBUG_TYPE "wasm"
@@ -79,13 +80,16 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeWebAssemblyTarget() {
   initializeWebAssemblyDebugFixupPass(PR);
   initializeWebAssemblyPeepholePass(PR);
   initializeWebAssemblyMCLowerPrePassPass(PR);
+  initializeWebAssemblyLowerRefTypesIntPtrConvPass(PR);
+  initializeWebAssemblyFixBrTableDefaultsPass(PR);
+  initializeWebAssemblyDAGToDAGISelPass(PR);
 }
 
 //===----------------------------------------------------------------------===//
 // WebAssembly Lowering public interface.
 //===----------------------------------------------------------------------===//
 
-static Reloc::Model getEffectiveRelocModel(Optional<Reloc::Model> RM,
+static Reloc::Model getEffectiveRelocModel(std::optional<Reloc::Model> RM,
                                            const Triple &TT) {
   if (!RM) {
     // Default to static relocation model.  This should always be more optimial
@@ -108,8 +112,8 @@ static Reloc::Model getEffectiveRelocModel(Optional<Reloc::Model> RM,
 ///
 WebAssemblyTargetMachine::WebAssemblyTargetMachine(
     const Target &T, const Triple &TT, StringRef CPU, StringRef FS,
-    const TargetOptions &Options, Optional<Reloc::Model> RM,
-    Optional<CodeModel::Model> CM, CodeGenOpt::Level OL, bool JIT)
+    const TargetOptions &Options, std::optional<Reloc::Model> RM,
+    std::optional<CodeModel::Model> CM, CodeGenOpt::Level OL, bool JIT)
     : LLVMTargetMachine(
           T,
           TT.isArch64Bit()
@@ -337,6 +341,13 @@ public:
 };
 } // end anonymous namespace
 
+MachineFunctionInfo *WebAssemblyTargetMachine::createMachineFunctionInfo(
+    BumpPtrAllocator &Allocator, const Function &F,
+    const TargetSubtargetInfo *STI) const {
+  return WebAssemblyFunctionInfo::create<WebAssemblyFunctionInfo>(Allocator, F,
+                                                                  STI);
+}
+
 TargetTransformInfo
 WebAssemblyTargetMachine::getTargetTransformInfo(const Function &F) const {
   return TargetTransformInfo(WebAssemblyTTIImpl(this, F));
@@ -413,7 +424,7 @@ void WebAssemblyPassConfig::addIRPasses() {
   // Add signatures to prototype-less function declarations
   addPass(createWebAssemblyAddMissingPrototypes());
 
-  // Lower .llvm.global_dtors into .llvm_global_ctors with __cxa_atexit calls.
+  // Lower .llvm.global_dtors into .llvm.global_ctors with __cxa_atexit calls.
   addPass(createLowerGlobalDtorsLegacyPass());
 
   // Fix function bitcasts, as WebAssembly requires caller and callee signatures
@@ -500,6 +511,7 @@ void WebAssemblyPassConfig::addPostRegAlloc() {
   // them.
 
   // These functions all require the NoVRegs property.
+  disablePass(&MachineLateInstrsCleanupID);
   disablePass(&MachineCopyPropagationID);
   disablePass(&PostRAMachineSinkingID);
   disablePass(&PostRASchedulerID);

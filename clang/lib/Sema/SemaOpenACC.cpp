@@ -4519,7 +4519,7 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
                                   /*LParenLoc=*/SourceLocation(), EndLoc);
     break;
   case ACCC_wait:
-    Res = ActOnOpenACCWaitClause(llvm::None, StartLoc,
+    Res = ActOnOpenACCWaitClause(std::nullopt, StartLoc,
                                  /*LParenLoc=*/SourceLocation(), EndLoc);
     break;
   case ACCC_read:
@@ -4628,7 +4628,7 @@ ACCClause *Sema::ActOnOpenACCNumGangsClause(Expr *NumGangs,
   // OpenACC doesn't specify such a restriction that I see for num_gangs, but
   // it seems reasonable.
   if (PosIntError == IsPositiveIntegerValue(NumGangs, *this, ACCC_num_gangs,
-                                            /*ArgName=*/None,
+                                            /*ArgName=*/std::nullopt,
                                             /*ErrorIfNotConst=*/false))
     return nullptr;
   return new (Context) ACCNumGangsClause(NumGangs, StartLoc, LParenLoc,
@@ -4643,7 +4643,7 @@ ACCClause *Sema::ActOnOpenACCNumWorkersClause(Expr *NumWorkers,
   // OpenACC doesn't specify such a restriction that I see for num_workers, but
   // it seems reasonable.
   if (PosIntError == IsPositiveIntegerValue(NumWorkers, *this, ACCC_num_workers,
-                                            /*ArgName=*/None,
+                                            /*ArgName=*/std::nullopt,
                                             /*ErrorIfNotConst=*/false))
     return nullptr;
   return new (Context) ACCNumWorkersClause(NumWorkers, StartLoc, LParenLoc,
@@ -4669,7 +4669,8 @@ ACCClause *Sema::ActOnOpenACCVectorLengthClause(Expr *VectorLength,
   //
   PosIntResult Res =
       IsPositiveIntegerValue(VectorLength, *this, ACCC_vector_length,
-                             /*ArgName=*/None, /*ErrorIfNotConst=*/false);
+                             /*ArgName=*/std::nullopt,
+                             /*ErrorIfNotConst=*/false);
   if (Res == PosIntError)
     return nullptr;
   if (Res == PosIntNonConst)
@@ -4685,7 +4686,7 @@ ACCClause *Sema::ActOnOpenACCCollapseClause(Expr *Collapse,
                                             SourceLocation LParenLoc,
                                             SourceLocation EndLoc) {
   if (PosIntError == IsPositiveIntegerValue(Collapse, *this, ACCC_collapse,
-                                            /*ArgName=*/None,
+                                            /*ArgName=*/std::nullopt,
                                             /*ErrorIfNotConst=*/true))
     return nullptr;
   OpenACCData->DirStack.setAssociatedLoops(
@@ -4704,7 +4705,7 @@ ACCClause *Sema::ActOnOpenACCTileClause(ArrayRef<Expr *> SizeExprList,
     // document for further discussion.  In short, this will eventually change.
     if (SizeExpr && !isa<ACCStarExpr>(SizeExpr) &&
         PosIntError == IsPositiveIntegerValue(SizeExpr, *this, ACCC_tile,
-                                              /*ArgName=*/None,
+                                              /*ArgName=*/std::nullopt,
                                               /*ErrorIfNotConst=*/false))
       return nullptr;
   }

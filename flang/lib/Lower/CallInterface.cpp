@@ -426,7 +426,7 @@ Fortran::lower::CalleeInterface::addEntryBlockAndMapArguments() {
 }
 
 bool Fortran::lower::CalleeInterface::hasHostAssociated() const {
-  return funit.parentHasHostAssoc();
+  return funit.parentHasTupleHostAssoc();
 }
 
 mlir::Type Fortran::lower::CalleeInterface::getHostAssociatedTy() const {
@@ -437,6 +437,13 @@ mlir::Type Fortran::lower::CalleeInterface::getHostAssociatedTy() const {
 mlir::Value Fortran::lower::CalleeInterface::getHostAssociatedTuple() const {
   assert(hasHostAssociated() || !funit.getHostAssoc().empty());
   return converter.hostAssocTupleValue();
+}
+
+void Fortran::lower::CalleeInterface::setFuncAttrs(
+    mlir::func::FuncOp func) const {
+  if (funit.parentHasHostAssoc())
+    func->setAttr(fir::getInternalProcedureAttrName(),
+                  mlir::UnitAttr::get(func->getContext()));
 }
 
 //===----------------------------------------------------------------------===//
@@ -484,6 +491,7 @@ void Fortran::lower::CallInterface<T>::declare() {
       for (const auto &placeHolder : llvm::enumerate(inputs))
         if (!placeHolder.value().attributes.empty())
           func.setArgAttrs(placeHolder.index(), placeHolder.value().attributes);
+      side().setFuncAttrs(func);
     }
   }
 }
@@ -683,7 +691,7 @@ public:
             &result = procedure.functionResult)
       if (const auto *resultTypeAndShape = result->GetTypeAndShape())
         return resultTypeAndShape->type();
-    return llvm::None;
+    return std::nullopt;
   }
 
   static bool mustPassLengthWithDummyProcedure(
@@ -1060,15 +1068,15 @@ private:
           getConverter().getFoldingContext(), toEvExpr(*expr)));
     return std::nullopt;
   }
-  void
-  addFirOperand(mlir::Type type, int entityPosition, Property p,
-                llvm::ArrayRef<mlir::NamedAttribute> attributes = llvm::None) {
+  void addFirOperand(
+      mlir::Type type, int entityPosition, Property p,
+      llvm::ArrayRef<mlir::NamedAttribute> attributes = std::nullopt) {
     interface.inputs.emplace_back(
         FirPlaceHolder{type, entityPosition, p, attributes});
   }
   void
   addFirResult(mlir::Type type, int entityPosition, Property p,
-               llvm::ArrayRef<mlir::NamedAttribute> attributes = llvm::None) {
+               llvm::ArrayRef<mlir::NamedAttribute> attributes = std::nullopt) {
     interface.outputs.emplace_back(
         FirPlaceHolder{type, entityPosition, p, attributes});
   }
@@ -1110,7 +1118,14 @@ bool Fortran::lower::CallInterface<T>::PassedEntity::mayBeModifiedByCall()
     const {
   if (!characteristics)
     return true;
-  return characteristics->GetIntent() != Fortran::common::Intent::In;
+  if (characteristics->GetIntent() == Fortran::common::Intent::In)
+    return false;
+  const auto *dummy =
+      std::get_if<Fortran::evaluate::characteristics::DummyDataObject>(
+          &characteristics->u);
+  return !dummy ||
+         !dummy->attrs.test(
+             Fortran::evaluate::characteristics::DummyDataObject::Attr::Value);
 }
 template <typename T>
 bool Fortran::lower::CallInterface<T>::PassedEntity::mayBeReadByCall() const {

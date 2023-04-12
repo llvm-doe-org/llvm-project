@@ -96,6 +96,9 @@ The improvements are...
 Improvements to clang-tidy
 --------------------------
 
+- Change to Python 3 in the shebang of `add_new_check.py` and `rename_check.py`,
+  as the existing code is not compatible with Python 2.
+
 New checks
 ^^^^^^^^^^
 
@@ -120,6 +123,11 @@ New checks
 
   Warns when using ``static`` function or variables at global scope, and suggests
   moving them into an anonymous namespace.
+
+- New :doc:`bugprone-standalone-empty <clang-tidy/checks/bugprone/standalone-empty>` check.
+
+  Warns when `empty()` is used on a range and the result is ignored. Suggests `clear()`
+  if it is an existing member function.
 
 New check aliases
 ^^^^^^^^^^^^^^^^^
@@ -195,6 +203,10 @@ Changes in existing checks
 
   The check now skips concept definitions since redundant expressions still make sense
   inside them.
+
+- Support removing ``c_str`` calls from ``std::string_view`` constructor calls in
+  :doc: `readability-redundant-string-cstr <clang-tidy/checks/readability/redundant-string-cstr>`
+  check.
 
 Removed checks
 ^^^^^^^^^^^^^^

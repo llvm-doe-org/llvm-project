@@ -70,10 +70,10 @@ LogicalResult RawBufferAtomicFaddOp::verify() {
 static Optional<uint32_t> getConstantUint32(Value v) {
   APInt cst;
   if (!v.getType().isInteger(32))
-    return None;
+    return std::nullopt;
   if (matchPattern(v, m_ConstantInt(&cst)))
     return cst.getZExtValue();
-  return None;
+  return std::nullopt;
 }
 
 template <typename OpType>
@@ -103,7 +103,7 @@ static bool staticallyOutOfBounds(OpType op) {
     Optional<uint32_t> idxVal = getConstantUint32(idx);
     if (!idxVal)
       return false;
-    indexVal += stride * idxVal.value();
+    indexVal += stride * *idxVal;
   }
   result += indexVal;
   if (result > std::numeric_limits<uint32_t>::max())

@@ -752,7 +752,7 @@ TEST(InstructionsTest, AlterCallBundles) {
   AttrBuilder AB(C);
   AB.addAttribute(Attribute::Cold);
   Call->setAttributes(AttributeList::get(C, AttributeList::FunctionIndex, AB));
-  Call->setDebugLoc(DebugLoc(MDNode::get(C, None)));
+  Call->setDebugLoc(DebugLoc(MDNode::get(C, std::nullopt)));
 
   OperandBundleDef NewBundle("after", ConstantInt::get(Int32Ty, 7));
   std::unique_ptr<CallInst> Clone(CallInst::Create(Call.get(), NewBundle));
@@ -782,7 +782,7 @@ TEST(InstructionsTest, AlterInvokeBundles) {
   AB.addAttribute(Attribute::Cold);
   Invoke->setAttributes(
       AttributeList::get(C, AttributeList::FunctionIndex, AB));
-  Invoke->setDebugLoc(DebugLoc(MDNode::get(C, None)));
+  Invoke->setDebugLoc(DebugLoc(MDNode::get(C, std::nullopt)));
 
   OperandBundleDef NewBundle("after", ConstantInt::get(Int32Ty, 7));
   std::unique_ptr<InvokeInst> Clone(
@@ -1516,7 +1516,7 @@ if.end:
 }
 )");
   Function *Foo = M->getFunction("foo");
-  auto BBs = Foo->getBasicBlockList().begin();
+  auto BBs = Foo->begin();
   CallBrInst &CBI = cast<CallBrInst>(BBs->front());
   ++BBs;
   ++BBs;
@@ -1695,7 +1695,7 @@ TEST(InstructionsTest, InsertAtBegin) {
   BasicBlock *BB = &*F->begin();
   Instruction *Ret = &*BB->begin();
   Instruction *I = BinaryOperator::CreateAdd(ArgA, ArgB);
-  auto It = I->insertAt(BB, BB->begin());
+  auto It = I->insertInto(BB, BB->begin());
   EXPECT_EQ(&*It, I);
   EXPECT_EQ(I->getNextNode(), Ret);
 }
@@ -1714,7 +1714,7 @@ TEST(InstructionsTest, InsertAtEnd) {
   BasicBlock *BB = &*F->begin();
   Instruction *Ret = &*BB->begin();
   Instruction *I = BinaryOperator::CreateAdd(ArgA, ArgB);
-  auto It = I->insertAt(BB, BB->end());
+  auto It = I->insertInto(BB, BB->end());
   EXPECT_EQ(&*It, I);
   EXPECT_EQ(Ret->getNextNode(), I);
 }

@@ -154,6 +154,8 @@ stages:
       "
       libomptarget :: nvptx64-nvidia-cuda :: mapping/target_has_device_addr.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_has_device_addr.c
+      ompd-test :: api_tests/test_ompd_finalize.c
+      ompd-test :: api_tests/test_ompd_get_curr_parallel_handle.c
       "
     TEST_LIT_XFAIL_NOT:
       ""

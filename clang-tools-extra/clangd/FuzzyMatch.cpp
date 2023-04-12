@@ -56,8 +56,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "FuzzyMatch.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/Support/Format.h"
+#include <optional>
 
 namespace clang {
 namespace clangd {
@@ -89,16 +89,16 @@ FuzzyMatcher::FuzzyMatcher(llvm::StringRef Pattern)
                               llvm::makeMutableArrayRef(PatRole, PatN));
 }
 
-llvm::Optional<float> FuzzyMatcher::match(llvm::StringRef Word) {
+std::optional<float> FuzzyMatcher::match(llvm::StringRef Word) {
   if (!(WordContainsPattern = init(Word)))
-    return llvm::None;
+    return std::nullopt;
   if (!PatN)
     return 1;
   buildGraph();
   auto Best = std::max(Scores[PatN][WordN][Miss].Score,
                        Scores[PatN][WordN][Match].Score);
   if (isAwful(Best))
-    return llvm::None;
+    return std::nullopt;
   float Score =
       ScoreScale * std::min(PerfectBonus * PatN, std::max<int>(0, Best));
   // If the pattern is as long as the word, we have an exact string match,

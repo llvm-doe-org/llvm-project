@@ -169,11 +169,11 @@ SubtargetFeatures ELFObjectFileBase::getARMFeatures() const {
   std::optional<unsigned> Attr =
       Attributes.getAttributeValue(ARMBuildAttrs::CPU_arch);
   if (Attr)
-    isV7 = Attr.value() == ARMBuildAttrs::v7;
+    isV7 = *Attr == ARMBuildAttrs::v7;
 
   Attr = Attributes.getAttributeValue(ARMBuildAttrs::CPU_arch_profile);
   if (Attr) {
-    switch (Attr.value()) {
+    switch (*Attr) {
     case ARMBuildAttrs::ApplicationProfile:
       Features.AddFeature("aclass");
       break;
@@ -192,7 +192,7 @@ SubtargetFeatures ELFObjectFileBase::getARMFeatures() const {
 
   Attr = Attributes.getAttributeValue(ARMBuildAttrs::THUMB_ISA_use);
   if (Attr) {
-    switch (Attr.value()) {
+    switch (*Attr) {
     default:
       break;
     case ARMBuildAttrs::Not_Allowed:
@@ -207,7 +207,7 @@ SubtargetFeatures ELFObjectFileBase::getARMFeatures() const {
 
   Attr = Attributes.getAttributeValue(ARMBuildAttrs::FP_arch);
   if (Attr) {
-    switch (Attr.value()) {
+    switch (*Attr) {
     default:
       break;
     case ARMBuildAttrs::Not_Allowed:
@@ -231,7 +231,7 @@ SubtargetFeatures ELFObjectFileBase::getARMFeatures() const {
 
   Attr = Attributes.getAttributeValue(ARMBuildAttrs::Advanced_SIMD_arch);
   if (Attr) {
-    switch (Attr.value()) {
+    switch (*Attr) {
     default:
       break;
     case ARMBuildAttrs::Not_Allowed:
@@ -250,7 +250,7 @@ SubtargetFeatures ELFObjectFileBase::getARMFeatures() const {
 
   Attr = Attributes.getAttributeValue(ARMBuildAttrs::MVE_arch);
   if (Attr) {
-    switch (Attr.value()) {
+    switch (*Attr) {
     default:
       break;
     case ARMBuildAttrs::Not_Allowed:
@@ -269,7 +269,7 @@ SubtargetFeatures ELFObjectFileBase::getARMFeatures() const {
 
   Attr = Attributes.getAttributeValue(ARMBuildAttrs::DIV_use);
   if (Attr) {
-    switch (Attr.value()) {
+    switch (*Attr) {
     default:
       break;
     case ARMBuildAttrs::DisallowDIV:
@@ -376,14 +376,14 @@ SubtargetFeatures ELFObjectFileBase::getFeatures() const {
   }
 }
 
-Optional<StringRef> ELFObjectFileBase::tryGetCPUName() const {
+std::optional<StringRef> ELFObjectFileBase::tryGetCPUName() const {
   switch (getEMachine()) {
   case ELF::EM_AMDGPU:
     return getAMDGPUCPUName();
   case ELF::EM_PPC64:
     return StringRef("future");
   default:
-    return None;
+    return std::nullopt;
   }
 }
 
@@ -546,7 +546,7 @@ void ELFObjectFileBase::setARMSubArch(Triple &TheTriple) const {
   std::optional<unsigned> Attr =
       Attributes.getAttributeValue(ARMBuildAttrs::CPU_arch);
   if (Attr) {
-    switch (Attr.value()) {
+    switch (*Attr) {
     case ARMBuildAttrs::v4:
       Triple += "v4";
       break;
@@ -578,7 +578,7 @@ void ELFObjectFileBase::setARMSubArch(Triple &TheTriple) const {
       std::optional<unsigned> ArchProfileAttr =
           Attributes.getAttributeValue(ARMBuildAttrs::CPU_arch_profile);
       if (ArchProfileAttr &&
-          ArchProfileAttr.value() == ARMBuildAttrs::MicroControllerProfile)
+          *ArchProfileAttr == ARMBuildAttrs::MicroControllerProfile)
         Triple += "v7m";
       else
         Triple += "v7";
@@ -619,7 +619,7 @@ void ELFObjectFileBase::setARMSubArch(Triple &TheTriple) const {
   TheTriple.setArchName(Triple);
 }
 
-std::vector<std::pair<Optional<DataRefImpl>, uint64_t>>
+std::vector<std::pair<std::optional<DataRefImpl>, uint64_t>>
 ELFObjectFileBase::getPltAddresses() const {
   std::string Err;
   const auto Triple = makeTriple();
@@ -678,7 +678,7 @@ ELFObjectFileBase::getPltAddresses() const {
     GotToPlt.insert(std::make_pair(Entry.second, Entry.first));
   // Find the relocations in the dynamic relocation table that point to
   // locations in the GOT for which we know the corresponding PLT entry.
-  std::vector<std::pair<Optional<DataRefImpl>, uint64_t>> Result;
+  std::vector<std::pair<std::optional<DataRefImpl>, uint64_t>> Result;
   for (const auto &Relocation : RelaPlt->relocations()) {
     if (Relocation.getType() != JumpSlotReloc)
       continue;
@@ -686,7 +686,7 @@ ELFObjectFileBase::getPltAddresses() const {
     if (PltEntryIter != GotToPlt.end()) {
       symbol_iterator Sym = Relocation.getSymbol();
       if (Sym == symbol_end())
-        Result.emplace_back(None, PltEntryIter->second);
+        Result.emplace_back(std::nullopt, PltEntryIter->second);
       else
         Result.emplace_back(Sym->getRawDataRefImpl(), PltEntryIter->second);
     }
@@ -696,7 +696,7 @@ ELFObjectFileBase::getPltAddresses() const {
 
 template <class ELFT>
 Expected<std::vector<BBAddrMap>> static readBBAddrMapImpl(
-    const ELFFile<ELFT> &EF, Optional<unsigned> TextSectionIndex) {
+    const ELFFile<ELFT> &EF, std::optional<unsigned> TextSectionIndex) {
   using Elf_Shdr = typename ELFT::Shdr;
   std::vector<BBAddrMap> BBAddrMaps;
   const auto &Sections = cantFail(EF.sections());
@@ -743,7 +743,7 @@ readDynsymVersionsImpl(const ELFFile<ELFT> &EF,
   if (!VerSec)
     return std::vector<VersionEntry>();
 
-  Expected<SmallVector<Optional<VersionEntry>, 0>> MapOrErr =
+  Expected<SmallVector<std::optional<VersionEntry>, 0>> MapOrErr =
       EF.loadVersionMap(VerNeedSec, VerDefSec);
   if (!MapOrErr)
     return MapOrErr.takeError();
@@ -792,8 +792,8 @@ ELFObjectFileBase::readDynsymVersions() const {
                                 Symbols);
 }
 
-Expected<std::vector<BBAddrMap>>
-ELFObjectFileBase::readBBAddrMap(Optional<unsigned> TextSectionIndex) const {
+Expected<std::vector<BBAddrMap>> ELFObjectFileBase::readBBAddrMap(
+    std::optional<unsigned> TextSectionIndex) const {
   if (const auto *Obj = dyn_cast<ELF32LEObjectFile>(this))
     return readBBAddrMapImpl(Obj->getELFFile(), TextSectionIndex);
   if (const auto *Obj = dyn_cast<ELF64LEObjectFile>(this))

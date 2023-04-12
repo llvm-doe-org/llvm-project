@@ -613,9 +613,6 @@ private:
   std::unique_ptr<CXXABI> ABI;
   CXXABI *createCXXABI(const TargetInfo &T);
 
-  /// The logical -> physical address space map.
-  const LangASMap *AddrSpaceMap = nullptr;
-
   /// Address space map mangling must be used with language specific
   /// address spaces (e.g. OpenCL/CUDA)
   bool AddrSpaceMapMangling;
@@ -2296,7 +2293,7 @@ public:
 
   Optional<CharUnits> getTypeSizeInCharsIfKnown(QualType Ty) const {
     if (Ty->isIncompleteType() || Ty->isDependentType())
-      return None;
+      return std::nullopt;
     return getTypeSizeInChars(Ty);
   }
 
@@ -2551,8 +2548,8 @@ public:
 
   bool hasSameNullabilityTypeQualifier(QualType SubT, QualType SuperT,
                                        bool IsParam) const {
-    auto SubTnullability = SubT->getNullability(*this);
-    auto SuperTnullability = SuperT->getNullability(*this);
+    auto SubTnullability = SubT->getNullability();
+    auto SuperTnullability = SuperT->getNullability();
     if (SubTnullability.has_value() == SuperTnullability.has_value()) {
       // Neither has nullability; return true
       if (!SubTnullability)
@@ -3121,6 +3118,9 @@ public:
   /// Parses the target attributes passed in, and returns only the ones that are
   /// valid feature names.
   ParsedTargetAttr filterFunctionTargetAttrs(const TargetAttr *TD) const;
+
+  std::vector<std::string>
+  filterFunctionTargetVersionAttrs(const TargetVersionAttr *TV) const;
 
   void getFunctionFeatureMap(llvm::StringMap<bool> &FeatureMap,
                              const FunctionDecl *) const;

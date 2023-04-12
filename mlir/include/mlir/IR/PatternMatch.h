@@ -88,29 +88,29 @@ public:
   ArrayRef<OperationName> getGeneratedOps() const { return generatedOps; }
 
   /// Return the root node that this pattern matches. Patterns that can match
-  /// multiple root types return None.
-  Optional<OperationName> getRootKind() const {
+  /// multiple root types return std::nullopt.
+  std::optional<OperationName> getRootKind() const {
     if (rootKind == RootKind::OperationName)
       return OperationName::getFromOpaquePointer(rootValue);
-    return llvm::None;
+    return std::nullopt;
   }
 
   /// Return the interface ID used to match the root operation of this pattern.
   /// If the pattern does not use an interface ID for deciding the root match,
-  /// this returns None.
+  /// this returns std::nullopt.
   Optional<TypeID> getRootInterfaceID() const {
     if (rootKind == RootKind::InterfaceID)
       return TypeID::getFromOpaquePointer(rootValue);
-    return llvm::None;
+    return std::nullopt;
   }
 
   /// Return the trait ID used to match the root operation of this pattern.
   /// If the pattern does not use a trait ID for deciding the root match, this
-  /// returns None.
+  /// returns std::nullopt.
   Optional<TypeID> getRootTraitID() const {
     if (rootKind == RootKind::TraitID)
       return TypeID::getFromOpaquePointer(rootValue);
-    return llvm::None;
+    return std::nullopt;
   }
 
   /// Return the benefit (the inverse of "cost") of matching this pattern.  The
@@ -465,12 +465,12 @@ public:
   /// 'argValues' is used to replace the block arguments of 'source' after
   /// merging.
   virtual void mergeBlocks(Block *source, Block *dest,
-                           ValueRange argValues = llvm::None);
+                           ValueRange argValues = std::nullopt);
 
   // Merge the operations of block 'source' before the operation 'op'. Source
   // block should not have existing predecessors or successors.
   void mergeBlockBefore(Block *source, Operation *op,
-                        ValueRange argValues = llvm::None);
+                        ValueRange argValues = std::nullopt);
 
   /// Split the operations starting at "before" (inclusive) out of the given
   /// block into a new block, and return it.
@@ -502,10 +502,15 @@ public:
     finalizeRootUpdate(root);
   }
 
-  /// Find uses of `from` and replace it with `to`. It also marks every modified
-  /// uses and notifies the rewriter that an in-place operation modification is
-  /// about to happen.
+  /// Find uses of `from` and replace them with `to`. It also marks every
+  /// modified uses and notifies the rewriter that an in-place operation
+  /// modification is about to happen.
   void replaceAllUsesWith(Value from, Value to);
+
+  /// Find uses of `from` and replace them with `to` except if the user is
+  /// `exceptedUser`. It also marks every modified uses and notifies the
+  /// rewriter that an in-place operation modification is about to happen.
+  void replaceAllUsesExcept(Value from, Value to, Operation *exceptedUser);
 
   /// Used to notify the rewriter that the IR failed to be rewritten because of
   /// a match failure, and provide a callback to populate a diagnostic with the
@@ -1587,7 +1592,8 @@ public:
   RewritePatternSet &add(ConstructorArg &&arg, ConstructorArgs &&...args) {
     // The following expands a call to emplace_back for each of the pattern
     // types 'Ts'.
-    (addImpl<Ts>(/*debugLabels=*/llvm::None, std::forward<ConstructorArg>(arg),
+    (addImpl<Ts>(/*debugLabels=*/std::nullopt,
+                 std::forward<ConstructorArg>(arg),
                  std::forward<ConstructorArgs>(args)...),
      ...);
     return *this;
@@ -1632,12 +1638,15 @@ public:
 
   // Add a matchAndRewrite style pattern represented as a C function pointer.
   template <typename OpType>
-  RewritePatternSet &add(LogicalResult (*implFn)(OpType,
-                                                 PatternRewriter &rewriter)) {
+  RewritePatternSet &
+  add(LogicalResult (*implFn)(OpType, PatternRewriter &rewriter),
+      PatternBenefit benefit = 1, ArrayRef<StringRef> generatedNames = {}) {
     struct FnPattern final : public OpRewritePattern<OpType> {
       FnPattern(LogicalResult (*implFn)(OpType, PatternRewriter &rewriter),
-                MLIRContext *context)
-          : OpRewritePattern<OpType>(context), implFn(implFn) {}
+                MLIRContext *context, PatternBenefit benefit,
+                ArrayRef<StringRef> generatedNames)
+          : OpRewritePattern<OpType>(context, benefit, generatedNames),
+            implFn(implFn) {}
 
       LogicalResult matchAndRewrite(OpType op,
                                     PatternRewriter &rewriter) const override {
@@ -1647,7 +1656,8 @@ public:
     private:
       LogicalResult (*implFn)(OpType, PatternRewriter &rewriter);
     };
-    add(std::make_unique<FnPattern>(std::move(implFn), getContext()));
+    add(std::make_unique<FnPattern>(std::move(implFn), getContext(), benefit,
+                                    generatedNames));
     return *this;
   }
 
@@ -1666,7 +1676,7 @@ public:
   RewritePatternSet &insert(ConstructorArg &&arg, ConstructorArgs &&...args) {
     // The following expands a call to emplace_back for each of the pattern
     // types 'Ts'.
-    (addImpl<Ts>(/*debugLabels=*/llvm::None, arg, args...), ...);
+    (addImpl<Ts>(/*debugLabels=*/std::nullopt, arg, args...), ...);
     return *this;
   }
 

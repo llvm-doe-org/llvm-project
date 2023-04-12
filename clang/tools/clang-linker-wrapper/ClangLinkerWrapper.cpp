@@ -53,6 +53,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include <atomic>
+#include <optional>
 
 using namespace llvm;
 using namespace llvm::opt;
@@ -121,11 +122,14 @@ enum ID {
 #undef OPTION
 };
 
-#define PREFIX(NAME, VALUE) const char *const NAME[] = VALUE;
+#define PREFIX(NAME, VALUE)                                                    \
+  static constexpr StringLiteral NAME##_init[] = VALUE;                        \
+  static constexpr ArrayRef<StringLiteral> NAME(NAME##_init,                   \
+                                                std::size(NAME##_init) - 1);
 #include "LinkerWrapperOpts.inc"
 #undef PREFIX
 
-static const OptTable::Info InfoTable[] = {
+static constexpr OptTable::Info InfoTable[] = {
 #define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,  \
                HELPTEXT, METAVAR, VALUES)                                      \
   {PREFIX, NAME,  HELPTEXT,    METAVAR,     OPT_##ID,  Option::KIND##Class,    \
@@ -876,7 +880,7 @@ Error linkBitcodeFiles(SmallVectorImpl<OffloadFile> &InputFiles,
     if (BitcodeOutput.size() != 1 || !SingleOutput)
       return createStringError(inconvertibleErrorCode(),
                                "Cannot embed bitcode with multiple files.");
-    OutputFiles.push_back(static_cast<std::string>(BitcodeOutput.front()));
+    OutputFiles.push_back(Args.MakeArgString(BitcodeOutput.front()));
     return Error::success();
   }
 
@@ -1187,7 +1191,8 @@ linkAndWrapDeviceFiles(SmallVectorImpl<OffloadFile> &LinkerInputFiles,
         return createFileError(*OutputOrErr, EC);
 
       OffloadingImage TheImage{};
-      TheImage.TheImageKind = IMG_Object;
+      TheImage.TheImageKind =
+          Args.hasArg(OPT_embed_bitcode) ? IMG_Bitcode : IMG_Object;
       TheImage.TheOffloadKind = Kind;
       TheImage.StringData = {
           {"triple",
@@ -1227,8 +1232,8 @@ linkAndWrapDeviceFiles(SmallVectorImpl<OffloadFile> &LinkerInputFiles,
   return WrappedOutput;
 }
 
-Optional<std::string> findFile(StringRef Dir, StringRef Root,
-                               const Twine &Name) {
+std::optional<std::string> findFile(StringRef Dir, StringRef Root,
+                                    const Twine &Name) {
   SmallString<128> Path;
   if (Dir.startswith("="))
     sys::path::append(Path, Root, Dir.substr(1), Name);
@@ -1237,32 +1242,36 @@ Optional<std::string> findFile(StringRef Dir, StringRef Root,
 
   if (sys::fs::exists(Path))
     return static_cast<std::string>(Path);
-  return None;
+  return std::nullopt;
 }
 
-Optional<std::string> findFromSearchPaths(StringRef Name, StringRef Root,
-                                          ArrayRef<StringRef> SearchPaths) {
+std::optional<std::string>
+findFromSearchPaths(StringRef Name, StringRef Root,
+                    ArrayRef<StringRef> SearchPaths) {
   for (StringRef Dir : SearchPaths)
-    if (Optional<std::string> File = findFile(Dir, Root, Name))
+    if (std::optional<std::string> File = findFile(Dir, Root, Name))
       return File;
-  return None;
+  return std::nullopt;
 }
 
-Optional<std::string> searchLibraryBaseName(StringRef Name, StringRef Root,
-                                            ArrayRef<StringRef> SearchPaths) {
+std::optional<std::string>
+searchLibraryBaseName(StringRef Name, StringRef Root,
+                      ArrayRef<StringRef> SearchPaths) {
   for (StringRef Dir : SearchPaths) {
-    if (Optional<std::string> File = findFile(Dir, Root, "lib" + Name + ".so"))
+    if (std::optional<std::string> File =
+            findFile(Dir, Root, "lib" + Name + ".so"))
       return File;
-    if (Optional<std::string> File = findFile(Dir, Root, "lib" + Name + ".a"))
+    if (std::optional<std::string> File =
+            findFile(Dir, Root, "lib" + Name + ".a"))
       return File;
   }
-  return None;
+  return std::nullopt;
 }
 
 /// Search for static libraries in the linker's library path given input like
 /// `-lfoo` or `-l:libfoo.a`.
-Optional<std::string> searchLibrary(StringRef Input, StringRef Root,
-                                    ArrayRef<StringRef> SearchPaths) {
+std::optional<std::string> searchLibrary(StringRef Input, StringRef Root,
+                                         ArrayRef<StringRef> SearchPaths) {
   if (Input.startswith(":"))
     return findFromSearchPaths(Input.drop_front(), Root, SearchPaths);
   return searchLibraryBaseName(Input, Root, SearchPaths);

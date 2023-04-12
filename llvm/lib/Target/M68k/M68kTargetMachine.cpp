@@ -13,6 +13,7 @@
 
 #include "M68kTargetMachine.h"
 #include "M68k.h"
+#include "M68kMachineFunction.h"
 #include "M68kSubtarget.h"
 #include "M68kTargetObjectFile.h"
 #include "TargetInfo/M68kTargetInfo.h"
@@ -27,6 +28,7 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/PassRegistry.h"
 #include <memory>
+#include <optional>
 
 using namespace llvm;
 
@@ -36,6 +38,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeM68kTarget() {
   RegisterTargetMachine<M68kTargetMachine> X(getTheM68kTarget());
   auto *PR = PassRegistry::getPassRegistry();
   initializeGlobalISel(*PR);
+  initializeM68kDAGToDAGISelPass(*PR);
 }
 
 namespace {
@@ -70,7 +73,7 @@ std::string computeDataLayout(const Triple &TT, StringRef CPU,
 }
 
 Reloc::Model getEffectiveRelocModel(const Triple &TT,
-                                    Optional<Reloc::Model> RM) {
+                                    std::optional<Reloc::Model> RM) {
   // If not defined we default to static
   if (!RM.has_value())
     return Reloc::Static;
@@ -78,7 +81,7 @@ Reloc::Model getEffectiveRelocModel(const Triple &TT,
   return *RM;
 }
 
-CodeModel::Model getEffectiveCodeModel(Optional<CodeModel::Model> CM,
+CodeModel::Model getEffectiveCodeModel(std::optional<CodeModel::Model> CM,
                                        bool JIT) {
   if (!CM) {
     return CodeModel::Small;
@@ -94,8 +97,8 @@ CodeModel::Model getEffectiveCodeModel(Optional<CodeModel::Model> CM,
 M68kTargetMachine::M68kTargetMachine(const Target &T, const Triple &TT,
                                      StringRef CPU, StringRef FS,
                                      const TargetOptions &Options,
-                                     Optional<Reloc::Model> RM,
-                                     Optional<CodeModel::Model> CM,
+                                     std::optional<Reloc::Model> RM,
+                                     std::optional<CodeModel::Model> CM,
                                      CodeGenOpt::Level OL, bool JIT)
     : LLVMTargetMachine(T, computeDataLayout(TT, CPU, Options), TT, CPU, FS,
                         Options, getEffectiveRelocModel(TT, RM),
@@ -124,6 +127,13 @@ M68kTargetMachine::getSubtargetImpl(const Function &F) const {
     I = std::make_unique<M68kSubtarget>(TargetTriple, CPU, FS, *this);
   }
   return I.get();
+}
+
+MachineFunctionInfo *M68kTargetMachine::createMachineFunctionInfo(
+    BumpPtrAllocator &Allocator, const Function &F,
+    const TargetSubtargetInfo *STI) const {
+  return M68kMachineFunctionInfo::create<M68kMachineFunctionInfo>(Allocator, F,
+                                                                  STI);
 }
 
 //===----------------------------------------------------------------------===//

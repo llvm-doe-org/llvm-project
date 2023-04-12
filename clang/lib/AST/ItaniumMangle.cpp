@@ -4249,6 +4249,7 @@ recurse:
   case Expr::OMPArrayShapingExprClass:
   case Expr::OMPIteratorExprClass:
   case Expr::CXXInheritedCtorInitExprClass:
+  case Expr::CXXParenListInitExprClass:
   case Expr::ACCStarExprClass:
     llvm_unreachable("unexpected statement kind");
 
@@ -6561,7 +6562,7 @@ ItaniumMangleContext *ItaniumMangleContext::create(ASTContext &Context,
   return new ItaniumMangleContextImpl(
       Context, Diags,
       [](ASTContext &, const NamedDecl *) -> llvm::Optional<unsigned> {
-        return llvm::None;
+        return std::nullopt;
       },
       IsAux);
 }

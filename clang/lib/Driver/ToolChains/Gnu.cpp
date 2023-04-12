@@ -331,8 +331,8 @@ static bool getStaticPIE(const ArgList &Args, const ToolChain &TC) {
   if (HasStaticPIE && Args.hasArg(options::OPT_nopie)) {
     const Driver &D = TC.getDriver();
     const llvm::opt::OptTable &Opts = D.getOpts();
-    const char *StaticPIEName = Opts.getOptionName(options::OPT_static_pie);
-    const char *NoPIEName = Opts.getOptionName(options::OPT_nopie);
+    StringRef StaticPIEName = Opts.getOptionName(options::OPT_static_pie);
+    StringRef NoPIEName = Opts.getOptionName(options::OPT_nopie);
     D.Diag(diag::err_drv_cannot_mix_options) << StaticPIEName << NoPIEName;
   }
   return HasStaticPIE;
@@ -1623,7 +1623,8 @@ static void findCSKYMultilibs(const Driver &D, const llvm::Triple &TargetTriple,
   FilterNonExistent NonExistent(Path, "/crtbegin.o", D.getVFS());
 
   tools::csky::FloatABI TheFloatABI = tools::csky::getCSKYFloatABI(D, Args);
-  llvm::Optional<llvm::StringRef> Res = tools::csky::getCSKYArchName(D, Args, TargetTriple);
+  std::optional<llvm::StringRef> Res =
+      tools::csky::getCSKYArchName(D, Args, TargetTriple);
 
   if (!Res)
     return;
@@ -2135,7 +2136,7 @@ void Generic_GCC::GCCInstallationDetector::print(raw_ostream &OS) const {
 
 bool Generic_GCC::GCCInstallationDetector::getBiarchSibling(Multilib &M) const {
   if (BiarchSibling) {
-    M = BiarchSibling.value();
+    M = *BiarchSibling;
     return true;
   }
   return false;
@@ -2891,6 +2892,7 @@ bool Generic_GCC::IsIntegratedAssemblerDefault() const {
   switch (getTriple().getArch()) {
   case llvm::Triple::aarch64:
   case llvm::Triple::aarch64_be:
+  case llvm::Triple::amdgcn:
   case llvm::Triple::arm:
   case llvm::Triple::armeb:
   case llvm::Triple::avr:
@@ -2911,6 +2913,7 @@ bool Generic_GCC::IsIntegratedAssemblerDefault() const {
   case llvm::Triple::ppcle:
   case llvm::Triple::ppc64:
   case llvm::Triple::ppc64le:
+  case llvm::Triple::r600:
   case llvm::Triple::riscv32:
   case llvm::Triple::riscv64:
   case llvm::Triple::sparc:

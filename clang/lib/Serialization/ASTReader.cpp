@@ -98,7 +98,6 @@
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
-#include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
@@ -1522,7 +1521,7 @@ bool ASTReader::ReadSLocEntry(int ID) {
     // we will also try to fail gracefully by setting up the SLocEntry.
     unsigned InputID = Record[4];
     InputFile IF = getInputFile(*F, InputID);
-    Optional<FileEntryRef> File = IF.getFile();
+    OptionalFileEntryRef File = IF.getFile();
     bool OverriddenBuffer = IF.isOverridden();
 
     // Note that we only check if a File was returned. If it was out-of-date
@@ -2363,8 +2362,8 @@ InputFile ASTReader::getInputFile(ModuleFile &F, unsigned ID, bool Complain) {
   StringRef Filename = FI.Filename;
   uint64_t StoredContentHash = FI.ContentHash;
 
-  OptionalFileEntryRefDegradesToFileEntryPtr File =
-      expectedToOptional(FileMgr.getFileRef(Filename, /*OpenFile=*/false));
+  OptionalFileEntryRefDegradesToFileEntryPtr File = OptionalFileEntryRef(
+      expectedToOptional(FileMgr.getFileRef(Filename, /*OpenFile=*/false)));
 
   // For an overridden file, create a virtual file with the stored
   // size/timestamp.
@@ -2411,8 +2410,8 @@ InputFile ASTReader::getInputFile(ModuleFile &F, unsigned ID, bool Complain) {
       Content,
       None,
     } Kind;
-    llvm::Optional<int64_t> Old = llvm::None;
-    llvm::Optional<int64_t> New = llvm::None;
+    llvm::Optional<int64_t> Old = std::nullopt;
+    llvm::Optional<int64_t> New = std::nullopt;
   };
   auto HasInputFileChanged = [&]() {
     if (StoredSize != File->getSize())
@@ -3966,14 +3965,14 @@ ASTReader::ReadModuleMapFileBlock(RecordData &Record, ModuleFile &F,
     Module *M =
         PP.getHeaderSearchInfo().lookupModule(F.ModuleName, F.ImportLoc);
     auto &Map = PP.getHeaderSearchInfo().getModuleMap();
-    Optional<FileEntryRef> ModMap =
-        M ? Map.getModuleMapFileForUniquing(M) : None;
+    OptionalFileEntryRef ModMap =
+        M ? Map.getModuleMapFileForUniquing(M) : std::nullopt;
     // Don't emit module relocation error if we have -fno-validate-pch
     if (!bool(PP.getPreprocessorOpts().DisablePCHOrModuleValidation &
               DisableValidationForModuleKind::Module) &&
         !ModMap) {
       if (!canRecoverFromOutOfDate(F.FileName, ClientLoadCapabilities)) {
-        if (auto ASTFE = M ? M->getASTFile() : None) {
+        if (auto ASTFE = M ? M->getASTFile() : std::nullopt) {
           // This module was defined by an imported (explicit) module.
           Diag(diag::err_module_file_conflict) << F.ModuleName << F.FileName
                                                << ASTFE->getName();
@@ -4296,6 +4295,7 @@ ASTReader::ASTReadResult ASTReader::ReadAST(StringRef FileName,
   // hit errors parsing the ASTs at this point.
   for (ImportedModule &M : Loaded) {
     ModuleFile &F = *M.Mod;
+    llvm::TimeTraceScope Scope2("Read Loaded AST", F.ModuleName);
 
     // Read the AST block.
     if (llvm::Error Err = ReadASTBlock(F, ClientLoadCapabilities)) {
@@ -6127,7 +6127,7 @@ PreprocessedEntity *ASTReader::ReadPreprocessedEntity(unsigned Index) {
   case PPD_INCLUSION_DIRECTIVE: {
     const char *FullFileNameStart = Blob.data() + Record[0];
     StringRef FullFileName(FullFileNameStart, Blob.size() - Record[0]);
-    Optional<FileEntryRef> File;
+    OptionalFileEntryRef File;
     if (!FullFileName.empty())
       File = PP.getFileManager().getOptionalFileRef(FullFileName);
 
@@ -6480,7 +6480,8 @@ static llvm::Optional<Type::TypeClass> getTypeClassForCode(TypeCode code) {
 #define TYPE_BIT_CODE(CLASS_ID, CODE_ID, CODE_VALUE) \
   case TYPE_##CODE_ID: return Type::CLASS_ID;
 #include "clang/Serialization/TypeBitCodes.def"
-  default: return llvm::None;
+  default:
+    return std::nullopt;
   }
 }
 
@@ -8779,7 +8780,7 @@ ASTReader::getSourceDescriptor(unsigned ID) {
                                llvm::sys::path::parent_path(MF.FileName),
                                FileName, MF.Signature);
   }
-  return None;
+  return std::nullopt;
 }
 
 ExternalASTSource::ExtKind ASTReader::hasExternalDefinitions(const Decl *FD) {
@@ -11251,8 +11252,10 @@ void OMPClauseReader::VisitOMPAffinityClause(OMPAffinityClause *C) {
 
 void OMPClauseReader::VisitOMPOrderClause(OMPOrderClause *C) {
   C->setKind(Record.readEnum<OpenMPOrderClauseKind>());
+  C->setModifier(Record.readEnum<OpenMPOrderClauseModifier>());
   C->setLParenLoc(Record.readSourceLocation());
   C->setKindKwLoc(Record.readSourceLocation());
+  C->setModifierKwLoc(Record.readSourceLocation());
 }
 
 void OMPClauseReader::VisitOMPFilterClause(OMPFilterClause *C) {

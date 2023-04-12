@@ -1305,12 +1305,13 @@ void AddressSanitizer::getInterestingMemoryOperands(
     if (!ClInstrumentAtomics || ignoreAccess(I, RMW->getPointerOperand()))
       return;
     Interesting.emplace_back(I, RMW->getPointerOperandIndex(), true,
-                             RMW->getValOperand()->getType(), None);
+                             RMW->getValOperand()->getType(), std::nullopt);
   } else if (AtomicCmpXchgInst *XCHG = dyn_cast<AtomicCmpXchgInst>(I)) {
     if (!ClInstrumentAtomics || ignoreAccess(I, XCHG->getPointerOperand()))
       return;
     Interesting.emplace_back(I, XCHG->getPointerOperandIndex(), true,
-                             XCHG->getCompareOperand()->getType(), None);
+                             XCHG->getCompareOperand()->getType(),
+                             std::nullopt);
   } else if (auto CI = dyn_cast<CallInst>(I)) {
     if (CI->getIntrinsicID() == Intrinsic::masked_load ||
         CI->getIntrinsicID() == Intrinsic::masked_store) {
@@ -1691,7 +1692,7 @@ void ModuleAddressSanitizer::poisonOneInitializer(Function &GlobalInit,
   IRB.CreateCall(AsanPoisonGlobals, ModuleNameAddr);
 
   // Add calls to unpoison all globals before each return instruction.
-  for (auto &BB : GlobalInit.getBasicBlockList())
+  for (auto &BB : GlobalInit)
     if (ReturnInst *RI = dyn_cast<ReturnInst>(BB.getTerminator()))
       CallInst::Create(AsanUnpoisonGlobals, "", RI);
 }
@@ -1758,7 +1759,7 @@ bool ModuleAddressSanitizer::shouldInstrumentGlobal(GlobalVariable *G) const {
   //   - Need to poison all copies, not just the main thread's one.
   if (G->isThreadLocal()) return false;
   // For now, just ignore this Global if the alignment is large.
-  if (G->getAlignment() > getMinRedzoneSizeForGlobal()) return false;
+  if (G->getAlign() && *G->getAlign() > getMinRedzoneSizeForGlobal()) return false;
 
   // For non-COFF targets, only instrument globals known to be defined by this
   // TU.

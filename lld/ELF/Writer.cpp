@@ -1031,8 +1031,8 @@ template <class ELFT> void Writer<ELFT>::setReservedSymbolSections() {
     // to the start of the .got or .got.plt section.
     InputSection *sec = in.gotPlt.get();
     if (!target->gotBaseSymInGotPlt)
-      sec = in.mipsGot.get() ? cast<InputSection>(in.mipsGot.get())
-                             : cast<InputSection>(in.got.get());
+      sec = in.mipsGot ? cast<InputSection>(in.mipsGot.get())
+                       : cast<InputSection>(in.got.get());
     ElfSym::globalOffsetTable->section = sec;
   }
 
@@ -1882,15 +1882,15 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
         ElfSym::tlsModuleBase = cast<Defined>(s);
       }
     }
-  }
 
-  if (!config->relocatable) {
-    llvm::TimeTraceScope timeScope("Finalize .eh_frame");
     // This responsible for splitting up .eh_frame section into
     // pieces. The relocation scan uses those pieces, so this has to be
     // earlier.
-    for (Partition &part : partitions)
-      finalizeSynthetic(part.ehFrame.get());
+    {
+      llvm::TimeTraceScope timeScope("Finalize .eh_frame");
+      for (Partition &part : partitions)
+        finalizeSynthetic(part.ehFrame.get());
+    }
 
     if (config->hasDynSymTab) {
       parallelForEach(symtab.getSymbols(), [](Symbol *sym) {

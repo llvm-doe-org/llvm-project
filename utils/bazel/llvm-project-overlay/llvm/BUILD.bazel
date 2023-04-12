@@ -2,6 +2,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load(":tblgen.bzl", "gentbl")
 load(":config.bzl", "llvm_config_defines")
@@ -373,6 +374,7 @@ cc_library(
     ]),
     deps = [
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -838,6 +840,7 @@ cc_library(
     ],
     copts = llvm_copts,
     deps = [
+        ":BinaryFormat",
         ":BitstreamReader",
         ":Core",
         ":Support",
@@ -855,6 +858,7 @@ cc_library(
     copts = llvm_copts,
     deps = [
         ":BinaryFormat",
+        ":DebugInfoCodeView",
         ":MC",
         ":Support",
         ":config",
@@ -953,7 +957,10 @@ cc_library(
     copts = llvm_copts,
     deps = [
         ":Core",
+        ":DebugInfo",
         ":DebugInfoDWARF",
+        ":Demangle",
+        ":Object",
         ":Support",
         ":Symbolize",
         ":config",
@@ -1023,6 +1030,7 @@ cc_library(
     copts = llvm_copts,
     deps = [
         ":Analysis",
+        ":BitReader",
         ":BitstreamWriter",
         ":Core",
         ":MC",
@@ -1050,6 +1058,35 @@ cc_library(
         ":BinaryFormat",
         ":Core",
         ":MC",
+        ":Support",
+        ":config",
+    ],
+)
+
+cc_library(
+    name = "TargetParser",
+    srcs = glob([
+        "lib/TargetParser/*.cpp",
+        "lib/TargetParser/*.h",
+    ]) + select({
+        "@bazel_tools//src/conditions:windows": glob([
+            "lib/TargetParser/Windows/*.h",
+            "lib/TargetParser/Windows/*.inc",
+        ]),
+        "//conditions:default": glob([
+            "lib/TargetParser/Unix/*.h",
+            "lib/TargetParser/Unix/*.inc",
+        ]),
+    }),
+    hdrs = glob([
+        "include/llvm/TargetParser/*.h",
+    ]),
+    copts = llvm_copts,
+    includes = ["include"],
+    textual_hdrs = glob([
+        "include/llvm/TargetParser/*.def",
+    ]),
+    deps = [
         ":Support",
         ":config",
     ],
@@ -1166,9 +1203,11 @@ cc_library(
         ":Analysis",
         ":BinaryFormat",
         ":Core",
+        ":Demangle",
         ":MC",
         ":ProfileData",
         ":Support",
+        ":Target",
         ":TransformUtils",
         ":config",
     ],
@@ -1206,6 +1245,7 @@ cc_library(
     deps = [
         ":AggressiveInstCombine",
         ":Analysis",
+        ":BinaryFormat",
         ":Core",
         ":InstCombine",
         ":ProfileData",
@@ -1304,8 +1344,10 @@ cc_library(
     deps = [
         ":Analysis",
         ":Core",
+        ":MC",
         ":Scalar",
         ":Support",
+        ":Target",
         ":TransformUtils",
     ],
 )
@@ -1371,6 +1413,7 @@ cc_library(
         ":BinaryFormat",
         ":Core",
         ":Support",
+        ":attributes_gen",
     ],
 )
 
@@ -1426,6 +1469,7 @@ cc_library(
     copts = llvm_copts,
     deps = [
         ":Core",
+        ":Object",
         ":Support",
         ":TransformUtils",
         ":config",
@@ -1495,6 +1539,7 @@ cc_library(
     copts = llvm_copts,
     deps = [
         ":Analysis",
+        ":BinaryFormat",
         ":Core",
         ":IPO",
         ":Scalar",
@@ -1549,6 +1594,7 @@ cc_library(
         "include/llvm/CodeGen/**/*.inc",
     ]),
     deps = [
+        ":AggressiveInstCombine",
         ":Analysis",
         ":AsmParser",
         ":BinaryFormat",
@@ -1558,6 +1604,7 @@ cc_library(
         ":DebugInfoCodeView",
         ":DebugInfoDWARF",
         ":IPO",
+        ":Instrumentation",
         ":MC",
         ":MCParser",
         ":ProfileData",
@@ -1992,6 +2039,7 @@ gentbl(
         strip_include_prefix = "lib/Target/" + target["name"],
         deps = [
             ":" + target["name"] + "CommonTableGen",
+            ":MC",
             ":Support",
             ":Target",
         ],
@@ -2040,6 +2088,7 @@ gentbl(
         features = [
             "-parse_headers",
             "-header_modules",
+            "-layering_check",
         ],
         strip_include_prefix = "lib/Target/" + target["name"],
         deps = [
@@ -2050,6 +2099,7 @@ gentbl(
             ":DebugInfoCodeView",
             ":MC",
             ":MCDisassembler",
+            ":Core",
             ":Support",
             ":Target",
             ":config",
@@ -2067,6 +2117,7 @@ gentbl(
         ]),
         hdrs = ["lib/Target/" + target["name"] + "/" + target["short_name"] + ".h"],
         copts = llvm_copts,
+        features = ["-layering_check"],
         strip_include_prefix = "lib/Target/" + target["name"],
         textual_hdrs = glob([
             "lib/Target/" + target["name"] + "/*.def",
@@ -2108,6 +2159,7 @@ gentbl(
             ":Target",
             ":" + target["name"] + "CodeGen",
             ":" + target["name"] + "CommonTableGen",
+            ":" + target["name"] + "Info",
             ":" + target["name"] + "UtilsAndDesc",
         ],
     )],
@@ -2244,14 +2296,21 @@ cc_library(
     hdrs = glob(["include/llvm/Passes/*.h"]) + ["include/llvm-c/Transforms/PassBuilder.h"],
     copts = llvm_copts,
     deps = [
+        ":AggressiveInstCombine",
         ":Analysis",
         ":CodeGen",
         ":Core",
         ":Coroutines",
+        ":IPO",
+        ":IRPrinter",
+        ":InstCombine",
+        ":Instrumentation",
         ":MLPolicies",
+        ":Scalar",
         ":Support",
         ":Target",
         ":TransformUtils",
+        ":Vectorize",
         ":common_transforms",
         ":config",
         ":pass_registry_def",
@@ -2277,13 +2336,17 @@ cc_library(
         ":BitWriter",
         ":CodeGen",
         ":Core",
+        ":IPO",
         ":IRPrinter",
         ":IRReader",
         ":Linker",
         ":MC",
         ":MCParser",
+        ":ObjCARC",
         ":Object",
         ":Passes",
+        ":Remarks",
+        ":Scalar",
         ":Support",
         ":Target",
         ":TransformUtils",
@@ -2595,6 +2658,7 @@ cc_library(
     deps = [
         ":Option",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -2659,6 +2723,50 @@ cc_library(
     ],
 )
 
+# A flag to pick which `pfm` to use for Exegesis.
+# Usage: `--@llvm-project//llvm:pfm=<disable|external|system>`.
+# Flag documentation: https://bazel.build/extending/config
+string_flag(
+    name = "pfm",
+    build_setting_default = "external",
+    values = [
+        "disable",  # Don't include pfm at all
+        "external",  # Build pfm from source
+        "system",  # Use system pfm (non hermetic)
+    ],
+)
+
+config_setting(
+    name = "pfm_disable",
+    flag_values = {":pfm": "disable"},
+)
+
+config_setting(
+    name = "pfm_external",
+    flag_values = {":pfm": "external"},
+)
+
+config_setting(
+    name = "pfm_system",
+    flag_values = {":pfm": "system"},
+)
+
+cc_library(
+    name = "maybe_pfm",
+    # We want dependencies of this library to have -DHAVE_LIBPFM conditionally
+    # defined, so we set `defines` instead of `copts`.
+    defines = select({
+        ":pfm_external": ["HAVE_LIBPFM=1"],
+        ":pfm_system": ["HAVE_LIBPFM=1"],
+        "//conditions:default": [],
+    }),
+    deps = select({
+        ":pfm_external": ["@pfm//:pfm_external"],
+        ":pfm_system": ["@pfm//:pfm_system"],
+        "//conditions:default": [],
+    }),
+)
+
 cc_library(
     name = "Exegesis",
     srcs = glob([
@@ -2695,6 +2803,7 @@ cc_library(
         ":Support",
         ":Target",
         ":config",
+        ":maybe_pfm",
     ],
 )
 
@@ -2727,7 +2836,7 @@ cc_binary(
     srcs = glob([
         "tools/dsymutil/*.cpp",
         "tools/dsymutil/*.h",
-    ]) + ["dsymutil-driver.cpp"],
+    ]),
     copts = llvm_copts,
     stamp = 0,
     deps = [
@@ -3044,6 +3153,7 @@ cc_binary(
         ":Demangle",
         ":Option",
         ":Support",
+        ":TargetParser",
     ],
 )
 
@@ -3201,6 +3311,7 @@ cc_binary(
         ":IPO",
         ":IRPrinter",
         ":IRReader",
+        ":Passes",
         ":Support",
     ],
 )
@@ -4188,10 +4299,14 @@ cc_binary(
         ":BitWriter",
         ":CodeGen",
         ":Core",
+        ":IPO",
         ":IRPrinter",
         ":IRReader",
+        ":Instrumentation",
         ":MC",
         ":Passes",
+        ":Remarks",
+        ":Scalar",
         ":Support",
         ":Target",
         ":TransformUtils",

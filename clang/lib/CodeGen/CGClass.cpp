@@ -1813,7 +1813,7 @@ namespace {
  public:
    SanitizeDtorCleanupBuilder(ASTContext &Context, EHScopeStack &EHStack,
                               const CXXDestructorDecl *DD)
-       : Context(Context), EHStack(EHStack), DD(DD), StartIndex(llvm::None) {}
+       : Context(Context), EHStack(EHStack), DD(DD), StartIndex(std::nullopt) {}
    void PushCleanupForField(const FieldDecl *Field) {
      if (Field->isZeroSize(Context))
        return;
@@ -1822,15 +1822,15 @@ namespace {
        if (!StartIndex)
          StartIndex = FieldIndex;
      } else if (StartIndex) {
-       EHStack.pushCleanup<SanitizeDtorFieldRange>(
-           NormalAndEHCleanup, DD, StartIndex.value(), FieldIndex);
-       StartIndex = None;
+       EHStack.pushCleanup<SanitizeDtorFieldRange>(NormalAndEHCleanup, DD,
+                                                   *StartIndex, FieldIndex);
+       StartIndex = std::nullopt;
      }
    }
    void End() {
      if (StartIndex)
        EHStack.pushCleanup<SanitizeDtorFieldRange>(NormalAndEHCleanup, DD,
-                                                   StartIndex.value(), -1);
+                                                   *StartIndex, -1);
    }
  };
 } // end anonymous namespace

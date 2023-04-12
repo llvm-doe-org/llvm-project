@@ -23,7 +23,6 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
-#include "llvm/ADT/StringSwitch.h"
 #include "llvm/BinaryFormat/COFF.h"
 #include "llvm/Support/BinaryStreamReader.h"
 #include "llvm/Support/Debug.h"
@@ -230,6 +229,7 @@ private:
   void setSectionPermissions();
   void writeSections();
   void writeBuildId();
+  void writePEChecksum();
   void sortSections();
   void sortExceptionTable();
   void sortCRTSectionChunks(std::vector<Chunk *> &chunks);
@@ -599,6 +599,43 @@ void Writer::finalizeAddresses() {
   }
 }
 
+void Writer::writePEChecksum() {
+  if (!config->writeCheckSum) {
+    return;
+  }
+
+  // https://docs.microsoft.com/en-us/windows/win32/debug/pe-format#checksum
+  uint32_t *buf = (uint32_t *)buffer->getBufferStart();
+  uint32_t size = (uint32_t)(buffer->getBufferSize());
+
+  coff_file_header *coffHeader =
+      (coff_file_header *)((uint8_t *)buf + dosStubSize + sizeof(PEMagic));
+  pe32_header *peHeader =
+      (pe32_header *)((uint8_t *)coffHeader + sizeof(coff_file_header));
+
+  uint64_t sum = 0;
+  uint32_t count = size;
+  ulittle16_t *addr = (ulittle16_t *)buf;
+
+  // The PE checksum algorithm, implemented as suggested in RFC1071
+  while (count > 1) {
+    sum += *addr++;
+    count -= 2;
+  }
+
+  // Add left-over byte, if any
+  if (count > 0)
+    sum += *(unsigned char *)addr;
+
+  // Fold 32-bit sum to 16 bits
+  while (sum >> 16) {
+    sum = (sum & 0xffff) + (sum >> 16);
+  }
+
+  sum += size;
+  peHeader->CheckSum = sum;
+}
+
 // The main function of the writer.
 void Writer::run() {
   ScopedTimer t1(ctx.codeLayoutTimer);
@@ -646,6 +683,8 @@ void Writer::run() {
 
   writeLLDMapFile(ctx);
   writeMapFile(ctx);
+
+  writePEChecksum();
 
   if (errorCount())
     return;

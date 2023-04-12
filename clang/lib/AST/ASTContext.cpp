@@ -71,7 +71,6 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/FoldingSet.h"
-#include "llvm/ADT/None.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/STLExtras.h"
@@ -94,6 +93,7 @@
 #include <cstdlib>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -771,9 +771,9 @@ canonicalizeImmediatelyDeclaredConstraint(const ASTContext &C, Expr *IDC,
 
   if (auto *OrigFold = dyn_cast<CXXFoldExpr>(IDC))
     NewIDC = new (C) CXXFoldExpr(
-        OrigFold->getType(), /*Callee*/nullptr, SourceLocation(), NewIDC,
+        OrigFold->getType(), /*Callee*/ nullptr, SourceLocation(), NewIDC,
         BinaryOperatorKind::BO_LAnd, SourceLocation(), /*RHS=*/nullptr,
-        SourceLocation(), /*NumExpansions=*/None);
+        SourceLocation(), /*NumExpansions=*/std::nullopt);
   return NewIDC;
 }
 
@@ -797,12 +797,13 @@ ASTContext::getCanonicalTemplateTemplateParmDecl(
                                           PEnd = Params->end();
        P != PEnd; ++P) {
     if (const auto *TTP = dyn_cast<TemplateTypeParmDecl>(*P)) {
-      TemplateTypeParmDecl *NewTTP = TemplateTypeParmDecl::Create(*this,
-          getTranslationUnitDecl(), SourceLocation(), SourceLocation(),
+      TemplateTypeParmDecl *NewTTP = TemplateTypeParmDecl::Create(
+          *this, getTranslationUnitDecl(), SourceLocation(), SourceLocation(),
           TTP->getDepth(), TTP->getIndex(), nullptr, false,
           TTP->isParameterPack(), TTP->hasTypeConstraint(),
-          TTP->isExpandedParameterPack() ?
-          llvm::Optional<unsigned>(TTP->getNumExpansionParameters()) : None);
+          TTP->isExpandedParameterPack()
+              ? llvm::Optional<unsigned>(TTP->getNumExpansionParameters())
+              : std::nullopt);
       if (const auto *TC = TTP->getTypeConstraint()) {
         QualType ParamAsArgument(NewTTP->getTypeForDecl(), 0);
         Expr *NewIDC = canonicalizeImmediatelyDeclaredConstraint(
@@ -927,39 +928,6 @@ ParentMapContext &ASTContext::getParentMapContext() {
   if (!ParentMapCtx)
     ParentMapCtx.reset(new ParentMapContext(*this));
   return *ParentMapCtx.get();
-}
-
-static const LangASMap *getAddressSpaceMap(const TargetInfo &T,
-                                           const LangOptions &LOpts) {
-  if (LOpts.FakeAddressSpaceMap) {
-    // The fake address space map must have a distinct entry for each
-    // language-specific address space.
-    static const unsigned FakeAddrSpaceMap[] = {
-        0,  // Default
-        1,  // opencl_global
-        3,  // opencl_local
-        2,  // opencl_constant
-        0,  // opencl_private
-        4,  // opencl_generic
-        5,  // opencl_global_device
-        6,  // opencl_global_host
-        7,  // cuda_device
-        8,  // cuda_constant
-        9,  // cuda_shared
-        1,  // sycl_global
-        5,  // sycl_global_device
-        6,  // sycl_global_host
-        3,  // sycl_local
-        0,  // sycl_private
-        10, // ptr32_sptr
-        11, // ptr32_uptr
-        12, // ptr64
-        13, // hlsl_groupshared
-    };
-    return &FakeAddrSpaceMap;
-  } else {
-    return &T.getAddressSpaceMap();
-  }
 }
 
 static bool isAddrSpaceMapManglingEnabled(const TargetInfo &TI,
@@ -1139,7 +1107,7 @@ ASTContext::getModulesWithMergedDefinition(const NamedDecl *Def) {
   auto MergedIt =
       MergedDefModules.find(cast<NamedDecl>(Def->getCanonicalDecl()));
   if (MergedIt == MergedDefModules.end())
-    return None;
+    return std::nullopt;
   return MergedIt->second;
 }
 
@@ -1197,7 +1165,7 @@ void ASTContext::addLazyModuleInitializers(Module *M, ArrayRef<uint32_t> IDs) {
 ArrayRef<Decl *> ASTContext::getModuleInitializers(Module *M) {
   auto It = ModuleInitializers.find(M);
   if (It == ModuleInitializers.end())
-    return None;
+    return std::nullopt;
 
   auto *Inits = It->second;
   Inits->resolve(*this);
@@ -1292,7 +1260,6 @@ void ASTContext::InitBuiltinTypes(const TargetInfo &Target,
   this->AuxTarget = AuxTarget;
 
   ABI.reset(createCXXABI(Target));
-  AddrSpaceMap = getAddressSpaceMap(Target, LangOpts);
   AddrSpaceMapMangling = isAddrSpaceMapManglingEnabled(Target, LangOpts);
 
   // C99 6.2.5p19.
@@ -2743,7 +2710,7 @@ getSubobjectSizeInBits(const FieldDecl *Field, const ASTContext &Context) {
   bool IsBitIntType = Field->getType()->isBitIntType();
   if (!Field->getType()->isReferenceType() && !IsBitIntType &&
       !Context.hasUniqueObjectRepresentations(Field->getType()))
-    return llvm::None;
+    return std::nullopt;
 
   int64_t FieldSizeInBits =
       Context.toBits(Context.getTypeSizeInChars(Field->getType()));
@@ -2752,14 +2719,14 @@ getSubobjectSizeInBits(const FieldDecl *Field, const ASTContext &Context) {
     if (IsBitIntType) {
       if ((unsigned)BitfieldSize >
           cast<BitIntType>(Field->getType())->getNumBits())
-        return llvm::None;
+        return std::nullopt;
     } else if (BitfieldSize > FieldSizeInBits) {
-      return llvm::None;
+      return std::nullopt;
     }
     FieldSizeInBits = BitfieldSize;
   } else if (IsBitIntType &&
              !Context.hasUniqueObjectRepresentations(Field->getType())) {
-    return llvm::None;
+    return std::nullopt;
   }
   return FieldSizeInBits;
 }
@@ -2777,11 +2744,11 @@ static llvm::Optional<int64_t> structSubobjectsHaveUniqueObjectRepresentations(
     llvm::Optional<int64_t> SizeInBits =
         getSubobjectSizeInBits(Subobject, Context);
     if (!SizeInBits)
-      return llvm::None;
+      return std::nullopt;
     if (*SizeInBits != 0) {
       int64_t Offset = getSubobjectOffset(Subobject, Context, Layout);
       if (Offset != CurOffsetInBits)
-        return llvm::None;
+        return std::nullopt;
       CurOffsetInBits += *SizeInBits;
     }
   }
@@ -2797,7 +2764,7 @@ structHasUniqueObjectRepresentations(const ASTContext &Context,
   int64_t CurOffsetInBits = 0;
   if (const auto *ClassDecl = dyn_cast<CXXRecordDecl>(RD)) {
     if (ClassDecl->isDynamicClass())
-      return llvm::None;
+      return std::nullopt;
 
     SmallVector<CXXRecordDecl *, 4> Bases;
     for (const auto &Base : ClassDecl->bases()) {
@@ -2814,7 +2781,7 @@ structHasUniqueObjectRepresentations(const ASTContext &Context,
         structSubobjectsHaveUniqueObjectRepresentations(Bases, CurOffsetInBits,
                                                         Context, Layout);
     if (!OffsetAfterBases)
-      return llvm::None;
+      return std::nullopt;
     CurOffsetInBits = *OffsetAfterBases;
   }
 
@@ -2822,7 +2789,7 @@ structHasUniqueObjectRepresentations(const ASTContext &Context,
       structSubobjectsHaveUniqueObjectRepresentations(
           RD->fields(), CurOffsetInBits, Context, Layout);
   if (!OffsetAfterFields)
-    return llvm::None;
+    return std::nullopt;
   CurOffsetInBits = *OffsetAfterFields;
 
   return CurOffsetInBits;
@@ -5218,7 +5185,7 @@ TemplateArgument ASTContext::getInjectedTemplateArg(NamedDecl *Param) {
   if (const auto *TTP = dyn_cast<TemplateTypeParmDecl>(Param)) {
     QualType ArgType = getTypeDeclType(TTP);
     if (TTP->isParameterPack())
-      ArgType = getPackExpansionType(ArgType, None);
+      ArgType = getPackExpansionType(ArgType, std::nullopt);
 
     Arg = TemplateArgument(ArgType);
   } else if (auto *NTTP = dyn_cast<NonTypeTemplateParmDecl>(Param)) {
@@ -5235,8 +5202,8 @@ TemplateArgument ASTContext::getInjectedTemplateArg(NamedDecl *Param) {
         Expr::getValueKindForType(NTTP->getType()), NTTP->getLocation());
 
     if (NTTP->isParameterPack())
-      E = new (*this) PackExpansionExpr(DependentTy, E, NTTP->getLocation(),
-                                        None);
+      E = new (*this)
+          PackExpansionExpr(DependentTy, E, NTTP->getLocation(), std::nullopt);
     Arg = TemplateArgument(E);
   } else {
     auto *TTP = cast<TemplateTemplateParmDecl>(Param);
@@ -6492,8 +6459,8 @@ static bool hasSameOverloadableAttrs(const FunctionDecl *A,
   auto BEnableIfAttrs = B->specific_attrs<EnableIfAttr>();
 
   for (auto Pair : zip_longest(AEnableIfAttrs, BEnableIfAttrs)) {
-    Optional<EnableIfAttr *> Cand1A = std::get<0>(Pair);
-    Optional<EnableIfAttr *> Cand2A = std::get<1>(Pair);
+    std::optional<EnableIfAttr *> Cand1A = std::get<0>(Pair);
+    std::optional<EnableIfAttr *> Cand2A = std::get<1>(Pair);
 
     // Return false if the number of enable_if attributes is different.
     if (!Cand1A || !Cand2A)
@@ -6974,7 +6941,7 @@ QualType ASTContext::getArrayDecayedType(QualType Ty) const {
                                      PrettyArrayType->getIndexTypeQualifiers());
 
   // int x[_Nullable] -> int * _Nullable
-  if (auto Nullability = Ty->getNullability(*this)) {
+  if (auto Nullability = Ty->getNullability()) {
     Result = const_cast<ASTContext *>(this)->getAttributedType(
         AttributedType::getNullabilityAttrKind(*Nullability), Result, Result);
   }
@@ -7101,6 +7068,21 @@ unsigned ASTContext::getIntegerRank(const Type *T) const {
   case BuiltinType::Int128:
   case BuiltinType::UInt128:
     return 7 + (getIntWidth(Int128Ty) << 3);
+
+  // "The ranks of char8_t, char16_t, char32_t, and wchar_t equal the ranks of
+  // their underlying types" [c++20 conv.rank]
+  case BuiltinType::Char8:
+    return getIntegerRank(UnsignedCharTy.getTypePtr());
+  case BuiltinType::Char16:
+    return getIntegerRank(
+        getFromTargetType(Target->getChar16Type()).getTypePtr());
+  case BuiltinType::Char32:
+    return getIntegerRank(
+        getFromTargetType(Target->getChar32Type()).getTypePtr());
+  case BuiltinType::WChar_S:
+  case BuiltinType::WChar_U:
+    return getIntegerRank(
+        getFromTargetType(Target->getWCharType()).getTypePtr());
   }
 }
 
@@ -11923,7 +11905,7 @@ MangleContext *ASTContext::createDeviceMangleContext(const TargetInfo &T) {
         [](ASTContext &, const NamedDecl *ND) -> llvm::Optional<unsigned> {
           if (const auto *RD = dyn_cast<CXXRecordDecl>(ND))
             return RD->getDeviceLambdaManglingNumber();
-          return llvm::None;
+          return std::nullopt;
         },
         /*IsAux=*/true);
   case TargetCXXABI::Microsoft:
@@ -12228,10 +12210,7 @@ uint64_t ASTContext::getTargetNullPointerValue(QualType QT) const {
 }
 
 unsigned ASTContext::getTargetAddressSpace(LangAS AS) const {
-  if (isTargetAddressSpace(AS))
-    return toTargetAddressSpace(AS);
-  else
-    return (*AddrSpaceMap)[(unsigned)AS];
+  return getTargetInfo().getTargetAddressSpace(AS);
 }
 
 bool ASTContext::hasSameExpr(const Expr *X, const Expr *Y) const {
@@ -13312,6 +13291,18 @@ QualType ASTContext::getCorrespondingSignedFixedPointType(QualType Ty) const {
   }
 }
 
+std::vector<std::string> ASTContext::filterFunctionTargetVersionAttrs(
+    const TargetVersionAttr *TV) const {
+  assert(TV != nullptr);
+  llvm::SmallVector<StringRef, 8> Feats;
+  std::vector<std::string> ResFeats;
+  TV->getFeatures(Feats);
+  for (auto &Feature : Feats)
+    if (Target->validateCpuSupports(Feature.str()))
+      ResFeats.push_back("?" + Feature.str());
+  return ResFeats;
+}
+
 ParsedTargetAttr
 ASTContext::filterFunctionTargetAttrs(const TargetAttr *TD) const {
   assert(TD != nullptr);
@@ -13370,12 +13361,32 @@ void ASTContext::getFunctionFeatureMap(llvm::StringMap<bool> &FeatureMap,
   } else if (const auto *TC = FD->getAttr<TargetClonesAttr>()) {
     std::vector<std::string> Features;
     StringRef VersionStr = TC->getFeatureStr(GD.getMultiVersionIndex());
-    if (VersionStr.startswith("arch="))
-      TargetCPU = VersionStr.drop_front(sizeof("arch=") - 1);
-    else if (VersionStr != "default")
-      Features.push_back((StringRef{"+"} + VersionStr).str());
-
+    if (Target->getTriple().isAArch64()) {
+      // TargetClones for AArch64
+      if (VersionStr != "default") {
+        SmallVector<StringRef, 1> VersionFeatures;
+        VersionStr.split(VersionFeatures, "+");
+        for (auto &VFeature : VersionFeatures) {
+          VFeature = VFeature.trim();
+          Features.push_back((StringRef{"?"} + VFeature).str());
+        }
+      }
+      Features.insert(Features.begin(),
+                      Target->getTargetOpts().FeaturesAsWritten.begin(),
+                      Target->getTargetOpts().FeaturesAsWritten.end());
+    } else {
+      if (VersionStr.startswith("arch="))
+        TargetCPU = VersionStr.drop_front(sizeof("arch=") - 1);
+      else if (VersionStr != "default")
+        Features.push_back((StringRef{"+"} + VersionStr).str());
+    }
     Target->initFeatureMap(FeatureMap, getDiagnostics(), TargetCPU, Features);
+  } else if (const auto *TV = FD->getAttr<TargetVersionAttr>()) {
+    std::vector<std::string> Feats = filterFunctionTargetVersionAttrs(TV);
+    Feats.insert(Feats.begin(),
+                 Target->getTargetOpts().FeaturesAsWritten.begin(),
+                 Target->getTargetOpts().FeaturesAsWritten.end());
+    Target->initFeatureMap(FeatureMap, getDiagnostics(), TargetCPU, Feats);
   } else {
     FeatureMap = Target->getTargetOpts().FeatureMap;
   }

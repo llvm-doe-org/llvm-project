@@ -16,9 +16,8 @@
 #ifndef LLVM_ADT_STRINGMAPENTRY_H
 #define LLVM_ADT_STRINGMAPENTRY_H
 
-#include "llvm/ADT/None.h"
-#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include <optional>
 
 namespace llvm {
 
@@ -124,7 +123,7 @@ public:
   /// Create a StringMapEntry for the specified key construct the value using
   /// \p InitiVals.
   template <typename AllocatorTy, typename... InitTy>
-  static StringMapEntry *Create(StringRef key, AllocatorTy &allocator,
+  static StringMapEntry *create(StringRef key, AllocatorTy &allocator,
                                 InitTy &&...initVals) {
     return new (StringMapEntryBase::allocateWithKey(
         sizeof(StringMapEntry), alignof(StringMapEntry), key, allocator))
@@ -149,6 +148,26 @@ public:
   }
 };
 
+// Allow structured bindings on StringMapEntry.
+template <std::size_t Index, typename ValueTy>
+decltype(auto) get(const StringMapEntry<ValueTy> &E) {
+  static_assert(Index < 2);
+  if constexpr (Index == 0)
+    return E.first();
+  else
+    return E.second;
+}
+
 } // end namespace llvm
+
+namespace std {
+template <typename ValueTy>
+struct tuple_size<llvm::StringMapEntry<ValueTy>>
+    : std::integral_constant<std::size_t, 2> {};
+
+template <std::size_t I, typename ValueTy>
+struct tuple_element<I, llvm::StringMapEntry<ValueTy>>
+    : std::conditional<I == 0, llvm::StringRef, ValueTy> {};
+} // namespace std
 
 #endif // LLVM_ADT_STRINGMAPENTRY_H

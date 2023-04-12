@@ -538,7 +538,7 @@ bool CursorVisitor::VisitChildren(CXCursor Cursor) {
             const Optional<bool> V = handleDeclForVisitation(*TL);
             if (!V)
               continue;
-            return V.value();
+            return *V;
           }
         } else if (VisitDeclContext(
                        CXXUnit->getASTContext().getTranslationUnitDecl()))
@@ -604,12 +604,12 @@ Optional<bool> CursorVisitor::shouldVisitCursor(CXCursor Cursor) {
   if (RegionOfInterest.isValid()) {
     SourceRange Range = getFullCursorExtent(Cursor, AU->getSourceManager());
     if (Range.isInvalid())
-      return None;
+      return std::nullopt;
 
     switch (CompareRegionOfInterest(Range)) {
     case RangeBefore:
       // This declaration comes before the region of interest; skip it.
-      return None;
+      return std::nullopt;
 
     case RangeAfter:
       // This declaration comes after the region of interest; we're done.
@@ -643,7 +643,7 @@ bool CursorVisitor::VisitDeclContext(DeclContext *DC) {
     const Optional<bool> V = handleDeclForVisitation(D);
     if (!V)
       continue;
-    return V.value();
+    return *V;
   }
   return false;
 }
@@ -658,7 +658,7 @@ Optional<bool> CursorVisitor::handleDeclForVisitation(const Decl *D) {
   // we passed the region-of-interest.
   if (auto *ivarD = dyn_cast<ObjCIvarDecl>(D)) {
     if (ivarD->getSynthesize())
-      return None;
+      return std::nullopt;
   }
 
   // FIXME: ObjCClassRef/ObjCProtocolRef for forward class/protocol
@@ -676,12 +676,12 @@ Optional<bool> CursorVisitor::handleDeclForVisitation(const Decl *D) {
 
   const Optional<bool> V = shouldVisitCursor(Cursor);
   if (!V)
-    return None;
-  if (!V.value())
+    return std::nullopt;
+  if (!*V)
     return false;
   if (Visit(Cursor, true))
     return true;
-  return None;
+  return std::nullopt;
 }
 
 bool CursorVisitor::VisitTranslationUnitDecl(TranslationUnitDecl *D) {
@@ -1076,7 +1076,7 @@ bool CursorVisitor::VisitObjCContainerDecl(ObjCContainerDecl *D) {
     const Optional<bool> &V = shouldVisitCursor(Cursor);
     if (!V)
       continue;
-    if (!V.value())
+    if (!*V)
       return false;
     if (Visit(Cursor, true))
       return true;
@@ -1374,7 +1374,7 @@ bool CursorVisitor::VisitConceptRequirement(const concepts::Requirement &R) {
   }
   case Requirement::RK_Nested: {
     const NestedRequirement &NR = cast<NestedRequirement>(R);
-    if (!NR.isSubstitutionFailure()) {
+    if (!NR.hasInvalidConstraint()) {
       if (Visit(NR.getConstraintExpr()))
         return true;
     }
@@ -2139,6 +2139,7 @@ public:
   void VisitLambdaExpr(const LambdaExpr *E);
   void VisitConceptSpecializationExpr(const ConceptSpecializationExpr *E);
   void VisitRequiresExpr(const RequiresExpr *E);
+  void VisitCXXParenListInitExpr(const CXXParenListInitExpr *E);
   void VisitOMPExecutableDirective(const OMPExecutableDirective *D);
   void VisitOMPLoopBasedDirective(const OMPLoopBasedDirective *D);
   void VisitOMPLoopDirective(const OMPLoopDirective *D);
@@ -3005,6 +3006,9 @@ void EnqueueVisitor::VisitRequiresExpr(const RequiresExpr *E) {
   WL.push_back(RequiresExprVisit(E, Parent));
   for (ParmVarDecl *VD : E->getLocalParameters())
     AddDecl(VD);
+}
+void EnqueueVisitor::VisitCXXParenListInitExpr(const CXXParenListInitExpr *E) {
+  EnqueueChildren(E);
 }
 void EnqueueVisitor::VisitPseudoObjectExpr(const PseudoObjectExpr *E) {
   // Treat the expression like its syntactic form.
@@ -3881,7 +3885,7 @@ clang_parseTranslationUnit_Impl(CXIndex CIdx, const char *source_filename,
 
   LibclangInvocationReporter InvocationReporter(
       *CXXIdx, LibclangInvocationReporter::OperationKind::ParseOperation,
-      options, llvm::makeArrayRef(*Args), /*InvocationArgs=*/None,
+      options, llvm::makeArrayRef(*Args), /*InvocationArgs=*/std::nullopt,
       unsaved_files);
   std::unique_ptr<ASTUnit> Unit(ASTUnit::LoadFromCommandLine(
       Args->data(), Args->data() + Args->size(),
@@ -5587,6 +5591,8 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
     return cxstring::createRef("ConceptSpecializationExpr");
   case CXCursor_RequiresExpr:
     return cxstring::createRef("RequiresExpr");
+  case CXCursor_CXXParenListInitExpr:
+    return cxstring::createRef("CXXParenListInitExpr");
   case CXCursor_ACCStarExpr:
     return cxstring::createRef("ACCStarExpr");
   case CXCursor_UnexposedStmt:
@@ -6714,6 +6720,7 @@ CXCursor clang_getCursorDefinition(CXCursor C) {
   case Decl::Export:
   case Decl::ObjCPropertyImpl:
   case Decl::FileScopeAsm:
+  case Decl::TopLevelStmt:
   case Decl::StaticAssert:
   case Decl::Block:
   case Decl::Captured:
@@ -7043,7 +7050,7 @@ void clang_enableStackTraces(void) {
 void clang_executeOnThread(void (*fn)(void *), void *user_data,
                            unsigned stack_size) {
   llvm::thread Thread(stack_size == 0 ? clang::DesiredStackSize
-                                      : llvm::Optional<unsigned>(stack_size),
+                                      : std::optional<unsigned>(stack_size),
                       fn, user_data);
   Thread.join();
 }
@@ -8247,13 +8254,13 @@ static CXVersion convertVersion(VersionTuple In) {
 
   Out.Major = In.getMajor();
 
-  Optional<unsigned> Minor = In.getMinor();
+  std::optional<unsigned> Minor = In.getMinor();
   if (Minor)
     Out.Minor = *Minor;
   else
     return Out;
 
-  Optional<unsigned> Subminor = In.getSubminor();
+  std::optional<unsigned> Subminor = In.getSubminor();
   if (Subminor)
     Out.Subminor = *Subminor;
 
@@ -8542,7 +8549,7 @@ CXFile clang_getIncludedFile(CXCursor cursor) {
     return nullptr;
 
   const InclusionDirective *ID = getCursorInclusionDirective(cursor);
-  Optional<FileEntryRef> File = ID->getFile();
+  OptionalFileEntryRef File = ID->getFile();
   return const_cast<FileEntry *>(File ? &File->getFileEntry() : nullptr);
 }
 

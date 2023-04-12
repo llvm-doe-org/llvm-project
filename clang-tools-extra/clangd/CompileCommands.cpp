@@ -42,7 +42,7 @@ llvm::Optional<std::string> queryXcrun(llvm::ArrayRef<llvm::StringRef> Argv) {
   auto Xcrun = llvm::sys::findProgramByName("xcrun");
   if (!Xcrun) {
     log("Couldn't find xcrun. Hopefully you have a non-apple toolchain...");
-    return llvm::None;
+    return std::nullopt;
   }
   llvm::SmallString<64> OutFile;
   llvm::sys::fs::createTemporaryFile("clangd-xcrun", "", OutFile);
@@ -58,18 +58,18 @@ llvm::Optional<std::string> queryXcrun(llvm::ArrayRef<llvm::StringRef> Argv) {
         "If you have a non-apple toolchain, this is OK. "
         "Otherwise, try xcode-select --install.",
         Ret);
-    return llvm::None;
+    return std::nullopt;
   }
 
   auto Buf = llvm::MemoryBuffer::getFile(OutFile);
   if (!Buf) {
     log("Can't read xcrun output: {0}", Buf.getError().message());
-    return llvm::None;
+    return std::nullopt;
   }
   StringRef Path = Buf->get()->getBuffer().trim();
   if (Path.empty()) {
     log("xcrun produced no output");
-    return llvm::None;
+    return std::nullopt;
   }
   return Path.str();
 }
@@ -120,12 +120,12 @@ std::string detectClangPath() {
 // The effect of this is to set -isysroot correctly. We do the same.
 llvm::Optional<std::string> detectSysroot() {
 #ifndef __APPLE__
-  return llvm::None;
+  return std::nullopt;
 #endif
 
   // SDKROOT overridden in environment, respect it. Driver will set isysroot.
   if (::getenv("SDKROOT"))
-    return llvm::None;
+    return std::nullopt;
   return queryXcrun({"xcrun", "--show-sdk-path"});
 }
 
@@ -466,8 +466,12 @@ llvm::ArrayRef<ArgStripper::Rule> ArgStripper::rulesFor(llvm::StringRef Arg) {
       NextAlias[T] = Self;
     };
     // Also grab prefixes for each option, these are not fully exposed.
-    const char *const *Prefixes[DriverID::LastOption] = {nullptr};
-#define PREFIX(NAME, VALUE) static const char *const NAME[] = VALUE;
+    llvm::ArrayRef<llvm::StringLiteral> Prefixes[DriverID::LastOption];
+
+#define PREFIX(NAME, VALUE)                                                    \
+  static constexpr llvm::StringLiteral NAME##_init[] = VALUE;                  \
+  static constexpr llvm::ArrayRef<llvm::StringLiteral> NAME(                   \
+      NAME##_init, std::size(NAME##_init) - 1);
 #define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,  \
                HELP, METAVAR, VALUES)                                          \
   Prefixes[DriverID::OPT_##ID] = PREFIX;
@@ -499,7 +503,7 @@ llvm::ArrayRef<ArgStripper::Rule> ArgStripper::rulesFor(llvm::StringRef Arg) {
       llvm::SmallVector<Rule> Rules;
       // Iterate over each alias, to add rules for parsing it.
       for (unsigned A = ID; A != DriverID::OPT_INVALID; A = NextAlias[A]) {
-        if (Prefixes[A] == nullptr) // option groups.
+        if (!Prefixes[A].size()) // option groups.
           continue;
         auto Opt = DriverTable.getOption(A);
         // Exclude - and -foo pseudo-options.
@@ -508,8 +512,8 @@ llvm::ArrayRef<ArgStripper::Rule> ArgStripper::rulesFor(llvm::StringRef Arg) {
         auto Modes = getModes(Opt);
         std::pair<unsigned, unsigned> ArgCount = getArgCount(Opt);
         // Iterate over each spelling of the alias, e.g. -foo vs --foo.
-        for (auto *Prefix = Prefixes[A]; *Prefix != nullptr; ++Prefix) {
-          llvm::SmallString<64> Buf(*Prefix);
+        for (StringRef Prefix : Prefixes[A]) {
+          llvm::SmallString<64> Buf(Prefix);
           Buf.append(Opt.getName());
           llvm::StringRef Spelling = Result->try_emplace(Buf).first->getKey();
           Rules.emplace_back();

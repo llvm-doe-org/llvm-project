@@ -1,5 +1,5 @@
 // REQUIRES: amdgpu-registered-target
-// RUN: %clang_cc1 -no-opaque-pointers -cl-std=CL2.0 -triple amdgcn-unknown-unknown -S -emit-llvm -o - %s | FileCheck -enable-var-scope %s
+// RUN: %clang_cc1 -no-opaque-pointers -cl-std=CL2.0 -triple amdgcn-unknown-unknown -target-cpu tahiti -S -emit-llvm -o - %s | FileCheck -enable-var-scope %s
 
 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
 
@@ -796,7 +796,7 @@ kernel void test_s_setreg(uint val) {
 
 // CHECK-DAG: [[$WI_RANGE]] = !{i32 0, i32 1024}
 // CHECK-DAG: [[$WS_RANGE]] = !{i16 1, i16 1025}
-// CHECK-DAG: attributes #[[$NOUNWIND_READONLY:[0-9]+]] = { nofree nounwind memory(read) }
+// CHECK-DAG: attributes #[[$NOUNWIND_READONLY]] = { mustprogress nocallback nofree nosync nounwind willreturn memory(read) }
 // CHECK-DAG: attributes #[[$READ_EXEC_ATTRS]] = { convergent }
 // CHECK-DAG: ![[$EXEC]] = !{!"exec"}
 // CHECK-DAG: ![[$EXEC_LO]] = !{!"exec_lo"}

@@ -1179,9 +1179,8 @@ static bool LookupDirect(Sema &S, LookupResult &R, const DeclContext *DC) {
     FunctionProtoType::ExtProtoInfo EPI = ConvProto->getExtProtoInfo();
     EPI.ExtInfo = EPI.ExtInfo.withCallingConv(CC_C);
     EPI.ExceptionSpec = EST_None;
-    QualType ExpectedType
-      = R.getSema().Context.getFunctionType(R.getLookupName().getCXXNameType(),
-                                            None, EPI);
+    QualType ExpectedType = R.getSema().Context.getFunctionType(
+        R.getLookupName().getCXXNameType(), std::nullopt, EPI);
 
     // Perform template argument deduction against the type that we would
     // expect the function to have.
@@ -1624,10 +1623,8 @@ hasAcceptableDefaultArgument(Sema &S, const ParmDecl *D,
   if (!D->hasDefaultArgument())
     return false;
 
-  llvm::SmallDenseSet<const ParmDecl *, 4> Visited;
-  while (D && !Visited.count(D)) {
-    Visited.insert(D);
-
+  llvm::SmallPtrSet<const ParmDecl *, 4> Visited;
+  while (D && Visited.insert(D).second) {
     auto &DefaultArg = D->getDefaultArgStorage();
     if (!DefaultArg.isInherited() && S.isAcceptable(D, Kind))
       return true;

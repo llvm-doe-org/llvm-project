@@ -141,6 +141,8 @@ CodeGenModule::CodeGenModule(ASTContext &C,
   const llvm::DataLayout &DL = M.getDataLayout();
   AllocaInt8PtrTy = Int8Ty->getPointerTo(DL.getAllocaAddrSpace());
   GlobalsInt8PtrTy = Int8Ty->getPointerTo(DL.getDefaultGlobalsAddressSpace());
+  ConstGlobalsPtrTy = Int8Ty->getPointerTo(
+      C.getTargetAddressSpace(GetGlobalConstantAddressSpace()));
   ASTAllocaAddressSpace = getTargetCodeGenInfo().getASTAllocaAddressSpace();
 
   // Build C++20 Module initializers.
@@ -516,6 +518,14 @@ void CodeGenModule::Release() {
   applyGlobalValReplacements();
   applyReplacements();
   emitMultiVersionFunctions();
+
+  if (Context.getLangOpts().IncrementalExtensions &&
+      GlobalTopLevelStmtBlockInFlight.first) {
+    const TopLevelStmtDecl *TLSD = GlobalTopLevelStmtBlockInFlight.second;
+    GlobalTopLevelStmtBlockInFlight.first->FinishFunction(TLSD->getEndLoc());
+    GlobalTopLevelStmtBlockInFlight = {nullptr, nullptr};
+  }
+
   if (CXX20ModuleInits && Primary && Primary->isInterfaceOrPartition())
     EmitCXXModuleInitFunc(Primary);
   else
@@ -764,9 +774,6 @@ void CodeGenModule::Release() {
     getModule().addModuleFlag(llvm::Module::Min, "cf-protection-branch",
                               1);
   }
-
-  if (CodeGenOpts.IBTSeal)
-    getModule().addModuleFlag(llvm::Module::Min, "ibt-seal", 1);
 
   if (CodeGenOpts.FunctionReturnThunks)
     getModule().addModuleFlag(llvm::Module::Override, "function_return_thunk_extern", 1);
@@ -1327,6 +1334,20 @@ static void AppendCPUSpecificCPUDispatchMangling(const CodeGenModule &CGM,
     Out << ".resolver";
 }
 
+static void AppendTargetVersionMangling(const CodeGenModule &CGM,
+                                        const TargetVersionAttr *Attr,
+                                        raw_ostream &Out) {
+  if (Attr->isDefaultVersion())
+    return;
+  Out << "._";
+  llvm::SmallVector<StringRef, 8> Feats;
+  Attr->getFeatures(Feats);
+  for (const auto &Feat : Feats) {
+    Out << 'M';
+    Out << Feat;
+  }
+}
+
 static void AppendTargetMangling(const CodeGenModule &CGM,
                                  const TargetAttr *Attr, raw_ostream &Out) {
   if (Attr->isDefaultVersion())
@@ -1372,14 +1393,27 @@ static void AppendTargetClonesMangling(const CodeGenModule &CGM,
                                        const TargetClonesAttr *Attr,
                                        unsigned VersionIndex,
                                        raw_ostream &Out) {
-  Out << '.';
-  StringRef FeatureStr = Attr->getFeatureStr(VersionIndex);
-  if (FeatureStr.startswith("arch="))
-    Out << "arch_" << FeatureStr.substr(sizeof("arch=") - 1);
-  else
-    Out << FeatureStr;
+  if (CGM.getTarget().getTriple().isAArch64()) {
+    StringRef FeatureStr = Attr->getFeatureStr(VersionIndex);
+    if (FeatureStr == "default")
+      return;
+    Out << "._";
+    SmallVector<StringRef, 8> Features;
+    FeatureStr.split(Features, "+");
+    for (auto &Feat : Features) {
+      Out << 'M';
+      Out << Feat;
+    }
+  } else {
+    Out << '.';
+    StringRef FeatureStr = Attr->getFeatureStr(VersionIndex);
+    if (FeatureStr.startswith("arch="))
+      Out << "arch_" << FeatureStr.substr(sizeof("arch=") - 1);
+    else
+      Out << FeatureStr;
 
-  Out << '.' << Attr->getMangledIndex(VersionIndex);
+    Out << '.' << Attr->getMangledIndex(VersionIndex);
+  }
 }
 
 static std::string getMangledNameImpl(CodeGenModule &CGM, GlobalDecl GD,
@@ -1434,6 +1468,9 @@ static std::string getMangledNameImpl(CodeGenModule &CGM, GlobalDecl GD,
         break;
       case MultiVersionKind::Target:
         AppendTargetMangling(CGM, FD->getAttr<TargetAttr>(), Out);
+        break;
+      case MultiVersionKind::TargetVersion:
+        AppendTargetVersionMangling(CGM, FD->getAttr<TargetVersionAttr>(), Out);
         break;
       case MultiVersionKind::TargetClones:
         AppendTargetClonesMangling(CGM, FD->getAttr<TargetClonesAttr>(),
@@ -1641,7 +1678,7 @@ void CodeGenModule::EmitCtorList(CtorList &Fns, const char *GlobalName) {
 
   // The LTO linker doesn't seem to like it when we set an alignment
   // on appending variables.  Take it off as a workaround.
-  list->setAlignment(llvm::None);
+  list->setAlignment(std::nullopt);
 
   Fns.clear();
 }
@@ -2156,10 +2193,12 @@ bool CodeGenModule::GetCPUAndFeaturesAttributes(GlobalDecl GD,
   const auto *FD = dyn_cast_or_null<FunctionDecl>(GD.getDecl());
   FD = FD ? FD->getMostRecentDecl() : FD;
   const auto *TD = FD ? FD->getAttr<TargetAttr>() : nullptr;
+  const auto *TV = FD ? FD->getAttr<TargetVersionAttr>() : nullptr;
+  assert((!TD || !TV) && "both target_version and target specified");
   const auto *SD = FD ? FD->getAttr<CPUSpecificAttr>() : nullptr;
   const auto *TC = FD ? FD->getAttr<TargetClonesAttr>() : nullptr;
   bool AddedAttr = false;
-  if (TD || SD || TC) {
+  if (TD || TV || SD || TC) {
     llvm::StringMap<bool> FeatureMap;
     getContext().getFunctionFeatureMap(FeatureMap, GD);
 
@@ -2804,9 +2843,10 @@ llvm::Constant *CodeGenModule::EmitAnnotationString(StringRef Str) {
 
   // Not found yet, create a new global.
   llvm::Constant *s = llvm::ConstantDataArray::getString(getLLVMContext(), Str);
-  auto *gv =
-      new llvm::GlobalVariable(getModule(), s->getType(), true,
-                               llvm::GlobalValue::PrivateLinkage, s, ".str");
+  auto *gv = new llvm::GlobalVariable(
+      getModule(), s->getType(), true, llvm::GlobalValue::PrivateLinkage, s,
+      ".str", nullptr, llvm::GlobalValue::NotThreadLocal,
+      ConstGlobalsPtrTy->getAddressSpace());
   gv->setSection(AnnotationSection);
   gv->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
   AStr = gv;
@@ -2832,7 +2872,7 @@ llvm::Constant *CodeGenModule::EmitAnnotationLineNo(SourceLocation L) {
 llvm::Constant *CodeGenModule::EmitAnnotationArgs(const AnnotateAttr *Attr) {
   ArrayRef<Expr *> Exprs = {Attr->args_begin(), Attr->args_size()};
   if (Exprs.empty())
-    return llvm::ConstantPointerNull::get(GlobalsInt8PtrTy);
+    return llvm::ConstantPointerNull::get(ConstGlobalsPtrTy);
 
   llvm::FoldingSetNodeID ID;
   for (Expr *E : Exprs) {
@@ -2882,8 +2922,8 @@ llvm::Constant *CodeGenModule::EmitAnnotateAttr(llvm::GlobalValue *GV,
   // Create the ConstantStruct for the global annotation.
   llvm::Constant *Fields[] = {
       llvm::ConstantExpr::getBitCast(GVInGlobalsAS, GlobalsInt8PtrTy),
-      llvm::ConstantExpr::getBitCast(AnnoGV, GlobalsInt8PtrTy),
-      llvm::ConstantExpr::getBitCast(UnitGV, GlobalsInt8PtrTy),
+      llvm::ConstantExpr::getBitCast(AnnoGV, ConstGlobalsPtrTy),
+      llvm::ConstantExpr::getBitCast(UnitGV, ConstGlobalsPtrTy),
       LineNoCst,
       Args,
   };
@@ -3612,12 +3652,18 @@ static unsigned
 TargetMVPriority(const TargetInfo &TI,
                  const CodeGenFunction::MultiVersionResolverOption &RO) {
   unsigned Priority = 0;
-  for (StringRef Feat : RO.Conditions.Features)
+  unsigned NumFeatures = 0;
+  for (StringRef Feat : RO.Conditions.Features) {
     Priority = std::max(Priority, TI.multiVersionSortPriority(Feat));
+    NumFeatures++;
+  }
 
   if (!RO.Conditions.Architecture.empty())
     Priority = std::max(
         Priority, TI.multiVersionSortPriority(RO.Conditions.Architecture));
+
+  Priority += TI.multiVersionFeatureCost() * NumFeatures;
+
   return Priority;
 }
 
@@ -3662,13 +3708,19 @@ void CodeGenModule::emitMultiVersionFunctions() {
               }
               assert(Func && "This should have just been created");
             }
-
-            const auto *TA = CurFD->getAttr<TargetAttr>();
-            llvm::SmallVector<StringRef, 8> Feats;
-            TA->getAddedFeatures(Feats);
-
-            Options.emplace_back(cast<llvm::Function>(Func),
-                                 TA->getArchitecture(), Feats);
+            if (CurFD->getMultiVersionKind() == MultiVersionKind::Target) {
+              const auto *TA = CurFD->getAttr<TargetAttr>();
+              llvm::SmallVector<StringRef, 8> Feats;
+              TA->getAddedFeatures(Feats);
+              Options.emplace_back(cast<llvm::Function>(Func),
+                                   TA->getArchitecture(), Feats);
+            } else {
+              const auto *TVA = CurFD->getAttr<TargetVersionAttr>();
+              llvm::SmallVector<StringRef, 8> Feats;
+              TVA->getFeatures(Feats);
+              Options.emplace_back(cast<llvm::Function>(Func),
+                                   /*Architecture*/ "", Feats);
+            }
           });
     } else if (FD->isTargetClonesMultiVersion()) {
       const auto *TC = FD->getAttr<TargetClonesAttr>();
@@ -3698,10 +3750,19 @@ void CodeGenModule::emitMultiVersionFunctions() {
         StringRef Architecture;
         llvm::SmallVector<StringRef, 1> Feature;
 
-        if (Version.startswith("arch="))
-          Architecture = Version.drop_front(sizeof("arch=") - 1);
-        else if (Version != "default")
-          Feature.push_back(Version);
+        if (getTarget().getTriple().isAArch64()) {
+          if (Version != "default") {
+            llvm::SmallVector<StringRef, 8> VerFeats;
+            Version.split(VerFeats, "+");
+            for (auto &CurFeat : VerFeats)
+              Feature.push_back(CurFeat.trim());
+          }
+        } else {
+          if (Version.startswith("arch="))
+            Architecture = Version.drop_front(sizeof("arch=") - 1);
+          else if (Version != "default")
+            Feature.push_back(Version);
+        }
 
         Options.emplace_back(cast<llvm::Function>(Func), Architecture, Feature);
       }
@@ -4045,7 +4106,7 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
     }
 
     llvm::Constant *BC = llvm::ConstantExpr::getBitCast(
-        F, Entry->getValueType()->getPointerTo());
+        F, Entry->getValueType()->getPointerTo(Entry->getAddressSpace()));
     addGlobalValReplacement(Entry, BC);
   }
 
@@ -4109,8 +4170,8 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
     return F;
   }
 
-  llvm::Type *PTy = llvm::PointerType::getUnqual(Ty);
-  return llvm::ConstantExpr::getBitCast(F, PTy);
+  return llvm::ConstantExpr::getBitCast(F,
+                                        Ty->getPointerTo(F->getAddressSpace()));
 }
 
 /// GetAddrOfFunction - Return the address of the given function.  If Ty is
@@ -4159,8 +4220,9 @@ llvm::Constant *CodeGenModule::GetFunctionStart(const ValueDecl *Decl) {
   llvm::GlobalValue *F =
       cast<llvm::GlobalValue>(GetAddrOfFunction(Decl)->stripPointerCasts());
 
-  return llvm::ConstantExpr::getBitCast(llvm::NoCFIValue::get(F),
-                                        llvm::Type::getInt8PtrTy(VMContext));
+  return llvm::ConstantExpr::getBitCast(
+      llvm::NoCFIValue::get(F),
+      llvm::Type::getInt8PtrTy(VMContext, F->getAddressSpace()));
 }
 
 static const FunctionDecl *
@@ -6150,6 +6212,39 @@ void CodeGenModule::EmitLinkageSpec(const LinkageSpecDecl *LSD) {
   EmitDeclContext(LSD);
 }
 
+void CodeGenModule::EmitTopLevelStmt(const TopLevelStmtDecl *D) {
+  std::unique_ptr<CodeGenFunction> &CurCGF =
+      GlobalTopLevelStmtBlockInFlight.first;
+
+  // We emitted a top-level stmt but after it there is initialization.
+  // Stop squashing the top-level stmts into a single function.
+  if (CurCGF && CXXGlobalInits.back() != CurCGF->CurFn) {
+    CurCGF->FinishFunction(D->getEndLoc());
+    CurCGF = nullptr;
+  }
+
+  if (!CurCGF) {
+    // void __stmts__N(void)
+    // FIXME: Ask the ABI name mangler to pick a name.
+    std::string Name = "__stmts__" + llvm::utostr(CXXGlobalInits.size());
+    FunctionArgList Args;
+    QualType RetTy = getContext().VoidTy;
+    const CGFunctionInfo &FnInfo =
+        getTypes().arrangeBuiltinFunctionDeclaration(RetTy, Args);
+    llvm::FunctionType *FnTy = getTypes().GetFunctionType(FnInfo);
+    llvm::Function *Fn = llvm::Function::Create(
+        FnTy, llvm::GlobalValue::InternalLinkage, Name, &getModule());
+
+    CurCGF.reset(new CodeGenFunction(*this));
+    GlobalTopLevelStmtBlockInFlight.second = D;
+    CurCGF->StartFunction(GlobalDecl(), RetTy, Fn, FnInfo, Args,
+                          D->getBeginLoc(), D->getBeginLoc());
+    CXXGlobalInits.push_back(Fn);
+  }
+
+  CurCGF->EmitStmt(D->getStmt());
+}
+
 void CodeGenModule::EmitDeclContext(const DeclContext *DC) {
   for (auto *I : DC->decls()) {
     // Unlike other DeclContexts, the contents of an ObjCImplDecl at TU scope
@@ -6358,6 +6453,10 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
     getModule().appendModuleInlineAsm(AD->getAsmString()->getString());
     break;
   }
+
+  case Decl::TopLevelStmt:
+    EmitTopLevelStmt(cast<TopLevelStmtDecl>(D));
+    break;
 
   case Decl::Import: {
     auto *Import = cast<ImportDecl>(D);

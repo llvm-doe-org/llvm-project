@@ -18,6 +18,7 @@
 #include "Symbols.h"
 #include "Writer.h"
 #include "lld/Common/Args.h"
+#include "lld/Common/CommonLinkerContext.h"
 #include "lld/Common/Driver.h"
 #include "lld/Common/Filesystem.h"
 #include "lld/Common/Timer.h"
@@ -414,6 +415,9 @@ void LinkerDriver::parseDirectives(InputFile *file) {
     case OPT_nodefaultlib:
       config->noDefaultLibs.insert(doFindLib(arg->getValue()).lower());
       break;
+    case OPT_release:
+      config->writeCheckSum = true;
+      break;
     case OPT_section:
       parseSection(arg->getValue());
       break;
@@ -482,7 +486,7 @@ static std::optional<sys::fs::UniqueID> getUniqueID(StringRef path) {
 }
 
 // Resolves a file path. This never returns the same path
-// (in that case, it returns None).
+// (in that case, it returns std::nullopt).
 std::optional<StringRef> LinkerDriver::findFile(StringRef filename) {
   StringRef path = doFindFile(filename);
 
@@ -525,7 +529,7 @@ StringRef LinkerDriver::doFindLib(StringRef filename) {
 
 // Resolves a library path. /nodefaultlib options are taken into
 // consideration. This never returns the same path (in that case,
-// it returns None).
+// it returns std::nullopt).
 std::optional<StringRef> LinkerDriver::findLib(StringRef filename) {
   if (config->noDefaultLibAll)
     return std::nullopt;
@@ -549,7 +553,7 @@ void LinkerDriver::detectWinSysRoot(const opt::InputArgList &Args) {
   // use. Check the environment next, in case we're being invoked from a VS
   // command prompt. Failing that, just try to find the newest Visual Studio
   // version we can and use its default VC toolchain.
-  Optional<StringRef> VCToolsDir, VCToolsVersion, WinSysRoot;
+  std::optional<StringRef> VCToolsDir, VCToolsVersion, WinSysRoot;
   if (auto *A = Args.getLastArg(OPT_vctoolsdir))
     VCToolsDir = A->getValue();
   if (auto *A = Args.getLastArg(OPT_vctoolsversion))
@@ -579,7 +583,7 @@ void LinkerDriver::detectWinSysRoot(const opt::InputArgList &Args) {
                          Args.getLastArg(OPT_vctoolsdir, OPT_winsysroot);
   if (Args.hasArg(OPT_lldignoreenv) || !Process::GetEnv("LIB") ||
       Args.getLastArg(OPT_winsdkdir, OPT_winsysroot)) {
-    Optional<StringRef> WinSdkDir, WinSdkVersion;
+    std::optional<StringRef> WinSdkDir, WinSdkVersion;
     if (auto *A = Args.getLastArg(OPT_winsdkdir))
       WinSdkDir = A->getValue();
     if (auto *A = Args.getLastArg(OPT_winsdkversion))
@@ -639,7 +643,7 @@ void LinkerDriver::addWinSysRootLibSearchPaths() {
 
 // Parses LIB environment which contains a list of search paths.
 void LinkerDriver::addLibSearchPaths() {
-  Optional<std::string> envOpt = Process::GetEnv("LIB");
+  std::optional<std::string> envOpt = Process::GetEnv("LIB");
   if (!envOpt)
     return;
   StringRef env = saver().save(*envOpt);
@@ -2020,6 +2024,10 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
   if (errorCount())
     return;
 
+  // Handle /RELEASE
+  if (args.hasArg(OPT_release))
+    config->writeCheckSum = true;
+  
   // Handle /safeseh, x86 only, on by default, except for mingw.
   if (config->machine == I386) {
     config->safeSEH = args.hasFlag(OPT_safeseh, OPT_safeseh_no, !config->mingw);

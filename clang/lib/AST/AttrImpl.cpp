@@ -151,7 +151,7 @@ void OMPDeclareTargetDeclAttr::printPrettyPragma(
 llvm::Optional<OMPDeclareTargetDeclAttr *>
 OMPDeclareTargetDeclAttr::getActiveAttr(const ValueDecl *VD) {
   if (!VD->hasAttrs())
-    return llvm::None;
+    return std::nullopt;
   unsigned Level = 0;
   OMPDeclareTargetDeclAttr *FoundAttr = nullptr;
   for (auto *Attr : VD->specific_attrs<OMPDeclareTargetDeclAttr>()) {
@@ -162,31 +162,31 @@ OMPDeclareTargetDeclAttr::getActiveAttr(const ValueDecl *VD) {
   }
   if (FoundAttr)
     return FoundAttr;
-  return llvm::None;
+  return std::nullopt;
 }
 
 llvm::Optional<OMPDeclareTargetDeclAttr::MapTypeTy>
 OMPDeclareTargetDeclAttr::isDeclareTargetDeclaration(const ValueDecl *VD) {
   llvm::Optional<OMPDeclareTargetDeclAttr *> ActiveAttr = getActiveAttr(VD);
   if (ActiveAttr)
-    return ActiveAttr.value()->getMapType();
-  return llvm::None;
+    return (*ActiveAttr)->getMapType();
+  return std::nullopt;
 }
 
 llvm::Optional<OMPDeclareTargetDeclAttr::DevTypeTy>
 OMPDeclareTargetDeclAttr::getDeviceType(const ValueDecl *VD) {
   llvm::Optional<OMPDeclareTargetDeclAttr *> ActiveAttr = getActiveAttr(VD);
   if (ActiveAttr)
-    return ActiveAttr.value()->getDevType();
-  return llvm::None;
+    return (*ActiveAttr)->getDevType();
+  return std::nullopt;
 }
 
 llvm::Optional<SourceLocation>
 OMPDeclareTargetDeclAttr::getLocation(const ValueDecl *VD) {
   llvm::Optional<OMPDeclareTargetDeclAttr *> ActiveAttr = getActiveAttr(VD);
   if (ActiveAttr)
-    return ActiveAttr.value()->getRange().getBegin();
-  return llvm::None;
+    return (*ActiveAttr)->getRange().getBegin();
+  return std::nullopt;
 }
 
 namespace clang {

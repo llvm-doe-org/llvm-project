@@ -156,12 +156,12 @@ static llvm::Optional<QualType> getUnwidenedIntegerType(const ASTContext &Ctx,
                                                         const Expr *E) {
   const Expr *Base = E->IgnoreImpCasts();
   if (E == Base)
-    return llvm::None;
+    return std::nullopt;
 
   QualType BaseTy = Base->getType();
   if (!Ctx.isPromotableIntegerType(BaseTy) ||
       Ctx.getTypeSize(BaseTy) >= Ctx.getTypeSize(E->getType()))
-    return llvm::None;
+    return std::nullopt;
 
   return BaseTy;
 }
@@ -1667,7 +1667,7 @@ Value *ScalarExprEmitter::VisitShuffleVectorExpr(ShuffleVectorExpr *E) {
     //   newv = insert newv, x, i
     auto *RTy = llvm::FixedVectorType::get(LTy->getElementType(),
                                            MTy->getNumElements());
-    Value* NewV = llvm::UndefValue::get(RTy);
+    Value* NewV = llvm::PoisonValue::get(RTy);
     for (unsigned i = 0, e = MTy->getNumElements(); i != e; ++i) {
       Value *IIndx = llvm::ConstantInt::get(CGF.SizeTy, i);
       Value *Indx = Builder.CreateExtractElement(Mask, IIndx, "shuf_idx");

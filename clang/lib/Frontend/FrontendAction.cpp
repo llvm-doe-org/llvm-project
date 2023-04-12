@@ -335,7 +335,7 @@ static std::error_code collectModuleHeaderIncludes(
     return std::error_code();
 
   // Resolve all lazy header directives to header files.
-  ModMap.resolveHeaderDirectives(Module, /*File=*/llvm::None);
+  ModMap.resolveHeaderDirectives(Module, /*File=*/std::nullopt);
 
   // If any headers are missing, we can't build this module. In most cases,
   // diagnostics for this should have already been produced; we only get here
@@ -823,7 +823,7 @@ bool FrontendAction::BeginSourceFile(CompilerInstance &CI,
         Dir = *DirOrErr;
       SmallVector<std::pair<const FileEntry *, const DirectoryEntry *>, 1> CWD;
       CWD.push_back({nullptr, Dir});
-      Optional<FileEntryRef> FE =
+      OptionalFileEntryRef FE =
           HS.LookupFile(FileName, SourceLocation(),
                         /*Angled*/ Input.getKind().getHeaderUnitKind() ==
                             InputKind::HeaderUnit_System,

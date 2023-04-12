@@ -476,8 +476,8 @@ public:
     getSema().ActOnOpenMPRegionStart(OMPD_target_update, nullptr);
     StmtResult AssociatedStmt =
         (Sema::CompoundScopeRAII(getSema()),
-         getSema().ActOnCompoundStmt(D->getEndLoc(), D->getEndLoc(), llvm::None,
-                                     /*isStmtExpr=*/false));
+         getSema().ActOnCompoundStmt(D->getEndLoc(), D->getEndLoc(),
+                                     std::nullopt, /*isStmtExpr=*/false));
     AssociatedStmt = getSema().ActOnOpenMPRegionEnd(AssociatedStmt, TClauses);
 
     // Build OpenMP directive and finalize enclosing compound statement, if
@@ -515,8 +515,8 @@ public:
     getSema().ActOnOpenMPRegionStart(OMPD_target_enter_data, nullptr);
     StmtResult AssociatedStmt =
         (Sema::CompoundScopeRAII(getSema()),
-         getSema().ActOnCompoundStmt(D->getEndLoc(), D->getEndLoc(), llvm::None,
-                                     /*isStmtExpr=*/false));
+         getSema().ActOnCompoundStmt(D->getEndLoc(), D->getEndLoc(),
+                                     std::nullopt, /*isStmtExpr=*/false));
     AssociatedStmt = getSema().ActOnOpenMPRegionEnd(AssociatedStmt, TClauses);
 
     // Build OpenMP directive and finalize enclosing compound statement, if any.
@@ -552,8 +552,8 @@ public:
     getSema().ActOnOpenMPRegionStart(OMPD_target_exit_data, nullptr);
     StmtResult AssociatedStmt =
         (Sema::CompoundScopeRAII(getSema()),
-         getSema().ActOnCompoundStmt(D->getEndLoc(), D->getEndLoc(), llvm::None,
-                                     /*isStmtExpr=*/false));
+         getSema().ActOnCompoundStmt(D->getEndLoc(), D->getEndLoc(),
+                                     std::nullopt, /*isStmtExpr=*/false));
     AssociatedStmt = getSema().ActOnOpenMPRegionEnd(AssociatedStmt, TClauses);
 
     // Build OpenMP directive and finalize enclosing compound statement, if any.
@@ -991,7 +991,7 @@ public:
               MapMods, {L.LParenLoc}, CXXScopeSpec(), DeclarationNameInfo(),
               OMPC_MAP_alloc, /*IsMapTypeImplicit=*/false, L.LocStart,
               L.LParenLoc, Vars,
-              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
 
@@ -1030,7 +1030,7 @@ public:
               MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
               OMPC_MAP_alloc, /*IsMapTypeImplicit=*/false, L.LocStart,
               L.LParenLoc, Vars,
-              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
 
@@ -1049,7 +1049,7 @@ public:
               MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
               OMPC_MAP_tofrom, /*IsMapTypeImplicit=*/false, L.LocStart,
               L.LParenLoc, Vars,
-              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
 
@@ -1068,7 +1068,7 @@ public:
               MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
               OMPC_MAP_to, /*IsMapTypeImplicit=*/false, L.LocStart, L.LParenLoc,
               Vars, OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd),
-              llvm::None);
+              std::nullopt);
         });
   }
 
@@ -1087,7 +1087,7 @@ public:
               MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
               OMPC_MAP_from, /*IsMapTypeImplicit=*/false, L.LocStart,
               L.LParenLoc, Vars,
-              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
 
@@ -1106,7 +1106,7 @@ public:
               MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
               OMPC_MAP_alloc, /*IsMapTypeImplicit=*/false, L.LocStart,
               L.LParenLoc, Vars,
-              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
 
@@ -1145,7 +1145,7 @@ public:
               MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
               OMPC_MAP_alloc, /*IsMapTypeImplicit=*/false, L.LocStart,
               L.LParenLoc, Vars,
-              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
 
@@ -1156,10 +1156,10 @@ public:
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
           return getDerived().RebuildOMPMapClause(
-              llvm::None, llvm::None, CXXScopeSpec(), DeclarationNameInfo(),
+              std::nullopt, std::nullopt, CXXScopeSpec(), DeclarationNameInfo(),
               OMPC_MAP_release, /*IsMapTypeImplicit=*/false, L.LocStart,
               L.LParenLoc, Vars,
-              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
 
@@ -1295,7 +1295,7 @@ private:
           return (getDerived().*Rebuilder)(
               MotionMods, MotionModLocs, MapperIdScopeSpec, MapperIdInfo,
               L.LParenLoc, Vars,
-              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), llvm::None);
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
 

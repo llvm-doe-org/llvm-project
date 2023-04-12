@@ -5,6 +5,7 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/TargetSelect.h"
+#include <optional>
 
 #include "gtest/gtest.h"
 
@@ -23,9 +24,9 @@ std::unique_ptr<LLVMTargetMachine> createTargetMachine() {
   std::string Error;
   const Target *TheTarget = TargetRegistry::lookupTarget(TT, Error);
 
-  return std::unique_ptr<LLVMTargetMachine>(
-      static_cast<LLVMTargetMachine *>(TheTarget->createTargetMachine(
-          TT, CPU, FS, TargetOptions(), None, None, CodeGenOpt::Default)));
+  return std::unique_ptr<LLVMTargetMachine>(static_cast<LLVMTargetMachine *>(
+      TheTarget->createTargetMachine(TT, CPU, FS, TargetOptions(), std::nullopt,
+                                     std::nullopt, CodeGenOpt::Default)));
 }
 
 std::unique_ptr<LoongArchInstrInfo> createInstrInfo(TargetMachine *TM) {
@@ -117,7 +118,7 @@ TEST(InstSizes, AtomicPseudo) {
       TM.get(), II.get(), "",
       // clang-format off
       "    dead early-clobber renamable $r10, dead early-clobber renamable $r11 = PseudoMaskedAtomicLoadAdd32 renamable $r7, renamable $r6, renamable $r8, 4\n"
-      "    dead early-clobber renamable $r10, dead early-clobber renamable $r11 = PseudoAtomicLoadAdd32 renamable $r7, renamable $r6\n"
+      "    dead early-clobber renamable $r10, dead early-clobber renamable $r11 = PseudoAtomicLoadAdd32 renamable $r7, renamable $r6, renamable $r8\n"
       "    dead early-clobber renamable $r5, dead early-clobber renamable $r9, dead early-clobber renamable $r10 = PseudoMaskedAtomicLoadUMax32 renamable $r7, renamable $r6, renamable $r8, 4\n"
       "    early-clobber renamable $r9, dead early-clobber renamable $r10, dead early-clobber renamable $r11 = PseudoMaskedAtomicLoadMax32 killed renamable $r6, killed renamable $r5, killed renamable $r7, killed renamable $r8, 4\n"
       "    dead early-clobber renamable $r5, dead early-clobber renamable $r9 = PseudoCmpXchg32 renamable $r7, renamable $r4, renamable $r6\n"

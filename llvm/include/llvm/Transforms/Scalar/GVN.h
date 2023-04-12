@@ -72,11 +72,11 @@ class GVNLegacyPass;
 /// Intended use is to create a default object, modify parameters with
 /// additional setters and then pass it to GVN.
 struct GVNOptions {
-  std::optional<bool> AllowPRE = None;
-  std::optional<bool> AllowLoadPRE = None;
-  std::optional<bool> AllowLoadInLoopPRE = None;
-  std::optional<bool> AllowLoadPRESplitBackedge = None;
-  std::optional<bool> AllowMemDep = None;
+  std::optional<bool> AllowPRE;
+  std::optional<bool> AllowLoadPRE;
+  std::optional<bool> AllowLoadInLoopPRE;
+  std::optional<bool> AllowLoadPRESplitBackedge;
+  std::optional<bool> AllowMemDep;
 
   GVNOptions() = default;
 

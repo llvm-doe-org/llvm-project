@@ -1532,9 +1532,15 @@ enum CXCursorKind {
   CXCursor_RequiresExpr = 154,
 
   /**
+   * Expression that references a C++20 parenthesized list aggregate
+   * initializer.
+   */
+  CXCursor_CXXParenListInitExpr = 155,
+
+  /**
    * OpenACC '*' expression
    */
-  CXCursor_ACCStarExpr = 155,
+  CXCursor_ACCStarExpr = 156,
 
   CXCursor_LastExpr = CXCursor_ACCStarExpr,
 

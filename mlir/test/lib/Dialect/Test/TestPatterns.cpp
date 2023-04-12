@@ -311,7 +311,7 @@ static void invokeCreateWithInferredReturnType(Operation *op) {
       std::array<Value, 2> values = {{fop.getArgument(i), fop.getArgument(j)}};
       SmallVector<Type, 2> inferredReturnTypes;
       if (succeeded(OpTy::inferReturnTypes(
-              context, llvm::None, values, op->getAttrDictionary(),
+              context, std::nullopt, values, op->getAttrDictionary(),
               op->getRegions(), inferredReturnTypes))) {
         OperationState state(location, OpTy::getOperationName());
         // TODO: Expand to regions.
@@ -568,8 +568,8 @@ struct TestPassthroughInvalidOp : public ConversionPattern {
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const final {
-    rewriter.replaceOpWithNewOp<TestValidOp>(op, llvm::None, operands,
-                                             llvm::None);
+    rewriter.replaceOpWithNewOp<TestValidOp>(op, std::nullopt, operands,
+                                             std::nullopt);
     return success();
   }
 };
@@ -777,8 +777,9 @@ struct TestTypeConverter : public TypeConverter {
 
   /// Hook for materializing a conversion. This is necessary because we generate
   /// 1->N type mappings.
-  static Optional<Value> materializeCast(OpBuilder &builder, Type resultType,
-                                         ValueRange inputs, Location loc) {
+  static std::optional<Value> materializeCast(OpBuilder &builder,
+                                              Type resultType,
+                                              ValueRange inputs, Location loc) {
     return builder.create<TestCastOp>(loc, resultType, inputs).getResult();
   }
 };
@@ -1267,7 +1268,7 @@ struct TestTypeConversionDriver
         // Convert a recursive self-referring type into a non-self-referring
         // type named "outer_converted_type" that contains a SimpleAType.
         [&](test::TestRecursiveType type, SmallVectorImpl<Type> &results,
-            ArrayRef<Type> callStack) -> Optional<LogicalResult> {
+            ArrayRef<Type> callStack) -> std::optional<LogicalResult> {
           // If the type is already converted, return it to indicate that it is
           // legal.
           if (type.getName() == "outer_converted_type") {

@@ -103,6 +103,21 @@ public:
   static bool shouldCollectSymbol(const NamedDecl &ND, const ASTContext &ASTCtx,
                                   const Options &Opts, bool IsMainFileSymbol);
 
+  // Given a ref contained in enclosing decl `Enclosing`, return
+  // the decl that should be used as that ref's Ref::Container. This is
+  // usually `Enclosing` itself, but in cases where `Enclosing` is not
+  // indexed, we walk further up because Ref::Container should always be
+  // an indexed symbol.
+  // Note: we don't use DeclContext as the container as in some cases
+  // it's useful to use a Decl which is not a DeclContext. For example,
+  // for a ref occurring in the initializer of a namespace-scope variable,
+  // it's useful to use that variable as the container, as otherwise the
+  // next enclosing DeclContext would be a NamespaceDecl or TranslationUnitDecl,
+  // which are both not indexed and less granular than we'd like for use cases
+  // like call hierarchy.
+  static const Decl *getRefContainer(const Decl *Enclosing,
+                                     const SymbolCollector::Options &Opts);
+
   void initialize(ASTContext &Ctx) override;
 
   void setPreprocessor(std::shared_ptr<Preprocessor> PP) override {
@@ -153,6 +168,9 @@ private:
   // File IDs for Symbol.IncludeHeaders.
   // The final spelling is calculated in finish().
   llvm::DenseMap<SymbolID, FileID> IncludeFiles;
+  // Files which contain ObjC symbols.
+  // This is finalized and used in finish().
+  llvm::DenseSet<FileID> FilesWithObjCConstructs;
   void setIncludeLocation(const Symbol &S, SourceLocation);
   // Indexed macros, to be erased if they turned out to be include guards.
   llvm::DenseSet<const IdentifierInfo *> IndexedMacros;

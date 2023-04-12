@@ -710,8 +710,7 @@ bool Parser::ParseTopLevelDecl(DeclGroupPtrTy &Result,
 
     // Late template parsing can begin.
     Actions.SetLateTemplateParser(LateTemplateParserCallback, nullptr, this);
-    if (!PP.isIncrementalProcessingEnabled())
-      Actions.ActOnEndOfTranslationUnit();
+    Actions.ActOnEndOfTranslationUnit();
     //else don't tell Sema that we ended parsing: more input might come.
     return true;
 
@@ -926,7 +925,7 @@ Parser::ParseExternalDeclaration(ParsedAttributes &Attrs,
     if (CurParsedObjCImpl) {
       // Code-complete Objective-C methods even without leading '-'/'+' prefix.
       Actions.CodeCompleteObjCMethodDecl(getCurScope(),
-                                         /*IsInstanceMethod=*/None,
+                                         /*IsInstanceMethod=*/std::nullopt,
                                          /*ReturnType=*/nullptr);
     }
     Actions.CodeCompleteOrdinaryName(
@@ -1037,8 +1036,13 @@ Parser::ParseExternalDeclaration(ParsedAttributes &Attrs,
       ConsumeToken();
       return nullptr;
     }
+    if (PP.isIncrementalProcessingEnabled() &&
+        !isDeclarationStatement(/*DisambiguatingWithExpression=*/true))
+      return ParseTopLevelStmtDecl();
+
     // We can't tell whether this is a function-definition or declaration yet.
-    return ParseDeclarationOrFunctionDefinition(Attrs, DeclSpecAttrs, DS);
+    if (!SingleDecl)
+      return ParseDeclarationOrFunctionDefinition(Attrs, DeclSpecAttrs, DS);
   }
 
   // This routine returns a DeclGroup, if the thing we parsed only contains a

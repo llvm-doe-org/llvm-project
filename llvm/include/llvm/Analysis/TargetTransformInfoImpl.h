@@ -359,6 +359,8 @@ public:
     return {};
   }
 
+  bool enableSelectOptimize() const { return true; }
+
   bool enableInterleavedAccessVectorization() const { return false; }
 
   bool enableMaskedInterleavedAccessVectorization() const { return false; }
@@ -1128,7 +1130,7 @@ public:
       // destination type of the trunc instruction rather than the load to
       // accurately estimate the cost of this load instruction.
       if (CostKind == TTI::TCK_CodeSize && LI->hasOneUse() &&
-          !LoadType->isVectorTy()) {    
+          !LoadType->isVectorTy()) {
         if (const TruncInst *TI = dyn_cast<TruncInst>(*LI->user_begin()))
           LoadType = TI->getDestTy();
       }

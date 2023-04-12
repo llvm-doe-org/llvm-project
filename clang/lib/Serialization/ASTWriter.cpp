@@ -743,6 +743,7 @@ static void AddStmtsExprs(llvm::BitstreamWriter &Stream,
   RECORD(EXPR_USER_DEFINED_LITERAL);
   RECORD(EXPR_CXX_STD_INITIALIZER_LIST);
   RECORD(EXPR_CXX_BOOL_LITERAL);
+  RECORD(EXPR_CXX_PAREN_LIST_INIT);
   RECORD(EXPR_CXX_NULL_PTR_LITERAL);
   RECORD(EXPR_CXX_TYPEID_EXPR);
   RECORD(EXPR_CXX_TYPEID_TYPE);
@@ -1044,6 +1045,7 @@ void ASTWriter::WriteBlockInfoBlock() {
   RECORD(SIGNATURE);
   RECORD(AST_BLOCK_HASH);
   RECORD(DIAGNOSTIC_OPTIONS);
+  RECORD(HEADER_SEARCH_PATHS);
   RECORD(DIAG_PRAGMA_MAPPINGS);
 
 #undef RECORD
@@ -1877,7 +1879,7 @@ void ASTWriter::WriteHeaderSearch(const HeaderSearch &HS) {
       // headers list when emitting resolved headers in the first loop below.
       // FIXME: It'd be preferable to avoid doing this if we were given
       // sufficient stat information in the module map.
-      HS.getModuleMap().resolveHeaderDirectives(M, /*File=*/llvm::None);
+      HS.getModuleMap().resolveHeaderDirectives(M, /*File=*/std::nullopt);
 
       // If the file didn't exist, we can still create a module if we were given
       // enough information in the module map.
@@ -4464,11 +4466,11 @@ void ASTWriter::EmitRecordWithPath(unsigned Abbrev, RecordDataRef Record,
 void ASTWriter::AddVersionTuple(const VersionTuple &Version,
                                 RecordDataImpl &Record) {
   Record.push_back(Version.getMajor());
-  if (Optional<unsigned> Minor = Version.getMinor())
+  if (std::optional<unsigned> Minor = Version.getMinor())
     Record.push_back(*Minor + 1);
   else
     Record.push_back(0);
-  if (Optional<unsigned> Subminor = Version.getSubminor())
+  if (std::optional<unsigned> Subminor = Version.getSubminor())
     Record.push_back(*Subminor + 1);
   else
     Record.push_back(0);
@@ -5947,7 +5949,7 @@ void ASTRecordWriter::AddCXXDefinitionData(const CXXRecordDecl *D) {
     AddDeclRef(D->getLambdaContextDecl());
     AddTypeSourceInfo(Lambda.MethodTyInfo);
     for (unsigned I = 0, N = Lambda.NumCaptures; I != N; ++I) {
-      const LambdaCapture &Capture = Lambda.Captures[I];
+      const LambdaCapture &Capture = Lambda.Captures.front()[I];
       AddSourceLocation(Capture.getLocation());
       Record->push_back(Capture.isImplicit());
       Record->push_back(Capture.getCaptureKind());
@@ -7084,8 +7086,10 @@ void OMPClauseWriter::VisitOMPExclusiveClause(OMPExclusiveClause *C) {
 
 void OMPClauseWriter::VisitOMPOrderClause(OMPOrderClause *C) {
   Record.writeEnum(C->getKind());
+  Record.writeEnum(C->getModifier());
   Record.AddSourceLocation(C->getLParenLoc());
   Record.AddSourceLocation(C->getKindKwLoc());
+  Record.AddSourceLocation(C->getModifierKwLoc());
 }
 
 void OMPClauseWriter::VisitOMPUsesAllocatorsClause(OMPUsesAllocatorsClause *C) {

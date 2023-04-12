@@ -48,7 +48,6 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallSet.h"
@@ -799,6 +798,13 @@ void Verifier::visitGlobalVariable(const GlobalVariable &GV) {
     Check(!STy->containsScalableVectorType(),
           "Globals cannot contain scalable vectors", &GV);
 
+  // Check if it's a target extension type that disallows being used as a
+  // global.
+  if (auto *TTy = dyn_cast<TargetExtType>(GV.getValueType()))
+    Check(TTy->hasProperty(TargetExtType::CanBeGlobal),
+          "Global @" + GV.getName() + " has illegal target extension type",
+          TTy);
+
   if (!GV.hasInitializer()) {
     visitGlobalValue(GV);
     return;
@@ -1241,7 +1247,7 @@ void Verifier::visitDISubroutineType(const DISubroutineType &N) {
 
 void Verifier::visitDIFile(const DIFile &N) {
   CheckDI(N.getTag() == dwarf::DW_TAG_file_type, "invalid tag", &N);
-  Optional<DIFile::ChecksumInfo<StringRef>> Checksum = N.getChecksum();
+  std::optional<DIFile::ChecksumInfo<StringRef>> Checksum = N.getChecksum();
   if (Checksum) {
     CheckDI(Checksum->Kind <= DIFile::ChecksumKind::CSK_Last,
             "invalid checksum kind", &N);
@@ -4964,12 +4970,23 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
     break;
   case Intrinsic::assume: {
     for (auto &Elem : Call.bundle_op_infos()) {
+      unsigned ArgCount = Elem.End - Elem.Begin;
+      // Separate storage assumptions are special insofar as they're the only
+      // operand bundles allowed on assumes that aren't parameter attributes.
+      if (Elem.Tag->getKey() == "separate_storage") {
+        Check(ArgCount == 2,
+              "separate_storage assumptions should have 2 arguments", Call);
+        Check(Call.getOperand(Elem.Begin)->getType()->isPointerTy() &&
+                  Call.getOperand(Elem.Begin + 1)->getType()->isPointerTy(),
+              "arguments to separate_storage assumptions should be pointers",
+              Call);
+        return;
+      }
       Check(Elem.Tag->getKey() == "ignore" ||
                 Attribute::isExistingAttribute(Elem.Tag->getKey()),
             "tags must be valid attribute names", Call);
       Attribute::AttrKind Kind =
           Attribute::getAttrKindFromName(Elem.Tag->getKey());
-      unsigned ArgCount = Elem.End - Elem.Begin;
       if (Kind == Attribute::Alignment) {
         Check(ArgCount <= 3 && ArgCount >= 2,
               "alignment assumptions should have 2 or 3 arguments", Call);
@@ -5011,6 +5028,12 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
           "an array");
     break;
   }
+  case Intrinsic::is_fpclass: {
+    const ConstantInt *TestMask = cast<ConstantInt>(Call.getOperand(1));
+    Check((TestMask->getZExtValue() & ~fcAllFlags) == 0,
+          "unsupported bits for llvm.is.fpclass test mask");
+    break;
+  }
   case Intrinsic::fptrunc_round: {
     // Check the rounding mode
     Metadata *MD = nullptr;
@@ -5025,7 +5048,7 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
            " (the operand should be a string)"),
           MD);
 
-    Optional<RoundingMode> RoundMode =
+    std::optional<RoundingMode> RoundMode =
         convertStrToRoundingMode(cast<MDString>(MD)->getString());
     Check(RoundMode && *RoundMode != RoundingMode::Dynamic,
           "unsupported rounding mode argument", Call);
@@ -5747,6 +5770,17 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
     Check(ElemTy,
           "Intrinsic requires elementtype attribute on second argument.",
           &Call);
+    break;
+  }
+  case Intrinsic::aarch64_prefetch: {
+    Check(cast<ConstantInt>(Call.getArgOperand(1))->getZExtValue() < 2,
+          "write argument to llvm.aarch64.prefetch must be 0 or 1", Call);
+    Check(cast<ConstantInt>(Call.getArgOperand(2))->getZExtValue() < 4,
+          "target argument to llvm.aarch64.prefetch must be 0-3", Call);
+    Check(cast<ConstantInt>(Call.getArgOperand(3))->getZExtValue() < 2,
+          "stream argument to llvm.aarch64.prefetch must be 0 or 1", Call);
+    Check(cast<ConstantInt>(Call.getArgOperand(4))->getZExtValue() < 2,
+          "isdata argument to llvm.aarch64.prefetch must be 0 or 1", Call);
     break;
   }
   };

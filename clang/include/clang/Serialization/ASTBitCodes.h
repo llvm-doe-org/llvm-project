@@ -1323,6 +1323,9 @@ enum DeclCode {
   /// A FileScopeAsmDecl record.
   DECL_FILE_SCOPE_ASM,
 
+  /// A TopLevelStmtDecl record.
+  DECL_TOP_LEVEL_STMT_DECL,
+
   /// A BlockDecl record.
   DECL_BLOCK,
 
@@ -1862,6 +1865,9 @@ enum StmtCode {
 
   /// A CXXBoolLiteralExpr record.
   EXPR_CXX_BOOL_LITERAL,
+
+  /// A CXXParenListInitExpr record.
+  EXPR_CXX_PAREN_LIST_INIT,
 
   EXPR_CXX_NULL_PTR_LITERAL, // CXXNullPtrLiteralExpr
   EXPR_CXX_TYPEID_EXPR,      // CXXTypeidExpr (of expr).

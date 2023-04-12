@@ -737,6 +737,7 @@ void COFFDumper::printPEHeader(const PEHeader *Hdr) {
   W.printNumber("MinorSubsystemVersion", Hdr->MinorSubsystemVersion);
   W.printNumber("SizeOfImage", Hdr->SizeOfImage);
   W.printNumber("SizeOfHeaders", Hdr->SizeOfHeaders);
+  W.printHex   ("CheckSum", Hdr->CheckSum);
   W.printEnum  ("Subsystem", Hdr->Subsystem, makeArrayRef(PEWindowsSubsystem));
   W.printFlags ("Characteristics", Hdr->DLLCharacteristics,
                 makeArrayRef(PEDLLCharacteristics));
@@ -1371,7 +1372,7 @@ void COFFDumper::mergeCodeViewTypes(MergingTypeTableBuilder &CVIDs,
                     Obj->getFileName());
       }
       SmallVector<TypeIndex, 128> SourceToDest;
-      Optional<PCHMergerInfo> PCHInfo;
+      std::optional<PCHMergerInfo> PCHInfo;
       if (GHash) {
         std::vector<GloballyHashedType> Hashes =
             GloballyHashedType::hashTypes(Types);

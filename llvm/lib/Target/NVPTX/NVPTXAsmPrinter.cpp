@@ -472,6 +472,9 @@ void NVPTXAsmPrinter::emitFunctionEntryLabel() {
   if (isKernelFunction(*F))
     emitKernelFunctionDirectives(*F, O);
 
+  if (shouldEmitPTXNoReturn(F, TM))
+    O << ".noreturn";
+
   OutStreamer->emitRawText(O.str());
 
   VRegMapping.clear();
@@ -615,6 +618,8 @@ void NVPTXAsmPrinter::emitDeclaration(const Function *F, raw_ostream &O) {
   getSymbol(F)->print(O, MAI);
   O << "\n";
   emitFunctionParamList(F, O);
+  if (shouldEmitPTXNoReturn(F, TM))
+    O << ".noreturn";
   O << ";\n";
 }
 
@@ -913,15 +918,6 @@ bool NVPTXAsmPrinter::doFinalization(Module &M) {
   TS->outputDwarfFileDirectives();
 
   return ret;
-
-  //bool Result = AsmPrinter::doFinalization(M);
-  // Instead of calling the parents doFinalization, we may
-  // clone parents doFinalization and customize here.
-  // Currently, we if NVISA out the EmitGlobals() in
-  // parent's doFinalization, which is too intrusive.
-  //
-  // Same for the doInitialization.
-  //return Result;
 }
 
 // This function emits appropriate linkage directives for
@@ -1466,7 +1462,7 @@ void NVPTXAsmPrinter::emitFunctionParamList(const Function *F, raw_ostream &O) {
   bool isABI = (STI.getSmVersion() >= 20);
   bool hasImageHandles = STI.hasImageHandles();
 
-  if (F->arg_empty()) {
+  if (F->arg_empty() && !F->isVarArg()) {
     O << "()\n";
     return;
   }
@@ -1668,6 +1664,15 @@ void NVPTXAsmPrinter::emitFunctionParamList(const Function *F, raw_ostream &O) {
       --paramIndex;
       continue;
     }
+  }
+
+  if (F->isVarArg()) {
+    if (!first)
+      O << ",\n";
+    O << "\t.param .align " << STI.getMaxRequiredAlignment();
+    O << " .b8 ";
+    getSymbol(F)->print(O, MAI);
+    O << "_vararg[]";
   }
 
   O << "\n)\n";
