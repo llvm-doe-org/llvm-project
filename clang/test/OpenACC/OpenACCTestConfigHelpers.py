@@ -26,8 +26,6 @@ def tgtSupportsStdio(tgt):
 def tgtBcPathClangOpt(tgt, libomptarget_dir):
     if tgt == "nvptx64-nvidia-cuda":
         return "--libomptarget-nvptx-bc-path=" + libomptarget_dir
-    if tgt == "amdgcn-amd-amdhsa":
-        return "--libomptarget-amdgcn-bc-path=" + libomptarget_dir
     return ""
 
 # Perform the algorithm described in

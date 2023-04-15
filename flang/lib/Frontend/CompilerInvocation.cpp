@@ -36,6 +36,7 @@
 #include "llvm/Support/Process.h"
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
+#include <optional>
 
 using namespace Fortran::frontend;
 
@@ -128,11 +129,16 @@ static void parseCodeGenArgs(Fortran::frontend::CodeGenOptions &opts,
   for (auto *a : args.filtered(clang::driver::options::OPT_fpass_plugin_EQ))
     opts.LLVMPassPlugins.push_back(a->getValue());
 
+  // -fembed-offload-object option
+  for (auto *a :
+       args.filtered(clang::driver::options::OPT_fembed_offload_object_EQ))
+    opts.OffloadObjects.push_back(a->getValue());
+
   // -mrelocation-model option.
   if (const llvm::opt::Arg *A =
           args.getLastArg(clang::driver::options::OPT_mrelocation_model)) {
     llvm::StringRef ModelName = A->getValue();
-    auto RM = llvm::StringSwitch<llvm::Optional<llvm::Reloc::Model>>(ModelName)
+    auto RM = llvm::StringSwitch<std::optional<llvm::Reloc::Model>>(ModelName)
                   .Case("static", llvm::Reloc::Static)
                   .Case("pic", llvm::Reloc::PIC_)
                   .Case("dynamic-no-pic", llvm::Reloc::DynamicNoPIC)

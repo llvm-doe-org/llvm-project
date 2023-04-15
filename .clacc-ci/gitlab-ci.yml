@@ -46,7 +46,7 @@ variables:
   VV_LLVM_TEST_SUITE_COMMIT: da5c250df731c259bd6f15f05ab93f3f7b902b63
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
   VV_CFLAGS:
-  KOKKOS_COMMIT: 43a105744fa67a3810fe7fbc29315a9e349047a1
+  KOKKOS_COMMIT: 2f2dff91cd63ac33e4f4c0560778188f9dcfc191
   KOKKOS_TESTS_COMMIT: a883ce8d4806b9ad1a1696ccb1e83f8a043f5be5
   KOKKOS_CMAKE_OPTS:
   KOKKOS_CFLAGS:
@@ -64,9 +64,14 @@ stages:
 #-------------------------------------------------------------------------------
 # build configurations
 #
-# Test every architecture with a release build plus assertions using python3.
-# There are multiple milan* systems, so use them to check configuration
-# choices that are hopefully orthogonal to the architecture.
+# - Sometimes enabling assertions breaks builds/tests (assertion fails).
+#   Sometimes disabling them does (assertion has required side effect).
+#   Assertions can be architecture-specific, so check every architecture both
+#   ways.
+# - Check every architecture with a release build, which is faster and takes
+#   much less disk space than a debug build.
+# - There are multiple milan* systems, so use them to check the case of a debug
+#   build.
 #-------------------------------------------------------------------------------
 
 # leconte has a /usr/lib64/libomptarget.so that, at least since July, 2022,
@@ -93,7 +98,7 @@ stages:
     NINJA: ninja
     PYTHON: /usr/bin/python3
     CMAKE_BUILD_OPTS:
-      -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
+      -DCMAKE_BUILD_TYPE=Release
       -DOPENMP_TEST_FLAGS=-L$BUILD_DIR/build/lib
     LLVM_ENABLE_PROJECTS: "clang"
     LLVM_ENABLE_RUNTIMES: "openmp"
@@ -109,6 +114,7 @@ stages:
       "
       libomp :: env/kmp_set_dispatch_buf.c
       libomptarget :: nvptx64-nvidia-cuda :: mapping/target_has_device_addr.c
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/info.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_has_device_addr.c
       "
     TEST_LIT_XFAIL_NOT:
@@ -128,8 +134,15 @@ stages:
     VV_COMP_LIT_XFAIL:
       ""
     VV_RUN_LIT_XFAIL:
-      "
-      "
+      ""
+
+.leconte-assert:
+  extends: [.leconte]
+  variables:
+    BUILD_ID: leconte-assert
+    CMAKE_BUILD_OPTS:
+      -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
+      -DOPENMP_TEST_FLAGS=-L$BUILD_DIR/build/lib
 
 .oswald02:
   tags: [shell, oswald02]
@@ -141,7 +154,7 @@ stages:
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
-    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release
     LLVM_ENABLE_PROJECTS: "clang"
     LLVM_ENABLE_RUNTIMES: "openmp"
     CPU_TRIPLE: "x86_64-pc-linux-gnu"
@@ -153,7 +166,14 @@ stages:
     TEST_LIT_XFAIL:
       "
       libomptarget :: nvptx64-nvidia-cuda :: mapping/target_has_device_addr.c
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/info.c
+      libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/close_enter_exit.c
+      libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/close_modifier.c
+      libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/shared_update.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_has_device_addr.c
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: unified_shared_memory/close_enter_exit.c
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: unified_shared_memory/close_modifier.c
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: unified_shared_memory/shared_update.c
       ompd-test :: api_tests/test_ompd_finalize.c
       ompd-test :: api_tests/test_ompd_get_curr_parallel_handle.c
       "
@@ -169,8 +189,13 @@ stages:
     VV_COMP_LIT_XFAIL:
       ""
     VV_RUN_LIT_XFAIL:
-      "
-      "
+      ""
+
+.oswald02-assert:
+  extends: [.oswald02]
+  variables:
+    BUILD_ID: oswald02-assert
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
 
 .explorer:
   tags: [shell, explorer]
@@ -182,7 +207,7 @@ stages:
     GCC_DIR: /usr
     NINJA: ninja
     PYTHON: /usr/bin/python3
-    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release
     # If lld isn't built, OpenMP offloading tests for AMDGPU fail:
     #
     #   clang-14: error: unable to execute command: Executable "lld" doesn't exist!
@@ -196,9 +221,7 @@ stages:
     KOKKOS_CMAKE_OPTS: -DKokkos_ARCH_VEGA906=On
     LIT_NPROC_DIVISOR: 1
     TEST_LIT_XFAIL:
-      "
-      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/parallel-da.c
-      "
+      ""
     TEST_LIT_XFAIL_NOT:
       ""
     TEST_LIT_FILTER_OUT_LIST:
@@ -214,6 +237,16 @@ stages:
       External/openacc_vv/atomic_capture_expr_plus_x.c.test
       "
 
+.explorer-assert:
+  extends: [.explorer]
+  variables:
+    BUILD_ID: explorer-assert
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
+    TEST_LIT_XFAIL:
+      "
+      Clang :: OpenACC/directives/amdgcn-amd-amdhsa/parallel-da.c
+      "
+
 .milan:
   tags: [shell, milan]
   variables:
@@ -223,7 +256,7 @@ stages:
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
-    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release
     LLVM_ENABLE_PROJECTS: "clang"
     LLVM_ENABLE_RUNTIMES: "openmp"
     CPU_TRIPLE: "x86_64-pc-linux-gnu"
@@ -242,43 +275,17 @@ stages:
       External/openacc_vv/acc_unmap_data.c.test
       "
 
-.no-asserts:
+.milan-assert:
   extends: [.milan]
   variables:
-    BUILD_ID: no-asserts
-    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=False
-    TEST_LIT_XFAIL:
-      ""
-    TEST_LIT_XFAIL_NOT:
-      ""
-    TEST_LIT_FILTER_OUT_LIST:
-      ""
-    VV_COMP_LIT_XFAIL:
-      ""
-    VV_RUN_LIT_XFAIL:
-      "
-      External/openacc_vv/acc_map_data.c.test
-      External/openacc_vv/acc_unmap_data.c.test
-      "
+    BUILD_ID: milan-assert
+    CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
 
 .debug:
   extends: [.milan]
   variables:
     BUILD_ID: debug
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Debug
-    TEST_LIT_XFAIL:
-      ""
-    TEST_LIT_XFAIL_NOT:
-      ""
-    TEST_LIT_FILTER_OUT_LIST:
-      ""
-    VV_COMP_LIT_XFAIL:
-      ""
-    VV_RUN_LIT_XFAIL:
-      "
-      External/openacc_vv/acc_map_data.c.test
-      External/openacc_vv/acc_unmap_data.c.test
-      "
 
 # Not setup or cleanup.
 .non-utility:
@@ -348,17 +355,26 @@ stages:
 leconte (setup):
   extends: [.leconte, .setup]
 
+leconte-assert (setup):
+  extends: [.leconte-assert, .setup]
+
 oswald02 (setup):
   extends: [.oswald02, .setup]
+
+oswald02-assert (setup):
+  extends: [.oswald02-assert, .setup]
 
 explorer (setup):
   extends: [.explorer, .setup]
 
+explorer-assert (setup):
+  extends: [.explorer-assert, .setup]
+
 milan (setup):
   extends: [.milan, .setup]
 
-no-asserts (setup):
-  extends: [.no-asserts, .setup]
+milan-assert (setup):
+  extends: [.milan-assert, .setup]
 
 debug (setup):
   extends: [.debug, .setup]
@@ -398,6 +414,18 @@ leconte (cleanup):
       artifacts: false
       optional: true
 
+leconte-assert (cleanup):
+  extends: [.leconte-assert, .cleanup]
+  needs:
+    - job: leconte-assert (test)
+      artifacts: false
+    - job: leconte-assert (vv)
+      artifacts: false
+      optional: true
+    - job: leconte-assert (kokkos)
+      artifacts: false
+      optional: true
+
 oswald02 (cleanup):
   extends: [.oswald02, .cleanup]
   needs:
@@ -407,6 +435,18 @@ oswald02 (cleanup):
       artifacts: false
       optional: true
     - job: oswald02 (kokkos)
+      artifacts: false
+      optional: true
+
+oswald02-assert (cleanup):
+  extends: [.oswald02-assert, .cleanup]
+  needs:
+    - job: oswald02-assert (test)
+      artifacts: false
+    - job: oswald02-assert (vv)
+      artifacts: false
+      optional: true
+    - job: oswald02-assert (kokkos)
       artifacts: false
       optional: true
 
@@ -422,6 +462,18 @@ explorer (cleanup):
       artifacts: false
       optional: true
 
+explorer-assert (cleanup):
+  extends: [.explorer-assert, .cleanup]
+  needs:
+    - job: explorer-assert (test)
+      artifacts: false
+    - job: explorer-assert (vv)
+      artifacts: false
+      optional: true
+    - job: explorer-assert (kokkos)
+      artifacts: false
+      optional: true
+
 milan (cleanup):
   extends: [.milan, .cleanup]
   needs:
@@ -434,15 +486,15 @@ milan (cleanup):
       artifacts: false
       optional: true
 
-no-asserts (cleanup):
-  extends: [.no-asserts, .cleanup]
+milan-assert (cleanup):
+  extends: [.milan-assert, .cleanup]
   needs:
-    - job: no-asserts (test)
+    - job: milan-assert (test)
       artifacts: false
-    - job: no-asserts (vv)
+    - job: milan-assert (vv)
       artifacts: false
       optional: true
-    - job: no-asserts (kokkos)
+    - job: milan-assert (kokkos)
       artifacts: false
       optional: true
 
@@ -461,17 +513,26 @@ debug (cleanup):
 leconte (manual cleanup):
   extends: [.leconte, .manual-cleanup]
 
+leconte-assert (manual cleanup):
+  extends: [.leconte-assert, .manual-cleanup]
+
 oswald02 (manual cleanup):
   extends: [.oswald02, .manual-cleanup]
+
+oswald02-assert (manual cleanup):
+  extends: [.oswald02-assert, .manual-cleanup]
 
 explorer (manual cleanup):
   extends: [.explorer, .manual-cleanup]
 
+explorer-assert (manual cleanup):
+  extends: [.explorer-assert, .manual-cleanup]
+
 milan (manual cleanup):
   extends: [.milan, .manual-cleanup]
 
-no-asserts (manual cleanup):
-  extends: [.no-asserts, .manual-cleanup]
+milan-assert (manual cleanup):
+  extends: [.milan-assert, .manual-cleanup]
 
 debug (manual cleanup):
   extends: [.debug, .manual-cleanup]
@@ -545,10 +606,22 @@ leconte (config):
     - job: leconte (setup)
       artifacts: false
 
+leconte-assert (config):
+  extends: [.leconte-assert, .config]
+  needs:
+    - job: leconte-assert (setup)
+      artifacts: false
+
 oswald02 (config):
   extends: [.oswald02, .config]
   needs:
     - job: oswald02 (setup)
+      artifacts: false
+
+oswald02-assert (config):
+  extends: [.oswald02-assert, .config]
+  needs:
+    - job: oswald02-assert (setup)
       artifacts: false
 
 explorer (config):
@@ -557,16 +630,22 @@ explorer (config):
     - job: explorer (setup)
       artifacts: false
 
+explorer-assert (config):
+  extends: [.explorer-assert, .config]
+  needs:
+    - job: explorer-assert (setup)
+      artifacts: false
+
 milan (config):
   extends: [.milan, .config]
   needs:
     - job: milan (setup)
       artifacts: false
 
-no-asserts (config):
-  extends: [.no-asserts, .config]
+milan-assert (config):
+  extends: [.milan-assert, .config]
   needs:
-    - job: no-asserts (setup)
+    - job: milan-assert (setup)
       artifacts: false
 
 debug (config):
@@ -599,10 +678,22 @@ leconte (build):
     - job: leconte (config)
       artifacts: false
 
+leconte-assert (build):
+  extends: [.leconte-assert, .build]
+  needs:
+    - job: leconte-assert (config)
+      artifacts: false
+
 oswald02 (build):
   extends: [.oswald02, .build]
   needs:
     - job: oswald02 (config)
+      artifacts: false
+
+oswald02-assert (build):
+  extends: [.oswald02-assert, .build]
+  needs:
+    - job: oswald02-assert (config)
       artifacts: false
 
 explorer (build):
@@ -611,16 +702,22 @@ explorer (build):
     - job: explorer (config)
       artifacts: false
 
+explorer-assert (build):
+  extends: [.explorer-assert, .build]
+  needs:
+    - job: explorer-assert (config)
+      artifacts: false
+
 milan (build):
   extends: [.milan, .build]
   needs:
     - job: milan (config)
       artifacts: false
 
-no-asserts (build):
-  extends: [.no-asserts, .build]
+milan-assert (build):
+  extends: [.milan-assert, .build]
   needs:
-    - job: no-asserts (config)
+    - job: milan-assert (config)
       artifacts: false
 
 debug (build):
@@ -764,10 +861,22 @@ leconte (test):
     - job: leconte (build)
       artifacts: false
 
+leconte-assert (test):
+  extends: [.leconte-assert, .test]
+  needs:
+    - job: leconte-assert (build)
+      artifacts: false
+
 oswald02 (test):
   extends: [.oswald02, .test]
   needs:
     - job: oswald02 (build)
+      artifacts: false
+
+oswald02-assert (test):
+  extends: [.oswald02-assert, .test]
+  needs:
+    - job: oswald02-assert (build)
       artifacts: false
 
 explorer (test):
@@ -776,16 +885,22 @@ explorer (test):
     - job: explorer (build)
       artifacts: false
 
+explorer-assert (test):
+  extends: [.explorer-assert, .test]
+  needs:
+    - job: explorer-assert (build)
+      artifacts: false
+
 milan (test):
   extends: [.milan, .test]
   needs:
     - job: milan (build)
       artifacts: false
 
-no-asserts (test):
-  extends: [.no-asserts, .test]
+milan-assert (test):
+  extends: [.milan-assert, .test]
   needs:
-    - job: no-asserts (build)
+    - job: milan-assert (build)
       artifacts: false
 
 debug (test):
@@ -955,10 +1070,22 @@ leconte (vv):
     - job: leconte (build)
       artifacts: false
 
+leconte-assert (vv):
+  extends: [.leconte-assert, .vv]
+  needs:
+    - job: leconte-assert (build)
+      artifacts: false
+
 oswald02 (vv):
   extends: [.oswald02, .vv]
   needs:
     - job: oswald02 (build)
+      artifacts: false
+
+oswald02-assert (vv):
+  extends: [.oswald02-assert, .vv]
+  needs:
+    - job: oswald02-assert (build)
       artifacts: false
 
 explorer (vv):
@@ -967,16 +1094,22 @@ explorer (vv):
     - job: explorer (build)
       artifacts: false
 
+explorer-assert (vv):
+  extends: [.explorer-assert, .vv]
+  needs:
+    - job: explorer-assert (build)
+      artifacts: false
+
 milan (vv):
   extends: [.milan, .vv]
   needs:
     - job: milan (build)
       artifacts: false
 
-no-asserts (vv):
-  extends: [.no-asserts, .vv]
+milan-assert (vv):
+  extends: [.milan-assert, .vv]
   needs:
-    - job: no-asserts (build)
+    - job: milan-assert (build)
       artifacts: false
 
 debug (vv):
@@ -1202,16 +1335,34 @@ leconte (kokkos):
     - job: leconte (build)
       artifacts: false
 
+leconte-assert (kokkos):
+  extends: [.leconte-assert, .kokkos]
+  needs:
+    - job: leconte-assert (build)
+      artifacts: false
+
 oswald02 (kokkos):
   extends: [.oswald02, .kokkos]
   needs:
     - job: oswald02 (build)
       artifacts: false
 
+oswald02-assert (kokkos):
+  extends: [.oswald02-assert, .kokkos]
+  needs:
+    - job: oswald02-assert (build)
+      artifacts: false
+
 explorer (kokkos):
   extends: [.explorer, .kokkos]
   needs:
     - job: explorer (build)
+      artifacts: false
+
+explorer-assert (kokkos):
+  extends: [.explorer-assert, .kokkos]
+  needs:
+    - job: explorer-assert (build)
       artifacts: false
 
 # On systems without a GPU, the kokkos examples use CPU parallelism, which
@@ -1228,12 +1379,12 @@ milan (kokkos):
     - job: milan (build)
       artifacts: false
 
-no-asserts (kokkos):
-  extends: [.no-asserts, .kokkos]
+milan-assert (kokkos):
+  extends: [.milan-assert, .kokkos]
   variables:
     ULIMIT_T_DIV_NPROC: 300
   needs:
-    - job: no-asserts (build)
+    - job: milan-assert (build)
       artifacts: false
 
 debug (kokkos):

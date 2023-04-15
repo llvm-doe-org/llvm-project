@@ -28,8 +28,8 @@ void VPlanTransforms::VPInstructionsToVPRecipes(
     SmallPtrSetImpl<Instruction *> &DeadInstructions, ScalarEvolution &SE,
     const TargetLibraryInfo &TLI) {
 
-  ReversePostOrderTraversal<VPBlockRecursiveTraversalWrapper<VPBlockBase *>>
-      RPOT(Plan->getEntry());
+  ReversePostOrderTraversal<VPBlockDeepTraversalWrapper<VPBlockBase *>> RPOT(
+      Plan->getEntry());
   for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(RPOT)) {
     VPRecipeBase *Term = VPBB->getTerminator();
     auto EndIter = Term ? Term->getIterator() : VPBB->end();
@@ -107,38 +107,33 @@ void VPlanTransforms::VPInstructionsToVPRecipes(
 }
 
 bool VPlanTransforms::sinkScalarOperands(VPlan &Plan) {
-  auto Iter = depth_first(
-      VPBlockRecursiveTraversalWrapper<VPBlockBase *>(Plan.getEntry()));
+  auto Iter = vp_depth_first_deep(Plan.getEntry());
   bool Changed = false;
-  // First, collect the operands of all predicated replicate recipes as seeds
-  // for sinking.
+  // First, collect the operands of all recipes in replicate blocks as seeds for
+  // sinking.
   SetVector<std::pair<VPBasicBlock *, VPRecipeBase *>> WorkList;
-  auto QueueOperands = [&WorkList](VPRecipeBase *R) {
-    for (VPValue *Op : R->operands())
-      if (auto *Def = Op->getDefiningRecipe())
-        WorkList.insert(std::make_pair(R->getParent(), Def));
-  };
-
-  for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(Iter)) {
+  for (VPRegionBlock *VPR : VPBlockUtils::blocksOnly<VPRegionBlock>(Iter)) {
+    VPBasicBlock *EntryVPBB = VPR->getEntryBasicBlock();
+    if (!VPR->isReplicator() || EntryVPBB->getSuccessors().size() != 2)
+      continue;
+    VPBasicBlock *VPBB = dyn_cast<VPBasicBlock>(EntryVPBB->getSuccessors()[0]);
+    if (!VPBB || VPBB->getSingleSuccessor() != VPR->getExitingBasicBlock())
+      continue;
     for (auto &Recipe : *VPBB) {
-      auto *RepR = dyn_cast<VPReplicateRecipe>(&Recipe);
-      if (!RepR || !RepR->isPredicated())
-        continue;
-      QueueOperands(RepR);
+      for (VPValue *Op : Recipe.operands())
+        if (auto *Def = Op->getDefiningRecipe())
+          WorkList.insert(std::make_pair(VPBB, Def));
     }
   }
 
   bool ScalarVFOnly = Plan.hasScalarVFOnly();
   // Try to sink each replicate or scalar IV steps recipe in the worklist.
-  while (!WorkList.empty()) {
+  for (unsigned I = 0; I != WorkList.size(); ++I) {
     VPBasicBlock *SinkTo;
     VPRecipeBase *SinkCandidate;
-    std::tie(SinkTo, SinkCandidate) = WorkList.pop_back_val();
-    if (SinkCandidate->getParent() == SinkTo) {
-      QueueOperands(SinkCandidate);
-      continue;
-    }
-    if (SinkCandidate->mayHaveSideEffects() ||
+    std::tie(SinkTo, SinkCandidate) = WorkList[I];
+    if (SinkCandidate->getParent() == SinkTo ||
+        SinkCandidate->mayHaveSideEffects() ||
         SinkCandidate->mayReadOrWriteMemory())
       continue;
     if (auto *RepR = dyn_cast<VPReplicateRecipe>(SinkCandidate)) {
@@ -177,9 +172,7 @@ bool VPlanTransforms::sinkScalarOperands(VPlan &Plan) {
       // TODO: add ".cloned" suffix to name of Clone's VPValue.
 
       Clone->insertBefore(SinkCandidate);
-      SmallVector<VPUser *, 4> Users(
-          SinkCandidate->getVPSingleValue()->users());
-      for (auto *U : Users) {
+      for (auto *U : to_vector(SinkCandidate->getVPSingleValue()->users())) {
         auto *UI = cast<VPRecipeBase>(U);
         if (UI->getParent() == SinkTo)
           continue;
@@ -192,7 +185,9 @@ bool VPlanTransforms::sinkScalarOperands(VPlan &Plan) {
       }
     }
     SinkCandidate->moveBefore(*SinkTo, SinkTo->getFirstNonPhi());
-    QueueOperands(SinkCandidate);
+    for (VPValue *Op : SinkCandidate->operands())
+      if (auto *Def = Op->getDefiningRecipe())
+        WorkList.insert(std::make_pair(SinkTo, Def));
     Changed = true;
   }
   return Changed;
@@ -236,9 +231,8 @@ bool VPlanTransforms::mergeReplicateRegionsIntoSuccessors(VPlan &Plan) {
   // replicate region with matching masks to process front. This is to avoid
   // iterator invalidation issues while merging regions.
   SmallVector<VPRegionBlock *, 8> WorkList;
-  for (VPRegionBlock *Region1 :
-       VPBlockUtils::blocksOnly<VPRegionBlock>(depth_first(
-           VPBlockRecursiveTraversalWrapper<VPBlockBase *>(Plan.getEntry())))) {
+  for (VPRegionBlock *Region1 : VPBlockUtils::blocksOnly<VPRegionBlock>(
+           vp_depth_first_deep(Plan.getEntry()))) {
     if (!Region1->isReplicator())
       continue;
     auto *MiddleBasicBlock =
@@ -290,8 +284,7 @@ bool VPlanTransforms::mergeReplicateRegionsIntoSuccessors(VPlan &Plan) {
       VPValue *PredInst1 =
           cast<VPPredInstPHIRecipe>(&Phi1ToMove)->getOperand(0);
       VPValue *Phi1ToMoveV = Phi1ToMove.getVPSingleValue();
-      SmallVector<VPUser *> Users(Phi1ToMoveV->users());
-      for (VPUser *U : Users) {
+      for (VPUser *U : to_vector(Phi1ToMoveV->users())) {
         auto *UI = dyn_cast<VPRecipeBase>(U);
         if (!UI || UI->getParent() != Then2)
           continue;
@@ -321,8 +314,8 @@ bool VPlanTransforms::mergeReplicateRegionsIntoSuccessors(VPlan &Plan) {
 
 bool VPlanTransforms::mergeBlocksIntoPredecessors(VPlan &Plan) {
   SmallVector<VPBasicBlock *> WorkList;
-  for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(depth_first(
-           VPBlockRecursiveTraversalWrapper<VPBlockBase *>(Plan.getEntry())))) {
+  for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(
+           vp_depth_first_deep(Plan.getEntry()))) {
     auto *PredVPBB =
         dyn_cast_or_null<VPBasicBlock>(VPBB->getSinglePredecessor());
     if (PredVPBB && PredVPBB->getNumSuccessors() == 1)
@@ -337,8 +330,7 @@ bool VPlanTransforms::mergeBlocksIntoPredecessors(VPlan &Plan) {
     auto *ParentRegion = cast_or_null<VPRegionBlock>(VPBB->getParent());
     if (ParentRegion && ParentRegion->getExiting() == VPBB)
       ParentRegion->setExiting(PredVPBB);
-    SmallVector<VPBlockBase *> Successors(VPBB->successors());
-    for (auto *Succ : Successors) {
+    for (auto *Succ : to_vector(VPBB->successors())) {
       VPBlockUtils::disconnectBlocks(VPBB, Succ);
       VPBlockUtils::connectBlocks(PredVPBB, Succ);
     }
@@ -413,8 +405,8 @@ void VPlanTransforms::removeRedundantCanonicalIVs(VPlan &Plan) {
 }
 
 void VPlanTransforms::removeDeadRecipes(VPlan &Plan) {
-  ReversePostOrderTraversal<VPBlockRecursiveTraversalWrapper<VPBlockBase *>>
-      RPOT(Plan.getEntry());
+  ReversePostOrderTraversal<VPBlockDeepTraversalWrapper<VPBlockBase *>> RPOT(
+      Plan.getEntry());
 
   for (VPBasicBlock *VPBB : reverse(VPBlockUtils::blocksOnly<VPBasicBlock>(RPOT))) {
     // The recipes in the block are processed in reverse order, to catch chains

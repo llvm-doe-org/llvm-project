@@ -225,8 +225,8 @@ bool GlobalMerge::doMerge(SmallVectorImpl<GlobalVariable*> &Globals,
   llvm::stable_sort(
       Globals, [&DL](const GlobalVariable *GV1, const GlobalVariable *GV2) {
         // We don't support scalable global variables.
-        return DL.getTypeAllocSize(GV1->getValueType()).getFixedSize() <
-               DL.getTypeAllocSize(GV2->getValueType()).getFixedSize();
+        return DL.getTypeAllocSize(GV1->getValueType()).getFixedValue() <
+               DL.getTypeAllocSize(GV2->getValueType()).getFixedValue();
       });
 
   // If we want to just blindly group all globals together, do so.
@@ -650,6 +650,14 @@ bool GlobalMerge::doInitialization(Module &M) {
 
     // Ignore all "required" globals:
     if (isMustKeepGlobalVariable(&GV))
+      continue;
+
+    // Don't merge tagged globals, as each global should have its own unique
+    // memory tag at runtime. TODO(hctim): This can be relaxed: constant globals
+    // with compatible alignment and the same contents may be merged as long as
+    // the globals occupy the same number of tag granules (i.e. `size_a / 16 ==
+    // size_b / 16`).
+    if (GV.isTagged())
       continue;
 
     Type *Ty = GV.getValueType();

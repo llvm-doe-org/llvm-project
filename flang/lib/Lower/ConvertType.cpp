@@ -302,9 +302,6 @@ struct TypeBuilderImpl {
     if (mlir::Type ty = getTypeIfDerivedAlreadyInConstruction(typeSymbol))
       return ty;
 
-    if (Fortran::semantics::IsFinalizable(tySpec))
-      TODO(converter.genLocation(tySpec.name()), "derived type finalization");
-
     auto rec = fir::RecordType::get(context,
                                     Fortran::lower::mangle::mangleName(tySpec));
     // Maintain the stack of types for recursive references.
@@ -316,7 +313,8 @@ struct TypeBuilderImpl {
          Fortran::semantics::OrderedComponentIterator(tySpec)) {
       // Lowering is assuming non deferred component lower bounds are always 1.
       // Catch any situations where this is not true for now.
-      if (componentHasNonDefaultLowerBounds(field))
+      if (!converter.getLoweringOptions().getLowerToHighLevelFIR() &&
+          componentHasNonDefaultLowerBounds(field))
         TODO(converter.genLocation(field.name()),
              "derived type components with non default lower bounds");
       if (IsProcedure(field))
@@ -408,6 +406,15 @@ struct TypeBuilderImpl {
   Fortran::lower::LenParameterTy getCharacterLength(const A &expr) {
     return fir::SequenceType::getUnknownExtent();
   }
+
+  template <typename T>
+  Fortran::lower::LenParameterTy
+  getCharacterLength(const Fortran::evaluate::FunctionRef<T> &funcRef) {
+    if (auto constantLen = toInt64(funcRef.LEN()))
+      return *constantLen;
+    return fir::SequenceType::getUnknownExtent();
+  }
+
   Fortran::lower::LenParameterTy
   getCharacterLength(const Fortran::lower::SomeExpr &expr) {
     // Do not use dynamic type length here. We would miss constant
@@ -482,6 +489,15 @@ mlir::Type Fortran::lower::translateVariableToFIRType(
 
 mlir::Type Fortran::lower::convertReal(mlir::MLIRContext *context, int kind) {
   return genRealType(context, kind);
+}
+
+bool Fortran::lower::isDerivedTypeWithLenParameters(
+    const Fortran::semantics::Symbol &sym) {
+  if (const Fortran::semantics::DeclTypeSpec *declTy = sym.GetType())
+    if (const Fortran::semantics::DerivedTypeSpec *derived =
+            declTy->AsDerived())
+      return Fortran::semantics::CountLenParameters(*derived) > 0;
+  return false;
 }
 
 template <typename T>

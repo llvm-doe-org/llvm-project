@@ -101,8 +101,6 @@ def HasFPARMv8       : Predicate<"Subtarget->hasFPARMv8()">,
                                AssemblerPredicateWithAll<(all_of FeatureFPARMv8), "fp-armv8">;
 def HasNEON          : Predicate<"Subtarget->hasNEON()">,
                                  AssemblerPredicateWithAll<(all_of FeatureNEON), "neon">;
-def HasCrypto        : Predicate<"Subtarget->hasCrypto()">,
-                                 AssemblerPredicateWithAll<(all_of FeatureCrypto), "crypto">;
 def HasSM4           : Predicate<"Subtarget->hasSM4()">,
                                  AssemblerPredicateWithAll<(all_of FeatureSM4), "sm4">;
 def HasSHA3          : Predicate<"Subtarget->hasSHA3()">,
@@ -362,8 +360,10 @@ def SDT_AArch64TLSDescCall : SDTypeProfile<0, -2, [SDTCisPtrTy<0>,
 def SDT_AArch64uaddlp : SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisVec<1>]>;
 
 def SDT_AArch64ldp : SDTypeProfile<2, 1, [SDTCisVT<0, i64>, SDTCisSameAs<0, 1>, SDTCisPtrTy<2>]>;
+def SDT_AArch64ldiapp : SDTypeProfile<2, 1, [SDTCisVT<0, i64>, SDTCisSameAs<0, 1>, SDTCisPtrTy<2>]>;
 def SDT_AArch64ldnp : SDTypeProfile<2, 1, [SDTCisVT<0, v4i32>, SDTCisSameAs<0, 1>, SDTCisPtrTy<2>]>;
 def SDT_AArch64stp : SDTypeProfile<0, 3, [SDTCisVT<0, i64>, SDTCisSameAs<0, 1>, SDTCisPtrTy<2>]>;
+def SDT_AArch64stilp : SDTypeProfile<0, 3, [SDTCisVT<0, i64>, SDTCisSameAs<0, 1>, SDTCisPtrTy<2>]>;
 def SDT_AArch64stnp : SDTypeProfile<0, 3, [SDTCisVT<0, v4i32>, SDTCisSameAs<0, 1>, SDTCisPtrTy<2>]>;
 
 // Generates the general dynamic sequences, i.e.
@@ -550,6 +550,16 @@ def top16Zero: PatLeaf<(i32 GPR32:$src), [{
 def top32Zero: PatLeaf<(i64 GPR64:$src), [{
   return SDValue(N,0)->getValueType(0) == MVT::i64 &&
          CurDAG->MaskedValueIsZero(SDValue(N,0), APInt::getHighBitsSet(64, 32));
+  }]>;
+
+// topbitsallzero - Return true if all bits except the lowest bit are known zero
+def topbitsallzero32: PatLeaf<(i32 GPR32:$src), [{
+  return SDValue(N,0)->getValueType(0) == MVT::i32 &&
+         CurDAG->MaskedValueIsZero(SDValue(N,0), APInt::getHighBitsSet(32, 31));
+  }]>;
+def topbitsallzero64: PatLeaf<(i64 GPR64:$src), [{
+  return SDValue(N,0)->getValueType(0) == MVT::i64 &&
+         CurDAG->MaskedValueIsZero(SDValue(N,0), APInt::getHighBitsSet(64, 63));
   }]>;
 
 // Node definitions.
@@ -776,8 +786,10 @@ def AArch64uunpkhi : SDNode<"AArch64ISD::UUNPKHI", SDT_AArch64unpk>;
 def AArch64uunpklo : SDNode<"AArch64ISD::UUNPKLO", SDT_AArch64unpk>;
 
 def AArch64ldp : SDNode<"AArch64ISD::LDP", SDT_AArch64ldp, [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def AArch64ldiapp : SDNode<"AArch64ISD::LDIAPP", SDT_AArch64ldiapp, [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
 def AArch64ldnp : SDNode<"AArch64ISD::LDNP", SDT_AArch64ldnp, [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
 def AArch64stp : SDNode<"AArch64ISD::STP", SDT_AArch64stp, [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+def AArch64stilp : SDNode<"AArch64ISD::STILP", SDT_AArch64stilp, [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
 def AArch64stnp : SDNode<"AArch64ISD::STNP", SDT_AArch64stnp, [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
 
 def AArch64tbl : SDNode<"AArch64ISD::TBL", SDT_AArch64TBL>;
@@ -2464,6 +2476,20 @@ def : Pat<(add GPR32:$val, (AArch64csel (i32 0), (i32 1), (i32 imm:$cc), NZCV)),
 def : Pat<(add GPR64:$val, (zext (AArch64csel (i32 0), (i32 1), (i32 imm:$cc), NZCV))),
           (CSINCXr GPR64:$val, GPR64:$val, (i32 imm:$cc))>;
 
+def : Pat<(or (topbitsallzero32:$val), (AArch64csel (i32 0), (i32 1), (i32 imm:$cc), NZCV)),
+          (CSINCWr GPR32:$val, WZR, imm:$cc)>;
+def : Pat<(or (topbitsallzero64:$val), (AArch64csel (i64 0), (i64 1), (i32 imm:$cc), NZCV)),
+          (CSINCXr GPR64:$val, XZR, imm:$cc)>;
+def : Pat<(or (topbitsallzero64:$val), (zext (AArch64csel (i32 0), (i32 1), (i32 imm:$cc), NZCV))),
+          (CSINCXr GPR64:$val, XZR, imm:$cc)>;
+
+def : Pat<(and (topbitsallzero32:$val), (AArch64csel (i32 0), (i32 1), (i32 imm:$cc), NZCV)),
+          (CSELWr WZR, GPR32:$val, imm:$cc)>;
+def : Pat<(and (topbitsallzero64:$val), (AArch64csel (i64 0), (i64 1), (i32 imm:$cc), NZCV)),
+          (CSELXr XZR, GPR64:$val, imm:$cc)>;
+def : Pat<(and (topbitsallzero64:$val), (zext (AArch64csel (i32 0), (i32 1), (i32 imm:$cc), NZCV))),
+          (CSELXr XZR, GPR64:$val, imm:$cc)>;
+
 // The inverse of the condition code from the alias instruction is what is used
 // in the aliased instruction. The parser all ready inverts the condition code
 // for these aliases.
@@ -3384,7 +3410,7 @@ def STPSpre : StorePairPreIdx<0b00, 1, FPR32Op, simm7s4, "stp">;
 def STPDpre : StorePairPreIdx<0b01, 1, FPR64Op, simm7s8, "stp">;
 def STPQpre : StorePairPreIdx<0b10, 1, FPR128Op, simm7s16, "stp">;
 
-// Pair (pre-indexed)
+// Pair (post-indexed)
 def STPWpost : StorePairPostIdx<0b00, 0, GPR32z, simm7s4, "stp">;
 def STPXpost : StorePairPostIdx<0b10, 0, GPR64z, simm7s8, "stp">;
 def STPSpost : StorePairPostIdx<0b00, 1, FPR32Op, simm7s4, "stp">;
@@ -5842,6 +5868,10 @@ def : Pat<(v16i8 (scalar_to_vector GPR32:$Rn)),
 def : Pat<(v8i8 (scalar_to_vector GPR32:$Rn)),
           (SUBREG_TO_REG (i32 0),
                          (f32 (COPY_TO_REGCLASS GPR32:$Rn, FPR32)), ssub)>;
+
+// The top bits will be zero from the FMOVWSr
+def : Pat<(v8i8 (bitconvert (i64 (zext GPR32:$Rn)))),
+          (SUBREG_TO_REG (i32 0), (f32 (FMOVWSr GPR32:$Rn)), ssub)>;
 
 def : Pat<(v8i16 (scalar_to_vector GPR32:$Rn)),
           (SUBREG_TO_REG (i32 0),
@@ -8571,11 +8601,15 @@ def : Pat<(AArch64AssertZExtBool GPR32:$op),
 //===----------------------------===//
 // 2022 Architecture Extensions:
 //===----------------------------===//
+
 def : InstAlias<"clrbhb",  (HINT 22), 0>;
 let Predicates = [HasCLRBHB] in {
   def : InstAlias<"clrbhb",  (HINT 22), 1>;
 }
 
+//===----------------------------------------------------------------------===//
+// Translation Hardening Extension (FEAT_THE)
+//===----------------------------------------------------------------------===//
 defm RCW     : ReadCheckWriteCompareAndSwap;
 
 defm RCWCLR  : ReadCheckWriteOperation<0b001, "clr">;
@@ -8651,6 +8685,9 @@ let Predicates = [HasRCPC3] in {
   def LDIAPPXpre: BaseLRCPC3IntegerLoadStorePair<0b11, 0b01, 0b0000, (outs GPR64sp:$wback, GPR64:$Rt, GPR64:$Rt2), (ins GPR64sp:$Rn), "ldiapp", "\t$Rt, $Rt2, [$Rn], #16", "$Rn = $wback">;
   def LDIAPPW:    BaseLRCPC3IntegerLoadStorePair<0b10, 0b01, 0b0001, (outs GPR32:$Rt, GPR32:$Rt2), (ins GPR64sp0:$Rn), "ldiapp", "\t$Rt, $Rt2, [$Rn]", "">;
   def LDIAPPX:    BaseLRCPC3IntegerLoadStorePair<0b11, 0b01, 0b0001, (outs GPR64:$Rt, GPR64:$Rt2), (ins GPR64sp0:$Rn), "ldiapp", "\t$Rt, $Rt2, [$Rn]", "">;
+
+  def : Pat<(AArch64ldiapp GPR64sp:$Rn), (LDIAPPX GPR64sp:$Rn)>;
+  def : Pat<(AArch64stilp GPR64:$Rt, GPR64:$Rt2, GPR64sp:$Rn), (STILPX GPR64:$Rt, GPR64:$Rt2, GPR64sp:$Rn)>;
 
   // Aliases for when offset=0
   def : InstAlias<"stilp\t$Rt, $Rt2, [$Rn, #0]", (STILPW GPR32: $Rt, GPR32: $Rt2, GPR64sp:$Rn)>;

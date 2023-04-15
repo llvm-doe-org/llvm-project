@@ -1344,21 +1344,36 @@ SDValue AMDGPUTargetLowering::LowerGlobalAddress(AMDGPUMachineFunction* MFI,
 SDValue AMDGPUTargetLowering::LowerCONCAT_VECTORS(SDValue Op,
                                                   SelectionDAG &DAG) const {
   SmallVector<SDValue, 8> Args;
+  SDLoc SL(Op);
 
   EVT VT = Op.getValueType();
-  if (VT == MVT::v4i16 || VT == MVT::v4f16) {
-    SDLoc SL(Op);
-    SDValue Lo = DAG.getNode(ISD::BITCAST, SL, MVT::i32, Op.getOperand(0));
-    SDValue Hi = DAG.getNode(ISD::BITCAST, SL, MVT::i32, Op.getOperand(1));
+  if (VT.getVectorElementType().getSizeInBits() < 32) {
+    unsigned OpBitSize = Op.getOperand(0).getValueType().getSizeInBits();
+    if (OpBitSize >= 32 && OpBitSize % 32 == 0) {
+      unsigned NewNumElt = OpBitSize / 32;
+      EVT NewEltVT = (NewNumElt == 1) ? MVT::i32
+                                      : EVT::getVectorVT(*DAG.getContext(),
+                                                         MVT::i32, NewNumElt);
+      for (const SDUse &U : Op->ops()) {
+        SDValue In = U.get();
+        SDValue NewIn = DAG.getNode(ISD::BITCAST, SL, NewEltVT, In);
+        if (NewNumElt > 1)
+          DAG.ExtractVectorElements(NewIn, Args);
+        else
+          Args.push_back(NewIn);
+      }
 
-    SDValue BV = DAG.getBuildVector(MVT::v2i32, SL, { Lo, Hi });
-    return DAG.getNode(ISD::BITCAST, SL, VT, BV);
+      EVT NewVT = EVT::getVectorVT(*DAG.getContext(), MVT::i32,
+                                   NewNumElt * Op.getNumOperands());
+      SDValue BV = DAG.getBuildVector(NewVT, SL, Args);
+      return DAG.getNode(ISD::BITCAST, SL, VT, BV);
+    }
   }
 
   for (const SDUse &U : Op->ops())
     DAG.ExtractVectorElements(U.get(), Args);
 
-  return DAG.getBuildVector(Op.getValueType(), SDLoc(Op), Args);
+  return DAG.getBuildVector(Op.getValueType(), SL, Args);
 }
 
 SDValue AMDGPUTargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op,
@@ -1391,15 +1406,16 @@ SDValue AMDGPUTargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op,
   return DAG.getBuildVector(Op.getValueType(), SDLoc(Op), Args);
 }
 
-/// Generate Min/Max node
-SDValue AMDGPUTargetLowering::combineFMinMaxLegacy(const SDLoc &DL, EVT VT,
-                                                   SDValue LHS, SDValue RHS,
-                                                   SDValue True, SDValue False,
-                                                   SDValue CC,
-                                                   DAGCombinerInfo &DCI) const {
-  if (!(LHS == True && RHS == False) && !(LHS == False && RHS == True))
-    return SDValue();
+// TODO: Handle fabs too
+static SDValue peekFNeg(SDValue Val) {
+  if (Val.getOpcode() == ISD::FNEG)
+    return Val.getOperand(0);
 
+  return Val;
+}
+SDValue AMDGPUTargetLowering::combineFMinMaxLegacyImpl(
+    const SDLoc &DL, EVT VT, SDValue LHS, SDValue RHS, SDValue True,
+    SDValue False, SDValue CC, DAGCombinerInfo &DCI) const {
   SelectionDAG &DAG = DCI.DAG;
   ISD::CondCode CCOpcode = cast<CondCodeSDNode>(CC)->get();
   switch (CCOpcode) {
@@ -1462,6 +1478,45 @@ SDValue AMDGPUTargetLowering::combineFMinMaxLegacy(const SDLoc &DL, EVT VT,
   case ISD::SETCC_INVALID:
     llvm_unreachable("Invalid setcc condcode!");
   }
+  return SDValue();
+}
+
+/// Generate Min/Max node
+SDValue AMDGPUTargetLowering::combineFMinMaxLegacy(const SDLoc &DL, EVT VT,
+                                                   SDValue LHS, SDValue RHS,
+                                                   SDValue True, SDValue False,
+                                                   SDValue CC,
+                                                   DAGCombinerInfo &DCI) const {
+  if ((LHS == True && RHS == False) || (LHS == False && RHS == True))
+    return combineFMinMaxLegacyImpl(DL, VT, LHS, RHS, True, False, CC, DCI);
+
+  SelectionDAG &DAG = DCI.DAG;
+
+  // If we can't directly match this, try to see if we can fold an fneg to
+  // match.
+
+  ConstantFPSDNode *CRHS = dyn_cast<ConstantFPSDNode>(RHS);
+  ConstantFPSDNode *CFalse = dyn_cast<ConstantFPSDNode>(False);
+  SDValue NegTrue = peekFNeg(True);
+
+  // Undo the combine foldFreeOpFromSelect does if it helps us match the
+  // fmin/fmax.
+  //
+  // select (fcmp olt (lhs, K)), (fneg lhs), -K
+  // -> fneg (fmin_legacy lhs, K)
+  //
+  // TODO: Use getNegatedExpression
+  if (LHS == NegTrue && CFalse && CRHS) {
+    APFloat NegRHS = neg(CRHS->getValueAPF());
+    if (NegRHS == CFalse->getValueAPF()) {
+      SDValue Combined =
+          combineFMinMaxLegacyImpl(DL, VT, LHS, RHS, NegTrue, False, CC, DCI);
+      if (Combined)
+        return DAG.getNode(ISD::FNEG, DL, VT, Combined);
+      return SDValue();
+    }
+  }
+
   return SDValue();
 }
 
@@ -3807,12 +3862,9 @@ static unsigned inverseMinMax(unsigned Opc) {
   }
 }
 
-SDValue AMDGPUTargetLowering::performFNegCombine(SDNode *N,
-                                                 DAGCombinerInfo &DCI) const {
-  SelectionDAG &DAG = DCI.DAG;
-  SDValue N0 = N->getOperand(0);
-  EVT VT = N->getValueType(0);
-
+/// \return true if it's profitable to try to push an fneg into its source
+/// instruction.
+bool AMDGPUTargetLowering::shouldFoldFNegIntoSrc(SDNode *N, SDValue N0) {
   unsigned Opc = N0.getOpcode();
 
   // If the input has multiple uses and we can either fold the negate down, or
@@ -3823,12 +3875,26 @@ SDValue AMDGPUTargetLowering::performFNegCombine(SDNode *N,
     // This may be able to fold into the source, but at a code size cost. Don't
     // fold if the fold into the user is free.
     if (allUsesHaveSourceMods(N, 0))
-      return SDValue();
+      return false;
   } else {
     if (fnegFoldsIntoOp(Opc) &&
         (allUsesHaveSourceMods(N) || !allUsesHaveSourceMods(N0.getNode())))
-      return SDValue();
+      return false;
   }
+
+  return true;
+}
+
+SDValue AMDGPUTargetLowering::performFNegCombine(SDNode *N,
+                                                 DAGCombinerInfo &DCI) const {
+  SelectionDAG &DAG = DCI.DAG;
+  SDValue N0 = N->getOperand(0);
+  EVT VT = N->getValueType(0);
+
+  unsigned Opc = N0.getOpcode();
+
+  if (!shouldFoldFNegIntoSrc(N, N0))
+    return SDValue();
 
   SDLoc SL(N);
   switch (Opc) {
@@ -4350,7 +4416,7 @@ SDValue AMDGPUTargetLowering::loadInputValue(SelectionDAG &DAG,
     return V;
 
   unsigned Mask = Arg.getMask();
-  unsigned Shift = countTrailingZeros<unsigned>(Mask);
+  unsigned Shift = llvm::countr_zero<unsigned>(Mask);
   V = DAG.getNode(ISD::SRL, SL, VT, V,
                   DAG.getShiftAmountConstant(Shift, VT, SL));
   return DAG.getNode(ISD::AND, SL, VT, V,
@@ -4493,8 +4559,6 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(TBUFFER_LOAD_FORMAT_D16)
   NODE_NAME_CASE(DS_ORDERED_COUNT)
   NODE_NAME_CASE(ATOMIC_CMP_SWAP)
-  NODE_NAME_CASE(ATOMIC_INC)
-  NODE_NAME_CASE(ATOMIC_DEC)
   NODE_NAME_CASE(ATOMIC_LOAD_FMIN)
   NODE_NAME_CASE(ATOMIC_LOAD_FMAX)
   NODE_NAME_CASE(BUFFER_LOAD)
@@ -4734,7 +4798,7 @@ void AMDGPUTargetLowering::computeKnownBitsForTargetNode(
     case Intrinsic::amdgcn_workitem_id_z: {
       unsigned MaxValue = Subtarget->getMaxWorkitemID(
           DAG.getMachineFunction().getFunction(), workitemIntrinsicDim(IID));
-      Known.Zero.setHighBits(countLeadingZeros(MaxValue));
+      Known.Zero.setHighBits(llvm::countl_zero(MaxValue));
       break;
     }
     default:

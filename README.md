@@ -271,38 +271,42 @@ might be easier to work from the build directory instead.  Doing so
 requires setting many environment variables and command-line options
 to ensure `clang` finds its own libraries and header files.
 
-For example, to compile and run for an NVIDIA GPU, where `$CLACC_BUILD_DIR` is
-the `build` directory created when following [the above build procedure from
-Git](#from-git):
+For example, to compile and run with offloading to a GPU, where
+`$CLACC_BUILD_DIR` is the `build` directory created when following [the above
+build procedure from Git](#from-git):
 
-```
-$ export PATH=$CLACC_BUILD_DIR/bin:$PATH
-$ export LD_LIBRARY_PATH=$CLACC_BUILD_DIR/lib:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src:$LD_LIBRARY_PATH
-$ clang -fopenacc -fopenmp-targets=nvptx64-nvidia-cuda \
-  --libomptarget-nvptx-bc-path=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
-  -L $CLACC_BUILD_DIR/lib \
-  -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
-  -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
-  -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
-  -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
-  -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
-  test.c
-$ ./a.out
-```
+* For an NVIDIA GPU:
 
-For an AMD GPU, change the Clang command line to:
+    ```
+    $ export PATH=$CLACC_BUILD_DIR/bin:$PATH
+    $ export LD_LIBRARY_PATH=$CLACC_BUILD_DIR/lib:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src:$LD_LIBRARY_PATH
+    $ clang -fopenacc -fopenmp-targets=nvptx64-nvidia-cuda \
+      --libomptarget-nvptx-bc-path=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
+      -L $CLACC_BUILD_DIR/lib \
+      -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
+      -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
+      -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
+      -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
+      -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
+      test.c
+    $ ./a.out
+    ```
 
-```
-$ clang -fopenacc -fopenmp-targets=amdgcn-amd-amdhsa \
-  --libomptarget-amdgcn-bc-path=$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
-  -L $CLACC_BUILD_DIR/lib \
-  -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
-  -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
-  -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
-  -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
-  -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
-  test.c
-```
+* For an AMD GPU:
+
+    ```
+    $ export PATH=$CLACC_BUILD_DIR/bin:$PATH
+    $ export LD_LIBRARY_PATH=$CLACC_BUILD_DIR/lib:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget:$CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src:$LD_LIBRARY_PATH
+    $ clang -fopenacc -fopenmp-targets=amdgcn-amd-amdhsa \
+      -L $CLACC_BUILD_DIR/lib \
+      -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
+      -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libomptarget \
+      -L $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
+      -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/runtime/src \
+      -isystem $CLACC_BUILD_DIR/runtimes/runtimes-bins/openmp/libacc2omp/src \
+      test.c
+    $ ./a.out
+    ```
 
 ## Testing
 

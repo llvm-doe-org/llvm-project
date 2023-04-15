@@ -224,7 +224,6 @@ if(FUCHSIA_SDK)
   set(RUNTIMES_aarch64-unknown-fuchsia+hwasan_LLVM_USE_SANITIZER "HWAddress" CACHE STRING "")
   set(RUNTIMES_aarch64-unknown-fuchsia+hwasan_LIBCXXABI_ENABLE_NEW_DELETE_DEFINITIONS OFF CACHE BOOL "")
   set(RUNTIMES_aarch64-unknown-fuchsia+hwasan_LIBCXX_ENABLE_NEW_DELETE_DEFINITIONS OFF CACHE BOOL "")
-  set(RUNTIMES_aarch64-unknown-fuchsia+hwasan_CMAKE_CXX_FLAGS "${FUCHSIA_aarch64-unknown-fuchsia_COMPILER_FLAGS} -mllvm --hwasan-globals=0" CACHE STRING "")
 
   # HWASan+noexcept
   set(RUNTIMES_aarch64-unknown-fuchsia+hwasan+noexcept_LLVM_BUILD_COMPILER_RT OFF CACHE BOOL "")
@@ -233,7 +232,6 @@ if(FUCHSIA_SDK)
   set(RUNTIMES_aarch64-unknown-fuchsia+hwasan+noexcept_LIBCXX_ENABLE_NEW_DELETE_DEFINITIONS OFF CACHE BOOL "")
   set(RUNTIMES_aarch64-unknown-fuchsia+hwasan+noexcept_LIBCXXABI_ENABLE_EXCEPTIONS OFF CACHE BOOL "")
   set(RUNTIMES_aarch64-unknown-fuchsia+hwasan+noexcept_LIBCXX_ENABLE_EXCEPTIONS OFF CACHE BOOL "")
-  set(RUNTIMES_aarch64-unknown-fuchsia+hwasan+noexcept_CMAKE_CXX_FLAGS "${FUCHSIA_aarch64-unknown-fuchsia_COMPILER_FLAGS} -mllvm --hwasan-globals=0" CACHE STRING "")
 
   set(LLVM_RUNTIME_MULTILIBS "asan;noexcept;compat;asan+noexcept;hwasan;hwasan+noexcept" CACHE STRING "")
 
@@ -265,6 +263,7 @@ set(LLVM_TOOLCHAIN_TOOLS
   llvm-lib
   llvm-libtool-darwin
   llvm-lipo
+  llvm-ml
   llvm-mt
   llvm-nm
   llvm-objcopy
@@ -288,7 +287,6 @@ set(LLVM_TOOLCHAIN_TOOLS
 set(LLVM_DISTRIBUTION_COMPONENTS
   clang
   lld
-  LTO
   clang-apply-replacements
   clang-doc
   clang-format

@@ -988,9 +988,9 @@ public:
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
           SmallVector<SourceLocation, 1> MapModLocs;
           return getDerived().RebuildOMPMapClause(
-              MapMods, {L.LParenLoc}, CXXScopeSpec(), DeclarationNameInfo(),
-              OMPC_MAP_alloc, /*IsMapTypeImplicit=*/false, L.LocStart,
-              L.LParenLoc, Vars,
+              /*IteratorModifier=*/nullptr, MapMods, {L.LParenLoc},
+              CXXScopeSpec(), DeclarationNameInfo(), OMPC_MAP_alloc,
+              /*IsMapTypeImplicit=*/false, L.LocStart, L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
@@ -1027,9 +1027,9 @@ public:
           for (int i = 0, e = MapMods.size(); i < e; ++i)
             MapModLocs.push_back(L.LParenLoc);
           return getDerived().RebuildOMPMapClause(
-              MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
-              OMPC_MAP_alloc, /*IsMapTypeImplicit=*/false, L.LocStart,
-              L.LParenLoc, Vars,
+              /*IteratorModifier=*/nullptr, MapMods, MapModLocs, CXXScopeSpec(),
+              DeclarationNameInfo(), OMPC_MAP_alloc,
+              /*IsMapTypeImplicit=*/false, L.LocStart, L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
@@ -1046,9 +1046,9 @@ public:
           for (int i = 0, e = MapMods.size(); i < e; ++i)
             MapModLocs.push_back(L.LParenLoc);
           return getDerived().RebuildOMPMapClause(
-              MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
-              OMPC_MAP_tofrom, /*IsMapTypeImplicit=*/false, L.LocStart,
-              L.LParenLoc, Vars,
+              /*IteratorModifier=*/nullptr, MapMods, MapModLocs, CXXScopeSpec(),
+              DeclarationNameInfo(), OMPC_MAP_tofrom,
+              /*IsMapTypeImplicit=*/false, L.LocStart, L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
@@ -1065,10 +1065,10 @@ public:
           for (int i = 0, e = MapMods.size(); i < e; ++i)
             MapModLocs.push_back(L.LParenLoc);
           return getDerived().RebuildOMPMapClause(
-              MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
-              OMPC_MAP_to, /*IsMapTypeImplicit=*/false, L.LocStart, L.LParenLoc,
-              Vars, OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd),
-              std::nullopt);
+              /*IteratorModifier=*/nullptr, MapMods, MapModLocs, CXXScopeSpec(),
+              DeclarationNameInfo(), OMPC_MAP_to, /*IsMapTypeImplicit=*/false,
+              L.LocStart, L.LParenLoc, Vars,
+              OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
 
@@ -1084,9 +1084,9 @@ public:
           for (int i = 0, e = MapMods.size(); i < e; ++i)
             MapModLocs.push_back(L.LParenLoc);
           return getDerived().RebuildOMPMapClause(
-              MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
-              OMPC_MAP_from, /*IsMapTypeImplicit=*/false, L.LocStart,
-              L.LParenLoc, Vars,
+              /*IteratorModifier=*/nullptr, MapMods, MapModLocs, CXXScopeSpec(),
+              DeclarationNameInfo(), OMPC_MAP_from, /*IsMapTypeImplicit=*/false,
+              L.LocStart, L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
@@ -1103,9 +1103,9 @@ public:
           for (int i = 0, e = MapMods.size(); i < e; ++i)
             MapModLocs.push_back(L.LParenLoc);
           return getDerived().RebuildOMPMapClause(
-              MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
-              OMPC_MAP_alloc, /*IsMapTypeImplicit=*/false, L.LocStart,
-              L.LParenLoc, Vars,
+              /*IteratorModifier=*/nullptr, MapMods, MapModLocs, CXXScopeSpec(),
+              DeclarationNameInfo(), OMPC_MAP_alloc,
+              /*IsMapTypeImplicit=*/false, L.LocStart, L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
@@ -1142,9 +1142,9 @@ public:
           for (int i = 0, e = MapMods.size(); i < e; ++i)
             MapModLocs.push_back(L.LParenLoc);
           return getDerived().RebuildOMPMapClause(
-              MapMods, MapModLocs, CXXScopeSpec(), DeclarationNameInfo(),
-              OMPC_MAP_alloc, /*IsMapTypeImplicit=*/false, L.LocStart,
-              L.LParenLoc, Vars,
+              /*IteratorModifier=*/nullptr, MapMods, MapModLocs, CXXScopeSpec(),
+              DeclarationNameInfo(), OMPC_MAP_alloc,
+              /*IsMapTypeImplicit=*/false, L.LocStart, L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }
@@ -1156,9 +1156,9 @@ public:
         D, C, OMPC_map,
         [&](ArrayRef<Expr *> Vars, const ExplicitClauseLocs &L) {
           return getDerived().RebuildOMPMapClause(
-              std::nullopt, std::nullopt, CXXScopeSpec(), DeclarationNameInfo(),
-              OMPC_MAP_release, /*IsMapTypeImplicit=*/false, L.LocStart,
-              L.LParenLoc, Vars,
+              /*IteratorModifier=*/nullptr, std::nullopt, std::nullopt,
+              CXXScopeSpec(), DeclarationNameInfo(), OMPC_MAP_release,
+              /*IsMapTypeImplicit=*/false, L.LocStart, L.LParenLoc, Vars,
               OMPVarListLocTy(L.LocStart, L.LParenLoc, L.LocEnd), std::nullopt);
         });
   }

@@ -130,8 +130,7 @@ function(llvm_ExternalProject_Add name source_dir)
     set(always_clean clean)
   endif()
 
-  list(FIND TOOLCHAIN_TOOLS clang FOUND_CLANG)
-  if(FOUND_CLANG GREATER -1)
+  if(clang IN_LIST TOOLCHAIN_TOOLS)
     set(CLANG_IN_TOOLCHAIN On)
   endif()
 
@@ -240,7 +239,7 @@ function(llvm_ExternalProject_Add name source_dir)
     set(sysroot_arg -DCMAKE_SYSROOT=${CMAKE_SYSROOT})
   endif()
 
-  if(CMAKE_CROSSCOMPILING)
+  if(CMAKE_CROSSCOMPILING OR _cmake_system_name STREQUAL AIX)
     set(compiler_args -DCMAKE_ASM_COMPILER=${CMAKE_ASM_COMPILER}
                       -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
                       -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
@@ -252,6 +251,8 @@ function(llvm_ExternalProject_Add name source_dir)
                       -DCMAKE_OBJDUMP=${CMAKE_OBJDUMP}
                       -DCMAKE_STRIP=${CMAKE_STRIP}
                       -DCMAKE_READELF=${CMAKE_READELF})
+  endif()
+  if(CMAKE_CROSSCOMPILING)
     set(llvm_config_path ${LLVM_CONFIG_PATH})
 
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -301,6 +302,7 @@ function(llvm_ExternalProject_Add name source_dir)
     BINARY_DIR ${BINARY_DIR}
     ${exclude}
     CMAKE_ARGS ${${nameCanon}_CMAKE_ARGS}
+               --no-warn-unused-cli
                ${compiler_args}
                -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
                ${sysroot_arg}

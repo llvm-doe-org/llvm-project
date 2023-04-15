@@ -499,13 +499,11 @@ DeviceTy::getTargetPointer(void *HstPtrBegin, void *HstPtrBase, int64_t Size,
   return {{IsNew, IsHostPtr, IsPresent}, Entry, TargetPointer};
 }
 
-// Used by targetDataBegin, targetDataEnd, targetDataUpdate and target.
-// Return the target pointer begin (where the data will be moved).
-// Decrement the reference counter if called from targetDataEnd.
 TargetPointerResultTy
 DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
                          bool UpdateRefCount, bool UseHoldRefCount,
-                         bool &IsHostPtr, bool MustContain, bool ForceDelete) {
+                         bool &IsHostPtr, bool MustContain, bool ForceDelete,
+                         bool FromDataEnd) {
   HDTTMapAccessorTy HDTTMap = HostDataToTargetMap.getExclusiveAccessor();
 
   void *TargetPointer = NULL;
@@ -526,15 +524,18 @@ DeviceTy::getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
              "expected correct IsLast prediction for reset");
     }
 
+    // Increment the number of threads that is using the entry on a
+    // targetDataEnd, tracking the number of possible "deleters". A thread may
+    // come to own the entry deletion even if it was not the last one querying
+    // for it. Thus, we must track every query on targetDataEnds to ensure only
+    // the last thread that holds a reference to an entry actually deletes it.
+    if (FromDataEnd)
+      HT.incDataEndThreadCount();
+
     const char *RefCountAction;
     if (!UpdateRefCount) {
       RefCountAction = " (update suppressed)";
     } else if (IsLast) {
-      // Mark the entry as to be deleted by this thread. Another thread might
-      // reuse the entry and take "ownership" for the deletion while this thread
-      // is waiting for data transfers. That is fine and the current thread will
-      // simply skip the deletion step then.
-      HT.setDeleteThreadId();
       HT.decRefCount(UseHoldRefCount);
       assert(HT.getTotalRefCount() == 0 &&
              "Expected zero reference count when deletion is scheduled");
@@ -590,31 +591,20 @@ void *DeviceTy::getTgtPtrBegin(HDTTMapAccessorTy &HDTTMap, void *HstPtrBegin,
   return NULL;
 }
 
-int DeviceTy::deallocTgtPtr(HDTTMapAccessorTy &HDTTMap, LookupResult LR,
-                            int64_t Size) {
-  // Check if the pointer is contained in any sub-nodes.
-  if (!(LR.Flags.IsContained || LR.Flags.ExtendsBefore ||
-        LR.Flags.ExtendsAfter)) {
-    REPORT("Section to delete (hst addr " DPxMOD ") does not exist in the"
-           " allocated memory\n",
-           DPxPTR(LR.Entry->HstPtrBegin));
-    return OFFLOAD_FAIL;
-  }
-
-  auto &HT = *LR.Entry;
-  // Verify this thread is still in charge of deleting the entry.
-  assert(HT.getTotalRefCount() == 0 &&
-         HT.getDeleteThreadId() == std::this_thread::get_id() &&
+int DeviceTy::eraseMapEntry(HDTTMapAccessorTy &HDTTMap,
+                            HostDataToTargetTy *Entry, int64_t Size) {
+  assert(Entry && "Trying to delete a null entry from the HDTT map.");
+  assert(Entry->getTotalRefCount() == 0 && Entry->getDataEndThreadCount() == 0 &&
          "Trying to delete entry that is in use or owned by another thread.");
 
-  DP("Deleting tgt data " DPxMOD " of size %" PRId64 "\n",
-     DPxPTR(HT.TgtPtrBegin), Size);
+  INFO(OMP_INFOTYPE_MAPPING_CHANGED, DeviceID,
+       "Removing map entry with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD
+       ", Size=%" PRId64 ", Name=%s\n",
+       DPxPTR(Entry->HstPtrBegin), DPxPTR(Entry->TgtPtrBegin), Size,
+       (Entry->HstPtrName) ? getNameFromMapping(Entry->HstPtrName).c_str()
+                           : "unknown");
+
 #if OMPT_SUPPORT
-  // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
-  // "The target-data-op-begin event occurs before a thread initiates a data
-  // operation on a target device.  The target-data-op-end event occurs after a
-  // thread initiates a data operation on a target device."
-  //
   // OpenMP 5.1, sec. 3.8.10, p. 430, L2-9:
   // "The target-data-disassociate event occurs before a thread initiates a
   // device pointer disassociation on a target device."
@@ -624,6 +614,42 @@ int DeviceTy::deallocTgtPtr(HDTTMapAccessorTy &HDTTMap, LookupResult LR,
   // target-data-disassociate event in that thread. These callbacks have type
   // signature ompt_callback_target_data_op_t or
   // ompt_callback_target_data_op_emi_t, respectively."
+  if (OmptApi.ompt_target_enabled->ompt_callback_target_data_op_emi) {
+    // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
+    // OpenACC support, so we haven't bothered to implement them yet.
+    OmptApi.ompt_target_callbacks->ompt_callback(
+        ompt_callback_target_data_op_emi)(
+        ompt_scope_beginend, /*target_task_data=*/NULL, /*target_data=*/NULL,
+        /*host_op_id=*/NULL, ompt_target_data_disassociate,
+        (void *)Entry->HstPtrBegin, omp_get_initial_device(),
+        (void *)Entry->TgtPtrBegin, DeviceID, Size, /*codeptr_ra=*/NULL);
+  }
+#endif
+  if (HDTTMap->erase(Entry) == 0) {
+    REPORT("Trying to remove a non-existent map entry\n");
+    return OFFLOAD_FAIL;
+  }
+
+  return OFFLOAD_SUCCESS;
+}
+
+int DeviceTy::deallocTgtPtrAndEntry(HostDataToTargetTy *Entry, int64_t Size) {
+  assert(Entry && "Trying to deallocate a null entry.");
+
+  DP("Deleting tgt data " DPxMOD " of size %" PRId64 "\n",
+     DPxPTR(Entry->TgtPtrBegin), Size);
+
+  void *Event = Entry->getEvent();
+  if (Event && destroyEvent(Event) != OFFLOAD_SUCCESS) {
+    REPORT("Failed to destroy event " DPxMOD "\n", DPxPTR(Event));
+    return OFFLOAD_FAIL;
+  }
+
+#if OMPT_SUPPORT
+  // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
+  // "The target-data-op-begin event occurs before a thread initiates a data
+  // operation on a target device.  The target-data-op-end event occurs after a
+  // thread initiates a data operation on a target device."
   //
   // OpenMP 5.1, sec. 3.8.2 "omp_target_free", p. 415, L11-12:
   // "The target-data-free-begin event occurs before a thread initiates a data
@@ -635,44 +661,19 @@ int DeviceTy::deallocTgtPtr(HDTTMapAccessorTy &HDTTMap, LookupResult LR,
   // "A thread dispatches a registered ompt_callback_target_data_op_emi or
   // ompt_callback_target_data_op callback when device memory is allocated or
   // freed, as well as when data is copied to or from a device."
-  //
-  // We assume the callback for ompt_target_data_disassociate should precede the
-  // callback for ompt_target_data_delete to reflect the order in which these
-  // events logically occur, even if that's not how the underlying actions are
-  // coded here.  Moreover, this ordering is for symmetry with
-  // ompt_target_data_alloc and ompt_target_data_associate.
   if (OmptApi.ompt_target_enabled->ompt_callback_target_data_op_emi) {
     // FIXME: We don't yet need the host_op_id and codeptr_ra arguments for
     // OpenACC support, so we haven't bothered to implement them yet.
     OmptApi.ompt_target_callbacks->ompt_callback(
         ompt_callback_target_data_op_emi)(
-      ompt_scope_beginend, /*target_task_data=*/NULL, /*target_data=*/NULL,
-      /*host_op_id=*/NULL, ompt_target_data_disassociate,
-      (void *)LR.Entry->HstPtrBegin, omp_get_initial_device(),
-      (void *)HT.TgtPtrBegin, DeviceID, Size, /*codeptr_ra=*/NULL);
-    OmptApi.ompt_target_callbacks->ompt_callback(
-        ompt_callback_target_data_op_emi)(
-      ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
-      /*host_op_id=*/NULL, ompt_target_data_delete,
-      (void *)LR.Entry->HstPtrBegin, omp_get_initial_device(),
-      (void *)HT.TgtPtrBegin, DeviceID, Size, /*codeptr_ra=*/NULL);
+        ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
+        /*host_op_id=*/NULL, ompt_target_data_delete,
+        (void *)Entry->HstPtrBegin, omp_get_initial_device(),
+        (void *)Entry->TgtPtrBegin, DeviceID, Size, /*codeptr_ra=*/NULL);
   }
 #endif
-  deleteData((void *)HT.TgtPtrBegin);
-  INFO(OMP_INFOTYPE_MAPPING_CHANGED, DeviceID,
-       "Removing map entry with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD
-       ", Size=%" PRId64 ", Name=%s\n",
-       DPxPTR(HT.HstPtrBegin), DPxPTR(HT.TgtPtrBegin), Size,
-       (HT.HstPtrName) ? getNameFromMapping(HT.HstPtrName).c_str() : "unknown");
-  void *Event = LR.Entry->getEvent();
-  HDTTMap->erase(LR.Entry);
-  delete LR.Entry;
-
-  int Ret = OFFLOAD_SUCCESS;
-  if (Event && destroyEvent(Event) != OFFLOAD_SUCCESS) {
-    REPORT("Failed to destroy event " DPxMOD "\n", DPxPTR(Event));
-    Ret = OFFLOAD_FAIL;
-  }
+  int Ret = deleteData((void *)Entry->TgtPtrBegin);
+  delete Entry;
 
   return Ret;
 }
@@ -818,15 +819,12 @@ int32_t DeviceTy::dataExchange(void *SrcPtr, DeviceTy &DstDev, void *DstPtr,
 }
 
 // Run region on device
-int32_t DeviceTy::runRegion(void *TgtEntryPtr, void **TgtVarsPtr,
-                            ptrdiff_t *TgtOffsets, int32_t TgtVarsSize,
-                            AsyncInfoTy &AsyncInfo) {
-  if (!RTL->run_region_async || !RTL->synchronize)
-    return RTL->run_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets,
-                           TgtVarsSize OMPT_SUPPORT_IF(, &OmptApi));
-  return RTL->run_region_async(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets,
-                               TgtVarsSize, AsyncInfo
-                               OMPT_SUPPORT_IF(, &OmptApi));
+int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
+                               ptrdiff_t *TgtOffsets,
+                               const KernelArgsTy &KernelArgs,
+                               AsyncInfoTy &AsyncInfo) {
+  return RTL->launch_kernel(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets,
+                            &KernelArgs, AsyncInfo OMPT_SUPPORT_IF(, &OmptApi));
 }
 
 // Run region on device
@@ -837,22 +835,6 @@ bool DeviceTy::printDeviceInfo(int32_t RTLDevId) {
     return false;
   RTL->print_device_info(RTLDevId);
   return true;
-}
-
-// Run team region on device.
-int32_t DeviceTy::runTeamRegion(void *TgtEntryPtr, void **TgtVarsPtr,
-                                ptrdiff_t *TgtOffsets, int32_t TgtVarsSize,
-                                int32_t NumTeams, int32_t ThreadLimit,
-                                uint64_t LoopTripCount,
-                                AsyncInfoTy &AsyncInfo) {
-  if (!RTL->run_team_region_async || !RTL->synchronize)
-    return RTL->run_team_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr,
-                                TgtOffsets, TgtVarsSize, NumTeams, ThreadLimit,
-                                LoopTripCount OMPT_SUPPORT_IF(, &OmptApi));
-  return RTL->run_team_region_async(RTLDeviceID, TgtEntryPtr, TgtVarsPtr,
-                                    TgtOffsets, TgtVarsSize, NumTeams,
-                                    ThreadLimit, LoopTripCount, AsyncInfo
-                                    OMPT_SUPPORT_IF(, &OmptApi));
 }
 
 // Whether data can be copied to DstDevice directly

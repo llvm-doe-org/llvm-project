@@ -26,6 +26,16 @@
 
 using namespace mlir;
 
+static ParseResult parseSequenceOpOperands(
+    OpAsmParser &parser, Optional<OpAsmParser::UnresolvedOperand> &root,
+    Type &rootType,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &extraBindings,
+    SmallVectorImpl<Type> &extraBindingTypes);
+static void printSequenceOpOperands(OpAsmPrinter &printer, Operation *op,
+                                    Value root, Type rootType,
+                                    ValueRange extraBindings,
+                                    TypeRange extraBindingTypes);
+
 #define GET_OP_CLASSES
 #include "mlir/Dialect/Transform/IR/TransformOps.cpp.inc"
 
@@ -240,6 +250,17 @@ transform::AlternativesOp::apply(transform::TransformResults &results,
   return emitSilenceableError() << "all alternatives failed";
 }
 
+void transform::AlternativesOp::getEffects(
+    SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
+  consumesHandle(getOperands(), effects);
+  producesHandle(getResults(), effects);
+  for (Region *region : getRegions()) {
+    if (!region->empty())
+      producesHandle(region->front().getArguments(), effects);
+  }
+  modifiesPayload(effects);
+}
+
 LogicalResult transform::AlternativesOp::verify() {
   for (Region &alternative : getAlternatives()) {
     Block &block = alternative.front();
@@ -261,8 +282,7 @@ LogicalResult transform::AlternativesOp::verify() {
 //===----------------------------------------------------------------------===//
 
 DiagnosedSilenceableFailure
-transform::CastOp::applyToOne(Operation *target,
-                              SmallVectorImpl<Operation *> &results,
+transform::CastOp::applyToOne(Operation *target, ApplyToEachResultList &results,
                               transform::TransformState &state) {
   results.push_back(target);
   return DiagnosedSilenceableFailure::success();
@@ -281,7 +301,8 @@ bool transform::CastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
   return llvm::all_of(
       std::initializer_list<Type>{inputs.front(), outputs.front()},
       [](Type ty) {
-        return ty.isa<pdl::OperationType, transform::TransformTypeInterface>();
+        return ty
+            .isa<pdl::OperationType, transform::TransformHandleTypeInterface>();
       });
 }
 
@@ -370,9 +391,9 @@ LogicalResult transform::ForeachOp::verify() {
     return emitOpError() << "expects the same number of results as the "
                             "terminator has operands";
   for (Value v : yieldOp.getOperands())
-    if (!v.getType().isa<TransformTypeInterface>())
-      return yieldOp->emitOpError(
-          "expects operands to have types implementing TransformTypeInterface");
+    if (!v.getType().isa<TransformHandleTypeInterface>())
+      return yieldOp->emitOpError("expects operands to have types implementing "
+                                  "TransformHandleTypeInterface");
   return success();
 }
 
@@ -400,6 +421,31 @@ DiagnosedSilenceableFailure transform::GetClosestIsolatedParentOp::apply(
 }
 
 //===----------------------------------------------------------------------===//
+// GetConsumersOfResult
+//===----------------------------------------------------------------------===//
+
+DiagnosedSilenceableFailure
+transform::GetConsumersOfResult::apply(transform::TransformResults &results,
+                                       transform::TransformState &state) {
+  int64_t resultNumber = getResultNumber();
+  ArrayRef<Operation *> payloadOps = state.getPayloadOps(getTarget());
+  if (payloadOps.empty()) {
+    results.set(getResult().cast<OpResult>(), {});
+    return DiagnosedSilenceableFailure::success();
+  }
+  if (payloadOps.size() != 1)
+    return emitDefiniteFailure()
+           << "handle must be mapped to exactly one payload op";
+
+  Operation *target = payloadOps.front();
+  if (target->getNumResults() <= resultNumber)
+    return emitDefiniteFailure() << "result number overflow";
+  results.set(getResult().cast<OpResult>(),
+              llvm::to_vector(target->getResult(resultNumber).getUsers()));
+  return DiagnosedSilenceableFailure::success();
+}
+
+//===----------------------------------------------------------------------===//
 // GetProducerOfOperand
 //===----------------------------------------------------------------------===//
 
@@ -419,8 +465,6 @@ transform::GetProducerOfOperand::apply(transform::TransformResults &results,
           << "could not find a producer for operand number: " << operandNumber
           << " of " << *target;
       diag.attachNote(target->getLoc()) << "target op";
-      results.set(getResult().cast<OpResult>(),
-                  SmallVector<mlir::Operation *>{});
       return diag;
     }
     producers.push_back(producer);
@@ -463,7 +507,7 @@ void transform::MergeHandlesOp::getEffects(
   // manipulation.
 }
 
-OpFoldResult transform::MergeHandlesOp::fold(ArrayRef<Attribute> operands) {
+OpFoldResult transform::MergeHandlesOp::fold(FoldAdaptor adaptor) {
   if (getDeduplicate() || getHandles().size() != 1)
     return {};
 
@@ -493,10 +537,6 @@ transform::SplitHandlesOp::apply(transform::TransformResults &results,
       getHandle() ? state.getPayloadOps(getHandle()).size() : 0;
   int64_t expectedNumResultHandles = getNumResultHandles();
   if (numResultHandles != expectedNumResultHandles) {
-    // Failing case needs to propagate gracefully for both suppress and
-    // propagate modes.
-    for (int64_t idx = 0; idx < expectedNumResultHandles; ++idx)
-      results.set(getResults()[idx].cast<OpResult>(), {});
     // Empty input handle corner case: always propagates empty handles in both
     // suppress and propagate modes.
     if (numResultHandles == 0)
@@ -561,12 +601,23 @@ transform::ReplicateOp::apply(transform::TransformResults &results,
   unsigned numRepetitions = state.getPayloadOps(getPattern()).size();
   for (const auto &en : llvm::enumerate(getHandles())) {
     Value handle = en.value();
-    ArrayRef<Operation *> current = state.getPayloadOps(handle);
-    SmallVector<Operation *> payload;
-    payload.reserve(numRepetitions * current.size());
-    for (unsigned i = 0; i < numRepetitions; ++i)
-      llvm::append_range(payload, current);
-    results.set(getReplicated()[en.index()].cast<OpResult>(), payload);
+    if (handle.getType().isa<TransformHandleTypeInterface>()) {
+      ArrayRef<Operation *> current = state.getPayloadOps(handle);
+      SmallVector<Operation *> payload;
+      payload.reserve(numRepetitions * current.size());
+      for (unsigned i = 0; i < numRepetitions; ++i)
+        llvm::append_range(payload, current);
+      results.set(getReplicated()[en.index()].cast<OpResult>(), payload);
+    } else {
+      assert(handle.getType().isa<TransformParamTypeInterface>() &&
+             "expected param type");
+      ArrayRef<Attribute> current = state.getParams(handle);
+      SmallVector<Attribute> params;
+      params.reserve(numRepetitions * current.size());
+      for (unsigned i = 0; i < numRepetitions; ++i)
+        llvm::append_range(params, current);
+      results.setParams(getReplicated()[en.index()].cast<OpResult>(), params);
+    }
   }
   return DiagnosedSilenceableFailure::success();
 }
@@ -613,6 +664,76 @@ transform::SequenceOp::apply(transform::TransformResults &results,
   return DiagnosedSilenceableFailure::success();
 }
 
+static ParseResult parseSequenceOpOperands(
+    OpAsmParser &parser, Optional<OpAsmParser::UnresolvedOperand> &root,
+    Type &rootType,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &extraBindings,
+    SmallVectorImpl<Type> &extraBindingTypes) {
+  OpAsmParser::UnresolvedOperand rootOperand;
+  OptionalParseResult hasRoot = parser.parseOptionalOperand(rootOperand);
+  if (!hasRoot.has_value()) {
+    root = std::nullopt;
+    return success();
+  }
+  if (failed(hasRoot.value()))
+    return failure();
+  root = rootOperand;
+
+  if (succeeded(parser.parseOptionalComma())) {
+    if (failed(parser.parseOperandList(extraBindings)))
+      return failure();
+  }
+  if (failed(parser.parseColon()))
+    return failure();
+
+  // The paren is truly optional.
+  (void)parser.parseOptionalLParen();
+
+  if (failed(parser.parseType(rootType))) {
+    return failure();
+  }
+
+  if (!extraBindings.empty()) {
+    if (parser.parseComma() || parser.parseTypeList(extraBindingTypes))
+      return failure();
+  }
+
+  if (extraBindingTypes.size() != extraBindings.size()) {
+    return parser.emitError(parser.getNameLoc(),
+                            "expected types to be provided for all operands");
+  }
+
+  // The paren is truly optional.
+  (void)parser.parseOptionalRParen();
+  return success();
+}
+
+static void printSequenceOpOperands(OpAsmPrinter &printer, Operation *op,
+                                    Value root, Type rootType,
+                                    ValueRange extraBindings,
+                                    TypeRange extraBindingTypes) {
+  if (!root)
+    return;
+
+  printer << root;
+  bool hasExtras = !extraBindings.empty();
+  if (hasExtras) {
+    printer << ", ";
+    printer.printOperands(extraBindings);
+  }
+
+  printer << " : ";
+  if (hasExtras)
+    printer << "(";
+
+  printer << rootType;
+  if (hasExtras) {
+    printer << ", ";
+    llvm::interleaveComma(extraBindingTypes, printer.getStream());
+    printer << ")";
+  }
+}
+
 /// Returns `true` if the given op operand may be consuming the handle value in
 /// the Transform IR. That is, if it may have a Free effect on it.
 static bool isValueUsePotentialConsumer(OpOperand &use) {
@@ -650,22 +771,22 @@ checkDoubleConsume(Value value,
 }
 
 LogicalResult transform::SequenceOp::verify() {
-  assert(getBodyBlock()->getNumArguments() == 1 &&
-         "the number of arguments must have been verified to be 1 by "
+  assert(getBodyBlock()->getNumArguments() >= 1 &&
+         "the number of arguments must have been verified to be more than 1 by "
          "PossibleTopLevelTransformOpTrait");
 
-  BlockArgument arg = getBodyBlock()->getArgument(0);
-  if (getRoot()) {
-    if (arg.getType() != getRoot().getType()) {
-      return emitOpError() << "expects the type of the block argument to match "
-                              "the type of the operand";
-    }
+  if (!getRoot() && !getExtraBindings().empty()) {
+    return emitOpError()
+           << "does not expect extra operands when used as top-level";
   }
 
-  // Check if the block argument has more than one consuming use.
-  if (failed(checkDoubleConsume(
-          arg, [this]() { return (emitOpError() << "block argument #0"); }))) {
-    return failure();
+  // Check if a block argument has more than one consuming use.
+  for (BlockArgument arg : getBodyBlock()->getArguments()) {
+    if (failed(checkDoubleConsume(arg, [this, arg]() {
+          return (emitOpError() << "block argument #" << arg.getArgNumber());
+        }))) {
+      return failure();
+    }
   }
 
   // Check properties of the nested operations they cannot check themselves.
@@ -699,26 +820,26 @@ LogicalResult transform::SequenceOp::verify() {
   return success();
 }
 
+/// Appends to `effects` the memory effect instances on `target` with the same
+/// resource and effect as the ones the operation `iface` having on `source`.
+static void
+remapEffects(MemoryEffectOpInterface iface, BlockArgument source, Value target,
+             SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
+  SmallVector<MemoryEffects::EffectInstance> nestedEffects;
+  iface.getEffectsOnValue(source, nestedEffects);
+  for (const auto &effect : nestedEffects)
+    effects.emplace_back(effect.getEffect(), target, effect.getResource());
+}
+
 void transform::SequenceOp::getEffects(
     SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
-  auto *mappingResource = TransformMappingResource::get();
-  effects.emplace_back(MemoryEffects::Read::get(), getRoot(), mappingResource);
-
-  for (Value result : getResults()) {
-    effects.emplace_back(MemoryEffects::Allocate::get(), result,
-                         mappingResource);
-    effects.emplace_back(MemoryEffects::Write::get(), result, mappingResource);
-  }
+  onlyReadsHandle(getRoot(), effects);
+  onlyReadsHandle(getExtraBindings(), effects);
+  producesHandle(getResults(), effects);
 
   if (!getRoot()) {
     for (Operation &op : *getBodyBlock()) {
-      auto iface = dyn_cast<MemoryEffectOpInterface>(&op);
-      if (!iface) {
-        // TODO: fill all possible effects; or require ops to actually implement
-        // the memory effect interface always
-        assert(false);
-      }
-
+      auto iface = cast<MemoryEffectOpInterface>(&op);
       SmallVector<MemoryEffects::EffectInstance, 2> nestedEffects;
       iface.getEffects(effects);
     }
@@ -728,24 +849,20 @@ void transform::SequenceOp::getEffects(
   // Carry over all effects on the argument of the entry block as those on the
   // operand, this is the same value just remapped.
   for (Operation &op : *getBodyBlock()) {
-    auto iface = dyn_cast<MemoryEffectOpInterface>(&op);
-    if (!iface) {
-      // TODO: fill all possible effects; or require ops to actually implement
-      // the memory effect interface always
-      assert(false);
-    }
+    auto iface = cast<MemoryEffectOpInterface>(&op);
 
-    SmallVector<MemoryEffects::EffectInstance, 2> nestedEffects;
-    iface.getEffectsOnValue(getBodyBlock()->getArgument(0), nestedEffects);
-    for (const auto &effect : nestedEffects)
-      effects.emplace_back(effect.getEffect(), getRoot(), effect.getResource());
+    remapEffects(iface, getBodyBlock()->getArgument(0), getRoot(), effects);
+    for (auto [source, target] : llvm::zip(
+             getBodyBlock()->getArguments().drop_front(), getExtraBindings())) {
+      remapEffects(iface, source, target, effects);
+    }
   }
 }
 
 OperandRange transform::SequenceOp::getSuccessorEntryOperands(
     std::optional<unsigned> index) {
   assert(index && *index == 0 && "unexpected region index");
-  if (getOperation()->getNumOperands() == 1)
+  if (getOperation()->getNumOperands() > 0)
     return getOperation()->getOperands();
   return OperandRange(getOperation()->operand_end(),
                       getOperation()->operand_end());
@@ -772,21 +889,51 @@ void transform::SequenceOp::getRegionInvocationBounds(
   bounds.emplace_back(1, 1);
 }
 
+template <typename FnTy>
+static void buildSequenceBody(OpBuilder &builder, OperationState &state,
+                              Type bbArgType, TypeRange extraBindingTypes,
+                              FnTy bodyBuilder) {
+  SmallVector<Type> types;
+  types.reserve(1 + extraBindingTypes.size());
+  types.push_back(bbArgType);
+  llvm::append_range(types, extraBindingTypes);
+
+  OpBuilder::InsertionGuard guard(builder);
+  Region *region = state.regions.back().get();
+  Block *bodyBlock = builder.createBlock(region, region->begin(),
+                                         extraBindingTypes, {state.location});
+
+  // Populate body.
+  builder.setInsertionPointToStart(bodyBlock);
+  if constexpr (llvm::function_traits<FnTy>::num_args == 3) {
+    bodyBuilder(builder, state.location, bodyBlock->getArgument(0));
+  } else {
+    bodyBuilder(builder, state.location, bodyBlock->getArgument(0),
+                bodyBlock->getArguments().drop_front());
+  }
+}
+
 void transform::SequenceOp::build(OpBuilder &builder, OperationState &state,
                                   TypeRange resultTypes,
                                   FailurePropagationMode failurePropagationMode,
                                   Value root,
                                   SequenceBodyBuilderFn bodyBuilder) {
-  build(builder, state, resultTypes, failurePropagationMode, root);
-  Region *region = state.regions.back().get();
+  build(builder, state, resultTypes, failurePropagationMode, root,
+        /*extraBindings=*/ValueRange());
   Type bbArgType = root.getType();
-  OpBuilder::InsertionGuard guard(builder);
-  Block *bodyBlock = builder.createBlock(
-      region, region->begin(), TypeRange{bbArgType}, {state.location});
+  buildSequenceBody(builder, state, bbArgType,
+                    /*extraBindingTypes=*/TypeRange(), bodyBuilder);
+}
 
-  // Populate body.
-  builder.setInsertionPointToStart(bodyBlock);
-  bodyBuilder(builder, state.location, bodyBlock->getArgument(0));
+void transform::SequenceOp::build(OpBuilder &builder, OperationState &state,
+                                  TypeRange resultTypes,
+                                  FailurePropagationMode failurePropagationMode,
+                                  Value root, ValueRange extraBindings,
+                                  SequenceBodyBuilderArgsFn bodyBuilder) {
+  build(builder, state, resultTypes, failurePropagationMode, root,
+        extraBindings);
+  buildSequenceBody(builder, state, root.getType(), extraBindings.getTypes(),
+                    bodyBuilder);
 }
 
 void transform::SequenceOp::build(OpBuilder &builder, OperationState &state,
@@ -794,15 +941,20 @@ void transform::SequenceOp::build(OpBuilder &builder, OperationState &state,
                                   FailurePropagationMode failurePropagationMode,
                                   Type bbArgType,
                                   SequenceBodyBuilderFn bodyBuilder) {
-  build(builder, state, resultTypes, failurePropagationMode, /*root=*/Value());
-  Region *region = state.regions.back().get();
-  OpBuilder::InsertionGuard guard(builder);
-  Block *bodyBlock = builder.createBlock(
-      region, region->begin(), TypeRange{bbArgType}, {state.location});
+  build(builder, state, resultTypes, failurePropagationMode, /*root=*/Value(),
+        /*extraBindings=*/ValueRange());
+  buildSequenceBody(builder, state, bbArgType,
+                    /*extraBindingTypes=*/TypeRange(), bodyBuilder);
+}
 
-  // Populate body.
-  builder.setInsertionPointToStart(bodyBlock);
-  bodyBuilder(builder, state.location, bodyBlock->getArgument(0));
+void transform::SequenceOp::build(OpBuilder &builder, OperationState &state,
+                                  TypeRange resultTypes,
+                                  FailurePropagationMode failurePropagationMode,
+                                  Type bbArgType, TypeRange extraBindingTypes,
+                                  SequenceBodyBuilderArgsFn bodyBuilder) {
+  build(builder, state, resultTypes, failurePropagationMode, /*root=*/Value(),
+        /*extraBindings=*/ValueRange());
+  buildSequenceBody(builder, state, bbArgType, extraBindingTypes, bodyBuilder);
 }
 
 //===----------------------------------------------------------------------===//

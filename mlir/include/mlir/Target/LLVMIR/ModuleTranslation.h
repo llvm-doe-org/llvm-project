@@ -15,8 +15,8 @@
 #define MLIR_TARGET_LLVMIR_MODULETRANSLATION_H
 
 #include "mlir/IR/Operation.h"
-#include "mlir/IR/Value.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/IR/Value.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Target/LLVMIR/LLVMTranslationInterface.h"
 #include "mlir/Target/LLVMIR/TypeToLLVM.h"
@@ -148,6 +148,10 @@ public:
   // Sets LLVM metadata for memory operations that have alias scope information.
   void setAliasScopeMetadata(Operation *op, llvm::Instruction *inst);
 
+  /// Sets LLVM TBAA metadata for memory operations that have
+  /// TBAA attributes.
+  void setTBAAMetadata(Operation *op, llvm::Instruction *inst);
+
   /// Converts the type from MLIR LLVM dialect to LLVM.
   llvm::Type *convertType(Type type);
 
@@ -269,7 +273,7 @@ public:
     ModuleTranslation &moduleTranslation;
   };
 
-  SymbolTableCollection& symbolTable() { return symbolTableCollection; }
+  SymbolTableCollection &symbolTable() { return symbolTableCollection; }
 
 private:
   ModuleTranslation(Operation *module,
@@ -291,8 +295,19 @@ private:
   /// metadata nodes for them and their domains.
   LogicalResult createAliasScopeMetadata();
 
+  /// Returns the LLVM metadata corresponding to a reference to an mlir LLVM
+  /// dialect TBAATagOp operation.
+  llvm::MDNode *getTBAANode(Operation &memOp, SymbolRefAttr tagRef) const;
+
+  /// Process tbaa LLVM Metadata operations and create LLVM
+  /// metadata nodes for them.
+  LogicalResult createTBAAMetadata();
+
   /// Translates dialect attributes attached to the given operation.
   LogicalResult convertDialectAttributes(Operation *op);
+
+  /// Translates parameter attributes and adds them to the returned AttrBuilder.
+  llvm::AttrBuilder convertParameterAttrs(DictionaryAttr paramAttrs);
 
   /// Original and translated module.
   Operation *mlirModule;
@@ -333,9 +348,13 @@ private:
   /// attribute.
   DenseMap<Attribute, llvm::MDNode *> loopOptionsMetadataMapping;
 
-  /// Mapping from an access scope metadata operation to its LLVM metadata.
+  /// Mapping from an alias scope metadata operation to its LLVM metadata.
   /// This map is populated on module entry.
   DenseMap<Operation *, llvm::MDNode *> aliasScopeMetadataMapping;
+
+  /// Mapping from a tbaa metadata operation to its LLVM metadata.
+  /// This map is populated on module entry.
+  DenseMap<const Operation *, llvm::MDNode *> tbaaMetadataMapping;
 
   /// Stack of user-specified state elements, useful when translating operations
   /// with regions.

@@ -1127,8 +1127,7 @@ static RTLDeviceInfoTy &DeviceInfo() { return DeviceInfoState; }
 namespace {
 
 int32_t dataRetrieve(int32_t DeviceId, void *HstPtr, void *TgtPtr, int64_t Size,
-                     __tgt_async_info *AsyncInfo
-                     OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) {
+                     __tgt_async_info *AsyncInfo) {
   assert(AsyncInfo && "AsyncInfo is nullptr");
   assert(DeviceId < DeviceInfo().NumberOfDevices && "Device ID too large");
   // Return success if we are not copying back to host from target.
@@ -1139,47 +1138,8 @@ int32_t dataRetrieve(int32_t DeviceId, void *HstPtr, void *TgtPtr, int64_t Size,
      (long long unsigned)(Elf64_Addr)TgtPtr,
      (long long unsigned)(Elf64_Addr)HstPtr);
 
-#if OMPT_SUPPORT
-    // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
-    // "The target-data-op-begin event occurs before a thread initiates a data
-    // operation on a target device.  The target-data-op-end event occurs after
-    // a thread initiates a data operation on a target device."
-    //
-    // OpenMP 5.1, sec. 3.8.5 "omp_target_memcpy", p. 419, L4-5:
-    // "The target-data-op-begin event occurs before a thread initiates a data
-    // transfer.  The target-data-op-end event occurs after a thread initiated
-    // a data transfer."
-    //
-    // OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t and
-    // ompt_callback_target_data_op_t", p. 535, L25-27:
-    // "A thread dispatches a registered ompt_callback_target_data_op_emi or
-    // ompt_callback_target_data_op callback when device memory is allocated or
-    // freed, as well as when data is copied to or from a device."
-    //
-    // FIXME: We don't yet need the target_task_data, target_data, host_op_id,
-    // and codeptr_ra arguments for OpenACC support, so we haven't bothered to
-    // implement them yet.
-    if (OmptApi->ompt_target_enabled->ompt_callback_target_data_op_emi) {
-      OmptApi->ompt_target_callbacks->ompt_callback(
-          ompt_callback_target_data_op_emi)(
-          ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
-          /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, TgtPtr,
-          OmptApi->global_device_id, HstPtr,
-          OmptApi->omp_get_initial_device(), Size, /*codeptr_ra=*/NULL);
-    }
-#endif
   Err = DeviceInfo().freesignalpoolMemcpyD2H(HstPtr, TgtPtr, (size_t)Size,
                                              DeviceId);
-#if OMPT_SUPPORT
-    if (OmptApi->ompt_target_enabled->ompt_callback_target_data_op_emi) {
-      OmptApi->ompt_target_callbacks->ompt_callback(
-          ompt_callback_target_data_op_emi)(
-          ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
-          /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, TgtPtr,
-          OmptApi->global_device_id, HstPtr,
-          OmptApi->omp_get_initial_device(), Size, /*codeptr_ra=*/NULL);
-    }
-#endif
 
   if (Err != HSA_STATUS_SUCCESS) {
     DP("Error when copying data from device to host. Pointers: "
@@ -1194,8 +1154,7 @@ int32_t dataRetrieve(int32_t DeviceId, void *HstPtr, void *TgtPtr, int64_t Size,
 }
 
 int32_t dataSubmit(int32_t DeviceId, void *TgtPtr, void *HstPtr, int64_t Size,
-                   __tgt_async_info *AsyncInfo
-                   OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) {
+                   __tgt_async_info *AsyncInfo) {
   assert(AsyncInfo && "AsyncInfo is nullptr");
   hsa_status_t Err;
   assert(DeviceId < DeviceInfo().NumberOfDevices && "Device ID too large");
@@ -1206,47 +1165,8 @@ int32_t dataSubmit(int32_t DeviceId, void *TgtPtr, void *HstPtr, int64_t Size,
   DP("Submit data %ld bytes, (hst:%016llx) -> (tgt:%016llx).\n", Size,
      (long long unsigned)(Elf64_Addr)HstPtr,
      (long long unsigned)(Elf64_Addr)TgtPtr);
-#if OMPT_SUPPORT
-    // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
-    // "The target-data-op-begin event occurs before a thread initiates a data
-    // operation on a target device.  The target-data-op-end event occurs after
-    // a thread initiates a data operation on a target device."
-    //
-    // OpenMP 5.1, sec. 3.8.5 "omp_target_memcpy", p. 419, L4-5:
-    // "The target-data-op-begin event occurs before a thread initiates a data
-    // transfer.  The target-data-op-end event occurs after a thread initiated
-    // a data transfer."
-    //
-    // OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t and
-    // ompt_callback_target_data_op_t", p. 535, L25-27:
-    // "A thread dispatches a registered ompt_callback_target_data_op_emi or
-    // ompt_callback_target_data_op callback when device memory is allocated or
-    // freed, as well as when data is copied to or from a device."
-    //
-    // FIXME: We don't yet need the target_task_data, target_data, host_op_id,
-    // and codeptr_ra arguments for OpenACC support, so we haven't bothered to
-    // implement them yet.
-    if (OmptApi->ompt_target_enabled->ompt_callback_target_data_op_emi) {
-      OmptApi->ompt_target_callbacks->ompt_callback(
-          ompt_callback_target_data_op_emi)(
-          ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
-          /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, HstPtr,
-          OmptApi->omp_get_initial_device(), TgtPtr,
-          OmptApi->global_device_id, Size, /*codeptr_ra=*/NULL);
-    }
-#endif
   Err = DeviceInfo().freesignalpoolMemcpyH2D(TgtPtr, HstPtr, (size_t)Size,
                                              DeviceId);
-#if OMPT_SUPPORT
-    if (OmptApi->ompt_target_enabled->ompt_callback_target_data_op_emi) {
-      OmptApi->ompt_target_callbacks->ompt_callback(
-          ompt_callback_target_data_op_emi)(
-          ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
-          /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, HstPtr,
-          OmptApi->omp_get_initial_device(), TgtPtr,
-          OmptApi->global_device_id, Size, /*codeptr_ra=*/NULL);
-    }
-#endif
   if (Err != HSA_STATUS_SUCCESS) {
     DP("Error when copying data from host to device. Pointers: "
        "host = 0x%016lx, device = 0x%016lx, size = %lld\n",
@@ -1445,38 +1365,12 @@ static uint64_t acquireAvailablePacketId(hsa_queue_t *Queue) {
 
 int32_t runRegionLocked(int32_t DeviceId, void *TgtEntryPtr, void **TgtArgs,
                         ptrdiff_t *TgtOffsets, int32_t ArgNum, int32_t NumTeams,
-                        int32_t ThreadLimit, uint64_t LoopTripcount
-                        OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) {
+                        int32_t ThreadLimit, uint64_t LoopTripcount) {
   // Set the context we are using
   // update thread limit content in gpu memory if un-initialized or specified
   // from host
 
   DP("Run target team region thread_limit %d\n", ThreadLimit);
-
-#if OMPT_SUPPORT
-  // OpenMP 5.1, sec. 2.14.5 "target Construct", p. 201, L17-20:
-  // "The target-submit-begin event occurs prior to initiating creation of an
-  // initial task on a target device for a target region.  The target-submit-end
-  // event occurs after initiating creation of an initial task on a target
-  // device for a target region."
-  //
-  // OpenMP 5.1, sec. 4.5.2.28 "ompt_callback_target_submit_emi_t and
-  // ompt_callback_target_submit_t", p. 543, L2-6:
-  // "A thread dispatches a registered ompt_callback_target_submit_emi or
-  // ompt_callback_target_submit callback on the host before and after a target
-  // task initiates creation of an initial task on a device."
-  // "The endpoint argument indicates that the callback signals the beginning or
-  // end of a scope."
-  //
-  // FIXME: We don't yet need the target_data or host_op_id argument for
-  // OpenACC support, so we haven't bothered to implement it yet.
-  if (OmptApi->ompt_target_enabled->ompt_callback_target_submit_emi) {
-    OmptApi->ompt_target_callbacks->ompt_callback(
-        ompt_callback_target_submit_emi)(
-        ompt_scope_begin, /*target_data=*/NULL, /*host_op_id=*/NULL,
-        /*requested_num_teams=*/NumTeams);
-  }
-#endif
 
   // All args are references.
   std::vector<void *> Args(ArgNum);
@@ -1657,14 +1551,6 @@ int32_t runRegionLocked(int32_t DeviceId, void *TgtEntryPtr, void **TgtArgs,
     // Since the packet is already published, its contents must not be
     // accessed any more
     hsa_signal_store_relaxed(Queue->doorbell_signal, PacketId);
-#if OMPT_SUPPORT
-    if (OmptApi->ompt_target_enabled->ompt_callback_target_submit_emi) {
-      OmptApi->ompt_target_callbacks->ompt_callback(
-          ompt_callback_target_submit_emi)(
-          ompt_scope_end, /*target_data=*/NULL, /*host_op_id=*/NULL,
-          /*requested_num_teams=*/NumTeams);
-    }
-#endif
 
     while (hsa_signal_wait_scacquire(S, HSA_SIGNAL_CONDITION_EQ, 0, UINT64_MAX,
                                      HSA_WAIT_STATE_BLOCKED) != 0)
@@ -1822,7 +1708,7 @@ struct DeviceEnvironment {
   // If the symbol is in .data (aomp, rocm) it can be written directly.
   // If it is in .bss, we must wait for it to be allocated space on the
   // gpu (trunk) and initialize after loading.
-  const char *sym() { return "omptarget_device_environment"; }
+  const char *sym() { return "__omp_rtl_device_environment"; }
 
   DeviceEnvironmentTy HostDeviceEnv;
   SymbolInfo SI;
@@ -1928,6 +1814,35 @@ bool imageContainsSymbol(void *Data, size_t Size, const char *Sym) {
   SymbolInfo SI;
   int Rc = getSymbolInfoWithoutLoading((char *)Data, Size, Sym, &SI);
   return (Rc == 0) && (SI.Addr != nullptr);
+}
+
+hsa_status_t lock_memory(void *HostPtr, size_t Size, hsa_agent_t Agent,
+                         void **LockedHostPtr) {
+  hsa_status_t err = is_locked(HostPtr, LockedHostPtr);
+  if (err != HSA_STATUS_SUCCESS)
+    return err;
+
+  // HostPtr is already locked, just return it
+  if (*LockedHostPtr)
+    return HSA_STATUS_SUCCESS;
+
+  hsa_agent_t Agents[1] = {Agent};
+  return hsa_amd_memory_lock(HostPtr, Size, Agents, /*num_agent=*/1,
+                             LockedHostPtr);
+}
+
+hsa_status_t unlock_memory(void *HostPtr) {
+  void *LockedHostPtr = nullptr;
+  hsa_status_t err = is_locked(HostPtr, &LockedHostPtr);
+  if (err != HSA_STATUS_SUCCESS)
+    return err;
+
+  // if LockedHostPtr is nullptr, then HostPtr was not locked
+  if (!LockedHostPtr)
+    return HSA_STATUS_SUCCESS;
+
+  err = hsa_amd_memory_unlock(HostPtr);
+  return err;
 }
 
 } // namespace
@@ -2188,7 +2103,7 @@ __tgt_target_table *__tgt_rtl_load_binary_locked(int32_t DeviceId,
   // per-image initialization work. Specifically:
   //
   // - Initialize an DeviceEnvironmentTy instance embedded in the
-  //   image at the symbol "omptarget_device_environment"
+  //   image at the symbol "__omp_rtl_device_environment"
   //   Fields DebugKind, DeviceNum, NumDevices. Used by the deviceRTL.
   //
   // - Allocate a large array per-gpu (could be moved to init_device)
@@ -2582,8 +2497,7 @@ int32_t __tgt_rtl_data_submit(
     OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) {
   assert(DeviceId < DeviceInfo().NumberOfDevices && "Device ID too large");
   __tgt_async_info AsyncInfo;
-  int32_t Rc = dataSubmit(DeviceId, TgtPtr, HstPtr, Size, &AsyncInfo
-                          OMPT_SUPPORT_IF(, OmptApi));
+  int32_t Rc = dataSubmit(DeviceId, TgtPtr, HstPtr, Size, &AsyncInfo);
   if (Rc != OFFLOAD_SUCCESS)
     return OFFLOAD_FAIL;
 
@@ -2597,8 +2511,7 @@ int32_t __tgt_rtl_data_submit_async(
   assert(DeviceId < DeviceInfo().NumberOfDevices && "Device ID too large");
   if (AsyncInfo) {
     initAsyncInfo(AsyncInfo);
-    return dataSubmit(DeviceId, TgtPtr, HstPtr, Size, AsyncInfo
-                      OMPT_SUPPORT_IF(, OmptApi));
+    return dataSubmit(DeviceId, TgtPtr, HstPtr, Size, AsyncInfo);
   }
   return __tgt_rtl_data_submit(DeviceId, TgtPtr, HstPtr, Size
                                OMPT_SUPPORT_IF(, OmptApi));
@@ -2609,8 +2522,7 @@ int32_t __tgt_rtl_data_retrieve(
     OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) {
   assert(DeviceId < DeviceInfo().NumberOfDevices && "Device ID too large");
   __tgt_async_info AsyncInfo;
-  int32_t Rc = dataRetrieve(DeviceId, HstPtr, TgtPtr, Size, &AsyncInfo
-                            OMPT_SUPPORT_IF(, OmptApi));
+  int32_t Rc = dataRetrieve(DeviceId, HstPtr, TgtPtr, Size, &AsyncInfo);
   if (Rc != OFFLOAD_SUCCESS)
     return OFFLOAD_FAIL;
 
@@ -2624,8 +2536,7 @@ int32_t __tgt_rtl_data_retrieve_async(
   assert(AsyncInfo && "AsyncInfo is nullptr");
   assert(DeviceId < DeviceInfo().NumberOfDevices && "Device ID too large");
   initAsyncInfo(AsyncInfo);
-  return dataRetrieve(DeviceId, HstPtr, TgtPtr, Size, AsyncInfo
-                      OMPT_SUPPORT_IF(, OmptApi));
+  return dataRetrieve(DeviceId, HstPtr, TgtPtr, Size, AsyncInfo);
 }
 
 int32_t __tgt_rtl_data_delete(int DeviceId, void *TgtPtr, int32_t) {
@@ -2641,61 +2552,24 @@ int32_t __tgt_rtl_data_delete(int DeviceId, void *TgtPtr, int32_t) {
   return OFFLOAD_SUCCESS;
 }
 
-int32_t __tgt_rtl_run_target_team_region(
-    int32_t DeviceId, void *TgtEntryPtr, void **TgtArgs, ptrdiff_t *TgtOffsets,
-    int32_t ArgNum, int32_t NumTeams, int32_t ThreadLimit,
-    uint64_t LoopTripcount
-    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) {
-
-  DeviceInfo().LoadRunLock.lock_shared();
-  int32_t Res = runRegionLocked(DeviceId, TgtEntryPtr, TgtArgs, TgtOffsets,
-                                ArgNum, NumTeams, ThreadLimit, LoopTripcount
-                                OMPT_SUPPORT_IF(, OmptApi));
-
-  DeviceInfo().LoadRunLock.unlock_shared();
-  return Res;
-}
-
-int32_t __tgt_rtl_run_target_region(
-    int32_t DeviceId, void *TgtEntryPtr, void **TgtArgs, ptrdiff_t *TgtOffsets,
-    int32_t ArgNum OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) {
-  // use one team and one thread
-  // fix thread num
-  int32_t TeamNum = 1;
-  int32_t ThreadLimit = 0; // use default
-  return __tgt_rtl_run_target_team_region(
-      DeviceId, TgtEntryPtr, TgtArgs, TgtOffsets, ArgNum, TeamNum, ThreadLimit,
-      0 OMPT_SUPPORT_IF(, OmptApi));
-}
-
-int32_t __tgt_rtl_run_target_team_region_async(
-    int32_t DeviceId, void *TgtEntryPtr, void **TgtArgs, ptrdiff_t *TgtOffsets,
-    int32_t ArgNum, int32_t NumTeams, int32_t ThreadLimit,
-    uint64_t LoopTripcount, __tgt_async_info *AsyncInfo
-    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) {
+int32_t __tgt_rtl_launch_kernel(int32_t DeviceId, void *TgtEntryPtr,
+                                void **TgtArgs, ptrdiff_t *TgtOffsets,
+                                KernelArgsTy *KernelArgs,
+                                __tgt_async_info *AsyncInfo) {
+  assert(!KernelArgs->NumTeams[1] && !KernelArgs->NumTeams[2] &&
+         !KernelArgs->ThreadLimit[1] && !KernelArgs->ThreadLimit[2] &&
+         "Only one dimensional kernels supported.");
   assert(AsyncInfo && "AsyncInfo is nullptr");
   initAsyncInfo(AsyncInfo);
 
   DeviceInfo().LoadRunLock.lock_shared();
-  int32_t Res = runRegionLocked(
-      DeviceId, TgtEntryPtr, TgtArgs, TgtOffsets, ArgNum, NumTeams, ThreadLimit,
-      LoopTripcount OMPT_SUPPORT_IF(, OmptApi));
+  int32_t Res =
+      runRegionLocked(DeviceId, TgtEntryPtr, TgtArgs, TgtOffsets,
+                      KernelArgs->NumArgs, KernelArgs->NumTeams[0],
+                      KernelArgs->ThreadLimit[0], KernelArgs->Tripcount);
 
   DeviceInfo().LoadRunLock.unlock_shared();
   return Res;
-}
-
-int32_t __tgt_rtl_run_target_region_async(
-    int32_t DeviceId, void *TgtEntryPtr, void **TgtArgs, ptrdiff_t *TgtOffsets,
-    int32_t ArgNum, __tgt_async_info *AsyncInfo
-    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) {
-  // use one team and one thread
-  // fix thread num
-  int32_t TeamNum = 1;
-  int32_t ThreadLimit = 0; // use default
-  return __tgt_rtl_run_target_team_region_async(
-      DeviceId, TgtEntryPtr, TgtArgs, TgtOffsets, ArgNum, TeamNum, ThreadLimit,
-      0, AsyncInfo OMPT_SUPPORT_IF(, OmptApi));
 }
 
 int32_t __tgt_rtl_synchronize(int32_t DeviceId, __tgt_async_info *AsyncInfo) {
@@ -2715,6 +2589,34 @@ void __tgt_rtl_print_device_info(int32_t DeviceId) {
   // NOTE: We don't need to set context for print device info.
 
   DeviceInfo().printDeviceInfo(DeviceId, DeviceInfo().HSAAgents[DeviceId]);
+}
+
+int32_t __tgt_rtl_data_lock(int32_t DeviceId, void *HostPtr, int64_t Size,
+                            void **LockedHostPtr) {
+  assert(DeviceId < DeviceInfo().NumberOfDevices && "Device ID too large");
+
+  hsa_agent_t Agent = DeviceInfo().HSAAgents[DeviceId];
+  hsa_status_t err = lock_memory(HostPtr, Size, Agent, LockedHostPtr);
+  if (err != HSA_STATUS_SUCCESS) {
+    DP("Error in tgt_rtl_data_lock\n");
+    return OFFLOAD_FAIL;
+  }
+  DP("Tgt lock host data %ld bytes, (HostPtr:%016llx).\n", Size,
+     (long long unsigned)(Elf64_Addr)*LockedHostPtr);
+  return OFFLOAD_SUCCESS;
+}
+
+int32_t __tgt_rtl_data_unlock(int DeviceId, void *HostPtr) {
+  assert(DeviceId < DeviceInfo().NumberOfDevices && "Device ID too large");
+  hsa_status_t err = unlock_memory(HostPtr);
+  if (err != HSA_STATUS_SUCCESS) {
+    DP("Error in tgt_rtl_data_unlock\n");
+    return OFFLOAD_FAIL;
+  }
+
+  DP("Tgt unlock data (tgt:%016llx).\n",
+     (long long unsigned)(Elf64_Addr)HostPtr);
+  return OFFLOAD_SUCCESS;
 }
 
 } // extern "C"

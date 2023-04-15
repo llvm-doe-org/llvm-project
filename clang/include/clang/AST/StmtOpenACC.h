@@ -248,7 +248,7 @@ public:
   getClausesOfKind(ArrayRef<ACCClause *> Clauses) {
     return {specific_clause_iterator<SpecificClause>(Clauses),
             specific_clause_iterator<SpecificClause>(
-                llvm::makeArrayRef(Clauses.end(), 0))};
+                llvm::ArrayRef(Clauses.end(), (size_t)0))};
   }
 
   template <typename SpecificClause>

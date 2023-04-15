@@ -9,7 +9,9 @@
 #ifndef LLVM_LIBC_SRC_STDIO_PRINTF_CORE_PARSER_H
 #define LLVM_LIBC_SRC_STDIO_PRINTF_CORE_PARSER_H
 
+#include "src/__support/CPP/type_traits.h"
 #include "src/__support/arg_list.h"
+#include "src/__support/common.h"
 #include "src/stdio/printf_core/core_structs.h"
 #include "src/stdio/printf_core/printf_config.h"
 
@@ -38,7 +40,7 @@ class Parser {
   struct TypeDesc {
     uint8_t size;
     PrimaryType primary_type;
-    constexpr bool operator==(const TypeDesc &other) const {
+    LIBC_INLINE constexpr bool operator==(const TypeDesc &other) const {
       return (size == other.size) && (primary_type == other.primary_type);
     }
   };
@@ -59,10 +61,10 @@ class Parser {
 
 public:
 #ifndef LLVM_LIBC_PRINTF_DISABLE_INDEX_MODE
-  Parser(const char *__restrict new_str, internal::ArgList &args)
+  LIBC_INLINE Parser(const char *__restrict new_str, internal::ArgList &args)
       : str(new_str), args_cur(args), args_start(args) {}
 #else
-  Parser(const char *__restrict new_str, internal::ArgList &args)
+  LIBC_INLINE Parser(const char *__restrict new_str, internal::ArgList &args)
       : str(new_str), args_cur(args) {}
 #endif // LLVM_LIBC_PRINTF_DISABLE_INDEX_MODE
 
@@ -86,7 +88,7 @@ private:
   LengthModifier parse_length_modifier(size_t *local_pos);
 
   // get_next_arg_value gets the next value from the arg list as type T.
-  template <class T> T inline get_next_arg_value() {
+  template <class T> LIBC_INLINE T get_next_arg_value() {
     return args_cur.next_var<T>();
   }
 
@@ -103,21 +105,20 @@ private:
   // local_pos.
   size_t parse_index(size_t *local_pos);
 
-  template <typename T>
-  static constexpr TypeDesc TYPE_DESC{sizeof(T), PrimaryType::Integer};
-  template <>
-  static constexpr TypeDesc TYPE_DESC<double>{sizeof(double),
-                                              PrimaryType::Float};
-  template <>
-  static constexpr TypeDesc TYPE_DESC<long double>{sizeof(long double),
-                                                   PrimaryType::Float};
-  template <>
-  static constexpr TypeDesc TYPE_DESC<void *>{sizeof(void *),
-                                              PrimaryType::Pointer};
-  template <>
-  static constexpr TypeDesc TYPE_DESC<void>{0, PrimaryType::Integer};
+  template <typename T> LIBC_INLINE static constexpr TypeDesc get_type_desc() {
+    if constexpr (cpp::is_same_v<T, void>) {
+      return TypeDesc{0, PrimaryType::Integer};
+    } else {
+      constexpr bool isPointer = cpp::is_same_v<T, void *>;
+      constexpr bool isFloat =
+          cpp::is_same_v<T, double> || cpp::is_same_v<T, long double>;
+      return TypeDesc{sizeof(T), isPointer ? PrimaryType::Pointer
+                                 : isFloat ? PrimaryType::Float
+                                           : PrimaryType::Integer};
+    }
+  }
 
-  void inline set_type_desc(size_t index, TypeDesc value) {
+  LIBC_INLINE void set_type_desc(size_t index, TypeDesc value) {
     if (index != 0 && index <= DESC_ARR_LEN)
       desc_arr[index - 1] = value;
   }
@@ -125,11 +126,11 @@ private:
   // get_arg_value gets the value from the arg list at index (starting at 1).
   // This may require parsing the format string. An index of 0 is interpreted as
   // the next value.
-  template <class T> T inline get_arg_value(size_t index) {
+  template <class T> LIBC_INLINE T get_arg_value(size_t index) {
     if (!(index == 0 || index == args_index))
       args_to_index(index);
 
-    set_type_desc(index, TYPE_DESC<T>);
+    set_type_desc(index, get_type_desc<T>());
 
     ++args_index;
     return get_next_arg_value<T>();

@@ -31,13 +31,11 @@ def LLVM_Dialect : Dialect {
   let hasRegionArgAttrVerify = 1;
   let hasRegionResultAttrVerify = 1;
   let hasOperationAttrVerify = 1;
+  let useFoldAPI = kEmitFoldAdaptorFolder;
 
   let extraClassDeclaration = [{
     /// Name of the data layout attributes.
     static StringRef getDataLayoutAttrName() { return "llvm.data_layout"; }
-    static StringRef getAlignAttrName() { return "llvm.align"; }
-    static StringRef getNoAliasAttrName() { return "llvm.noalias"; }
-    static StringRef getReadonlyAttrName() { return "llvm.readonly"; }
     static StringRef getNoAliasScopesAttrName() { return "noalias_scopes"; }
     static StringRef getAliasScopesAttrName() { return "alias_scopes"; }
     static StringRef getLoopAttrName() { return "llvm.loop"; }
@@ -45,13 +43,37 @@ def LLVM_Dialect : Dialect {
     static StringRef getLoopOptionsAttrName() { return "options"; }
     static StringRef getAccessGroupsAttrName() { return "access_groups"; }
     static StringRef getStructAttrsAttrName() { return "llvm.struct_attrs"; }
+    static StringRef getTBAAAttrName() { return "llvm.tbaa"; }
+
+    /// Names of llvm parameter attributes.
+    static StringRef getAlignAttrName() { return "llvm.align"; }
+    static StringRef getAllocAlignAttrName() { return "llvm.allocalign"; }
+    static StringRef getAllocatedPointerAttrName() { return "llvm.allocptr"; }
     static StringRef getByValAttrName() { return "llvm.byval"; }
     static StringRef getByRefAttrName() { return "llvm.byref"; }
-    static StringRef getStructRetAttrName() { return "llvm.sret"; }
-    static StringRef getInAllocaAttrName() { return "llvm.inalloca"; }
     static StringRef getNoUndefAttrName() { return "llvm.noundef"; }
+    static StringRef getDereferenceableAttrName() { return "llvm.dereferenceable"; }
+    static StringRef getDereferenceableOrNullAttrName() { return "llvm.dereferenceable_or_null"; }
+    static StringRef getInAllocaAttrName() { return "llvm.inalloca"; }
+    static StringRef getInRegAttrName() { return "llvm.inreg"; }
+    static StringRef getNestAttrName() { return "llvm.nest"; }
+    static StringRef getNoAliasAttrName() { return "llvm.noalias"; }
+    static StringRef getNoCaptureAttrName() { return "llvm.nocapture"; }
+    static StringRef getNoFreeAttrName() { return "llvm.nofree"; }
+    static StringRef getNonNullAttrName() { return "llvm.nonnull"; }
+    static StringRef getPreallocatedAttrName() { return "llvm.preallocated"; }
+    static StringRef getReadonlyAttrName() { return "llvm.readonly"; }
+    static StringRef getReturnedAttrName() { return "llvm.returned"; }
     static StringRef getSExtAttrName() { return "llvm.signext"; }
+    static StringRef getStackAlignmentAttrName() { return "llvm.alignstack"; }
+    static StringRef getStructRetAttrName() { return "llvm.sret"; }
+    static StringRef getWriteOnlyAttrName() { return "llvm.writeonly"; }
     static StringRef getZExtAttrName() { return "llvm.zeroext"; }
+    // TODO Restrict the usage of this to parameter attributes once there is an
+    // alternative way of modeling memory effects on FunctionOpInterface.
+    /// Name of the attribute that will cause the creation of a readnone memory
+    /// effect when lowering to the LLVMDialect.
+    static StringRef getReadnoneAttrName() { return "llvm.readnone"; }
 
     /// Verifies if the attribute is a well-formed value for "llvm.struct_attrs"
     static LogicalResult verifyStructAttr(
@@ -73,16 +95,17 @@ def LLVM_Dialect : Dialect {
     /// Returns `true` if the given type is compatible with the LLVM dialect.
     static bool isCompatibleType(Type);
 
-    /// Name of the attribute mapped to LLVM's 'readnone' function attribute.
-    /// It is allowed on any FunctionOpInterface operations.
-    static StringRef getReadnoneAttrName() {
-      return "llvm.readnone";
-    }
 
     Type parseType(DialectAsmParser &p) const override;
     void printType(Type, DialectAsmPrinter &p) const override;
 
   private:
+    /// Verifies a parameter attribute attached to a parameter of type
+    /// paramType.
+    LogicalResult verifyParameterAttribute(Operation *op,
+                                           Type paramType,
+                                           NamedAttribute paramAttr);
+
     /// Register all types.
     void registerTypes();
 
@@ -234,12 +257,16 @@ class LLVM_OpBase<Dialect dialect, string mnemonic, list<Trait> traits = []> :
   //             of the MLIR operation argument with the given name, or if the
   //             name matches the result name, by a reference to store the
   //             result of the newly created MLIR operation to;
+  //   - $_op - substituted by a reference to store the newly created MLIR
+  //            operation (only for MLIR operations that return no result);
   //   - $_int_attr - substituted by a call to an integer attribute matcher;
   //   - $_var_attr - substituted by a call to a variable attribute matcher;
   //   - $_resultType - substituted with the MLIR result type;
   //   - $_location - substituted with the MLIR location;
   //   - $_builder - substituted with the MLIR builder;
   //   - $_qualCppClassName - substitiuted with the MLIR operation class name.
+  // Always either store a reference to the result of the newly created
+  // operation, or to the operation itself if it does not return a result.
   // Additionally, `$$` can be used to produce the dollar character.
   string mlirBuilder = "";
 
@@ -388,7 +415,7 @@ class LLVM_IntrOpBase<Dialect dialect, string opName, string enumName,
       $_location, resultTypes, *mlirOperands);
     }] # !if(!gt(requiresFastmath, 0),
       "moduleImport.setFastmathFlagsAttr(inst, op);", "")
-    # !if(!gt(numResults, 0), "$res = op;", "(void)op;");
+    # !if(!gt(numResults, 0), "$res = op;", "$_op = op;");
 }
 
 // Base class for LLVM intrinsic operations, should not be used directly. Places

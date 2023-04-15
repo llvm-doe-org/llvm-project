@@ -311,9 +311,8 @@ bool refersToReorderedSection(ErrorOr<BinarySection &> Section) {
 } // anonymous namespace
 
 Expected<std::unique_ptr<RewriteInstance>>
-RewriteInstance::createRewriteInstance(ELFObjectFileBase *File, const int Argc,
-                                       const char *const *Argv,
-                                       StringRef ToolPath) {
+RewriteInstance::create(ELFObjectFileBase *File, const int Argc,
+                        const char *const *Argv, StringRef ToolPath) {
   Error Err = Error::success();
   auto RI = std::make_unique<RewriteInstance>(File, Argc, Argv, ToolPath, Err);
   if (Err)
@@ -2537,12 +2536,12 @@ void RewriteInstance::handleRelocation(const SectionRef &RelocatedSection,
             BC->getBinaryFunctionAtAddress(Address + 1)) {
       // Do an extra check that the function was referenced previously.
       // It's a linear search, but it should rarely happen.
-      bool Found =
-          llvm::any_of(llvm::make_second_range(ContainingBF->Relocations),
-                       [&](const Relocation &Rel) {
-                         return Rel.Symbol == RogueBF->getSymbol() &&
-                                !Relocation::isPCRelative(Rel.Type);
-                       });
+      auto CheckReloc = [&](const Relocation &Rel) {
+        return Rel.Symbol == RogueBF->getSymbol() &&
+               !Relocation::isPCRelative(Rel.Type);
+      };
+      bool Found = llvm::any_of(
+          llvm::make_second_range(ContainingBF->Relocations), CheckReloc);
 
       if (Found) {
         errs() << "BOLT-WARNING: detected possible compiler de-virtualization "
@@ -2581,7 +2580,7 @@ void RewriteInstance::handleRelocation(const SectionRef &RelocatedSection,
           ReferencedBF->registerReferencedOffset(RefFunctionOffset);
         }
         if (opts::Verbosity > 1 &&
-            !BinarySection(*BC, RelocatedSection).isReadOnly())
+            BinarySection(*BC, RelocatedSection).isWritable())
           errs() << "BOLT-WARNING: writable reference into the middle of the "
                  << formatv("function {0} detected at address {1:x}\n",
                             *ReferencedBF, Rel.getOffset());
@@ -2675,15 +2674,13 @@ void RewriteInstance::handleRelocation(const SectionRef &RelocatedSection,
 
   auto checkMaxDataRelocations = [&]() {
     ++NumDataRelocations;
-    if (opts::MaxDataRelocations &&
-        NumDataRelocations + 1 == opts::MaxDataRelocations) {
-      LLVM_DEBUG({
-        dbgs() << "BOLT-DEBUG: processing ending on data relocation "
-               << NumDataRelocations << ": ";
-      });
+    LLVM_DEBUG(if (opts::MaxDataRelocations &&
+                   NumDataRelocations + 1 == opts::MaxDataRelocations) {
+      dbgs() << "BOLT-DEBUG: processing ending on data relocation "
+             << NumDataRelocations << ": ";
       printRelocationInfo(Rel, ReferencedSymbol->getName(), SymbolAddress,
                           Addend, ExtractedValue);
-    }
+    });
 
     return (!opts::MaxDataRelocations ||
             NumDataRelocations < opts::MaxDataRelocations);
@@ -2758,10 +2755,14 @@ void RewriteInstance::selectFunctionsToProcess() {
       LiteThresholdExecCount, static_cast<uint64_t>(opts::LiteThresholdCount));
 
   StringSet<> ReorderFunctionsUserSet;
+  StringSet<> ReorderFunctionsLTOCommonSet;
   if (opts::ReorderFunctions == ReorderFunctions::RT_USER) {
     for (const std::string &Function :
-         ReorderFunctions::readFunctionOrderFile())
+         ReorderFunctions::readFunctionOrderFile()) {
       ReorderFunctionsUserSet.insert(Function);
+      if (std::optional<StringRef> LTOCommonName = getLTOCommonName(Function))
+        ReorderFunctionsLTOCommonSet.insert(*LTOCommonName);
+    }
   }
 
   uint64_t NumFunctionsToProcess = 0;
@@ -2797,6 +2798,10 @@ void RewriteInstance::selectFunctionsToProcess() {
             });
         if (Match.has_value())
           return true;
+        for (const StringRef Name : Function.getNames())
+          if (std::optional<StringRef> LTOCommonName = getLTOCommonName(Name))
+            if (ReorderFunctionsLTOCommonSet.contains(*LTOCommonName))
+              return true;
       }
 
       if (ProfileReader && !ProfileReader->mayHaveProfileData(Function))
@@ -3915,7 +3920,7 @@ void RewriteInstance::mapAllocatableSections(RuntimeDyld &RTDyld) {
       if (!Section.hasValidSectionID())
         continue;
 
-      if (Section.isReadOnly() != (SType == ST_READONLY))
+      if (Section.isWritable() == (SType == ST_READONLY))
         continue;
 
       if (Section.getOutputAddress()) {
@@ -4165,7 +4170,7 @@ void RewriteInstance::rewriteNoteSections() {
     // Set/modify section info.
     BinarySection &NewSection = BC->registerOrUpdateNoteSection(
         SectionName, SectionData, Size, Section.sh_addralign,
-        BSec->isReadOnly(), BSec->getELFType());
+        !BSec->isWritable(), BSec->getELFType());
     NewSection.setOutputAddress(0);
     NewSection.setOutputFileOffset(NextAvailableOffset);
 
@@ -4444,8 +4449,7 @@ RewriteInstance::getOutputSections(ELFObjectFile<ELFT> *File,
   }
 
   std::vector<ELFShdrTy> SectionsOnly(OutputSections.size());
-  llvm::transform(OutputSections, SectionsOnly.begin(),
-                  [](auto &SectionInfo) { return SectionInfo.second; });
+  llvm::copy(llvm::make_second_range(OutputSections), SectionsOnly.begin());
 
   return SectionsOnly;
 }

@@ -1067,14 +1067,9 @@ void *acc_deviceptr(void *data_arg) {
   // We do not call omp_get_mapped_ptr because OpenMP 5.2 does not clarify its
   // handling of:
   // - Null pointer.
-  // - Shared memory (including host as current device).  Moreover the current
-  //   omp_get_mapped_ptr implementation returns a null pointer in this case,
-  //   but acc_deviceptr must return data_arg, as explained above.
+  // - Shared memory (including host as current device).
   // - The case where data_arg is within arr[0:N] when only arr[N:M] is
-  //   currently mapped.  Moreover, the current omp_get_mapped_ptr
-  //   implementation returns a non-null pointer in this case, but
-  //   acc_deviceptr must return a null pointer.  This behavior is under
-  //   discussion at <https://github.com/llvm/llvm-project/issues/54899>.
+  //   currently mapped.
   if (!data_arg)
     return NULL;
   void *DevPtr;
@@ -1089,7 +1084,7 @@ void *acc_hostptr(void *data_dev) {
   //   "If the data is in shared memory or data_dev is a null pointer,
   //   acc_hostptr returns the incoming address."
   // - This behavior appears to mimic nvc 20.9-0.
-  // - OpenMP 5.2 is unclear about the behavior of acc_get_mapped_ptr in these
+  // - OpenMP 5.2 is unclear about the behavior of omp_get_mapped_ptr in these
   //   cases, and our extension omp_get_mapped_hostptr should be consistent with
   //   omp_get_mapped_ptr.
   if (!data_dev)

@@ -2819,7 +2819,7 @@ def : GCNPat <
 >;
 }
 
-let SubtargetPredicate = isGFX90APlus in
+let OtherPredicates = [HasFmacF64Inst] in
 // Don't allow source modifiers. If there are any source modifiers then it's
 // better to select fma instead of fmac.
 def : GCNPat <
@@ -3140,7 +3140,7 @@ def IMMZeroBasedBitfieldMask : ImmLeaf <i32, [{
 }]>;
 
 def IMMPopCount : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(countPopulation(N->getZExtValue()), SDLoc(N),
+  return CurDAG->getTargetConstant(llvm::popcount(N->getZExtValue()), SDLoc(N),
                                    MVT::i32);
 }]>;
 
@@ -3486,8 +3486,6 @@ def G_AMDGPU_ATOMIC_CMPXCHG : AMDGPUGenericInstruction {
 }
 
 let Namespace = "AMDGPU" in {
-def G_AMDGPU_ATOMIC_INC : G_ATOMICRMW_OP;
-def G_AMDGPU_ATOMIC_DEC : G_ATOMICRMW_OP;
 def G_AMDGPU_ATOMIC_FMIN : G_ATOMICRMW_OP;
 def G_AMDGPU_ATOMIC_FMAX : G_ATOMICRMW_OP;
 }

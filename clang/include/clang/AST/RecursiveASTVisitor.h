@@ -3862,6 +3862,14 @@ bool RecursiveASTVisitor<Derived>::VisitOMPBindClause(OMPBindClause *C) {
   return true;
 }
 
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitOMPXDynCGroupMemClause(
+    OMPXDynCGroupMemClause *C) {
+  TRY_TO(VisitOMPClauseWithPreInit(C));
+  TRY_TO(TraverseStmt(C->getSize()));
+  return true;
+}
+
 // OpenACC directives.
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseACCDirectiveStmt(

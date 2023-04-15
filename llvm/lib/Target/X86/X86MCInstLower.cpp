@@ -1024,7 +1024,14 @@ void X86AsmPrinter::LowerTlsAddr(X86MCInstLower &MCInstLowering,
 
   const MCSymbolRefExpr *Sym = MCSymbolRefExpr::create(
       MCInstLowering.GetSymbolFromOperand(MI.getOperand(3)), SRVK, Ctx);
-  const bool UseGot = MMI->getModule()->getRtLibUseGOT();
+
+  // As of binutils 2.32, ld has a bogus TLS relaxation error when the GD/LD
+  // code sequence using R_X86_64_GOTPCREL (instead of R_X86_64_GOTPCRELX) is
+  // attempted to be relaxed to IE/LE (binutils PR24784). Work around the bug by
+  // only using GOT when GOTPCRELX is enabled.
+  // TODO Delete the workaround when GOTPCRELX becomes commonplace.
+  bool UseGot = MMI->getModule()->getRtLibUseGOT() &&
+                Ctx.getAsmInfo()->canRelaxRelocations();
 
   if (Is64Bits) {
     bool NeedsPadding = SRVK == MCSymbolRefExpr::VK_TLSGD;
@@ -1601,6 +1608,7 @@ void X86AsmPrinter::LowerPATCHABLE_EVENT_CALL(const MachineInstr &MI,
     if (auto Op = MCIL.LowerMachineOperand(&MI, MI.getOperand(I))) {
       assert(Op->isReg() && "Only support arguments in registers");
       SrcRegs[I] = getX86SubSuperRegister(Op->getReg(), 64);
+      assert(SrcRegs[I].isValid() && "Invalid operand");
       if (SrcRegs[I] != DestRegs[I]) {
         UsedMask[I] = true;
         EmitAndCountInstruction(
@@ -1699,6 +1707,7 @@ void X86AsmPrinter::LowerPATCHABLE_TYPED_EVENT_CALL(const MachineInstr &MI,
       // TODO: Is register only support adequate?
       assert(Op->isReg() && "Only supports arguments in registers");
       SrcRegs[I] = getX86SubSuperRegister(Op->getReg(), 64);
+      assert(SrcRegs[I].isValid() && "Invalid operand");
       if (SrcRegs[I] != DestRegs[I]) {
         UsedMask[I] = true;
         EmitAndCountInstruction(
@@ -1896,8 +1905,8 @@ static std::string getShuffleComment(const MachineInstr *MI, unsigned SrcOp1Idx,
   // names. Fortunately most people use the ATT style (outside of Windows)
   // and they actually agree on register naming here. Ultimately, this is
   // a comment, and so its OK if it isn't perfect.
-  auto GetRegisterName = [](unsigned RegNum) -> StringRef {
-    return X86ATTInstPrinter::getRegisterName(RegNum);
+  auto GetRegisterName = [](MCRegister Reg) -> StringRef {
+    return X86ATTInstPrinter::getRegisterName(Reg);
   };
 
   const MachineOperand &DstOp = MI->getOperand(0);
@@ -2127,7 +2136,7 @@ static void addConstantComments(const MachineInstr *MI,
 
     const MachineOperand &MaskOp = MI->getOperand(MaskIdx);
     if (auto *C = getConstantFromPool(*MI, MaskOp)) {
-      unsigned Width = getRegisterWidth(MI->getDesc().OpInfo[0]);
+      unsigned Width = getRegisterWidth(MI->getDesc().operands()[0]);
       SmallVector<int, 64> Mask;
       DecodePSHUFBMask(C, Width, Mask);
       if (!Mask.empty())
@@ -2205,7 +2214,7 @@ static void addConstantComments(const MachineInstr *MI,
 
     const MachineOperand &MaskOp = MI->getOperand(MaskIdx);
     if (auto *C = getConstantFromPool(*MI, MaskOp)) {
-      unsigned Width = getRegisterWidth(MI->getDesc().OpInfo[0]);
+      unsigned Width = getRegisterWidth(MI->getDesc().operands()[0]);
       SmallVector<int, 16> Mask;
       DecodeVPERMILPMask(C, ElSize, Width, Mask);
       if (!Mask.empty())
@@ -2234,7 +2243,7 @@ static void addConstantComments(const MachineInstr *MI,
 
     const MachineOperand &MaskOp = MI->getOperand(3 + X86::AddrDisp);
     if (auto *C = getConstantFromPool(*MI, MaskOp)) {
-      unsigned Width = getRegisterWidth(MI->getDesc().OpInfo[0]);
+      unsigned Width = getRegisterWidth(MI->getDesc().operands()[0]);
       SmallVector<int, 16> Mask;
       DecodeVPERMIL2PMask(C, (unsigned)CtrlOp.getImm(), ElSize, Width, Mask);
       if (!Mask.empty())
@@ -2249,7 +2258,7 @@ static void addConstantComments(const MachineInstr *MI,
 
     const MachineOperand &MaskOp = MI->getOperand(3 + X86::AddrDisp);
     if (auto *C = getConstantFromPool(*MI, MaskOp)) {
-      unsigned Width = getRegisterWidth(MI->getDesc().OpInfo[0]);
+      unsigned Width = getRegisterWidth(MI->getDesc().operands()[0]);
       SmallVector<int, 16> Mask;
       DecodeVPPERMMask(C, Width, Mask);
       if (!Mask.empty())
@@ -2498,11 +2507,6 @@ void X86AsmPrinter::emitInstruction(const MachineInstr *MI) {
   switch (MI->getOpcode()) {
   case TargetOpcode::DBG_VALUE:
     llvm_unreachable("Should be handled target independently");
-
-  // Emit nothing here but a comment if we can.
-  case X86::Int_MemBarrier:
-    OutStreamer->emitRawComment("MEMBARRIER");
-    return;
 
   case X86::EH_RETURN:
   case X86::EH_RETURN64: {

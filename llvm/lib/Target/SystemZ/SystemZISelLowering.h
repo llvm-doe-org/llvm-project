@@ -146,9 +146,6 @@ enum NodeType : unsigned {
   // Store the CC value in bits 29 and 28 of an integer.
   IPM,
 
-  // Compiler barrier only; generate a no-op.
-  MEMBARRIER,
-
   // Transaction begin.  The first operand is the chain, the second
   // the TDB pointer, and the third the immediate control field.
   // Returns CC value and chain.
@@ -603,6 +600,10 @@ public:
                                            const SelectionDAG &DAG,
                                            unsigned Depth) const override;
 
+  bool isGuaranteedNotToBeUndefOrPoisonForTargetNode(
+      SDValue Op, const APInt &DemandedElts, const SelectionDAG &DAG,
+      bool PoisonOnly, unsigned Depth) const override;
+
   ISD::NodeType getExtendForAtomicOps() const override {
     return ISD::ANY_EXTEND;
   }
@@ -688,6 +689,7 @@ private:
   SDValue lowerZERO_EXTEND_VECTOR_INREG(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerShift(SDValue Op, SelectionDAG &DAG, unsigned ByScalar) const;
   SDValue lowerIS_FPCLASS(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerGET_ROUNDING(SDValue Op, SelectionDAG &DAG) const;
 
   bool canTreatAsByteVector(EVT VT) const;
   SDValue combineExtract(const SDLoc &DL, EVT ElemVT, EVT VecVT, SDValue OrigOp,

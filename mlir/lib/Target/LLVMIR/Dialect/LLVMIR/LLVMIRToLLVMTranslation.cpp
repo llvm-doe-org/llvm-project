@@ -18,10 +18,12 @@
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/Support/ModRef.h"
 
 using namespace mlir;
 using namespace mlir::LLVM;
@@ -65,6 +67,102 @@ static LogicalResult convertIntrinsicImpl(OpBuilder &odsBuilder,
   return failure();
 }
 
+/// Returns the list of LLVM IR metadata kinds that are convertible to MLIR LLVM
+/// dialect attributes.
+static ArrayRef<unsigned> getSupportedMetadataImpl() {
+  static const SmallVector<unsigned> convertibleMetadata = {
+      llvm::LLVMContext::MD_prof, llvm::LLVMContext::MD_tbaa,
+      llvm::LLVMContext::MD_access_group};
+  return convertibleMetadata;
+}
+
+/// Converts the given profiling metadata `node` to an MLIR profiling attribute
+/// and attaches it to the imported operation if the translation succeeds.
+/// Returns failure otherwise.
+static LogicalResult setProfilingAttr(OpBuilder &builder, llvm::MDNode *node,
+                                      Operation *op,
+                                      LLVM::ModuleImport &moduleImport) {
+  // Return success for empty metadata nodes since there is nothing to import.
+  if (!node->getNumOperands())
+    return success();
+
+  auto *name = dyn_cast<llvm::MDString>(node->getOperand(0));
+  if (!name)
+    return failure();
+
+  // Handle function entry count metadata.
+  if (name->getString().equals("function_entry_count")) {
+    // TODO support function entry count metadata with GUID fields.
+    if (node->getNumOperands() != 2)
+      return failure();
+
+    llvm::ConstantInt *entryCount =
+        llvm::mdconst::extract<llvm::ConstantInt>(node->getOperand(1));
+    if (auto funcOp = dyn_cast<LLVMFuncOp>(op)) {
+      funcOp.setFunctionEntryCount(entryCount->getZExtValue());
+      return success();
+    }
+    return failure();
+  }
+
+  if (!name->getString().equals("branch_weights"))
+    return failure();
+
+  // Handle branch weights metadata.
+  SmallVector<int32_t> branchWeights;
+  branchWeights.reserve(node->getNumOperands() - 1);
+  for (unsigned i = 1, e = node->getNumOperands(); i != e; ++i) {
+    llvm::ConstantInt *branchWeight =
+        llvm::mdconst::extract<llvm::ConstantInt>(node->getOperand(i));
+    branchWeights.push_back(branchWeight->getZExtValue());
+  }
+
+  // Attach the branch weights to the operations that support it.
+  return llvm::TypeSwitch<Operation *, LogicalResult>(op)
+      .Case<CondBrOp, SwitchOp, CallOp, InvokeOp>([&](auto branchWeightOp) {
+        branchWeightOp.setBranchWeightsAttr(
+            builder.getI32VectorAttr(branchWeights));
+        return success();
+      })
+      .Default([](auto) { return failure(); });
+}
+
+/// Searches the symbol reference pointing to the metadata operation that
+/// maps to the given TBAA metadata `node` and attaches it to the imported
+/// operation if the lookup succeeds. Returns failure otherwise.
+static LogicalResult setTBAAAttr(const llvm::MDNode *node, Operation *op,
+                                 LLVM::ModuleImport &moduleImport) {
+  SymbolRefAttr tbaaTagSym = moduleImport.lookupTBAAAttr(node);
+  if (!tbaaTagSym)
+    return failure();
+
+  op->setAttr(LLVMDialect::getTBAAAttrName(),
+              ArrayAttr::get(op->getContext(), tbaaTagSym));
+  return success();
+}
+
+/// Searches the symbol references pointing to the access group operations that
+/// map to the access group nodes starting from the access group metadata
+/// `node`, and attaches all of them to the imported operation if the lookups
+/// succeed. Returns failure otherwise.
+static LogicalResult setAccessGroupAttr(const llvm::MDNode *node, Operation *op,
+                                        LLVM::ModuleImport &moduleImport) {
+  // An access group node is either access group or an access group list.
+  SmallVector<Attribute> accessGroups;
+  if (!node->getNumOperands())
+    accessGroups.push_back(moduleImport.lookupAccessGroupAttr(node));
+  for (const llvm::MDOperand &operand : node->operands()) {
+    auto *node = cast<llvm::MDNode>(operand.get());
+    accessGroups.push_back(moduleImport.lookupAccessGroupAttr(node));
+  }
+  // Exit if one of the access group node lookups failed.
+  if (llvm::is_contained(accessGroups, nullptr))
+    return failure();
+
+  op->setAttr(LLVMDialect::getAccessGroupsAttrName(),
+              ArrayAttr::get(op->getContext(), accessGroups));
+  return success();
+}
 namespace {
 
 /// Implementation of the dialect interface that converts operations belonging
@@ -80,10 +178,34 @@ public:
     return convertIntrinsicImpl(builder, inst, moduleImport);
   }
 
+  /// Attaches the given LLVM metadata to the imported operation if a conversion
+  /// to an LLVM dialect attribute exists and succeeds. Returns failure
+  /// otherwise.
+  LogicalResult setMetadataAttrs(OpBuilder &builder, unsigned kind,
+                                 llvm::MDNode *node, Operation *op,
+                                 LLVM::ModuleImport &moduleImport) const final {
+    // Call metadata specific handlers.
+    if (kind == llvm::LLVMContext::MD_prof)
+      return setProfilingAttr(builder, node, op, moduleImport);
+    if (kind == llvm::LLVMContext::MD_tbaa)
+      return setTBAAAttr(node, op, moduleImport);
+    if (kind == llvm::LLVMContext::MD_access_group)
+      return setAccessGroupAttr(node, op, moduleImport);
+
+    // A handler for a supported metadata kind is missing.
+    llvm_unreachable("unknown metadata type");
+  }
+
   /// Returns the list of LLVM IR intrinsic identifiers that are convertible to
   /// MLIR LLVM dialect intrinsics.
   ArrayRef<unsigned> getSupportedIntrinsics() const final {
     return getSupportedIntrinsicsImpl();
+  }
+
+  /// Returns the list of LLVM IR metadata kinds that are convertible to MLIR
+  /// LLVM dialect attributes.
+  ArrayRef<unsigned> getSupportedMetadata() const final {
+    return getSupportedMetadataImpl();
   }
 };
 } // namespace

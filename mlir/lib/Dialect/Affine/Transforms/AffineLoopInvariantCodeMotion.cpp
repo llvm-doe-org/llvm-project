@@ -106,7 +106,7 @@ bool isOpLoopInvariant(Operation &op, Value indVar, ValueRange iterArgs,
       for (auto *user : memref.getUsers()) {
         // If this memref has a user that is a DMA, give up because these
         // operations write to this memref.
-        if (isa<AffineDmaStartOp, AffineDmaWaitOp>(op))
+        if (isa<AffineDmaStartOp, AffineDmaWaitOp>(user))
           return false;
         // If the memref used by the load/store is used in a store elsewhere in
         // the loop nest, we do not hoist. Similarly, if the memref used in a
@@ -116,7 +116,7 @@ bool isOpLoopInvariant(Operation &op, Value indVar, ValueRange iterArgs,
              isa<AffineWriteOpInterface>(op))) {
           if (&op != user) {
             SmallVector<AffineForOp, 8> userIVs;
-            getLoopIVs(*user, &userIVs);
+            getAffineForIVs(*user, &userIVs);
             // Check that userIVs don't contain the for loop around the op.
             if (llvm::is_contained(userIVs, getForInductionVarOwner(indVar)))
               return false;

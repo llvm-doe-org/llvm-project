@@ -67,7 +67,6 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
       CXX_VISIBILITY_PRESET protected)
 
     target_include_directories( "omptarget.rtl.${tmachine_libname}" PRIVATE
-      ${LIBOMP_INCLUDE_DIR}
       ${LIBOMPTARGET_INCLUDE_DIR}
       ${LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIR})
 
@@ -75,8 +74,6 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
       "omptarget.rtl.${tmachine_libname}")
 
     # Report to the parent scope that we are building a plugin.
-    set(LIBOMPTARGET_SYSTEM_TARGETS
-      "${LIBOMPTARGET_SYSTEM_TARGETS} ${tmachine_triple} ${tmachine_triple}-oldDriver" PARENT_SCOPE)
     set(LIBOMPTARGET_SYSTEM_TARGETS
       "${LIBOMPTARGET_SYSTEM_TARGETS} ${tmachine_triple} ${tmachine_triple}-LTO" PARENT_SCOPE)
     set(LIBOMPTARGET_TESTED_PLUGINS

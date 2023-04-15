@@ -12,7 +12,6 @@
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/Dialect/LLVMIR/LLVMEnums.td"
 include "mlir/Dialect/LLVMIR/LLVMOpBase.td"
-include "mlir/IR/SubElementInterfaces.td"
 
 // All of the attributes will extend this class.
 class LLVM_Attr<string name, string attrMnemonic,
@@ -70,9 +69,9 @@ def LoopOptionsAttr : LLVM_Attr<"LoopOptions", "loopopts"> {
   let extraClassDeclaration = [{
     using OptionValuePair = std::pair<LoopOptionCase, int64_t>;
     using OptionsArray = ArrayRef<std::pair<LoopOptionCase, int64_t>>;
-    Optional<bool> disableUnroll();
-    Optional<bool> disableLICM();
-    Optional<int64_t> interleaveCount();
+    std::optional<bool> disableUnroll();
+    std::optional<bool> disableLICM();
+    std::optional<int64_t> interleaveCount();
   }];
 
   let builders = [
@@ -123,6 +122,15 @@ def LLVM_DITagParameter : LLVM_DIParameter<
 >;
 
 //===----------------------------------------------------------------------===//
+// DIVoidResultTypeAttr
+//===----------------------------------------------------------------------===//
+
+def LLVM_DIVoidResultTypeAttr : LLVM_Attr<"DIVoidResultType", "di_void_result_type",
+                                          /*traits=*/[], "DITypeAttr"> {
+  let parameters = (ins);
+}
+
+//===----------------------------------------------------------------------===//
 // DIBasicTypeAttr
 //===----------------------------------------------------------------------===//
 
@@ -151,9 +159,8 @@ def LLVM_DIBasicTypeAttr : LLVM_Attr<"DIBasicType", "di_basic_type",
 // DICompileUnitAttr
 //===----------------------------------------------------------------------===//
 
-def LLVM_DICompileUnitAttr : LLVM_Attr<"DICompileUnit", "di_compile_unit", [
-    SubElementAttrInterface
-  ], "DIScopeAttr"> {
+def LLVM_DICompileUnitAttr : LLVM_Attr<"DICompileUnit", "di_compile_unit",
+                                       /*traits=*/[], "DIScopeAttr"> {
   let parameters = (ins
     LLVM_DILanguageParameter:$sourceLanguage,
     "DIFileAttr":$file,
@@ -168,9 +175,8 @@ def LLVM_DICompileUnitAttr : LLVM_Attr<"DICompileUnit", "di_compile_unit", [
 // DICompositeTypeAttr
 //===----------------------------------------------------------------------===//
 
-def LLVM_DICompositeTypeAttr : LLVM_Attr<"DICompositeType", "di_composite_type", [
-    SubElementAttrInterface
-  ], "DITypeAttr"> {
+def LLVM_DICompositeTypeAttr : LLVM_Attr<"DICompositeType", "di_composite_type",
+                                         /*traits=*/[], "DITypeAttr"> {
   let parameters = (ins
     LLVM_DITagParameter:$tag,
     "StringAttr":$name,
@@ -190,9 +196,8 @@ def LLVM_DICompositeTypeAttr : LLVM_Attr<"DICompositeType", "di_composite_type",
 // DIDerivedTypeAttr
 //===----------------------------------------------------------------------===//
 
-def LLVM_DIDerivedTypeAttr : LLVM_Attr<"DIDerivedType", "di_derived_type", [
-    SubElementAttrInterface
-  ], "DITypeAttr"> {
+def LLVM_DIDerivedTypeAttr : LLVM_Attr<"DIDerivedType", "di_derived_type",
+                                       /*traits=*/[], "DITypeAttr"> {
   let parameters = (ins
     LLVM_DITagParameter:$tag,
     OptionalParameter<"StringAttr">:$name,
@@ -222,9 +227,8 @@ def LLVM_DIFileAttr : LLVM_Attr<"DIFile", "di_file", /*traits=*/[], "DIScopeAttr
 // DILexicalBlockAttr
 //===----------------------------------------------------------------------===//
 
-def LLVM_DILexicalBlockAttr : LLVM_Attr<"DILexicalBlock", "di_lexical_block", [
-    SubElementAttrInterface
-  ], "DIScopeAttr"> {
+def LLVM_DILexicalBlockAttr : LLVM_Attr<"DILexicalBlock", "di_lexical_block",
+                                        /*traits=*/[], "DIScopeAttr"> {
   let parameters = (ins
     "DIScopeAttr":$scope,
     OptionalParameter<"DIFileAttr">:$file,
@@ -246,9 +250,8 @@ def LLVM_DILexicalBlockAttr : LLVM_Attr<"DILexicalBlock", "di_lexical_block", [
 // DILexicalBlockFileAttr
 //===----------------------------------------------------------------------===//
 
-def LLVM_DILexicalBlockFile : LLVM_Attr<"DILexicalBlockFile", "di_lexical_block_file", [
-    SubElementAttrInterface
-  ], "DIScopeAttr"> {
+def LLVM_DILexicalBlockFile : LLVM_Attr<"DILexicalBlockFile", "di_lexical_block_file",
+                                        /*traits=*/[], "DIScopeAttr"> {
   let parameters = (ins
     "DIScopeAttr":$scope,
     OptionalParameter<"DIFileAttr">:$file,
@@ -268,9 +271,8 @@ def LLVM_DILexicalBlockFile : LLVM_Attr<"DILexicalBlockFile", "di_lexical_block_
 // DILocalVariableAttr
 //===----------------------------------------------------------------------===//
 
-def LLVM_DILocalVariableAttr : LLVM_Attr<"DILocalVariable", "di_local_variable", [
-    SubElementAttrInterface
-  ], "DINodeAttr"> {
+def LLVM_DILocalVariableAttr : LLVM_Attr<"DILocalVariable", "di_local_variable",
+                                         /*traits=*/[], "DINodeAttr"> {
   let parameters = (ins
     "DIScopeAttr":$scope,
     "StringAttr":$name,
@@ -298,9 +300,8 @@ def LLVM_DILocalVariableAttr : LLVM_Attr<"DILocalVariable", "di_local_variable",
 // DISubprogramAttr
 //===----------------------------------------------------------------------===//
 
-def LLVM_DISubprogramAttr : LLVM_Attr<"DISubprogram", "di_subprogram", [
-    SubElementAttrInterface
-  ], "DIScopeAttr"> {
+def LLVM_DISubprogramAttr : LLVM_Attr<"DISubprogram", "di_subprogram",
+                                      /*traits=*/[], "DIScopeAttr"> {
   let parameters = (ins
     "DICompileUnitAttr":$compileUnit,
     "DIScopeAttr":$scope,
@@ -348,19 +349,36 @@ def LLVM_DISubrangeAttr : LLVM_Attr<"DISubrange", "di_subrange", /*traits=*/[],
 // DISubroutineTypeAttr
 //===----------------------------------------------------------------------===//
 
-def LLVM_DISubroutineTypeAttr : LLVM_Attr<"DISubroutineType", "di_subroutine_type", [
-    SubElementAttrInterface
-  ], "DITypeAttr"> {
+def LLVM_DISubroutineTypeAttr : LLVM_Attr<"DISubroutineType", "di_subroutine_type",
+                                          /*traits=*/[], "DITypeAttr"> {
   let parameters = (ins
     LLVM_DICallingConventionParameter:$callingConvention,
-    OptionalParameter<"DITypeAttr">:$resultType,
-    OptionalArrayRefParameter<"DITypeAttr">:$argumentTypes
+    OptionalArrayRefParameter<"DITypeAttr">:$types
   );
   let builders = [
-    TypeBuilder<(ins "DITypeAttr":$resultType,
-                     "ArrayRef<DITypeAttr>":$argumentTypes), [{
-      return $_get($_ctxt, /*callingConvention=*/0, resultType, argumentTypes);
+    TypeBuilder<(ins "ArrayRef<DITypeAttr>":$types), [{
+      return $_get($_ctxt, /*callingConvention=*/0, types);
     }]>
+  ];
+  let assemblyFormat = "`<` struct(params) `>`";
+  let genVerifyDecl = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// MemoryEffectsAttr
+//===----------------------------------------------------------------------===//
+
+def LLVM_MemoryEffectsAttr : LLVM_Attr<"MemoryEffects", "memory_effects"> {
+  let parameters = (ins
+    "ModRefInfo":$other,
+    "ModRefInfo":$argMem,
+    "ModRefInfo":$inaccessibleMem
+  );
+  let extraClassDeclaration = [{
+    bool isReadWrite();
+  }];
+  let builders = [
+    TypeBuilder<(ins "ArrayRef<ModRefInfo>":$memInfoArgs)>
   ];
   let assemblyFormat = "`<` struct(params) `>`";
 }

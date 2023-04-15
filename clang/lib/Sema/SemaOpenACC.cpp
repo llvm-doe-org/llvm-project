@@ -4450,7 +4450,7 @@ enum PosIntResult {PosIntConst, PosIntNonConst, PosIntError};
 
 static PosIntResult IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
                                            OpenACCClauseKind CKind,
-                                           Optional<StringRef> ArgName,
+                                           std::optional<StringRef> ArgName,
                                            bool ErrorIfNotConst) {
   SourceLocation Loc = ValExpr->getExprLoc();
   // This uses err_omp_* diagnostics, but none currently mention OpenMP or
@@ -4467,7 +4467,7 @@ static PosIntResult IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
 
   ValExpr = Value.get();
   // The expression must evaluate to a non-negative integer value.
-  Optional<llvm::APSInt> Result =
+  std::optional<llvm::APSInt> Result =
       ValExpr->getIntegerConstantExpr(SemaRef.Context);
   if (!Result) {
     if (ErrorIfNotConst) {

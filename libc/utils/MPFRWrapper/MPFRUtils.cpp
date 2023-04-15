@@ -190,9 +190,21 @@ public:
     return result;
   }
 
+  MPFRNumber acosh() const {
+    MPFRNumber result(*this);
+    mpfr_acosh(result.value, value, mpfr_rounding);
+    return result;
+  }
+
   MPFRNumber asin() const {
     MPFRNumber result(*this);
     mpfr_asin(result.value, value, mpfr_rounding);
+    return result;
+  }
+
+  MPFRNumber asinh() const {
+    MPFRNumber result(*this);
+    mpfr_asinh(result.value, value, mpfr_rounding);
     return result;
   }
 
@@ -540,8 +552,12 @@ unary_operation(Operation op, InputType input, unsigned int precision,
     return mpfrInput.abs();
   case Operation::Acos:
     return mpfrInput.acos();
+  case Operation::Acosh:
+    return mpfrInput.acosh();
   case Operation::Asin:
     return mpfrInput.asin();
+  case Operation::Asinh:
+    return mpfrInput.asinh();
   case Operation::Atan:
     return mpfrInput.atan();
   case Operation::Atanh:

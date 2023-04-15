@@ -416,7 +416,7 @@ BitsInit *BitsInit::get(RecordKeeper &RK, ArrayRef<Init *> Range) {
 }
 
 void BitsInit::Profile(FoldingSetNodeID &ID) const {
-  ProfileBitsInit(ID, makeArrayRef(getTrailingObjects<Init *>(), NumBits));
+  ProfileBitsInit(ID, ArrayRef(getTrailingObjects<Init *>(), NumBits));
 }
 
 Init *BitsInit::convertInitializerTo(RecTy *Ty) const {
@@ -2190,10 +2190,9 @@ static void ProfileCondOpInit(FoldingSetNodeID &ID,
 }
 
 void CondOpInit::Profile(FoldingSetNodeID &ID) const {
-  ProfileCondOpInit(ID,
-      makeArrayRef(getTrailingObjects<Init *>(), NumConds),
-      makeArrayRef(getTrailingObjects<Init *>() + NumConds, NumConds),
-      ValType);
+  ProfileCondOpInit(ID, ArrayRef(getTrailingObjects<Init *>(), NumConds),
+                    ArrayRef(getTrailingObjects<Init *>() + NumConds, NumConds),
+                    ValType);
 }
 
 CondOpInit *CondOpInit::get(ArrayRef<Init *> CondRange,
@@ -2359,7 +2358,9 @@ DagInit::get(Init *V, StringInit *VN,
 }
 
 void DagInit::Profile(FoldingSetNodeID &ID) const {
-  ProfileDagInit(ID, Val, ValName, makeArrayRef(getTrailingObjects<Init *>(), NumArgs), makeArrayRef(getTrailingObjects<StringInit *>(), NumArgNames));
+  ProfileDagInit(ID, Val, ValName,
+                 ArrayRef(getTrailingObjects<Init *>(), NumArgs),
+                 ArrayRef(getTrailingObjects<StringInit *>(), NumArgNames));
 }
 
 Record *DagInit::getOperatorAsDef(ArrayRef<SMLoc> Loc) const {
@@ -2727,20 +2728,20 @@ BitsInit *Record::getValueAsBitsInit(StringRef FieldName) const {
 }
 
 ListInit *Record::getValueAsListInit(StringRef FieldName) const {
-  llvm::Optional<ListInit*> LI = getValueAsOptionalListInit(FieldName);
+  std::optional<ListInit*> LI = getValueAsOptionalListInit(FieldName);
   if (!LI.has_value())
     PrintFatalError(getLoc(), "Record `" + getName() +
       "' does not have a field named `" + FieldName + "'!\n");
   return LI.value();
 }
 
-llvm::Optional<ListInit*>
+std::optional<ListInit*>
 Record::getValueAsOptionalListInit(StringRef FieldName) const {
   const RecordVal *R = getValue(FieldName);
   if (!R || !R->getValue())
-    return llvm::Optional<ListInit*>();
+    return std::optional<ListInit*>();
   if (isa<UnsetInit>(R->getValue()))
-    return llvm::Optional<ListInit*>();
+    return std::optional<ListInit*>();
   if (ListInit *LI = dyn_cast<ListInit>(R->getValue()))
     return LI;
   PrintFatalError(getLoc(), "Record `" + getName() + "', field `" + FieldName +
@@ -2749,7 +2750,7 @@ Record::getValueAsOptionalListInit(StringRef FieldName) const {
 
 std::vector<Record*>
 Record::getValueAsListOfDefs(StringRef FieldName) const {
-  llvm::Optional<std::vector<Record*>> List =
+  std::optional<std::vector<Record*>> List =
       getValueAsOptionalListOfDefs(FieldName);
   if (!List.has_value())
     PrintFatalError(getLoc(), "Record `" + getName() +
@@ -2757,11 +2758,11 @@ Record::getValueAsListOfDefs(StringRef FieldName) const {
   return List.value();
 }
 
-llvm::Optional<std::vector<Record*>>
+std::optional<std::vector<Record*>>
 Record::getValueAsOptionalListOfDefs(StringRef FieldName) const {
-  llvm::Optional<ListInit*> List = getValueAsOptionalListInit(FieldName);
+  std::optional<ListInit*> List = getValueAsOptionalListInit(FieldName);
   if (!List.has_value())
-    return llvm::Optional<std::vector<Record*>>();
+    return std::optional<std::vector<Record*>>();
   std::vector<Record*> Defs;
   for (Init *I : List.value()->getValues()) {
     if (DefInit *DI = dyn_cast<DefInit>(I))
@@ -2984,7 +2985,7 @@ RecordKeeper::getAllDerivedDefinitions(StringRef ClassName) const {
   // the same vectors multiple times.
   auto Pair = ClassRecordsMap.try_emplace(ClassName);
   if (Pair.second)
-    Pair.first->second = getAllDerivedDefinitions(makeArrayRef(ClassName));
+    Pair.first->second = getAllDerivedDefinitions(ArrayRef(ClassName));
 
   return Pair.first->second;
 }

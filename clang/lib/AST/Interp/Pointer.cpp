@@ -16,6 +16,9 @@ using namespace clang::interp;
 
 Pointer::Pointer(Block *Pointee) : Pointer(Pointee, 0, 0) {}
 
+Pointer::Pointer(Block *Pointee, unsigned BaseAndOffset)
+    : Pointer(Pointee, BaseAndOffset, BaseAndOffset) {}
+
 Pointer::Pointer(const Pointer &P) : Pointer(P.Pointee, P.Base, P.Offset) {}
 
 Pointer::Pointer(Pointer &&P)
@@ -163,22 +166,20 @@ void Pointer::initialize() const {
   Descriptor *Desc = getFieldDesc();
 
   assert(Desc);
-  if (Desc->isArray()) {
-    if (Desc->isPrimitiveArray()) {
-      // Primitive global arrays don't have an initmap.
-      if (isStatic() && Base == 0)
-        return;
+  if (Desc->isPrimitiveArray()) {
+    // Primitive global arrays don't have an initmap.
+    if (isStatic() && Base == 0)
+      return;
 
-      // Primitive array initializer.
-      InitMap *&Map = getInitMap();
-      if (Map == (InitMap *)-1)
-        return;
-      if (Map == nullptr)
-        Map = InitMap::allocate(Desc->getNumElems());
-      if (Map->initialize(getIndex())) {
-        free(Map);
-        Map = (InitMap *)-1;
-      }
+    // Primitive array initializer.
+    InitMap *&Map = getInitMap();
+    if (Map == (InitMap *)-1)
+      return;
+    if (Map == nullptr)
+      Map = InitMap::allocate(Desc->getNumElems());
+    if (Map->initialize(getIndex())) {
+      free(Map);
+      Map = (InitMap *)-1;
     }
   } else {
     // Field has its bit in an inline descriptor.

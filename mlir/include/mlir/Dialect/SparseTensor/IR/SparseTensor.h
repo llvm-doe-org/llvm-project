@@ -38,6 +38,18 @@
 namespace mlir {
 namespace sparse_tensor {
 
+/// Convenience method to abbreviate casting `getType()`.
+template <typename T>
+inline RankedTensorType getRankedTensorType(T t) {
+  return t.getType().template cast<RankedTensorType>();
+}
+
+/// Convenience method to abbreviate casting `getType()`.
+template <typename T>
+inline MemRefType getMemRefType(T t) {
+  return t.getType().template cast<MemRefType>();
+}
+
 /// Convenience method to get a sparse encoding attribute from a type.
 /// Returns null-attribute for any type without an encoding.
 SparseTensorEncodingAttr getSparseTensorEncoding(Type type);
@@ -45,6 +57,11 @@ SparseTensorEncodingAttr getSparseTensorEncoding(Type type);
 /// Returns true iff the given type is a type for a COO tensor with the last
 /// dimension level type being unique.
 bool isUniqueCOOType(RankedTensorType tp);
+
+/// Returns the starting dimension for a trailing COO region that spans across
+/// at least two dimensions. If no such COO region is found, returns the rank
+/// of the tensor.
+unsigned getCOOStart(SparseTensorEncodingAttr enc);
 
 //
 // Dimension level types.

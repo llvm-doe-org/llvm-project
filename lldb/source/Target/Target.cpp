@@ -67,6 +67,7 @@
 
 #include <memory>
 #include <mutex>
+#include <optional>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -356,7 +357,7 @@ BreakpointSP Target::CreateBreakpoint(const FileSpecList *containingModules,
                                       bool hardware,
                                       LazyBool move_to_nearest_code) {
   FileSpec remapped_file;
-  llvm::Optional<llvm::StringRef> removed_prefix_opt =
+  std::optional<llvm::StringRef> removed_prefix_opt =
       GetSourcePathMap().ReverseRemapPath(file, remapped_file);
   if (!removed_prefix_opt)
     remapped_file = file;
@@ -2384,10 +2385,8 @@ Target::GetScratchTypeSystems(bool create_on_demand) {
       if (auto ts = *type_system_or_err)
         scratch_type_systems.push_back(ts);
   }
-  std::sort(scratch_type_systems.begin(), scratch_type_systems.end(),
-            [](lldb::TypeSystemSP a, lldb::TypeSystemSP b) {
-              return a.get() <= b.get();
-            });
+
+  std::sort(scratch_type_systems.begin(), scratch_type_systems.end());
   scratch_type_systems.erase(
       std::unique(scratch_type_systems.begin(), scratch_type_systems.end()),
       scratch_type_systems.end());
@@ -4474,7 +4473,7 @@ void TargetProperties::CheckJITObjectsDir() {
   else if (!writable)
     os << "is not writable";
 
-  llvm::Optional<lldb::user_id_t> debugger_id;
+  std::optional<lldb::user_id_t> debugger_id;
   if (m_target)
     debugger_id = m_target->GetDebugger().GetID();
   Debugger::ReportError(os.str(), debugger_id);

@@ -1,4 +1,4 @@
-// RUN: mlir-opt %s -canonicalize --split-input-file | FileCheck %s
+// RUN: mlir-opt %s -canonicalize="test-convergence" --split-input-file | FileCheck %s
 
 // CHECK-LABEL: @select_same_val
 //       CHECK:   return %arg1
@@ -1869,6 +1869,33 @@ func.func @test_andi_not_fold_lhs(%arg0 : index) -> index {
     %1 = arith.xori %arg0, %0 : index
     %2 = arith.andi %1, %arg0 : index
     return %2 : index
+}
+
+// -----
+
+// CHECK-LABEL: @test_andi_not_fold_rhs_vec(
+// CHECK-SAME: %[[ARG0:[[:alnum:]]+]]
+// CHECK: %[[C:.*]] = arith.constant dense<0> : vector<2xi32>
+// CHECK: return %[[C]]
+
+func.func @test_andi_not_fold_rhs_vec(%arg0 : vector<2xi32>) -> vector<2xi32> {
+    %0 = arith.constant dense<[-1, -1]> : vector<2xi32>
+    %1 = arith.xori %arg0, %0 : vector<2xi32>
+    %2 = arith.andi %arg0, %1 : vector<2xi32>
+    return %2 : vector<2xi32>
+}
+
+
+// CHECK-LABEL: @test_andi_not_fold_lhs_vec(
+// CHECK-SAME: %[[ARG0:[[:alnum:]]+]]
+// CHECK: %[[C:.*]] = arith.constant dense<0> : vector<2xi32>
+// CHECK: return %[[C]]
+
+func.func @test_andi_not_fold_lhs_vec(%arg0 : vector<2xi32>) -> vector<2xi32> {
+    %0 = arith.constant dense<[-1, -1]> : vector<2xi32>
+    %1 = arith.xori %arg0, %0 : vector<2xi32>
+    %2 = arith.andi %1, %arg0 : vector<2xi32>
+    return %2 : vector<2xi32>
 }
 
 // -----

@@ -72,7 +72,7 @@ class RewriteOpenACC : public ASTConsumer,
     assert(Tok.getKind() != tok::semi &&
            "expected recorded end token not to be a semicolon");
 #endif
-    Optional<Token> Next = Lexer::findNextToken(RecordedEnd, SM, LO);
+    std::optional<Token> Next = Lexer::findNextToken(RecordedEnd, SM, LO);
     // If Tok is expanded from a macro and is not the last token in the
     // expansion, findNextToken refuses to look for the next token and returns
     // None.  Assume the final semicolon is the next token and is thus within

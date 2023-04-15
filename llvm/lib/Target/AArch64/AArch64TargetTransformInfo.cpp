@@ -39,6 +39,7 @@ static cl::opt<unsigned> SVEGatherOverhead("sve-gather-overhead", cl::init(10),
 static cl::opt<unsigned> SVEScatterOverhead("sve-scatter-overhead",
                                             cl::init(10), cl::Hidden);
 
+namespace {
 class TailFoldingKind {
 private:
   uint8_t Bits = 0; // Currently defaults to disabled.
@@ -89,6 +90,7 @@ public:
   void add(uint8_t Flag) { Bits |= Flag; }
   void remove(uint8_t Flag) { Bits &= ~Flag; }
 };
+} // namespace
 
 TailFoldingKind TailFoldingKindLoc;
 
@@ -1434,6 +1436,99 @@ static std::optional<Instruction *> instCombineSVESDIV(InstCombiner &IC,
   return std::nullopt;
 }
 
+bool SimplifyValuePattern(SmallVector<Value *> &Vec, bool AllowPoison) {
+  size_t VecSize = Vec.size();
+  if (VecSize == 1)
+    return true;
+  if (!isPowerOf2_64(VecSize))
+    return false;
+  size_t HalfVecSize = VecSize / 2;
+
+  for (auto LHS = Vec.begin(), RHS = Vec.begin() + HalfVecSize;
+       RHS != Vec.end(); LHS++, RHS++) {
+    if (*LHS != nullptr && *RHS != nullptr) {
+      if (*LHS == *RHS)
+        continue;
+      else
+        return false;
+    }
+    if (!AllowPoison)
+      return false;
+    if (*LHS == nullptr && *RHS != nullptr)
+      *LHS = *RHS;
+  }
+
+  Vec.resize(HalfVecSize);
+  SimplifyValuePattern(Vec, AllowPoison);
+  return true;
+}
+
+// Try to simplify dupqlane patterns like dupqlane(f32 A, f32 B, f32 A, f32 B)
+// to dupqlane(f64(C)) where C is A concatenated with B
+static std::optional<Instruction *> instCombineSVEDupqLane(InstCombiner &IC,
+                                                           IntrinsicInst &II) {
+  Value *CurrentInsertElt = nullptr, *Default = nullptr;
+  if (!match(II.getOperand(0),
+             m_Intrinsic<Intrinsic::vector_insert>(
+                 m_Value(Default), m_Value(CurrentInsertElt), m_Value())) ||
+      !isa<FixedVectorType>(CurrentInsertElt->getType()))
+    return std::nullopt;
+  auto IIScalableTy = cast<ScalableVectorType>(II.getType());
+
+  // Insert the scalars into a container ordered by InsertElement index
+  SmallVector<Value *> Elts(IIScalableTy->getMinNumElements(), nullptr);
+  while (auto InsertElt = dyn_cast<InsertElementInst>(CurrentInsertElt)) {
+    auto Idx = cast<ConstantInt>(InsertElt->getOperand(2));
+    Elts[Idx->getValue().getZExtValue()] = InsertElt->getOperand(1);
+    CurrentInsertElt = InsertElt->getOperand(0);
+  }
+
+  bool AllowPoison =
+      isa<PoisonValue>(CurrentInsertElt) && isa<PoisonValue>(Default);
+  if (!SimplifyValuePattern(Elts, AllowPoison))
+    return std::nullopt;
+
+  // Rebuild the simplified chain of InsertElements. e.g. (a, b, a, b) as (a, b)
+  IRBuilder<> Builder(II.getContext());
+  Builder.SetInsertPoint(&II);
+  Value *InsertEltChain = PoisonValue::get(CurrentInsertElt->getType());
+  for (size_t I = 0; I < Elts.size(); I++) {
+    if (Elts[I] == nullptr)
+      continue;
+    InsertEltChain = Builder.CreateInsertElement(InsertEltChain, Elts[I],
+                                                 Builder.getInt64(I));
+  }
+  if (InsertEltChain == nullptr)
+    return std::nullopt;
+
+  // Splat the simplified sequence, e.g. (f16 a, f16 b, f16 c, f16 d) as one i64
+  // value or (f16 a, f16 b) as one i32 value. This requires an InsertSubvector
+  // be bitcast to a type wide enough to fit the sequence, be splatted, and then
+  // be narrowed back to the original type.
+  unsigned PatternWidth = IIScalableTy->getScalarSizeInBits() * Elts.size();
+  unsigned PatternElementCount = IIScalableTy->getScalarSizeInBits() *
+                                 IIScalableTy->getMinNumElements() /
+                                 PatternWidth;
+
+  IntegerType *WideTy = Builder.getIntNTy(PatternWidth);
+  auto *WideScalableTy = ScalableVectorType::get(WideTy, PatternElementCount);
+  auto *WideShuffleMaskTy =
+      ScalableVectorType::get(Builder.getInt32Ty(), PatternElementCount);
+
+  auto ZeroIdx = ConstantInt::get(Builder.getInt64Ty(), APInt(64, 0));
+  auto InsertSubvector = Builder.CreateInsertVector(
+      II.getType(), PoisonValue::get(II.getType()), InsertEltChain, ZeroIdx);
+  auto WideBitcast =
+      Builder.CreateBitOrPointerCast(InsertSubvector, WideScalableTy);
+  auto WideShuffleMask = ConstantAggregateZero::get(WideShuffleMaskTy);
+  auto WideShuffle = Builder.CreateShuffleVector(
+      WideBitcast, PoisonValue::get(WideScalableTy), WideShuffleMask);
+  auto NarrowBitcast =
+      Builder.CreateBitOrPointerCast(WideShuffle, II.getType());
+
+  return IC.replaceInstUsesWith(II, NarrowBitcast);
+}
+
 static std::optional<Instruction *> instCombineMaxMinNM(InstCombiner &IC,
                                                         IntrinsicInst &II) {
   Value *A = II.getArgOperand(0);
@@ -1551,6 +1646,8 @@ AArch64TTIImpl::instCombineIntrinsic(InstCombiner &IC,
     return instCombineSVESel(IC, II);
   case Intrinsic::aarch64_sve_srshl:
     return instCombineSVESrshl(IC, II);
+  case Intrinsic::aarch64_sve_dupq_lane:
+    return instCombineSVEDupqLane(IC, II);
   }
 
   return std::nullopt;
@@ -1975,6 +2072,23 @@ InstructionCost AArch64TTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst,
     { ISD::BITCAST, MVT::nxv2i16, MVT::nxv2f16, 0 },
     { ISD::BITCAST, MVT::nxv4i16, MVT::nxv4f16, 0 },
     { ISD::BITCAST, MVT::nxv2i32, MVT::nxv2f32, 0 },
+
+    // Add cost for extending to illegal -too wide- scalable vectors.
+    // zero/sign extend are implemented by multiple unpack operations,
+    // where each operation has a cost of 1.
+    { ISD::ZERO_EXTEND, MVT::nxv16i16, MVT::nxv16i8, 2},
+    { ISD::ZERO_EXTEND, MVT::nxv16i32, MVT::nxv16i8, 6},
+    { ISD::ZERO_EXTEND, MVT::nxv16i64, MVT::nxv16i8, 14},
+    { ISD::ZERO_EXTEND, MVT::nxv8i32, MVT::nxv8i16, 2},
+    { ISD::ZERO_EXTEND, MVT::nxv8i64, MVT::nxv8i16, 6},
+    { ISD::ZERO_EXTEND, MVT::nxv4i64, MVT::nxv4i32, 2},
+
+    { ISD::SIGN_EXTEND, MVT::nxv16i16, MVT::nxv16i8, 2},
+    { ISD::SIGN_EXTEND, MVT::nxv16i32, MVT::nxv16i8, 6},
+    { ISD::SIGN_EXTEND, MVT::nxv16i64, MVT::nxv16i8, 14},
+    { ISD::SIGN_EXTEND, MVT::nxv8i32, MVT::nxv8i16, 2},
+    { ISD::SIGN_EXTEND, MVT::nxv8i64, MVT::nxv8i16, 6},
+    { ISD::SIGN_EXTEND, MVT::nxv4i64, MVT::nxv4i32, 2},
   };
 
   if (const auto *Entry = ConvertCostTableLookup(ConversionTbl, ISD,
@@ -2034,14 +2148,14 @@ InstructionCost AArch64TTIImpl::getExtractWithExtendCost(unsigned Opcode,
 
   // Get the cost for the extract. We compute the cost (if any) for the extend
   // below.
-  InstructionCost Cost =
-      getVectorInstrCost(Instruction::ExtractElement, VecTy, Index);
+  TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput;
+  InstructionCost Cost = getVectorInstrCost(Instruction::ExtractElement, VecTy,
+                                            CostKind, Index, nullptr, nullptr);
 
   // Legalize the types.
   auto VecLT = getTypeLegalizationCost(VecTy);
   auto DstVT = TLI->getValueType(DL, Dst);
   auto SrcVT = TLI->getValueType(DL, Src);
-  TTI::TargetCostKind CostKind = TTI::TCK_RecipThroughput;
 
   // If the resulting type is still a vector and the destination type is legal,
   // we may get the extension for free. If not, get the default cost for the
@@ -2128,12 +2242,16 @@ InstructionCost AArch64TTIImpl::getVectorInstrCostHelper(Type *Val,
 }
 
 InstructionCost AArch64TTIImpl::getVectorInstrCost(unsigned Opcode, Type *Val,
-                                                   unsigned Index) {
+                                                   TTI::TargetCostKind CostKind,
+                                                   unsigned Index, Value *Op0,
+                                                   Value *Op1) {
   return getVectorInstrCostHelper(Val, Index, false /* HasRealUse */);
 }
 
 InstructionCost AArch64TTIImpl::getVectorInstrCost(const Instruction &I,
-                                                   Type *Val, unsigned Index) {
+                                                   Type *Val,
+                                                   TTI::TargetCostKind CostKind,
+                                                   unsigned Index) {
   return getVectorInstrCostHelper(Val, Index, true /* HasRealUse */);
 }
 
@@ -2198,9 +2316,9 @@ InstructionCost AArch64TTIImpl::getArithmeticInstrCost(
       if (TLI->isOperationLegalOrCustom(ISD, LT.second) && ST->hasSVE()) {
         // SDIV/UDIV operations are lowered using SVE, then we can have less
         // costs.
-        if (isa<FixedVectorType>(Ty) &&
-            cast<FixedVectorType>(Ty)->getPrimitiveSizeInBits().getFixedSize() <
-                128) {
+        if (isa<FixedVectorType>(Ty) && cast<FixedVectorType>(Ty)
+                                                ->getPrimitiveSizeInBits()
+                                                .getFixedValue() < 128) {
           EVT VT = TLI->getValueType(DL, Ty);
           static const CostTblEntry DivTbl[]{
               {ISD::SDIV, MVT::v2i8, 5},  {ISD::SDIV, MVT::v4i8, 8},

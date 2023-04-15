@@ -24,6 +24,7 @@
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include "llvm/Frontend/OpenMP/OMPGridValues.h"
+#include "llvm/Support/Error.h"
 
 namespace llvm {
 namespace omp {
@@ -60,13 +61,13 @@ struct CUDAKernelTy : public GenericKernelTy {
   }
 
   /// Launch the CUDA kernel function
-  Error launchImpl(GenericDeviceTy &GenericDevice, uint32_t NumThreads,
-                   uint64_t NumBlocks, uint32_t DynamicMemorySize,
-                   int32_t NumKernelArgs, void *KernelArgs,
-                   AsyncInfoWrapperTy &AsyncInfoWrapper) const override;
+  Error launchImpl(
+      GenericDeviceTy &GenericDevice, uint32_t NumThreads, uint64_t NumBlocks,
+      KernelArgsTy &KernelArgs, void *Args, AsyncInfoWrapperTy &AsyncInfoWrapper
+      OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) const override;
 
   /// The default number of blocks is common to the whole device.
-  uint64_t getDefaultNumBlocks(GenericDeviceTy &GenericDevice) const override {
+  uint32_t getDefaultNumBlocks(GenericDeviceTy &GenericDevice) const override {
     return GenericDevice.getDefaultNumBlocks();
   }
 
@@ -348,33 +349,14 @@ struct CUDADeviceTy : public GenericDeviceTy {
     DP("Entry point " DPxMOD " maps to %s (" DPxMOD ")\n", DPxPTR(&KernelEntry),
        KernelEntry.name, DPxPTR(Func));
 
-    // Create a metadata object for the exec mode global (auto-generated).
-    StaticGlobalTy<llvm::omp::OMPTgtExecModeFlags> ExecModeGlobal(
-        KernelEntry.name, "_exec_mode");
-
-    // Retrieve execution mode for the kernel. This may fail since some kernels
-    // may not have a execution mode.
-    GenericGlobalHandlerTy &GHandler = Plugin::get().getGlobalHandler();
-    if (auto Err = GHandler.readGlobalFromImage(*this, Image, ExecModeGlobal)) {
-      // In some cases the execution mode is not included, so use the default.
-      ExecModeGlobal.setValue(llvm::omp::OMP_TGT_EXEC_MODE_GENERIC);
-      // Consume the error since it is acceptable to fail.
-      [[maybe_unused]] std::string ErrStr = toString(std::move(Err));
-
-      DP("Failed to read execution mode for '%s': %s\n"
-         "Using default GENERIC (1) execution mode\n",
-         KernelEntry.name, ErrStr.data());
-    }
-
-    // Check that the retrieved execution mode is valid.
-    if (!GenericKernelTy::isValidExecutionMode(ExecModeGlobal.getValue()))
-      return Plugin::error("Invalid execution mode %d for '%s'",
-                           ExecModeGlobal.getValue(), KernelEntry.name);
+    Expected<OMPTgtExecModeFlags> ExecModeOrErr =
+        getExecutionModeForKernel(KernelEntry.name, Image);
+    if (!ExecModeOrErr)
+      return ExecModeOrErr.takeError();
 
     // Allocate and initialize the CUDA kernel.
     CUDAKernelTy *CUDAKernel = Plugin::get().allocate<CUDAKernelTy>();
-    new (CUDAKernel)
-        CUDAKernelTy(KernelEntry.name, ExecModeGlobal.getValue(), Func);
+    new (CUDAKernel) CUDAKernelTy(KernelEntry.name, ExecModeOrErr.get(), Func);
 
     return CUDAKernel;
   }
@@ -512,9 +494,18 @@ struct CUDADeviceTy : public GenericDeviceTy {
     return Plugin::check(Res, "Error in cuStreamQuery: %s");
   }
 
+  Expected<void *> dataLockImpl(void *HstPtr, int64_t Size) override {
+    // TODO: Register the buffer as CUDA host memory.
+    return HstPtr;
+  }
+
+  Error dataUnlockImpl(void *HstPtr) override { return Plugin::success(); }
+
   /// Submit data to the device (host to device transfer).
-  Error dataSubmitImpl(void *TgtPtr, const void *HstPtr, int64_t Size,
-                       AsyncInfoWrapperTy &AsyncInfoWrapper) override {
+  Error dataSubmitImpl(
+      void *TgtPtr, const void *HstPtr, int64_t Size,
+      AsyncInfoWrapperTy &AsyncInfoWrapper
+      OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) override {
     if (auto Err = setContext())
       return Err;
 
@@ -522,13 +513,23 @@ struct CUDADeviceTy : public GenericDeviceTy {
     if (!Stream)
       return Plugin::error("Failure to get stream");
 
+#if OMPT_SUPPORT
+    dispatchOmptCallbackTargetDataTransferToDevice(OmptApi, ompt_scope_begin,
+                                                   HstPtr, TgtPtr, Size);
+#endif
     CUresult Res = cuMemcpyHtoDAsync((CUdeviceptr)TgtPtr, HstPtr, Size, Stream);
+#if OMPT_SUPPORT
+    dispatchOmptCallbackTargetDataTransferToDevice(OmptApi, ompt_scope_end,
+                                                   HstPtr, TgtPtr, Size);
+#endif
     return Plugin::check(Res, "Error in cuMemcpyHtoDAsync: %s");
   }
 
   /// Retrieve data from the device (device to host transfer).
-  Error dataRetrieveImpl(void *HstPtr, const void *TgtPtr, int64_t Size,
-                         AsyncInfoWrapperTy &AsyncInfoWrapper) override {
+  Error dataRetrieveImpl(
+      void *HstPtr, const void *TgtPtr, int64_t Size,
+      AsyncInfoWrapperTy &AsyncInfoWrapper
+      OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) override {
     if (auto Err = setContext())
       return Err;
 
@@ -536,7 +537,15 @@ struct CUDADeviceTy : public GenericDeviceTy {
     if (!Stream)
       return Plugin::error("Failure to get stream");
 
+#if OMPT_SUPPORT
+    dispatchOmptCallbackTargetDataTransferFromDevice(OmptApi, ompt_scope_begin,
+                                                     TgtPtr, HstPtr, Size);
+#endif
     CUresult Res = cuMemcpyDtoHAsync(HstPtr, (CUdeviceptr)TgtPtr, Size, Stream);
+#if OMPT_SUPPORT
+    dispatchOmptCallbackTargetDataTransferFromDevice(OmptApi, ompt_scope_end,
+                                                     TgtPtr, HstPtr, Size);
+#endif
     return Plugin::check(Res, "Error in cuMemcpyDtoHAsync: %s");
   }
 
@@ -802,8 +811,10 @@ struct CUDADeviceTy : public GenericDeviceTy {
     return Plugin::check(Res, "Error in cuDeviceGetAttribute: %s");
   }
 
-  /// See GenericDeviceTy::getArch().
-  std::string getArch() const override { return ComputeCapability.str(); }
+  /// See GenericDeviceTy::getComputeUnitKind().
+  std::string getComputeUnitKind() const override {
+    return ComputeCapability.str();
+  }
 
 private:
   using CUDAStreamManagerTy = GenericDeviceResourceManagerTy<CUDAStreamRef>;
@@ -832,22 +843,32 @@ private:
   } ComputeCapability;
 };
 
-Error CUDAKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
-                               uint32_t NumThreads, uint64_t NumBlocks,
-                               uint32_t DynamicMemorySize,
-                               int32_t NumKernelArgs, void *KernelArgs,
-                               AsyncInfoWrapperTy &AsyncInfoWrapper) const {
+Error CUDAKernelTy::launchImpl(
+    GenericDeviceTy &GenericDevice, uint32_t NumThreads, uint64_t NumBlocks,
+    KernelArgsTy &KernelArgs, void *Args, AsyncInfoWrapperTy &AsyncInfoWrapper
+    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) const {
+#if OMPT_SUPPORT
+  dispatchOmptCallbackTargetSubmit(OmptApi, ompt_scope_begin,
+                                   KernelArgs.NumTeams[0]);
+#endif
   CUDADeviceTy &CUDADevice = static_cast<CUDADeviceTy &>(GenericDevice);
 
   CUstream Stream = CUDADevice.getStream(AsyncInfoWrapper);
   if (!Stream)
     return Plugin::error("Failure to get stream");
 
+  uint32_t MaxDynCGroupMem =
+      std::max(KernelArgs.DynCGroupMem, GenericDevice.getDynamicMemorySize());
+
   CUresult Res =
       cuLaunchKernel(Func, NumBlocks, /* gridDimY */ 1,
                      /* gridDimZ */ 1, NumThreads,
-                     /* blockDimY */ 1, /* blockDimZ */ 1, DynamicMemorySize,
-                     Stream, (void **)KernelArgs, nullptr);
+                     /* blockDimY */ 1, /* blockDimZ */ 1, MaxDynCGroupMem,
+                     Stream, (void **)Args, nullptr);
+#if OMPT_SUPPORT
+  dispatchOmptCallbackTargetSubmit(OmptApi, ompt_scope_end,
+                                   KernelArgs.NumTeams[0]);
+#endif
   return Plugin::check(Res, "Error in cuLaunchKernel for '%s': %s", getName());
 }
 
@@ -885,7 +906,7 @@ public:
 /// Class implementing the CUDA-specific functionalities of the plugin.
 struct CUDAPluginTy final : public GenericPluginTy {
   /// Create a CUDA plugin.
-  CUDAPluginTy() : GenericPluginTy() {}
+  CUDAPluginTy() : GenericPluginTy(getTripleArch()) {}
 
   /// This class should not be copied.
   CUDAPluginTy(const CUDAPluginTy &) = delete;
@@ -968,6 +989,8 @@ struct CUDAPluginTy final : public GenericPluginTy {
     }
     return true;
   }
+
+  omp_device_t getOMPDeviceType() const override { return omp_device_nvptx64; }
 };
 
 Error CUDADeviceTy::dataExchangeImpl(const void *SrcPtr,

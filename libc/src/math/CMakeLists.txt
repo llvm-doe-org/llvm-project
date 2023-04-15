@@ -65,9 +65,11 @@ add_entrypoint_object(
 )
 
 add_math_entrypoint_object(acosf)
+add_math_entrypoint_object(acoshf)
 
 add_math_entrypoint_object(asin)
 add_math_entrypoint_object(asinf)
+add_math_entrypoint_object(asinhf)
 
 add_math_entrypoint_object(atanf)
 
@@ -131,6 +133,7 @@ add_math_entrypoint_object(ldexp)
 add_math_entrypoint_object(ldexpf)
 add_math_entrypoint_object(ldexpl)
 
+add_math_entrypoint_object(log10)
 add_math_entrypoint_object(log10f)
 
 add_math_entrypoint_object(log1pf)

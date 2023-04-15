@@ -35,6 +35,7 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/StringSaver.h"
 #include "llvm/Support/xxhash.h"
+#include <optional>
 
 using namespace clang;
 
@@ -1508,7 +1509,7 @@ void MicrosoftCXXNameMangler::mangleIntegerLiteral(
 void MicrosoftCXXNameMangler::mangleExpression(
     const Expr *E, const NonTypeTemplateParmDecl *PD) {
   // See if this is a constant expression.
-  if (Optional<llvm::APSInt> Value =
+  if (std::optional<llvm::APSInt> Value =
           E->getIntegerConstantExpr(Context.getASTContext())) {
     mangleIntegerLiteral(*Value, PD, E->getType());
     return;
@@ -2476,6 +2477,13 @@ void MicrosoftCXXNameMangler::mangleType(const BuiltinType *T, Qualifiers,
     mangleArtificialTagType(TTK_Struct, "__bf16", {"__clang"});
     break;
 
+#define WASM_REF_TYPE(InternalName, MangledName, Id, SingletonId, AS)          \
+  case BuiltinType::Id:                                                        \
+    mangleArtificialTagType(TTK_Struct, MangledName);                          \
+    mangleArtificialTagType(TTK_Struct, MangledName, {"__clang"});             \
+    break;
+
+#include "clang/Basic/WebAssemblyReferenceTypes.def"
 #define SVE_TYPE(Name, Id, SingletonId) \
   case BuiltinType::Id:
 #include "clang/Basic/AArch64SVEACLETypes.def"

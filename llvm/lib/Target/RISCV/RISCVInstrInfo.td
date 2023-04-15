@@ -154,7 +154,7 @@ class UImmAsmOperand<int width, string suffix = "">
 def FenceArg : AsmOperandClass {
   let Name = "FenceArg";
   let RenderMethod = "addFenceArgOperands";
-  let DiagnosticType = "InvalidFenceArg";
+  let ParserMethod = "parseFenceArg";
 }
 
 def fencearg : Operand<XLenVT> {
@@ -191,11 +191,17 @@ def uimmlog2xlen : Operand<XLenVT>, ImmLeaf<XLenVT, [{
   let OperandNamespace = "RISCVOp";
 }
 
-def uimm2 : Operand<XLenVT> {
+def uimm2 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<2>(Imm);}]> {
   let ParserMatchClass = UImmAsmOperand<2>;
   let DecoderMethod = "decodeUImmOperand<2>";
   let OperandType = "OPERAND_UIMM2";
   let OperandNamespace = "RISCVOp";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (!MCOp.evaluateAsConstantImm(Imm))
+      return false;
+    return isUInt<2>(Imm);
+  }];
 }
 
 def uimm3 : Operand<XLenVT> {
@@ -446,13 +452,13 @@ def AddiPairImmLarge : SDNodeXForm<imm, [{
 }]>;
 
 def TrailingZeros : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(countTrailingZeros(N->getZExtValue()),
+  return CurDAG->getTargetConstant(llvm::countr_zero(N->getZExtValue()),
                                    SDLoc(N), N->getValueType(0));
 }]>;
 
 def XLenSubTrailingOnes : SDNodeXForm<imm, [{
   uint64_t XLen = Subtarget->getXLen();
-  uint64_t TrailingOnes = countTrailingOnes(N->getZExtValue());
+  uint64_t TrailingOnes = llvm::countr_one(N->getZExtValue());
   return CurDAG->getTargetConstant(XLen - TrailingOnes, SDLoc(N),
                                    N->getValueType(0));
 }]>;
@@ -833,6 +839,8 @@ def HINVAL_GVMA : Priv_rr<"hinval.gvma", 0b0110011>, Sched<[]>;
 } // Predicates = [HasStdExtSvinval]
 
 def SFENCE_VMA  : Priv_rr<"sfence.vma", 0b0001001>, Sched<[]>;
+
+let Predicates = [HasStdExtH] in {
 def HFENCE_VVMA : Priv_rr<"hfence.vvma", 0b0010001>, Sched<[]>;
 def HFENCE_GVMA : Priv_rr<"hfence.gvma", 0b0110001>, Sched<[]>;
 
@@ -846,8 +854,8 @@ def HLVX_WU : HLoad_r<0b0110100, 0b00011, "hlvx.wu">, Sched<[]>;
 def HSV_B   : HStore_rr<0b0110001, "hsv.b">, Sched<[]>;
 def HSV_H   : HStore_rr<0b0110011, "hsv.h">, Sched<[]>;
 def HSV_W   : HStore_rr<0b0110101, "hsv.w">, Sched<[]>;
-
-let Predicates = [IsRV64] in {
+}
+let Predicates = [IsRV64, HasStdExtH] in {
 def HLV_WU  : HLoad_r<0b0110100, 0b00001, "hlv.wu">, Sched<[]>;
 def HLV_D   : HLoad_r<0b0110110, 0b00000, "hlv.d">, Sched<[]>;
 def HSV_D   : HStore_rr<0b0110111, "hsv.d">, Sched<[]>;
@@ -1851,6 +1859,7 @@ include "RISCVInstrInfoF.td"
 include "RISCVInstrInfoD.td"
 include "RISCVInstrInfoC.td"
 include "RISCVInstrInfoZb.td"
+include "RISCVInstrInfoZc.td"
 include "RISCVInstrInfoZk.td"
 include "RISCVInstrInfoV.td"
 include "RISCVInstrInfoZfh.td"

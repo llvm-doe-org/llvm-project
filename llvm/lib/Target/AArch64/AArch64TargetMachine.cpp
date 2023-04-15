@@ -238,6 +238,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAArch64Target() {
   initializeAArch64StackTaggingPreRAPass(*PR);
   initializeAArch64LowerHomogeneousPrologEpilogPass(*PR);
   initializeAArch64DAGToDAGISelPass(*PR);
+  initializeAArch64GlobalsTaggingPass(*PR);
 }
 
 //===----------------------------------------------------------------------===//
@@ -587,6 +588,7 @@ void AArch64PassConfig::addIRPasses() {
   if (getOptLevel() == CodeGenOpt::Aggressive && EnableSelectOpt)
     addPass(createSelectOptimizePass());
 
+  addPass(createAArch64GlobalsTaggingPass());
   addPass(createAArch64StackTaggingPass(
       /*IsOptNone=*/TM->getOptLevel() == CodeGenOpt::None));
 
@@ -648,7 +650,7 @@ bool AArch64PassConfig::addPreISel() {
 
 void AArch64PassConfig::addCodeGenPrepare() {
   if (getOptLevel() != CodeGenOpt::None)
-    addPass(createTypePromotionPass());
+    addPass(createTypePromotionLegacyPass());
   TargetPassConfig::addCodeGenPrepare();
 }
 

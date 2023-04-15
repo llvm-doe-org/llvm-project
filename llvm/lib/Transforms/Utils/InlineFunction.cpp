@@ -23,7 +23,6 @@
 #include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/CaptureTracking.h"
-#include "llvm/Analysis/EHPersonalities.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/MemoryProfileInfo.h"
 #include "llvm/Analysis/ObjCARCAnalysisUtils.h"
@@ -42,6 +41,7 @@
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Dominators.h"
+#include "llvm/IR/EHPersonalities.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InlineAsm.h"
@@ -549,13 +549,6 @@ static BasicBlock *HandleCallsInBlockInlinedThroughInvoke(
 
     if (!CI || CI->doesNotThrow())
       continue;
-
-    if (CI->isInlineAsm()) {
-      InlineAsm *IA = cast<InlineAsm>(CI->getCalledOperand());
-      if (!IA->canThrow()) {
-        continue;
-      }
-    }
 
     // We do not need to (and in fact, cannot) convert possibly throwing calls
     // to @llvm.experimental_deoptimize (resp. @llvm.experimental.guard) into
@@ -1444,23 +1437,26 @@ static void AddAlignmentAssumptions(CallBase &CB, InlineFunctionInfo &IFI) {
 
   Function *CalledFunc = CB.getCalledFunction();
   for (Argument &Arg : CalledFunc->args()) {
-    unsigned Align = Arg.getType()->isPointerTy() ? Arg.getParamAlignment() : 0;
-    if (Align && !Arg.hasPassPointeeByValueCopyAttr() && !Arg.hasNUses(0)) {
-      if (!DTCalculated) {
-        DT.recalculate(*CB.getCaller());
-        DTCalculated = true;
-      }
+    if (!Arg.getType()->isPointerTy() || Arg.hasPassPointeeByValueCopyAttr() ||
+        Arg.hasNUses(0))
+      continue;
+    MaybeAlign Alignment = Arg.getParamAlign();
+    if (!Alignment)
+      continue;
 
-      // If we can already prove the asserted alignment in the context of the
-      // caller, then don't bother inserting the assumption.
-      Value *ArgVal = CB.getArgOperand(Arg.getArgNo());
-      if (getKnownAlignment(ArgVal, DL, &CB, AC, &DT) >= Align)
-        continue;
-
-      CallInst *NewAsmp =
-          IRBuilder<>(&CB).CreateAlignmentAssumption(DL, ArgVal, Align);
-      AC->registerAssumption(cast<AssumeInst>(NewAsmp));
+    if (!DTCalculated) {
+      DT.recalculate(*CB.getCaller());
+      DTCalculated = true;
     }
+    // If we can already prove the asserted alignment in the context of the
+    // caller, then don't bother inserting the assumption.
+    Value *ArgVal = CB.getArgOperand(Arg.getArgNo());
+    if (getKnownAlignment(ArgVal, DL, &CB, AC, &DT) >= *Alignment)
+      continue;
+
+    CallInst *NewAsmp = IRBuilder<>(&CB).CreateAlignmentAssumption(
+        DL, ArgVal, Alignment->value());
+    AC->registerAssumption(cast<AssumeInst>(NewAsmp));
   }
 }
 
@@ -1560,7 +1556,7 @@ static Value *HandleByValArgument(Type *ByValType, Value *Arg,
                                   Instruction *TheCall,
                                   const Function *CalledFunc,
                                   InlineFunctionInfo &IFI,
-                                  unsigned ByValAlignment) {
+                                  MaybeAlign ByValAlignment) {
   assert(cast<PointerType>(Arg->getType())
              ->isOpaqueOrPointeeTypeMatches(ByValType));
   Function *Caller = TheCall->getFunction();
@@ -1573,7 +1569,7 @@ static Value *HandleByValArgument(Type *ByValType, Value *Arg,
     // If the byval argument has a specified alignment that is greater than the
     // passed in pointer, then we either have to round up the input pointer or
     // give up on this transformation.
-    if (ByValAlignment <= 1)  // 0 = unspecified, 1 = no particular alignment.
+    if (ByValAlignment.valueOrOne() == 1)
       return Arg;
 
     AssumptionCache *AC =
@@ -1581,8 +1577,8 @@ static Value *HandleByValArgument(Type *ByValType, Value *Arg,
 
     // If the pointer is already known to be sufficiently aligned, or if we can
     // round it up to a larger alignment, then we don't need a temporary.
-    if (getOrEnforceKnownAlignment(Arg, Align(ByValAlignment), DL, TheCall,
-                                   AC) >= ByValAlignment)
+    if (getOrEnforceKnownAlignment(Arg, *ByValAlignment, DL, TheCall, AC) >=
+        *ByValAlignment)
       return Arg;
 
     // Otherwise, we have to make a memcpy to get a safe alignment.  This is bad
@@ -1590,13 +1586,13 @@ static Value *HandleByValArgument(Type *ByValType, Value *Arg,
   }
 
   // Create the alloca.  If we have DataLayout, use nice alignment.
-  Align Alignment(DL.getPrefTypeAlignment(ByValType));
+  Align Alignment = DL.getPrefTypeAlign(ByValType);
 
   // If the byval had an alignment specified, we *must* use at least that
   // alignment, as it is required by the byval argument (and uses of the
   // pointer inside the callee).
-  if (ByValAlignment > 0)
-    Alignment = std::max(Alignment, Align(ByValAlignment));
+  if (ByValAlignment)
+    Alignment = std::max(Alignment, *ByValAlignment);
 
   Value *NewAlloca =
       new AllocaInst(ByValType, DL.getAllocaAddrSpace(), nullptr, Alignment,
@@ -2192,7 +2188,7 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
       if (CB.isByValArgument(ArgNo)) {
         ActualArg = HandleByValArgument(CB.getParamByValType(ArgNo), ActualArg,
                                         &CB, CalledFunc, IFI,
-                                        CalledFunc->getParamAlignment(ArgNo));
+                                        CalledFunc->getParamAlign(ArgNo));
         if (ActualArg != *AI)
           ByValInits.push_back(
               {ActualArg, (Value *)*AI, CB.getParamByValType(ArgNo)});
@@ -2306,7 +2302,7 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
     fixupLineNumbers(Caller, FirstNewBlock, &CB,
                      CalledFunc->getSubprogram() != nullptr);
 
-    if (getEnableAssignmentTracking()) {
+    if (isAssignmentTrackingEnabled(*Caller->getParent())) {
       // Interpret inlined stores to caller-local variables as assignments.
       trackInlinedStores(FirstNewBlock, Caller->end(), CB);
 
@@ -2337,7 +2333,7 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
       for (BasicBlock &NewBlock :
            make_range(FirstNewBlock->getIterator(), Caller->end()))
         for (Instruction &I : NewBlock)
-          if (auto *II = dyn_cast<AssumeInst>(&I))
+          if (auto *II = dyn_cast<CondGuardInst>(&I))
             IFI.GetAssumptionCache(*Caller).registerAssumption(II);
   }
 
@@ -2511,7 +2507,7 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
         if (!AllocaTypeSize.isScalable() &&
             AllocaArraySize != std::numeric_limits<uint64_t>::max() &&
             std::numeric_limits<uint64_t>::max() / AllocaArraySize >=
-                AllocaTypeSize.getFixedSize()) {
+                AllocaTypeSize.getFixedValue()) {
           AllocaSize = ConstantInt::get(Type::getInt64Ty(AI->getContext()),
                                         AllocaArraySize * AllocaTypeSize);
         }

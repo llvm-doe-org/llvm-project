@@ -38,7 +38,6 @@
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SmallVector.h"
@@ -46,6 +45,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/TypeSize.h"
+#include <optional>
 
 namespace llvm {
 
@@ -1129,6 +1129,8 @@ public:
 #define RVV_TYPE(Name, Id, SingletonId) \
   CanQualType SingletonId;
 #include "clang/Basic/RISCVVTypes.def"
+#define WASM_TYPE(Name, Id, SingletonId) CanQualType SingletonId;
+#include "clang/Basic/WebAssemblyReferenceTypes.def"
 
   // Types for deductions in C++0x [stmt.ranged]'s desugaring. Built on demand.
   mutable QualType AutoDeductTy;     // Deduction against 'auto'.
@@ -1477,6 +1479,9 @@ public:
   /// \pre \p EltTy must be a built-in type.
   QualType getScalableVectorType(QualType EltTy, unsigned NumElts) const;
 
+  /// Return a WebAssembly externref type.
+  QualType getWebAssemblyExternrefType() const;
+
   /// Return the unique reference to a vector type of the specified
   /// element type and size.
   ///
@@ -1590,9 +1595,10 @@ public:
   QualType getBTFTagAttributedType(const BTFTypeTagAttr *BTFAttr,
                                    QualType Wrapped);
 
-  QualType getSubstTemplateTypeParmType(QualType Replacement,
-                                        Decl *AssociatedDecl, unsigned Index,
-                                        Optional<unsigned> PackIndex) const;
+  QualType
+  getSubstTemplateTypeParmType(QualType Replacement, Decl *AssociatedDecl,
+                               unsigned Index,
+                               std::optional<unsigned> PackIndex) const;
   QualType getSubstTemplateTypeParmPackType(Decl *AssociatedDecl,
                                             unsigned Index, bool Final,
                                             const TemplateArgument &ArgPack);
@@ -1655,7 +1661,7 @@ public:
   ///        elsewhere, such as if the pattern contains a placeholder type or
   ///        if this is the canonical type of another pack expansion type.
   QualType getPackExpansionType(QualType Pattern,
-                                Optional<unsigned> NumExpansions,
+                                std::optional<unsigned> NumExpansions,
                                 bool ExpectPackInType = true);
 
   QualType getObjCInterfaceType(const ObjCInterfaceDecl *Decl,
@@ -2174,10 +2180,10 @@ public:
                                         const IdentifierInfo *Name) const;
   TemplateName getDependentTemplateName(NestedNameSpecifier *NNS,
                                         OverloadedOperatorKind Operator) const;
-  TemplateName getSubstTemplateTemplateParm(TemplateName replacement,
-                                            Decl *AssociatedDecl,
-                                            unsigned Index,
-                                            Optional<unsigned> PackIndex) const;
+  TemplateName
+  getSubstTemplateTemplateParm(TemplateName replacement, Decl *AssociatedDecl,
+                               unsigned Index,
+                               std::optional<unsigned> PackIndex) const;
   TemplateName getSubstTemplateTemplateParmPack(const TemplateArgument &ArgPack,
                                                 Decl *AssociatedDecl,
                                                 unsigned Index,
@@ -2291,13 +2297,13 @@ public:
   CharUnits getTypeSizeInChars(QualType T) const;
   CharUnits getTypeSizeInChars(const Type *T) const;
 
-  Optional<CharUnits> getTypeSizeInCharsIfKnown(QualType Ty) const {
+  std::optional<CharUnits> getTypeSizeInCharsIfKnown(QualType Ty) const {
     if (Ty->isIncompleteType() || Ty->isDependentType())
       return std::nullopt;
     return getTypeSizeInChars(Ty);
   }
 
-  Optional<CharUnits> getTypeSizeInCharsIfKnown(const Type *Ty) const {
+  std::optional<CharUnits> getTypeSizeInCharsIfKnown(const Type *Ty) const {
     return getTypeSizeInCharsIfKnown(QualType(Ty, 0));
   }
 
@@ -2868,10 +2874,12 @@ public:
   bool canBindObjCObjectType(QualType To, QualType From);
 
   // Functions for calculating composite types
-  QualType mergeTypes(QualType, QualType, bool OfBlockPointer=false,
-                      bool Unqualified = false, bool BlockReturnType = false);
-  QualType mergeFunctionTypes(QualType, QualType, bool OfBlockPointer=false,
-                              bool Unqualified = false, bool AllowCXX = false);
+  QualType mergeTypes(QualType, QualType, bool OfBlockPointer = false,
+                      bool Unqualified = false, bool BlockReturnType = false,
+                      bool IsConditionalOperator = false);
+  QualType mergeFunctionTypes(QualType, QualType, bool OfBlockPointer = false,
+                              bool Unqualified = false, bool AllowCXX = false,
+                              bool IsConditionalOperator = false);
   QualType mergeFunctionParameterTypes(QualType, QualType,
                                        bool OfBlockPointer = false,
                                        bool Unqualified = false);

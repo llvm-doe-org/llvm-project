@@ -1951,7 +1951,7 @@ static bool isIndexInRangeOfArrayType(uint64_t NumElements,
   // A negative index or an index past the end of our sequential type is
   // considered out-of-range.
   int64_t IndexVal = CI->getSExtValue();
-  if (IndexVal < 0 || (NumElements > 0 && (uint64_t)IndexVal >= NumElements))
+  if (IndexVal < 0 || (IndexVal != 0 && (uint64_t)IndexVal >= NumElements))
     return false;
 
   // Otherwise, it is in-range.
@@ -2038,7 +2038,7 @@ Constant *llvm::ConstantFoldGetElementPtr(Type *PointeeTy, Constant *C,
   if (Idxs.empty()) return C;
 
   Type *GEPTy = GetElementPtrInst::getGEPReturnType(
-      PointeeTy, C, makeArrayRef((Value *const *)Idxs.data(), Idxs.size()));
+      PointeeTy, C, ArrayRef((Value *const *)Idxs.data(), Idxs.size()));
 
   if (isa<PoisonValue>(C))
     return PoisonValue::get(GEPTy);
@@ -2051,6 +2051,10 @@ Constant *llvm::ConstantFoldGetElementPtr(Type *PointeeTy, Constant *C,
     // For non-opaque pointers having multiple indices will change the result
     // type of the GEP.
     if (!C->getType()->getScalarType()->isOpaquePointerTy() && Idxs.size() != 1)
+      return false;
+
+    // Avoid losing inrange information.
+    if (InRangeIndex)
       return false;
 
     return all_of(Idxs, [](Value *Idx) {
@@ -2198,11 +2202,17 @@ Constant *llvm::ConstantFoldGetElementPtr(Type *PointeeTy, Constant *C,
       Unknown = true;
       continue;
     }
+
+    // Determine the number of elements in our sequential type.
+    uint64_t NumElements = STy->getArrayNumElements();
+    if (!NumElements) {
+      Unknown = true;
+      continue;
+    }
+
     // It's out of range, but we can factor it into the prior
     // dimension.
     NewIdxs.resize(Idxs.size());
-    // Determine the number of elements in our sequential type.
-    uint64_t NumElements = STy->getArrayNumElements();
 
     // Expand the current index or the previous index to a vector from a scalar
     // if necessary.
@@ -2276,7 +2286,8 @@ Constant *llvm::ConstantFoldGetElementPtr(Type *PointeeTy, Constant *C,
   // check for the "inbounds" property.
   if (!Unknown && !InBounds)
     if (auto *GV = dyn_cast<GlobalVariable>(C))
-      if (!GV->hasExternalWeakLinkage() && isInBoundsIndices(Idxs))
+      if (!GV->hasExternalWeakLinkage() && GV->getValueType() == PointeeTy &&
+          isInBoundsIndices(Idxs))
         return ConstantExpr::getGetElementPtr(PointeeTy, C, Idxs,
                                               /*InBounds=*/true, InRangeIndex);
 

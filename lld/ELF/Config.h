@@ -235,7 +235,6 @@ struct Config {
   bool nostdlib;
   bool oFormatBinary;
   bool omagic;
-  bool opaquePointers;
   bool optEB = false;
   bool optEL = false;
   bool optimizeBBJumps;
@@ -450,7 +449,7 @@ LLVM_LIBRARY_VISIBILITY extern Ctx ctx;
 // The first two elements of versionDefinitions represent VER_NDX_LOCAL and
 // VER_NDX_GLOBAL. This helper returns other elements.
 static inline ArrayRef<VersionDefinition> namedVersionDefs() {
-  return llvm::makeArrayRef(config->versionDefinitions).slice(2);
+  return llvm::ArrayRef(config->versionDefinitions).slice(2);
 }
 
 void errorOrWarn(const Twine &msg);

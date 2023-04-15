@@ -667,7 +667,6 @@ namespace llvm {
     PROBED_ALLOCA,
 
     // Memory barriers.
-    MEMBARRIER,
     MFENCE,
 
     // Get a random integer and indicate whether it is valid in CF.
@@ -799,6 +798,9 @@ namespace llvm {
     LBTS,
     LBTC,
     LBTR,
+    LBTS_RM,
+    LBTC_RM,
+    LBTR_RM,
 
     /// RAO arithmetic instructions.
     /// OUTCHAIN = AADD(INCHAIN, PTR, RHS)
@@ -884,8 +886,8 @@ namespace llvm {
     AESDECWIDE256KL,
 
     /// Compare and Add if Condition is Met. Compare value in operand 2 with
-    /// value in memory of operand 1. If condition of operand 4 is met, add value
-    /// operand 3 to m32 and write new value in operand 1. Operand 2 is
+    /// value in memory of operand 1. If condition of operand 4 is met, add
+    /// value operand 3 to m32 and write new value in operand 1. Operand 2 is
     /// always updated with the original value from operand 1.
     CMPCCXADD,
 
@@ -1001,11 +1003,30 @@ namespace llvm {
     /// legal as the hook is used before type legalization.
     bool isSafeMemOpType(MVT VT) const override;
 
+    bool isMemoryAccessFast(EVT VT, Align Alignment) const;
+
     /// Returns true if the target allows unaligned memory accesses of the
     /// specified type. Returns whether it is "fast" in the last argument.
     bool allowsMisalignedMemoryAccesses(EVT VT, unsigned AS, Align Alignment,
                                         MachineMemOperand::Flags Flags,
                                         unsigned *Fast) const override;
+
+    /// This function returns true if the memory access is aligned or if the
+    /// target allows this specific unaligned memory access. If the access is
+    /// allowed, the optional final parameter returns a relative speed of the
+    /// access (as defined by the target).
+    bool allowsMemoryAccess(
+        LLVMContext &Context, const DataLayout &DL, EVT VT, unsigned AddrSpace,
+        Align Alignment,
+        MachineMemOperand::Flags Flags = MachineMemOperand::MONone,
+        unsigned *Fast = nullptr) const override;
+
+    bool allowsMemoryAccess(LLVMContext &Context, const DataLayout &DL, EVT VT,
+                            const MachineMemOperand &MMO,
+                            unsigned *Fast) const {
+      return allowsMemoryAccess(Context, DL, VT, MMO.getAddrSpace(),
+                                MMO.getAlign(), MMO.getFlags(), Fast);
+    }
 
     /// Provide custom lowering hooks for some operations.
     ///
@@ -1092,6 +1113,8 @@ namespace llvm {
         unsigned OldShiftOpcode, unsigned NewShiftOpcode,
         SelectionDAG &DAG) const override;
 
+    bool preferScalarizeSplat(unsigned Opc) const override;
+
     bool shouldFoldConstantShiftPairToMask(const SDNode *N,
                                            CombineLevel Level) const override;
 
@@ -1115,7 +1138,9 @@ namespace llvm {
       return VTIsOk(XVT) && VTIsOk(KeptBitsVT);
     }
 
-    bool shouldExpandShift(SelectionDAG &DAG, SDNode *N) const override;
+    ShiftLegalizationStrategy
+    preferredShiftLegalizationStrategy(SelectionDAG &DAG, SDNode *N,
+                                       unsigned ExpansionFactor) const override;
 
     bool shouldSplatInsEltVarIndex(EVT VT) const override;
 
@@ -1187,7 +1212,7 @@ namespace llvm {
         bool PoisonOnly, bool ConsiderFlags, unsigned Depth) const override;
 
     bool isSplatValueForTargetNode(SDValue Op, const APInt &DemandedElts,
-                                   APInt &UndefElts,
+                                   APInt &UndefElts, const SelectionDAG &DAG,
                                    unsigned Depth) const override;
 
     bool isTargetCanonicalConstantNode(SDValue Op) const override {
@@ -1677,6 +1702,7 @@ namespace llvm {
                         LLVMContext &Context) const override;
 
     const MCPhysReg *getScratchRegisters(CallingConv::ID CC) const override;
+    ArrayRef<MCPhysReg> getRoundingControlRegisters() const override;
 
     TargetLoweringBase::AtomicExpansionKind
     shouldExpandAtomicLoadInIR(LoadInst *LI) const override;

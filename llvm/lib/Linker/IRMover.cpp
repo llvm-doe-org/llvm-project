@@ -316,7 +316,7 @@ Type *TypeMapTy::get(Type *Ty, SmallPtrSet<StructType *, 8> &Visited) {
                                      cast<PointerType>(Ty)->getAddressSpace());
   case Type::FunctionTyID:
     return *Entry = FunctionType::get(ElementTypes[0],
-                                      makeArrayRef(ElementTypes).slice(1),
+                                      ArrayRef(ElementTypes).slice(1),
                                       cast<FunctionType>(Ty)->isVarArg());
   case Type::StructTyID: {
     auto *STy = cast<StructType>(Ty);
@@ -1555,7 +1555,7 @@ void IRLinker::updateAttributes(GlobalValue &GV) {
     // Remove nocallback attribute when it is on a call-site.
     for (BasicBlock &BB : *F)
       for (Instruction &I : BB)
-        if (CallInst *CI = dyn_cast<CallInst>(&I))
+        if (CallBase *CI = dyn_cast<CallBase>(&I))
           CI->removeFnAttr(Attribute::NoCallback);
   }
 }

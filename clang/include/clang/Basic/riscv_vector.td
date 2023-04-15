@@ -137,8 +137,6 @@ class PolicyScheme<int val>{
 def NonePolicy : PolicyScheme<0>;
 def HasPassthruOperand : PolicyScheme<1>;
 def HasPolicyOperand : PolicyScheme<2>;
-// Specail case for passthru operand which is not a first opeand.
-def HasPassthruOperandAtIdx1 : PolicyScheme<3>;
 
 class RVVBuiltin<string suffix, string prototype, string type_range,
                  string overloaded_suffix = ""> {
@@ -202,10 +200,6 @@ class RVVBuiltin<string suffix, string prototype, string type_range,
   bit HasTailPolicy = true;
   // This builtin support mask agnostic and undisturbed policy.
   bit HasMaskPolicy = true;
-
-  // This builtin prototype is tail undisturbed policy. It also means the
-  // default polcy without suffix is tail undisturbed.
-  bit IsPrototypeDefaultTU = false;
 
   // This builtin prototype with TA or TAMA policy could not support overloading
   // API. Other policy intrinsic functions would support overloading API with
@@ -298,6 +292,11 @@ multiclass RVVOutBuiltinSet<string intrinsic_name, string type_range,
 multiclass RVVOp0BuiltinSet<string intrinsic_name, string type_range,
                             list<list<string>> suffixes_prototypes>
     : RVVBuiltinSet<intrinsic_name, type_range, suffixes_prototypes, [0]>;
+
+// IntrinsicTypes is output, op1 [-1, 0]
+multiclass RVVOutOp0BuiltinSet<string intrinsic_name, string type_range,
+                               list<list<string>> suffixes_prototypes>
+    : RVVBuiltinSet<intrinsic_name, type_range, suffixes_prototypes, [-1, 0]>;
 
 // IntrinsicTypes is output, op1 [-1, 1]
 multiclass RVVOutOp1BuiltinSet<string intrinsic_name, string type_range,
@@ -455,13 +454,34 @@ class RVVMaskOp0Builtin<string prototype> : RVVOp0Builtin<"m", prototype, "c"> {
 }
 
 let UnMaskedPolicyScheme = HasPolicyOperand,
-    HasMaskedOffOperand = false,
-    IsPrototypeDefaultTU = true in {
-  multiclass RVVSlideBuiltinSet {
+    HasMaskedOffOperand = false in {
+  multiclass RVVSlideUpBuiltinSet {
     defm "" : RVVOutBuiltinSet<NAME, "csilxfd",
                                [["vx","v", "vvvz"]]>;
     defm "" : RVVOutBuiltinSet<NAME, "csil",
                                [["vx","Uv", "UvUvUvz"]]>;
+  }
+}
+
+let UnMaskedPolicyScheme = HasPassthruOperand,
+    ManualCodegen = [{
+      if (IsMasked) {
+        std::rotate(Ops.begin(), Ops.begin() + 1, Ops.end() - 1);
+        if ((PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA))
+          Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
+      } else {
+        if (PolicyAttrs & RVV_VTA)
+          Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
+      }
+
+      Ops.push_back(ConstantInt::get(Ops.back()->getType(), PolicyAttrs));
+      IntrinsicTypes = {ResultType, Ops.back()->getType()};
+    }] in {
+  multiclass RVVSlideDownBuiltinSet {
+    defm "" : RVVOutBuiltinSet<NAME, "csilxfd",
+                               [["vx","v", "vvz"]]>;
+    defm "" : RVVOutBuiltinSet<NAME, "csil",
+                               [["vx","Uv", "UvUvz"]]>;
   }
 }
 
@@ -498,22 +518,22 @@ class RVVConvToNarrowingSignedBuiltin<string overloaded_name>
 class RVVConvToNarrowingUnsignedBuiltin<string overloaded_name>
     : RVVConvBuiltin<"Uv", "UvFw", "csi", overloaded_name>;
 
-let HasMaskedOffOperand = false in {
+let HasMaskedOffOperand = true in {
   multiclass RVVSignedReductionBuiltin {
-    defm "" : RVVOutOp1BuiltinSet<NAME, "csil",
-                                  [["vs", "vSv", "SvSvvSv"]]>;
+    defm "" : RVVOutOp0BuiltinSet<NAME, "csil",
+                                  [["vs", "vSv", "SvvSv"]]>;
   }
   multiclass RVVUnsignedReductionBuiltin {
-    defm "" : RVVOutOp1BuiltinSet<NAME, "csil",
-                                  [["vs", "UvUSv", "USvUSvUvUSv"]]>;
+    defm "" : RVVOutOp0BuiltinSet<NAME, "csil",
+                                  [["vs", "UvUSv", "USvUvUSv"]]>;
   }
   multiclass RVVFloatingReductionBuiltin {
-    defm "" : RVVOutOp1BuiltinSet<NAME, "xfd",
-                                  [["vs", "vSv", "SvSvvSv"]]>;
+    defm "" : RVVOutOp0BuiltinSet<NAME, "xfd",
+                                  [["vs", "vSv", "SvvSv"]]>;
   }
   multiclass RVVFloatingWidenReductionBuiltin {
-    defm "" : RVVOutOp1BuiltinSet<NAME, "xf",
-                                  [["vs", "vSw", "SwSwvSw"]]>;
+    defm "" : RVVOutOp0BuiltinSet<NAME, "xf",
+                                  [["vs", "vSw", "SwvSw"]]>;
   }
 }
 
@@ -629,12 +649,12 @@ multiclass RVVVLEFFBuiltin<list<string> types> {
         if (IsMasked) {
           // Move mask to right before vl.
           std::rotate(Ops.begin(), Ops.begin() + 1, Ops.end() - 1);
-          if (PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC)
+          if ((PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA))
             Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
           Ops.push_back(ConstantInt::get(Ops.back()->getType(), PolicyAttrs));
           IntrinsicTypes = {ResultType, Ops[4]->getType()};
         } else {
-          if (PolicyAttrs == TAIL_AGNOSTIC)
+          if (PolicyAttrs & RVV_VTA)
             Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
           IntrinsicTypes = {ResultType, Ops[3]->getType()};
         }
@@ -919,8 +939,8 @@ multiclass RVVUnitStridedSegLoad<string op> {
       SmallVector<llvm::Value*, 12> Operands;
 
       // Please refer to comment under 'defvar NFList' in this file
-      if ((IsMasked && PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC) ||
-          (!IsMasked && PolicyAttrs == TAIL_AGNOSTIC))
+      if ((IsMasked && (PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA)) ||
+          (!IsMasked && PolicyAttrs & RVV_VTA))
         Operands.append(NF, llvm::PoisonValue::get(ResultType));
       else {
         if (IsMasked)
@@ -929,8 +949,8 @@ multiclass RVVUnitStridedSegLoad<string op> {
           Operands.append(Ops.begin() + NF, Ops.begin() + 2 * NF);
       }
       unsigned PtrOperandIdx = IsMasked ?
-        (PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC) ? NF + 1 : 2 * NF + 1 :
-        (PolicyAttrs == TAIL_AGNOSTIC) ? NF : 2 * NF;
+        ((PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA)) ? NF + 1 : 2 * NF + 1 :
+        (PolicyAttrs & RVV_VTA) ? NF : 2 * NF;
       Value *PtrOperand = Ops[PtrOperandIdx];
       Value *VLOperand = Ops[PtrOperandIdx + 1];
       Operands.push_back(PtrOperand);
@@ -984,8 +1004,8 @@ multiclass RVVUnitStridedSegLoadFF<string op> {
       SmallVector<llvm::Value*, 12> Operands;
 
       // Please refer to comment under 'defvar NFList' in this file
-      if ((IsMasked && PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC) ||
-          (!IsMasked && PolicyAttrs == TAIL_AGNOSTIC))
+      if ((IsMasked && (PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA)) ||
+          (!IsMasked && PolicyAttrs & RVV_VTA))
         Operands.append(NF, llvm::PoisonValue::get(ResultType));
       else {
         if (IsMasked)
@@ -994,8 +1014,8 @@ multiclass RVVUnitStridedSegLoadFF<string op> {
           Operands.append(Ops.begin() + NF, Ops.begin() + 2 * NF);
       }
       unsigned PtrOperandIdx = IsMasked ?
-        (PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC) ? NF + 1 : 2 * NF + 1 :
-        (PolicyAttrs == TAIL_AGNOSTIC) ? NF : 2 * NF;
+        ((PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA)) ? NF + 1 : 2 * NF + 1 :
+        (PolicyAttrs & RVV_VTA) ? NF : 2 * NF;
       Value *PtrOperand = Ops[PtrOperandIdx];
       Value *NewVLOperand = Ops[PtrOperandIdx + 1];
       Value *VLOperand = Ops[PtrOperandIdx + 2];
@@ -1051,8 +1071,8 @@ multiclass RVVStridedSegLoad<string op> {
       SmallVector<llvm::Value*, 12> Operands;
 
       // Please refer to comment under 'defvar NFList' in this file
-      if ((IsMasked && PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC) ||
-          (!IsMasked && PolicyAttrs == TAIL_AGNOSTIC))
+      if ((IsMasked && (PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA)) ||
+          (!IsMasked && PolicyAttrs & RVV_VTA))
         Operands.append(NF, llvm::PoisonValue::get(ResultType));
       else {
         if (IsMasked)
@@ -1061,8 +1081,8 @@ multiclass RVVStridedSegLoad<string op> {
           Operands.append(Ops.begin() + NF, Ops.begin() + 2 * NF);
       }
       unsigned PtrOperandIdx = IsMasked ?
-        (PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC) ? NF + 1 : 2 * NF + 1 :
-        (PolicyAttrs == TAIL_AGNOSTIC) ? NF : 2 * NF;
+        ((PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA)) ? NF + 1 : 2 * NF + 1 :
+        (PolicyAttrs & RVV_VTA) ? NF : 2 * NF;
       Value *PtrOperand = Ops[PtrOperandIdx];
       Value *StrideOperand = Ops[PtrOperandIdx + 1];
       Value *VLOperand = Ops[PtrOperandIdx + 2];
@@ -1113,8 +1133,8 @@ multiclass RVVIndexedSegLoad<string op> {
       SmallVector<llvm::Value*, 12> Operands;
 
       // Please refer to comment under 'defvar NFList' in this file
-      if ((IsMasked && PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC) ||
-          (!IsMasked && PolicyAttrs == TAIL_AGNOSTIC))
+      if ((IsMasked && (PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA)) ||
+          (!IsMasked && PolicyAttrs & RVV_VTA))
         Operands.append(NF, llvm::PoisonValue::get(ResultType));
       else {
         if (IsMasked)
@@ -1123,8 +1143,8 @@ multiclass RVVIndexedSegLoad<string op> {
           Operands.append(Ops.begin() + NF, Ops.begin() + 2 * NF);
       }
       unsigned PtrOperandIdx = IsMasked ?
-        (PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC) ? NF + 1 : 2 * NF + 1 :
-        (PolicyAttrs == TAIL_AGNOSTIC) ? NF : 2 * NF;
+        ((PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA)) ? NF + 1 : 2 * NF + 1 :
+        (PolicyAttrs & RVV_VTA) ? NF : 2 * NF;
       Value *PtrOperand = Ops[PtrOperandIdx];
       Value *IndexOperand = Ops[PtrOperandIdx + 1];
       Value *VLOperand = Ops[PtrOperandIdx + 2];
@@ -1313,10 +1333,10 @@ multiclass RVVPseudoUnaryBuiltin<string IR, string type_range> {
       {
         if (IsMasked) {
           std::rotate(Ops.begin(), Ops.begin() + 1, Ops.end() - 1);
-          if (PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC)
+          if ((PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA))
             Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
         } else {
-          if (PolicyAttrs == TAIL_AGNOSTIC)
+          if (PolicyAttrs & RVV_VTA)
             Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
         }
         auto ElemTy = cast<llvm::VectorType>(ResultType)->getElementType();
@@ -1346,10 +1366,10 @@ multiclass RVVPseudoVNotBuiltin<string IR, string type_range> {
       {
         if (IsMasked) {
           std::rotate(Ops.begin(), Ops.begin() + 1, Ops.end() - 1);
-          if (PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC)
+          if ((PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA))
             Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
         } else {
-          if (PolicyAttrs == TAIL_AGNOSTIC)
+          if (PolicyAttrs & RVV_VTA)
             Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
         }
         auto ElemTy = cast<llvm::VectorType>(ResultType)->getElementType();
@@ -1401,7 +1421,7 @@ multiclass RVVPseudoVFUnaryBuiltin<string IR, string type_range> {
       {
         if (IsMasked) {
           std::rotate(Ops.begin(), Ops.begin() + 1, Ops.end() - 1);
-          if (PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC)
+          if ((PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA))
             Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
           Ops.insert(Ops.begin() + 2, Ops[1]);
           Ops.push_back(ConstantInt::get(Ops.back()->getType(), PolicyAttrs));
@@ -1410,7 +1430,7 @@ multiclass RVVPseudoVFUnaryBuiltin<string IR, string type_range> {
                             Ops[2]->getType(),
                             Ops.back()->getType()};
         } else {
-          if (PolicyAttrs == TAIL_AGNOSTIC)
+          if (PolicyAttrs & RVV_VTA)
             Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
           // op1, po2, vl
           IntrinsicTypes = {ResultType,
@@ -1436,10 +1456,10 @@ multiclass RVVPseudoVWCVTBuiltin<string IR, string MName, string type_range,
       {
         if (IsMasked) {
           std::rotate(Ops.begin(), Ops.begin() + 1, Ops.end() - 1);
-          if (PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC)
+          if ((PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA))
             Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
         } else {
-          if (PolicyAttrs == TAIL_AGNOSTIC)
+          if (PolicyAttrs & RVV_VTA)
             Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
         }
         auto ElemTy = cast<llvm::VectorType>(ResultType)->getElementType();
@@ -1478,10 +1498,10 @@ multiclass RVVPseudoVNCVTBuiltin<string IR, string MName, string type_range,
       {
         if (IsMasked) {
           std::rotate(Ops.begin(), Ops.begin() + 1, Ops.end() - 1);
-          if (PolicyAttrs == TAIL_AGNOSTIC_MASK_AGNOSTIC)
+          if ((PolicyAttrs & RVV_VTA) && (PolicyAttrs & RVV_VMA))
             Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
         } else {
-          if (PolicyAttrs == TAIL_AGNOSTIC)
+          if (PolicyAttrs & RVV_VTA)
             Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
         }
         Ops.insert(Ops.begin() + 2, llvm::Constant::getNullValue(Ops.back()->getType())); 
@@ -1519,7 +1539,7 @@ enum RVV_CSR {
 };
 
 static __inline__ __attribute__((__always_inline__, __nodebug__))
-unsigned long vread_csr(enum RVV_CSR __csr) {
+unsigned long __riscv_vread_csr(enum RVV_CSR __csr) {
   unsigned long __rv = 0;
   switch (__csr) {
     case RVV_VSTART:
@@ -1539,7 +1559,7 @@ unsigned long vread_csr(enum RVV_CSR __csr) {
 }
 
 static __inline__ __attribute__((__always_inline__, __nodebug__))
-void vwrite_csr(enum RVV_CSR __csr, unsigned long __value) {
+void __riscv_vwrite_csr(enum RVV_CSR __csr, unsigned long __value) {
   switch (__csr) {
     case RVV_VSTART:
       __asm__ __volatile__ ("csrw\tvstart, %z0" : : "rJ"(__value) : "memory");
@@ -1558,6 +1578,32 @@ void vwrite_csr(enum RVV_CSR __csr, unsigned long __value) {
 }] in
 def vread_vwrite_csr: RVVHeader;
 
+let HeaderCode =
+[{
+#define __riscv_vlenb() __builtin_rvv_vlenb()
+}] in
+def vlenb_macro: RVVHeader;
+
+let HasBuiltinAlias = false, HasVL = false, HasMasked = false,
+    UnMaskedPolicyScheme = NonePolicy, MaskedPolicyScheme = NonePolicy,
+    Log2LMUL = [0], IRName = "",
+    ManualCodegen = [{
+    {
+      LLVMContext &Context = CGM.getLLVMContext();
+      llvm::MDBuilder MDHelper(Context);
+
+      llvm::Metadata *Ops[] = {llvm::MDString::get(Context, "vlenb")};
+      llvm::MDNode *RegName = llvm::MDNode::get(Context, Ops);
+      llvm::Value *Metadata = llvm::MetadataAsValue::get(Context, RegName);
+      llvm::Function *F =
+        CGM.getIntrinsic(llvm::Intrinsic::read_register, {SizeTy});
+      return Builder.CreateCall(F, Metadata);
+    }
+    }] in
+{
+  def vlenb : RVVBuiltin<"", "u", "i">;
+}
+
 // 6. Configuration-Setting Instructions
 // 6.1. vsetvli/vsetvl instructions
 
@@ -1565,62 +1611,62 @@ def vread_vwrite_csr: RVVHeader;
 // and LMUL.
 let HeaderCode =
 [{
-#define vsetvl_e8mf4(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 6)
-#define vsetvl_e8mf2(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 7)
-#define vsetvl_e8m1(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 0)
-#define vsetvl_e8m2(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 1)
-#define vsetvl_e8m4(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 2)
-#define vsetvl_e8m8(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 3)
+#define __riscv_vsetvl_e8mf4(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 6)
+#define __riscv_vsetvl_e8mf2(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 7)
+#define __riscv_vsetvl_e8m1(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 0)
+#define __riscv_vsetvl_e8m2(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 1)
+#define __riscv_vsetvl_e8m4(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 2)
+#define __riscv_vsetvl_e8m8(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 3)
 
-#define vsetvl_e16mf2(avl) __builtin_rvv_vsetvli((size_t)(avl), 1, 7)
-#define vsetvl_e16m1(avl) __builtin_rvv_vsetvli((size_t)(avl), 1, 0)
-#define vsetvl_e16m2(avl) __builtin_rvv_vsetvli((size_t)(avl), 1, 1)
-#define vsetvl_e16m4(avl) __builtin_rvv_vsetvli((size_t)(avl), 1, 2)
-#define vsetvl_e16m8(avl) __builtin_rvv_vsetvli((size_t)(avl), 1, 3)
+#define __riscv_vsetvl_e16mf2(avl) __builtin_rvv_vsetvli((size_t)(avl), 1, 7)
+#define __riscv_vsetvl_e16m1(avl) __builtin_rvv_vsetvli((size_t)(avl), 1, 0)
+#define __riscv_vsetvl_e16m2(avl) __builtin_rvv_vsetvli((size_t)(avl), 1, 1)
+#define __riscv_vsetvl_e16m4(avl) __builtin_rvv_vsetvli((size_t)(avl), 1, 2)
+#define __riscv_vsetvl_e16m8(avl) __builtin_rvv_vsetvli((size_t)(avl), 1, 3)
 
-#define vsetvl_e32m1(avl) __builtin_rvv_vsetvli((size_t)(avl), 2, 0)
-#define vsetvl_e32m2(avl) __builtin_rvv_vsetvli((size_t)(avl), 2, 1)
-#define vsetvl_e32m4(avl) __builtin_rvv_vsetvli((size_t)(avl), 2, 2)
-#define vsetvl_e32m8(avl) __builtin_rvv_vsetvli((size_t)(avl), 2, 3)
+#define __riscv_vsetvl_e32m1(avl) __builtin_rvv_vsetvli((size_t)(avl), 2, 0)
+#define __riscv_vsetvl_e32m2(avl) __builtin_rvv_vsetvli((size_t)(avl), 2, 1)
+#define __riscv_vsetvl_e32m4(avl) __builtin_rvv_vsetvli((size_t)(avl), 2, 2)
+#define __riscv_vsetvl_e32m8(avl) __builtin_rvv_vsetvli((size_t)(avl), 2, 3)
 
 #if __riscv_v_elen >= 64
-#define vsetvl_e8mf8(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 5)
-#define vsetvl_e16mf4(avl) __builtin_rvv_vsetvli((size_t)(avl), 1, 6)
-#define vsetvl_e32mf2(avl) __builtin_rvv_vsetvli((size_t)(avl), 2, 7)
+#define __riscv_vsetvl_e8mf8(avl) __builtin_rvv_vsetvli((size_t)(avl), 0, 5)
+#define __riscv_vsetvl_e16mf4(avl) __builtin_rvv_vsetvli((size_t)(avl), 1, 6)
+#define __riscv_vsetvl_e32mf2(avl) __builtin_rvv_vsetvli((size_t)(avl), 2, 7)
 
-#define vsetvl_e64m1(avl) __builtin_rvv_vsetvli((size_t)(avl), 3, 0)
-#define vsetvl_e64m2(avl) __builtin_rvv_vsetvli((size_t)(avl), 3, 1)
-#define vsetvl_e64m4(avl) __builtin_rvv_vsetvli((size_t)(avl), 3, 2)
-#define vsetvl_e64m8(avl) __builtin_rvv_vsetvli((size_t)(avl), 3, 3)
+#define __riscv_vsetvl_e64m1(avl) __builtin_rvv_vsetvli((size_t)(avl), 3, 0)
+#define __riscv_vsetvl_e64m2(avl) __builtin_rvv_vsetvli((size_t)(avl), 3, 1)
+#define __riscv_vsetvl_e64m4(avl) __builtin_rvv_vsetvli((size_t)(avl), 3, 2)
+#define __riscv_vsetvl_e64m8(avl) __builtin_rvv_vsetvli((size_t)(avl), 3, 3)
 #endif
 
-#define vsetvlmax_e8mf4() __builtin_rvv_vsetvlimax(0, 6)
-#define vsetvlmax_e8mf2() __builtin_rvv_vsetvlimax(0, 7)
-#define vsetvlmax_e8m1() __builtin_rvv_vsetvlimax(0, 0)
-#define vsetvlmax_e8m2() __builtin_rvv_vsetvlimax(0, 1)
-#define vsetvlmax_e8m4() __builtin_rvv_vsetvlimax(0, 2)
-#define vsetvlmax_e8m8() __builtin_rvv_vsetvlimax(0, 3)
+#define __riscv_vsetvlmax_e8mf4() __builtin_rvv_vsetvlimax(0, 6)
+#define __riscv_vsetvlmax_e8mf2() __builtin_rvv_vsetvlimax(0, 7)
+#define __riscv_vsetvlmax_e8m1() __builtin_rvv_vsetvlimax(0, 0)
+#define __riscv_vsetvlmax_e8m2() __builtin_rvv_vsetvlimax(0, 1)
+#define __riscv_vsetvlmax_e8m4() __builtin_rvv_vsetvlimax(0, 2)
+#define __riscv_vsetvlmax_e8m8() __builtin_rvv_vsetvlimax(0, 3)
 
-#define vsetvlmax_e16mf2() __builtin_rvv_vsetvlimax(1, 7)
-#define vsetvlmax_e16m1() __builtin_rvv_vsetvlimax(1, 0)
-#define vsetvlmax_e16m2() __builtin_rvv_vsetvlimax(1, 1)
-#define vsetvlmax_e16m4() __builtin_rvv_vsetvlimax(1, 2)
-#define vsetvlmax_e16m8() __builtin_rvv_vsetvlimax(1, 3)
+#define __riscv_vsetvlmax_e16mf2() __builtin_rvv_vsetvlimax(1, 7)
+#define __riscv_vsetvlmax_e16m1() __builtin_rvv_vsetvlimax(1, 0)
+#define __riscv_vsetvlmax_e16m2() __builtin_rvv_vsetvlimax(1, 1)
+#define __riscv_vsetvlmax_e16m4() __builtin_rvv_vsetvlimax(1, 2)
+#define __riscv_vsetvlmax_e16m8() __builtin_rvv_vsetvlimax(1, 3)
 
-#define vsetvlmax_e32m1() __builtin_rvv_vsetvlimax(2, 0)
-#define vsetvlmax_e32m2() __builtin_rvv_vsetvlimax(2, 1)
-#define vsetvlmax_e32m4() __builtin_rvv_vsetvlimax(2, 2)
-#define vsetvlmax_e32m8() __builtin_rvv_vsetvlimax(2, 3)
+#define __riscv_vsetvlmax_e32m1() __builtin_rvv_vsetvlimax(2, 0)
+#define __riscv_vsetvlmax_e32m2() __builtin_rvv_vsetvlimax(2, 1)
+#define __riscv_vsetvlmax_e32m4() __builtin_rvv_vsetvlimax(2, 2)
+#define __riscv_vsetvlmax_e32m8() __builtin_rvv_vsetvlimax(2, 3)
 
 #if __riscv_v_elen >= 64
-#define vsetvlmax_e8mf8() __builtin_rvv_vsetvlimax(0, 5)
-#define vsetvlmax_e16mf4() __builtin_rvv_vsetvlimax(1, 6)
-#define vsetvlmax_e32mf2() __builtin_rvv_vsetvlimax(2, 7)
+#define __riscv_vsetvlmax_e8mf8() __builtin_rvv_vsetvlimax(0, 5)
+#define __riscv_vsetvlmax_e16mf4() __builtin_rvv_vsetvlimax(1, 6)
+#define __riscv_vsetvlmax_e32mf2() __builtin_rvv_vsetvlimax(2, 7)
 
-#define vsetvlmax_e64m1() __builtin_rvv_vsetvlimax(3, 0)
-#define vsetvlmax_e64m2() __builtin_rvv_vsetvlimax(3, 1)
-#define vsetvlmax_e64m4() __builtin_rvv_vsetvlimax(3, 2)
-#define vsetvlmax_e64m8() __builtin_rvv_vsetvlimax(3, 3)
+#define __riscv_vsetvlmax_e64m1() __builtin_rvv_vsetvlimax(3, 0)
+#define __riscv_vsetvlmax_e64m2() __builtin_rvv_vsetvlimax(3, 1)
+#define __riscv_vsetvlmax_e64m4() __builtin_rvv_vsetvlimax(3, 2)
+#define __riscv_vsetvlmax_e64m8() __builtin_rvv_vsetvlimax(3, 3)
 #endif
 
 }] in
@@ -1825,8 +1871,7 @@ defm vwmulsu : RVVOutOp0Op1BuiltinSet<"vwmulsu", "csi",
 }
 
 // 12.13. Vector Single-Width Integer Multiply-Add Instructions
-let UnMaskedPolicyScheme = HasPolicyOperand,
-    IsPrototypeDefaultTU = true in {
+let UnMaskedPolicyScheme = HasPolicyOperand in {
 defm vmacc  : RVVIntTerBuiltinSet;
 defm vnmsac : RVVIntTerBuiltinSet;
 defm vmadd  : RVVIntTerBuiltinSet;
@@ -1852,20 +1897,19 @@ defm vwmaccus : RVVOutOp1Op2BuiltinSet<"vwmaccus", "csi",
 // 12.15. Vector Integer Merge Instructions
 // C/C++ Operand: (mask, op1, op2, vl), Intrinsic: (passthru, op1, op2, mask, vl)
 let HasMasked = false,
-    UnMaskedPolicyScheme = HasPassthruOperandAtIdx1,
+    UnMaskedPolicyScheme = HasPassthruOperand,
     MaskedPolicyScheme = NonePolicy,
     ManualCodegen = [{
-      std::rotate(Ops.begin(), Ops.begin() + 1, Ops.end() - 1);
       // insert poison passthru
-      if (PolicyAttrs == TAIL_AGNOSTIC)
+      if (PolicyAttrs & RVV_VTA)
         Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
       IntrinsicTypes = {ResultType, Ops[2]->getType(), Ops.back()->getType()};
     }] in {
   defm vmerge : RVVOutOp1BuiltinSet<"vmerge", "csil",
-                                    [["vvm", "v", "vmvv"],
-                                     ["vxm", "v", "vmve"],
-                                     ["vvm", "Uv", "UvmUvUv"],
-                                     ["vxm", "Uv", "UvmUvUe"]]>;
+                                    [["vvm", "v", "vvvm"],
+                                     ["vxm", "v", "vvem"],
+                                     ["vvm", "Uv", "UvUvUvm"],
+                                     ["vxm", "Uv", "UvUvUem"]]>;
 }
 
 // 12.16. Vector Integer Move Instructions
@@ -1938,8 +1982,7 @@ let Log2LMUL = [-2, -1, 0, 1, 2] in {
 }
 
 // 14.6. Vector Single-Width Floating-Point Fused Multiply-Add Instructions
-let UnMaskedPolicyScheme = HasPolicyOperand,
-    IsPrototypeDefaultTU = true in {
+let UnMaskedPolicyScheme = HasPolicyOperand in {
 defm vfmacc  : RVVFloatingTerBuiltinSet;
 defm vfnmacc : RVVFloatingTerBuiltinSet;
 defm vfmsac  : RVVFloatingTerBuiltinSet;
@@ -1996,19 +2039,18 @@ let Name = "vfclass_v", UnMaskedPolicyScheme = HasPassthruOperand in
 // 14.15. Vector Floating-Point Merge Instructio
 // C/C++ Operand: (mask, op1, op2, vl), Builtin: (op1, op2, mask, vl)
 let HasMasked = false,
-    UnMaskedPolicyScheme = HasPassthruOperandAtIdx1,
+    UnMaskedPolicyScheme = HasPassthruOperand,
     MaskedPolicyScheme = NonePolicy,
     ManualCodegen = [{
-      std::rotate(Ops.begin(), Ops.begin() + 1, Ops.end() - 1);
       // insert poison passthru
-      if (PolicyAttrs == TAIL_AGNOSTIC)
+      if (PolicyAttrs & RVV_VTA)
         Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
       IntrinsicTypes = {ResultType, Ops[2]->getType(), Ops.back()->getType()};
     }] in {
   defm vmerge : RVVOutOp1BuiltinSet<"vmerge", "xfd",
-                                    [["vvm", "v", "vmvv"]]>;
+                                    [["vvm", "v", "vvvm"]]>;
   defm vfmerge : RVVOutOp1BuiltinSet<"vfmerge", "xfd",
-                                    [["vfm", "v", "vmve"]]>;
+                                     [["vfm", "v", "vvem"]]>;
 }
 
 // 14.16. Vector Floating-Point Move Instruction
@@ -2057,7 +2099,6 @@ let Log2LMUL = [-3, -2, -1, 0, 1, 2] in {
 // 15.1. Vector Single-Width Integer Reduction Instructions
 let UnMaskedPolicyScheme = HasPassthruOperand,
     MaskedPolicyScheme = HasPassthruOperand,
-    IsPrototypeDefaultTU = true,
     HasMaskPolicy = false in {
 defm vredsum : RVVIntReductionBuiltinSet;
 defm vredmaxu : RVVUnsignedReductionBuiltin;
@@ -2070,11 +2111,11 @@ defm vredxor : RVVIntReductionBuiltinSet;
 
 // 15.2. Vector Widening Integer Reduction Instructions
 // Vector Widening Integer Reduction Operations
-let HasMaskedOffOperand = false in {
-  defm vwredsum : RVVOutOp1BuiltinSet<"vwredsum", "csi",
-                                      [["vs", "vSw", "SwSwvSw"]]>;
-  defm vwredsumu : RVVOutOp1BuiltinSet<"vwredsumu", "csi",
-                                       [["vs", "UvUSw", "USwUSwUvUSw"]]>;
+let HasMaskedOffOperand = true in {
+  defm vwredsum : RVVOutOp0BuiltinSet<"vwredsum", "csi",
+                                      [["vs", "vSw", "SwvSw"]]>;
+  defm vwredsumu : RVVOutOp0BuiltinSet<"vwredsumu", "csi",
+                                       [["vs", "UvUSw", "USwUvUSw"]]>;
 }
 
 // 15.3. Vector Single-Width Floating-Point Reduction Instructions
@@ -2140,12 +2181,12 @@ let HasMasked = false, MaskedPolicyScheme = NonePolicy in {
     defm vmv_x : RVVOp0BuiltinSet<"vmv_x_s", "csil",
                                    [["s", "ve", "ev"],
                                     ["s", "UvUe", "UeUv"]]>;
-  let OverloadedName = "vmv_s", IsPrototypeDefaultTU = true,
+  let OverloadedName = "vmv_s",
       UnMaskedPolicyScheme = HasPassthruOperand,
       SupportOverloading = false in
     defm vmv_s : RVVOutBuiltinSet<"vmv_s_x", "csil",
-                                   [["x", "v", "vve"],
-                                    ["x", "Uv", "UvUvUe"]]>;
+                                   [["x", "v", "ve"],
+                                    ["x", "Uv", "UvUe"]]>;
 }
 
 // 17.2. Floating-Point Scalar Move Instructions
@@ -2153,19 +2194,19 @@ let HasMasked = false, MaskedPolicyScheme = NonePolicy in {
   let HasVL = false, OverloadedName = "vfmv_f" in
     defm vfmv_f : RVVOp0BuiltinSet<"vfmv_f_s", "xfd",
                                      [["s", "ve", "ev"]]>;
-  let OverloadedName = "vfmv_s", IsPrototypeDefaultTU = true,
+  let OverloadedName = "vfmv_s",
       UnMaskedPolicyScheme = HasPassthruOperand,
       SupportOverloading = false in
     defm vfmv_s : RVVOutBuiltinSet<"vfmv_s_f", "xfd",
-                                     [["f", "v", "vve"],
-                                      ["x", "Uv", "UvUvUe"]]>;
+                                     [["f", "v", "ve"],
+                                      ["x", "Uv", "UvUe"]]>;
 }
 
 // 17.3. Vector Slide Instructions
 // 17.3.1. Vector Slideup Instructions
-defm vslideup   : RVVSlideBuiltinSet;
+defm vslideup   : RVVSlideUpBuiltinSet;
 // 17.3.2. Vector Slidedown Instructions
-defm vslidedown : RVVSlideBuiltinSet;
+defm vslidedown : RVVSlideDownBuiltinSet;
 
 // 17.3.3. Vector Slide1up Instructions
 let UnMaskedPolicyScheme = HasPassthruOperand in {
@@ -2194,23 +2235,21 @@ defm vrgatherei16 : RVVOutBuiltinSet<"vrgatherei16_vv", "csil",
 }
 
 // 17.5. Vector Compress Instruction
-let IsPrototypeDefaultTU = true,
-    HasMasked = false,
-    UnMaskedPolicyScheme = HasPassthruOperandAtIdx1,
+let HasMasked = false,
+    UnMaskedPolicyScheme = HasPassthruOperand,
     MaskedPolicyScheme = NonePolicy,
     ManualCodegen = [{
-      std::rotate(Ops.begin(), Ops.begin() + 1, Ops.end() - 1);
       // insert poison passthru
-      if (PolicyAttrs == TAIL_AGNOSTIC)
+      if (PolicyAttrs & RVV_VTA)
         Ops.insert(Ops.begin(), llvm::PoisonValue::get(ResultType));
       IntrinsicTypes = {ResultType, Ops.back()->getType()};
     }] in {
   // signed and floating type
   defm vcompress : RVVOutBuiltinSet<"vcompress", "csilxfd",
-                                    [["vm", "v", "vmvv"]]>;
+                                    [["vm", "v", "vvm"]]>;
   // unsigned type
   defm vcompress : RVVOutBuiltinSet<"vcompress", "csil",
-                                    [["vm", "Uv", "UvmUvUv"]]>;
+                                    [["vm", "Uv", "UvUvm"]]>;
 }
 
 // Miscellaneous

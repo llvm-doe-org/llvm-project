@@ -98,7 +98,6 @@
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -136,6 +135,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <tuple>
@@ -1225,7 +1225,7 @@ bool ASTReader::ReadLexicalDeclContextStorage(ModuleFile &M,
   auto &Lex = LexicalDecls[DC];
   if (!Lex.first) {
     Lex = std::make_pair(
-        &M, llvm::makeArrayRef(
+        &M, llvm::ArrayRef(
                 reinterpret_cast<const llvm::support::unaligned_uint32_t *>(
                     Blob.data()),
                 Blob.size() / 4));
@@ -1549,8 +1549,8 @@ bool ASTReader::ReadSLocEntry(int ID) {
     if (NumFileDecls && ContextObj) {
       const DeclID *FirstDecl = F->FileSortedDecls + Record[6];
       assert(F->FileSortedDecls && "FILE_SORTED_DECLS not encountered yet ?");
-      FileDeclIDs[FID] = FileDeclsInfo(F, llvm::makeArrayRef(FirstDecl,
-                                                             NumFileDecls));
+      FileDeclIDs[FID] =
+          FileDeclsInfo(F, llvm::ArrayRef(FirstDecl, NumFileDecls));
     }
 
     const SrcMgr::ContentCache &ContentCache =
@@ -1684,7 +1684,7 @@ Token ASTReader::ReadToken(ModuleFile &F, const RecordDataImpl &Record,
       Toks.reserve(NumTokens);
       for (unsigned I = 0; I < NumTokens; ++I)
         Toks.push_back(ReadToken(F, Record, Idx));
-      Info->Toks = llvm::makeArrayRef(Toks).copy(PP.getPreprocessorAllocator());
+      Info->Toks = llvm::ArrayRef(Toks).copy(PP.getPreprocessorAllocator());
       Tok.setAnnotationValue(static_cast<void *>(Info));
       break;
     }
@@ -1948,7 +1948,7 @@ HeaderFileInfoTrait::ReadData(internal_key_ref key, const unsigned char *d,
       Reader.ResolveImportedPath(M, Filename);
     // FIXME: NameAsWritten
     Module::Header H = {std::string(key.Filename), "",
-                        *FileMgr.getFile(Filename)};
+                        FileMgr.getOptionalFileRef(Filename)};
     ModMap.addHeader(Mod, H, HeaderRole, /*Imported*/true);
     HFI.isModuleHeader |= ModuleMap::isModular(HeaderRole);
   }
@@ -2410,8 +2410,8 @@ InputFile ASTReader::getInputFile(ModuleFile &F, unsigned ID, bool Complain) {
       Content,
       None,
     } Kind;
-    llvm::Optional<int64_t> Old = std::nullopt;
-    llvm::Optional<int64_t> New = std::nullopt;
+    std::optional<int64_t> Old = std::nullopt;
+    std::optional<int64_t> New = std::nullopt;
   };
   auto HasInputFileChanged = [&]() {
     if (StoredSize != File->getSize())
@@ -3404,7 +3404,7 @@ llvm::Error ASTReader::ReadASTBlock(ModuleFile &F,
       if (!Record.empty()) {
         unsigned Idx = 0, End = Record.size() - 1;
         bool ReachedEOFWhileSkipping = Record[Idx++];
-        llvm::Optional<Preprocessor::PreambleSkipInfo> SkipInfo;
+        std::optional<Preprocessor::PreambleSkipInfo> SkipInfo;
         if (ReachedEOFWhileSkipping) {
           SourceLocation HashToken = ReadSourceLocation(F, Record, Idx);
           SourceLocation IfTokenLoc = ReadSourceLocation(F, Record, Idx);
@@ -4258,7 +4258,7 @@ ASTReader::ASTReadResult ASTReader::ReadAST(StringRef FileName,
   llvm::TimeTraceScope scope("ReadAST", FileName);
 
   llvm::SaveAndRestore SetCurImportLocRAII(CurrentImportLoc, ImportLoc);
-  llvm::SaveAndRestore<Optional<ModuleKind>> SetCurModuleKindRAII(
+  llvm::SaveAndRestore<std::optional<ModuleKind>> SetCurModuleKindRAII(
       CurrentDeserializingModuleKind, Type);
 
   // Defer any pending actions until we get to the end of reading the AST file.
@@ -5662,7 +5662,7 @@ llvm::Error ASTReader::ReadSubmoduleBlock(ModuleFile &F,
       //        `Headers/`, so this path will never exist.
       std::string Filename = std::string(Blob);
       ResolveImportedPath(F, Filename);
-      if (auto Umbrella = PP.getFileManager().getFile(Filename)) {
+      if (auto Umbrella = PP.getFileManager().getOptionalFileRef(Filename)) {
         if (!CurrentModule->getUmbrellaHeader()) {
           // FIXME: NameAsWritten
           ModMap.setUmbrellaHeader(CurrentModule, *Umbrella, Blob, "");
@@ -6266,8 +6266,8 @@ std::pair<unsigned, unsigned>
 
 /// Optionally returns true or false if the preallocated preprocessed
 /// entity with index \arg Index came from file \arg FID.
-Optional<bool> ASTReader::isPreprocessedEntityInFileID(unsigned Index,
-                                                             FileID FID) {
+std::optional<bool> ASTReader::isPreprocessedEntityInFileID(unsigned Index,
+                                                            FileID FID) {
   if (FID.isInvalid())
     return false;
 
@@ -6291,7 +6291,7 @@ namespace {
   /// Visitor used to search for information about a header file.
   class HeaderFileInfoVisitor {
     const FileEntry *FE;
-    Optional<HeaderFileInfo> HFI;
+    std::optional<HeaderFileInfo> HFI;
 
   public:
     explicit HeaderFileInfoVisitor(const FileEntry *FE) : FE(FE) {}
@@ -6311,7 +6311,7 @@ namespace {
       return true;
     }
 
-    Optional<HeaderFileInfo> getHeaderFileInfo() const { return HFI; }
+    std::optional<HeaderFileInfo> getHeaderFileInfo() const { return HFI; }
   };
 
 } // namespace
@@ -6319,8 +6319,8 @@ namespace {
 HeaderFileInfo ASTReader::GetHeaderFileInfo(const FileEntry *FE) {
   HeaderFileInfoVisitor Visitor(FE);
   ModuleMgr.visit(Visitor);
-  if (Optional<HeaderFileInfo> HFI = Visitor.getHeaderFileInfo())
-    return *HFI;
+  if (std::optional<HeaderFileInfo> HFI = Visitor.getHeaderFileInfo())
+      return *HFI;
 
   return HeaderFileInfo();
 }
@@ -6475,7 +6475,7 @@ ASTReader::RecordLocation ASTReader::TypeCursorForIndex(unsigned Index) {
              M->DeclsBlockStartOffset);
 }
 
-static llvm::Optional<Type::TypeClass> getTypeClassForCode(TypeCode code) {
+static std::optional<Type::TypeClass> getTypeClassForCode(TypeCode code) {
   switch (code) {
 #define TYPE_BIT_CODE(CLASS_ID, CODE_ID, CODE_VALUE) \
   case TYPE_##CODE_ID: return Type::CLASS_ID;
@@ -6858,6 +6858,7 @@ void TypeLocReader::VisitPackExpansionTypeLoc(PackExpansionTypeLoc TL) {
 
 void TypeLocReader::VisitObjCInterfaceTypeLoc(ObjCInterfaceTypeLoc TL) {
   TL.setNameLoc(readSourceLocation());
+  TL.setNameEndLoc(readSourceLocation());
 }
 
 void TypeLocReader::VisitObjCTypeParamTypeLoc(ObjCTypeParamTypeLoc TL) {
@@ -7178,6 +7179,11 @@ QualType ASTReader::GetType(TypeID ID) {
       T = Context.SingletonId; \
       break;
 #include "clang/Basic/RISCVVTypes.def"
+#define WASM_TYPE(Name, Id, SingletonId)                                       \
+  case PREDEF_TYPE_##Id##_ID:                                                  \
+    T = Context.SingletonId;                                                   \
+    break;
+#include "clang/Basic/WebAssemblyReferenceTypes.def"
     }
 
     assert(!T.isNull() && "Unknown predefined type");
@@ -7302,7 +7308,7 @@ void ASTReader::CompleteRedeclChain(const Decl *D) {
   //
   // FIXME: Merging a function definition should merge
   // all mergeable entities within it.
-  if (isa<TranslationUnitDecl, NamespaceDecl, CXXRecordDecl, EnumDecl>(DC)) {
+  if (isa<TranslationUnitDecl, NamespaceDecl, RecordDecl, EnumDecl>(DC)) {
     if (DeclarationName Name = cast<NamedDecl>(D)->getDeclName()) {
       if (!getContext().getLangOpts().CPlusPlus &&
           isa<TranslationUnitDecl>(DC)) {
@@ -8036,8 +8042,8 @@ void ASTReader::UpdateSema() {
           PragmaAlignPackStack.front().PushLocation);
       DropFirst = true;
     }
-    for (const auto &Entry : llvm::makeArrayRef(PragmaAlignPackStack)
-                                 .drop_front(DropFirst ? 1 : 0)) {
+    for (const auto &Entry :
+         llvm::ArrayRef(PragmaAlignPackStack).drop_front(DropFirst ? 1 : 0)) {
       SemaObj->AlignPackStack.Stack.emplace_back(
           Entry.SlotLabel, Entry.Value, Entry.Location, Entry.PushLocation);
     }
@@ -8068,7 +8074,7 @@ void ASTReader::UpdateSema() {
       DropFirst = true;
     }
     for (const auto &Entry :
-         llvm::makeArrayRef(FpPragmaStack).drop_front(DropFirst ? 1 : 0))
+         llvm::ArrayRef(FpPragmaStack).drop_front(DropFirst ? 1 : 0))
       SemaObj->FpPragmaStack.Stack.emplace_back(
           Entry.SlotLabel, Entry.Value, Entry.Location, Entry.PushLocation);
     if (FpPragmaCurrentLocation.isInvalid()) {
@@ -8764,8 +8770,7 @@ unsigned ASTReader::getModuleFileID(ModuleFile *F) {
   return (I - PCHModules.end()) << 1;
 }
 
-llvm::Optional<ASTSourceDescriptor>
-ASTReader::getSourceDescriptor(unsigned ID) {
+std::optional<ASTSourceDescriptor> ASTReader::getSourceDescriptor(unsigned ID) {
   if (Module *M = getSubmodule(ID))
     return ASTSourceDescriptor(*M);
 
@@ -9506,8 +9511,10 @@ void ASTReader::finishPendingActions() {
 
 void ASTReader::diagnoseOdrViolations() {
   if (PendingOdrMergeFailures.empty() && PendingOdrMergeChecks.empty() &&
+      PendingRecordOdrMergeFailures.empty() &&
       PendingFunctionOdrMergeFailures.empty() &&
       PendingEnumOdrMergeFailures.empty() &&
+      PendingObjCInterfaceOdrMergeFailures.empty() &&
       PendingObjCProtocolOdrMergeFailures.empty())
     return;
 
@@ -9528,6 +9535,25 @@ void ASTReader::diagnoseOdrViolations() {
       RD->bases_begin();
       RD->vbases_begin();
     }
+  }
+
+  // Trigger the import of the full definition of each record in C/ObjC.
+  auto RecordOdrMergeFailures = std::move(PendingRecordOdrMergeFailures);
+  PendingRecordOdrMergeFailures.clear();
+  for (auto &Merge : RecordOdrMergeFailures) {
+    Merge.first->decls_begin();
+    for (auto &D : Merge.second)
+      D->decls_begin();
+  }
+
+  // Trigger the import of the full interface definition.
+  auto ObjCInterfaceOdrMergeFailures =
+      std::move(PendingObjCInterfaceOdrMergeFailures);
+  PendingObjCInterfaceOdrMergeFailures.clear();
+  for (auto &Merge : ObjCInterfaceOdrMergeFailures) {
+    Merge.first->decls_begin();
+    for (auto &InterfacePair : Merge.second)
+      InterfacePair.first->decls_begin();
   }
 
   // Trigger the import of functions.
@@ -9647,8 +9673,10 @@ void ASTReader::diagnoseOdrViolations() {
     }
   }
 
-  if (OdrMergeFailures.empty() && FunctionOdrMergeFailures.empty() &&
-      EnumOdrMergeFailures.empty() && ObjCProtocolOdrMergeFailures.empty())
+  if (OdrMergeFailures.empty() && RecordOdrMergeFailures.empty() &&
+      FunctionOdrMergeFailures.empty() && EnumOdrMergeFailures.empty() &&
+      ObjCInterfaceOdrMergeFailures.empty() &&
+      ObjCProtocolOdrMergeFailures.empty())
     return;
 
   // Ensure we don't accidentally recursively enter deserialization while
@@ -9687,6 +9715,26 @@ void ASTReader::diagnoseOdrViolations() {
     }
   }
 
+  // Issue any pending ODR-failure diagnostics for RecordDecl in C/ObjC. Note
+  // that in C++ this is done as a part of CXXRecordDecl ODR checking.
+  for (auto &Merge : RecordOdrMergeFailures) {
+    // If we've already pointed out a specific problem with this class, don't
+    // bother issuing a general "something's different" diagnostic.
+    if (!DiagnosedOdrMergeFailures.insert(Merge.first).second)
+      continue;
+
+    RecordDecl *FirstRecord = Merge.first;
+    bool Diagnosed = false;
+    for (auto *SecondRecord : Merge.second) {
+      if (DiagsEmitter.diagnoseMismatch(FirstRecord, SecondRecord)) {
+        Diagnosed = true;
+        break;
+      }
+    }
+    (void)Diagnosed;
+    assert(Diagnosed && "Unable to emit ODR diagnostic.");
+  }
+
   // Issue ODR failures diagnostics for functions.
   for (auto &Merge : FunctionOdrMergeFailures) {
     FunctionDecl *FirstFunction = Merge.first;
@@ -9712,6 +9760,25 @@ void ASTReader::diagnoseOdrViolations() {
     bool Diagnosed = false;
     for (auto &SecondEnum : Merge.second) {
       if (DiagsEmitter.diagnoseMismatch(FirstEnum, SecondEnum)) {
+        Diagnosed = true;
+        break;
+      }
+    }
+    (void)Diagnosed;
+    assert(Diagnosed && "Unable to emit ODR diagnostic.");
+  }
+
+  for (auto &Merge : ObjCInterfaceOdrMergeFailures) {
+    // If we've already pointed out a specific problem with this interface,
+    // don't bother issuing a general "something's different" diagnostic.
+    if (!DiagnosedOdrMergeFailures.insert(Merge.first).second)
+      continue;
+
+    bool Diagnosed = false;
+    ObjCInterfaceDecl *FirstID = Merge.first;
+    for (auto &InterfacePair : Merge.second) {
+      if (DiagsEmitter.diagnoseMismatch(FirstID, InterfacePair.first,
+                                        InterfacePair.second)) {
         Diagnosed = true;
         break;
       }
@@ -10210,6 +10277,9 @@ OMPClause *OMPClauseReader::readClause() {
     break;
   case llvm::omp::OMPC_align:
     C = new (Context) OMPAlignClause();
+    break;
+  case llvm::omp::OMPC_ompx_dyn_cgroup_mem:
+    C = new (Context) OMPXDynCGroupMemClause();
     break;
 #define OMP_CLAUSE_NO_CLASS(Enum, Str)                                         \
   case llvm::omp::Enum:                                                        \
@@ -10770,10 +10840,13 @@ void OMPClauseReader::VisitOMPDeviceClause(OMPDeviceClause *C) {
 
 void OMPClauseReader::VisitOMPMapClause(OMPMapClause *C) {
   C->setLParenLoc(Record.readSourceLocation());
+  bool HasIteratorModifier = false;
   for (unsigned I = 0; I < NumberOfOMPMapClauseModifiers; ++I) {
     C->setMapTypeModifier(
         I, static_cast<OpenMPMapModifierKind>(Record.readInt()));
     C->setMapTypeModifierLoc(I, Record.readSourceLocation());
+    if (C->getMapTypeModifier(I) == OMPC_MAP_MODIFIER_iterator)
+      HasIteratorModifier = true;
   }
   C->setMapperQualifierLoc(Record.readNestedNameSpecifierLoc());
   C->setMapperIdInfo(Record.readDeclarationNameInfo());
@@ -10797,6 +10870,9 @@ void OMPClauseReader::VisitOMPMapClause(OMPMapClause *C) {
   for (unsigned I = 0; I < NumVars; ++I)
     UDMappers.push_back(Record.readExpr());
   C->setUDMapperRefs(UDMappers);
+
+  if (HasIteratorModifier)
+    C->setIteratorModifier(Record.readExpr());
 
   SmallVector<ValueDecl *, 16> Decls;
   Decls.reserve(UniqueDecls);
@@ -11272,6 +11348,12 @@ void OMPClauseReader::VisitOMPBindClause(OMPBindClause *C) {
 
 void OMPClauseReader::VisitOMPAlignClause(OMPAlignClause *C) {
   C->setAlignment(Record.readExpr());
+  C->setLParenLoc(Record.readSourceLocation());
+}
+
+void OMPClauseReader::VisitOMPXDynCGroupMemClause(OMPXDynCGroupMemClause *C) {
+  VisitOMPClauseWithPreInit(C);
+  C->setSize(Record.readSubExpr());
   C->setLParenLoc(Record.readSourceLocation());
 }
 

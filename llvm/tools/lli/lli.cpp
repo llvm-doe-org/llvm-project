@@ -174,7 +174,7 @@ namespace {
   cl::opt<char> OptLevel("O",
                          cl::desc("Optimization level. [-O0, -O1, -O2, or -O3] "
                                   "(default = '-O2')"),
-                         cl::Prefix, cl::init(' '));
+                         cl::Prefix, cl::init('2'));
 
   cl::opt<std::string>
   TargetTriple("mtriple", cl::desc("Override target triple for module"));
@@ -408,17 +408,10 @@ static void addCygMingExtraModule(ExecutionEngine &EE, LLVMContext &Context,
 }
 
 CodeGenOpt::Level getOptLevel() {
-  switch (OptLevel) {
-  default:
-    WithColor::error(errs(), "lli") << "invalid optimization level.\n";
-    exit(1);
-  case '0': return CodeGenOpt::None;
-  case '1': return CodeGenOpt::Less;
-  case ' ':
-  case '2': return CodeGenOpt::Default;
-  case '3': return CodeGenOpt::Aggressive;
-  }
-  llvm_unreachable("Unrecognized opt level.");
+  if (auto Level = CodeGenOpt::parseLevel(OptLevel))
+    return *Level;
+  WithColor::error(errs(), "lli") << "invalid optimization level.\n";
+  exit(1);
 }
 
 [[noreturn]] static void reportError(SMDiagnostic Err, const char *ProgName) {
@@ -670,10 +663,6 @@ int main(int argc, char **argv, char * const *envp) {
 #endif
   }
 
-  std::unique_ptr<orc::ExecutorProcessControl> EPC =
-      RemoteMCJIT ? ExitOnErr(launchRemote())
-                  : ExitOnErr(orc::SelfExecutorProcessControl::Create());
-
   if (!RemoteMCJIT) {
     // If the program doesn't explicitly call exit, we will need the Exit
     // function later on to make an explicit call, so get the function now.
@@ -719,6 +708,7 @@ int main(int argc, char **argv, char * const *envp) {
     abort();
   } else {
     // else == "if (RemoteMCJIT)"
+    std::unique_ptr<orc::ExecutorProcessControl> EPC = ExitOnErr(launchRemote());
 
     // Remote target MCJIT doesn't (yet) support static constructors. No reason
     // it couldn't. This is a limitation of the LLI implementation, not the

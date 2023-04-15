@@ -185,7 +185,7 @@ public:
 
   /// Fetches list of all variables in the clause.
   ArrayRef<const Expr *> getVarRefs() const {
-    return llvm::makeArrayRef(
+    return llvm::ArrayRef(
         static_cast<const T *>(this)->template getTrailingObjects<Expr *>(),
         NumVars);
   }
@@ -1813,7 +1813,7 @@ public:
 
   /// Fetches list of size expressions associated with this clause.
   ArrayRef<const Expr *> getSizeExprs() const {
-    return llvm::makeArrayRef(getTrailingObjects<Expr *>(), NumSizeExprs);
+    return llvm::ArrayRef(getTrailingObjects<Expr *>(), NumSizeExprs);
   }
 
   child_range children() {
@@ -1981,7 +1981,7 @@ public:
   /// Fetches list of queue expressions associated with this clause.  It's
   /// empty if none.
   ArrayRef<const Expr *> getQueueExprs() const {
-    return llvm::makeArrayRef(getTrailingObjects<Expr *>(), NumQueueExprs);
+    return llvm::ArrayRef(getTrailingObjects<Expr *>(), NumQueueExprs);
   }
 
   child_range children() {

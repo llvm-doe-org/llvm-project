@@ -591,14 +591,7 @@ static const MCSymbolELF *getLinkedToSymbol(const GlobalObject *GO,
   if (!MD)
     return nullptr;
 
-  const MDOperand &Op = MD->getOperand(0);
-  if (!Op.get())
-    return nullptr;
-
-  auto *VM = dyn_cast<ValueAsMetadata>(Op);
-  if (!VM)
-    report_fatal_error("MD_associated operand is not ValueAsMetadata");
-
+  auto *VM = cast<ValueAsMetadata>(MD->getOperand(0).get());
   auto *OtherGV = dyn_cast<GlobalValue>(VM->getValue());
   return OtherGV ? dyn_cast<MCSymbolELF>(TM.getSymbol(OtherGV)) : nullptr;
 }
@@ -2292,15 +2285,15 @@ TargetLoweringObjectFileXCOFF::getTargetSymbol(const GlobalValue *GV,
   // function entry point. We choose to always return a function descriptor
   // here.
   if (const GlobalObject *GO = dyn_cast<GlobalObject>(GV)) {
+    if (GO->isDeclarationForLinker())
+      return cast<MCSectionXCOFF>(getSectionForExternalReference(GO, TM))
+          ->getQualNameSymbol();
+
     if (const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GV))
       if (GVar->hasAttribute("toc-data"))
         return cast<MCSectionXCOFF>(
                    SectionForGlobal(GVar, SectionKind::getData(), TM))
             ->getQualNameSymbol();
-
-    if (GO->isDeclarationForLinker())
-      return cast<MCSectionXCOFF>(getSectionForExternalReference(GO, TM))
-          ->getQualNameSymbol();
 
     SectionKind GOKind = getKindForGlobal(GO, TM);
     if (GOKind.isText())
@@ -2359,6 +2352,10 @@ MCSection *TargetLoweringObjectFileXCOFF::getSectionForExternalReference(
       isa<Function>(GO) ? XCOFF::XMC_DS : XCOFF::XMC_UA;
   if (GO->isThreadLocal())
     SMC = XCOFF::XMC_UL;
+
+  if (const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GO))
+    if (GVar->hasAttribute("toc-data"))
+      SMC = XCOFF::XMC_TD;
 
   // Externals go into a csect of type ER.
   return getContext().getXCOFFSection(

@@ -60,3 +60,15 @@ add_header_library(
   DEPS
     .memset_implementation
 )
+
+add_header_library(
+  strcmp_implementation
+  HDRS
+    strcmp_implementations.h
+)
+
+add_header_library(
+  strstr_implementation
+  HDRS
+    strstr_implementations.h
+)

@@ -52,9 +52,6 @@ else()
   set(LIBOMPTARGET_DEP_LIBRARIES)
 endif()
 
-# Set the -I for headers from the runtime.
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../../runtime/src)
-
 if(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
   # On FreeBSD, the 'environ' symbol is undefined at link time, but resolved by
   # the dynamic linker at runtime. Therefore, allow the symbol to be undefined
@@ -114,10 +111,10 @@ set_target_properties(omptarget.rtl.amdgpu PROPERTIES
 # This controls whether tests are run for the nvptx offloading target
 # Run them if libhsa is available, or if the user explicitly asked for dlopen
 # Otherwise this plugin is being built speculatively and there may be no hsa available
-if (${hsa-runtime64_FOUND} OR LIBOMPTARGET_FORCE_DLOPEN_LIBHSA)
+option(LIBOMPTARGET_FORCE_AMDGPU_TESTS "Build AMDGPU libomptarget tests" OFF)
+if (LIBOMPTARGET_FOUND_AMDGPU_GPU OR LIBOMPTARGET_FORCE_AMDGPU_TESTS)
   # Report to the parent scope that we are building a plugin for amdgpu
-  set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS} amdgcn-amd-amdhsa amdgcn-amd-amdhsa-oldDriver" PARENT_SCOPE)
-  set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS} amdgcn-amd-amdhsa amdgcn-amd-amdhsa-LTO" PARENT_SCOPE)
+  set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS} amdgcn-amd-amdhsa" PARENT_SCOPE)
   list(APPEND LIBOMPTARGET_TESTED_PLUGINS "omptarget.rtl.amdgpu")
   set(LIBOMPTARGET_TESTED_PLUGINS "${LIBOMPTARGET_TESTED_PLUGINS}" PARENT_SCOPE)
 else()

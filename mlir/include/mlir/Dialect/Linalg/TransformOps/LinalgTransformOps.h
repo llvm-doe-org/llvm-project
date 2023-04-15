@@ -17,12 +17,19 @@
 namespace mlir {
 class TilingInterface;
 class RewriterBase;
+
 namespace linalg {
 class GenericOp;
 class LinalgOp;
 } // namespace linalg
 
+namespace tensor {
+class PackOp;
+class UnPackOp;
+} // namespace tensor
+
 namespace transform {
+class TransformHandleTypeInterface;
 // Types needed for builders.
 struct TileSizesSpec {};
 struct NumThreadsSpec {};

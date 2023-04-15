@@ -131,12 +131,8 @@ enum : uint64_t {
   // Is a WMMA instruction.
   IsWMMA = UINT64_C(1) << 59,
 
-  // Is source of divergence.
-  //
-  // Note: There is no corresponding SIInstrInfo::IsSourceOfDivergence method
-  // by design, since this flag only covers opcodes that are _always_ divergent.
-  // Use SIInstrInfo::getInstructionUniformity for a more complete analysis.
-  IsSourceOfDivergence = UINT64_C(1) << 60
+  // Whether tied sources will be read.
+  TiedSourceNotRead = UINT64_C(1) << 60,
 };
 
 // v_cmp_class_* etc. use a 10-bit mask for what operation is checked.
@@ -198,6 +194,12 @@ enum OperandType : unsigned {
   OPERAND_REG_INLINE_AC_V2INT32,
   OPERAND_REG_INLINE_AC_V2FP32,
 
+  // Operand for source modifiers for VOP instructions
+  OPERAND_INPUT_MODS,
+
+  // Operand for SDWA instructions
+  OPERAND_SDWA_VOPC_DST,
+
   OPERAND_REG_IMM_FIRST = OPERAND_REG_IMM_INT32,
   OPERAND_REG_IMM_LAST = OPERAND_REG_IMM_V2FP32,
 
@@ -211,13 +213,7 @@ enum OperandType : unsigned {
   OPERAND_SRC_LAST = OPERAND_REG_INLINE_C_LAST,
 
   OPERAND_KIMM_FIRST = OPERAND_KIMM32,
-  OPERAND_KIMM_LAST = OPERAND_KIMM16,
-
-  // Operand for source modifiers for VOP instructions
-  OPERAND_INPUT_MODS,
-
-  // Operand for SDWA instructions
-  OPERAND_SDWA_VOPC_DST
+  OPERAND_KIMM_LAST = OPERAND_KIMM16
 
 };
 }
@@ -337,7 +333,7 @@ enum Id { // Message ID, width(4) [3:0].
   ID_SAVEWAVE = 4,           // added in GFX8, removed in GFX11
   ID_STALL_WAVE_GEN = 5,     // added in GFX9
   ID_HALT_WAVES = 6,         // added in GFX9
-  ID_ORDERED_PS_DONE = 7,    // added in GFX9
+  ID_ORDERED_PS_DONE = 7,    // added in GFX9, removed in GFX11
   ID_EARLY_PRIM_DEALLOC = 8, // added in GFX9, removed in GFX10
   ID_GS_ALLOC_REQ = 9,       // added in GFX9
   ID_GET_DOORBELL = 10,      // added in GFX9, removed in GFX11
@@ -903,6 +899,10 @@ enum Offset_COV5 : unsigned {
   HOSTCALL_PTR_OFFSET = 80,
   MULTIGRID_SYNC_ARG_OFFSET = 88,
   HEAP_PTR_OFFSET = 96,
+
+  DEFAULT_QUEUE_OFFSET = 104,
+  COMPLETION_ACTION_OFFSET = 112,
+
   PRIVATE_BASE_OFFSET = 192,
   SHARED_BASE_OFFSET = 196,
   QUEUE_PTR_OFFSET = 200,

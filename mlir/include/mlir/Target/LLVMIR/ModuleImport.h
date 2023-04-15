@@ -46,9 +46,9 @@ public:
   ModuleImport(ModuleOp mlirModule, std::unique_ptr<llvm::Module> llvmModule);
 
   /// Calls the LLVMImportInterface initialization that queries the registered
-  /// dialect interfaces for the supported LLVM IR intrinsics and builds the
-  /// dispatch table. Returns failure if multiple dialect interfaces translate
-  /// the same LLVM IR intrinsic.
+  /// dialect interfaces for the supported LLVM IR intrinsics and metadata kinds
+  /// and builds the dispatch tables. Returns failure if multiple dialect
+  /// interfaces translate the same LLVM IR intrinsic.
   LogicalResult initializeImportInterface() { return iface.initializeImport(); }
 
   /// Converts all functions of the LLVM module to MLIR functions.
@@ -71,6 +71,35 @@ public:
 
   /// Returns the MLIR value mapped to the given LLVM value.
   Value lookupValue(llvm::Value *value) { return valueMapping.lookup(value); }
+
+  /// Stores a mapping between an LLVM instruction and the imported MLIR
+  /// operation if the operation returns no result. Asserts if the operation
+  /// returns a result and should be added to valueMapping instead.
+  void mapNoResultOp(llvm::Instruction *llvm, Operation *mlir) {
+    mapNoResultOp(llvm) = mlir;
+  }
+
+  /// Provides write-once access to store the MLIR operation corresponding to
+  /// the given LLVM instruction if the operation returns no result. Asserts if
+  /// the operation returns a result and should be added to valueMapping
+  /// instead.
+  Operation *&mapNoResultOp(llvm::Instruction *inst) {
+    Operation *&mlir = noResultOpMapping[inst];
+    assert(inst->getType()->isVoidTy() &&
+           "attempting to map an operation that returns a result");
+    assert(mlir == nullptr &&
+           "attempting to map an operation that is already mapped");
+    return mlir;
+  }
+
+  /// Returns the MLIR operation mapped to the given LLVM instruction. Queries
+  /// valueMapping and noResultOpMapping to support operations with and without
+  /// result.
+  Operation *lookupOperation(llvm::Instruction *inst) {
+    if (Value value = lookupValue(inst))
+      return value.getDefiningOp();
+    return noResultOpMapping.lookup(inst);
+  }
 
   /// Stores the mapping between an LLVM block and its MLIR counterpart.
   void mapBlock(llvm::BasicBlock *llvm, Block *mlir) {
@@ -111,22 +140,41 @@ public:
   /// Imports `func` into the current module.
   LogicalResult processFunction(llvm::Function *func);
 
-  /// Converts function attributes of LLVM Function \p func
-  /// into LLVM dialect attributes of LLVMFuncOp \p funcOp.
+  /// Converts function attributes of LLVM Function `func` into LLVM dialect
+  /// attributes of LLVMFuncOp `funcOp`.
   void processFunctionAttributes(llvm::Function *func, LLVMFuncOp funcOp);
-
-  /// Imports `globalVar` as a GlobalOp, creating it if it doesn't exist.
-  GlobalOp processGlobal(llvm::GlobalVariable *globalVar);
 
   /// Sets the fastmath flags attribute for the imported operation `op` given
   /// the original instruction `inst`. Asserts if the operation does not
   /// implement the fastmath interface.
   void setFastmathFlagsAttr(llvm::Instruction *inst, Operation *op) const;
 
+  /// Converts all LLVM metadata nodes that translate to operations nested in a
+  /// global metadata operation, such as alias analysis or access group
+  /// metadata, and builds a map from the metadata nodes to the symbols pointing
+  /// to the converted operations. Returns success if all conversions succeed
+  /// and failure otherwise.
+  // Note: All metadata is nested inside a single global metadata operation to
+  // minimize the number of symbols that pollute the global namespace.
+  LogicalResult convertMetadata();
+
+  /// Returns the MLIR symbol reference mapped to the given LLVM TBAA
+  /// metadata `node`.
+  SymbolRefAttr lookupTBAAAttr(const llvm::MDNode *node) const {
+    return tbaaMapping.lookup(node);
+  }
+
+  /// Returns the MLIR symbol reference mapped to the given LLVM access
+  /// group metadata `node`.
+  SymbolRefAttr lookupAccessGroupAttr(const llvm::MDNode *node) const {
+    return accessGroupMapping.lookup(node);
+  }
+
 private:
   /// Clears the block and value mapping before processing a new region.
   void clearBlockAndValueMapping() {
     valueMapping.clear();
+    noResultOpMapping.clear();
     blockMapping.clear();
   }
   /// Sets the constant insertion point to the start of the given block.
@@ -135,19 +183,29 @@ private:
     constantInsertionOp = nullptr;
   }
 
+  /// Converts an LLVM global variable into an MLIR LLVM dialect global
+  /// operation if a conversion exists. Otherwise, returns failure.
+  LogicalResult convertGlobal(llvm::GlobalVariable *globalVar);
+  /// Imports the magic globals "global_ctors" and "global_dtors".
+  LogicalResult convertGlobalCtorsAndDtors(llvm::GlobalVariable *globalVar);
   /// Returns personality of `func` as a FlatSymbolRefAttr.
   FlatSymbolRefAttr getPersonalityAsAttr(llvm::Function *func);
   /// Imports `bb` into `block`, which must be initially empty.
   LogicalResult processBasicBlock(llvm::BasicBlock *bb, Block *block);
   /// Converts an LLVM intrinsic to an MLIR LLVM dialect operation if an MLIR
   /// counterpart exists. Otherwise, returns failure.
-  LogicalResult convertIntrinsic(OpBuilder &odsBuilder, llvm::CallInst *inst);
+  LogicalResult convertIntrinsic(llvm::CallInst *inst);
   /// Converts an LLVM instruction to an MLIR LLVM dialect operation if an MLIR
   /// counterpart exists. Otherwise, returns failure.
-  LogicalResult convertInstruction(OpBuilder &odsBuilder,
-                                   llvm::Instruction *inst);
+  LogicalResult convertInstruction(llvm::Instruction *inst);
+  /// Converts the metadata attached to the original instruction `inst` if
+  /// a dialect interfaces supports the specific kind of metadata and attaches
+  /// the resulting dialect attributes to the converted operation `op`. Emits a
+  /// warning if the conversion of a supported metadata kind fails.
+  void setNonDebugMetadataAttrs(llvm::Instruction *inst, Operation *op);
   /// Imports `inst` and populates valueMapping[inst] with the result of the
-  /// imported operation.
+  /// imported operation or noResultOpMapping[inst] with the imported operation
+  /// if it has no result.
   LogicalResult processInstruction(llvm::Instruction *inst);
   /// Converts the `branch` arguments in the order of the phi's found in
   /// `target` and appends them to the `blockArguments` to attach to the
@@ -162,6 +220,14 @@ private:
   LogicalResult convertCallTypeAndOperands(llvm::CallBase *callInst,
                                            SmallVectorImpl<Type> &types,
                                            SmallVectorImpl<Value> &operands);
+  /// Converts the parameter attributes attached to `func` and adds them to the
+  /// `funcOp`.
+  void convertParameterAttributes(llvm::Function *func, LLVMFuncOp funcOp,
+                                  OpBuilder &builder);
+  /// Converts the AttributeSet of one parameter in LLVM IR to a corresponding
+  /// DictionaryAttr for the LLVM dialect.
+  DictionaryAttr convertParameterAttribute(llvm::AttributeSet llvmParamAttrs,
+                                           OpBuilder &builder);
   /// Returns the builtin type equivalent to be used in attributes for the given
   /// LLVM IR dialect type.
   Type getStdTypeForAttr(Type type);
@@ -181,6 +247,21 @@ private:
   /// them fails. All operations are inserted at the start of the current
   /// function entry block.
   FailureOr<Value> convertConstantExpr(llvm::Constant *constant);
+  /// Returns a global metadata operation that serves as a container for LLVM
+  /// metadata that converts to MLIR operations. Creates the global metadata
+  /// operation on the first invocation.
+  MetadataOp getGlobalMetadataOp();
+  /// Performs conversion of LLVM TBAA metadata starting from
+  /// `node`. On exit from this function all nodes reachable
+  /// from `node` are converted, and tbaaMapping map is updated
+  /// (unless all dependencies have been converted by a previous
+  /// invocation of this function).
+  LogicalResult processTBAAMetadata(const llvm::MDNode *node);
+  /// Converts all LLVM access groups starting from `node` to MLIR access group
+  /// operations and stores a mapping from every nested access group node to the
+  /// symbol pointing to the translated operation. Returns success if all
+  /// conversions succeed and failure otherwise.
+  LogicalResult processAccessGroupMetadata(const llvm::MDNode *node);
 
   /// Builder pointing at where the next instruction should be generated.
   OpBuilder builder;
@@ -190,6 +271,8 @@ private:
   Operation *constantInsertionOp = nullptr;
   /// Operation to insert the next global after.
   Operation *globalInsertionOp = nullptr;
+  /// Operation to insert metadata operations into.
+  MetadataOp globalMetadataOp = nullptr;
   /// The current context.
   MLIRContext *context;
   /// The MLIR module being created.
@@ -205,8 +288,17 @@ private:
   DenseMap<llvm::BasicBlock *, Block *> blockMapping;
   /// Function-local mapping between original and imported values.
   DenseMap<llvm::Value *, Value> valueMapping;
-  /// Uniquing map of GlobalVariables.
-  DenseMap<llvm::GlobalVariable *, GlobalOp> globals;
+  /// Function-local mapping between original instructions and imported
+  /// operations for all operations that return no result. All operations that
+  /// return a result have a valueMapping entry instead.
+  DenseMap<llvm::Instruction *, Operation *> noResultOpMapping;
+  /// Mapping between LLVM TBAA metadata nodes and symbol references
+  /// to the LLVMIR dialect TBAA operations corresponding to these
+  /// nodes.
+  DenseMap<const llvm::MDNode *, SymbolRefAttr> tbaaMapping;
+  /// Mapping between original LLVM access group metadata nodes and the symbol
+  /// references pointing to the imported MLIR access group operations.
+  DenseMap<const llvm::MDNode *, SymbolRefAttr> accessGroupMapping;
   /// The stateful type translator (contains named structs).
   LLVM::TypeFromLLVMIRTranslator typeTranslator;
   /// Stateful debug information importer.

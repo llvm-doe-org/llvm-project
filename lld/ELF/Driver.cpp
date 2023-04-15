@@ -1158,8 +1158,6 @@ static void readConfigs(opt::InputArgList &args) {
   config->nostdlib = args.hasArg(OPT_nostdlib);
   config->oFormatBinary = isOutputFormatBinary(args);
   config->omagic = args.hasFlag(OPT_omagic, OPT_no_omagic, false);
-  config->opaquePointers = args.hasFlag(
-      OPT_plugin_opt_opaque_pointers, OPT_plugin_opt_no_opaque_pointers, true);
   config->optRemarksFilename = args.getLastArgValue(OPT_opt_remarks_filename);
   config->optStatsFilename = args.getLastArgValue(OPT_plugin_opt_stats_file);
 
@@ -2688,7 +2686,7 @@ void LinkerDriver::link(opt::InputArgList &args) {
 
   // compileBitcodeFiles may have produced lto.tmp object files. After this, no
   // more file will be added.
-  auto newObjectFiles = makeArrayRef(ctx.objectFiles).slice(numObjsBeforeLTO);
+  auto newObjectFiles = ArrayRef(ctx.objectFiles).slice(numObjsBeforeLTO);
   parallelForEach(newObjectFiles, [](ELFFileBase *file) {
     initSectionsAndLocalSyms(file, /*ignoreComdats=*/true);
   });
@@ -2792,10 +2790,10 @@ void LinkerDriver::link(opt::InputArgList &args) {
     ctx.inputSections.push_back(createCommentSection());
 
   // Split SHF_MERGE and .eh_frame sections into pieces in preparation for garbage collection.
-  invokeELFT(splitSections);
+  invokeELFT(splitSections,);
 
   // Garbage collection and removal of shared symbols from unused shared objects.
-  invokeELFT(markLive);
+  invokeELFT(markLive,);
   demoteSharedAndLazySymbols();
 
   // Make copies of any input sections that need to be copied into each
@@ -2804,7 +2802,7 @@ void LinkerDriver::link(opt::InputArgList &args) {
 
   // Create synthesized sections such as .got and .plt. This is called before
   // processSectionCommands() so that they can be placed by SECTIONS commands.
-  invokeELFT(createSyntheticSections);
+  invokeELFT(createSyntheticSections,);
 
   // Some input sections that are used for exception handling need to be moved
   // into synthetic sections. Do that now so that they aren't assigned to
@@ -2845,7 +2843,7 @@ void LinkerDriver::link(opt::InputArgList &args) {
   // ICF runs after processSectionCommands() so that we know the output sections.
   if (config->icf != ICFLevel::None) {
     invokeELFT(findKeepUniqueSections, args);
-    invokeELFT(doIcf);
+    invokeELFT(doIcf,);
   }
 
   // Read the callgraph now that we know what was gced or icfed
@@ -2853,9 +2851,9 @@ void LinkerDriver::link(opt::InputArgList &args) {
     if (auto *arg = args.getLastArg(OPT_call_graph_ordering_file))
       if (std::optional<MemoryBufferRef> buffer = readFile(arg->getValue()))
         readCallGraph(*buffer);
-    invokeELFT(readCallGraphsFromObjectFiles);
+    invokeELFT(readCallGraphsFromObjectFiles,);
   }
 
   // Write the result to the file.
-  invokeELFT(writeResult);
+  invokeELFT(writeResult,);
 }

@@ -251,6 +251,16 @@ namespace llvm {
   unsigned int APFloatBase::semanticsSizeInBits(const fltSemantics &semantics) {
     return semantics.sizeInBits;
   }
+  unsigned int APFloatBase::semanticsIntSizeInBits(const fltSemantics &semantics,
+                                                   bool isSigned) {
+    // The max FP value is pow(2, MaxExponent) * (1 + MaxFraction), so we need
+    // at least one more bit than the MaxExponent to hold the max FP value.
+    unsigned int MinBitWidth = semanticsMaxExponent(semantics) + 1;
+    // Extra sign bit needed.
+    if (isSigned)
+      ++MinBitWidth;
+    return MinBitWidth;
+  }
 
   unsigned APFloatBase::getSizeInBits(const fltSemantics &Sem) {
     return Sem.sizeInBits;
@@ -2650,7 +2660,7 @@ IEEEFloat::convertFromZeroExtendedInteger(const integerPart *parts,
                                           unsigned int width, bool isSigned,
                                           roundingMode rounding_mode) {
   unsigned int partCount = partCountForBits(width);
-  APInt api = APInt(width, makeArrayRef(parts, partCount));
+  APInt api = APInt(width, ArrayRef(parts, partCount));
 
   sign = false;
   if (isSigned && APInt::tcExtractBit(parts, width - 1)) {
@@ -4056,9 +4066,9 @@ void IEEEFloat::toString(SmallVectorImpl<char> &Str, unsigned FormatPrecision,
 
   // Decompose the number into an APInt and an exponent.
   int exp = exponent - ((int) semantics->precision - 1);
-  APInt significand(semantics->precision,
-                    makeArrayRef(significandParts(),
-                                 partCountForBits(semantics->precision)));
+  APInt significand(
+      semantics->precision,
+      ArrayRef(significandParts(), partCountForBits(semantics->precision)));
 
   // Set FormatPrecision if zero.  We want to do this before we
   // truncate trailing zeros, as those are part of the precision.
@@ -4477,7 +4487,7 @@ IEEEFloat scalbn(IEEEFloat X, int Exp, IEEEFloat::roundingMode RoundingMode) {
   int MaxIncrement = MaxExp - (MinExp - SignificandBits) + 1;
 
   // Clamp to one past the range ends to let normalize handle overlflow.
-  X.exponent += std::min(std::max(Exp, -MaxIncrement - 1), MaxIncrement);
+  X.exponent += std::clamp(Exp, -MaxIncrement - 1, MaxIncrement);
   X.normalize(RoundingMode, lfExactlyZero);
   if (X.isNaN())
     X.makeQuiet();

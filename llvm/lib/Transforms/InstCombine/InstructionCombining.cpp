@@ -47,7 +47,6 @@
 #include "llvm/Analysis/BlockFrequencyInfo.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/ConstantFolding.h"
-#include "llvm/Analysis/EHPersonalities.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/LazyBlockFrequencyInfo.h"
@@ -70,6 +69,7 @@
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Dominators.h"
+#include "llvm/IR/EHPersonalities.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/IRBuilder.h"
@@ -2463,7 +2463,7 @@ Instruction *InstCombinerImpl::visitGetElementPtrInst(GetElementPtrInst &GEP) {
     unsigned AS = GEP.getPointerAddressSpace();
     if (GEP.getOperand(1)->getType()->getScalarSizeInBits() ==
         DL.getIndexSizeInBits(AS)) {
-      uint64_t TyAllocSize = DL.getTypeAllocSize(GEPEltType).getFixedSize();
+      uint64_t TyAllocSize = DL.getTypeAllocSize(GEPEltType).getFixedValue();
 
       bool Matched = false;
       uint64_t C;
@@ -2593,8 +2593,9 @@ Instruction *InstCombinerImpl::visitGetElementPtrInst(GetElementPtrInst &GEP) {
       if (GEPEltType->isSized() && StrippedPtrEltTy->isSized()) {
         // Check that changing the type amounts to dividing the index by a scale
         // factor.
-        uint64_t ResSize = DL.getTypeAllocSize(GEPEltType).getFixedSize();
-        uint64_t SrcSize = DL.getTypeAllocSize(StrippedPtrEltTy).getFixedSize();
+        uint64_t ResSize = DL.getTypeAllocSize(GEPEltType).getFixedValue();
+        uint64_t SrcSize =
+            DL.getTypeAllocSize(StrippedPtrEltTy).getFixedValue();
         if (ResSize && SrcSize % ResSize == 0) {
           Value *Idx = GEP.getOperand(1);
           unsigned BitWidth = Idx->getType()->getPrimitiveSizeInBits();
@@ -2630,10 +2631,10 @@ Instruction *InstCombinerImpl::visitGetElementPtrInst(GetElementPtrInst &GEP) {
           StrippedPtrEltTy->isArrayTy()) {
         // Check that changing to the array element type amounts to dividing the
         // index by a scale factor.
-        uint64_t ResSize = DL.getTypeAllocSize(GEPEltType).getFixedSize();
+        uint64_t ResSize = DL.getTypeAllocSize(GEPEltType).getFixedValue();
         uint64_t ArrayEltSize =
             DL.getTypeAllocSize(StrippedPtrEltTy->getArrayElementType())
-                .getFixedSize();
+                .getFixedValue();
         if (ResSize && ArrayEltSize % ResSize == 0) {
           Value *Idx = GEP.getOperand(1);
           unsigned BitWidth = Idx->getType()->getPrimitiveSizeInBits();
@@ -2694,7 +2695,7 @@ Instruction *InstCombinerImpl::visitGetElementPtrInst(GetElementPtrInst &GEP) {
           BasePtrOffset.isNonNegative()) {
         APInt AllocSize(
             IdxWidth,
-            DL.getTypeAllocSize(AI->getAllocatedType()).getKnownMinSize());
+            DL.getTypeAllocSize(AI->getAllocatedType()).getKnownMinValue());
         if (BasePtrOffset.ule(AllocSize)) {
           return GetElementPtrInst::CreateInBounds(
               GEP.getSourceElementType(), PtrOp, Indices, GEP.getName());
@@ -3316,6 +3317,12 @@ InstCombinerImpl::foldExtractOfOverflowIntrinsic(ExtractValueInst &EV) {
   if (OvID == Intrinsic::usub_with_overflow)
     return new ICmpInst(ICmpInst::ICMP_ULT, WO->getLHS(), WO->getRHS());
 
+  // smul with i1 types overflows when both sides are set: -1 * -1 == +1, but
+  // +1 is not possible because we assume signed values.
+  if (OvID == Intrinsic::smul_with_overflow &&
+      WO->getLHS()->getType()->isIntOrIntVectorTy(1))
+    return BinaryOperator::CreateAnd(WO->getLHS(), WO->getRHS());
+
   // If only the overflow result is used, and the right hand side is a
   // constant (or constant splat), we can remove the intrinsic by directly
   // checking for overflow.
@@ -3386,7 +3393,7 @@ Instruction *InstCombinerImpl::visitExtractValueInst(ExtractValueInst &EV) {
       Value *NewEV = Builder.CreateExtractValue(IV->getAggregateOperand(),
                                                 EV.getIndices());
       return InsertValueInst::Create(NewEV, IV->getInsertedValueOperand(),
-                                     makeArrayRef(insi, inse));
+                                     ArrayRef(insi, inse));
     }
     if (insi == inse)
       // The insert list is a prefix of the extract list
@@ -3398,7 +3405,7 @@ Instruction *InstCombinerImpl::visitExtractValueInst(ExtractValueInst &EV) {
       // with
       // %E extractvalue { i32 } { i32 42 }, 0
       return ExtractValueInst::Create(IV->getInsertedValueOperand(),
-                                      makeArrayRef(exti, exte));
+                                      ArrayRef(exti, exte));
   }
 
   if (Instruction *R = foldExtractOfOverflowIntrinsic(EV))
@@ -3822,7 +3829,8 @@ InstCombinerImpl::pushFreezeToPreventPoisonFromPropagating(FreezeInst &OrigFI) {
   // poison.  If the only source of new poison is flags, we can simply
   // strip them (since we know the only use is the freeze and nothing can
   // benefit from them.)
-  if (canCreateUndefOrPoison(cast<Operator>(OrigOp), /*ConsiderFlags*/ false))
+  if (canCreateUndefOrPoison(cast<Operator>(OrigOp),
+                             /*ConsiderFlagsAndMetadata*/ false))
     return nullptr;
 
   // If operand is guaranteed not to be poison, there is no need to add freeze
@@ -3839,7 +3847,7 @@ InstCombinerImpl::pushFreezeToPreventPoisonFromPropagating(FreezeInst &OrigFI) {
       return nullptr;
   }
 
-  OrigOpInst->dropPoisonGeneratingFlags();
+  OrigOpInst->dropPoisonGeneratingFlagsAndMetadata();
 
   // If all operands are guaranteed to be non-poison, we can drop freeze.
   if (!MaybePoisonOperand)
@@ -3902,7 +3910,7 @@ Instruction *InstCombinerImpl::foldFreezeIntoRecurrence(FreezeInst &FI,
 
     Instruction *I = dyn_cast<Instruction>(V);
     if (!I || canCreateUndefOrPoison(cast<Operator>(I),
-                                     /*ConsiderFlags*/ false))
+                                     /*ConsiderFlagsAndMetadata*/ false))
       return nullptr;
 
     DropFlags.push_back(I);
@@ -3910,7 +3918,7 @@ Instruction *InstCombinerImpl::foldFreezeIntoRecurrence(FreezeInst &FI,
   }
 
   for (Instruction *I : DropFlags)
-    I->dropPoisonGeneratingFlags();
+    I->dropPoisonGeneratingFlagsAndMetadata();
 
   if (StartNeedsFreeze) {
     Builder.SetInsertPoint(StartBB->getTerminator());
@@ -4596,7 +4604,7 @@ static bool combineInstructionsOverFunction(
   // LowerDbgDeclare calls RemoveRedundantDbgInstrs, but LowerDbgDeclare will
   // almost never return true when running an assignment tracking build. Take
   // this opportunity to do some clean up for assignment tracking builds too.
-  if (!MadeIRChange && getEnableAssignmentTracking()) {
+  if (!MadeIRChange && isAssignmentTrackingEnabled(*F.getParent())) {
     for (auto &BB : F)
       RemoveRedundantDbgInstrs(&BB);
   }

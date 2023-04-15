@@ -23,8 +23,6 @@ if (LLVM_LINK_LLVM_DYLIB)
 else()
   llvm_map_components_to_libnames(llvm_libs BinaryFormat Object Support)
 endif()
-# Set the -I for headers from the runtime.
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/../../../../runtime/src)
 
 target_link_libraries(elf_common PUBLIC ${llvm_libs} ${OPENMP_PTHREAD_LIB})
 

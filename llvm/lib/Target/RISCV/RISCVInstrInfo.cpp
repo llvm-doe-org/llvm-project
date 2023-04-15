@@ -1092,8 +1092,7 @@ static MachineInstr *canFoldAsPredicatedOp(Register Reg,
     if (MO.isDef())
       return nullptr;
     // Allow constant physregs.
-    if (Register::isPhysicalRegister(MO.getReg()) &&
-        !MRI.isConstantPhysReg(MO.getReg()))
+    if (MO.getReg().isPhysical() && !MRI.isConstantPhysReg(MO.getReg()))
       return nullptr;
   }
   bool DontMoveAcrossStores = true;
@@ -1206,12 +1205,7 @@ unsigned RISCVInstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
   }
 
   if (MI.getParent() && MI.getParent()->getParent()) {
-    const auto MF = MI.getMF();
-    const auto &TM = static_cast<const RISCVTargetMachine &>(MF->getTarget());
-    const MCRegisterInfo &MRI = *TM.getMCRegisterInfo();
-    const MCSubtargetInfo &STI = *TM.getMCSubtargetInfo();
-    const RISCVSubtarget &ST = MF->getSubtarget<RISCVSubtarget>();
-    if (isCompressibleInst(MI, &ST, MRI, STI))
+    if (isCompressibleInst(MI, STI))
       return 2;
   }
   return get(Opcode).getSize();
@@ -1437,7 +1431,7 @@ RISCVInstrInfo::getInverseOpcode(unsigned Opcode) const {
 static bool canCombineFPFusedMultiply(const MachineInstr &Root,
                                       const MachineOperand &MO,
                                       bool DoRegPressureReduce) {
-  if (!MO.isReg() || !Register::isVirtualRegister(MO.getReg()))
+  if (!MO.isReg() || !MO.getReg().isVirtual())
     return false;
   const MachineRegisterInfo &MRI = Root.getMF()->getRegInfo();
   MachineInstr *MI = MRI.getVRegDef(MO.getReg());
@@ -1626,6 +1620,12 @@ bool RISCVInstrInfo::verifyInstruction(const MachineInstr &MI,
         CASE_OPERAND_UIMM(4)
         CASE_OPERAND_UIMM(5)
         CASE_OPERAND_UIMM(7)
+        CASE_OPERAND_UIMM(12)
+        CASE_OPERAND_UIMM(20)
+          // clang-format on
+        case RISCVOp::OPERAND_UIMM2_LSB0:
+          Ok = isShiftedUInt<1, 1>(Imm);
+          break;
         case RISCVOp::OPERAND_UIMM7_LSB00:
           Ok = isShiftedUInt<5, 2>(Imm);
           break;
@@ -1635,9 +1635,6 @@ bool RISCVInstrInfo::verifyInstruction(const MachineInstr &MI,
         case RISCVOp::OPERAND_UIMM8_LSB000:
           Ok = isShiftedUInt<5, 3>(Imm);
           break;
-        CASE_OPERAND_UIMM(12)
-        CASE_OPERAND_UIMM(20)
-          // clang-format on
         case RISCVOp::OPERAND_SIMM10_LSB0000_NONZERO:
           Ok = isShiftedInt<6, 4>(Imm) && (Imm != 0);
           break;
@@ -1833,7 +1830,7 @@ RISCVInstrInfo::getSerializableDirectMachineOperandTargetFlags() const {
       {MO_TPREL_ADD, "riscv-tprel-add"},
       {MO_TLS_GOT_HI, "riscv-tls-got-hi"},
       {MO_TLS_GD_HI, "riscv-tls-gd-hi"}};
-  return makeArrayRef(TargetFlags);
+  return ArrayRef(TargetFlags);
 }
 bool RISCVInstrInfo::isFunctionSafeToOutlineFrom(
     MachineFunction &MF, bool OutlineFromLinkOnceODRs) const {
@@ -2641,18 +2638,20 @@ bool RISCVInstrInfo::hasAllNBitUsers(const MachineInstr &OrigMI,
           break;
         Worklist.push_back(std::make_pair(UserMI, Bits));
         break;
-      case RISCV::ANDI:
-        if (Bits >=
-            (64 - countLeadingZeros((uint64_t)UserMI->getOperand(2).getImm())))
+      case RISCV::ANDI: {
+        uint64_t Imm = UserMI->getOperand(2).getImm();
+        if (Bits >= (unsigned)llvm::bit_width(Imm))
           break;
         Worklist.push_back(std::make_pair(UserMI, Bits));
         break;
-      case RISCV::ORI:
-        if (Bits >=
-            (64 - countLeadingOnes((uint64_t)UserMI->getOperand(2).getImm())))
+      }
+      case RISCV::ORI: {
+        uint64_t Imm = UserMI->getOperand(2).getImm();
+        if (Bits >= (unsigned)llvm::bit_width<uint64_t>(~Imm))
           break;
         Worklist.push_back(std::make_pair(UserMI, Bits));
         break;
+      }
 
       case RISCV::SLL:
       case RISCV::BSET:

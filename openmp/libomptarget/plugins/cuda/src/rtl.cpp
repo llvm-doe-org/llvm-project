@@ -27,8 +27,12 @@
 #include "omptarget.h"
 #include "omptargetplugin.h"
 
+#ifndef TARGET_NAME
 #define TARGET_NAME CUDA
+#endif
+#ifndef DEBUG_PREFIX
 #define DEBUG_PREFIX "Target " GETNAME(TARGET_NAME) " RTL"
+#endif
 
 #include "MemoryManager.h"
 
@@ -932,7 +936,7 @@ public:
       if (const char *EnvStr = getenv("LIBOMPTARGET_DEVICE_RTL_DEBUG"))
         DeviceEnv.DebugKind = std::stoi(EnvStr);
 
-      const char *DeviceEnvName = "omptarget_device_environment";
+      const char *DeviceEnvName = "__omp_rtl_device_environment";
       CUdeviceptr DeviceEnvPtr;
       size_t CUSize;
 
@@ -987,54 +991,12 @@ public:
     return nullptr;
   }
 
-  int dataSubmit(const int DeviceId, void *TgtPtr, void *HstPtr,
-                 const int64_t Size, __tgt_async_info *AsyncInfo
-                 OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) const {
+  int dataSubmit(const int DeviceId, const void *TgtPtr, const void *HstPtr,
+                 const int64_t Size, __tgt_async_info *AsyncInfo) const {
     assert(AsyncInfo && "AsyncInfo is nullptr");
 
     CUstream Stream = getStream(DeviceId, AsyncInfo);
-
-#if OMPT_SUPPORT
-    // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
-    // "The target-data-op-begin event occurs before a thread initiates a data
-    // operation on a target device.  The target-data-op-end event occurs after
-    // a thread initiates a data operation on a target device."
-    //
-    // OpenMP 5.1, sec. 3.8.5 "omp_target_memcpy", p. 419, L4-5:
-    // "The target-data-op-begin event occurs before a thread initiates a data
-    // transfer.  The target-data-op-end event occurs after a thread initiated
-    // a data transfer."
-    //
-    // OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t and
-    // ompt_callback_target_data_op_t", p. 535, L25-27:
-    // "A thread dispatches a registered ompt_callback_target_data_op_emi or
-    // ompt_callback_target_data_op callback when device memory is allocated or
-    // freed, as well as when data is copied to or from a device."
-    //
-    // FIXME: We don't yet need the target_task_data, target_data, host_op_id,
-    // and codeptr_ra arguments for OpenACC support, so we haven't bothered to
-    // implement them yet.
-    if (OmptApi->ompt_target_enabled->ompt_callback_target_data_op_emi) {
-      OmptApi->ompt_target_callbacks->ompt_callback(
-          ompt_callback_target_data_op_emi)(
-          ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
-          /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, HstPtr,
-          OmptApi->omp_get_initial_device(), TgtPtr,
-          OmptApi->global_device_id, Size, /*codeptr_ra=*/NULL);
-    }
-#endif
     CUresult Err = cuMemcpyHtoDAsync((CUdeviceptr)TgtPtr, HstPtr, Size, Stream);
-#if OMPT_SUPPORT
-    if (OmptApi->ompt_target_enabled->ompt_callback_target_data_op_emi) {
-      OmptApi->ompt_target_callbacks->ompt_callback(
-          ompt_callback_target_data_op_emi)(
-          ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
-          /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, HstPtr,
-          OmptApi->omp_get_initial_device(), TgtPtr,
-          OmptApi->global_device_id, Size, /*codeptr_ra=*/NULL);
-    }
-#endif
-
     if (Err != CUDA_SUCCESS) {
       DP("Error when copying data from host to device. Pointers: host "
          "= " DPxMOD ", device = " DPxMOD ", size = %" PRId64 "\n",
@@ -1046,54 +1008,12 @@ public:
     return OFFLOAD_SUCCESS;
   }
 
-  int dataRetrieve(const int DeviceId, void *HstPtr, void *TgtPtr,
-                   const int64_t Size, __tgt_async_info *AsyncInfo
-                   OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) const {
+  int dataRetrieve(const int DeviceId, void *HstPtr, const void *TgtPtr,
+                   const int64_t Size, __tgt_async_info *AsyncInfo) const {
     assert(AsyncInfo && "AsyncInfo is nullptr");
 
     CUstream Stream = getStream(DeviceId, AsyncInfo);
-
-#if OMPT_SUPPORT
-    // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
-    // "The target-data-op-begin event occurs before a thread initiates a data
-    // operation on a target device.  The target-data-op-end event occurs after
-    // a thread initiates a data operation on a target device."
-    //
-    // OpenMP 5.1, sec. 3.8.5 "omp_target_memcpy", p. 419, L4-5:
-    // "The target-data-op-begin event occurs before a thread initiates a data
-    // transfer.  The target-data-op-end event occurs after a thread initiated
-    // a data transfer."
-    //
-    // OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t and
-    // ompt_callback_target_data_op_t", p. 535, L25-27:
-    // "A thread dispatches a registered ompt_callback_target_data_op_emi or
-    // ompt_callback_target_data_op callback when device memory is allocated or
-    // freed, as well as when data is copied to or from a device."
-    //
-    // FIXME: We don't yet need the target_task_data, target_data, host_op_id,
-    // and codeptr_ra arguments for OpenACC support, so we haven't bothered to
-    // implement them yet.
-    if (OmptApi->ompt_target_enabled->ompt_callback_target_data_op_emi) {
-      OmptApi->ompt_target_callbacks->ompt_callback(
-          ompt_callback_target_data_op_emi)(
-          ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
-          /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, TgtPtr,
-          OmptApi->global_device_id, HstPtr,
-          OmptApi->omp_get_initial_device(), Size, /*codeptr_ra=*/NULL);
-    }
-#endif
     CUresult Err = cuMemcpyDtoHAsync(HstPtr, (CUdeviceptr)TgtPtr, Size, Stream);
-#if OMPT_SUPPORT
-    if (OmptApi->ompt_target_enabled->ompt_callback_target_data_op_emi) {
-      OmptApi->ompt_target_callbacks->ompt_callback(
-          ompt_callback_target_data_op_emi)(
-          ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
-          /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, TgtPtr,
-          OmptApi->global_device_id, HstPtr,
-          OmptApi->omp_get_initial_device(), Size, /*codeptr_ra=*/NULL);
-    }
-#endif
-
     if (Err != CUDA_SUCCESS) {
       DP("Error when copying data from device to host. Pointers: host "
          "= " DPxMOD ", device = " DPxMOD ", size = %" PRId64 "\n",
@@ -1197,37 +1117,11 @@ public:
     return OFFLOAD_FAIL;
   }
 
-  int runTargetTeamRegion(
-      const int DeviceId, void *TgtEntryPtr, void **TgtArgs,
-      ptrdiff_t *TgtOffsets, const int ArgNum, const int TeamNum,
-      const int ThreadLimit, const unsigned int LoopTripCount,
-      __tgt_async_info *AsyncInfo
-      OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) const {
-#if OMPT_SUPPORT
-    // OpenMP 5.1, sec. 2.14.5 "target Construct", p. 201, L17-20:
-    // "The target-submit-begin event occurs prior to initiating creation of an
-    // initial task on a target device for a target region.  The
-    // target-submit-end event occurs after initiating creation of an initial
-    // task on a target device for a target region."
-    //
-    // OpenMP 5.1, sec. 4.5.2.28 "ompt_callback_target_submit_emi_t and
-    // ompt_callback_target_submit_t", p. 543, L2-6:
-    // "A thread dispatches a registered ompt_callback_target_submit_emi or
-    // ompt_callback_target_submit callback on the host before and after a
-    // target task initiates creation of an initial task on a device."
-    // "The endpoint argument indicates that the callback signals the beginning
-    // or end of a scope."
-    //
-    // FIXME: We don't yet need the target_data or host_op_id argument for
-    // OpenACC support, so we haven't bothered to implement it yet.
-    if (OmptApi->ompt_target_enabled->ompt_callback_target_submit_emi) {
-      OmptApi->ompt_target_callbacks->ompt_callback(
-          ompt_callback_target_submit_emi)(
-          ompt_scope_begin, /*target_data=*/NULL, /*host_op_id=*/NULL,
-          /*requested_num_teams=*/TeamNum);
-    }
-#endif
-
+  int runTargetTeamRegion(const int DeviceId, void *TgtEntryPtr, void **TgtArgs,
+                          ptrdiff_t *TgtOffsets, const int ArgNum,
+                          const int TeamNum, const int ThreadLimit,
+                          const unsigned int LoopTripCount,
+                          __tgt_async_info *AsyncInfo) const {
     // All args are references.
     std::vector<void *> Args(ArgNum);
     std::vector<void *> Ptrs(ArgNum);
@@ -1351,15 +1245,6 @@ public:
                          DynamicMemorySize, Stream, &Args[0], nullptr);
     if (!checkResult(Err, "Error returned from cuLaunchKernel\n"))
       return OFFLOAD_FAIL;
-
-#if OMPT_SUPPORT
-    if (OmptApi->ompt_target_enabled->ompt_callback_target_submit_emi) {
-      OmptApi->ompt_target_callbacks->ompt_callback(
-          ompt_callback_target_submit_emi)(
-          ompt_scope_end, /*target_data=*/NULL, /*host_op_id=*/NULL,
-          /*requested_num_teams=*/TeamNum);
-    }
-#endif
 
     DP("Launch of entry point at " DPxMOD " successful!\n",
        DPxPTR(TgtEntryPtr));
@@ -1792,8 +1677,7 @@ int32_t __tgt_rtl_data_submit_async(
   if (DeviceRTL.setContext(DeviceId) != OFFLOAD_SUCCESS)
     return OFFLOAD_FAIL;
 
-  return DeviceRTL.dataSubmit(DeviceId, TgtPtr, HstPtr, Size, AsyncInfoPtr
-                              OMPT_SUPPORT_IF(, OmptApi));
+  return DeviceRTL.dataSubmit(DeviceId, TgtPtr, HstPtr, Size, AsyncInfoPtr);
 }
 
 int32_t __tgt_rtl_data_retrieve(
@@ -1822,8 +1706,7 @@ int32_t __tgt_rtl_data_retrieve_async(
   if (DeviceRTL.setContext(DeviceId) != OFFLOAD_SUCCESS)
     return OFFLOAD_FAIL;
 
-  return DeviceRTL.dataRetrieve(DeviceId, HstPtr, TgtPtr, Size, AsyncInfoPtr
-                                OMPT_SUPPORT_IF(, OmptApi));
+  return DeviceRTL.dataRetrieve(DeviceId, HstPtr, TgtPtr, Size, AsyncInfoPtr);
 }
 
 int32_t __tgt_rtl_data_exchange_async(int32_t SrcDevId, void *SrcPtr,
@@ -1893,7 +1776,7 @@ int32_t __tgt_rtl_run_target_team_region_async(
 
   return DeviceRTL.runTargetTeamRegion(
       DeviceId, TgtEntryPtr, TgtArgs, TgtOffsets, ArgNum, TeamNum, ThreadLimit,
-      LoopTripcount, AsyncInfoPtr OMPT_SUPPORT_IF(, OmptApi));
+      LoopTripcount, AsyncInfoPtr);
 }
 
 int32_t __tgt_rtl_run_target_region(
@@ -2029,6 +1912,21 @@ int32_t __tgt_rtl_init_device_info(int32_t DeviceId,
     return OFFLOAD_FAIL;
 
   return DeviceRTL.initDeviceInfo(DeviceId, DeviceInfoPtr, ErrStr);
+}
+
+int32_t __tgt_rtl_launch_kernel(int32_t DeviceId, void *TgtEntryPtr,
+                                void **TgtArgs, ptrdiff_t *TgtOffsets,
+                                KernelArgsTy *KernelArgs,
+                                __tgt_async_info *AsyncInfo) {
+  assert(DeviceRTL.isValidDeviceId(DeviceId) && "device_id is invalid");
+
+  if (DeviceRTL.setContext(DeviceId) != OFFLOAD_SUCCESS)
+    return OFFLOAD_FAIL;
+
+  return DeviceRTL.runTargetTeamRegion(
+      DeviceId, TgtEntryPtr, TgtArgs, TgtOffsets, KernelArgs->NumArgs,
+      KernelArgs->NumTeams[0], KernelArgs->ThreadLimit[0],
+      KernelArgs->Tripcount, AsyncInfo);
 }
 
 #ifdef __cplusplus

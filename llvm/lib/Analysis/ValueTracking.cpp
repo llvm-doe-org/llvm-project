@@ -25,7 +25,6 @@
 #include "llvm/Analysis/AssumeBundleQueries.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/ConstantFolding.h"
-#include "llvm/Analysis/EHPersonalities.h"
 #include "llvm/Analysis/GuardUtils.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/Loads.h"
@@ -42,6 +41,7 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/Dominators.h"
+#include "llvm/IR/EHPersonalities.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/GlobalAlias.h"
@@ -616,16 +616,13 @@ static bool isKnownNonZeroFromAssume(const Value *V, const Query &Q) {
   for (auto &AssumeVH : Q.AC->assumptionsFor(V)) {
     if (!AssumeVH)
       continue;
-    CallInst *I = cast<CallInst>(AssumeVH);
+    CondGuardInst *I = cast<CondGuardInst>(AssumeVH);
     assert(I->getFunction() == Q.CxtI->getFunction() &&
            "Got assumption for the wrong function!");
 
     // Warning: This loop can end up being somewhat performance sensitive.
     // We're running this loop for once for each value queried resulting in a
     // runtime of ~O(#assumes * #values).
-
-    assert(I->getCalledFunction()->getIntrinsicID() == Intrinsic::assume &&
-           "must be an assume intrinsic");
 
     Value *RHS;
     CmpInst::Predicate Pred;
@@ -664,16 +661,13 @@ static void computeKnownBitsFromAssume(const Value *V, KnownBits &Known,
   for (auto &AssumeVH : Q.AC->assumptionsFor(V)) {
     if (!AssumeVH)
       continue;
-    CallInst *I = cast<CallInst>(AssumeVH);
+    CondGuardInst *I = cast<CondGuardInst>(AssumeVH);
     assert(I->getParent()->getParent() == Q.CxtI->getParent()->getParent() &&
            "Got assumption for the wrong function!");
 
     // Warning: This loop can end up being somewhat performance sensitive.
     // We're running this loop for once for each value queried resulting in a
     // runtime of ~O(#assumes * #values).
-
-    assert(I->getCalledFunction()->getIntrinsicID() == Intrinsic::assume &&
-           "must be an assume intrinsic");
 
     Value *Arg = I->getArgOperand(0);
 
@@ -940,6 +934,14 @@ static void computeKnownBitsFromAssume(const Value *V, KnownBits &Known,
           Known.Zero.setHighBits(RHSKnown.countMinLeadingZeros());
       }
       break;
+    case ICmpInst::ICMP_NE: {
+      // assume (v & b != 0) where b is a power of 2
+      const APInt *BPow2;
+      if (match(Cmp, m_ICmp(Pred, m_c_And(m_V, m_Power2(BPow2)), m_Zero())) &&
+          isValidAssumeForContext(I, Q.CxtI, Q.DT)) {
+        Known.One |= BPow2->zextOrTrunc(BitWidth);
+      }
+    } break;
     }
   }
 
@@ -1367,14 +1369,14 @@ static void computeKnownBitsFromOperator(const Operator *I,
       KnownBits IndexBits(IndexBitWidth);
       computeKnownBits(Index, IndexBits, Depth + 1, Q);
       TypeSize IndexTypeSize = Q.DL.getTypeAllocSize(IndexedTy);
-      uint64_t TypeSizeInBytes = IndexTypeSize.getKnownMinSize();
+      uint64_t TypeSizeInBytes = IndexTypeSize.getKnownMinValue();
       KnownBits ScalingFactor(IndexBitWidth);
       // Multiply by current sizeof type.
       // &A[i] == A + i * sizeof(*A[i]).
       if (IndexTypeSize.isScalable()) {
         // For scalable types the only thing we know about sizeof is
         // that this is a multiple of the minimum size.
-        ScalingFactor.Zero.setLowBits(countTrailingZeros(TypeSizeInBytes));
+        ScalingFactor.Zero.setLowBits(llvm::countr_zero(TypeSizeInBytes));
       } else if (IndexBits.isConstant()) {
         APInt IndexConst = IndexBits.getConstant();
         APInt ScalingFactor(IndexBitWidth, TypeSizeInBytes);
@@ -1631,7 +1633,7 @@ static void computeKnownBitsFromOperator(const Operator *I,
         // If this call is poison for 0 input, the result will be less than 2^n.
         if (II->getArgOperand(1) == ConstantInt::getTrue(II->getContext()))
           PossibleLZ = std::min(PossibleLZ, BitWidth - 1);
-        unsigned LowBits = Log2_32(PossibleLZ)+1;
+        unsigned LowBits = llvm::bit_width(PossibleLZ);
         Known.Zero.setBitsFrom(LowBits);
         break;
       }
@@ -1642,7 +1644,7 @@ static void computeKnownBitsFromOperator(const Operator *I,
         // If this call is poison for 0 input, the result will be less than 2^n.
         if (II->getArgOperand(1) == ConstantInt::getTrue(II->getContext()))
           PossibleTZ = std::min(PossibleTZ, BitWidth - 1);
-        unsigned LowBits = Log2_32(PossibleTZ)+1;
+        unsigned LowBits = llvm::bit_width(PossibleTZ);
         Known.Zero.setBitsFrom(LowBits);
         break;
       }
@@ -1651,7 +1653,7 @@ static void computeKnownBitsFromOperator(const Operator *I,
         // We can bound the space the count needs.  Also, bits known to be zero
         // can't contribute to the population.
         unsigned BitsPossiblySet = Known2.countMaxPopulation();
-        unsigned LowBits = Log2_32(BitsPossiblySet)+1;
+        unsigned LowBits = llvm::bit_width(BitsPossiblySet);
         Known.Zero.setBitsFrom(LowBits);
         // TODO: we could bound KnownOne using the lower bound on the number
         // of bits which might be set provided by popcnt KnownOne2.
@@ -1733,11 +1735,13 @@ static void computeKnownBitsFromOperator(const Operator *I,
         Known.Zero.setBitsFrom(32);
         break;
       case Intrinsic::riscv_vsetvli:
+      case Intrinsic::riscv_vsetvli_opt:
       case Intrinsic::riscv_vsetvlimax:
-        // Assume that VL output is positive and would fit in an int32_t.
-        // TODO: VLEN might be capped at 16 bits in a future V spec update.
-        if (BitWidth >= 32)
-          Known.Zero.setBitsFrom(31);
+      case Intrinsic::riscv_vsetvlimax_opt:
+        // Assume that VL output is >= 65536.
+        // TODO: Take SEW and LMUL into account.
+        if (BitWidth > 17)
+          Known.Zero.setBitsFrom(17);
         break;
       case Intrinsic::vscale: {
         if (!II->getParent() || !II->getFunction() ||
@@ -1761,7 +1765,7 @@ static void computeKnownBitsFromOperator(const Operator *I,
           break;
         }
 
-        unsigned FirstZeroHighBit = 32 - countLeadingZeros(*VScaleMax);
+        unsigned FirstZeroHighBit = llvm::bit_width(*VScaleMax);
         if (FirstZeroHighBit < BitWidth)
           Known.Zero.setBitsFrom(FirstZeroHighBit);
 
@@ -2565,16 +2569,16 @@ bool isKnownNonZero(const Value *V, const APInt &DemandedElts, unsigned Depth,
     // truncating casts, e.g., int2ptr/ptr2int with appropriate sizes, as well
     // as casts that can alter the value, e.g., AddrSpaceCasts.
     if (!isa<ScalableVectorType>(I->getType()) &&
-        Q.DL.getTypeSizeInBits(I->getOperand(0)->getType()).getFixedSize() <=
-        Q.DL.getTypeSizeInBits(I->getType()).getFixedSize())
+        Q.DL.getTypeSizeInBits(I->getOperand(0)->getType()).getFixedValue() <=
+            Q.DL.getTypeSizeInBits(I->getType()).getFixedValue())
       return isKnownNonZero(I->getOperand(0), Depth, Q);
     break;
   case Instruction::PtrToInt:
     // Similar to int2ptr above, we can look through ptr2int here if the cast
     // is a no-op or an extend and not a truncate.
     if (!isa<ScalableVectorType>(I->getType()) &&
-        Q.DL.getTypeSizeInBits(I->getOperand(0)->getType()).getFixedSize() <=
-        Q.DL.getTypeSizeInBits(I->getType()).getFixedSize())
+        Q.DL.getTypeSizeInBits(I->getOperand(0)->getType()).getFixedValue() <=
+            Q.DL.getTypeSizeInBits(I->getType()).getFixedValue())
       return isKnownNonZero(I->getOperand(0), Depth, Q);
     break;
   case Instruction::Or:
@@ -3312,10 +3316,17 @@ static unsigned ComputeNumSignBitsImpl(const Value *V,
       return Tmp;
     }
 
-    case Instruction::Trunc:
-      // FIXME: it's tricky to do anything useful for this, but it is an
-      // important case for targets like X86.
-      break;
+    case Instruction::Trunc: {
+      // If the input contained enough sign bits that some remain after the
+      // truncation, then we can make use of that. Otherwise we don't know
+      // anything.
+      Tmp = ComputeNumSignBits(U->getOperand(0), Depth + 1, Q);
+      unsigned OperandTyBits = U->getOperand(0)->getType()->getScalarSizeInBits();
+      if (Tmp > (OperandTyBits - TyBits))
+        return Tmp - (OperandTyBits - TyBits);
+
+      return 1;
+    }
 
     case Instruction::ExtractElement:
       // Look through extract element. At the moment we keep this simple and
@@ -3653,6 +3664,14 @@ static bool cannotBeOrderedLessThanZeroImpl(const Value *V,
       break;
     case Intrinsic::canonicalize:
     case Intrinsic::arithmetic_fence:
+    case Intrinsic::floor:
+    case Intrinsic::ceil:
+    case Intrinsic::trunc:
+    case Intrinsic::rint:
+    case Intrinsic::nearbyint:
+    case Intrinsic::round:
+    case Intrinsic::roundeven:
+    case Intrinsic::fptrunc_round:
       return cannotBeOrderedLessThanZeroImpl(I->getOperand(0), TLI, SignBitOnly, Depth + 1);
     case Intrinsic::maxnum: {
       Value *V0 = I->getOperand(0), *V1 = I->getOperand(1);
@@ -4132,8 +4151,8 @@ static Value *BuildSubAggregate(Value *From, Value* To, Type *IndexedType,
     return nullptr;
 
   // Insert the value in the new (sub) aggregate
-  return InsertValueInst::Create(To, V, makeArrayRef(Idxs).slice(IdxSkip),
-                                 "tmp", InsertBefore);
+  return InsertValueInst::Create(To, V, ArrayRef(Idxs).slice(IdxSkip), "tmp",
+                                 InsertBefore);
 }
 
 // This helper takes a nested struct and extracts a part of it (which is again a
@@ -4205,7 +4224,7 @@ Value *llvm::FindInsertedValue(Value *V, ArrayRef<unsigned> idx_range,
         // %C = insertvalue {i32, i32 } %A, i32 11, 1
         // which allows the unused 0,0 element from the nested struct to be
         // removed.
-        return BuildSubAggregate(V, makeArrayRef(idx_range.begin(), req_idx),
+        return BuildSubAggregate(V, ArrayRef(idx_range.begin(), req_idx),
                                  InsertBefore);
       }
 
@@ -4220,8 +4239,7 @@ Value *llvm::FindInsertedValue(Value *V, ArrayRef<unsigned> idx_range,
     // requested (though possibly only partially). Now we recursively look at
     // the inserted value, passing any remaining indices.
     return FindInsertedValue(I->getInsertedValueOperand(),
-                             makeArrayRef(req_idx, idx_range.end()),
-                             InsertBefore);
+                             ArrayRef(req_idx, idx_range.end()), InsertBefore);
   }
 
   if (ExtractValueInst *I = dyn_cast<ExtractValueInst>(V)) {
@@ -4317,7 +4335,7 @@ bool llvm::getConstantDataArrayInfo(const Value *V,
 
   if (GV->getInitializer()->isNullValue()) {
     Type *GVTy = GV->getValueType();
-    uint64_t SizeInBytes = DL.getTypeStoreSize(GVTy).getFixedSize();
+    uint64_t SizeInBytes = DL.getTypeStoreSize(GVTy).getFixedValue();
     uint64_t Length = SizeInBytes / ElementSizeInBytes;
 
     Slice.Array = nullptr;
@@ -5214,9 +5232,9 @@ static bool shiftAmountKnownInRange(const Value *ShiftAmount) {
 }
 
 static bool canCreateUndefOrPoison(const Operator *Op, bool PoisonOnly,
-                                   bool ConsiderFlags) {
+                                   bool ConsiderFlagsAndMetadata) {
 
-  if (ConsiderFlags && Op->hasPoisonGeneratingFlags())
+  if (ConsiderFlagsAndMetadata && Op->hasPoisonGeneratingFlagsOrMetadata())
     return true;
 
   unsigned Opcode = Op->getOpcode();
@@ -5364,12 +5382,15 @@ static bool canCreateUndefOrPoison(const Operator *Op, bool PoisonOnly,
   }
 }
 
-bool llvm::canCreateUndefOrPoison(const Operator *Op, bool ConsiderFlags) {
-  return ::canCreateUndefOrPoison(Op, /*PoisonOnly=*/false, ConsiderFlags);
+bool llvm::canCreateUndefOrPoison(const Operator *Op,
+                                  bool ConsiderFlagsAndMetadata) {
+  return ::canCreateUndefOrPoison(Op, /*PoisonOnly=*/false,
+                                  ConsiderFlagsAndMetadata);
 }
 
-bool llvm::canCreatePoison(const Operator *Op, bool ConsiderFlags) {
-  return ::canCreateUndefOrPoison(Op, /*PoisonOnly=*/true, ConsiderFlags);
+bool llvm::canCreatePoison(const Operator *Op, bool ConsiderFlagsAndMetadata) {
+  return ::canCreateUndefOrPoison(Op, /*PoisonOnly=*/true,
+                                  ConsiderFlagsAndMetadata);
 }
 
 static bool directlyImpliesPoison(const Value *ValAssumedPoison,
@@ -7421,11 +7442,9 @@ ConstantRange llvm::computeConstantRange(const Value *V, bool ForSigned,
     for (auto &AssumeVH : AC->assumptionsFor(V)) {
       if (!AssumeVH)
         continue;
-      CallInst *I = cast<CallInst>(AssumeVH);
+      IntrinsicInst *I = cast<IntrinsicInst>(AssumeVH);
       assert(I->getParent()->getParent() == CtxI->getParent()->getParent() &&
              "Got assumption for the wrong function!");
-      assert(I->getCalledFunction()->getIntrinsicID() == Intrinsic::assume &&
-             "must be an assume intrinsic");
 
       if (!isValidAssumeForContext(I, CtxI, DT))
         continue;
@@ -7473,7 +7492,7 @@ getOffsetFromIndex(const GEPOperator *GEP, unsigned Idx, const DataLayout &DL) {
     TypeSize Size = DL.getTypeAllocSize(GTI.getIndexedType());
     if (Size.isScalable())
       return std::nullopt;
-    Offset += Size.getFixedSize() * OpC->getSExtValue();
+    Offset += Size.getFixedValue() * OpC->getSExtValue();
   }
 
   return Offset;

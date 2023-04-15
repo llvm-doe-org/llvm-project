@@ -229,44 +229,6 @@ void *__tgt_rtl_data_alloc(int32_t DeviceId, int64_t Size, void *HstPtr,
 int32_t __tgt_rtl_data_submit(
     int32_t DeviceId, void *TgtPtr, void *HstPtr, int64_t Size
     OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) {
-#if OMPT_SUPPORT
-  // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
-  // "The target-data-op-begin event occurs before a thread initiates a data
-  // operation on a target device.  The target-data-op-end event occurs after a
-  // thread initiates a data operation on a target device."
-  //
-  // OpenMP 5.1, sec. 3.8.5 "omp_target_memcpy", p. 419, L4-5:
-  // "The target-data-op-begin event occurs before a thread initiates a data
-  // transfer.  The target-data-op-end event occurs after a thread initiated a
-  // data transfer."
-  //
-  // OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t and
-  // ompt_callback_target_data_op_t", p. 535, L25-27:
-  // "A thread dispatches a registered ompt_callback_target_data_op_emi or
-  // ompt_callback_target_data_op callback when device memory is allocated or
-  // freed, as well as when data is copied to or from a device."
-  //
-  // There's nothing to actually enqueue as we're about to perform the copy
-  // synchronously, so we just dispatch these callbacks back to back.
-  //
-  // FIXME: We don't yet need the target_task_data, target_data, host_op_id, and
-  // codeptr_ra arguments for OpenACC support, so we haven't bothered to
-  // implement them yet.
-  if (OmptApi->ompt_target_enabled->ompt_callback_target_data_op_emi) {
-    OmptApi->ompt_target_callbacks->ompt_callback(
-        ompt_callback_target_data_op_emi)(
-        ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
-        /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, HstPtr,
-        OmptApi->omp_get_initial_device(), TgtPtr, OmptApi->global_device_id,
-        Size, /*codeptr_ra=*/NULL);
-    OmptApi->ompt_target_callbacks->ompt_callback(
-        ompt_callback_target_data_op_emi)(
-        ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
-        /*host_op_id=*/NULL, ompt_target_data_transfer_to_device, HstPtr,
-        OmptApi->omp_get_initial_device(), TgtPtr, OmptApi->global_device_id,
-        Size, /*codeptr_ra=*/NULL);
-  }
-#endif
   memcpy(TgtPtr, HstPtr, Size);
   return OFFLOAD_SUCCESS;
 }
@@ -274,44 +236,6 @@ int32_t __tgt_rtl_data_submit(
 int32_t __tgt_rtl_data_retrieve(
     int32_t DeviceId, void *HstPtr, void *TgtPtr, int64_t Size
     OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) {
-#if OMPT_SUPPORT
-  // OpenMP 5.1, sec. 2.21.7.1 "map Clause", p. 353, L6-7:
-  // "The target-data-op-begin event occurs before a thread initiates a data
-  // operation on a target device.  The target-data-op-end event occurs after a
-  // thread initiates a data operation on a target device."
-  //
-  // OpenMP 5.1, sec. 3.8.5 "omp_target_memcpy", p. 419, L4-5:
-  // "The target-data-op-begin event occurs before a thread initiates a data
-  // transfer.  The target-data-op-end event occurs after a thread initiated a
-  // data transfer."
-  //
-  // OpenMP 5.1, sec. 4.5.2.25 "ompt_callback_target_data_op_emi_t and
-  // ompt_callback_target_data_op_t", p. 535, L25-27:
-  // "A thread dispatches a registered ompt_callback_target_data_op_emi or
-  // ompt_callback_target_data_op callback when device memory is allocated or
-  // freed, as well as when data is copied to or from a device."
-  //
-  // There's nothing to actually enqueue as we're about to perform the copy
-  // synchronously, so we just dispatch these callbacks back to back.
-  //
-  // FIXME: We don't yet need the target_task_data, target_data, host_op_id, and
-  // codeptr_ra arguments for OpenACC support, so we haven't bothered to
-  // implement them yet.
-  if (OmptApi->ompt_target_enabled->ompt_callback_target_data_op_emi) {
-    OmptApi->ompt_target_callbacks->ompt_callback(
-        ompt_callback_target_data_op_emi)(
-        ompt_scope_begin, /*target_task_data=*/NULL, /*target_data=*/NULL,
-        /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, TgtPtr,
-        OmptApi->global_device_id, HstPtr, OmptApi->omp_get_initial_device(),
-        Size, /*codeptr_ra=*/NULL);
-    OmptApi->ompt_target_callbacks->ompt_callback(
-        ompt_callback_target_data_op_emi)(
-        ompt_scope_end, /*target_task_data=*/NULL, /*target_data=*/NULL,
-        /*host_op_id=*/NULL, ompt_target_data_transfer_from_device, TgtPtr,
-        OmptApi->global_device_id, HstPtr, OmptApi->omp_get_initial_device(),
-        Size, /*codeptr_ra=*/NULL);
-  }
-#endif
   memcpy(HstPtr, TgtPtr, Size);
   return OFFLOAD_SUCCESS;
 }
@@ -321,27 +245,29 @@ int32_t __tgt_rtl_data_delete(int32_t DeviceId, void *TgtPtr, int32_t) {
   return OFFLOAD_SUCCESS;
 }
 
-int32_t __tgt_rtl_run_target_team_region(
-    int32_t DeviceId, void *TgtEntryPtr, void **TgtArgs, ptrdiff_t *TgtOffsets,
-    int32_t ArgNum, int32_t TeamNum, int32_t ThreadLimit,
-    uint64_t LoopTripcount /*not used*/
-    OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) {
+int32_t __tgt_rtl_launch_kernel(int32_t DeviceId, void *TgtEntryPtr,
+                                void **TgtArgs, ptrdiff_t *TgtOffsets,
+                                KernelArgsTy *KernelArgs,
+                                __tgt_async_info *AsyncInfoPtr) {
+  assert(!KernelArgs->NumTeams[1] && !KernelArgs->NumTeams[2] &&
+         !KernelArgs->ThreadLimit[1] && !KernelArgs->ThreadLimit[2] &&
+         "Only one dimensional kernels supported.");
   // ignore team num and thread limit.
 
   // Use libffi to launch execution.
   ffi_cif Cif;
 
   // All args are references.
-  std::vector<ffi_type *> ArgsTypes(ArgNum, &ffi_type_pointer);
-  std::vector<void *> Args(ArgNum);
-  std::vector<void *> Ptrs(ArgNum);
+  std::vector<ffi_type *> ArgsTypes(KernelArgs->NumArgs, &ffi_type_pointer);
+  std::vector<void *> Args(KernelArgs->NumArgs);
+  std::vector<void *> Ptrs(KernelArgs->NumArgs);
 
-  for (int32_t I = 0; I < ArgNum; ++I) {
+  for (uint32_t I = 0; I < KernelArgs->NumArgs; ++I) {
     Ptrs[I] = (void *)((intptr_t)TgtArgs[I] + TgtOffsets[I]);
     Args[I] = &Ptrs[I];
   }
 
-  ffi_status Status = ffi_prep_cif(&Cif, FFI_DEFAULT_ABI, ArgNum,
+  ffi_status Status = ffi_prep_cif(&Cif, FFI_DEFAULT_ABI, KernelArgs->NumArgs,
                                    &ffi_type_void, &ArgsTypes[0]);
 
   assert(Status == FFI_OK && "Unable to prepare target launch!");
@@ -349,53 +275,12 @@ int32_t __tgt_rtl_run_target_team_region(
   if (Status != FFI_OK)
     return OFFLOAD_FAIL;
 
-#if OMPT_SUPPORT
-  // OpenMP 5.1, sec. 2.14.5 "target Construct", p. 201, L17-20:
-  // "The target-submit-begin event occurs prior to initiating creation of an
-  // initial task on a target device for a target region.  The target-submit-end
-  // event occurs after initiating creation of an initial task on a target
-  // device for a target region."
-  //
-  // OpenMP 5.1, sec. 4.5.2.28 "ompt_callback_target_submit_emi_t and
-  // ompt_callback_target_submit_t", p. 543, L2-6:
-  // "A thread dispatches a registered ompt_callback_target_submit_emi or
-  // ompt_callback_target_submit callback on the host before and after a target
-  // task initiates creation of an initial task on a device."
-  // "The endpoint argument indicates that the callback signals the beginning or
-  // end of a scope."
-  //
-  // There's nothing to actually enqueue as we're about to call the task
-  // directly, so we just dispatch these callbacks back to back.
-  //
-  // FIXME: We don't yet need the target_data or host_op_id argument for OpenACC
-  // support, so we haven't bothered to implement it yet.
-  if (OmptApi->ompt_target_enabled->ompt_callback_target_submit_emi) {
-    OmptApi->ompt_target_callbacks->ompt_callback(
-        ompt_callback_target_submit_emi)(
-        ompt_scope_begin, /*target_data=*/NULL, /*host_op_id=*/NULL,
-        /*requested_num_teams=*/TeamNum);
-    OmptApi->ompt_target_callbacks->ompt_callback(
-        ompt_callback_target_submit_emi)(
-        ompt_scope_end, /*target_data=*/NULL, /*host_op_id=*/NULL,
-        /*requested_num_teams=*/TeamNum);
-  }
-#endif
-
   DP("Running entry point at " DPxMOD "...\n", DPxPTR(TgtEntryPtr));
 
   void (*Entry)(void);
   *((void **)&Entry) = TgtEntryPtr;
   ffi_call(&Cif, Entry, NULL, &Args[0]);
   return OFFLOAD_SUCCESS;
-}
-
-int32_t __tgt_rtl_run_target_region(
-    int32_t DeviceId, void *TgtEntryPtr, void **TgtArgs, ptrdiff_t *TgtOffsets,
-    int32_t ArgNum OMPT_SUPPORT_IF(, const ompt_plugin_api_t *OmptApi)) {
-  // use one team and one thread.
-  return __tgt_rtl_run_target_team_region(DeviceId, TgtEntryPtr, TgtArgs,
-                                          TgtOffsets, ArgNum, 1, 1, 0
-                                          OMPT_SUPPORT_IF(, OmptApi));
 }
 
 #ifdef __cplusplus

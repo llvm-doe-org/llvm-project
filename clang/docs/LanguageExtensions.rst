@@ -635,6 +635,7 @@ Unless specified otherwise operation(±0) = ±0 and operation(±infinity) = ±in
  T __builtin_elementwise_sin(T x)            return the sine of x interpreted as an angle in radians          floating point types
  T __builtin_elementwise_cos(T x)            return the cosine of x interpreted as an angle in radians        floating point types
  T __builtin_elementwise_floor(T x)          return the largest integral value less than or equal to x        floating point types
+ T __builtin_elementwise_log(T x)            return the natural logarithm of x                                floating point types
  T __builtin_elementwise_roundeven(T x)      round x to the nearest integer value in floating point format,   floating point types
                                              rounding halfway cases to even (that is, to the nearest value
                                              that is an even integer), regardless of the current rounding
@@ -2360,6 +2361,48 @@ evaluated, so any side effects of the expression will be discarded.
 
 Query for this feature with ``__has_builtin(__builtin_assume)``.
 
+``__builtin_offsetof``
+----------------------
+
+``__builtin_offsetof`` is used to implement the ``offsetof`` macro, which
+calculates the offset (in bytes) to a given member of the given type.
+
+**Syntax**:
+
+.. code-block:: c++
+
+    __builtin_offsetof(type-name, member-designator)
+
+**Example of Use**:
+
+.. code-block:: c++
+
+  struct S {
+    char c;
+    int i;
+    struct T {
+      float f[2];
+    } t;
+  };
+
+  const int offset_to_i = __builtin_offsetof(struct S, i);
+  const int ext1 = __builtin_offsetof(struct U { int i; }, i); // C extension
+  const int offset_to_subobject = __builtin_offsetof(struct S, t.f[1]);
+
+**Description**:
+
+This builtin is usable in an integer constant expression which returns a value
+of type ``size_t``. The value returned is the offset in bytes to the subobject
+designated by the member-designator from the beginning of an object of type
+``type-name``. Clang extends the required standard functionality in the
+following way:
+
+* In C language modes, the first argument may be the definition of a new type.
+  Any type declared this way is scoped to the nearest scope containing the call
+  to the builtin.
+
+Query for this feature with ``__has_builtin(__builtin_offsetof)``.
+
 ``__builtin_call_with_static_chain``
 ------------------------------------
 
@@ -2889,7 +2932,8 @@ implementation details of ``__sync_lock_test_and_set()``.  The
 ``__builtin_addressof`` performs the functionality of the built-in ``&``
 operator, ignoring any ``operator&`` overload.  This is useful in constant
 expressions in C++11, where there is no other way to take the address of an
-object that overloads ``operator&``.
+object that overloads ``operator&``. Clang automatically adds
+``[[clang::lifetimebound]]`` to the parameter of ``__builtin_addressof``.
 
 **Example of use**:
 

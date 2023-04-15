@@ -64,11 +64,11 @@ public:
 
   bool IsMathErrnoDefault() const override { return false; }
   bool isCrossCompiling() const override { return true; }
-  bool isPICDefault() const override { return false; }
+  bool isPICDefault() const override { return true; }
   bool isPIEDefault(const llvm::opt::ArgList &Args) const override {
     return false;
   }
-  bool isPICDefaultForced() const override { return false; }
+  bool isPICDefaultForced() const override { return true; }
   bool SupportsProfiling() const override { return false; }
 
   llvm::opt::DerivedArgList *
@@ -97,16 +97,10 @@ public:
   /// Needed for translating LTO options.
   const char *getDefaultLinker() const override { return "ld.lld"; }
 
-  /// Should skip argument.
-  bool shouldSkipArgument(const llvm::opt::Arg *Arg) const;
-
-  /// Uses amdgpu_arch tool to get arch of the system GPU. Will return error
+  /// Uses amdgpu-arch tool to get arch of the system GPU. Will return error
   /// if unable to find one.
-  llvm::Error getSystemGPUArch(const llvm::opt::ArgList &Args,
-                               std::string &GPUArch) const;
-
-  llvm::Error detectSystemGPUs(const llvm::opt::ArgList &Args,
-                               SmallVector<std::string, 1> &GPUArchs) const;
+  virtual Expected<SmallVector<std::string>>
+  getSystemGPUArchs(const llvm::opt::ArgList &Args) const override;
 
 protected:
   /// Check and diagnose invalid target ID specified by -mcpu.

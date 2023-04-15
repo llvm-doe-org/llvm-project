@@ -20,6 +20,11 @@ add_subdirectory(common)
 macro(build_generic_elf64_nextgen tmachine tmachine_name tmachine_libname tmachine_triple elf_machine_id)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
   if(LIBOMPTARGET_DEP_LIBFFI_FOUND)
+    set(optional_args ${ARGN})
+    list(LENGTH optional_args num_optional_args)
+    if (${num_optional_args} GREATER 0)
+      list(GET optional_args 0 target_omp_device_t)
+    endif()
 
     libomptarget_say("Building ${tmachine_name} NextGen offloading plugin.")
 
@@ -35,6 +40,12 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
 
     # Define target regiple
     add_definitions("-DLIBOMPTARGET_NEXTGEN_GENERIC_PLUGIN_TRIPLE=${tmachine}")
+
+    # Define macro with the omp_device_t for this target, if supplied.  Some
+    # targets don't have omp_device_t entries yet, but eventually all should.
+    if(DEFINED target_omp_device_t)
+      add_definitions("-DTARGET_OMP_DEVICE_T=${target_omp_device_t}")
+    endif()
 
     add_llvm_library("omptarget.rtl.${tmachine_libname}.nextgen"
       SHARED

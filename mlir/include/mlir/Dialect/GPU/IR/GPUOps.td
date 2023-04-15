@@ -180,7 +180,7 @@ def GPU_SubgroupSizeOp : GPU_Op<"subgroup_size", [
 
 def GPU_GPUFuncOp : GPU_Op<"func", [
     HasParent<"GPUModuleOp">, AutomaticAllocationScope, FunctionOpInterface,
-    IsolatedFromAbove, Symbol
+    IsolatedFromAbove
   ]> {
   let summary = "Function executable on a GPU";
 
@@ -330,7 +330,7 @@ def GPU_GPUFuncOp : GPU_Op<"func", [
     /// Returns the block size this kernel will be launched with along
     /// dimension `dim` if known. The value of gpu.thread_id dim will be strictly
     /// less than this size.
-    Optional<uint32_t> getKnownBlockSize(gpu::Dimension dim) {
+    std::optional<uint32_t> getKnownBlockSize(gpu::Dimension dim) {
       if (auto array =
         (*this)->getAttrOfType<DenseI32ArrayAttr>(getKnownBlockSizeAttrName())) {
         return array[static_cast<uint32_t>(dim)];
@@ -341,7 +341,7 @@ def GPU_GPUFuncOp : GPU_Op<"func", [
     /// Returns the grid size this kernel will be launched with along
     /// dimension `dim` if known. The value of gpu.block_id dim will be strictly
     /// less than this size.
-    Optional<uint32_t> getKnownGridSize(gpu::Dimension dim) {
+    std::optional<uint32_t> getKnownGridSize(gpu::Dimension dim) {
       if (auto array =
         (*this)->getAttrOfType<DenseI32ArrayAttr>(getKnownGridSizeAttrName())) {
         return array[static_cast<uint32_t>(dim)];

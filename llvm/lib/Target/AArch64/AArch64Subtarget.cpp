@@ -172,6 +172,15 @@ void AArch64Subtarget::initializeProperties() {
     PrefetchDistance = 280;
     MinPrefetchStride = 2048;
     MaxPrefetchIterationsAhead = 3;
+    switch (ARMProcFamily) {
+    case AppleA14:
+    case AppleA15:
+    case AppleA16:
+      MaxInterleaveFactor = 4;
+      break;
+    default:
+      break;
+    }
     break;
   case ExynosM3:
     MaxInterleaveFactor = 4;
@@ -267,6 +276,7 @@ void AArch64Subtarget::initializeProperties() {
     MinVectorRegisterBitWidth = 128;
     break;
   case Ampere1:
+  case Ampere1A:
     CacheLineSize = 64;
     PrefFunctionLogAlignment = 6;
     PrefLoopLogAlignment = 6;
@@ -351,6 +361,13 @@ AArch64Subtarget::ClassifyGlobalReference(const GlobalValue *GV,
   // MachO large model always goes via a GOT, simply to get a single 8-byte
   // absolute relocation on all global addresses.
   if (TM.getCodeModel() == CodeModel::Large && isTargetMachO())
+    return AArch64II::MO_GOT;
+
+  // All globals dynamically protected by MTE must have their address tags
+  // synthesized. This is done by having the loader stash the tag in the GOT
+  // entry. Force all tagged globals (even ones with internal linkage) through
+  // the GOT.
+  if (GV->isTagged())
     return AArch64II::MO_GOT;
 
   if (!TM.shouldAssumeDSOLocal(*GV->getParent(), GV)) {

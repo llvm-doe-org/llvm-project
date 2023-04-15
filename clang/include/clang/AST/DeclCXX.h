@@ -357,11 +357,11 @@ private:
     }
 
     ArrayRef<CXXBaseSpecifier> bases() const {
-      return llvm::makeArrayRef(getBases(), NumBases);
+      return llvm::ArrayRef(getBases(), NumBases);
     }
 
     ArrayRef<CXXBaseSpecifier> vbases() const {
-      return llvm::makeArrayRef(getVBases(), NumVBases);
+      return llvm::ArrayRef(getVBases(), NumVBases);
     }
 
   private:
@@ -1091,6 +1091,11 @@ public:
   }
 
   unsigned capture_size() const { return getLambdaData().NumCaptures; }
+
+  const LambdaCapture *getCapture(unsigned I) const {
+    assert(isLambda() && I < capture_size() && "invalid index for capture");
+    return captures_begin() + I;
+  }
 
   using conversion_iterator = UnresolvedSetIterator;
 
@@ -1824,6 +1829,20 @@ public:
 
   TypeSourceInfo *getLambdaTypeInfo() const {
     return getLambdaData().MethodTyInfo;
+  }
+
+  void setLambdaTypeInfo(TypeSourceInfo *TS) {
+    assert(DefinitionData && DefinitionData->IsLambda &&
+           "setting lambda property of non-lambda class");
+    auto &DL = static_cast<LambdaDefinitionData &>(*DefinitionData);
+    DL.MethodTyInfo = TS;
+  }
+
+  void setLambdaIsGeneric(bool IsGeneric) {
+    assert(DefinitionData && DefinitionData->IsLambda &&
+           "setting lambda property of non-lambda class");
+    auto &DL = static_cast<LambdaDefinitionData &>(*DefinitionData);
+    DL.IsGenericLambda = IsGeneric;
   }
 
   // Determine whether this type is an Interface Like type for
@@ -3739,7 +3758,7 @@ public:
   /// Get the set of using declarations that this pack expanded into. Note that
   /// some of these may still be unresolved.
   ArrayRef<NamedDecl *> expansions() const {
-    return llvm::makeArrayRef(getTrailingObjects<NamedDecl *>(), NumExpansions);
+    return llvm::ArrayRef(getTrailingObjects<NamedDecl *>(), NumExpansions);
   }
 
   static UsingPackDecl *Create(ASTContext &C, DeclContext *DC,
@@ -4109,7 +4128,7 @@ public:
                                                unsigned NumBindings);
 
   ArrayRef<BindingDecl *> bindings() const {
-    return llvm::makeArrayRef(getTrailingObjects<BindingDecl *>(), NumBindings);
+    return llvm::ArrayRef(getTrailingObjects<BindingDecl *>(), NumBindings);
   }
 
   void printName(raw_ostream &OS, const PrintingPolicy &Policy) const override;

@@ -18,6 +18,7 @@
 #include <climits>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 
 // We need the string version of ompt_trigger_runtime_api so that DEFINE_IDENT
 // can form a proper ident_t at compile time.
@@ -140,11 +141,6 @@ EXTERN void *omp_target_alloc(size_t Size, int DeviceNum) {
   // TODO: We have not implemented the ompt_scope_begin callback because we
   // don't need it for OpenACC support.
 #if OMPT_SUPPORT
-  // If offloading is disabled, the runtime might not be initialized.  In that
-  // case, ompt_start_tool and libomp_start_tool haven't been called, so we
-  // don't know what OMPT callbacks to dispatch.  Calling __tgt_load_rtls
-  // guarantees all those calls are made.
-  __tgt_load_rtls();
   DeviceAllocSizesMtx.lock();
   DeviceAllocSizes[Ptr] = Size;
   DeviceAllocSizesMtx.unlock();
@@ -212,6 +208,15 @@ EXTERN void llvm_omp_target_free_shared(void *Ptre, int DeviceNum) {
 
 EXTERN void *llvm_omp_target_dynamic_shared_alloc() { return nullptr; }
 EXTERN void *llvm_omp_get_dynamic_shared() { return nullptr; }
+
+EXTERN [[nodiscard]] void *llvm_omp_target_lock_mem(void *Ptr, size_t Size,
+                                                    int DeviceNum) {
+  return targetLockExplicit(Ptr, Size, DeviceNum, __func__);
+}
+
+EXTERN void llvm_omp_target_unlock_mem(void *Ptr, int DeviceNum) {
+  targetUnlockExplicit(Ptr, DeviceNum, __func__);
+}
 
 EXTERN int omp_target_is_present(const void *Ptr, int DeviceNum) {
   TIMESCOPE();
@@ -318,69 +323,20 @@ EXTERN int omp_target_is_accessible(const void *Ptr, size_t Size,
   return Rc;
 }
 
-EXTERN void *omp_get_mapped_ptr(const void *Ptr, int DeviceNum) {
-  TIMESCOPE();
-  DP("Call to omp_get_mapped_ptr for device %d and address " DPxMOD "\n",
-     DeviceNum, DPxPTR(Ptr));
-
-  if (!Ptr) {
-    DP("Call to omp_get_mapped_ptr with NULL Ptr, returning NULL\n");
-    return NULL;
-  }
-
-  if (DeviceNum == omp_get_initial_device()) {
-    DP("Call to omp_get_mapped_ptr on host, returning host pointer\n");
-    // OpenMP 5.1, sec. 3.8.11 "omp_get_mapped_ptr", p. 431, L10-12:
-    // "Otherwise it returns the device pointer, which is ptr if device_num is
-    // the value returned by omp_get_initial_device()."
-    //
-    // That is, the spec actually requires us to cast away const.
-    return const_cast<void *>(Ptr);
-  }
-
-  PM->RTLsMtx.lock();
-  size_t Devices_size = PM->Devices.size();
-  PM->RTLsMtx.unlock();
-  if (Devices_size <= (size_t)DeviceNum) {
-    DP("Call to omp_get_mapped_ptr with invalid device ID, returning NULL\n");
-    return NULL;
-  }
-
-  DeviceTy &Device = *PM->Devices[DeviceNum];
-  bool IsLast; // not used
-  bool IsHostPtr;
-  TargetPointerResultTy TPR =
-      Device.getTgtPtrBegin(const_cast<void *>(Ptr), /*Size=*/0, IsLast,
-                            /*UpdateRefCount=*/false, /*UseHoldRefCount=*/false,
-                            IsHostPtr);
-  void *TgtPtr = TPR.isPresent() ? TPR.TargetPointer : nullptr;
-  // Return nullptr in the case of unified shared memory.
-  //
-  // TODO: This seems to be implied by the named "mapped" instead of
-  // "accessible".  Or should we return the host pointer?  That is, is this
-  // supposed to be like omp_target_is_present or omp_target_is_accessible?
-  // OpenMP 5.1 doesn't seem clear.  Keep omp_get_mapped_hostptr in sync.
-  if (IsHostPtr) {
-    DP("Call to omp_get_mapped_ptr for unified shared memory, returning "
-       "NULL\n");
-    return nullptr;
-  }
-  DP("Call to omp_get_mapped_ptr returns " DPxMOD "\n", DPxPTR(TgtPtr));
-  return TgtPtr;
-}
-
 EXTERN void *omp_get_mapped_hostptr(const void *Ptr, int DeviceNum) {
   TIMESCOPE();
-  DP("Call to omp_get_mapped_hostptr for device %d and address " DPxMOD "\n",
-     DeviceNum, DPxPTR(Ptr));
+  DP("Call to omp_get_mapped_hostptr with ptr " DPxMOD ", device_num %d.\n",
+     DPxPTR(Ptr), DeviceNum);
 
   if (!Ptr) {
-    DP("Call to omp_get_mapped_hostptr with NULL Ptr, returning NULL\n");
-    return NULL;
+    DP("Call to omp_get_mapped_hostptr with nullptr, returning nullptr\n");
+    return nullptr;
   }
 
   if (DeviceNum == omp_get_initial_device()) {
-    DP("Call to omp_get_mapped_hostptr for host, returning device pointer\n");
+    DP("Call to omp_get_mapped_hostptr for initial device %d, returning device "
+       "pointer " DPxMOD "\n",
+       DeviceNum, DPxPTR(Ptr));
     // For consistency with OpenMP 5.1, sec. 3.8.11 "omp_get_mapped_ptr", p.
     // 431, L10-12:
     // "Otherwise it returns the device pointer, which is ptr if device_num is
@@ -388,18 +344,21 @@ EXTERN void *omp_get_mapped_hostptr(const void *Ptr, int DeviceNum) {
     return const_cast<void *>(Ptr);
   }
 
-  PM->RTLsMtx.lock();
-  size_t Devices_size = PM->Devices.size();
-  PM->RTLsMtx.unlock();
-  if (Devices_size <= (size_t)DeviceNum) {
-    DP("Call to omp_get_mapped_hostptr with invalid device ID, returning "
-       "NULL\n");
-    return NULL;
+  int DevicesSize;
+  {
+    std::lock_guard<std::mutex> LG(PM->RTLsMtx);
+    DevicesSize = PM->Devices.size();
+  }
+  if (DevicesSize <= DeviceNum) {
+    DP("Call to omp_get_mapped_hostptr with invalid device %d, returning "
+       "nullptr\n",
+       DeviceNum);
+    return nullptr;
   }
 
   DeviceTy &Device = *PM->Devices[DeviceNum];
-  // TODO: This returns nullptr in the case of unified shared memory.  This is
-  // for consistency with the current omp_get_mapped_ptr implementation.
+  // This returns nullptr in the case of unified shared memory.  This is for
+  // consistency with the current omp_get_mapped_ptr implementation.
   void *HostPtr = Device.lookupHostPtr(const_cast<void *>(Ptr));
   DP("Call to omp_get_mapped_hostptr returns " DPxMOD "\n", DPxPTR(HostPtr));
   return HostPtr;
@@ -720,6 +679,55 @@ EXTERN int omp_target_disassociate_ptr(const void *HostPtr, int DeviceNum) {
       omp_get_initial_device(), TgtPtrBegin, DeviceNum, Size);
   DP("omp_target_disassociate_ptr returns %d\n", Rc);
   return Rc;
+}
+
+EXTERN void *omp_get_mapped_ptr(const void *Ptr, int DeviceNum) {
+  TIMESCOPE();
+  DP("Call to omp_get_mapped_ptr with ptr " DPxMOD ", device_num %d.\n",
+     DPxPTR(Ptr), DeviceNum);
+
+  if (!Ptr) {
+    REPORT("Call to omp_get_mapped_ptr with nullptr.\n");
+    return nullptr;
+  }
+
+  if (DeviceNum == omp_get_initial_device()) {
+    REPORT("Device %d is initial device, returning Ptr " DPxMOD ".\n",
+           DeviceNum, DPxPTR(Ptr));
+    return const_cast<void *>(Ptr);
+  }
+
+  int DevicesSize = omp_get_initial_device();
+  {
+    std::lock_guard<std::mutex> LG(PM->RTLsMtx);
+    DevicesSize = PM->Devices.size();
+  }
+  if (DevicesSize <= DeviceNum) {
+    DP("DeviceNum %d is invalid, returning nullptr.\n", DeviceNum);
+    return nullptr;
+  }
+
+  if (!deviceIsReady(DeviceNum)) {
+    REPORT("Device %d is not ready, returning nullptr.\n", DeviceNum);
+    return nullptr;
+  }
+
+  bool IsLast = false;
+  bool IsHostPtr = false;
+  auto &Device = *PM->Devices[DeviceNum];
+  TargetPointerResultTy TPR =
+      Device.getTgtPtrBegin(const_cast<void *>(Ptr), 1, IsLast,
+                            /*UpdateRefCount=*/false,
+                            /*UseHoldRefCount=*/false, IsHostPtr);
+  if (!TPR.isPresent()) {
+    DP("Ptr " DPxMOD "is not present on device %d, returning nullptr.\n",
+       DPxPTR(Ptr), DeviceNum);
+    return nullptr;
+  }
+
+  DP("omp_get_mapped_ptr returns " DPxMOD ".\n", DPxPTR(TPR.TargetPointer));
+
+  return TPR.TargetPointer;
 }
 
 EXTERN void *omp_target_map_to(void *ptr, size_t size, int device_num) {
