@@ -233,9 +233,7 @@ stages:
     VV_COMP_LIT_XFAIL:
       ""
     VV_RUN_LIT_XFAIL:
-      "
-      External/openacc_vv/atomic_capture_expr_plus_x.c.test
-      "
+      ""
 
 .explorer-assert:
   extends: [.explorer]
@@ -979,6 +977,9 @@ debug (test):
     # around it to get meaningful OpenACC results.
     - sed -i -e 's/typedef enum { false, true } bool;/#include <stdbool.h>/'
           Tests/acc_testsuite.h
+    # Fix an incorrect test.
+    - sed -i -e 's/copy(totals\[0:10\])/copy(totals[0:11])/'
+          Tests/atomic_capture_expr_plus_x.c
     - cd ../llvm-test-suite
     - mkdir build
     - cd build
