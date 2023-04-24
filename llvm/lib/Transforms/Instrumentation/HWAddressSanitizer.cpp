@@ -17,7 +17,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/StackSafetyAnalysis.h"
@@ -50,6 +49,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/Instrumentation/AddressSanitizerCommon.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/MemoryTaggingSupport.h"
@@ -438,12 +438,12 @@ void HWAddressSanitizerPass::printPipeline(
     raw_ostream &OS, function_ref<StringRef(StringRef)> MapClassName2PassName) {
   static_cast<PassInfoMixin<HWAddressSanitizerPass> *>(this)->printPipeline(
       OS, MapClassName2PassName);
-  OS << "<";
+  OS << '<';
   if (Options.CompileKernel)
     OS << "kernel;";
   if (Options.Recover)
     OS << "recover";
-  OS << ">";
+  OS << '>';
 }
 
 void HWAddressSanitizer::createHwasanCtorComdat() {
@@ -967,11 +967,11 @@ bool HWAddressSanitizer::instrumentMemAccess(InterestingMemoryOperand &O) {
     return false; // FIXME
 
   IRBuilder<> IRB(O.getInsn());
-  if (isPowerOf2_64(O.TypeSize) &&
-      (O.TypeSize / 8 <= (1ULL << (kNumberOfAccessSizes - 1))) &&
+  if (isPowerOf2_64(O.TypeStoreSize) &&
+      (O.TypeStoreSize / 8 <= (1ULL << (kNumberOfAccessSizes - 1))) &&
       (!O.Alignment || *O.Alignment >= Mapping.getObjectAlignment() ||
-       *O.Alignment >= O.TypeSize / 8)) {
-    size_t AccessSizeIndex = TypeSizeToSizeIndex(O.TypeSize);
+       *O.Alignment >= O.TypeStoreSize / 8)) {
+    size_t AccessSizeIndex = TypeSizeToSizeIndex(O.TypeStoreSize);
     if (InstrumentWithCalls) {
       IRB.CreateCall(HwasanMemoryAccessCallback[O.IsWrite][AccessSizeIndex],
                      IRB.CreatePointerCast(Addr, IntptrTy));
@@ -983,7 +983,7 @@ bool HWAddressSanitizer::instrumentMemAccess(InterestingMemoryOperand &O) {
   } else {
     IRB.CreateCall(HwasanMemoryAccessCallbackSized[O.IsWrite],
                    {IRB.CreatePointerCast(Addr, IntptrTy),
-                    ConstantInt::get(IntptrTy, O.TypeSize / 8)});
+                    ConstantInt::get(IntptrTy, O.TypeStoreSize / 8)});
   }
   untagPointerOperand(O.getInsn(), Addr);
 

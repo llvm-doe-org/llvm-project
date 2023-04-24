@@ -155,6 +155,7 @@
 ; CHECK-O-NEXT: Running pass: SimplifyCFGPass
 ; CHECK-O-NEXT: Running pass: InstCombinePass
 ; CHECK-O3-NEXT: AggressiveInstCombinePass
+; CHECK-O23SZ-NEXT: Running pass: ConstraintEliminationPass
 ; CHECK-O1-NEXT: Running pass: LibCallsShrinkWrapPass
 ; CHECK-O2-NEXT: Running pass: LibCallsShrinkWrapPass
 ; CHECK-O3-NEXT: Running pass: LibCallsShrinkWrapPass
@@ -231,6 +232,7 @@
 ; CHECK-O-NEXT: Running pass: LowerConstantIntrinsicsPass on foo
 ; CHECK-MATRIX: Running pass: LowerMatrixIntrinsicsPass on f
 ; CHECK-MATRIX-NEXT: Running pass: EarlyCSEPass on f
+; CHECK-O3-NEXT: Running pass: ControlHeightReductionPass
 ; CHECK-EP-VECTORIZER-START-NEXT: Running pass: NoOpFunctionPass
 ; CHECK-EXT: Running pass: {{.*}}::Bye on foo
 ; CHECK-NOEXT:  {{^}}
@@ -242,8 +244,6 @@
 ; CHECK-O-NEXT: Running analysis: LoopAccessAnalysis on foo
 ; CHECK-O-NEXT: Running pass: InjectTLIMappings
 ; CHECK-O-NEXT: Running pass: LoopVectorizePass
-; CHECK-O-NEXT: Running analysis: BlockFrequencyAnalysis
-; CHECK-O-NEXT: Running analysis: BranchProbabilityAnalysis
 ; CHECK-O-NEXT: Running pass: LoopLoadEliminationPass
 ; CHECK-O-NEXT: Running pass: InstCombinePass
 ; CHECK-O-NEXT: Running pass: SimplifyCFGPass

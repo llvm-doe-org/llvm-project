@@ -669,5 +669,77 @@ namespace IncDec {
                                               // expected-note {{in call to 'IntMul}} \
                                               // ref-error {{not an integral constant expression}} \
                                               // ref-note {{in call to 'IntMul}}
+  constexpr int arr[] = {1,2,3};
+  constexpr int ptrInc1() {
+    const int *p = arr;
+    p += 2;
+    return *p;
+  }
+  static_assert(ptrInc1() == 3, "");
+
+  constexpr int ptrInc2() {
+    const int *p = arr;
+    return *(p += 1);
+  }
+  static_assert(ptrInc2() == 2, "");
+
+  constexpr int ptrInc3() { // expected-error {{never produces a constant expression}} \
+                            // ref-error {{never produces a constant expression}}
+    const int *p = arr;
+    p += 12; // expected-note {{cannot refer to element 12 of array of 3 elements}} \
+             // ref-note {{cannot refer to element 12 of array of 3 elements}}
+    return *p;
+  }
+
+  constexpr int ptrIncDec1() {
+    const int *p = arr;
+    p += 2;
+    p -= 1;
+    return *p;
+  }
+  static_assert(ptrIncDec1() == 2, "");
+
+  constexpr int ptrDec1() { // expected-error {{never produces a constant expression}} \
+                        // ref-error {{never produces a constant expression}}
+    const int *p = arr;
+    p -= 1;  // expected-note {{cannot refer to element -1 of array of 3 elements}} \
+             // ref-note {{cannot refer to element -1 of array of 3 elements}}
+    return *p;
+  }
 };
 #endif
+
+namespace CompoundLiterals {
+  constexpr int get5() {
+    return (int[]){1,2,3,4,5}[4];
+  }
+  static_assert(get5() == 5, "");
+
+  constexpr int get6(int f = (int[]){1,2,6}[2]) { // ref-note {{subexpression not valid in a constant expression}} \
+                                                  // ref-note {{declared here}}
+    return f;
+  }
+  static_assert(get6(6) == 6, "");
+  // FIXME: Who's right here?
+  static_assert(get6() == 6, ""); // ref-error {{not an integral constant expression}}
+
+  constexpr int x = (int){3};
+  static_assert(x == 3, "");
+#if __cplusplus >= 201402L
+  constexpr int getX() {
+    int x = (int){3};
+    x = (int){5};
+    return x;
+  }
+  static_assert(getX() == 5, "");
+#endif
+
+#if __cplusplus >= 202002L
+  constexpr int get3() {
+    int m;
+    m = (int){3};
+    return m;
+  }
+  static_assert(get3() == 3, "");
+#endif
+};

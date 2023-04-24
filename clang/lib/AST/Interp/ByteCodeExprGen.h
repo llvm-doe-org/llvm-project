@@ -87,6 +87,10 @@ public:
   bool VisitCharacterLiteral(const CharacterLiteral *E);
   bool VisitCompoundAssignOperator(const CompoundAssignOperator *E);
   bool VisitFloatCompoundAssignOperator(const CompoundAssignOperator *E);
+  bool VisitPointerCompoundAssignOperator(const CompoundAssignOperator *E);
+  bool VisitExprWithCleanups(const ExprWithCleanups *E);
+  bool VisitMaterializeTemporaryExpr(const MaterializeTemporaryExpr *E);
+  bool VisitCompoundLiteralExpr(const CompoundLiteralExpr *E);
 
 protected:
   bool visitExpr(const Expr *E) override;
@@ -156,6 +160,9 @@ protected:
       return false;
 
     if (!visitInitializer(Init))
+      return false;
+
+    if (Init->getType()->isRecordType() && !this->emitCheckGlobalCtor(Init))
       return false;
 
     return this->emitPopPtr(Init);
@@ -232,9 +239,12 @@ private:
   }
 
   /// Returns whether we should create a global variable for the
-  /// given VarDecl.
-  bool shouldBeGloballyIndexed(const VarDecl *VD) const {
-    return VD->hasGlobalStorage() || VD->isConstexpr();
+  /// given ValueDecl.
+  bool shouldBeGloballyIndexed(const ValueDecl *VD) const {
+    if (const auto *V = dyn_cast<VarDecl>(VD))
+      return V->hasGlobalStorage() || V->isConstexpr();
+
+    return false;
   }
 
   llvm::RoundingMode getRoundingMode(const Expr *E) const {
@@ -295,7 +305,7 @@ public:
 
   virtual void emitDestruction() {}
 
-  VariableScope *getParent() { return Parent; }
+  VariableScope *getParent() const { return Parent; }
 
 protected:
   /// ByteCodeExprGen instance.
@@ -340,7 +350,10 @@ public:
   BlockScope(ByteCodeExprGen<Emitter> *Ctx) : LocalScope<Emitter>(Ctx) {}
 
   void addExtended(const Scope::Local &Local) override {
-    llvm_unreachable("Cannot create temporaries in full scopes");
+    // If we to this point, just add the variable as a normal local
+    // variable. It will be destroyed at the end of the block just
+    // like all others.
+    this->addLocal(Local);
   }
 };
 
@@ -351,8 +364,8 @@ public:
   ExprScope(ByteCodeExprGen<Emitter> *Ctx) : LocalScope<Emitter>(Ctx) {}
 
   void addExtended(const Scope::Local &Local) override {
-    assert(this->Parent);
-    this->Parent->addLocal(Local);
+    if (this->Parent)
+      this->Parent->addLocal(Local);
   }
 };
 

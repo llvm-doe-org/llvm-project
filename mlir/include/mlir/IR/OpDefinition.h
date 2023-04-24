@@ -132,20 +132,22 @@ public:
 
   /// Walk the operation by calling the callback for each nested operation
   /// (including this one), block or region, depending on the callback provided.
-  /// Regions, blocks and operations at the same nesting level are visited in
-  /// lexicographical order. The walk order for enclosing regions, blocks and
-  /// operations with respect to their nested ones is specified by 'Order'
+  /// The order in which regions, blocks and operations the same nesting level
+  /// are visited (e.g., lexicographical or reverse lexicographical order) is
+  /// determined by 'Iterator'. The walk order for enclosing regions, blocks
+  /// and operations with respect to their nested ones is specified by 'Order'
   /// (post-order by default). A callback on a block or operation is allowed to
   /// erase that block or operation if either:
   ///   * the walk is in post-order, or
   ///   * the walk is in pre-order and the walk is skipped after the erasure.
   /// See Operation::walk for more details.
-  template <WalkOrder Order = WalkOrder::PostOrder, typename FnT,
+  template <WalkOrder Order = WalkOrder::PostOrder,
+            typename Iterator = ForwardIterator, typename FnT,
             typename RetT = detail::walkResultType<FnT>>
   std::enable_if_t<llvm::function_traits<std::decay_t<FnT>>::num_args == 1,
                    RetT>
   walk(FnT &&callback) {
-    return state->walk<Order>(std::forward<FnT>(callback));
+    return state->walk<Order, Iterator>(std::forward<FnT>(callback));
   }
 
   /// Generic walker with a stage aware callback. Walk the operation by calling
@@ -631,13 +633,14 @@ public:
   class Impl
       : public TraitBase<ConcreteType, OneTypedResult<ResultType>::Impl> {
   public:
-    TypedValue<ResultType> getResult() {
-      return cast<TypedValue<ResultType>>(this->getOperation()->getResult(0));
+   mlir::TypedValue<ResultType> getResult() {
+      return cast<mlir::TypedValue<ResultType>>(
+          this->getOperation()->getResult(0));
     }
 
     /// If the operation returns a single value, then the Op can be implicitly
     /// converted to a Value. This yields the value of the only result.
-    operator TypedValue<ResultType>() { return getResult(); }
+    operator mlir::TypedValue<ResultType>() { return getResult(); }
 
     ResultType getType() { return getResult().getType(); }
   };

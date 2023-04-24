@@ -80,6 +80,8 @@ struct RTLInfoTy {
                                        const char **);
   typedef int32_t(data_lock_ty)(int32_t, void *, int64_t, void **);
   typedef int32_t(data_unlock_ty)(int32_t, void *);
+  typedef int32_t(data_notify_mapped_ty)(int32_t, void *, int64_t);
+  typedef int32_t(data_notify_unmapped_ty)(int32_t, void *);
 
   omp_device_t DeviceType = omp_device_none;
   int32_t Idx = -1;             // RTL index, index is the number of devices
@@ -132,6 +134,8 @@ struct RTLInfoTy {
   release_async_info_ty *release_async_info = nullptr;
   data_lock_ty *data_lock = nullptr;
   data_unlock_ty *data_unlock = nullptr;
+  data_notify_mapped_ty *data_notify_mapped = nullptr;
+  data_notify_unmapped_ty *data_notify_unmapped = nullptr;
 
   // Are there images associated with this RTL.
   bool IsUsed = false;

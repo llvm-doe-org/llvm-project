@@ -648,7 +648,7 @@ FlatAffineValueConstraints::addAffineForOpDomain(AffineForOp forOp) {
 LogicalResult FlatAffineValueConstraints::addAffineParallelOpDomain(
     AffineParallelOp parallelOp) {
   size_t ivPos = 0;
-  for (auto iv : parallelOp.getIVs()) {
+  for (Value iv : parallelOp.getIVs()) {
     unsigned pos;
     if (!findVar(iv, &pos)) {
       assert(false && "variable expected for the IV value");
@@ -664,10 +664,11 @@ LogicalResult FlatAffineValueConstraints::addAffineParallelOpDomain(
 
     auto upperBound = parallelOp.getUpperBoundMap(ivPos);
     if (upperBound.isConstant())
-      addBound(BoundType::UB, pos, upperBound.getSingleConstantResult());
+      addBound(BoundType::UB, pos, upperBound.getSingleConstantResult() - 1);
     else if (failed(addBound(BoundType::UB, pos, upperBound,
                              parallelOp.getUpperBoundsOperands())))
       return failure();
+    ++ivPos;
   }
   return success();
 }
@@ -1405,15 +1406,15 @@ void FlatAffineValueConstraints::printSpace(raw_ostream &os) const {
   os << "(";
   for (unsigned i = 0, e = getNumDimAndSymbolVars(); i < e; i++) {
     if (hasValue(i))
-      os << "Value ";
+      os << "Value\t";
     else
-      os << "None ";
+      os << "None\t";
   }
   for (unsigned i = getVarKindOffset(VarKind::Local),
                 e = getVarKindEnd(VarKind::Local);
        i < e; ++i)
-    os << "Local ";
-  os << " const)\n";
+    os << "Local\t";
+  os << "const)\n";
 }
 
 void FlatAffineValueConstraints::clearAndCopyFrom(

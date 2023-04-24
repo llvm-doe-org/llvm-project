@@ -24,7 +24,6 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
@@ -52,8 +51,9 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/SMLoc.h"
-#include "llvm/Support/TargetParser.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/TargetParser.h"
+#include "llvm/TargetParser/Triple.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -516,86 +516,86 @@ class ARMAsmParser : public MCTargetAsmParser {
 
   bool isThumb() const {
     // FIXME: Can tablegen auto-generate this?
-    return getSTI().getFeatureBits()[ARM::ModeThumb];
+    return getSTI().hasFeature(ARM::ModeThumb);
   }
 
   bool isThumbOne() const {
-    return isThumb() && !getSTI().getFeatureBits()[ARM::FeatureThumb2];
+    return isThumb() && !getSTI().hasFeature(ARM::FeatureThumb2);
   }
 
   bool isThumbTwo() const {
-    return isThumb() && getSTI().getFeatureBits()[ARM::FeatureThumb2];
+    return isThumb() && getSTI().hasFeature(ARM::FeatureThumb2);
   }
 
   bool hasThumb() const {
-    return getSTI().getFeatureBits()[ARM::HasV4TOps];
+    return getSTI().hasFeature(ARM::HasV4TOps);
   }
 
   bool hasThumb2() const {
-    return getSTI().getFeatureBits()[ARM::FeatureThumb2];
+    return getSTI().hasFeature(ARM::FeatureThumb2);
   }
 
   bool hasV6Ops() const {
-    return getSTI().getFeatureBits()[ARM::HasV6Ops];
+    return getSTI().hasFeature(ARM::HasV6Ops);
   }
 
   bool hasV6T2Ops() const {
-    return getSTI().getFeatureBits()[ARM::HasV6T2Ops];
+    return getSTI().hasFeature(ARM::HasV6T2Ops);
   }
 
   bool hasV6MOps() const {
-    return getSTI().getFeatureBits()[ARM::HasV6MOps];
+    return getSTI().hasFeature(ARM::HasV6MOps);
   }
 
   bool hasV7Ops() const {
-    return getSTI().getFeatureBits()[ARM::HasV7Ops];
+    return getSTI().hasFeature(ARM::HasV7Ops);
   }
 
   bool hasV8Ops() const {
-    return getSTI().getFeatureBits()[ARM::HasV8Ops];
+    return getSTI().hasFeature(ARM::HasV8Ops);
   }
 
   bool hasV8MBaseline() const {
-    return getSTI().getFeatureBits()[ARM::HasV8MBaselineOps];
+    return getSTI().hasFeature(ARM::HasV8MBaselineOps);
   }
 
   bool hasV8MMainline() const {
-    return getSTI().getFeatureBits()[ARM::HasV8MMainlineOps];
+    return getSTI().hasFeature(ARM::HasV8MMainlineOps);
   }
   bool hasV8_1MMainline() const {
-    return getSTI().getFeatureBits()[ARM::HasV8_1MMainlineOps];
+    return getSTI().hasFeature(ARM::HasV8_1MMainlineOps);
   }
   bool hasMVE() const {
-    return getSTI().getFeatureBits()[ARM::HasMVEIntegerOps];
+    return getSTI().hasFeature(ARM::HasMVEIntegerOps);
   }
   bool hasMVEFloat() const {
-    return getSTI().getFeatureBits()[ARM::HasMVEFloatOps];
+    return getSTI().hasFeature(ARM::HasMVEFloatOps);
   }
   bool hasCDE() const {
-    return getSTI().getFeatureBits()[ARM::HasCDEOps];
+    return getSTI().hasFeature(ARM::HasCDEOps);
   }
   bool has8MSecExt() const {
-    return getSTI().getFeatureBits()[ARM::Feature8MSecExt];
+    return getSTI().hasFeature(ARM::Feature8MSecExt);
   }
 
   bool hasARM() const {
-    return !getSTI().getFeatureBits()[ARM::FeatureNoARM];
+    return !getSTI().hasFeature(ARM::FeatureNoARM);
   }
 
   bool hasDSP() const {
-    return getSTI().getFeatureBits()[ARM::FeatureDSP];
+    return getSTI().hasFeature(ARM::FeatureDSP);
   }
 
   bool hasD32() const {
-    return getSTI().getFeatureBits()[ARM::FeatureD32];
+    return getSTI().hasFeature(ARM::FeatureD32);
   }
 
   bool hasV8_1aOps() const {
-    return getSTI().getFeatureBits()[ARM::HasV8_1aOps];
+    return getSTI().hasFeature(ARM::HasV8_1aOps);
   }
 
   bool hasRAS() const {
-    return getSTI().getFeatureBits()[ARM::FeatureRAS];
+    return getSTI().hasFeature(ARM::FeatureRAS);
   }
 
   void SwitchMode() {
@@ -607,7 +607,7 @@ class ARMAsmParser : public MCTargetAsmParser {
   void FixModeAfterArchChange(bool WasThumb, SMLoc Loc);
 
   bool isMClass() const {
-    return getSTI().getFeatureBits()[ARM::FeatureMClass];
+    return getSTI().hasFeature(ARM::FeatureMClass);
   }
 
   /// @name Auto-generated Match Functions
@@ -7831,6 +7831,107 @@ bool ARMAsmParser::validateInstruction(MCInst &Inst,
     }
     return false;
   }
+
+  case ARM::t2LDRB_OFFSET_imm:
+  case ARM::t2LDRB_PRE_imm:
+  case ARM::t2LDRB_POST_imm:
+  case ARM::t2STRB_OFFSET_imm:
+  case ARM::t2STRB_PRE_imm:
+  case ARM::t2STRB_POST_imm: {
+    if (Inst.getOpcode() == ARM::t2LDRB_POST_imm ||
+        Inst.getOpcode() == ARM::t2STRB_POST_imm ||
+        Inst.getOpcode() == ARM::t2LDRB_PRE_imm ||
+        Inst.getOpcode() == ARM::t2STRB_PRE_imm) {
+      int Imm = Inst.getOperand(2).getImm();
+      if (Imm > 255 || Imm < -255)
+        return Error(Operands[5]->getStartLoc(),
+                     "operand must be in range [-255, 255]");
+    } else if (Inst.getOpcode() == ARM::t2LDRB_OFFSET_imm ||
+               Inst.getOpcode() == ARM::t2STRB_OFFSET_imm) {
+      int Imm = Inst.getOperand(2).getImm();
+      if (Imm > 0 || Imm < -255)
+        return Error(Operands[5]->getStartLoc(),
+                     "operand must be in range [0, 255] with a negative sign");
+    }
+    if (Inst.getOperand(0).getReg() == ARM::PC) {
+      return Error(Operands[3]->getStartLoc(),
+                   "if operand is PC, should call the LDRB (literal)");
+    }
+    return false;
+  }
+
+  case ARM::t2LDRH_OFFSET_imm:
+  case ARM::t2LDRH_PRE_imm:
+  case ARM::t2LDRH_POST_imm:
+  case ARM::t2STRH_OFFSET_imm:
+  case ARM::t2STRH_PRE_imm:
+  case ARM::t2STRH_POST_imm: {
+    if (Inst.getOpcode() == ARM::t2LDRH_POST_imm ||
+        Inst.getOpcode() == ARM::t2STRH_POST_imm ||
+        Inst.getOpcode() == ARM::t2LDRH_PRE_imm ||
+        Inst.getOpcode() == ARM::t2STRH_PRE_imm) {
+      int Imm = Inst.getOperand(2).getImm();
+      if (Imm > 255 || Imm < -255)
+        return Error(Operands[5]->getStartLoc(),
+                     "operand must be in range [-255, 255]");
+    } else if (Inst.getOpcode() == ARM::t2LDRH_OFFSET_imm ||
+               Inst.getOpcode() == ARM::t2STRH_OFFSET_imm) {
+      int Imm = Inst.getOperand(2).getImm();
+      if (Imm > 0 || Imm < -255)
+        return Error(Operands[5]->getStartLoc(),
+                     "operand must be in range [0, 255] with a negative sign");
+    }
+    if (Inst.getOperand(0).getReg() == ARM::PC) {
+      return Error(Operands[3]->getStartLoc(),
+                   "if operand is PC, should call the LDRH (literal)");
+    }
+    return false;
+  }
+
+  case ARM::t2LDRSB_OFFSET_imm:
+  case ARM::t2LDRSB_PRE_imm:
+  case ARM::t2LDRSB_POST_imm: {
+    if (Inst.getOpcode() == ARM::t2LDRSB_POST_imm ||
+        Inst.getOpcode() == ARM::t2LDRSB_PRE_imm) {
+      int Imm = Inst.getOperand(2).getImm();
+      if (Imm > 255 || Imm < -255)
+        return Error(Operands[5]->getStartLoc(),
+                     "operand must be in range [-255, 255]");
+    } else if (Inst.getOpcode() == ARM::t2LDRSB_OFFSET_imm) {
+      int Imm = Inst.getOperand(2).getImm();
+      if (Imm > 0 || Imm < -255)
+        return Error(Operands[5]->getStartLoc(),
+                     "operand must be in range [0, 255] with a negative sign");
+    }
+    if (Inst.getOperand(0).getReg() == ARM::PC) {
+      return Error(Operands[3]->getStartLoc(),
+                   "if operand is PC, should call the LDRH (literal)");
+    }
+    return false;
+  }
+
+  case ARM::t2LDRSH_OFFSET_imm:
+  case ARM::t2LDRSH_PRE_imm:
+  case ARM::t2LDRSH_POST_imm: {
+    if (Inst.getOpcode() == ARM::t2LDRSH_POST_imm ||
+        Inst.getOpcode() == ARM::t2LDRSH_PRE_imm) {
+      int Imm = Inst.getOperand(2).getImm();
+      if (Imm > 255 || Imm < -255)
+        return Error(Operands[5]->getStartLoc(),
+                     "operand must be in range [-255, 255]");
+    } else if (Inst.getOpcode() == ARM::t2LDRSH_OFFSET_imm) {
+      int Imm = Inst.getOperand(2).getImm();
+      if (Imm > 0 || Imm < -255)
+        return Error(Operands[5]->getStartLoc(),
+                     "operand must be in range [0, 255] with a negative sign");
+    }
+    if (Inst.getOperand(0).getReg() == ARM::PC) {
+      return Error(Operands[3]->getStartLoc(),
+                   "if operand is PC, should call the LDRH (literal)");
+    }
+    return false;
+  }
+
   case ARM::LDR_PRE_IMM:
   case ARM::LDR_PRE_REG:
   case ARM::t2LDR_PRE:
@@ -8798,7 +8899,7 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
       // before passing it to the ADR instruction.
       unsigned Enc = Inst.getOperand(2).getImm();
       TmpInst.addOperand(MCOperand::createImm(
-        ARM_AM::rotr32(Enc & 0xFF, (Enc & 0xF00) >> 7)));
+          llvm::rotr<uint32_t>(Enc & 0xFF, (Enc & 0xF00) >> 7)));
     } else {
       // Turn PC-relative expression into absolute expression.
       // Reading PC provides the start of the current instruction + 8 and
@@ -8843,6 +8944,156 @@ bool ARMAsmParser::processInstruction(MCInst &Inst,
                                                              : ARM::t2STR_POST);
     TmpInst.addOperand(Inst.getOperand(4)); // Rt_wb
     TmpInst.addOperand(Inst.getOperand(0)); // Rt
+    TmpInst.addOperand(Inst.getOperand(1)); // Rn
+    TmpInst.addOperand(Inst.getOperand(2)); // imm
+    TmpInst.addOperand(Inst.getOperand(3)); // CondCode
+    Inst = TmpInst;
+    return true;
+  }
+  // Aliases for imm syntax of LDRB instructions.
+  case ARM::t2LDRB_OFFSET_imm: {
+    MCInst TmpInst;
+    TmpInst.setOpcode(ARM::t2LDRBi8);
+    TmpInst.addOperand(Inst.getOperand(0)); // Rt
+    TmpInst.addOperand(Inst.getOperand(1)); // Rn
+    TmpInst.addOperand(Inst.getOperand(2)); // imm
+    TmpInst.addOperand(Inst.getOperand(3)); // CondCode
+    Inst = TmpInst;
+    return true;
+  }
+  case ARM::t2LDRB_PRE_imm:
+  case ARM::t2LDRB_POST_imm: {
+    MCInst TmpInst;
+    TmpInst.setOpcode(Inst.getOpcode() == ARM::t2LDRB_PRE_imm
+                          ? ARM::t2LDRB_PRE
+                          : ARM::t2LDRB_POST);
+    TmpInst.addOperand(Inst.getOperand(0)); // Rt
+    TmpInst.addOperand(Inst.getOperand(4)); // Rt_wb
+    TmpInst.addOperand(Inst.getOperand(1)); // Rn
+    TmpInst.addOperand(Inst.getOperand(2)); // imm
+    TmpInst.addOperand(Inst.getOperand(3)); // CondCode
+    Inst = TmpInst;
+    return true;
+  }
+  // Aliases for imm syntax of STRB instructions.
+  case ARM::t2STRB_OFFSET_imm: {
+    MCInst TmpInst;
+    TmpInst.setOpcode(ARM::t2STRBi8);
+    TmpInst.addOperand(Inst.getOperand(0)); // Rt
+    TmpInst.addOperand(Inst.getOperand(1)); // Rn
+    TmpInst.addOperand(Inst.getOperand(2)); // imm
+    TmpInst.addOperand(Inst.getOperand(3)); // CondCode
+    Inst = TmpInst;
+    return true;
+  }
+  case ARM::t2STRB_PRE_imm:
+  case ARM::t2STRB_POST_imm: {
+    MCInst TmpInst;
+    TmpInst.setOpcode(Inst.getOpcode() == ARM::t2STRB_PRE_imm
+                          ? ARM::t2STRB_PRE
+                          : ARM::t2STRB_POST);
+    TmpInst.addOperand(Inst.getOperand(4)); // Rt_wb
+    TmpInst.addOperand(Inst.getOperand(0)); // Rt
+    TmpInst.addOperand(Inst.getOperand(1)); // Rn
+    TmpInst.addOperand(Inst.getOperand(2)); // imm
+    TmpInst.addOperand(Inst.getOperand(3)); // CondCode
+    Inst = TmpInst;
+    return true;
+  }
+  // Aliases for imm syntax of LDRH instructions.
+  case ARM::t2LDRH_OFFSET_imm: {
+    MCInst TmpInst;
+    TmpInst.setOpcode(ARM::t2LDRHi8);
+    TmpInst.addOperand(Inst.getOperand(0)); // Rt
+    TmpInst.addOperand(Inst.getOperand(1)); // Rn
+    TmpInst.addOperand(Inst.getOperand(2)); // imm
+    TmpInst.addOperand(Inst.getOperand(3)); // CondCode
+    Inst = TmpInst;
+    return true;
+  }
+  case ARM::t2LDRH_PRE_imm:
+  case ARM::t2LDRH_POST_imm: {
+    MCInst TmpInst;
+    TmpInst.setOpcode(Inst.getOpcode() == ARM::t2LDRH_PRE_imm
+                          ? ARM::t2LDRH_PRE
+                          : ARM::t2LDRH_POST);
+    TmpInst.addOperand(Inst.getOperand(0)); // Rt
+    TmpInst.addOperand(Inst.getOperand(4)); // Rt_wb
+    TmpInst.addOperand(Inst.getOperand(1)); // Rn
+    TmpInst.addOperand(Inst.getOperand(2)); // imm
+    TmpInst.addOperand(Inst.getOperand(3)); // CondCode
+    Inst = TmpInst;
+    return true;
+  }
+  // Aliases for imm syntax of STRH instructions.
+  case ARM::t2STRH_OFFSET_imm: {
+    MCInst TmpInst;
+    TmpInst.setOpcode(ARM::t2STRHi8);
+    TmpInst.addOperand(Inst.getOperand(0)); // Rt
+    TmpInst.addOperand(Inst.getOperand(1)); // Rn
+    TmpInst.addOperand(Inst.getOperand(2)); // imm
+    TmpInst.addOperand(Inst.getOperand(3)); // CondCode
+    Inst = TmpInst;
+    return true;
+  }
+  case ARM::t2STRH_PRE_imm:
+  case ARM::t2STRH_POST_imm: {
+    MCInst TmpInst;
+    TmpInst.setOpcode(Inst.getOpcode() == ARM::t2STRH_PRE_imm
+                          ? ARM::t2STRH_PRE
+                          : ARM::t2STRH_POST);
+    TmpInst.addOperand(Inst.getOperand(4)); // Rt_wb
+    TmpInst.addOperand(Inst.getOperand(0)); // Rt
+    TmpInst.addOperand(Inst.getOperand(1)); // Rn
+    TmpInst.addOperand(Inst.getOperand(2)); // imm
+    TmpInst.addOperand(Inst.getOperand(3)); // CondCode
+    Inst = TmpInst;
+    return true;
+  }
+  // Aliases for imm syntax of LDRSB instructions.
+  case ARM::t2LDRSB_OFFSET_imm: {
+    MCInst TmpInst;
+    TmpInst.setOpcode(ARM::t2LDRSBi8);
+    TmpInst.addOperand(Inst.getOperand(0)); // Rt
+    TmpInst.addOperand(Inst.getOperand(1)); // Rn
+    TmpInst.addOperand(Inst.getOperand(2)); // imm
+    TmpInst.addOperand(Inst.getOperand(3)); // CondCode
+    Inst = TmpInst;
+    return true;
+  }
+  case ARM::t2LDRSB_PRE_imm:
+  case ARM::t2LDRSB_POST_imm: {
+    MCInst TmpInst;
+    TmpInst.setOpcode(Inst.getOpcode() == ARM::t2LDRSB_PRE_imm
+                          ? ARM::t2LDRSB_PRE
+                          : ARM::t2LDRSB_POST);
+    TmpInst.addOperand(Inst.getOperand(0)); // Rt
+    TmpInst.addOperand(Inst.getOperand(4)); // Rt_wb
+    TmpInst.addOperand(Inst.getOperand(1)); // Rn
+    TmpInst.addOperand(Inst.getOperand(2)); // imm
+    TmpInst.addOperand(Inst.getOperand(3)); // CondCode
+    Inst = TmpInst;
+    return true;
+  }
+  // Aliases for imm syntax of LDRSH instructions.
+  case ARM::t2LDRSH_OFFSET_imm: {
+    MCInst TmpInst;
+    TmpInst.setOpcode(ARM::t2LDRSHi8);
+    TmpInst.addOperand(Inst.getOperand(0)); // Rt
+    TmpInst.addOperand(Inst.getOperand(1)); // Rn
+    TmpInst.addOperand(Inst.getOperand(2)); // imm
+    TmpInst.addOperand(Inst.getOperand(3)); // CondCode
+    Inst = TmpInst;
+    return true;
+  }
+  case ARM::t2LDRSH_PRE_imm:
+  case ARM::t2LDRSH_POST_imm: {
+    MCInst TmpInst;
+    TmpInst.setOpcode(Inst.getOpcode() == ARM::t2LDRSH_PRE_imm
+                          ? ARM::t2LDRSH_PRE
+                          : ARM::t2LDRSH_POST);
+    TmpInst.addOperand(Inst.getOperand(0)); // Rt
+    TmpInst.addOperand(Inst.getOperand(4)); // Rt_wb
     TmpInst.addOperand(Inst.getOperand(1)); // Rn
     TmpInst.addOperand(Inst.getOperand(2)); // imm
     TmpInst.addOperand(Inst.getOperand(3)); // CondCode

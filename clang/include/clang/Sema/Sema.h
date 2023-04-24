@@ -486,6 +486,12 @@ public:
     PSK_Pop_Set   = PSK_Pop | PSK_Set,  // #pragma (pop[, id], value)
   };
 
+  struct PragmaPackInfo {
+    PragmaMsStackAction Action;
+    StringRef SlotLabel;
+    Token Alignment;
+  };
+
   // #pragma pack and align.
   class AlignPackInfo {
   public:
@@ -1140,10 +1146,6 @@ public:
   /// standard library.
   LazyDeclPtr StdAlignValT;
 
-  /// The C++ "std::experimental" namespace, where the experimental parts
-  /// of the standard library resides.
-  NamespaceDecl *StdExperimentalNamespaceCache;
-
   /// The C++ "std::initializer_list" template, which is defined in
   /// \<initializer_list>.
   ClassTemplateDecl *StdInitializerList;
@@ -1151,10 +1153,6 @@ public:
   /// The C++ "std::coroutine_traits" template, which is defined in
   /// \<coroutine_traits>
   ClassTemplateDecl *StdCoroutineTraitsCache;
-  /// The namespace where coroutine components are defined. In standard,
-  /// they are defined in std namespace. And in the previous implementation,
-  /// they are defined in std::experimental namespace.
-  NamespaceDecl *CoroTraitsNamespaceCache;
 
   /// The C++ "type_info" declaration, which is defined in \<typeinfo>.
   RecordDecl *CXXTypeInfoDecl;
@@ -2277,17 +2275,24 @@ private:
     SourceLocation BeginLoc;
     clang::Module *Module = nullptr;
     bool ModuleInterface = false;
-    bool IsPartition = false;
-    bool ImplicitGlobalModuleFragment = false;
     VisibleModuleSet OuterVisibleModules;
   };
   /// The modules we're currently parsing.
   llvm::SmallVector<ModuleScope, 16> ModuleScopes;
-  /// The global module fragment of the current translation unit.
-  clang::Module *GlobalModuleFragment = nullptr;
+  /// The explicit global module fragment of the current translation unit.
+  /// The explicit Global Module Fragment, as specified in C++
+  /// [module.global.frag].
+  clang::Module *TheGlobalModuleFragment = nullptr;
 
-  /// The modules we imported directly.
-  llvm::SmallPtrSet<clang::Module *, 8> DirectModuleImports;
+  /// The implicit global module fragments of the current translation unit.
+  /// We would only create at most two implicit global module fragments to
+  /// avoid performance penalties when there are many language linkage
+  /// exports.
+  ///
+  /// The contents in the implicit global module fragment can't be discarded
+  /// no matter if it is exported or not.
+  clang::Module *TheImplicitGlobalModuleFragment = nullptr;
+  clang::Module *TheExportedImplicitGlobalModuleFragment = nullptr;
 
   /// Namespace definitions that we will export when they finish.
   llvm::SmallPtrSet<const NamespaceDecl*, 8> DeferredExportedNamespaces;
@@ -2303,10 +2308,16 @@ private:
     return getCurrentModule() ? getCurrentModule()->isModulePurview() : false;
   }
 
-  /// Enter the scope of the global module.
-  Module *PushGlobalModuleFragment(SourceLocation BeginLoc, bool IsImplicit);
-  /// Leave the scope of the global module.
+  /// Enter the scope of the explicit global module fragment.
+  Module *PushGlobalModuleFragment(SourceLocation BeginLoc);
+  /// Leave the scope of the explicit global module fragment.
   void PopGlobalModuleFragment();
+
+  /// Enter the scope of an implicit global module fragment.
+  Module *PushImplicitGlobalModuleFragment(SourceLocation BeginLoc,
+                                           bool IsExported);
+  /// Leave the scope of an implicit global module fragment.
+  void PopImplicitGlobalModuleFragment();
 
   VisibleModuleSet VisibleModules;
 
@@ -2337,10 +2348,6 @@ public:
   /// Get the module owning an entity.
   Module *getOwningModule(const Decl *Entity) {
     return Entity->getOwningModule();
-  }
-
-  bool isModuleDirectlyImported(const Module *M) {
-    return DirectModuleImports.contains(M);
   }
 
   // Determine whether the module M belongs to the  current TU.
@@ -6090,9 +6097,6 @@ public:
 
   NamespaceDecl *getStdNamespace() const;
   NamespaceDecl *getOrCreateStdNamespace();
-
-  NamespaceDecl *lookupStdExperimentalNamespace();
-  NamespaceDecl *getCachedCoroNamespace() { return CoroTraitsNamespaceCache; }
 
   CXXRecordDecl *getStdBadAlloc() const;
   EnumDecl *getStdAlignValT() const;
@@ -10090,6 +10094,7 @@ public:
                         const Decl *Pattern, Decl *Inst,
                         LateInstantiatedAttrVec *LateAttrs = nullptr,
                         LocalInstantiationScope *OuterMostScope = nullptr);
+  void updateAttrsForLateParsedTemplate(const Decl *Pattern, Decl *Inst);
 
   void
   InstantiateAttrsForDecl(const MultiLevelTemplateArgumentList &TemplateArgs,
@@ -10906,7 +10911,7 @@ public:
   bool checkNSReturnsRetainedReturnType(SourceLocation loc, QualType type);
 
   //===--------------------------------------------------------------------===//
-  // C++ Coroutines TS
+  // C++ Coroutines
   //
   bool ActOnCoroutineBodyStart(Scope *S, SourceLocation KwLoc,
                                StringRef Keyword);
@@ -10931,8 +10936,7 @@ public:
   /// Lookup 'coroutine_traits' in std namespace and std::experimental
   /// namespace. The namespace found is recorded in Namespace.
   ClassTemplateDecl *lookupCoroutineTraits(SourceLocation KwLoc,
-                                           SourceLocation FuncLoc,
-                                           NamespaceDecl *&Namespace);
+                                           SourceLocation FuncLoc);
   /// Check that the expression co_await promise.final_suspend() shall not be
   /// potentially-throwing.
   bool checkFinalSuspendNoThrow(const Stmt *FinalSuspend);
@@ -12997,7 +13001,6 @@ public:
   bool areVectorTypesSameSize(QualType srcType, QualType destType);
   bool areLaxCompatibleVectorTypes(QualType srcType, QualType destType);
   bool isLaxVectorConversion(QualType srcType, QualType destType);
-  bool areSameVectorElemTypes(QualType srcType, QualType destType);
   bool anyAltivecTypes(QualType srcType, QualType destType);
 
   /// type checking declaration initializers (C99 6.7.8)
@@ -13909,8 +13912,11 @@ private:
   bool CheckPPCMMAType(QualType Type, SourceLocation TypeLoc);
 
   bool SemaBuiltinElementwiseMath(CallExpr *TheCall);
+  bool SemaBuiltinElementwiseTernaryMath(CallExpr *TheCall);
   bool PrepareBuiltinElementwiseMathOneArgCall(CallExpr *TheCall);
   bool PrepareBuiltinReduceMathOneArgCall(CallExpr *TheCall);
+
+  bool SemaBuiltinNonDeterministicValue(CallExpr *TheCall);
 
   // Matrix builtin handling.
   ExprResult SemaBuiltinMatrixTranspose(CallExpr *TheCall,

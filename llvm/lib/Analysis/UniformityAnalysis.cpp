@@ -1,4 +1,4 @@
-//===- ConvergenceUtils.cpp -----------------------------------------------===//
+//===- UniformityAnalysis.cpp ---------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -73,8 +73,7 @@ void llvm::GenericUniformityAnalysisImpl<SSAContext>::pushUsers(
 template <>
 bool llvm::GenericUniformityAnalysisImpl<SSAContext>::usesValueFromCycle(
     const Instruction &I, const Cycle &DefCycle) const {
-  if (isAlwaysUniform(I))
-    return false;
+  assert(!isAlwaysUniform(I));
   for (const Use &U : I.operands()) {
     if (auto *I = dyn_cast<Instruction>(&U)) {
       if (DefCycle.contains(I->getParent()))
@@ -125,12 +124,12 @@ UniformityInfoWrapperPass::UniformityInfoWrapperPass() : FunctionPass(ID) {
   initializeUniformityInfoWrapperPassPass(*PassRegistry::getPassRegistry());
 }
 
-INITIALIZE_PASS_BEGIN(UniformityInfoWrapperPass, "uniforminfo",
-                      "Uniform Info Analysis", true, true)
+INITIALIZE_PASS_BEGIN(UniformityInfoWrapperPass, "uniformity",
+                      "Uniformity Analysis", true, true)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
-INITIALIZE_PASS_END(UniformityInfoWrapperPass, "uniforminfo",
-                    "Uniform Info Analysis", true, true)
+INITIALIZE_PASS_END(UniformityInfoWrapperPass, "uniformity",
+                    "Uniformity Analysis", true, true)
 
 void UniformityInfoWrapperPass::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesAll();

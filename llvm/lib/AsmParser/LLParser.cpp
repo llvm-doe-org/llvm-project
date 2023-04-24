@@ -1141,9 +1141,9 @@ bool LLParser::parseAliasOrIFunc(const std::string &Name, LocTy NameLoc,
 
   // Insert into the module, we know its name won't collide now.
   if (IsAlias)
-    M->getAliasList().push_back(GA.release());
+    M->insertAlias(GA.release());
   else
-    M->getIFuncList().push_back(GI.release());
+    M->insertIFunc(GI.release());
   assert(GV->getName() == Name && "Should not be a name conflict!");
 
   return false;
@@ -1468,6 +1468,15 @@ bool LLParser::parseEnumAttribute(Attribute::AttrKind Attr, AttrBuilder &B,
       return true;
     B.addMemoryAttr(*ME);
     return false;
+  }
+  case Attribute::NoFPClass: {
+    if (FPClassTest NoFPClass =
+            static_cast<FPClassTest>(parseNoFPClassAttr())) {
+      B.addNoFPClassAttr(NoFPClass);
+      return false;
+    }
+
+    return true;
   }
   default:
     B.addAttribute(Attr);
@@ -2065,8 +2074,12 @@ bool LLParser::parseOptionalCallingConv(unsigned &CC) {
   case lltok::kw_swiftcc:        CC = CallingConv::Swift; break;
   case lltok::kw_swifttailcc:    CC = CallingConv::SwiftTail; break;
   case lltok::kw_x86_intrcc:     CC = CallingConv::X86_INTR; break;
-  case lltok::kw_hhvmcc:         CC = CallingConv::HHVM; break;
-  case lltok::kw_hhvm_ccc:       CC = CallingConv::HHVM_C; break;
+  case lltok::kw_hhvmcc:
+    CC = CallingConv::DUMMY_HHVM;
+    break;
+  case lltok::kw_hhvm_ccc:
+    CC = CallingConv::DUMMY_HHVM_C;
+    break;
   case lltok::kw_cxx_fast_tlscc: CC = CallingConv::CXX_FAST_TLS; break;
   case lltok::kw_amdgpu_vs:      CC = CallingConv::AMDGPU_VS; break;
   case lltok::kw_amdgpu_gfx:     CC = CallingConv::AMDGPU_Gfx; break;
@@ -2334,6 +2347,86 @@ std::optional<MemoryEffects> LLParser::parseMemoryAttr() {
 
   tokError("unterminated memory attribute");
   return std::nullopt;
+}
+
+static unsigned keywordToFPClassTest(lltok::Kind Tok) {
+  switch (Tok) {
+  case lltok::kw_all:
+    return fcAllFlags;
+  case lltok::kw_nan:
+    return fcNan;
+  case lltok::kw_snan:
+    return fcSNan;
+  case lltok::kw_qnan:
+    return fcQNan;
+  case lltok::kw_inf:
+    return fcInf;
+  case lltok::kw_ninf:
+    return fcNegInf;
+  case lltok::kw_pinf:
+    return fcPosInf;
+  case lltok::kw_norm:
+    return fcNormal;
+  case lltok::kw_nnorm:
+    return fcNegNormal;
+  case lltok::kw_pnorm:
+    return fcPosNormal;
+  case lltok::kw_sub:
+    return fcSubnormal;
+  case lltok::kw_nsub:
+    return fcNegSubnormal;
+  case lltok::kw_psub:
+    return fcPosSubnormal;
+  case lltok::kw_zero:
+    return fcZero;
+  case lltok::kw_nzero:
+    return fcNegZero;
+  case lltok::kw_pzero:
+    return fcPosZero;
+  default:
+    return 0;
+  }
+}
+
+unsigned LLParser::parseNoFPClassAttr() {
+  unsigned Mask = fcNone;
+
+  Lex.Lex();
+  if (!EatIfPresent(lltok::lparen)) {
+    tokError("expected '('");
+    return 0;
+  }
+
+  do {
+    uint64_t Value = 0;
+    unsigned TestMask = keywordToFPClassTest(Lex.getKind());
+    if (TestMask != 0) {
+      Mask |= TestMask;
+      // TODO: Disallow overlapping masks to avoid copy paste errors
+    } else if (Mask == 0 && Lex.getKind() == lltok::APSInt &&
+               !parseUInt64(Value)) {
+      if (Value == 0 || (Value & ~static_cast<unsigned>(fcAllFlags)) != 0) {
+        error(Lex.getLoc(), "invalid mask value for 'nofpclass'");
+        return 0;
+      }
+
+      if (!EatIfPresent(lltok::rparen)) {
+        error(Lex.getLoc(), "expected ')'");
+        return 0;
+      }
+
+      return Value;
+    } else {
+      error(Lex.getLoc(), "expected nofpclass test mask");
+      return 0;
+    }
+
+    Lex.Lex();
+    if (EatIfPresent(lltok::rparen))
+      return Mask;
+  } while (1);
+
+  llvm_unreachable("unterminated nofpclass attribute");
 }
 
 /// parseOptionalCommaAlign

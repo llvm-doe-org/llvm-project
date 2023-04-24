@@ -487,11 +487,11 @@ namespace {
       assert(N->getOpcode() == ISD::AND && "Unexpected opcode");
       const APInt &Val = cast<ConstantSDNode>(N->getOperand(1))->getAPIntValue();
 
-      if (Val.countTrailingOnes() >= Width)
+      if (Val.countr_one() >= Width)
         return true;
 
       APInt Mask = Val | CurDAG->computeKnownBits(N->getOperand(0)).Zero;
-      return Mask.countTrailingOnes() >= Width;
+      return Mask.countr_one() >= Width;
     }
 
     /// Return an SDNode that returns the value of the global base register.
@@ -4007,7 +4007,7 @@ bool X86DAGToDAGISel::tryShiftAmountMod(SDNode *N) {
     if (Add1C && Add1C->getAPIntValue().urem(Size) == 0) {
       NewShiftAmt = Add0;
 
-    } else if (ShiftAmt->getOpcode() != ISD::ADD &&
+    } else if (ShiftAmt->getOpcode() != ISD::ADD && ShiftAmt.hasOneUse() &&
                ((Add0C && Add0C->getAPIntValue().urem(Size) == Size - 1) ||
                 (Add1C && Add1C->getAPIntValue().urem(Size) == Size - 1))) {
       // If we are doing a NOT on just the lower bits with (Size*N-1) -/^ X
@@ -4021,7 +4021,10 @@ bool X86DAGToDAGISel::tryShiftAmountMod(SDNode *N) {
 
       EVT OpVT = ShiftAmt.getValueType();
 
-      NewShiftAmt = CurDAG->getNOT(DL, Add0C == nullptr ? Add0 : Add1, OpVT);
+      SDValue AllOnes = CurDAG->getAllOnesConstant(DL, OpVT);
+      NewShiftAmt = CurDAG->getNode(ISD::XOR, DL, OpVT,
+                                    Add0C == nullptr ? Add0 : Add1, AllOnes);
+      insertDAGNode(*CurDAG, OrigShiftAmt, AllOnes);
       insertDAGNode(*CurDAG, OrigShiftAmt, NewShiftAmt);
       // If we are shifting by N-X where N == 0 mod Size, then just shift by
       // -X to generate a NEG instead of a SUB of a constant.
@@ -4452,7 +4455,7 @@ bool X86DAGToDAGISel::shrinkAndImmediate(SDNode *And) {
   // implicit zeroing of 32 bit ops. So we should check if the lower 32 bits
   // are negative too.
   APInt MaskVal = And1C->getAPIntValue();
-  unsigned MaskLZ = MaskVal.countLeadingZeros();
+  unsigned MaskLZ = MaskVal.countl_zero();
   if (!MaskLZ || (VT == MVT::i64 && MaskLZ == 32))
     return false;
 
@@ -4468,8 +4471,8 @@ bool X86DAGToDAGISel::shrinkAndImmediate(SDNode *And) {
 
   // If a negative constant would not allow a smaller encoding, there's no need
   // to continue. Only change the constant when we know it's a win.
-  unsigned MinWidth = NegMaskVal.getMinSignedBits();
-  if (MinWidth > 32 || (MinWidth > 8 && MaskVal.getMinSignedBits() <= 32))
+  unsigned MinWidth = NegMaskVal.getSignificantBits();
+  if (MinWidth > 32 || (MinWidth > 8 && MaskVal.getSignificantBits() <= 32))
     return false;
 
   // Extend masks if we truncated above.

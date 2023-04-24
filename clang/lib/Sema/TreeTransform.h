@@ -4908,7 +4908,7 @@ bool TreeTransform<Derived>::TransformTemplateArgument(
         getSema(),
         Uneval ? Sema::ExpressionEvaluationContext::Unevaluated
                : Sema::ExpressionEvaluationContext::ConstantEvaluated,
-        /*LambdaContextDecl=*/nullptr, /*ExprContext=*/
+        Sema::ReuseLambdaContextDecl, /*ExprContext=*/
         Sema::ExpressionEvaluationContextRecord::EK_TemplateArgument);
 
     Expr *InputExpr = Input.getSourceExpression();
@@ -8287,8 +8287,7 @@ TreeTransform<Derived>::TransformMSAsmStmt(MSAsmStmt *S) {
                                        TransformedExprs, S->getEndLoc());
 }
 
-// C++ Coroutines TS
-
+// C++ Coroutines
 template<typename Derived>
 StmtResult
 TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
@@ -14099,7 +14098,8 @@ TreeTransform<Derived>::TransformLambdaExpr(LambdaExpr *E) {
 
   CXXRecordDecl *OldClass = E->getLambdaClass();
   CXXRecordDecl *Class = getSema().createLambdaClosureType(
-      E->getIntroducerRange(), nullptr, DependencyKind, E->getCaptureDefault());
+      E->getIntroducerRange(), /*Info=*/nullptr, DependencyKind,
+      E->getCaptureDefault());
   getDerived().transformedLocalDecl(OldClass, {Class});
 
   std::optional<std::tuple<bool, unsigned, unsigned, Decl *>> Mangling;
@@ -15445,7 +15445,12 @@ TreeTransform<Derived>::TransformBlockExpr(BlockExpr *E) {
                                                  oldCapture));
       assert(blockScope->CaptureMap.count(newCapture));
     }
-    assert(oldBlock->capturesCXXThis() == blockScope->isCXXThisCaptured());
+
+    // The this pointer may not be captured by the instantiated block, even when
+    // it's captured by the original block, if the expression causing the
+    // capture is in the discarded branch of a constexpr if statement.
+    assert((!blockScope->isCXXThisCaptured() || oldBlock->capturesCXXThis()) &&
+           "this pointer isn't captured in the old block");
   }
 #endif
 

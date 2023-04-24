@@ -312,7 +312,9 @@ MaybeExpr ExpressionAnalyzer::ApplySubscripts(
 void ExpressionAnalyzer::CheckConstantSubscripts(ArrayRef &ref) {
   // Fold subscript expressions and check for an empty triplet.
   Shape lb{GetLBOUNDs(foldingContext_, ref.base())};
+  CHECK(lb.size() >= ref.subscript().size());
   Shape ub{GetUBOUNDs(foldingContext_, ref.base())};
+  CHECK(ub.size() >= ref.subscript().size());
   bool anyPossiblyEmptyDim{false};
   int dim{0};
   for (Subscript &ss : ref.subscript()) {
@@ -564,10 +566,10 @@ MaybeExpr ExpressionAnalyzer::Analyze(const parser::Designator &d) {
     std::optional<DataRef> dataRef{ExtractDataRef(std::move(result))};
     if (!dataRef) {
       dataRef = ExtractDataRef(std::move(result), /*intoSubstring=*/true);
-      if (!dataRef) {
-        dataRef = ExtractDataRef(std::move(result),
-            /*intoSubstring=*/false, /*intoComplexPart=*/true);
-      }
+    }
+    if (!dataRef) {
+      dataRef = ExtractDataRef(std::move(result),
+          /*intoSubstring=*/false, /*intoComplexPart=*/true);
     }
     if (dataRef && !CheckDataRef(*dataRef)) {
       result.reset();
@@ -2022,8 +2024,9 @@ MaybeExpr ExpressionAnalyzer::Analyze(
                         "component", "value")};
                 if (checked && *checked && GetRank(*componentShape) > 0 &&
                     GetRank(*valueShape) == 0 &&
-                    !IsExpandableScalar(*converted, GetFoldingContext(),
-                        *componentShape, true /*admit PURE call*/)) {
+                    (IsDeferredShape(*symbol) ||
+                        !IsExpandableScalar(*converted, GetFoldingContext(),
+                            *componentShape, true /*admit PURE call*/))) {
                   AttachDeclaration(
                       Say(expr.source,
                           "Scalar value cannot be expanded to shape of array component '%s'"_err_en_US,
@@ -2874,8 +2877,38 @@ std::optional<characteristics::Procedure> ExpressionAnalyzer::CheckCall(
     ActualArguments &arguments) {
   bool treatExternalAsImplicit{IsExternalCalledImplicitly(callSite, proc)};
   const Symbol *procSymbol{proc.GetSymbol()};
-  auto chars{characteristics::Procedure::Characterize(
-      proc, context_.foldingContext())};
+  std::optional<characteristics::Procedure> chars;
+  if (procSymbol && procSymbol->has<semantics::ProcEntityDetails>() &&
+      procSymbol->owner().IsGlobal()) {
+    // Unknown global external, implicit interface; assume
+    // characteristics from the actual arguments, and check
+    // for consistency with other references.
+    chars = characteristics::Procedure::FromActuals(
+        proc, arguments, context_.foldingContext());
+    if (chars && procSymbol) {
+      // Ensure calls over implicit interfaces are consistent
+      auto name{procSymbol->name()};
+      if (auto iter{implicitInterfaces_.find(name)};
+          iter != implicitInterfaces_.end()) {
+        std::string whyNot;
+        if (!chars->IsCompatibleWith(iter->second.second, &whyNot)) {
+          if (auto *msg{Say(callSite,
+                  "Reference to the procedure '%s' has an implicit interface that is distinct from another reference: %s"_warn_en_US,
+                  name, whyNot)}) {
+            msg->Attach(
+                iter->second.first, "previous reference to '%s'"_en_US, name);
+          }
+        }
+      } else {
+        implicitInterfaces_.insert(
+            std::make_pair(name, std::make_pair(callSite, *chars)));
+      }
+    }
+  }
+  if (!chars) {
+    chars = characteristics::Procedure::Characterize(
+        proc, context_.foldingContext());
+  }
   bool ok{true};
   if (chars) {
     if (treatExternalAsImplicit && !chars->CanBeCalledViaImplicitInterface()) {
@@ -3409,7 +3442,7 @@ MaybeExpr ExpressionAnalyzer::Analyze(const parser::Expr &expr) {
     if (expr.typedExpr) {
       return expr.typedExpr->v;
     }
-    if (!wasIterativelyAnalyzing) {
+    if (!wasIterativelyAnalyzing && !context_.anyDefinedIntrinsicOperator()) {
       iterativelyAnalyzingSubexpressions_ = true;
       result = IterativelyAnalyzeSubexpressions(expr);
     }
@@ -4035,18 +4068,16 @@ std::optional<ProcedureRef> ArgumentAnalyzer::GetDefinedAssignmentProc() {
     auto restorer{context_.GetContextualMessages().DiscardMessages()};
     if (const Symbol *symbol{scope.FindSymbol(oprName)}) {
       ExpressionAnalyzer::AdjustActuals noAdjustment;
-      auto pair{context_.ResolveGeneric(*symbol, actuals_, noAdjustment, true)};
-      if (pair.first) {
-        proc = pair.first;
-      } else {
-        context_.EmitGenericResolutionError(*symbol, pair.second, true);
-      }
+      proc =
+          context_.ResolveGeneric(*symbol, actuals_, noAdjustment, true).first;
     }
     for (std::size_t i{0}; !proc && i < actuals_.size(); ++i) {
       const Symbol *generic{nullptr};
       if (const Symbol *binding{FindBoundOp(oprName, i, generic, true)}) {
-        if (const Symbol *resolution{
-                GetBindingResolution(GetType(i), *binding)}) {
+        if (CheckAccessibleSymbol(scope, DEREF(generic))) {
+          // ignore inaccessible type-bound ASSIGNMENT(=) generic
+        } else if (const Symbol *
+            resolution{GetBindingResolution(GetType(i), *binding)}) {
           proc = resolution;
         } else {
           proc = binding;

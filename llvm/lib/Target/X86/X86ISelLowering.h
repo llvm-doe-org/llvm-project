@@ -740,6 +740,9 @@ namespace llvm {
     // User level interrupts - testui
     TESTUI,
 
+    // Perform an FP80 add after changing precision control in FPCW.
+    FP80_ADD,
+
     /// X86 strict FP compare instructions.
     STRICT_FCMP = ISD::FIRST_TARGET_STRICTFP_OPCODE,
     STRICT_FCMPS,
@@ -778,6 +781,9 @@ namespace llvm {
     // Conversions between float and half-float.
     STRICT_CVTPS2PH,
     STRICT_CVTPH2PS,
+
+    // Perform an FP80 add after changing precision control in FPCW.
+    STRICT_FP80_ADD,
 
     // WARNING: Only add nodes here if they are strict FP nodes. Non-memory and
     // non-strict FP nodes should be above FIRST_TARGET_STRICTFP_OPCODE.
@@ -1040,6 +1046,8 @@ namespace llvm {
 
     SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
 
+    bool preferABDSToABSWithNSW(EVT VT) const override;
+
     /// Return true if the target has native support for
     /// the specified value type and it is 'desirable' to use the type for the
     /// given node type. e.g. On x86 i16 is legal, but undesirable since i16
@@ -1051,6 +1059,13 @@ namespace llvm {
     /// i16 is legal, but undesirable since i16 instruction encodings are longer
     /// and some i16 instructions are slow.
     bool IsDesirableToPromoteOp(SDValue Op, EVT &PVT) const override;
+
+    /// Return prefered fold type, Abs if this is a vector, AddAnd if its an
+    /// integer, None otherwise.
+    TargetLowering::AndOrSETCCFoldKind
+    isDesirableToCombineLogicOpOfSETCC(const SDNode *LogicOp,
+                                       const SDNode *SETCC0,
+                                       const SDNode *SETCC1) const override;
 
     /// Return the newly negated expression if the cost is not expensive and
     /// set the cost in \p Cost to indicate that if it is cheaper or neutral to
@@ -1081,8 +1096,6 @@ namespace llvm {
     bool isCheapToSpeculateCtlz(Type *Ty) const override;
 
     bool isCtlzFast() const override;
-
-    bool hasBitPreservingFPLogic(EVT VT) const override;
 
     bool isMultiStoresCheaperThanBitsMerge(EVT LTy, EVT HTy) const override {
       // If the pair to store is a mixture of float and int values, we will

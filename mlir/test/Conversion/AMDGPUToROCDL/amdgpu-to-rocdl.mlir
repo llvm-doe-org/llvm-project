@@ -49,6 +49,7 @@ func.func @gpu_gcn_raw_buffer_load_i8(%buf: memref<64xi8>, %idx: i32) -> i8 {
   %0 = amdgpu.raw_buffer_load {boundsCheck = true} %buf[%idx] : memref<64xi8>, i32 -> i8
   func.return %0 : i8
 }
+
 // CHECK-LABEL: func @gpu_gcn_raw_buffer_load_2xi8
 func.func @gpu_gcn_raw_buffer_load_2xi8(%buf: memref<64xi8>, %idx: i32) -> vector<2xi8> {
   // CHECK: %[[numRecords:.*]] = llvm.mlir.constant(64 : i32)
@@ -67,6 +68,29 @@ func.func @gpu_gcn_raw_buffer_load_16xi8(%buf: memref<64xi8>, %idx: i32) -> vect
   // CHECK: return %[[ret]]
   %0 = amdgpu.raw_buffer_load {boundsCheck = true} %buf[%idx] : memref<64xi8>, i32 -> vector<16xi8>
   func.return %0 : vector<16xi8>
+}
+
+// CHECK-LABEL: func @gpu_gcn_raw_buffer_load_f8E5M2FNUZ
+func.func @gpu_gcn_raw_buffer_load_f8E5M2FNUZ(%buf: memref<64xf8E5M2FNUZ>, %idx: i32) -> f8E5M2FNUZ {
+  // CHECK: %[[numRecords:.*]] = llvm.mlir.constant(64 : i32)
+  // CHECK: llvm.insertelement{{.*}}%[[numRecords]]
+  // CHECK: %[[loaded:.*]] = rocdl.raw.buffer.load %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}} : i8
+  // CHECK: %[[ret:.*]] = builtin.unrealized_conversion_cast %[[loaded]] : i8 to f8E5M2FNUZ
+  // CHECK: return %[[ret]]
+  %0 = amdgpu.raw_buffer_load {boundsCheck = true} %buf[%idx] : memref<64xf8E5M2FNUZ>, i32 -> f8E5M2FNUZ
+  func.return %0 : f8E5M2FNUZ
+}
+
+// CHECK-LABEL: func @gpu_gcn_raw_buffer_load_4xf8E4M3FNUZ
+func.func @gpu_gcn_raw_buffer_load_4xf8E4M3FNUZ(%buf: memref<64xf8E4M3FNUZ>, %idx: i32) -> vector<4xf8E4M3FNUZ> {
+  // CHECK: %[[numRecords:.*]] = llvm.mlir.constant(64 : i32)
+  // CHECK: llvm.insertelement{{.*}}%[[numRecords]]
+  // CHECK: %[[loaded:.*]] = rocdl.raw.buffer.load %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}} : i32
+  // CHECK: %[[cast:.*]] = llvm.bitcast %[[loaded]] : i32 to vector<4xi8>
+  // CHECK: %[[ret:.*]] = builtin.unrealized_conversion_cast %[[cast]] : vector<4xi8> to vector<4xf8E4M3FNUZ>
+  // CHECK: return %[[ret]]
+  %0 = amdgpu.raw_buffer_load {boundsCheck = true} %buf[%idx] : memref<64xf8E4M3FNUZ>, i32 -> vector<4xf8E4M3FNUZ>
+  func.return %0 : vector<4xf8E4M3FNUZ>
 }
 
 // Since the lowering logic is shared with loads, only bitcasts need to be rechecked
@@ -106,6 +130,39 @@ func.func @gpu_gcn_raw_buffer_atomic_fadd_f32(%value: f32, %buf: memref<64xf32>,
   // CHECK: %[[resource:.*]] = llvm.insertelement{{.*}}%[[word3]]
   // CHECK: rocdl.raw.buffer.atomic.fadd %{{.*}} %[[resource]], %{{.*}}, %{{.*}}, %{{.*}} : f32
   amdgpu.raw_buffer_atomic_fadd {boundsCheck = true} %value -> %buf[%idx] : f32 -> memref<64xf32>, i32
+  func.return
+}
+
+// CHECK-LABEL: func @gpu_gcn_raw_buffer_atomic_fmax_f32
+func.func @gpu_gcn_raw_buffer_atomic_fmax_f32(%value: f32, %buf: memref<64xf32>, %idx: i32) {
+  // CHECK: %[[numRecords:.*]] = llvm.mlir.constant(256 : i32)
+  // CHECK: llvm.insertelement{{.*}}%[[numRecords]]
+  // CHECK: %[[word3:.*]] = llvm.mlir.constant(159744 : i32)
+  // CHECK: %[[resource:.*]] = llvm.insertelement{{.*}}%[[word3]]
+  // CHECK: rocdl.raw.buffer.atomic.fmax %{{.*}} %[[resource]], %{{.*}}, %{{.*}}, %{{.*}} : f32
+  amdgpu.raw_buffer_atomic_fmax {boundsCheck = true} %value -> %buf[%idx] : f32 -> memref<64xf32>, i32
+  func.return
+}
+
+// CHECK-LABEL: func @gpu_gcn_raw_buffer_atomic_smax_i32
+func.func @gpu_gcn_raw_buffer_atomic_smax_i32(%value: i32, %buf: memref<64xi32>, %idx: i32) {
+  // CHECK: %[[numRecords:.*]] = llvm.mlir.constant(256 : i32)
+  // CHECK: llvm.insertelement{{.*}}%[[numRecords]]
+  // CHECK: %[[word3:.*]] = llvm.mlir.constant(159744 : i32)
+  // CHECK: %[[resource:.*]] = llvm.insertelement{{.*}}%[[word3]]
+  // CHECK: rocdl.raw.buffer.atomic.smax %{{.*}} %[[resource]], %{{.*}}, %{{.*}}, %{{.*}} : i32
+  amdgpu.raw_buffer_atomic_smax {boundsCheck = true} %value -> %buf[%idx] : i32 -> memref<64xi32>, i32
+  func.return
+}
+
+// CHECK-LABEL: func @gpu_gcn_raw_buffer_atomic_umin_i32
+func.func @gpu_gcn_raw_buffer_atomic_umin_i32(%value: i32, %buf: memref<64xi32>, %idx: i32) {
+  // CHECK: %[[numRecords:.*]] = llvm.mlir.constant(256 : i32)
+  // CHECK: llvm.insertelement{{.*}}%[[numRecords]]
+  // CHECK: %[[word3:.*]] = llvm.mlir.constant(159744 : i32)
+  // CHECK: %[[resource:.*]] = llvm.insertelement{{.*}}%[[word3]]
+  // CHECK: rocdl.raw.buffer.atomic.umin %{{.*}} %[[resource]], %{{.*}}, %{{.*}}, %{{.*}} : i32
+  amdgpu.raw_buffer_atomic_umin {boundsCheck = true} %value -> %buf[%idx] : i32 -> memref<64xi32>, i32
   func.return
 }
 

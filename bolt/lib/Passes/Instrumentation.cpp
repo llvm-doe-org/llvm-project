@@ -182,19 +182,16 @@ Instrumentation::createInstrumentationSnippet(BinaryContext &BC, bool IsLeaf) {
   return CounterInstrs;
 }
 
-namespace {
-
 // Helper instruction sequence insertion function
-BinaryBasicBlock::iterator insertInstructions(InstructionListType &Instrs,
-                                              BinaryBasicBlock &BB,
-                                              BinaryBasicBlock::iterator Iter) {
+static BinaryBasicBlock::iterator
+insertInstructions(InstructionListType &Instrs, BinaryBasicBlock &BB,
+                   BinaryBasicBlock::iterator Iter) {
   for (MCInst &NewInst : Instrs) {
     Iter = BB.insertInstruction(Iter, NewInst);
     ++Iter;
   }
   return Iter;
 }
-} // namespace
 
 void Instrumentation::instrumentLeafNode(BinaryBasicBlock &BB,
                                          BinaryBasicBlock::iterator Iter,
@@ -218,7 +215,7 @@ void Instrumentation::instrumentIndirectTarget(BinaryBasicBlock &BB,
   BinaryContext &BC = FromFunction.getBinaryContext();
   bool IsTailCall = BC.MIB->isTailCall(*Iter);
   InstructionListType CounterInstrs = BC.MIB->createInstrumentedIndirectCall(
-      *Iter, IsTailCall,
+      std::move(*Iter),
       IsTailCall ? IndTailCallHandlerExitBBFunction->getSymbol()
                  : IndCallHandlerExitBBFunction->getSymbol(),
       IndCallSiteID, &*BC.Ctx);

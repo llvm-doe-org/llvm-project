@@ -2985,7 +2985,7 @@ void Sema::DeclareGlobalNewDelete() {
   //   functions are replaceable ([new.delete]); these are attached to the
   //   global module ([module.unit]).
   if (getLangOpts().CPlusPlusModules && getCurrentModule())
-    PushGlobalModuleFragment(SourceLocation(), /*IsImplicit=*/true);
+    PushGlobalModuleFragment(SourceLocation());
 
   // C++ [basic.std.dynamic]p2:
   //   [...] The following allocation and deallocation functions (18.4) are
@@ -3029,10 +3029,10 @@ void Sema::DeclareGlobalNewDelete() {
 
     // The implicitly declared "std::bad_alloc" should live in global module
     // fragment.
-    if (GlobalModuleFragment) {
+    if (TheGlobalModuleFragment) {
       getStdBadAlloc()->setModuleOwnershipKind(
           Decl::ModuleOwnershipKind::ReachableWhenImported);
-      getStdBadAlloc()->setLocalOwningModule(GlobalModuleFragment);
+      getStdBadAlloc()->setLocalOwningModule(TheGlobalModuleFragment);
     }
   }
   if (!StdAlignValT && getLangOpts().AlignedAllocation) {
@@ -3044,10 +3044,10 @@ void Sema::DeclareGlobalNewDelete() {
 
     // The implicitly declared "std::align_val_t" should live in global module
     // fragment.
-    if (GlobalModuleFragment) {
+    if (TheGlobalModuleFragment) {
       AlignValT->setModuleOwnershipKind(
           Decl::ModuleOwnershipKind::ReachableWhenImported);
-      AlignValT->setLocalOwningModule(GlobalModuleFragment);
+      AlignValT->setLocalOwningModule(TheGlobalModuleFragment);
     }
 
     AlignValT->setIntegerType(Context.getSizeType());
@@ -3176,10 +3176,10 @@ void Sema::DeclareGlobalAllocationFunction(DeclarationName Name,
     // module all the time. But in the implementation, the global module
     // is only meaningful when we're in a module unit. So here we attach
     // these allocation functions to global module conditionally.
-    if (GlobalModuleFragment) {
+    if (TheGlobalModuleFragment) {
       Alloc->setModuleOwnershipKind(
           Decl::ModuleOwnershipKind::ReachableWhenImported);
-      Alloc->setLocalOwningModule(GlobalModuleFragment);
+      Alloc->setLocalOwningModule(TheGlobalModuleFragment);
     }
 
     Alloc->addAttr(VisibilityAttr::CreateImplicit(
@@ -4895,6 +4895,7 @@ static bool CheckUnaryTypeTraitTypeCompleteness(Sema &S, TypeTrait UTT,
   case UTT_IsLiteral:
   // By analogy, is_trivially_relocatable imposes the same constraints.
   case UTT_IsTriviallyRelocatable:
+  case UTT_CanPassInRegs:
   // Per the GCC type traits documentation, T shall be a complete type, cv void,
   // or an array of unknown bound. But GCC actually imposes the same constraints
   // as above.
@@ -5383,6 +5384,11 @@ static bool EvaluateUnaryTypeTrait(Sema &Self, TypeTrait UTT,
     return T.isTriviallyRelocatableType(C);
   case UTT_IsReferenceable:
     return T.isReferenceable();
+  case UTT_CanPassInRegs:
+    if (CXXRecordDecl *RD = T->getAsCXXRecordDecl(); RD && !T.hasQualifiers())
+      return RD->canPassInRegisters();
+    Self.Diag(KeyLoc, diag::err_builtin_pass_in_regs_non_class) << T;
+    return false;
   }
 }
 

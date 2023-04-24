@@ -18,10 +18,15 @@
 #include "CodeGenIntrinsics.h"
 #include "CodeGenSchedule.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/ModRef.h"
 #include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
 #include <algorithm>
+#include <iterator>
+#include <tuple>
 using namespace llvm;
 
 cl::OptionCategory AsmParserCat("Options for -gen-asm-parser");
@@ -77,6 +82,7 @@ StringRef llvm::getEnumName(MVT::SimpleValueType T) {
   case MVT::ppcf128:  return "MVT::ppcf128";
   case MVT::x86mmx:   return "MVT::x86mmx";
   case MVT::x86amx:   return "MVT::x86amx";
+  case MVT::aarch64svcount:   return "MVT::aarch64svcount";
   case MVT::i64x8:    return "MVT::i64x8";
   case MVT::Glue:     return "MVT::Glue";
   case MVT::isVoid:   return "MVT::isVoid";
@@ -696,9 +702,10 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R,
 
   EnumName = DefName.substr(4);
 
-  if (R->getValue("ClangBuiltinName"))  // Ignore a missing ClangBuiltinName field.
+  if (R->getValue(
+          "ClangBuiltinName")) // Ignore a missing ClangBuiltinName field.
     ClangBuiltinName = std::string(R->getValueAsString("ClangBuiltinName"));
-  if (R->getValue("MSBuiltinName"))   // Ignore a missing MSBuiltinName field.
+  if (R->getValue("MSBuiltinName")) // Ignore a missing MSBuiltinName field.
     MSBuiltinName = std::string(R->getValueAsString("MSBuiltinName"));
 
   TargetPrefix = std::string(R->getValueAsString("TargetPrefix"));
@@ -720,7 +727,7 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R,
   // If TargetPrefix is specified, make sure that Name starts with
   // "llvm.<targetprefix>.".
   if (!TargetPrefix.empty()) {
-    if (Name.size() < 6+TargetPrefix.size() ||
+    if (Name.size() < 6 + TargetPrefix.size() ||
         Name.substr(5, 1 + TargetPrefix.size()) != (TargetPrefix + "."))
       PrintFatalError(DefLoc, "Intrinsic '" + DefName +
                                   "' does not start with 'llvm." +
@@ -756,8 +763,7 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R,
     MVT::SimpleValueType VT;
     if (TyEl->isSubClassOf("LLVMMatchType")) {
       unsigned MatchTy = TyEl->getValueAsInt("Number");
-      assert(MatchTy < OverloadedVTs.size() &&
-             "Invalid matching number!");
+      assert(MatchTy < OverloadedVTs.size() && "Invalid matching number!");
       VT = OverloadedVTs[MatchTy];
       // It only makes sense to use the extended and truncated vector element
       // variants with iAny types; otherwise, if the intrinsic is not
@@ -788,9 +794,10 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R,
     if (TyEl->isSubClassOf("LLVMMatchType")) {
       unsigned MatchTy = TyEl->getValueAsInt("Number");
       if (MatchTy >= OverloadedVTs.size()) {
-        PrintError(R->getLoc(),
-                   "Parameter #" + Twine(i) + " has out of bounds matching "
-                   "number " + Twine(MatchTy));
+        PrintError(R->getLoc(), "Parameter #" + Twine(i) +
+                                    " has out of bounds matching "
+                                    "number " +
+                                    Twine(MatchTy));
         PrintFatalError(DefLoc,
                         Twine("ParamTypes is ") + TypeList->getAsString());
       }
@@ -806,7 +813,7 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R,
       VT = getValueType(TyEl->getValueAsDef("VT"));
 
     // Reject invalid types.
-    if (VT == MVT::isVoid && i != e-1 /*void at end means varargs*/)
+    if (VT == MVT::isVoid && i != e - 1 /*void at end means varargs*/)
       PrintFatalError(DefLoc, "Intrinsic '" + DefName +
                                   " has void in result type list!");
 

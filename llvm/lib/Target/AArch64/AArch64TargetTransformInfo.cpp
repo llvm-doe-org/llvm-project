@@ -2072,23 +2072,6 @@ InstructionCost AArch64TTIImpl::getCastInstrCost(unsigned Opcode, Type *Dst,
     { ISD::BITCAST, MVT::nxv2i16, MVT::nxv2f16, 0 },
     { ISD::BITCAST, MVT::nxv4i16, MVT::nxv4f16, 0 },
     { ISD::BITCAST, MVT::nxv2i32, MVT::nxv2f32, 0 },
-
-    // Add cost for extending to illegal -too wide- scalable vectors.
-    // zero/sign extend are implemented by multiple unpack operations,
-    // where each operation has a cost of 1.
-    { ISD::ZERO_EXTEND, MVT::nxv16i16, MVT::nxv16i8, 2},
-    { ISD::ZERO_EXTEND, MVT::nxv16i32, MVT::nxv16i8, 6},
-    { ISD::ZERO_EXTEND, MVT::nxv16i64, MVT::nxv16i8, 14},
-    { ISD::ZERO_EXTEND, MVT::nxv8i32, MVT::nxv8i16, 2},
-    { ISD::ZERO_EXTEND, MVT::nxv8i64, MVT::nxv8i16, 6},
-    { ISD::ZERO_EXTEND, MVT::nxv4i64, MVT::nxv4i32, 2},
-
-    { ISD::SIGN_EXTEND, MVT::nxv16i16, MVT::nxv16i8, 2},
-    { ISD::SIGN_EXTEND, MVT::nxv16i32, MVT::nxv16i8, 6},
-    { ISD::SIGN_EXTEND, MVT::nxv16i64, MVT::nxv16i8, 14},
-    { ISD::SIGN_EXTEND, MVT::nxv8i32, MVT::nxv8i16, 2},
-    { ISD::SIGN_EXTEND, MVT::nxv8i64, MVT::nxv8i16, 6},
-    { ISD::SIGN_EXTEND, MVT::nxv4i64, MVT::nxv4i32, 2},
   };
 
   if (const auto *Entry = ConvertCostTableLookup(ConversionTbl, ISD,
@@ -2201,7 +2184,8 @@ InstructionCost AArch64TTIImpl::getCFInstrCost(unsigned Opcode,
   return 0;
 }
 
-InstructionCost AArch64TTIImpl::getVectorInstrCostHelper(Type *Val,
+InstructionCost AArch64TTIImpl::getVectorInstrCostHelper(const Instruction *I,
+                                                         Type *Val,
                                                          unsigned Index,
                                                          bool HasRealUse) {
   assert(Val->isVectorTy() && "This must be a vector type");
@@ -2227,14 +2211,21 @@ InstructionCost AArch64TTIImpl::getVectorInstrCostHelper(Type *Val,
     // needed. So it has non-zero cost.
     // - For the rest of cases (virtual instruction or element type is float),
     // consider the instruction free.
-    //
+    if (Index == 0 && (!HasRealUse || !Val->getScalarType()->isIntegerTy()))
+      return 0;
+
+    // This is recognising a LD1 single-element structure to one lane of one
+    // register instruction. I.e., if this is an `insertelement` instruction,
+    // and its second operand is a load, then we will generate a LD1, which
+    // are expensive instructions.
+    if (I && dyn_cast<LoadInst>(I->getOperand(1)))
+      return ST->getVectorInsertExtractBaseCost() + 1;
+
     // FIXME:
     // If the extract-element and insert-element instructions could be
     // simplified away (e.g., could be combined into users by looking at use-def
     // context), they have no cost. This is not done in the first place for
     // compile-time considerations.
-    if (Index == 0 && (!HasRealUse || !Val->getScalarType()->isIntegerTy()))
-      return 0;
   }
 
   // All other insert/extracts cost this much.
@@ -2245,14 +2236,14 @@ InstructionCost AArch64TTIImpl::getVectorInstrCost(unsigned Opcode, Type *Val,
                                                    TTI::TargetCostKind CostKind,
                                                    unsigned Index, Value *Op0,
                                                    Value *Op1) {
-  return getVectorInstrCostHelper(Val, Index, false /* HasRealUse */);
+  return getVectorInstrCostHelper(nullptr, Val, Index, false /* HasRealUse */);
 }
 
 InstructionCost AArch64TTIImpl::getVectorInstrCost(const Instruction &I,
                                                    Type *Val,
                                                    TTI::TargetCostKind CostKind,
                                                    unsigned Index) {
-  return getVectorInstrCostHelper(Val, Index, true /* HasRealUse */);
+  return getVectorInstrCostHelper(&I, Val, Index, true /* HasRealUse */);
 }
 
 InstructionCost AArch64TTIImpl::getArithmeticInstrCost(
@@ -2682,7 +2673,7 @@ AArch64TTIImpl::getCostOfKeepingLiveOverCall(ArrayRef<Type *> Tys) {
   return Cost;
 }
 
-unsigned AArch64TTIImpl::getMaxInterleaveFactor(unsigned VF) {
+unsigned AArch64TTIImpl::getMaxInterleaveFactor(ElementCount VF) {
   return ST->getMaxInterleaveFactor();
 }
 

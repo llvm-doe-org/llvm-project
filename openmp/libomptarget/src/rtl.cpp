@@ -267,6 +267,10 @@ bool RTLsTy::attemptLoadRTL(const std::string &RTLName, RTLInfoTy &RTL) {
       DynLibrary->getAddressOfSymbol("__tgt_rtl_data_lock");
   *((void **)&RTL.data_unlock) =
       DynLibrary->getAddressOfSymbol("__tgt_rtl_data_unlock");
+  *((void **)&RTL.data_notify_mapped) =
+      DynLibrary->getAddressOfSymbol("__tgt_rtl_data_notify_mapped");
+  *((void **)&RTL.data_notify_unmapped) =
+      DynLibrary->getAddressOfSymbol("__tgt_rtl_data_notify_unmapped");
 
   RTL.DeviceType = RTL.get_device_type ? (omp_device_t)RTL.get_device_type()
                                        : omp_device_none;

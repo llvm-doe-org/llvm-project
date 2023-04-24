@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "flang/Runtime/pointer.h"
-#include "assign.h"
+#include "assign-impl.h"
 #include "derived.h"
 #include "stat.h"
 #include "terminator.h"
@@ -60,6 +60,13 @@ void RTNAME(PointerApplyMold)(
   pointer.set_base_addr(nullptr);
   pointer.raw().attribute = CFI_attribute_pointer;
   pointer.raw().rank = rank;
+  if (auto *pointerAddendum{pointer.Addendum()}) {
+    if (const auto *moldAddendum{mold.Addendum()}) {
+      if (const auto *derived{moldAddendum->derivedType()}) {
+        pointerAddendum->set_derivedType(derived);
+      }
+    }
+  }
 }
 
 void RTNAME(PointerAssociateScalar)(Descriptor &pointer, void *target) {
@@ -95,14 +102,17 @@ void RTNAME(PointerAssociateRemapping)(Descriptor &pointer,
   Terminator terminator{sourceFile, sourceLine};
   SubscriptValue byteStride{/*captured from first dimension*/};
   std::size_t boundElementBytes{bounds.ElementBytes()};
-  for (int j{0}; j < bounds.rank(); ++j) {
+  std::size_t boundsRank{
+      static_cast<std::size_t>(bounds.GetDimension(1).Extent())};
+  pointer.raw().rank = boundsRank;
+  for (unsigned j{0}; j < boundsRank; ++j) {
     auto &dim{pointer.GetDimension(j)};
     dim.SetBounds(GetInt64(bounds.ZeroBasedIndexedElement<const char>(2 * j),
                       boundElementBytes, terminator),
         GetInt64(bounds.ZeroBasedIndexedElement<const char>(2 * j + 1),
             boundElementBytes, terminator));
     if (j == 0) {
-      byteStride = dim.ByteStride();
+      byteStride = dim.ByteStride() * dim.Extent();
     } else {
       dim.SetByteStride(byteStride);
       byteStride *= dim.Extent();
@@ -112,6 +122,13 @@ void RTNAME(PointerAssociateRemapping)(Descriptor &pointer,
     terminator.Crash("PointerAssociateRemapping: too many elements in remapped "
                      "pointer (%zd > %zd)",
         pointer.Elements(), target.Elements());
+  }
+  if (auto *pointerAddendum{pointer.Addendum()}) {
+    if (const auto *targetAddendum{target.Addendum()}) {
+      if (const auto *derived{targetAddendum->derivedType()}) {
+        pointerAddendum->set_derivedType(derived);
+      }
+    }
   }
 }
 

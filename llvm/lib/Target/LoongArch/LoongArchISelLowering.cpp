@@ -195,8 +195,7 @@ LoongArchTargetLowering::LoongArchTargetLowering(const TargetMachine &TM,
   setMinCmpXchgSizeInBits(32);
 
   // Function alignments.
-  const Align FunctionAlignment(4);
-  setMinFunctionAlignment(FunctionAlignment);
+  setMinFunctionAlignment(Align(4));
 
   setTargetDAGCombine(ISD::AND);
   setTargetDAGCombine(ISD::OR);
@@ -2049,7 +2048,7 @@ void LoongArchTargetLowering::analyzeInputArgs(
     if (Fn(MF.getDataLayout(), ABI, i, ArgVT, CCValAssign::Full, Ins[i].Flags,
            CCInfo, /*IsFixed=*/true, IsRet, ArgTy)) {
       LLVM_DEBUG(dbgs() << "InputArg #" << i << " has unhandled type "
-                        << EVT(ArgVT).getEVTString() << '\n');
+                        << ArgVT << '\n');
       llvm_unreachable("");
     }
   }
@@ -2067,7 +2066,7 @@ void LoongArchTargetLowering::analyzeOutputArgs(
     if (Fn(MF.getDataLayout(), ABI, i, ArgVT, CCValAssign::Full, Outs[i].Flags,
            CCInfo, Outs[i].IsFixed, IsRet, OrigTy)) {
       LLVM_DEBUG(dbgs() << "OutputArg #" << i << " has unhandled type "
-                        << EVT(ArgVT).getEVTString() << "\n");
+                        << ArgVT << "\n");
       llvm_unreachable("");
     }
   }
@@ -2210,8 +2209,8 @@ SDValue LoongArchTargetLowering::LowerFormalArguments(
   case CallingConv::Fast:
     break;
   case CallingConv::GHC:
-    if (!MF.getSubtarget().getFeatureBits()[LoongArch::FeatureBasicF] ||
-        !MF.getSubtarget().getFeatureBits()[LoongArch::FeatureBasicD])
+    if (!MF.getSubtarget().hasFeature(LoongArch::FeatureBasicF) ||
+        !MF.getSubtarget().hasFeature(LoongArch::FeatureBasicD))
       report_fatal_error(
         "GHC calling convention requires the F and D extensions");
   }
@@ -3186,4 +3185,12 @@ bool LoongArchTargetLowering::isLegalAddressingMode(const DataLayout &DL,
   }
 
   return true;
+}
+
+bool LoongArchTargetLowering::hasAndNotCompare(SDValue Y) const {
+  // TODO: Support vectors.
+  if (Y.getValueType().isVector())
+    return false;
+
+  return !isa<ConstantSDNode>(Y);
 }

@@ -1298,10 +1298,11 @@ ExprResult Parser::ParseLambdaExpressionAfterIntroducer(
       if (Tok.is(tok::kw___noinline__)) {
         IdentifierInfo *AttrName = Tok.getIdentifierInfo();
         SourceLocation AttrNameLoc = ConsumeToken();
-        Attributes.addNew(AttrName, AttrNameLoc, nullptr, AttrNameLoc, nullptr,
-                          0, ParsedAttr::AS_Keyword);
+        Attributes.addNew(AttrName, AttrNameLoc, /*ScopeName=*/nullptr,
+                          AttrNameLoc, /*ArgsUnion=*/nullptr,
+                          /*numArgs=*/0, ParsedAttr::AS_Keyword);
       } else if (Tok.is(tok::kw___attribute))
-        ParseGNUAttributes(Attributes, nullptr, &D);
+        ParseGNUAttributes(Attributes, /*LatePArsedAttrList=*/nullptr, &D);
       else
         break;
     }
@@ -1491,19 +1492,20 @@ ExprResult Parser::ParseLambdaExpressionAfterIntroducer(
     HasParentheses = true;
   }
 
-  if (Tok.isOneOf(tok::kw_mutable, tok::arrow, tok::kw___attribute,
+  HasSpecifiers =
+      Tok.isOneOf(tok::kw_mutable, tok::arrow, tok::kw___attribute,
                   tok::kw_constexpr, tok::kw_consteval, tok::kw_static,
                   tok::kw___private, tok::kw___global, tok::kw___local,
                   tok::kw___constant, tok::kw___generic, tok::kw_groupshared,
                   tok::kw_requires, tok::kw_noexcept) ||
-      (Tok.is(tok::l_square) && NextToken().is(tok::l_square))) {
-    HasSpecifiers = true;
-    if (!HasParentheses && !getLangOpts().CPlusPlus2b)
-      // It's common to forget that one needs '()' before 'mutable', an
-      // attribute specifier, the result type, or the requires clause. Deal with
-      // this.
-      Diag(Tok, diag::ext_lambda_missing_parens)
-          << FixItHint::CreateInsertion(Tok.getLocation(), "() ");
+      (Tok.is(tok::l_square) && NextToken().is(tok::l_square));
+
+  if (HasSpecifiers && !HasParentheses && !getLangOpts().CPlusPlus2b) {
+    // It's common to forget that one needs '()' before 'mutable', an
+    // attribute specifier, the result type, or the requires clause. Deal with
+    // this.
+    Diag(Tok, diag::ext_lambda_missing_parens)
+        << FixItHint::CreateInsertion(Tok.getLocation(), "() ");
   }
 
   if (HasParentheses || HasSpecifiers)

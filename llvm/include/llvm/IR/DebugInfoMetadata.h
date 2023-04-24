@@ -2776,6 +2776,11 @@ public:
   struct FragmentInfo {
     uint64_t SizeInBits;
     uint64_t OffsetInBits;
+    /// Return the index of the first bit of the fragment.
+    uint64_t startInBits() const { return OffsetInBits; }
+    /// Return the index of the bit after the end of the fragment, e.g. for
+    /// fragment offset=16 and size=32 return their sum, 48.
+    uint64_t endInBits() const { return OffsetInBits + SizeInBits; }
   };
 
   /// Retrieve the details of this fragment expression.
@@ -2838,9 +2843,9 @@ public:
   /// non-variadic form and not considering the debug operands.
   /// \p FirstExpr is the DIExpression for the first debug value.
   /// \p FirstIndirect should be true if the first debug value is indirect; in
-  /// IR this should be true for dbg.declare and dbg.addr intrinsics and false
-  /// for dbg.values, and in MIR this should be true only for DBG_VALUE
-  /// instructions whose second operand is an immediate value.
+  /// IR this should be true for dbg.declare intrinsics and false for
+  /// dbg.values, and in MIR this should be true only for DBG_VALUE instructions
+  /// whose second operand is an immediate value.
   /// \p SecondExpr and \p SecondIndirect have the same meaning as the prior
   /// arguments, but apply to the second debug value.
   static bool isEqualExpression(const DIExpression *FirstExpr,

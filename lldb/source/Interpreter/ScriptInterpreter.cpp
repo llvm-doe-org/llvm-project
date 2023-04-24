@@ -29,10 +29,8 @@ using namespace lldb_private;
 
 ScriptInterpreter::ScriptInterpreter(
     Debugger &debugger, lldb::ScriptLanguage script_lang,
-    lldb::ScriptedProcessInterfaceUP scripted_process_interface_up,
     lldb::ScriptedPlatformInterfaceUP scripted_platform_interface_up)
     : m_debugger(debugger), m_script_lang(script_lang),
-      m_scripted_process_interface_up(std::move(scripted_process_interface_up)),
       m_scripted_platform_interface_up(
           std::move(scripted_platform_interface_up)) {}
 
@@ -114,7 +112,8 @@ Status ScriptInterpreter::SetBreakpointCommandCallback(
     const char *callback_text) {
   Status error;
   for (BreakpointOptions &bp_options : bp_options_vec) {
-    error = SetBreakpointCommandCallback(bp_options, callback_text);
+    error = SetBreakpointCommandCallback(bp_options, callback_text,
+                                         /*is_callback=*/false);
     if (!error.Success())
       break;
   }

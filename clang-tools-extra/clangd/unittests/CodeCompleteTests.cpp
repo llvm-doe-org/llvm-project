@@ -465,6 +465,18 @@ TEST(CompletionTest, Qualifiers) {
               Not(Contains(AllOf(qualifier(""), named("foo")))));
 }
 
+// https://github.com/clangd/clangd/issues/1451
+TEST(CompletionTest, QualificationWithInlineNamespace) {
+  auto Results = completions(R"cpp(
+    namespace a { inline namespace b {} }
+    using namespace a::b;
+    void f() { Foo^ }
+  )cpp",
+                             {cls("a::Foo")});
+  EXPECT_THAT(Results.Completions,
+              UnorderedElementsAre(AllOf(qualifier("a::"), named("Foo"))));
+}
+
 TEST(CompletionTest, InjectedTypename) {
   // These are suppressed when accessed as a member...
   EXPECT_THAT(completions("struct X{}; void foo(){ X().^ }").Completions,
@@ -627,7 +639,7 @@ TEST(CompletionTest, Kinds) {
                     has("variable", CompletionItemKind::Variable),
                     has("int", CompletionItemKind::Keyword),
                     has("Struct", CompletionItemKind::Struct),
-                    has("MACRO", CompletionItemKind::Text),
+                    has("MACRO", CompletionItemKind::Constant),
                     has("indexFunction", CompletionItemKind::Function),
                     has("indexVariable", CompletionItemKind::Variable),
                     has("indexClass", CompletionItemKind::Class)));
@@ -3789,7 +3801,7 @@ TEST(CompletionTest, FunctionArgsExist) {
                      kind(CompletionItemKind::Constructor))));
   EXPECT_THAT(completions(Context + "MAC^(2)", {}, Opts).Completions,
               Contains(AllOf(labeled("MACRO(x)"), snippetSuffix(""),
-                             kind(CompletionItemKind::Text))));
+                             kind(CompletionItemKind::Function))));
 }
 
 TEST(CompletionTest, NoCrashDueToMacroOrdering) {

@@ -252,11 +252,6 @@ GenerateModuleFromModuleMapAction::CreateOutputFile(CompilerInstance &CI,
 
 bool GenerateModuleInterfaceAction::BeginSourceFileAction(
     CompilerInstance &CI) {
-  if (!CI.getLangOpts().ModulesTS && !CI.getLangOpts().CPlusPlusModules) {
-    CI.getDiagnostics().Report(diag::err_module_interface_requires_cpp_modules);
-    return false;
-  }
-
   CI.getLangOpts().setCompilingModule(LangOptions::CMK_ModuleInterface);
 
   return GenerateModuleAction::BeginSourceFileAction(CI);
@@ -771,8 +766,10 @@ static StringRef ModuleKindName(Module::ModuleKind MK) {
     return "Partition Implementation";
   case Module::ModuleHeaderUnit:
     return "Header Unit";
-  case Module::GlobalModuleFragment:
+  case Module::ExplicitGlobalModuleFragment:
     return "Global Module Fragment";
+  case Module::ImplicitGlobalModuleFragment:
+    return "Implicit Module Fragment";
   case Module::PrivateModuleFragment:
     return "Private Module Fragment";
   }

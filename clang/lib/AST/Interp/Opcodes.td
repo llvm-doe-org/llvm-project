@@ -49,6 +49,7 @@ def ArgRecordDecl : ArgType { let Name = "const RecordDecl *"; }
 def ArgRecordField : ArgType { let Name = "const Record::Field *"; }
 def ArgFltSemantics : ArgType { let Name = "const llvm::fltSemantics *"; }
 def ArgRoundingMode : ArgType { let Name = "llvm::RoundingMode"; }
+def ArgLETD: ArgType { let Name = "const LifetimeExtendedTemporaryDecl *"; }
 
 //===----------------------------------------------------------------------===//
 // Classes of types instructions operate on.
@@ -305,6 +306,9 @@ def RVOPtr : Opcode;
 def NarrowPtr : Opcode;
 // [Pointer] -> [Pointer]
 def ExpandPtr : Opcode;
+// [Pointer, Offset] -> [Pointer]
+def ArrayElemPtr : AluOpcode;
+def ArrayElemPtrPop : AluOpcode;
 
 //===----------------------------------------------------------------------===//
 // Direct field accessors
@@ -327,10 +331,16 @@ def GetLocal : AccessOpcode { let HasCustomEval = 1; }
 // [] -> [Pointer]
 def SetLocal : AccessOpcode { let HasCustomEval = 1; }
 
+def CheckGlobalCtor : Opcode {}
+
 // [] -> [Value]
 def GetGlobal : AccessOpcode;
 // [Value] -> []
 def InitGlobal : AccessOpcode;
+// [Value] -> []
+def InitGlobalTemp : AccessOpcode {
+  let Args = [ArgUint32, ArgLETD];
+}
 // [Value] -> []
 def SetGlobal : AccessOpcode;
 

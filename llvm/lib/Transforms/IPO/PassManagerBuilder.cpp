@@ -56,7 +56,6 @@ PassManagerBuilder::PassManagerBuilder() {
     ForgetAllSCEVInLoopUnroll = ForgetSCEVInLoopUnroll;
     VerifyInput = false;
     VerifyOutput = false;
-    MergeFunctions = false;
     DivergentTarget = false;
     CallGraphProfile = true;
 }
@@ -153,9 +152,7 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
       SimplifyCFGOptions().convertSwitchRangeToICmp(true)));
   MPM.add(createInstructionCombiningPass());
   // We resume loop passes creating a second loop pipeline here.
-  MPM.add(createLoopIdiomPass());             // Recognize idioms like memset.
   MPM.add(createIndVarSimplifyPass());        // Canonicalize indvars
-  MPM.add(createLoopDeletionPass());          // Delete dead loops
 
   // Unroll small loops and perform peeling.
   MPM.add(createSimpleLoopUnrollPass(OptLevel, DisableUnrollLoops,
@@ -169,7 +166,6 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
     MPM.add(createMergedLoadStoreMotionPass()); // Merge ld/st in diamonds
     MPM.add(createGVNPass(DisableGVNLoadPRE));  // Remove redundancies
   }
-  MPM.add(createSCCPPass());                  // Constant prop with SCCP
 
   // Delete dead bit computations (instcombine runs after to fold away the dead
   // computations, and then ADCE will run later to exploit any new DCE
@@ -215,14 +211,8 @@ void PassManagerBuilder::addVectorPasses(legacy::PassManagerBase &PM,
     // across the loop nests.
     PM.add(createLoopUnrollPass(OptLevel, DisableUnrollLoops,
                                 ForgetAllSCEVInLoopUnroll));
-    PM.add(createWarnMissedTransformationsPass());
   }
 
-  if (!IsFullLTO) {
-    // Eliminate loads by forwarding stores from the previous iteration to loads
-    // of the current iteration.
-    PM.add(createLoopLoadEliminationPass());
-  }
   // Cleanup after the loop optimization passes.
   PM.add(createInstructionCombiningPass());
 
@@ -244,7 +234,6 @@ void PassManagerBuilder::addVectorPasses(legacy::PassManagerBase &PM,
                                          .sinkCommonInsts(true)));
 
   if (IsFullLTO) {
-    PM.add(createSCCPPass());                 // Propagate exposed constants
     PM.add(createInstructionCombiningPass()); // Clean up again
     PM.add(createBitTrackingDCEPass());
   }
@@ -253,9 +242,6 @@ void PassManagerBuilder::addVectorPasses(legacy::PassManagerBase &PM,
   if (SLPVectorize) {
     PM.add(createSLPVectorizerPass());
   }
-
-  // Enhance/cleanup vector code.
-  PM.add(createVectorCombinePass());
 
   if (!IsFullLTO) {
     PM.add(createInstructionCombiningPass());
@@ -275,8 +261,6 @@ void PassManagerBuilder::addVectorPasses(legacy::PassManagerBase &PM,
       PM.add(createLICMPass(LicmMssaOptCap, LicmMssaNoAccForPromotionCap,
                             /*AllowSpeculation=*/true));
     }
-
-    PM.add(createWarnMissedTransformationsPass());
   }
 
   // After vectorization and unrolling, assume intrinsics may tell us more
@@ -289,11 +273,6 @@ void PassManagerBuilder::addVectorPasses(legacy::PassManagerBase &PM,
 
 void PassManagerBuilder::populateModulePassManager(
     legacy::PassManagerBase &MPM) {
-  MPM.add(createAnnotation2MetadataLegacyPass());
-
-  // Allow forcing function attributes as a debugging and tuning aid.
-  MPM.add(createForceFunctionAttrsLegacyPass());
-
   // If all optimizations are disabled, just run the always-inline pass and,
   // if enabled, the function merging pass.
   if (OptLevel == 0) {
@@ -302,13 +281,6 @@ void PassManagerBuilder::populateModulePassManager(
       Inliner = nullptr;
     }
 
-    // FIXME: The BarrierNoopPass is a HACK! The inliner pass above implicitly
-    // creates a CGSCC pass manager, but we don't want to add extensions into
-    // that pass manager. To prevent this we insert a no-op module pass to reset
-    // the pass manager to get the same behavior as EP_OptimizerLast in non-O0
-    // builds. The function merging pass is
-    if (MergeFunctions)
-      MPM.add(createMergeFunctionsPass());
     return;
   }
 
@@ -318,16 +290,9 @@ void PassManagerBuilder::populateModulePassManager(
 
   addInitialAliasAnalysisPasses(MPM);
 
-  // Infer attributes about declarations if possible.
-  MPM.add(createInferFunctionAttrsLegacyPass());
-
   if (OptLevel > 2)
     MPM.add(createCallSiteSplittingPass());
 
-  MPM.add(createIPSCCPPass());          // IP SCCP
-  MPM.add(createCalledValuePropagationPass());
-
-  MPM.add(createGlobalOptimizerPass()); // Optimize out global vars
   // Promote any localized global vars.
   MPM.add(createPromoteMemoryToRegisterPass());
 
@@ -344,14 +309,10 @@ void PassManagerBuilder::populateModulePassManager(
   MPM.add(createGlobalsAAWrapperPass());
 
   // Start of CallGraph SCC passes.
-  bool RunInliner = false;
   if (Inliner) {
     MPM.add(Inliner);
     Inliner = nullptr;
-    RunInliner = true;
   }
-
-  MPM.add(createPostOrderFunctionAttrsLegacyPass());
 
   addFunctionSimplificationPasses(MPM);
 
@@ -359,31 +320,6 @@ void PassManagerBuilder::populateModulePassManager(
   // pass manager that we are specifically trying to avoid. To prevent this
   // we must insert a no-op module pass to reset the pass manager.
   MPM.add(createBarrierNoopPass());
-
-  if (OptLevel > 1)
-    // Remove avail extern fns and globals definitions if we aren't
-    // compiling an object file for later LTO. For LTO we want to preserve
-    // these so they are eligible for inlining at link-time. Note if they
-    // are unreferenced they will be removed by GlobalDCE later, so
-    // this only impacts referenced available externally globals.
-    // Eventually they will be suppressed during codegen, but eliminating
-    // here enables more opportunity for GlobalDCE as it may make
-    // globals referenced by available external functions dead
-    // and saves running remaining passes on the eliminated functions.
-    MPM.add(createEliminateAvailableExternallyPass());
-
-  MPM.add(createReversePostOrderFunctionAttrsPass());
-
-  // The inliner performs some kind of dead code elimination as it goes,
-  // but there are cases that are not really caught by it. We might
-  // at some point consider teaching the inliner about them, but it
-  // is OK for now to run GlobalOpt + GlobalDCE in tandem as their
-  // benefits generally outweight the cost, making the whole pipeline
-  // faster.
-  if (RunInliner) {
-    MPM.add(createGlobalOptimizerPass());
-    MPM.add(createGlobalDCEPass());
-  }
 
   // We add a fresh GlobalsModRef run at this point. This is particularly
   // useful as the above will have inlined, DCE'ed, and function-attr
@@ -410,26 +346,7 @@ void PassManagerBuilder::populateModulePassManager(
   // on the rotated form. Disable header duplication at -Oz.
   MPM.add(createLoopRotatePass(SizeLevel == 2 ? 0 : -1, false));
 
-  // Distribute loops to allow partial vectorization.  I.e. isolate dependences
-  // into separate loop that would otherwise inhibit vectorization.  This is
-  // currently only performed for loops marked with the metadata
-  // llvm.loop.distribute=true or when -enable-loop-distribute is specified.
-  MPM.add(createLoopDistributePass());
-
   addVectorPasses(MPM, /* IsFullLTO */ false);
-
-  // FIXME: We shouldn't bother with this anymore.
-  MPM.add(createStripDeadPrototypesPass()); // Get rid of dead prototypes
-
-  // GlobalOpt already deletes dead functions and globals, at -O2 try a
-  // late pass of GlobalDCE.  It is capable of deleting dead cycles.
-  if (OptLevel > 1) {
-    MPM.add(createGlobalDCEPass());         // Remove dead fns and globals.
-    MPM.add(createConstantMergePass());     // Merge dup global constants
-  }
-
-  if (MergeFunctions)
-    MPM.add(createMergeFunctionsPass());
 
   // LoopSink pass sinks instructions hoisted by LICM, which serves as a
   // canonicalization pass that enables other optimizations. As a result,
@@ -438,11 +355,6 @@ void PassManagerBuilder::populateModulePassManager(
   MPM.add(createLoopSinkPass());
   // Get rid of LCSSA nodes.
   MPM.add(createInstSimplifyLegacyPass());
-
-  // This hoists/decomposes div/rem ops. It should run after other sink/hoist
-  // passes to avoid re-sinking, but before SimplifyCFG because it can allow
-  // flattening of blocks.
-  MPM.add(createDivRemPairsPass());
 
   // LoopSink (and other loop passes since the last simplifyCFG) might have
   // resulted in single-entry-single-exit or empty blocks. Clean up the CFG.
@@ -496,8 +408,7 @@ LLVMPassManagerBuilderSetDisableSimplifyLibCalls(LLVMPassManagerBuilderRef PMB,
 void
 LLVMPassManagerBuilderUseInlinerWithThreshold(LLVMPassManagerBuilderRef PMB,
                                               unsigned Threshold) {
-  PassManagerBuilder *Builder = unwrap(PMB);
-  Builder->Inliner = createFunctionInliningPass(Threshold);
+  // TODO: remove this
 }
 
 void

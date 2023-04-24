@@ -18,7 +18,7 @@
 #include "mlir/Pass/Pass.h"
 
 namespace mlir {
-#define GEN_PASS_DEF_CONVERTNVGPUTONVVM
+#define GEN_PASS_DEF_CONVERTNVGPUTONVVMPASS
 #include "mlir/Conversion/Passes.h.inc"
 } // namespace mlir
 
@@ -338,12 +338,14 @@ struct MmaSyncOptoNVVM : public ConvertOpToLLVMPattern<nvgpu::MmaSyncOp> {
 };
 
 struct ConvertNVGPUToNVVMPass
-    : public impl::ConvertNVGPUToNVVMBase<ConvertNVGPUToNVVMPass> {
-  ConvertNVGPUToNVVMPass() = default;
+    : public impl::ConvertNVGPUToNVVMPassBase<ConvertNVGPUToNVVMPass> {
+  using Base::Base;
 
   void runOnOperation() override {
+    LowerToLLVMOptions options(&getContext());
+    options.useOpaquePointers = useOpaquePointers;
     RewritePatternSet patterns(&getContext());
-    LLVMTypeConverter converter(&getContext());
+    LLVMTypeConverter converter(&getContext(), options);
     /// device-side async tokens cannot be materialized in nvvm. We just convert
     /// them to a dummy i32 type in order to easily drop them during conversion.
     converter.addConversion([&](nvgpu::DeviceAsyncTokenType type) -> Type {
@@ -572,19 +574,31 @@ struct NVGPUAsyncCopyLowering
     Value dstPtr = getStridedElementPtr(loc, dstMemrefType, adaptor.getDst(),
                                         adaptor.getDstIndices(), rewriter);
     auto i8Ty = IntegerType::get(op.getContext(), 8);
+    FailureOr<unsigned> dstAddressSpace =
+        getTypeConverter()->getMemRefAddressSpace(dstMemrefType);
+    if (failed(dstAddressSpace))
+      return rewriter.notifyMatchFailure(
+          loc, "destination memref address space not convertible to integer");
     auto dstPointerType =
-        LLVM::LLVMPointerType::get(i8Ty, dstMemrefType.getMemorySpaceAsInt());
-    dstPtr = rewriter.create<LLVM::BitcastOp>(loc, dstPointerType, dstPtr);
+        getTypeConverter()->getPointerType(i8Ty, *dstAddressSpace);
+    if (!getTypeConverter()->useOpaquePointers())
+      dstPtr = rewriter.create<LLVM::BitcastOp>(loc, dstPointerType, dstPtr);
 
     auto srcMemrefType = op.getSrc().getType().cast<MemRefType>();
+    FailureOr<unsigned> srcAddressSpace =
+        getTypeConverter()->getMemRefAddressSpace(srcMemrefType);
+    if (failed(srcAddressSpace))
+      return rewriter.notifyMatchFailure(
+          loc, "source memref address space not convertible to integer");
 
     Value scrPtr = getStridedElementPtr(loc, srcMemrefType, adaptor.getSrc(),
                                         adaptor.getSrcIndices(), rewriter);
     auto srcPointerType =
-        LLVM::LLVMPointerType::get(i8Ty, srcMemrefType.getMemorySpaceAsInt());
-    scrPtr = rewriter.create<LLVM::BitcastOp>(loc, srcPointerType, scrPtr);
+        getTypeConverter()->getPointerType(i8Ty, *srcAddressSpace);
+    if (!getTypeConverter()->useOpaquePointers())
+      scrPtr = rewriter.create<LLVM::BitcastOp>(loc, srcPointerType, scrPtr);
     // Intrinsics takes a global pointer so we need an address space cast.
-    auto srcPointerGlobalType = LLVM::LLVMPointerType::get(
+    auto srcPointerGlobalType = getTypeConverter()->getPointerType(
         i8Ty, NVVM::NVVMMemorySpace::kGlobalMemorySpace);
     scrPtr = rewriter.create<LLVM::AddrSpaceCastOp>(loc, srcPointerGlobalType,
                                                     scrPtr);
@@ -666,8 +680,4 @@ void mlir::populateNVGPUToNVVMConversionPatterns(LLVMTypeConverter &converter,
   patterns.add<MmaSyncOptoNVVM, MmaLdMatrixOpToNVVM, NVGPUAsyncCopyLowering,
                NVGPUAsyncCreateGroupLowering, NVGPUAsyncWaitLowering,
                NVGPUMmaSparseSyncLowering>(converter);
-}
-
-std::unique_ptr<Pass> mlir::createConvertNVGPUToNVVMPass() {
-  return std::make_unique<ConvertNVGPUToNVVMPass>();
 }

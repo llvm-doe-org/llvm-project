@@ -1179,8 +1179,8 @@ def : InstAlias<".insn_s $opcode, $funct3, $rs2, ${imm12}(${rs1})",
 
 class PatGpr<SDPatternOperator OpNode, RVInst Inst>
     : Pat<(OpNode GPR:$rs1), (Inst GPR:$rs1)>;
-class PatGprGpr<SDPatternOperator OpNode, RVInst Inst>
-    : Pat<(OpNode GPR:$rs1, GPR:$rs2), (Inst GPR:$rs1, GPR:$rs2)>;
+class PatGprGpr<SDPatternOperator OpNode, RVInst Inst, ValueType vt = XLenVT>
+    : Pat<(vt (OpNode GPR:$rs1, GPR:$rs2)), (Inst GPR:$rs1, GPR:$rs2)>;
 
 class PatGprImm<SDPatternOperator OpNode, RVInst Inst, ImmLeaf ImmType>
     : Pat<(XLenVT (OpNode (XLenVT GPR:$rs1), ImmType:$imm)),
@@ -1195,7 +1195,8 @@ class PatGprUimmLog2XLen<SDPatternOperator OpNode, RVInstIShift Inst>
 def assertsexti32 : PatFrag<(ops node:$src), (assertsext node:$src), [{
   return cast<VTSDNode>(N->getOperand(1))->getVT().bitsLE(MVT::i32);
 }]>;
-def sexti32 : ComplexPattern<i64, 1, "selectSExti32">;
+def sexti16 : ComplexPattern<XLenVT, 1, "selectSExtBits<16>">;
+def sexti32 : ComplexPattern<i64, 1, "selectSExtBits<32>">;
 def assertzexti32 : PatFrag<(ops node:$src), (assertzext node:$src), [{
   return cast<VTSDNode>(N->getOperand(1))->getVT().bitsLE(MVT::i32);
 }]>;
@@ -1331,20 +1332,17 @@ def : PatGprSimm12<setlt, SLTI>;
 def : PatGprGpr<setult, SLTU>;
 def : PatGprSimm12<setult, SLTIU>;
 
+// RISC-V doesn't have general instructions for integer setne/seteq, but we can
+// check for equality with 0. These ComplexPatterns rewrite the setne/seteq into
+// something that can be compared with 0.
+// These ComplexPatterns must be used in pairs.
+def riscv_setne : ComplexPattern<XLenVT, 1, "selectSETNE", [setcc]>;
+def riscv_seteq : ComplexPattern<XLenVT, 1, "selectSETEQ", [setcc]>;
+
 // Define pattern expansions for setcc operations that aren't directly
 // handled by a RISC-V instruction.
-def : Pat<(seteq GPR:$rs1, 0), (SLTIU GPR:$rs1, 1)>;
-def : Pat<(seteq GPR:$rs1, GPR:$rs2), (SLTIU (XOR GPR:$rs1, GPR:$rs2), 1)>;
-def : Pat<(seteq GPR:$rs1, simm12_plus1:$imm12),
-          (SLTIU (ADDI GPR:$rs1, (NegImm simm12_plus1:$imm12)), 1)>;
-def : Pat<(seteq GPR:$rs1, -2048),
-          (SLTIU (XORI GPR:$rs1, -2048), 1)>;
-def : Pat<(setne GPR:$rs1, 0), (SLTU X0, GPR:$rs1)>;
-def : Pat<(setne GPR:$rs1, GPR:$rs2), (SLTU X0, (XOR GPR:$rs1, GPR:$rs2))>;
-def : Pat<(setne GPR:$rs1, simm12_plus1:$imm12),
-          (SLTU X0, (ADDI GPR:$rs1, (NegImm simm12_plus1:$imm12)))>;
-def : Pat<(setne GPR:$rs1, -2048),
-          (SLTU X0, (XORI GPR:$rs1, -2048))>;
+def : Pat<(riscv_seteq GPR:$rs1), (SLTIU GPR:$rs1, 1)>;
+def : Pat<(riscv_setne GPR:$rs1), (SLTU X0, GPR:$rs1)>;
 def : Pat<(setne GPR:$rs1, -1), (SLTIU GPR:$rs1, -1)>;
 
 def IntCCtoRISCVCC : SDNodeXForm<riscv_selectcc, [{
@@ -1468,6 +1466,26 @@ let Predicates = [HasStdExtC, OptForMinSize] in {
   def : BrccCompessOpt<SETEQ, BEQ>;
   def : BrccCompessOpt<SETNE, BNE>;
 }
+
+class LongBccPseudo : Pseudo<(outs),
+                             (ins GPR:$rs1, GPR:$rs2, simm21_lsb0_jal:$imm20),
+                             []> {
+  let Size = 8;
+  let isBarrier = 1;
+  let isBranch = 1;
+  let hasSideEffects = 0;
+  let mayStore = 0;
+  let mayLoad = 0;
+  let isAsmParserOnly = 1;
+  let hasNoSchedulingInfo = 1;
+}
+
+def PseudoLongBEQ : LongBccPseudo;
+def PseudoLongBNE : LongBccPseudo;
+def PseudoLongBLT : LongBccPseudo;
+def PseudoLongBGE : LongBccPseudo;
+def PseudoLongBLTU : LongBccPseudo;
+def PseudoLongBGEU : LongBccPseudo;
 
 let isBarrier = 1, isBranch = 1, isTerminator = 1 in
 def PseudoBR : Pseudo<(outs), (ins simm21_lsb0_jal:$imm20), [(br bb:$imm20)]>,
@@ -1849,6 +1867,14 @@ def : Pat<(binop_allwusers<add> GPR:$rs1, (AddiPair:$rs2)),
                  (AddiPairImmSmall AddiPair:$rs2))>;
 }
 
+/// Empty pseudo for RISCVInitUndefPass
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Size = 0, isCodeGenOnly = 1 in {
+  def PseudoRVVInitUndefM1     :  Pseudo<(outs VR:$vd), (ins), [], "">;
+  def PseudoRVVInitUndefM2     :  Pseudo<(outs VRM2:$vd), (ins), [], "">;
+  def PseudoRVVInitUndefM4     :  Pseudo<(outs VRM4:$vd), (ins), [], "">;
+  def PseudoRVVInitUndefM8     :  Pseudo<(outs VRM8:$vd), (ins), [], "">;
+}
+
 //===----------------------------------------------------------------------===//
 // Standard extensions
 //===----------------------------------------------------------------------===//
@@ -1862,6 +1888,7 @@ include "RISCVInstrInfoZb.td"
 include "RISCVInstrInfoZc.td"
 include "RISCVInstrInfoZk.td"
 include "RISCVInstrInfoV.td"
+include "RISCVInstrInfoZfa.td"
 include "RISCVInstrInfoZfh.td"
 include "RISCVInstrInfoZicbo.td"
 

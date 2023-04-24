@@ -429,6 +429,21 @@ Instruction *InstCombinerImpl::foldSelectOpOp(SelectInst &SI, Instruction *TI,
                                !OtherOpF->getType()->isVectorTy()))
     return nullptr;
 
+  // If we are sinking div/rem after a select, we may need to freeze the
+  // condition because div/rem may induce immediate UB with a poison operand.
+  // For example, the following transform is not safe if Cond can ever be poison
+  // because we can replace poison with zero and then we have div-by-zero that
+  // didn't exist in the original code:
+  // Cond ? x/y : x/z --> x / (Cond ? y : z)
+  auto *BO = dyn_cast<BinaryOperator>(TI);
+  if (BO && BO->isIntDivRem() && !isGuaranteedNotToBePoison(Cond)) {
+    // A udiv/urem with a common divisor is safe because UB can only occur with
+    // div-by-zero, and that would be present in the original code.
+    if (BO->getOpcode() == Instruction::SDiv ||
+        BO->getOpcode() == Instruction::SRem || MatchIsOpZero)
+      Cond = Builder.CreateFreeze(Cond);
+  }
+
   // If we reach here, they do have operations in common.
   Value *NewSI = Builder.CreateSelect(Cond, OtherOpT, OtherOpF,
                                       SI.getName() + ".v", &SI);
@@ -1593,12 +1608,31 @@ static Instruction *foldSelectZeroOrOnes(ICmpInst *Cmp, Value *TVal,
   return nullptr;
 }
 
-static Value *foldSelectInstWithICmpConst(SelectInst &SI, ICmpInst *ICI) {
+static Value *foldSelectInstWithICmpConst(SelectInst &SI, ICmpInst *ICI,
+                                          InstCombiner::BuilderTy &Builder) {
   const APInt *CmpC;
   Value *V;
   CmpInst::Predicate Pred;
   if (!match(ICI, m_ICmp(Pred, m_Value(V), m_APInt(CmpC))))
     return nullptr;
+
+  // Match clamp away from min/max value as a max/min operation.
+  Value *TVal = SI.getTrueValue();
+  Value *FVal = SI.getFalseValue();
+  if (Pred == ICmpInst::ICMP_EQ && V == FVal) {
+    // (V == UMIN) ? UMIN+1 : V --> umax(V, UMIN+1)
+    if (CmpC->isMinValue() && match(TVal, m_SpecificInt(*CmpC + 1)))
+      return Builder.CreateBinaryIntrinsic(Intrinsic::umax, V, TVal);
+    // (V == UMAX) ? UMAX-1 : V --> umin(V, UMAX-1)
+    if (CmpC->isMaxValue() && match(TVal, m_SpecificInt(*CmpC - 1)))
+      return Builder.CreateBinaryIntrinsic(Intrinsic::umin, V, TVal);
+    // (V == SMIN) ? SMIN+1 : V --> smax(V, SMIN+1)
+    if (CmpC->isMinSignedValue() && match(TVal, m_SpecificInt(*CmpC + 1)))
+      return Builder.CreateBinaryIntrinsic(Intrinsic::smax, V, TVal);
+    // (V == SMAX) ? SMAX-1 : V --> smin(V, SMAX-1)
+    if (CmpC->isMaxSignedValue() && match(TVal, m_SpecificInt(*CmpC - 1)))
+      return Builder.CreateBinaryIntrinsic(Intrinsic::smin, V, TVal);
+  }
 
   BinaryOperator *BO;
   const APInt *C;
@@ -1632,7 +1666,7 @@ Instruction *InstCombinerImpl::foldSelectInstWithICmp(SelectInst &SI,
   if (Instruction *NewSPF = canonicalizeSPF(SI, *ICI, *this))
     return NewSPF;
 
-  if (Value *V = foldSelectInstWithICmpConst(SI, ICI))
+  if (Value *V = foldSelectInstWithICmpConst(SI, ICI, Builder))
     return replaceInstUsesWith(SI, V);
 
   if (Value *V = canonicalizeClampLike(SI, *ICI, Builder))
@@ -1683,7 +1717,7 @@ Instruction *InstCombinerImpl::foldSelectInstWithICmp(SelectInst &SI,
 
   // FIXME: This code is nearly duplicated in InstSimplify. Using/refactoring
   // decomposeBitTestICmp() might help.
-  {
+  if (TrueVal->getType()->isIntOrIntVectorTy()) {
     unsigned BitWidth =
         DL.getTypeSizeInBits(TrueVal->getType()->getScalarType());
     APInt MinSignedValue = APInt::getSignedMinValue(BitWidth);
@@ -3364,25 +3398,14 @@ Instruction *InstCombinerImpl::visitSelectInst(SelectInst &SI) {
     }
   }
 
-  auto canMergeSelectThroughBinop = [](BinaryOperator *BO) {
-    // The select might be preventing a division by 0.
-    switch (BO->getOpcode()) {
-    default:
-      return true;
-    case Instruction::SRem:
-    case Instruction::URem:
-    case Instruction::SDiv:
-    case Instruction::UDiv:
-      return false;
-    }
-  };
-
   // Try to simplify a binop sandwiched between 2 selects with the same
-  // condition.
+  // condition. This is not valid for div/rem because the select might be
+  // preventing a division-by-zero.
+  // TODO: A div/rem restriction is conservative; use something like
+  //       isSafeToSpeculativelyExecute().
   // select(C, binop(select(C, X, Y), W), Z) -> select(C, binop(X, W), Z)
   BinaryOperator *TrueBO;
-  if (match(TrueVal, m_OneUse(m_BinOp(TrueBO))) &&
-      canMergeSelectThroughBinop(TrueBO)) {
+  if (match(TrueVal, m_OneUse(m_BinOp(TrueBO))) && !TrueBO->isIntDivRem()) {
     if (auto *TrueBOSI = dyn_cast<SelectInst>(TrueBO->getOperand(0))) {
       if (TrueBOSI->getCondition() == CondVal) {
         replaceOperand(*TrueBO, 0, TrueBOSI->getTrueValue());
@@ -3401,8 +3424,7 @@ Instruction *InstCombinerImpl::visitSelectInst(SelectInst &SI) {
 
   // select(C, Z, binop(select(C, X, Y), W)) -> select(C, Z, binop(Y, W))
   BinaryOperator *FalseBO;
-  if (match(FalseVal, m_OneUse(m_BinOp(FalseBO))) &&
-      canMergeSelectThroughBinop(FalseBO)) {
+  if (match(FalseVal, m_OneUse(m_BinOp(FalseBO))) && !FalseBO->isIntDivRem()) {
     if (auto *FalseBOSI = dyn_cast<SelectInst>(FalseBO->getOperand(0))) {
       if (FalseBOSI->getCondition() == CondVal) {
         replaceOperand(*FalseBO, 0, FalseBOSI->getFalseValue());

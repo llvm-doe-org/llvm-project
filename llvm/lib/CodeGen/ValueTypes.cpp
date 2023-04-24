@@ -10,6 +10,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Type.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TypeSize.h"
 #include "llvm/Support/WithColor.h"
@@ -173,8 +174,17 @@ std::string EVT::getEVTString() const {
   case MVT::Untyped:   return "Untyped";
   case MVT::funcref:   return "funcref";
   case MVT::externref: return "externref";
+  case MVT::aarch64svcount:
+    return "aarch64svcount";
   }
 }
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+void EVT::dump() const {
+  print(dbgs());
+  dbgs() << "\n";
+}
+#endif
 
 /// getTypeForEVT - This method returns an LLVM type corresponding to the
 /// specified EVT.  For integer types, this returns an unsigned type.  Note
@@ -202,6 +212,8 @@ Type *EVT::getTypeForEVT(LLVMContext &Context) const {
   case MVT::f128:    return Type::getFP128Ty(Context);
   case MVT::ppcf128: return Type::getPPC_FP128Ty(Context);
   case MVT::x86mmx:  return Type::getX86_MMXTy(Context);
+  case MVT::aarch64svcount:
+    return TargetExtType::get(Context, "aarch64.svcount");
   case MVT::x86amx:  return Type::getX86_AMXTy(Context);
   case MVT::i64x8:   return IntegerType::get(Context, 512);
   case MVT::externref: return Type::getWasm_ExternrefTy(Context);
@@ -571,6 +583,12 @@ MVT MVT::getVT(Type *Ty, bool HandleUnknown){
   case Type::DoubleTyID:    return MVT(MVT::f64);
   case Type::X86_FP80TyID:  return MVT(MVT::f80);
   case Type::X86_MMXTyID:   return MVT(MVT::x86mmx);
+  case Type::TargetExtTyID:
+    if (cast<TargetExtType>(Ty)->getName() == "aarch64.svcount")
+      return MVT(MVT::aarch64svcount);
+    if (HandleUnknown)
+      return MVT(MVT::Other);
+    llvm_unreachable("Unknown target ext type!");
   case Type::X86_AMXTyID:   return MVT(MVT::x86amx);
   case Type::FP128TyID:     return MVT(MVT::f128);
   case Type::PPC_FP128TyID: return MVT(MVT::ppcf128);
@@ -603,3 +621,15 @@ EVT EVT::getEVT(Type *Ty, bool HandleUnknown){
   }
   }
 }
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+void MVT::dump() const {
+  print(dbgs());
+  dbgs() << "\n";
+}
+#endif
+
+void MVT::print(raw_ostream &OS) const {
+  OS << EVT(*this).getEVTString();
+}
+

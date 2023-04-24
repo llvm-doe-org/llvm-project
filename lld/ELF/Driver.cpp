@@ -736,15 +736,24 @@ static StringRef getDynamicLinker(opt::InputArgList &args) {
 
 static int getMemtagMode(opt::InputArgList &args) {
   StringRef memtagModeArg = args.getLastArgValue(OPT_android_memtag_mode);
-  if (!config->androidMemtagHeap && !config->androidMemtagStack) {
-    if (!memtagModeArg.empty())
-      error("when using --android-memtag-mode, at least one of "
-            "--android-memtag-heap or "
-            "--android-memtag-stack is required");
+  if (memtagModeArg.empty()) {
+    if (config->androidMemtagStack)
+      warn("--android-memtag-mode is unspecified, leaving "
+           "--android-memtag-stack a no-op");
+    else if (config->androidMemtagHeap)
+      warn("--android-memtag-mode is unspecified, leaving "
+           "--android-memtag-heap a no-op");
     return ELF::NT_MEMTAG_LEVEL_NONE;
   }
 
-  if (memtagModeArg == "sync" || memtagModeArg.empty())
+  if (!config->androidMemtagHeap && !config->androidMemtagStack) {
+    error("when using --android-memtag-mode, at least one of "
+          "--android-memtag-heap or "
+          "--android-memtag-stack is required");
+    return ELF::NT_MEMTAG_LEVEL_NONE;
+  }
+
+  if (memtagModeArg == "sync")
     return ELF::NT_MEMTAG_LEVEL_SYNC;
   if (memtagModeArg == "async")
     return ELF::NT_MEMTAG_LEVEL_ASYNC;
@@ -1139,6 +1148,14 @@ static void readConfigs(opt::InputArgList &args) {
       args.hasFlag(OPT_lto_whole_program_visibility,
                    OPT_no_lto_whole_program_visibility, false);
   config->ltoo = args::getInteger(args, OPT_lto_O, 2);
+  if (config->ltoo > 3)
+    error("invalid optimization level for LTO: " + Twine(config->ltoo));
+  unsigned ltoCgo =
+      args::getInteger(args, OPT_lto_CGO, args::getCGOptLevel(config->ltoo));
+  if (auto level = CodeGenOpt::getLevel(ltoCgo))
+    config->ltoCgo = *level;
+  else
+    error("invalid codegen optimization level for LTO: " + Twine(ltoCgo));
   config->ltoObjPath = args.getLastArgValue(OPT_lto_obj_path_eq);
   config->ltoPartitions = args::getInteger(args, OPT_lto_partitions, 1);
   config->ltoSampleProfile = args.getLastArgValue(OPT_lto_sample_profile);
@@ -1395,8 +1412,6 @@ static void readConfigs(opt::InputArgList &args) {
     config->thinLTOJobs = arg->getValue();
   config->threadCount = parallel::strategy.compute_thread_count();
 
-  if (config->ltoo > 3)
-    error("invalid optimization level for LTO: " + Twine(config->ltoo));
   if (config->ltoPartitions == 0)
     error("--lto-partitions: number of threads must be > 0");
   if (!get_threadpool_strategy(config->thinLTOJobs))

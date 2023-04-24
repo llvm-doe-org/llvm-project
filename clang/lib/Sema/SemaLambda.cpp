@@ -902,11 +902,12 @@ static TypeSourceInfo *getLambdaType(Sema &S, LambdaIntroducer &Intro,
 CXXMethodDecl *Sema::CreateLambdaCallOperator(SourceRange IntroducerRange,
                                               CXXRecordDecl *Class) {
 
-  // C++11 [expr.prim.lambda]p5:
-  //   The closure type for a lambda-expression has a public inline function
-  //   call operator (13.5.4) whose parameters and return type are described
-  //   by the lambda-expression's parameter-declaration-clause and
-  //   trailing-return-type respectively.
+  // C++20 [expr.prim.lambda.closure]p3:
+  // The closure type for a lambda-expression has a public inline function
+  // call operator (for a non-generic lambda) or function call operator
+  // template (for a generic lambda) whose parameters and return type are
+  // described by the lambda-expression's parameter-declaration-clause
+  // and trailing-return-type respectively.
   DeclarationName MethodName =
       Context.DeclarationNames.getCXXOperatorName(OO_Call);
   DeclarationNameLoc MethodNameLoc =
@@ -915,9 +916,10 @@ CXXMethodDecl *Sema::CreateLambdaCallOperator(SourceRange IntroducerRange,
       Context, Class, SourceLocation(),
       DeclarationNameInfo(MethodName, IntroducerRange.getBegin(),
                           MethodNameLoc),
-      QualType(), nullptr, SC_None, getCurFPFeatures().isFPConstrained(),
+      QualType(), /*Tinfo=*/nullptr, SC_None,
+      getCurFPFeatures().isFPConstrained(),
       /*isInline=*/true, ConstexprSpecKind::Unspecified, SourceLocation(),
-      nullptr);
+      /*TrailingRequiresClause=*/nullptr);
   Method->setAccess(AS_public);
   return Method;
 }
@@ -1004,14 +1006,8 @@ void Sema::ActOnLambdaExpressionAfterIntroducer(LambdaIntroducer &Intro,
   }
 
   CXXRecordDecl *Class = createLambdaClosureType(
-      Intro.Range, nullptr, LambdaDependencyKind, Intro.Default);
+      Intro.Range, /*Info=*/nullptr, LambdaDependencyKind, Intro.Default);
   LSI->Lambda = Class;
-
-  // C++11 [expr.prim.lambda]p5:
-  //   The closure type for a lambda-expression has a public inline function
-  //   call operator (13.5.4) whose parameters and return type are described
-  //   by the lambda-expression's parameter-declaration-clause and
-  //   trailing-return-type respectively.
 
   CXXMethodDecl *Method = CreateLambdaCallOperator(Intro.Range, Class);
   LSI->CallOperator = Method;
@@ -1255,8 +1251,8 @@ void Sema::ActOnLambdaClosureQualifiers(LambdaIntroducer &Intro,
   if (Intro.Default != LCD_None &&
       !LSI->Lambda->getParent()->isFunctionOrMethod() &&
       (getCurrentThisType().isNull() ||
-       CheckCXXThisCapture(SourceLocation(), /*Explicit*/ true,
-                           /*BuildAndDiagnose*/ false)))
+       CheckCXXThisCapture(SourceLocation(), /*Explicit=*/true,
+                           /*BuildAndDiagnose=*/false)))
     Diag(Intro.DefaultLoc, diag::err_capture_default_non_local);
 }
 
@@ -1635,7 +1631,7 @@ static void addFunctionPointerConversion(Sema &S, SourceRange IntroducerRange,
         S.Context, Class, Loc, DeclarationNameInfo(InvokerName, Loc),
         InvokerFunctionTy, CallOperator->getTypeSourceInfo(), SC_Static,
         S.getCurFPFeatures().isFPConstrained(),
-        /*isInline=*/true, ConstexprSpecKind::Unspecified,
+        /*isInline=*/true, CallOperator->getConstexprKind(),
         CallOperator->getBody()->getEndLoc());
     for (unsigned I = 0, N = CallOperator->getNumParams(); I != N; ++I)
       InvokerParams[I]->setOwningFunction(Invoke);

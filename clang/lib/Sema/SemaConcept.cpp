@@ -527,6 +527,19 @@ bool Sema::addInstantiatedCapturesToScope(
   const auto *LambdaPattern = cast<CXXMethodDecl>(PatternDecl)->getParent();
 
   unsigned Instantiated = 0;
+
+  auto AddSingleCapture = [&](const ValueDecl *CapturedPattern,
+                              unsigned Index) {
+    ValueDecl *CapturedVar = LambdaClass->getCapture(Index)->getCapturedVar();
+    if (cast<CXXMethodDecl>(Function)->isConst()) {
+      QualType T = CapturedVar->getType();
+      T.addConst();
+      CapturedVar->setType(T);
+    }
+    if (CapturedVar->isInitCapture())
+      Scope.InstantiatedLocal(CapturedPattern, CapturedVar);
+  };
+
   for (const LambdaCapture &CapturePattern : LambdaPattern->captures()) {
     if (!CapturePattern.capturesVariable()) {
       Instantiated++;
@@ -534,35 +547,15 @@ bool Sema::addInstantiatedCapturesToScope(
     }
     const ValueDecl *CapturedPattern = CapturePattern.getCapturedVar();
     if (!CapturedPattern->isParameterPack()) {
-      ValueDecl *CapturedVar =
-          LambdaClass->getCapture(Instantiated)->getCapturedVar();
-      if (cast<CXXMethodDecl>(Function)->isConst()) {
-        QualType T = CapturedVar->getType();
-        T.addConst();
-        CapturedVar->setType(T);
-      }
-      if (CapturedVar->isInitCapture())
-        Scope.InstantiatedLocal(CapturedPattern, CapturedVar);
-      Instantiated++;
+      AddSingleCapture(CapturedPattern, Instantiated++);
     } else {
       Scope.MakeInstantiatedLocalArgPack(CapturedPattern);
       std::optional<unsigned> NumArgumentsInExpansion =
           getNumArgumentsInExpansion(CapturedPattern->getType(), TemplateArgs);
       if (!NumArgumentsInExpansion)
         continue;
-      for (unsigned Arg = 0; Arg < *NumArgumentsInExpansion; ++Arg) {
-        ValueDecl *CapturedVar =
-            LambdaClass->getCapture(Instantiated)->getCapturedVar();
-        if (cast<CXXMethodDecl>(Function)->isConst()) {
-          QualType T = CapturedVar->getType();
-          T.addConst();
-          CapturedVar->setType(T);
-        }
-        if (CapturedVar->isInitCapture())
-          Scope.InstantiatedLocalPackArg(CapturedPattern,
-                                         cast<VarDecl>(CapturedVar));
-        Instantiated++;
-      }
+      for (unsigned Arg = 0; Arg < *NumArgumentsInExpansion; ++Arg)
+        AddSingleCapture(CapturedPattern, Instantiated++);
     }
   }
   return false;

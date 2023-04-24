@@ -11394,21 +11394,6 @@ NamespaceDecl *Sema::getStdNamespace() const {
   return cast_or_null<NamespaceDecl>(
                                  StdNamespace.get(Context.getExternalSource()));
 }
-
-NamespaceDecl *Sema::lookupStdExperimentalNamespace() {
-  if (!StdExperimentalNamespaceCache) {
-    if (auto Std = getStdNamespace()) {
-      LookupResult Result(*this, &PP.getIdentifierTable().get("experimental"),
-                          SourceLocation(), LookupNamespaceName);
-      if (!LookupQualifiedName(Result, Std) ||
-          !(StdExperimentalNamespaceCache =
-                Result.getAsSingle<NamespaceDecl>()))
-        Result.suppressDiagnostics();
-    }
-  }
-  return StdExperimentalNamespaceCache;
-}
-
 namespace {
 
 enum UnsupportedSTLSelect {
@@ -16391,14 +16376,8 @@ Decl *Sema::ActOnStartLinkageSpecification(Scope *S, SourceLocation ExternLoc,
   /// If the declaration is already in global module fragment, we don't
   /// need to attach it again.
   if (getLangOpts().CPlusPlusModules && isCurrentModulePurview()) {
-    Module *GlobalModule =
-        PushGlobalModuleFragment(ExternLoc, /*IsImplicit=*/true);
-    /// According to [module.reach]p3.2,
-    /// The declaration in global module fragment is reachable if it is not
-    /// discarded. And the discarded declaration should be deleted. So it
-    /// doesn't matter mark the declaration in global module fragment as
-    /// reachable here.
-    D->setModuleOwnershipKind(Decl::ModuleOwnershipKind::ReachableWhenImported);
+    Module *GlobalModule = PushImplicitGlobalModuleFragment(
+        ExternLoc, /*IsExported=*/D->isInExportDeclContext());
     D->setLocalOwningModule(GlobalModule);
   }
 
@@ -16423,8 +16402,9 @@ Decl *Sema::ActOnFinishLinkageSpecification(Scope *S,
   // LinkageSpec isn't in the module created by itself. So we don't
   // need to pop it.
   if (getLangOpts().CPlusPlusModules && getCurrentModule() &&
-      getCurrentModule()->isGlobalModule() && getCurrentModule()->Parent)
-    PopGlobalModuleFragment();
+      getCurrentModule()->isImplicitGlobalModule() &&
+      getCurrentModule()->Parent)
+    PopImplicitGlobalModuleFragment();
 
   PopDeclContext();
   return LinkageSpec;
@@ -16813,7 +16793,14 @@ Decl *Sema::BuildStaticAssertDeclaration(SourceLocation StaticAssertLoc,
                        FoldKind).isInvalid())
       Failed = true;
 
-    if (!Failed && !Cond) {
+    // CWG2518
+    // [dcl.pre]/p10  If [...] the expression is evaluated in the context of a
+    // template definition, the declaration has no effect.
+    bool InTemplateDefinition =
+        getLangOpts().CPlusPlus && CurContext->isDependentContext();
+
+    if (!Failed && !Cond && !InTemplateDefinition) {
+
       SmallString<256> MsgBuffer;
       llvm::raw_svector_ostream Msg(MsgBuffer);
       if (AssertMessage) {
@@ -16844,7 +16831,8 @@ Decl *Sema::BuildStaticAssertDeclaration(SourceLocation StaticAssertLoc,
         DiagnoseStaticAssertDetails(InnerCond);
       } else {
         Diag(StaticAssertLoc, diag::err_static_assert_failed)
-          << !AssertMessage << Msg.str() << AssertExpr->getSourceRange();
+            << !AssertMessage << Msg.str() << AssertExpr->getSourceRange();
+        PrintContextStack();
       }
       Failed = true;
     }
@@ -17996,7 +17984,7 @@ void Sema::MarkVTableUsed(SourceLocation Loc, CXXRecordDecl *Class,
   // immediately. For all other classes, we mark their virtual members
   // at the end of the translation unit.
   if (Class->isLocalClass())
-    MarkVirtualMembersReferenced(Loc, Class);
+    MarkVirtualMembersReferenced(Loc, Class->getDefinition());
   else
     VTableUses.push_back(std::make_pair(Class, Loc));
 }

@@ -37,7 +37,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/MachineValueType.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Support/TargetParser.h"
+#include "llvm/TargetParser/TargetParser.h"
 #include <optional>
 
 using namespace llvm;
@@ -119,6 +119,7 @@ public:
     ImmTyInstOffset,
     ImmTyOffset0,
     ImmTyOffset1,
+    ImmTySMEMOffsetMod,
     ImmTyCPol,
     ImmTySWZ,
     ImmTyTFE,
@@ -347,6 +348,8 @@ public:
     return isImm() && Imm.Type == ImmT;
   }
 
+  bool isImmLiteral() const { return isImmTy(ImmTyNone); }
+
   bool isImmModifier() const {
     return isImm() && Imm.Type != ImmTyNone;
   }
@@ -370,7 +373,7 @@ public:
   bool isOffset() const { return isImmTy(ImmTyOffset) && isUInt<16>(getImm()); }
   bool isOffset0() const { return isImmTy(ImmTyOffset0) && isUInt<8>(getImm()); }
   bool isOffset1() const { return isImmTy(ImmTyOffset1) && isUInt<8>(getImm()); }
-
+  bool isSMEMOffsetMod() const { return isImmTy(ImmTySMEMOffsetMod); }
   bool isFlatOffset() const { return isImmTy(ImmTyOffset) || isImmTy(ImmTyInstOffset); }
   bool isGDS() const { return isImmTy(ImmTyGDS); }
   bool isLDS() const { return isImmTy(ImmTyLDS); }
@@ -1032,6 +1035,7 @@ public:
     case ImmTyInstOffset: OS << "InstOffset"; break;
     case ImmTyOffset0: OS << "Offset0"; break;
     case ImmTyOffset1: OS << "Offset1"; break;
+    case ImmTySMEMOffsetMod: OS << "SMEMOffsetMod"; break;
     case ImmTyCPol: OS << "CPol"; break;
     case ImmTySWZ: OS << "SWZ"; break;
     case ImmTyTFE: OS << "TFE"; break;
@@ -1481,6 +1485,14 @@ public:
     return getFeatureBits()[AMDGPU::FeatureIntClamp];
   }
 
+  bool hasPartialNSAEncoding() const {
+    return getFeatureBits()[AMDGPU::FeaturePartialNSAEncoding];
+  }
+
+  unsigned getNSAMaxSize() const {
+    return AMDGPU::getNSAMaxSize(getSTI());
+  }
+
   AMDGPUTargetStreamer &getTargetStreamer() {
     MCTargetStreamer &TS = *getParser().getStreamer().getTargetStreamer();
     return static_cast<AMDGPUTargetStreamer &>(TS);
@@ -1745,6 +1757,7 @@ public:
 
   AMDGPUOperand::Ptr defaultSMRDOffset8() const;
   AMDGPUOperand::Ptr defaultSMEMOffset() const;
+  AMDGPUOperand::Ptr defaultSMEMOffsetMod() const;
   AMDGPUOperand::Ptr defaultSMRDLiteralOffset() const;
   AMDGPUOperand::Ptr defaultFlatOffset() const;
 
@@ -3681,7 +3694,15 @@ bool AMDGPUAsmParser::validateMIMGAddrSize(const MCInst &Inst) {
   unsigned ExpectedAddrSize =
       AMDGPU::getAddrSizeMIMGOp(BaseOpcode, DimInfo, IsA16, hasG16());
 
-  if (!IsNSA) {
+  if (IsNSA) {
+    if (hasPartialNSAEncoding() && ExpectedAddrSize > getNSAMaxSize()) {
+      int VAddrLastIdx = SrsrcIdx - 1;
+      unsigned VAddrLastSize =
+          AMDGPU::getRegOperandSize(getMRI(), Desc, VAddrLastIdx) / 4;
+
+      return VAddrLastIdx - VAddr0Idx + VAddrLastSize == ExpectedAddrSize;
+    }
+  } else {
     if (ExpectedAddrSize > 12)
       ExpectedAddrSize = 16;
 
@@ -4136,7 +4157,7 @@ SMLoc AMDGPUAsmParser::getSMEMOffsetLoc(const OperandVector &Operands) const {
   // Start with second operand because SMEM Offset cannot be dst or src0.
   for (unsigned i = 2, e = Operands.size(); i != e; ++i) {
     AMDGPUOperand &Op = ((AMDGPUOperand &)*Operands[i]);
-    if (Op.isSMEMOffset())
+    if (Op.isSMEMOffset() || Op.isSMEMOffsetMod())
       return Op.getStartLoc();
   }
   return getLoc();
@@ -6006,28 +6027,21 @@ AMDGPUAsmParser::parseNamedBit(StringRef Name, OperandVector &Operands,
 
 unsigned AMDGPUAsmParser::getCPolKind(StringRef Id, StringRef Mnemo,
                                       bool &Disabling) const {
-  Disabling = Id.startswith("no");
+  Disabling = Id.consume_front("no");
 
   if (isGFX940() && !Mnemo.startswith("s_")) {
     return StringSwitch<unsigned>(Id)
         .Case("nt", AMDGPU::CPol::NT)
-        .Case("nont", AMDGPU::CPol::NT)
         .Case("sc0", AMDGPU::CPol::SC0)
-        .Case("nosc0", AMDGPU::CPol::SC0)
         .Case("sc1", AMDGPU::CPol::SC1)
-        .Case("nosc1", AMDGPU::CPol::SC1)
         .Default(0);
   }
 
   return StringSwitch<unsigned>(Id)
       .Case("dlc", AMDGPU::CPol::DLC)
-      .Case("nodlc", AMDGPU::CPol::DLC)
       .Case("glc", AMDGPU::CPol::GLC)
-      .Case("noglc", AMDGPU::CPol::GLC)
       .Case("scc", AMDGPU::CPol::SCC)
-      .Case("noscc", AMDGPU::CPol::SCC)
       .Case("slc", AMDGPU::CPol::SLC)
-      .Case("noslc", AMDGPU::CPol::SLC)
       .Default(0);
 }
 
@@ -7920,7 +7934,8 @@ void AMDGPUAsmParser::cvtSMEMAtomic(MCInst &Inst, const OperandVector &Operands)
 
   if ((int)Inst.getNumOperands() <=
       AMDGPU::getNamedOperandIdx(Inst.getOpcode(), AMDGPU::OpName::offset))
-    addOptionalImmOperand(Inst, Operands, OptionalIdx, AMDGPUOperand::ImmTyOffset);
+    addOptionalImmOperand(Inst, Operands, OptionalIdx,
+                          AMDGPUOperand::ImmTySMEMOffsetMod);
   addOptionalImmOperand(Inst, Operands, OptionalIdx, AMDGPUOperand::ImmTyCPol, 0);
 }
 
@@ -7940,18 +7955,18 @@ void AMDGPUAsmParser::cvtIntersectRay(MCInst &Inst,
 //===----------------------------------------------------------------------===//
 
 bool AMDGPUOperand::isSMRDOffset8() const {
-  return isImm() && isUInt<8>(getImm());
+  return isImmLiteral() && isUInt<8>(getImm());
 }
 
 bool AMDGPUOperand::isSMEMOffset() const {
-  return isImmTy(ImmTyNone) ||
-         isImmTy(ImmTyOffset); // Offset range is checked later by validator.
+  // Offset range is checked later by validator.
+  return isImmLiteral();
 }
 
 bool AMDGPUOperand::isSMRDLiteralOffset() const {
   // 32-bit literals are only supported on CI and we only want to use them
   // when the offset is > 8-bits.
-  return isImm() && !isUInt<8>(getImm()) && isUInt<32>(getImm());
+  return isImmLiteral() && !isUInt<8>(getImm()) && isUInt<32>(getImm());
 }
 
 AMDGPUOperand::Ptr AMDGPUAsmParser::defaultSMRDOffset8() const {
@@ -7959,7 +7974,12 @@ AMDGPUOperand::Ptr AMDGPUAsmParser::defaultSMRDOffset8() const {
 }
 
 AMDGPUOperand::Ptr AMDGPUAsmParser::defaultSMEMOffset() const {
-  return AMDGPUOperand::CreateImm(this, 0, SMLoc(), AMDGPUOperand::ImmTyOffset);
+  return AMDGPUOperand::CreateImm(this, 0, SMLoc());
+}
+
+AMDGPUOperand::Ptr AMDGPUAsmParser::defaultSMEMOffsetMod() const {
+  return AMDGPUOperand::CreateImm(this, 0, SMLoc(),
+                                  AMDGPUOperand::ImmTySMEMOffsetMod);
 }
 
 AMDGPUOperand::Ptr AMDGPUAsmParser::defaultSMRDLiteralOffset() const {
@@ -8013,7 +8033,9 @@ void AMDGPUAsmParser::onBeginOfFile() {
     return;
 
   if (!getTargetStreamer().getTargetID())
-    getTargetStreamer().initializeTargetID(getSTI(), getSTI().getFeatureString());
+    getTargetStreamer().initializeTargetID(getSTI(), getSTI().getFeatureString(),
+        // TODO: Should try to check code object version from directive???
+        AMDGPU::getAmdhsaCodeObjectVersion());
 
   if (isHsaAbiVersion3AndAbove(&getSTI()))
     getTargetStreamer().EmitDirectiveAMDGCNTarget();
@@ -8439,11 +8461,11 @@ bool AMDGPUOperand::isABID() const {
 }
 
 bool AMDGPUOperand::isS16Imm() const {
-  return isImm() && (isInt<16>(getImm()) || isUInt<16>(getImm()));
+  return isImmLiteral() && (isInt<16>(getImm()) || isUInt<16>(getImm()));
 }
 
 bool AMDGPUOperand::isU16Imm() const {
-  return isImm() && isUInt<16>(getImm());
+  return isImmLiteral() && isUInt<16>(getImm());
 }
 
 //===----------------------------------------------------------------------===//
@@ -9127,8 +9149,6 @@ AMDGPUAsmParser::parseCustomOperand(OperandVector &Operands, unsigned MCK) {
   case MCK_ImmNegLo:
     return parseOperandArrayWithPrefix("neg_lo", Operands,
                                        AMDGPUOperand::ImmTyNegLo);
-  case MCK_ImmSMEMOffset:
-    return parseIntWithPrefix("offset", Operands, AMDGPUOperand::ImmTyOffset);
   case MCK_ImmOModSI:
     return parseOModOperand(Operands);
   case MCK_ImmOpSel:
@@ -9196,8 +9216,6 @@ unsigned AMDGPUAsmParser::validateTargetOperandClass(MCParsedAsmOperand &Op,
     return Operand.isInterpAttr() ? Match_Success : Match_InvalidOperand;
   case MCK_AttrChan:
     return Operand.isAttrChan() ? Match_Success : Match_InvalidOperand;
-  case MCK_ImmSMEMOffset:
-    return Operand.isSMEMOffset() ? Match_Success : Match_InvalidOperand;
   case MCK_SReg_64:
   case MCK_SReg_64_XEXEC:
     // Null is defined as a 32-bit register but

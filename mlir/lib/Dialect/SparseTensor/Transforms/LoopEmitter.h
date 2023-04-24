@@ -170,8 +170,8 @@ public:
 private:
   struct LoopLevelInfo {
     LoopLevelInfo(ArrayRef<size_t> tids, ArrayRef<size_t> dims, Operation *loop,
-                  Value iv, StringAttr loopTag)
-        : tids(tids), dims(dims), loop(loop), iv(iv) {
+                  Block *userBlock, Value iv, StringAttr loopTag)
+        : tids(tids), dims(dims), loop(loop), userCodeBlock(userBlock), iv(iv) {
       // Attached a special tag to loop emitter generated loop.
       if (loopTag)
         loop->setAttr(LoopEmitter::getLoopEmitterLoopAttrName(), loopTag);
@@ -181,13 +181,18 @@ private:
     const llvm::SmallVector<size_t> tids;
     // The corresponding dims for the tensors
     const llvm::SmallVector<size_t> dims;
-    const Operation *loop; // the loop operation
-    const Value iv;        // the induction variable for the loop
+    const Operation *loop;      // the loop operation
+    Block *const userCodeBlock; // the block holding users' generated code.
+    const Value iv;             // the induction variable for the loop
   };
 
   /// Linearizes address for dense dimension (i.e., p = (i * d0) + j).
   Value genAddress(OpBuilder &builder, Location loc, size_t tid, size_t dim,
                    Value iv);
+
+  /// Generates instructions to compute the coordinate of tesnors[tid] on `l`
+  /// under the current loop context.
+  Value genSparseCoord(OpBuilder &builder, Location loc, size_t tid, size_t l);
 
   bool isOutputTensor(size_t tid) {
     return hasOutput && tid == tensors.size() - 1;
@@ -255,26 +260,52 @@ private:
   std::vector<std::vector<Value>> pidxs;
   std::vector<std::vector<Value>> coord;
   std::vector<std::vector<Value>> highs;
+  std::vector<std::vector<Value>> lvlSizes;
   std::vector<std::vector<Value>> ptrBuffer; // to_pointers
   std::vector<std::vector<Value>> idxBuffer; // to_indices
   std::vector<Value> valBuffer;              // to_value
 
-  // Loop Stack, stores the information of all the nested loops that are
-  // alive.
+  /// Whether the sparse input is a slice.
+  std::vector<bool> isSparseSlices;
+
+  /// Loop Stack, stores the information of all the nested loops that are
+  /// alive.
   std::vector<LoopLevelInfo> loopStack;
 
-  // Loop Sequence Stack, stores the unversial index for the current loop
-  // sequence.
+  /// Loop Sequence Stack, stores the unversial index for the current loop
+  /// sequence.
   std::vector<Value> loopSeqStack;
 
-  // Maps AffineDimExpr to the index of the loop in loopStack.
-  // TODO: We should probably use a callback function here to make it more
-  // general.
+  /// Maps AffineDimExpr to the index of the loop in loopStack.
+  /// TODO: We should probably use a callback function here to make it more
+  /// general.
   std::vector<unsigned> sparsiferLoopLvlMap;
 
-  // TODO: not yet used, it should track the current level for each tensor
-  // to help eliminate `dim` paramters from above APIs.
-  // std::vector<size_t> curLv;
+  //
+  // View based reshape related-fields and methods
+  //
+
+  /// Collapse Reassociations related to a specific tensor
+  // TODO: support expand.
+  std::vector<ArrayAttr> collapseReassoc;
+
+  /// Get the collapse reassociation for tensors[tid] on l. For unreshaped
+  /// operands, the reassociation is simply an identity transformation.
+  SmallVector<int64_t, 2> getCollapseReassociation(unsigned tid, unsigned l) {
+    // Returns for SmallVector<int64_t, 2> just like `ReassociaionIndices`
+    if (auto reass = collapseReassoc[tid]) {
+      auto attr = reass[l];
+      return llvm::to_vector<2>(
+          llvm::map_range(attr.cast<ArrayAttr>(), [&](Attribute indexAttr) {
+            return indexAttr.cast<IntegerAttr>().getInt();
+          }));
+    }
+    return {l};
+  }
+
+  /// TODO: not yet used, it should track the current level for each tensor
+  /// to help eliminate `dim` paramters from above APIs.
+  /// std::vector<size_t> curLv;
 };
 
 } // namespace sparse_tensor

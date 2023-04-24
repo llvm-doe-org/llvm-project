@@ -1965,6 +1965,9 @@ void OpEmitter::genBuilder() {
     if (body)
       ERROR_IF_PRUNED(method, "build", op);
 
+    if (method)
+      method->setDeprecated(builder.getDeprecatedMessage());
+
     FmtContext fctx;
     fctx.withBuilder(odsBuilder);
     fctx.addSubst("_state", builderOpState);
@@ -2339,12 +2342,8 @@ void OpEmitter::genFolderDecls() {
   if (!op.hasFolder())
     return;
 
-  Dialect::FolderAPI folderApi = op.getDialect().getFolderAPI();
   SmallVector<MethodParameter> paramList;
-  if (folderApi == Dialect::FolderAPI::RawAttributes)
-    paramList.emplace_back("::llvm::ArrayRef<::mlir::Attribute>", "operands");
-  else
-    paramList.emplace_back("FoldAdaptor", "adaptor");
+  paramList.emplace_back("FoldAdaptor", "adaptor");
 
   StringRef retType;
   bool hasSingleResult =

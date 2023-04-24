@@ -34,7 +34,9 @@ using namespace llvm;
 
 using VectorParts = SmallVector<Value *, 2>;
 
+namespace llvm {
 extern cl::opt<bool> EnableVPlanNativePath;
+}
 
 #define LV_NAME "loop-vectorize"
 #define DEBUG_TYPE LV_NAME
@@ -127,6 +129,13 @@ bool VPRecipeBase::mayHaveSideEffects() const {
            "underlying instruction has side-effects");
     return false;
   }
+  case VPWidenMemoryInstructionSC:
+    assert(cast<VPWidenMemoryInstructionRecipe>(this)
+                   ->getIngredient()
+                   .mayHaveSideEffects() == mayWriteToMemory() &&
+           "mayHaveSideffects result for ingredient differs from this "
+           "implementation");
+    return mayWriteToMemory();
   case VPReplicateSC: {
     auto *R = cast<VPReplicateRecipe>(this);
     return R->getUnderlyingInstr()->mayHaveSideEffects();
@@ -266,6 +275,17 @@ void VPInstruction::generateInstruction(VPTransformState &State,
     }
     break;
   }
+  case VPInstruction::CalculateTripCountMinusVF: {
+    Value *ScalarTC = State.get(getOperand(0), Part);
+    Value *Step =
+        createStepForVF(Builder, ScalarTC->getType(), State.VF, State.UF);
+    Value *Sub = Builder.CreateSub(ScalarTC, Step);
+    Value *Cmp = Builder.CreateICmp(CmpInst::Predicate::ICMP_UGT, ScalarTC, Step);
+    Value *Zero = ConstantInt::get(ScalarTC->getType(), 0);
+    Value *Sel = Builder.CreateSelect(Cmp, Sub, Zero);
+    State.set(this, Sel, Part);
+    break;
+  }
   case VPInstruction::CanonicalIVIncrement:
   case VPInstruction::CanonicalIVIncrementNUW: {
     Value *Next = nullptr;
@@ -402,6 +422,9 @@ void VPInstruction::print(raw_ostream &O, const Twine &Indent,
   case VPInstruction::BranchOnCond:
     O << "branch-on-cond";
     break;
+  case VPInstruction::CalculateTripCountMinusVF:
+    O << "TC > VF ? TC - VF : 0";
+    break;
   case VPInstruction::CanonicalIVIncrementForPart:
     O << "VF * Part + ";
     break;
@@ -445,11 +468,6 @@ void VPWidenCallRecipe::execute(VPTransformState &State) {
          "DbgInfoIntrinsic should have been dropped during VPlan construction");
   State.setDebugLocFromInst(&CI);
 
-  SmallVector<Type *, 4> Tys;
-  for (Value *ArgOperand : CI.args())
-    Tys.push_back(
-        ToVectorTy(ArgOperand->getType(), State.VF.getKnownMinValue()));
-
   for (unsigned Part = 0; Part < State.UF; ++Part) {
     SmallVector<Type *, 2> TysForDecl = {CI.getType()};
     SmallVector<Value *, 4> Args;
@@ -477,14 +495,12 @@ void VPWidenCallRecipe::execute(VPTransformState &State) {
       VectorF = Intrinsic::getDeclaration(M, VectorIntrinsicID, TysForDecl);
       assert(VectorF && "Can't retrieve vector intrinsic.");
     } else {
-      // Use vector version of the function call.
-      const VFShape Shape = VFShape::get(CI, State.VF, false /*HasGlobalPred*/);
 #ifndef NDEBUG
-      assert(VFDatabase(CI).getVectorizedFunction(Shape) != nullptr &&
-             "Can't create vector function.");
+      assert(Variant != nullptr && "Can't create vector function.");
 #endif
-      VectorF = VFDatabase(CI).getVectorizedFunction(Shape);
+      VectorF = Variant;
     }
+
     SmallVector<OperandBundleDef, 1> OpBundles;
     CI.getOperandBundlesAsDefs(OpBundles);
     CallInst *V = State.Builder.CreateCall(VectorF, Args, OpBundles);
@@ -516,8 +532,12 @@ void VPWidenCallRecipe::print(raw_ostream &O, const Twine &Indent,
 
   if (VectorIntrinsicID)
     O << " (using vector intrinsic)";
-  else
-    O << " (using library function)";
+  else {
+    O << " (using library function";
+    if (Variant->hasName())
+      O << ": " << Variant->getName();
+    O << ")";
+  }
 }
 
 void VPWidenSelectRecipe::print(raw_ostream &O, const Twine &Indent,
@@ -913,7 +933,21 @@ void VPReductionRecipe::print(raw_ostream &O, const Twine &Indent,
     O << " (with final reduction value stored in invariant address sank "
          "outside of loop)";
 }
+#endif
 
+bool VPReplicateRecipe::shouldPack() const {
+  // Find if the recipe is used by a widened recipe via an intervening
+  // VPPredInstPHIRecipe. In this case, also pack the scalar values in a vector.
+  return any_of(users(), [](const VPUser *U) {
+    if (auto *PredR = dyn_cast<VPPredInstPHIRecipe>(U))
+      return any_of(PredR->users(), [PredR](const VPUser *U) {
+        return !U->usesScalars(PredR);
+      });
+    return false;
+  });
+}
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
 void VPReplicateRecipe::print(raw_ostream &O, const Twine &Indent,
                               VPSlotTracker &SlotTracker) const {
   O << Indent << (IsUniform ? "CLONE " : "REPLICATE ");
@@ -934,7 +968,7 @@ void VPReplicateRecipe::print(raw_ostream &O, const Twine &Indent,
     printOperands(O, SlotTracker);
   }
 
-  if (AlsoPack)
+  if (shouldPack())
     O << " (S->V)";
 }
 #endif

@@ -29,7 +29,6 @@
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
-#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/FormattedStream.h"
@@ -82,6 +81,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVExpandPseudoPass(*PR);
   initializeRISCVInsertVSETVLIPass(*PR);
   initializeRISCVDAGToDAGISelPass(*PR);
+  initializeRISCVInitUndefPass(*PR);
 }
 
 static StringRef computeDataLayout(const Triple &TT) {
@@ -111,6 +111,9 @@ RISCVTargetMachine::RISCVTargetMachine(const Target &T, const Triple &TT,
   // RISC-V supports the MachineOutliner.
   setMachineOutliner(true);
   setSupportsDefaultOutlining(true);
+
+  if (TT.isOSFuchsia() && !TT.isArch64Bit())
+    report_fatal_error("Fuchsia is only supported for 64-bit");
 }
 
 const RISCVSubtarget *
@@ -261,6 +264,7 @@ public:
   void addMachineSSAOptimization() override;
   void addPreRegAlloc() override;
   void addPostRegAlloc() override;
+  void addOptimizedRegAlloc() override;
 };
 } // namespace
 
@@ -354,6 +358,13 @@ void RISCVPassConfig::addPreRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createRISCVMergeBaseOffsetOptPass());
   addPass(createRISCVInsertVSETVLIPass());
+}
+
+void RISCVPassConfig::addOptimizedRegAlloc() {
+  if (getOptimizeRegAlloc())
+    insertPass(&DetectDeadLanesID, &RISCVInitUndefID);
+
+  TargetPassConfig::addOptimizedRegAlloc();
 }
 
 void RISCVPassConfig::addPostRegAlloc() {

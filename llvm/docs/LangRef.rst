@@ -366,8 +366,9 @@ added in the future:
     apply for values returned in callee-saved registers.
 
     - On X86-64 the callee preserves all general purpose registers, except for
-      R11. R11 can be used as a scratch register. Floating-point registers
-      (XMMs/YMMs) are not preserved and need to be saved by the caller.
+      R11 and return registers, if any. R11 can be used as a scratch register.
+      Floating-point registers (XMMs/YMMs) are not preserved and need to be
+      saved by the caller.
 
     The idea behind this convention is to support calls to runtime functions
     that have a hot path and a cold path. The hot path is usually a small piece
@@ -715,14 +716,16 @@ to over-align the global if the global has an assigned section. In this
 case, the extra alignment could be observable: for example, code could
 assume that the globals are densely packed in their section and try to
 iterate over them as an array, alignment padding would break this
-iteration. The maximum alignment is ``1 << 32``.
+iteration. For TLS variables, the module flag ``MaxTLSAlign``, if present,
+limits the alignment to the given value. Optimizers are not allowed to
+impose a stronger alignment on these variables. The maximum alignment
+is ``1 << 32``.
 
-For global variables declarations, as well as definitions that may be
+For global variable declarations, as well as definitions that may be
 replaced at link time (``linkonce``, ``weak``, ``extern_weak`` and ``common``
-linkage types), LLVM makes no assumptions about the allocation size of the
-variables, except that they may not overlap. The alignment of a global variable
-declaration or replaceable definition must not be greater than the alignment of
-the definition it resolves to.
+linkage types), the allocation size and alignment of the definition it resolves
+to must be greater than or equal to that of the declaration or replaceable
+definition, otherwise the behavior is undefined.
 
 Globals can also have a :ref:`DLL storage class <dllstorageclass>`,
 an optional :ref:`runtime preemption specifier <runtime_preemption_model>`,
@@ -1392,6 +1395,79 @@ Currently, only the following parameter attributes are defined:
     representation contains any undefined or poison bits, the behavior is
     undefined. Note that this does not refer to padding introduced by the
     type's storage representation.
+
+.. _nofpclass:
+
+``nofpclass(<test mask>)``
+    This attribute applies to parameters and return values with
+    floating-point and vector of floating-point types, as well as
+    arrays of such types. The test mask has the same format as the
+    second argument to the :ref:`llvm.is.fpclass <llvm.is.fpclass>`,
+    and indicates which classes of floating-point values are not
+    permitted for the value. For example a bitmask of 3 indicates
+    the parameter may not be a NaN.
+
+    If the value is a floating-point class indicated by the
+    ``nofpclass`` test mask, a :ref:`poison value <poisonvalues>` is
+    passed or returned instead.
+
+.. code-block:: text
+  :caption: The following invariants hold
+
+       @llvm.is.fpclass(nofpclass(test_mask) %x, test_mask) => false
+       @llvm.is.fpclass(nofpclass(test_mask) %x, ~test_mask) => true
+       nofpclass(all) => poison
+..
+
+   In textual IR, various string names are supported for readability
+   and can be combined. For example ``nofpclass(nan pinf nzero)``
+   evaluates to a mask of 547.
+
+   This does not depend on the floating-point environment. For
+   example, a function parameter marked ``nofpclass(zero)`` indicates
+   no zero inputs. If this is applied to an argument in a function
+   marked with :ref:`\"denormal-fp-math\" <denormal_fp_math>`
+   indicating zero treatment of input denormals, it does not imply the
+   value cannot be a denormal value which would compare equal to 0.
+
+.. table:: Recognized test mask names
+
+    +-------+----------------------+---------------+
+    | Name  | floating-point class | Bitmask value |
+    +=======+======================+===============+
+    |  nan  | Any NaN              |       3       |
+    +-------+----------------------+---------------+
+    |  inf  | +/- infinity         |      516      |
+    +-------+----------------------+---------------+
+    |  norm | +/- normal           |       26      |
+    +-------+----------------------+---------------+
+    |  sub  | +/- subnormal        |      144      |
+    +-------+----------------------+---------------+
+    |  zero | +/- 0                |       96      |
+    +-------+----------------------+---------------+
+    |  all  | All values           |     1023      |
+    +-------+----------------------+---------------+
+    | snan  | Signaling NaN        |       1       |
+    +-------+----------------------+---------------+
+    | qnan  | Quiet NaN            |       2       |
+    +-------+----------------------+---------------+
+    | ninf  | Negative infinity    |       4       |
+    +-------+----------------------+---------------+
+    | nnorm | Negative normal      |       8       |
+    +-------+----------------------+---------------+
+    | nsub  | Negative subnormal   |       16      |
+    +-------+----------------------+---------------+
+    | nzero | Negative zero        |       32      |
+    +-------+----------------------+---------------+
+    | pzero | Positive zero        |       64      |
+    +-------+----------------------+---------------+
+    | psub  | Positive subnormal   |       128     |
+    +-------+----------------------+---------------+
+    | pnorm | Positive normal      |       256     |
+    +-------+----------------------+---------------+
+    | pinf  | Positive infinity    |       512     |
+    +-------+----------------------+---------------+
+
 
 ``alignstack(<n>)``
     This indicates the alignment that should be considered by the backend when
@@ -2144,6 +2220,8 @@ example:
     might otherwise be set or cleared by calling this function. LLVM will
     not introduce any new floating-point instructions that may trap.
 
+.. _denormal_fp_math:
+
 ``"denormal-fp-math"``
     This indicates the denormal (subnormal) handling that may be
     assumed for the default floating-point environment. This is a
@@ -2767,23 +2845,23 @@ as follows:
     specified, the default index size is equal to the pointer size. All sizes
     are in bits. The address space, ``n``, is optional, and if not specified,
     denotes the default address space 0. The value of ``n`` must be
-    in the range [1,2^23).
+    in the range [1,2^24).
 ``i<size>:<abi>[:<pref>]``
     This specifies the alignment for an integer type of a given bit
-    ``<size>``. The value of ``<size>`` must be in the range [1,2^23).
+    ``<size>``. The value of ``<size>`` must be in the range [1,2^24).
     ``<pref>`` is optional and defaults to ``<abi>``.
     For ``i8``, the ``<abi>`` value must equal 8,
     that is, ``i8`` must be naturally aligned.
 ``v<size>:<abi>[:<pref>]``
     This specifies the alignment for a vector type of a given bit
-    ``<size>``. The value of ``<size>`` must be in the range [1,2^23).
+    ``<size>``. The value of ``<size>`` must be in the range [1,2^24).
     ``<pref>`` is optional and defaults to ``<abi>``.
 ``f<size>:<abi>[:<pref>]``
     This specifies the alignment for a floating-point type of a given bit
     ``<size>``. Only values of ``<size>`` that are supported by the target
     will work. 32 (float) and 64 (double) are supported on all targets; 80
     or 128 (different flavors of long double) are also supported on some
-    targets. The value of ``<size>`` must be in the range [1,2^23).
+    targets. The value of ``<size>`` must be in the range [1,2^24).
     ``<pref>`` is optional and defaults to ``<abi>``.
 ``a:<abi>[:<pref>]``
     This specifies the alignment for an object of aggregate type.
@@ -3281,15 +3359,17 @@ seq\_cst total orderings of other operations that are not marked
 Floating-Point Environment
 --------------------------
 
-The default LLVM floating-point environment assumes that floating-point
-instructions do not have side effects. Results assume the round-to-nearest
-rounding mode. No floating-point exception state is maintained in this
-environment. Therefore, there is no attempt to create or preserve invalid
-operation (SNaN) or division-by-zero exceptions.
+The default LLVM floating-point environment assumes that traps are disabled and
+status flags are not observable. Therefore, floating-point math operations do
+not have side effects and may be speculated freely. Results assume the
+round-to-nearest rounding mode.
 
-The benefit of this exception-free assumption is that floating-point
-operations may be speculated freely without any other fast-math relaxations
-to the floating-point model.
+Floating-point math operations are allowed to treat all NaNs as if they were
+quiet NaNs. For example, "pow(1.0, SNaN)" may be simplified to 1.0. This also
+means that SNaN may be passed through a math operation without quieting. For
+example, "fmul SNaN, 1.0" may be simplified to SNaN rather than QNaN. However,
+SNaN values are never created by math operations. They may only occur when
+provided as a program input value.
 
 Code that requires different behavior than this should use the
 :ref:`Constrained Floating-Point Intrinsics <constrainedfp>`.
@@ -5771,11 +5851,12 @@ retained, even if their IR counterparts are optimized out of the IR. The
 
 .. _DISubprogramDeclaration:
 
-When ``isDefinition: false``, subprograms describe a declaration in the type
-tree as opposed to a definition of a function.  If the scope is a composite
-type with an ODR ``identifier:`` and that does not set ``flags: DIFwdDecl``,
-then the subprogram declaration is uniqued based only on its ``linkageName:``
-and ``scope:``.
+When ``spFlags: DISPFlagDefinition`` is not present, subprograms describe a
+declaration in the type tree as opposed to a definition of a function. In this
+case, the ``declaration`` field must be empty. If the scope is a composite type
+with an ODR ``identifier:`` and that does not set ``flags: DIFwdDecl``, then
+the subprogram declaration is uniqued based only on its ``linkageName:`` and
+``scope:``.
 
 .. code-block:: text
 
@@ -5784,9 +5865,9 @@ and ``scope:``.
     }
 
     !0 = distinct !DISubprogram(name: "foo", linkageName: "_Zfoov", scope: !1,
-                                file: !2, line: 7, type: !3, isLocal: true,
-                                isDefinition: true, scopeLine: 8,
-                                containingType: !4,
+                                file: !2, line: 7, type: !3,
+                                spFlags: DISPFlagDefinition | DISPFlagLocalToUnit,
+                                scopeLine: 8, containingType: !4,
                                 virtuality: DW_VIRTUALITY_pure_virtual,
                                 virtualIndex: 10, flags: DIFlagPrototyped,
                                 isOptimized: true, unit: !5, templateParams: !6,
@@ -5973,10 +6054,10 @@ sense that a debugger might modify its value), whereas *implicit locations*
 describe merely the actual *value* of a source variable which might not exist
 in registers or in memory (see ``DW_OP_stack_value``).
 
-A ``llvm.dbg.addr`` or ``llvm.dbg.declare`` intrinsic describes an indirect
-value (the address) of a source variable. The first operand of the intrinsic
-must be an address of some kind. A DIExpression attached to the intrinsic
-refines this address to produce a concrete location for the source variable.
+A ``llvm.dbg.declare`` intrinsic describes an indirect value (the address) of a
+source variable. The first operand of the intrinsic must be an address of some
+kind. A DIExpression attached to the intrinsic refines this address to produce a
+concrete location for the source variable.
 
 A ``llvm.dbg.value`` intrinsic describes the direct value of a source variable.
 The first operand of the intrinsic may be a direct or indirect value. A
@@ -8534,6 +8615,14 @@ function, with the possibility of control flow transfer to either the
 
 This instruction should only be used to implement the "goto" feature of gcc
 style inline assembly. Any other usage is an error in the IR verifier.
+
+Note that in order to support outputs along indirect edges, LLVM may need to
+split critical edges, which may require synthesizing a replacement block for
+the ``indirect labels``. Therefore, the address of a label as seen by another
+``callbr`` instruction, or for a :ref:`blockaddress <blockaddress>` constant,
+may not be equal to the address provided for the same block to this
+instruction's ``indirect labels`` operand. The assembly code may only transfer
+control to addresses provided via this instruction's ``indirect labels``.
 
 Arguments:
 """"""""""
@@ -15540,7 +15629,7 @@ support all bit widths or vector types, however.
 ::
 
       declare i8  @llvm.fshl.i8 (i8 %a, i8 %b, i8 %c)
-      declare i67 @llvm.fshl.i67(i67 %a, i67 %b, i67 %c)
+      declare i64 @llvm.fshl.i64(i64 %a, i64 %b, i64 %c)
       declare <2 x i32> @llvm.fshl.v2i32(<2 x i32> %a, <2 x i32> %b, <2 x i32> %c)
 
 Overview:
@@ -15588,7 +15677,7 @@ support all bit widths or vector types, however.
 ::
 
       declare i8  @llvm.fshr.i8 (i8 %a, i8 %b, i8 %c)
-      declare i67 @llvm.fshr.i67(i67 %a, i67 %b, i67 %c)
+      declare i64 @llvm.fshr.i64(i64 %a, i64 %b, i64 %c)
       declare <2 x i32> @llvm.fshr.v2i32(<2 x i32> %a, <2 x i32> %b, <2 x i32> %c)
 
 Overview:
@@ -17687,6 +17776,75 @@ Arguments:
 """"""""""
 
 The argument to this intrinsic must be a vector.
+
+'``llvm.experimental.vector.deinterleave2``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+This is an overloaded intrinsic.
+
+::
+
+      declare {<2 x double>, <2 x double>} @llvm.experimental.vector.deinterleave2.v4f64(<4 x double> %vec1)
+      declare {<vscale x 4 x i32>, <vscale x 4 x i32>}  @llvm.experimental.vector.deinterleave2.nxv8i32(<vscale x 8 x i32> %vec1)
+
+Overview:
+"""""""""
+
+The '``llvm.experimental.vector.deinterleave2``' intrinsic constructs two
+vectors by deinterleaving the even and odd lanes of the input vector.
+
+This intrinsic works for both fixed and scalable vectors. While this intrinsic
+supports all vector types the recommended way to express this operation for
+fixed-width vectors is still to use a shufflevector, as that may allow for more
+optimization opportunities.
+
+For example:
+
+.. code-block:: text
+
+  {<2 x i64>, <2 x i64>} llvm.experimental.vector.deinterleave2.v4i64(<4 x i64> <i64 0, i64 1, i64 2, i64 3>); ==> {<2 x i64> <i64 0, i64 2>, <2 x i64> <i64 1, i64 3>}
+
+Arguments:
+""""""""""
+
+The argument is a vector whose type corresponds to the logical concatenation of
+the two result types.
+
+'``llvm.experimental.vector.interleave2``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+This is an overloaded intrinsic.
+
+::
+
+      declare <4 x double> @llvm.experimental.vector.interleave2.v4f64(<2 x double> %vec1, <2 x double> %vec2)
+      declare <vscale x 8 x i32> @llvm.experimental.vector.interleave2.nxv8i32(<vscale x 4 x i32> %vec1, <vscale x 4 x i32> %vec2)
+
+Overview:
+"""""""""
+
+The '``llvm.experimental.vector.interleave2``' intrinsic constructs a vector
+by interleaving two input vectors.
+
+This intrinsic works for both fixed and scalable vectors. While this intrinsic
+supports all vector types the recommended way to express this operation for
+fixed-width vectors is still to use a shufflevector, as that may allow for more
+optimization opportunities.
+
+For example:
+
+.. code-block:: text
+
+   <4 x i64> llvm.experimental.vector.interleave2.v4i64(<2 x i64> <i64 0, i64 2>, <2 x i64> <i64 1, i64 3>); ==> <4 x i64> <i64 0, i64 1, i64 2, i64 3>
+
+Arguments:
+""""""""""
+Both arguments must be vectors of the same type whereby their logical
+concatenation matches the result type.
 
 '``llvm.experimental.vector.splice``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -24901,6 +25059,8 @@ Floating-Point Test Intrinsics
 These functions get properties of floating-point values.
 
 
+.. _llvm.is.fpclass:
+
 '``llvm.is.fpclass``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -24969,7 +25129,12 @@ if the element value satisfies the specified test. The argument ``test`` is a
 bit mask where each bit specifies floating-point class to test. For example, the
 value 0x108 makes test for normal value, - bits 3 and 8 in it are set, which
 means that the function returns ``true`` if ``op`` is a positive or negative
-normal value. The function never raises floating-point exceptions.
+normal value. The function never raises floating-point exceptions. The
+function does not canonicalize its input value and does not depend
+on the floating-point environment. If the floating-point environment
+has a zeroing treatment of subnormal input values (such as indicated
+by the ``"denormal-fp-math"`` attribute), a subnormal value will be
+observed (will not be implicitly treated as zero).
 
 
 General Intrinsics

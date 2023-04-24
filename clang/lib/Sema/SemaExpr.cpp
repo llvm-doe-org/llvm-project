@@ -6702,10 +6702,10 @@ static FunctionDecl *rewriteBuiltinFunctionDecl(Sema *Sema, ASTContext &Context,
       return nullptr;
     Expr *Arg = ArgRes.get();
     QualType ArgType = Arg->getType();
-    if (!ParamType->isPointerType() ||
-        ParamType.hasAddressSpace() ||
+    if (!ParamType->isPointerType() || ParamType.hasAddressSpace() ||
         !ArgType->isPointerType() ||
-        !ArgType->getPointeeType().hasAddressSpace()) {
+        !ArgType->getPointeeType().hasAddressSpace() ||
+        isPtrSizeAddressSpace(ArgType->getPointeeType().getAddressSpace())) {
       OverloadParams.push_back(ParamType);
       continue;
     }
@@ -7983,7 +7983,7 @@ bool Sema::isValidSveBitcast(QualType srcTy, QualType destTy) {
   assert(srcTy->isVectorType() || destTy->isVectorType());
 
   auto ValidScalableConversion = [](QualType FirstType, QualType SecondType) {
-    if (!FirstType->isSizelessBuiltinType())
+    if (!FirstType->isSVESizelessBuiltinType())
       return false;
 
     const auto *VecTy = SecondType->getAs<VectorType>();
@@ -8033,28 +8033,22 @@ bool Sema::anyAltivecTypes(QualType SrcTy, QualType DestTy) {
          "expected at least one type to be a vector here");
 
   bool IsSrcTyAltivec =
-      SrcTy->isVectorType() && (SrcTy->castAs<VectorType>()->getVectorKind() ==
-                                VectorType::AltiVecVector);
+      SrcTy->isVectorType() && ((SrcTy->castAs<VectorType>()->getVectorKind() ==
+                                 VectorType::AltiVecVector) ||
+                                (SrcTy->castAs<VectorType>()->getVectorKind() ==
+                                 VectorType::AltiVecBool) ||
+                                (SrcTy->castAs<VectorType>()->getVectorKind() ==
+                                 VectorType::AltiVecPixel));
+
   bool IsDestTyAltivec = DestTy->isVectorType() &&
-                         (DestTy->castAs<VectorType>()->getVectorKind() ==
-                          VectorType::AltiVecVector);
+                         ((DestTy->castAs<VectorType>()->getVectorKind() ==
+                           VectorType::AltiVecVector) ||
+                          (DestTy->castAs<VectorType>()->getVectorKind() ==
+                           VectorType::AltiVecBool) ||
+                          (DestTy->castAs<VectorType>()->getVectorKind() ==
+                           VectorType::AltiVecPixel));
 
   return (IsSrcTyAltivec || IsDestTyAltivec);
-}
-
-// This returns true if both vectors have the same element type.
-bool Sema::areSameVectorElemTypes(QualType SrcTy, QualType DestTy) {
-  assert((DestTy->isVectorType() || SrcTy->isVectorType()) &&
-         "expected at least one type to be a vector here");
-
-  uint64_t SrcLen, DestLen;
-  QualType SrcEltTy, DestEltTy;
-  if (!breakDownVectorType(SrcTy, SrcLen, SrcEltTy))
-    return false;
-  if (!breakDownVectorType(DestTy, DestLen, DestEltTy))
-    return false;
-
-  return (SrcEltTy == DestEltTy);
 }
 
 /// Are the two types lax-compatible vector types?  That is, given
@@ -9894,7 +9888,7 @@ Sema::CheckAssignmentConstraints(QualType LHSType, ExprResult &RHS,
         // change, so if we are converting between vector types where
         // at least one is an Altivec vector, emit a warning.
         if (anyAltivecTypes(RHSType, LHSType) &&
-            !areSameVectorElemTypes(RHSType, LHSType))
+            !Context.areCompatibleVectorTypes(RHSType, LHSType))
           Diag(RHS.get()->getExprLoc(), diag::warn_deprecated_lax_vec_conv_all)
               << RHSType << LHSType;
         Kind = CK_BitCast;
@@ -9910,7 +9904,9 @@ Sema::CheckAssignmentConstraints(QualType LHSType, ExprResult &RHS,
       const VectorType *VecType = RHSType->getAs<VectorType>();
       if (VecType && VecType->getNumElements() == 1 &&
           isLaxVectorConversion(RHSType, LHSType)) {
-        if (VecType->getVectorKind() == VectorType::AltiVecVector)
+        if (VecType->getVectorKind() == VectorType::AltiVecVector ||
+            VecType->getVectorKind() == VectorType::AltiVecBool ||
+            VecType->getVectorKind() == VectorType::AltiVecPixel)
           Diag(RHS.get()->getExprLoc(), diag::warn_deprecated_lax_vec_conv_all)
               << RHSType << LHSType;
         ExprResult *VecExpr = &RHS;
@@ -9921,8 +9917,8 @@ Sema::CheckAssignmentConstraints(QualType LHSType, ExprResult &RHS,
     }
 
     // Allow assignments between fixed-length and sizeless SVE vectors.
-    if ((LHSType->isSizelessBuiltinType() && RHSType->isVectorType()) ||
-        (LHSType->isVectorType() && RHSType->isSizelessBuiltinType()))
+    if ((LHSType->isSVESizelessBuiltinType() && RHSType->isVectorType()) ||
+        (LHSType->isVectorType() && RHSType->isSVESizelessBuiltinType()))
       if (Context.areCompatibleSveTypes(LHSType, RHSType) ||
           Context.areLaxCompatibleSveTypes(LHSType, RHSType)) {
         Kind = CK_BitCast;
@@ -10548,7 +10544,7 @@ static bool canConvertIntToOtherIntTy(Sema &S, ExprResult *Int,
     // bits that the vector element type, reject it.
     llvm::APSInt Result = EVResult.Val.getInt();
     unsigned NumBits = IntSigned
-                           ? (Result.isNegative() ? Result.getMinSignedBits()
+                           ? (Result.isNegative() ? Result.getSignificantBits()
                                                   : Result.getActiveBits())
                            : Result.getActiveBits();
     if (Order < 0 && S.Context.getIntWidth(OtherIntTy) < NumBits)
@@ -10800,12 +10796,14 @@ QualType Sema::CheckVectorOperands(ExprResult &LHS, ExprResult &RHS,
     return QualType();
   }
 
-  // Expressions containing GNU and SVE (fixed or sizeless) vectors are invalid
-  // since the ambiguity can affect the ABI.
-  auto IsSveGnuConversion = [](QualType FirstType, QualType SecondType) {
+  // Expressions containing GNU and SVE or RVV (fixed or sizeless) vectors are
+  // invalid since the ambiguity can affect the ABI.
+  auto IsSveRVVGnuConversion = [](QualType FirstType, QualType SecondType,
+                                  unsigned &SVEorRVV) {
     const VectorType *FirstVecType = FirstType->getAs<VectorType>();
     const VectorType *SecondVecType = SecondType->getAs<VectorType>();
 
+    SVEorRVV = 0;
     if (FirstVecType && SecondVecType)
       return FirstVecType->getVectorKind() == VectorType::GenericVector &&
              (SecondVecType->getVectorKind() ==
@@ -10813,13 +10811,24 @@ QualType Sema::CheckVectorOperands(ExprResult &LHS, ExprResult &RHS,
               SecondVecType->getVectorKind() ==
                   VectorType::SveFixedLengthPredicateVector);
 
-    return FirstType->isSizelessBuiltinType() && SecondVecType &&
-           SecondVecType->getVectorKind() == VectorType::GenericVector;
+    if (SecondVecType &&
+        SecondVecType->getVectorKind() == VectorType::GenericVector) {
+      if (FirstType->isSVESizelessBuiltinType())
+        return true;
+      if (FirstType->isRVVSizelessBuiltinType()) {
+        SVEorRVV = 1;
+        return true;
+      }
+    }
+
+    return false;
   };
 
-  if (IsSveGnuConversion(LHSType, RHSType) ||
-      IsSveGnuConversion(RHSType, LHSType)) {
-    Diag(Loc, diag::err_typecheck_sve_gnu_ambiguous) << LHSType << RHSType;
+  unsigned SVEorRVV;
+  if (IsSveRVVGnuConversion(LHSType, RHSType, SVEorRVV) ||
+      IsSveRVVGnuConversion(RHSType, LHSType, SVEorRVV)) {
+    Diag(Loc, diag::err_typecheck_sve_rvv_gnu_ambiguous)
+        << SVEorRVV << LHSType << RHSType;
     return QualType();
   }
 
@@ -10859,7 +10868,7 @@ QualType Sema::CheckVectorOperands(ExprResult &LHS, ExprResult &RHS,
   ExprResult *OtherExpr = LHSVecType ? &RHS : &LHS;
   if (isLaxVectorConversion(OtherType, VecType)) {
     if (anyAltivecTypes(RHSType, LHSType) &&
-        !areSameVectorElemTypes(RHSType, LHSType))
+        !Context.areCompatibleVectorTypes(RHSType, LHSType))
       Diag(Loc, diag::warn_deprecated_lax_vec_conv_all) << RHSType << LHSType;
     // If we're allowing lax vector conversions, only the total (data) size
     // needs to be the same. For non compound assignment, if one of the types is
@@ -11791,7 +11800,7 @@ static void DiagnoseBadShiftValues(Sema& S, ExprResult &LHS, ExprResult &RHS,
   }
 
   llvm::APInt ResultBits =
-      static_cast<llvm::APInt&>(Right) + Left.getMinSignedBits();
+      static_cast<llvm::APInt &>(Right) + Left.getSignificantBits();
   if (LeftBits.uge(ResultBits))
     return;
   llvm::APSInt Result = Left.extend(ResultBits.getLimitedValue());
@@ -11814,9 +11823,9 @@ static void DiagnoseBadShiftValues(Sema& S, ExprResult &LHS, ExprResult &RHS,
   }
 
   S.Diag(Loc, diag::warn_shift_result_gt_typewidth)
-    << HexResult.str() << Result.getMinSignedBits() << LHSType
-    << Left.getBitWidth() << LHS.get()->getSourceRange()
-    << RHS.get()->getSourceRange();
+      << HexResult.str() << Result.getSignificantBits() << LHSType
+      << Left.getBitWidth() << LHS.get()->getSourceRange()
+      << RHS.get()->getSourceRange();
 }
 
 /// Return the resulting type when a vector is shifted
@@ -18029,10 +18038,13 @@ HandleImmediateInvocations(Sema &SemaRef,
     if (!CE.getInt())
       EvaluateAndDiagnoseImmediateInvocation(SemaRef, CE);
   for (auto *DR : Rec.ReferenceToConsteval) {
-    auto *FD = cast<FunctionDecl>(DR->getDecl());
+    NamedDecl *ND = cast<FunctionDecl>(DR->getDecl());
+    if (auto *MD = llvm::dyn_cast<CXXMethodDecl>(ND);
+        MD && (MD->isLambdaStaticInvoker() || isLambdaCallOperator(MD)))
+      ND = MD->getParent();
     SemaRef.Diag(DR->getBeginLoc(), diag::err_invalid_consteval_take_address)
-        << FD;
-    SemaRef.Diag(FD->getLocation(), diag::note_declared_at);
+        << ND << isa<CXXRecordDecl>(ND);
+    SemaRef.Diag(ND->getLocation(), diag::note_declared_at);
   }
 }
 
@@ -19185,6 +19197,13 @@ bool Sema::tryCaptureVariable(
     // capture it.
     if (IsInScopeDeclarationContext &&
         FunctionScopesIndex == MaxFunctionScopesIndex && VarDC == DC)
+      return true;
+
+    // When evaluating some attributes (like enable_if) we might refer to a
+    // function parameter appertaining to the same declaration as that
+    // attribute.
+    if (const auto *Parm = dyn_cast<ParmVarDecl>(Var);
+        Parm && Parm->getDeclContext() == DC)
       return true;
 
     // Only block literals, captured statements, and lambda expressions can

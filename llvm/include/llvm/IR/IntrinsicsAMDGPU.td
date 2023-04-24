@@ -400,7 +400,7 @@ def int_amdgcn_class : DefaultAttrsIntrinsic<
   [IntrNoMem, IntrSpeculatable]
 >;
 
-def int_amdgcn_fmed3 : ClangBuiltin<"__builtin_amdgcn_fmed3">,
+def int_amdgcn_fmed3 :
   DefaultAttrsIntrinsic<[llvm_anyfloat_ty],
     [LLVMMatchType<0>, LLVMMatchType<0>, LLVMMatchType<0>],
     [IntrNoMem, IntrSpeculatable]
@@ -1570,12 +1570,12 @@ def int_amdgcn_live_mask : DefaultAttrsIntrinsic <[llvm_i1_ty],
 def int_amdgcn_mbcnt_lo :
   ClangBuiltin<"__builtin_amdgcn_mbcnt_lo">,
   DefaultAttrsIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-   [IntrNoMem]>;
+   [IntrNoMem, IntrConvergent]>;
 
 def int_amdgcn_mbcnt_hi :
   ClangBuiltin<"__builtin_amdgcn_mbcnt_hi">,
   DefaultAttrsIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-            [IntrNoMem]>;
+            [IntrNoMem, IntrConvergent]>;
 
 // llvm.amdgcn.ds.swizzle src offset
 def int_amdgcn_ds_swizzle :

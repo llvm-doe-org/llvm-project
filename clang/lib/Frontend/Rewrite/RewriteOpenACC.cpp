@@ -562,7 +562,7 @@ public:
 
     // RewriteBeginString will replace DirectiveRange, which doesn't include
     // the original directive's trailing newline, so don't include one here.
-    if (RewriteBeginString.back() == '\n')
+    if (!RewriteBeginString.empty () && RewriteBeginString.back() == '\n')
       RewriteBeginString.pop_back();
 
     // Perform replacement.

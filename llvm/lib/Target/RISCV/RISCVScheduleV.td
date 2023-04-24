@@ -12,98 +12,63 @@
 defvar UpperBoundLMUL = "UpperBound";
 defvar SchedMxList = ["UpperBound", "M1", "M2", "M4", "M8", "MF2", "MF4", "MF8"];
 // Used for widening and narrowing instructions as it doesn't contain M8.
-defvar SchedMxListW = ["UpperBound", "MF8", "MF4", "MF2", "M1", "M2", "M4"];
-defvar SchedMxListFW = ["UpperBound", "MF4", "MF2", "M1", "M2", "M4"];
+defvar SchedMxListW = !listremove(SchedMxList, ["M8"]);
+defvar SchedMxListFW = !listremove(SchedMxList, ["M8", "MF8"]);
+// Used for widening floating-point Reduction as it doesn't contain MF8.
+defvar SchedMxListFWRed = !listremove(SchedMxList, ["MF8"]);
 
-// Creates SchedWrite for each (name, LMUL) pair for LMUL in SchedMxList
-multiclass LMULSchedWrites<string name> {
-  foreach mx = SchedMxList in {
+// Define multiclasses to define SchedWrite, SchedRead,  WriteRes, and
+// ReadAdvance for each (name, LMUL) pair for each LMUL in each of the
+// SchedMxList variants above.
+
+multiclass LMULSchedWritesImpl<string name, list<string> MxList> {
+  foreach mx = MxList in {
     def name # "_" # mx : SchedWrite;
   }
 }
-
-// Creates SchedWrite for each (name, LMUL) pair for LMUL in SchedMxListW
-multiclass LMULSchedWritesW<string name> {
-  foreach mx = SchedMxListW in {
-    def name # "_" # mx : SchedWrite;
-  }
-}
-
-// Creates SchedWrite for each (name, LMUL) pair for LMUL in SchedMxListFW
-multiclass LMULSchedWritesFW<string name> {
-  foreach mx = SchedMxListFW in {
-    def name # "_" # mx : SchedWrite;
-  }
-}
-
-// Creates SchedRead for each (name, LMUL) pair for LMUL in SchedMxList
-multiclass LMULSchedReads<string name> {
-  foreach mx = SchedMxList in {
+multiclass LMULSchedReadsImpl<string name, list<string> MxList> {
+  foreach mx = MxList in {
     def name # "_" # mx : SchedRead;
   }
 }
-
-// Creates SchedRead for each (name, LMUL) pair for LMUL in SchedMxListW
-multiclass LMULSchedReadsW<string name> {
-  foreach mx = SchedMxListW in {
-    def name # "_" # mx : SchedRead;
-  }
-}
-
-// Creates SchedRead for each (name, LMUL) pair for LMUL in SchedMxListFW
-multiclass LMULSchedReadsFW<string name> {
-  foreach mx = SchedMxListFW in {
-    def name # "_" # mx : SchedRead;
-  }
-}
-
-// Creates WriteRes for each (name, LMUL, resources) tuple for LMUL
-// in SchedMxList
-multiclass LMULWriteRes<string name, list<ProcResourceKind> resources> {
-  foreach mx = SchedMxList in {
+multiclass LMULWriteResImpl<string name, list<string> MxList,
+                            list<ProcResourceKind> resources> {
+  foreach mx = MxList in {
     def : WriteRes<!cast<SchedWrite>(name # "_" # mx), resources>;
   }
 }
-
-// Creates WriteRes for each (name, LMUL, resources) tuple for LMUL
-// in SchedMxListW
-multiclass LMULWriteResW<string name, list<ProcResourceKind> resources> {
-  foreach mx = SchedMxListW in {
-    def : WriteRes<!cast<SchedWrite>(name # "_" # mx), resources>;
-  }
-}
-
-// Creates WriteRes for each (name, LMUL, resources) tuple for LMUL
-// in SchedMxListFW
-multiclass LMULWriteResFW<string name, list<ProcResourceKind> resources> {
-  foreach mx = SchedMxListFW in {
-    def : WriteRes<!cast<SchedWrite>(name # "_" # mx), resources>;
-  }
-}
-
-// Creates ReadAdvance for each (name, LMUL, val) tuple for LMUL
-// in SchedMxList
-multiclass LMULReadAdvance<string name, int val, list<SchedWrite> writes = []> {
-  foreach mx = SchedMxList in {
+multiclass LMULReadAdvanceImpl<string name, list<string> MxList, int val,
+                               list<SchedWrite> writes = []> {
+  foreach mx = MxList in {
     def : ReadAdvance<!cast<SchedRead>(name # "_" # mx), val, writes>;
   }
 }
 
-// Creates ReadAdvance for each (name, LMUL, val) tuple for LMUL
-// in SchedMxListW
-multiclass LMULReadAdvanceW<string name, int val, list<SchedWrite> writes = []> {
-  foreach mx = SchedMxListW in {
-    def : ReadAdvance<!cast<SchedRead>(name # "_" # mx), val, writes>;
-  }
-}
+multiclass LMULSchedWrites<string name> : LMULSchedWritesImpl<name, SchedMxList>;
+multiclass LMULSchedReads<string name> : LMULSchedReadsImpl<name, SchedMxList>;
+multiclass LMULWriteRes<string name, list<ProcResourceKind> resources>
+  : LMULWriteResImpl<name, SchedMxList, resources>;
+multiclass LMULReadAdvance<string name, int val, list<SchedWrite> writes = []>
+  : LMULReadAdvanceImpl<name, SchedMxList, val, writes>;
 
-// Creates ReadAdvance for each (name, LMUL, val) tuple for LMUL
-// in SchedMxListFW
-multiclass LMULReadAdvanceFW<string name, int val, list<SchedWrite> writes = []> {
-  foreach mx = SchedMxListFW in {
-    def : ReadAdvance<!cast<SchedRead>(name # "_" # mx), val, writes>;
-  }
-}
+multiclass LMULSchedWritesW<string name> : LMULSchedWritesImpl<name, SchedMxListW>;
+multiclass LMULSchedReadsW<string name> : LMULSchedReadsImpl<name, SchedMxListW>;
+multiclass LMULWriteResW<string name, list<ProcResourceKind> resources>
+  : LMULWriteResImpl<name, SchedMxListW, resources>;
+multiclass LMULReadAdvanceW<string name, int val, list<SchedWrite> writes = []>
+  : LMULReadAdvanceImpl<name, SchedMxListW, val, writes>;
+
+multiclass LMULSchedWritesFW<string name> : LMULSchedWritesImpl<name, SchedMxListFW>;
+multiclass LMULSchedReadsFW<string name> : LMULSchedReadsImpl<name, SchedMxListFW>;
+multiclass LMULWriteResFW<string name, list<ProcResourceKind> resources>
+  : LMULWriteResImpl<name, SchedMxListFW, resources>;
+multiclass LMULReadAdvanceFW<string name, int val, list<SchedWrite> writes = []>
+  : LMULReadAdvanceImpl<name, SchedMxListFW, val, writes>;
+
+multiclass LMULSchedWritesFWRed<string name> : LMULSchedWritesImpl<name, SchedMxListFWRed>;
+multiclass LMULWriteResFWRed<string name, list<ProcResourceKind> resources>
+  : LMULWriteResImpl<name, SchedMxListFWRed, resources>;
+
 
 // 3.6 Vector Byte Length vlenb
 def WriteRdVLENB      : SchedWrite;
@@ -297,16 +262,20 @@ defm "" : LMULSchedWritesW<"WriteVFNCvtFToIV">;
 defm "" : LMULSchedWritesFW<"WriteVFNCvtFToFV">;
 
 // 14. Vector Reduction Operations
+// The latency of reduction is determined by the size of the read resource.
+// The LMUL range of read resource(VS2) for reduction operantion is between
+// MF8 and M8. Use the _From suffix to indicate the number of the
+// LMUL from VS2.
 // 14.1. Vector Single-Width Integer Reduction Instructions
-def WriteVIRedV       : SchedWrite;
+defm "" : LMULSchedWrites<"WriteVIRedV_From">;
 // 14.2. Vector Widening Integer Reduction Instructions
-def WriteVIWRedV      : SchedWrite;
+defm "" : LMULSchedWrites<"WriteVIWRedV_From">;
 // 14.3. Vector Single-Width Floating-Point Reduction Instructions
-def WriteVFRedV       : SchedWrite;
-def WriteVFRedOV      : SchedWrite;
+defm "" : LMULSchedWrites<"WriteVFRedV_From">;
+defm "" : LMULSchedWrites<"WriteVFRedOV_From">;
 // 14.4. Vector Widening Floating-Point Reduction Instructions
-def WriteVFWRedV      : SchedWrite;
-def WriteVFWRedOV     : SchedWrite;
+defm "" : LMULSchedWritesFWRed<"WriteVFWRedV_From">;
+defm "" : LMULSchedWritesFWRed<"WriteVFWRedOV_From">;
 
 // 15. Vector Mask Instructions
 // 15.1. Vector Mask-Register Logical Instructions
@@ -727,12 +696,12 @@ defm "" : LMULWriteResW<"WriteVFNCvtFToIV", []>;
 defm "" : LMULWriteResFW<"WriteVFNCvtFToFV", []>;
 
 // 14. Vector Reduction Operations
-def : WriteRes<WriteVIRedV, []>;
-def : WriteRes<WriteVIWRedV, []>;
-def : WriteRes<WriteVFRedV, []>;
-def : WriteRes<WriteVFRedOV, []>;
-def : WriteRes<WriteVFWRedV, []>;
-def : WriteRes<WriteVFWRedOV, []>;
+defm "" : LMULWriteRes<"WriteVIRedV_From", []>;
+defm "" : LMULWriteRes<"WriteVIWRedV_From", []>;
+defm "" : LMULWriteRes<"WriteVFRedV_From", []>;
+defm "" : LMULWriteRes<"WriteVFRedOV_From", []>;
+defm "" : LMULWriteResFWRed<"WriteVFWRedV_From", []>;
+defm "" : LMULWriteResFWRed<"WriteVFWRedOV_From", []>;
 
 // 15. Vector Mask Instructions
 defm "" : LMULWriteRes<"WriteVMALUV", []>;

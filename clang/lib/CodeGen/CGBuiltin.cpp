@@ -52,10 +52,10 @@
 #include "llvm/IR/IntrinsicsX86.h"
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/MatrixBuilder.h"
-#include "llvm/Support/AArch64TargetParser.h"
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/ScopedPrinter.h"
-#include "llvm/Support/X86TargetParser.h"
+#include "llvm/TargetParser/AArch64TargetParser.h"
+#include "llvm/TargetParser/X86TargetParser.h"
 #include <optional>
 #include <sstream>
 
@@ -3060,6 +3060,15 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     return RValue::get(V);
   }
 
+  case Builtin::BI__builtin_nondeterministic_value: {
+    llvm::Type *Ty = ConvertType(E->getArg(0)->getType());
+
+    Value *Result = PoisonValue::get(Ty);
+    Result = Builder.CreateFreeze(Result);
+
+    return RValue::get(Result);
+  }
+
   case Builtin::BI__builtin_elementwise_abs: {
     Value *Result;
     QualType QT = E->getArg(0)->getType();
@@ -3082,6 +3091,12 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
   case Builtin::BI__builtin_elementwise_log:
     return RValue::get(
         emitUnaryBuiltin(*this, E, llvm::Intrinsic::log, "elt.log"));
+  case Builtin::BI__builtin_elementwise_log2:
+    return RValue::get(
+        emitUnaryBuiltin(*this, E, llvm::Intrinsic::log2, "elt.log2"));
+  case Builtin::BI__builtin_elementwise_log10:
+    return RValue::get(
+        emitUnaryBuiltin(*this, E, llvm::Intrinsic::log10, "elt.log10"));
   case Builtin::BI__builtin_elementwise_cos:
     return RValue::get(
         emitUnaryBuiltin(*this, E, llvm::Intrinsic::cos, "elt.cos"));
@@ -3103,6 +3118,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
         emitUnaryBuiltin(*this, E, llvm::Intrinsic::canonicalize, "elt.trunc"));
   case Builtin::BI__builtin_elementwise_copysign:
     return RValue::get(emitBinaryBuiltin(*this, E, llvm::Intrinsic::copysign));
+  case Builtin::BI__builtin_elementwise_fma:
+    return RValue::get(emitTernaryBuiltin(*this, E, llvm::Intrinsic::fma));
   case Builtin::BI__builtin_elementwise_add_sat:
   case Builtin::BI__builtin_elementwise_sub_sat: {
     Value *Op0 = EmitScalarExpr(E->getArg(0));
@@ -9482,8 +9499,10 @@ Value *CodeGenFunction::EmitAArch64SVEBuiltinExpr(unsigned BuiltinID,
 
     if (TypeFlags.isReverseCompare())
       std::swap(Ops[1], Ops[2]);
-
-    if (TypeFlags.isReverseUSDOT())
+    else if (TypeFlags.isReverseUSDOT())
+      std::swap(Ops[1], Ops[2]);
+    else if (TypeFlags.isReverseMergeAnyBinOp() &&
+             TypeFlags.getMergeType() == SVETypeFlags::MergeAny)
       std::swap(Ops[1], Ops[2]);
 
     // Predicated intrinsics with _z suffix need a select w/ zeroinitializer.

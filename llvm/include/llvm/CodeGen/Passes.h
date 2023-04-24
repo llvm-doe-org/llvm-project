@@ -542,7 +542,7 @@ namespace llvm {
   FunctionPass *createEHContGuardCatchretPass();
 
   /// Create Hardware Loop pass. \see HardwareLoops.cpp
-  FunctionPass *createHardwareLoopsPass();
+  FunctionPass *createHardwareLoopsLegacyPass();
 
   /// This pass inserts pseudo probe annotation for callsite profiling.
   FunctionPass *createPseudoProbeInserter();
@@ -597,6 +597,8 @@ namespace llvm {
 
   /// This pass converts conditional moves to conditional jumps when profitable.
   FunctionPass *createSelectOptimizePass();
+
+  FunctionPass *createCallBrPass();
 } // End llvm namespace
 
 #endif

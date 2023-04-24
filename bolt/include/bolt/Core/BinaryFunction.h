@@ -349,6 +349,9 @@ private:
   /// This attribute is only valid when hasCFG() == true.
   bool HasCanonicalCFG{true};
 
+  /// True if another function body was merged into this one.
+  bool HasFunctionsFoldedInto{false};
+
   /// Name for the section this function code should reside in.
   std::string CodeSectionName;
 
@@ -1407,6 +1410,9 @@ public:
   /// Return true if the body of the function was merged into another function.
   bool isFolded() const { return FoldedIntoFunction != nullptr; }
 
+  /// Return true if other functions were folded into this one.
+  bool hasFunctionsFoldedInto() const { return HasFunctionsFoldedInto; }
+
   /// If this function was folded, return the function it was folded into.
   BinaryFunction *getFoldedIntoFunction() const { return FoldedIntoFunction; }
 
@@ -1459,8 +1465,6 @@ public:
   }
 
   ArrayRef<uint8_t> getLSDATypeIndexTable() const { return LSDATypeIndexTable; }
-
-  const LabelsMapType &getLabels() const { return Labels; }
 
   IslandInfo &getIslandInfo() {
     assert(Islands && "function expected to have constant islands");
@@ -1770,6 +1774,9 @@ public:
 
   void setFolded(BinaryFunction *BF) { FoldedIntoFunction = BF; }
 
+  /// Indicate that another function body was merged with this function.
+  void setHasFunctionsFoldedInto() { HasFunctionsFoldedInto = true; }
+
   BinaryFunction &setPersonalityFunction(uint64_t Addr) {
     assert(!PersonalityFunction && "can't set personality function twice");
     PersonalityFunction = BC.getOrCreateGlobalSymbol(Addr, "FUNCat");
@@ -1826,9 +1833,9 @@ public:
   /// Return true if the function is a secondary fragment of another function.
   bool isFragment() const { return IsFragment; }
 
-  /// Returns if the given function is a parent fragment of this function.
-  bool isParentFragment(BinaryFunction *Parent) const {
-    return ParentFragments.count(Parent);
+  /// Returns if this function is a child of \p Other function.
+  bool isChildOf(const BinaryFunction &Other) const {
+    return llvm::is_contained(ParentFragments, &Other);
   }
 
   /// Set the profile data for the number of times the function was called.

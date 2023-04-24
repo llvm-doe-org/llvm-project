@@ -9,9 +9,9 @@
 #include "src/__support/CPP/array.h"
 #include "src/__support/FPUtil/FPBits.h"
 #include "src/math/sinhf.h"
+#include "test/UnitTest/FPMatcher.h"
+#include "test/UnitTest/Test.h"
 #include "utils/MPFRWrapper/MPFRUtils.h"
-#include "utils/UnitTest/FPMatcher.h"
-#include "utils/UnitTest/Test.h"
 #include <math.h>
 
 #include <errno.h>
@@ -68,13 +68,16 @@ TEST(LlvmLibcSinhfTest, SmallValues) {
 
 TEST(LlvmLibcSinhfTest, Overflow) {
   errno = 0;
-  EXPECT_FP_EQ(inf, __llvm_libc::sinhf(float(FPBits(0x7f7fffffU))));
+  EXPECT_FP_EQ_WITH_EXCEPTION(
+      inf, __llvm_libc::sinhf(float(FPBits(0x7f7fffffU))), FE_OVERFLOW);
   EXPECT_MATH_ERRNO(ERANGE);
 
-  EXPECT_FP_EQ(inf, __llvm_libc::sinhf(float(FPBits(0x42cffff8U))));
+  EXPECT_FP_EQ_WITH_EXCEPTION(
+      inf, __llvm_libc::sinhf(float(FPBits(0x42cffff8U))), FE_OVERFLOW);
   EXPECT_MATH_ERRNO(ERANGE);
 
-  EXPECT_FP_EQ(inf, __llvm_libc::sinhf(float(FPBits(0x42d00008U))));
+  EXPECT_FP_EQ_WITH_EXCEPTION(
+      inf, __llvm_libc::sinhf(float(FPBits(0x42d00008U))), FE_OVERFLOW);
   EXPECT_MATH_ERRNO(ERANGE);
 }
 

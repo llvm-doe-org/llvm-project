@@ -78,7 +78,7 @@ public:
   std::size_t GetElementByteSize(const Descriptor &) const;
   std::size_t GetElements(const Descriptor &) const;
 
-  // For ocmponents that are descriptors, returns size of descriptor;
+  // For components that are descriptors, returns size of descriptor;
   // for Genre::Data, returns elemental byte size times element count.
   std::size_t SizeInBytes(const Descriptor &) const;
 
@@ -208,7 +208,7 @@ public:
 
   const DerivedType *GetParentType() const;
 
-  // Finds a data component by name in this derived type or tis ancestors.
+  // Finds a data component by name in this derived type or its ancestors.
   const Component *FindDataComponent(
       const char *name, std::size_t nameLen) const;
 
