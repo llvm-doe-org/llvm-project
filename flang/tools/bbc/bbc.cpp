@@ -19,10 +19,10 @@
 #include "flang/Lower/Bridge.h"
 #include "flang/Lower/PFTBuilder.h"
 #include "flang/Lower/Support/Verifier.h"
-#include "flang/Optimizer/Support/FIRContext.h"
+#include "flang/Optimizer/Dialect/Support/FIRContext.h"
+#include "flang/Optimizer/Dialect/Support/KindMapping.h"
 #include "flang/Optimizer/Support/InitFIR.h"
 #include "flang/Optimizer/Support/InternalNames.h"
-#include "flang/Optimizer/Support/KindMapping.h"
 #include "flang/Optimizer/Support/Utils.h"
 #include "flang/Optimizer/Transforms/Passes.h"
 #include "flang/Parser/characters.h"
@@ -37,7 +37,9 @@
 #include "flang/Semantics/runtime-type-info.h"
 #include "flang/Semantics/semantics.h"
 #include "flang/Semantics/unparse-with-symbols.h"
+#include "flang/Tools/CrossToolHelpers.h"
 #include "flang/Version.inc"
+#include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
@@ -121,6 +123,11 @@ static llvm::cl::opt<bool> pftDumpTest(
 static llvm::cl::opt<bool> enableOpenMP("fopenmp",
                                         llvm::cl::desc("enable openmp"),
                                         llvm::cl::init(false));
+
+static llvm::cl::opt<bool>
+    enableOpenMPDevice("fopenmp-is-device",
+                       llvm::cl::desc("enable openmp device compilation"),
+                       llvm::cl::init(false));
 
 static llvm::cl::opt<bool> enableOpenACC("fopenacc",
                                          llvm::cl::desc("enable openacc"),
@@ -237,6 +244,8 @@ static mlir::LogicalResult convertFortranSourceToMLIR(
       kindMap, loweringOptions, {});
   burnside.lower(parseTree, semanticsContext);
   mlir::ModuleOp mlirModule = burnside.getModule();
+  if (enableOpenMP)
+    setOffloadModuleInterfaceAttributes(mlirModule, enableOpenMPDevice);
   std::error_code ec;
   std::string outputName = outputFilename;
   if (!outputName.size())
@@ -251,7 +260,7 @@ static mlir::LogicalResult convertFortranSourceToMLIR(
   mlir::PassManager pm(mlirModule->getName(),
                        mlir::OpPassManager::Nesting::Implicit);
   pm.enableVerifier(/*verifyPasses=*/true);
-  mlir::applyPassManagerCLOptions(pm);
+  (void)mlir::applyPassManagerCLOptions(pm);
   if (passPipeline.hasAnyOccurrences()) {
     // run the command-line specified pipeline
     (void)passPipeline.addToPipeline(pm, [&](const llvm::Twine &msg) {

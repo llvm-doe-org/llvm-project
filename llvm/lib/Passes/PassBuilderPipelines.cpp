@@ -57,6 +57,7 @@
 #include "llvm/Transforms/IPO/InferFunctionAttrs.h"
 #include "llvm/Transforms/IPO/Inliner.h"
 #include "llvm/Transforms/IPO/LowerTypeTests.h"
+#include "llvm/Transforms/IPO/MemProfContextDisambiguation.h"
 #include "llvm/Transforms/IPO/MergeFunctions.h"
 #include "llvm/Transforms/IPO/ModuleInliner.h"
 #include "llvm/Transforms/IPO/OpenMPOpt.h"
@@ -270,6 +271,10 @@ static cl::opt<AttributorRunOption> AttributorRun(
                           "enable call graph SCC attributor runs"),
                clEnumValN(AttributorRunOption::NONE, "none",
                           "disable attributor runs")));
+
+cl::opt<bool> EnableMemProfContextDisambiguation(
+    "enable-memprof-context-disambiguation", cl::init(false), cl::Hidden,
+    cl::ZeroOrMore, cl::desc("Enable MemProf context disambiguation"));
 
 PipelineTuningOptions::PipelineTuningOptions() {
   LoopInterleaving = true;
@@ -831,8 +836,11 @@ PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
   if (AttributorRun & AttributorRunOption::CGSCC)
     MainCGPipeline.addPass(AttributorCGSCCPass());
 
-  // Now deduce any function attributes based in the current code.
-  MainCGPipeline.addPass(PostOrderFunctionAttrsPass());
+  // Deduce function attributes. We do another run of this after the function
+  // simplification pipeline, so this only needs to run when it could affect the
+  // function simplification pipeline, which is only the case with recursive
+  // functions.
+  MainCGPipeline.addPass(PostOrderFunctionAttrsPass(/*SkipNonRecursive*/ true));
 
   // When at O3 add argument promotion to the pass pipeline.
   // FIXME: It isn't at all clear why this should be limited to O3.
@@ -847,14 +855,25 @@ PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
   for (auto &C : CGSCCOptimizerLateEPCallbacks)
     C(MainCGPipeline, Level);
 
-  // Lastly, add the core function simplification pipeline nested inside the
+  // Add the core function simplification pipeline nested inside the
   // CGSCC walk.
   MainCGPipeline.addPass(createCGSCCToFunctionPassAdaptor(
       buildFunctionSimplificationPipeline(Level, Phase),
       PTO.EagerlyInvalidateAnalyses, /*NoRerun=*/true));
 
+  // Finally, deduce any function attributes based on the fully simplified
+  // function.
+  MainCGPipeline.addPass(PostOrderFunctionAttrsPass());
+
+  // Mark that the function is fully simplified and that it shouldn't be
+  // simplified again if we somehow revisit it due to CGSCC mutations unless
+  // it's been modified since.
+  MainCGPipeline.addPass(createCGSCCToFunctionPassAdaptor(
+      RequireAnalysisPass<ShouldNotRunFunctionPassesAnalysis, Function>()));
+
   MainCGPipeline.addPass(CoroSplitPass(Level != OptimizationLevel::O0));
 
+  // Make sure we don't affect potential future NoRerun CGSCC adaptors.
   MIWP.addLateModulePass(createModuleToFunctionPassAdaptor(
       InvalidateAnalysisPass<ShouldNotRunFunctionPassesAnalysis>()));
 
@@ -954,14 +973,6 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
   if (Level == OptimizationLevel::O3)
     EarlyFPM.addPass(CallSiteSplittingPass());
 
-  // In SamplePGO ThinLTO backend, we need instcombine before profile annotation
-  // to convert bitcast to direct calls so that they can be inlined during the
-  // profile annotation prepration step.
-  // More details about SamplePGO design can be found in:
-  // https://research.google.com/pubs/pub45290.html
-  // FIXME: revisit how SampleProfileLoad/Inliner/ICP is structured.
-  if (LoadSampleProfile)
-    EarlyFPM.addPass(InstCombinePass());
   MPM.addPass(createModuleToFunctionPassAdaptor(std::move(EarlyFPM),
                                                 PTO.EagerlyInvalidateAnalyses));
 
@@ -1006,9 +1017,12 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
   // and prior to optimizing globals.
   // FIXME: This position in the pipeline hasn't been carefully considered in
   // years, it should be re-analyzed.
-  MPM.addPass(IPSCCPPass(IPSCCPOptions(/*AllowFuncSpec=*/
-                                       Level != OptimizationLevel::Os &&
-                                       Level != OptimizationLevel::Oz)));
+  MPM.addPass(IPSCCPPass(
+              IPSCCPOptions(/*AllowFuncSpec=*/
+                            Level != OptimizationLevel::Os &&
+                            Level != OptimizationLevel::Oz &&
+                            Phase != ThinOrFullLTOPhase::ThinLTOPreLink &&
+                            Phase != ThinOrFullLTOPhase::FullLTOPreLink)));
 
   // Attach metadata to indirect call sites indicating the set of functions
   // they may target at run-time. This should follow IPSCCP.
@@ -1057,6 +1071,14 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
   MPM.addPass(DeadArgumentEliminationPass());
 
   MPM.addPass(CoroCleanupPass());
+
+  // Optimize globals now that functions are fully simplified.
+  MPM.addPass(GlobalOptPass());
+
+  // Remove dead code, except in the ThinLTO pre-link pipeline where we may want
+  // to keep available_externally functions.
+  if (Phase != ThinOrFullLTOPhase::ThinLTOPreLink)
+    MPM.addPass(GlobalDCEPass());
 
   if (EnableMemProfiler && Phase != ThinOrFullLTOPhase::ThinLTOPreLink) {
     MPM.addPass(createModuleToFunctionPassAdaptor(MemProfilerPass()));
@@ -1212,10 +1234,6 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
   const bool LTOPreLink = (LTOPhase == ThinOrFullLTOPhase::ThinLTOPreLink ||
                            LTOPhase == ThinOrFullLTOPhase::FullLTOPreLink);
   ModulePassManager MPM;
-
-  // Optimize globals now that the module is fully simplified.
-  MPM.addPass(GlobalOptPass());
-  MPM.addPass(GlobalDCEPass());
 
   // Run partial inlining pass to partially inline functions that have
   // large bodies.
@@ -1385,8 +1403,8 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
 ModulePassManager
 PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
                                            bool LTOPreLink) {
-  assert(Level != OptimizationLevel::O0 &&
-         "Must request optimizations for the default pipeline!");
+  if (Level == OptimizationLevel::O0)
+    return buildO0DefaultPipeline(Level, LTOPreLink);
 
   ModulePassManager MPM;
 
@@ -1427,8 +1445,8 @@ PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
 
 ModulePassManager
 PassBuilder::buildThinLTOPreLinkDefaultPipeline(OptimizationLevel Level) {
-  assert(Level != OptimizationLevel::O0 &&
-         "Must request optimizations for the default pipeline!");
+  if (Level == OptimizationLevel::O0)
+    return buildO0DefaultPipeline(Level, /*LTOPreLink*/true);
 
   ModulePassManager MPM;
 
@@ -1460,9 +1478,6 @@ PassBuilder::buildThinLTOPreLinkDefaultPipeline(OptimizationLevel Level) {
   // ways that aren't beneficial.
   if (RunPartialInlining)
     MPM.addPass(PartialInlinerPass());
-
-  // Reduce the size of the IR as much as possible.
-  MPM.addPass(GlobalOptPass());
 
   if (PGOOpt && PGOOpt->PseudoProbeForProfiling &&
       PGOOpt->Action == PGOOptions::SampleUse)
@@ -1542,8 +1557,6 @@ ModulePassManager PassBuilder::buildThinLTODefaultPipeline(
 
 ModulePassManager
 PassBuilder::buildLTOPreLinkDefaultPipeline(OptimizationLevel Level) {
-  assert(Level != OptimizationLevel::O0 &&
-         "Must request optimizations for the default pipeline!");
   // FIXME: We should use a customized pre-link pipeline!
   return buildPerModuleDefaultPipeline(Level,
                                        /* LTOPreLink */ true);
@@ -1674,6 +1687,9 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
   // keep one copy of each constant.
   MPM.addPass(ConstantMergePass());
 
+  // Remove unused arguments from functions.
+  MPM.addPass(DeadArgumentEliminationPass());
+
   // Reduce the code after globalopt and ipsccp.  Both can open up significant
   // simplification opportunities, and both can propagate functions through
   // function pointers.  When this happens, we often have to resolve varargs
@@ -1698,6 +1714,12 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
       InlineContext{ThinOrFullLTOPhase::FullLTOPostLink,
                     InlinePass::CGSCCInliner}));
 
+  // Perform context disambiguation after inlining, since that would reduce the
+  // amount of additional cloning required to distinguish the allocation
+  // contexts.
+  if (EnableMemProfContextDisambiguation)
+    MPM.addPass(MemProfContextDisambiguation());
+
   // Optimize globals again after we ran the inliner.
   MPM.addPass(GlobalOptPass());
 
@@ -1710,9 +1732,6 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
   // If we didn't decide to inline a function, check to see if we can
   // transform it to pass arguments by value instead of by reference.
   MPM.addPass(createModuleToPostOrderCGSCCPassAdaptor(ArgumentPromotionPass()));
-
-  // Remove unused arguments from functions.
-  MPM.addPass(DeadArgumentEliminationPass());
 
   FunctionPassManager FPM;
   // The IPO Passes may leave cruft around. Clean up after them.

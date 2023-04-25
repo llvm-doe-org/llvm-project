@@ -52,14 +52,13 @@ define <4 x i64> @interleave_v2i64(<2 x i64> %x, <2 x i64> %y) {
 ; RV32-V128-LABEL: interleave_v2i64:
 ; RV32-V128:       # %bb.0:
 ; RV32-V128-NEXT:    vmv1r.v v12, v9
-; RV32-V128-NEXT:    # kill: def $v8 killed $v8 def $v8m2
 ; RV32-V128-NEXT:    vsetivli zero, 4, e16, mf2, ta, ma
-; RV32-V128-NEXT:    vid.v v10
-; RV32-V128-NEXT:    vsrl.vi v14, v10, 1
+; RV32-V128-NEXT:    vid.v v9
+; RV32-V128-NEXT:    vsrl.vi v14, v9, 1
 ; RV32-V128-NEXT:    vsetvli zero, zero, e64, m2, ta, mu
+; RV32-V128-NEXT:    vrgatherei16.vv v10, v8, v14
 ; RV32-V128-NEXT:    li a0, 10
 ; RV32-V128-NEXT:    vmv.s.x v0, a0
-; RV32-V128-NEXT:    vrgatherei16.vv v10, v8, v14
 ; RV32-V128-NEXT:    vrgatherei16.vv v10, v12, v14, v0.t
 ; RV32-V128-NEXT:    vmv.v.v v8, v10
 ; RV32-V128-NEXT:    ret
@@ -67,13 +66,12 @@ define <4 x i64> @interleave_v2i64(<2 x i64> %x, <2 x i64> %y) {
 ; RV64-V128-LABEL: interleave_v2i64:
 ; RV64-V128:       # %bb.0:
 ; RV64-V128-NEXT:    vmv1r.v v12, v9
-; RV64-V128-NEXT:    # kill: def $v8 killed $v8 def $v8m2
 ; RV64-V128-NEXT:    vsetivli zero, 4, e64, m2, ta, mu
 ; RV64-V128-NEXT:    vid.v v10
 ; RV64-V128-NEXT:    vsrl.vi v14, v10, 1
+; RV64-V128-NEXT:    vrgather.vv v10, v8, v14
 ; RV64-V128-NEXT:    li a0, 10
 ; RV64-V128-NEXT:    vmv.s.x v0, a0
-; RV64-V128-NEXT:    vrgather.vv v10, v8, v14
 ; RV64-V128-NEXT:    vrgather.vv v10, v12, v14, v0.t
 ; RV64-V128-NEXT:    vmv.v.v v8, v10
 ; RV64-V128-NEXT:    ret
@@ -370,9 +368,9 @@ define <64 x i32> @interleave_v32i32(<32 x i32> %x, <32 x i32> %y) {
 ; RV32-V128-NEXT:    vsetvli zero, a1, e32, m8, ta, ma
 ; RV32-V128-NEXT:    vle32.v v0, (a0)
 ; RV32-V128-NEXT:    vmv8r.v v24, v8
-; RV32-V128-NEXT:    addi a0, sp, 16
-; RV32-V128-NEXT:    vs8r.v v8, (a0) # Unknown-size Folded Spill
 ; RV32-V128-NEXT:    vrgather.vv v8, v24, v0
+; RV32-V128-NEXT:    addi a0, sp, 16
+; RV32-V128-NEXT:    vs8r.v v24, (a0) # Unknown-size Folded Spill
 ; RV32-V128-NEXT:    lui a0, %hi(.LCPI15_1)
 ; RV32-V128-NEXT:    addi a0, a0, %lo(.LCPI15_1)
 ; RV32-V128-NEXT:    vle32.v v24, (a0)
@@ -421,9 +419,9 @@ define <64 x i32> @interleave_v32i32(<32 x i32> %x, <32 x i32> %y) {
 ; RV64-V128-NEXT:    vsetvli zero, a1, e32, m8, ta, ma
 ; RV64-V128-NEXT:    vle32.v v0, (a0)
 ; RV64-V128-NEXT:    vmv8r.v v24, v8
-; RV64-V128-NEXT:    addi a0, sp, 16
-; RV64-V128-NEXT:    vs8r.v v8, (a0) # Unknown-size Folded Spill
 ; RV64-V128-NEXT:    vrgather.vv v8, v24, v0
+; RV64-V128-NEXT:    addi a0, sp, 16
+; RV64-V128-NEXT:    vs8r.v v24, (a0) # Unknown-size Folded Spill
 ; RV64-V128-NEXT:    lui a0, %hi(.LCPI15_1)
 ; RV64-V128-NEXT:    addi a0, a0, %lo(.LCPI15_1)
 ; RV64-V128-NEXT:    vle32.v v24, (a0)
@@ -665,3 +663,31 @@ define <8 x i32> @unary_interleave_v8i32(<8 x i32> %x) {
   %a = shufflevector <8 x i32> %x, <8 x i32> poison, <8 x i32> <i32 0, i32 4, i32 1, i32 5, i32 2, i32 6, i32 3, i32 7>
   ret <8 x i32> %a
 }
+
+; This interleaves the first 2 elements of a vector in opposite order. With
+; undefs for the remaining elements. We use to miscompile this.
+define <4 x i8> @unary_interleave_10uu_v4i8(<4 x i8> %x) {
+; V128-LABEL: unary_interleave_10uu_v4i8:
+; V128:       # %bb.0:
+; V128-NEXT:    vsetivli zero, 2, e8, mf4, ta, ma
+; V128-NEXT:    vslidedown.vi v10, v8, 1
+; V128-NEXT:    vsetivli zero, 2, e8, mf8, ta, ma
+; V128-NEXT:    vwaddu.vv v9, v10, v8
+; V128-NEXT:    li a0, -1
+; V128-NEXT:    vwmaccu.vx v9, a0, v8
+; V128-NEXT:    vmv1r.v v8, v9
+; V128-NEXT:    ret
+;
+; V512-LABEL: unary_interleave_10uu_v4i8:
+; V512:       # %bb.0:
+; V512-NEXT:    vsetivli zero, 2, e8, mf8, ta, ma
+; V512-NEXT:    vslidedown.vi v10, v8, 1
+; V512-NEXT:    vwaddu.vv v9, v10, v8
+; V512-NEXT:    li a0, -1
+; V512-NEXT:    vwmaccu.vx v9, a0, v8
+; V512-NEXT:    vmv1r.v v8, v9
+; V512-NEXT:    ret
+  %a = shufflevector <4 x i8> %x, <4 x i8> poison, <4 x i32> <i32 1, i32 0, i32 undef, i32 undef>
+  ret <4 x i8> %a
+}
+

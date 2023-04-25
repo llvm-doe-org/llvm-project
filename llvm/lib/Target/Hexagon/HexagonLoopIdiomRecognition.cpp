@@ -336,7 +336,7 @@ void Simplifier::Context::initialize(Instruction *Exp) {
 
   while (!Q.empty()) {
     Value *V = Q.pop_front_val();
-    if (M.find(V) != M.end())
+    if (M.contains(V))
       continue;
     if (Instruction *U = dyn_cast<Instruction>(V)) {
       if (isa<PHINode>(U) || U->getParent() != Block)
@@ -664,7 +664,7 @@ Value *PolynomialMultiplyRecognize::getCountIV(BasicBlock *BB) {
       continue;
 
     if (auto *T = dyn_cast<ConstantInt>(IncV))
-      if (T->getZExtValue() == 1)
+      if (T->isOne())
         return PN;
   }
   return nullptr;

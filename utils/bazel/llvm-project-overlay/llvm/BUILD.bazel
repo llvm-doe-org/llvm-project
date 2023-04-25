@@ -283,6 +283,10 @@ cc_library(
         # be an empty library unless zlib is enabled, in which case it will
         # both provide the necessary dependencies and configuration defines.
         "@llvm_zlib//:zlib",
+        # We unconditionally depend on the custom LLVM zstd wrapper. This will
+        # be an empty library unless zstd is enabled, in which case it will
+        # both provide the necessary dependencies and configuration defines.
+        "@llvm_zstd//:zstd",
     ],
 )
 
@@ -569,26 +573,18 @@ cc_library(
 )
 
 cc_library(
-    name = "tblgen",
+    name = "LLVMTableGenGlobalISel",
     srcs = glob([
-        "utils/TableGen/*.cpp",
         "utils/TableGen/GlobalISel/*.cpp",
-
-        # Some tablegen sources include headers from MC, so these have to be
-        # listed here. MC uses headers produced by tablegen, so it cannot be a
-        # regular dependency.
-        "include/llvm/MC/*.h",
-
+    ]) + [
+        "utils/TableGen/CodeGenInstruction.h",
+    ],
+    hdrs = glob([
         # We have to include these headers here as well as in the `hdrs` below
         # to allow the `.cpp` files to use file-relative-inclusion to find
         # them, even though consumers of this library use inclusion relative to
         # `utils/TableGen` with the `strip_includes_prefix` of this library.
         # This mixture appears to be incompatible with header modules.
-        "utils/TableGen/*.h",
-        "utils/TableGen/GlobalISel/*.h",
-    ]),
-    hdrs = glob([
-        "utils/TableGen/*.h",
         "utils/TableGen/GlobalISel/*.h",
     ]),
     copts = llvm_copts,
@@ -603,10 +599,23 @@ cc_library(
 
 cc_binary(
     name = "llvm-tblgen",
+    srcs = glob([
+        "utils/TableGen/*.cpp",
+        "utils/TableGen/*.inc",
+        "utils/TableGen/*.h",
+
+        # Some tablegen sources include headers from MC, so these have to be
+        # listed here. MC uses headers produced by tablegen, so it cannot be a
+        # regular dependency.
+        "include/llvm/MC/*.h",
+    ]),
     copts = llvm_copts,
     stamp = 0,
     deps = [
-        ":tblgen",
+        ":LLVMTableGenGlobalISel",
+        ":Support",
+        ":TableGen",
+        ":config",
     ],
 )
 
@@ -1320,6 +1329,20 @@ cc_library(
 )
 
 cc_library(
+    name = "FrontendDebug",
+    srcs = glob([
+        "lib/Frontend/Debug/*.cpp",
+    ]),
+    hdrs = glob([
+        "include/llvm/Frontend/Debug/*.h",
+    ]),
+    copts = llvm_copts,
+    deps = [
+        ":Support",
+    ],
+)
+
+cc_library(
     name = "FrontendHLSL",
     srcs = glob([
         "lib/Frontend/HLSL/*.cpp",
@@ -1527,7 +1550,6 @@ cc_library(
     hdrs = glob([
         "include/llvm/Transforms/IPO/*.h",
     ]) + [
-        "include/llvm-c/Transforms/PassManagerBuilder.h",
         "include/llvm/Transforms/IPO.h",
     ],
     copts = llvm_copts,
@@ -4152,6 +4174,7 @@ cc_binary(
         ":Support",
         ":TargetParser",
         ":WindresTableGen",
+        ":config",
         ":llvm-rc-defs-lib",
     ],
 )

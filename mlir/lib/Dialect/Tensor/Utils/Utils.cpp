@@ -14,6 +14,7 @@
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/Dialect/Utils/IndexingUtils.h"
 
 using namespace mlir;
@@ -50,6 +51,20 @@ SmallVector<Value> mlir::tensor::createDynamicDimValues(OpBuilder &b,
           b.create<tensor::DimOp>(loc, rankedTensor, en.index()));
   }
   return dynamicDims;
+}
+
+FailureOr<OpFoldResult> mlir::tensor::createDimValue(OpBuilder &b, Location loc,
+                                                     Value rankedTensor,
+                                                     int64_t dim) {
+  auto tensorTy = rankedTensor.getType().dyn_cast<RankedTensorType>();
+  if (!tensorTy)
+    return failure();
+  auto shape = tensorTy.getShape();
+  if (dim >= static_cast<int64_t>(shape.size()))
+    return failure();
+  if (ShapedType::isDynamic(shape[dim]))
+    return OpFoldResult(b.createOrFold<tensor::DimOp>(loc, rankedTensor, dim));
+  return OpFoldResult(b.getIndexAttr(shape[dim]));
 }
 
 SmallVector<OpFoldResult>

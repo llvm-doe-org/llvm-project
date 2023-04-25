@@ -241,11 +241,9 @@ namespace threadSafety {
 
 // FIXME: No way to easily map from TemplateTypeParmTypes to
 // TemplateTypeParmDecls, so we have this horrible PointerUnion.
-using UnexpandedParameterPack = std::pair<
-    llvm::PointerUnion<
-        const TemplateTypeParmType *, const SubstTemplateTypeParmPackType *,
-        const SubstNonTypeTemplateParmPackExpr *, const NamedDecl *>,
-    SourceLocation>;
+typedef std::pair<llvm::PointerUnion<const TemplateTypeParmType *, NamedDecl *>,
+                  SourceLocation>
+    UnexpandedParameterPack;
 
 /// Describes whether we've seen any nullability information for the given
 /// file.
@@ -1050,7 +1048,7 @@ public:
   /// ExpressionEvaluationContextRecord object.
   bool isConstantEvaluatedOverride;
 
-  bool isConstantEvaluated() {
+  bool isConstantEvaluated() const {
     return ExprEvalContexts.back().isConstantEvaluated() ||
            isConstantEvaluatedOverride;
   }
@@ -1491,7 +1489,7 @@ public:
   /// Determine if VD, which must be a variable or function, is an external
   /// symbol that nonetheless can't be referenced from outside this translation
   /// unit because its type has no linkage and it's not extern "C".
-  bool isExternalWithNoLinkageType(ValueDecl *VD);
+  bool isExternalWithNoLinkageType(ValueDecl *VD) const;
 
   /// Obtain a sorted list of functions that are undefined but ODR-used.
   void getUndefinedButUsed(
@@ -2279,6 +2277,10 @@ private:
   };
   /// The modules we're currently parsing.
   llvm::SmallVector<ModuleScope, 16> ModuleScopes;
+
+  /// For an interface unit, this is the implicitly imported interface unit.
+  clang::Module *ThePrimaryInterface = nullptr;
+
   /// The explicit global module fragment of the current translation unit.
   /// The explicit Global Module Fragment, as specified in C++
   /// [module.global.frag].
@@ -3553,13 +3555,13 @@ public:
   void ActOnExitFunctionContext();
 
   /// If \p AllowLambda is true, treat lambda as function.
-  DeclContext *getFunctionLevelDeclContext(bool AllowLambda = false);
+  DeclContext *getFunctionLevelDeclContext(bool AllowLambda = false) const;
 
   /// Returns a pointer to the innermost enclosing function, or nullptr if the
   /// current context is not inside a function. If \p AllowLambda is true,
   /// this can return the call operator of an enclosing lambda, otherwise
   /// lambdas are skipped when looking for an enclosing function.
-  FunctionDecl *getCurFunctionDecl(bool AllowLambda = false);
+  FunctionDecl *getCurFunctionDecl(bool AllowLambda = false) const;
 
   /// getCurMethodDecl - If inside of a method body, this returns a pointer to
   /// the method decl for the method being parsed.  If we're currently
@@ -3569,7 +3571,7 @@ public:
   /// getCurFunctionOrMethodDecl - Return the Decl for the current ObjC method
   /// or C function we're in, otherwise return null.  If we're currently
   /// in a 'block', this returns the containing context.
-  NamedDecl *getCurFunctionOrMethodDecl();
+  NamedDecl *getCurFunctionOrMethodDecl() const;
 
   /// Add this decl to the scope shadowed decl chains.
   void PushOnScopeChains(NamedDecl *D, Scope *S, bool AddToContext = true);
@@ -3582,7 +3584,7 @@ public:
   ///        enclosing namespace set of the context, rather than contained
   ///        directly within it.
   bool isDeclInScope(NamedDecl *D, DeclContext *Ctx, Scope *S = nullptr,
-                     bool AllowInlineNamespace = false);
+                     bool AllowInlineNamespace = false) const;
 
   /// Finds the scope corresponding to the given decl context, if it
   /// happens to be an enclosing scope.  Otherwise return NULL.
@@ -4354,7 +4356,7 @@ public:
     ForExternalRedeclaration
   };
 
-  RedeclarationKind forRedeclarationInCurContext() {
+  RedeclarationKind forRedeclarationInCurContext() const {
     // A declaration with an owning module for linkage can never link against
     // anything that is not visible. We don't need to check linkage here; if
     // the context has internal linkage, redeclaration lookup won't find things
@@ -4719,6 +4721,11 @@ public:
       MSInheritanceModel SemanticSpelling);
 
   void CheckAlignasUnderalignment(Decl *D);
+
+  bool CheckNoInlineAttr(const Stmt *OrigSt, const Stmt *CurSt,
+                         const AttributeCommonInfo &A);
+  bool CheckAlwaysInlineAttr(const Stmt *OrigSt, const Stmt *CurSt,
+                             const AttributeCommonInfo &A);
 
   /// Adjust the calling convention of a method to be the ABI default if it
   /// wasn't specified explicitly.  This handles method types formed from
@@ -7104,10 +7111,9 @@ public:
                         Expr *TrailingRequiresClause);
 
   /// Number lambda for linkage purposes if necessary.
-  void handleLambdaNumbering(
-      CXXRecordDecl *Class, CXXMethodDecl *Method,
-      std::optional<std::tuple<bool, unsigned, unsigned, Decl *>> Mangling =
-          std::nullopt);
+  void handleLambdaNumbering(CXXRecordDecl *Class, CXXMethodDecl *Method,
+                             std::optional<CXXRecordDecl::LambdaNumbering>
+                                 NumberingOverride = std::nullopt);
 
   /// Endow the lambda scope info with the relevant properties.
   void buildLambdaScope(sema::LambdaScopeInfo *LSI, CXXMethodDecl *CallOperator,
@@ -8119,7 +8125,8 @@ public:
                             SourceLocation EllipsisLoc);
 
   bool AttachTypeConstraint(AutoTypeLoc TL,
-                            NonTypeTemplateParmDecl *ConstrainedParameter,
+                            NonTypeTemplateParmDecl *NewConstrainedParm,
+                            NonTypeTemplateParmDecl *OrigConstrainedParm,
                             SourceLocation EllipsisLoc);
 
   bool RequireStructuralType(QualType T, SourceLocation Loc);
@@ -8453,24 +8460,31 @@ public:
     /// template<int Value> struct integer_c;
     /// X<integer_c> xic;
     /// \endcode
-    TPL_TemplateTemplateArgumentMatch
+    TPL_TemplateTemplateArgumentMatch,
+
+    /// We are determining whether the template-parameters are equivalent
+    /// according to C++ [temp.over.link]/6. This comparison does not consider
+    /// constraints.
+    ///
+    /// \code
+    /// template<C1 T> void f(T);
+    /// template<C2 T> void f(T);
+    /// \endcode
+    TPL_TemplateParamsEquivalent,
   };
 
   bool TemplateParameterListsAreEqual(
       const NamedDecl *NewInstFrom, TemplateParameterList *New,
       const NamedDecl *OldInstFrom, TemplateParameterList *Old, bool Complain,
       TemplateParameterListEqualKind Kind,
-      SourceLocation TemplateArgLoc = SourceLocation(),
-      bool PartialOrdering = false);
+      SourceLocation TemplateArgLoc = SourceLocation());
 
   bool TemplateParameterListsAreEqual(
       TemplateParameterList *New, TemplateParameterList *Old, bool Complain,
       TemplateParameterListEqualKind Kind,
-      SourceLocation TemplateArgLoc = SourceLocation(),
-      bool PartialOrdering = false) {
+      SourceLocation TemplateArgLoc = SourceLocation()) {
     return TemplateParameterListsAreEqual(nullptr, New, nullptr, Old, Complain,
-                                          Kind, TemplateArgLoc,
-                                          PartialOrdering);
+                                          Kind, TemplateArgLoc);
   }
 
   bool CheckTemplateDeclScope(Scope *S, TemplateParameterList *TemplateParams);
@@ -9850,14 +9864,21 @@ public:
   /// eagerly.
   SmallVector<PendingImplicitInstantiation, 1> LateParsedInstantiations;
 
+  SmallVector<SmallVector<VTableUse, 16>, 8> SavedVTableUses;
+  SmallVector<std::deque<PendingImplicitInstantiation>, 8>
+      SavedPendingInstantiations;
+
   class GlobalEagerInstantiationScope {
   public:
     GlobalEagerInstantiationScope(Sema &S, bool Enabled)
         : S(S), Enabled(Enabled) {
       if (!Enabled) return;
 
-      SavedPendingInstantiations.swap(S.PendingInstantiations);
-      SavedVTableUses.swap(S.VTableUses);
+      S.SavedPendingInstantiations.emplace_back();
+      S.SavedPendingInstantiations.back().swap(S.PendingInstantiations);
+
+      S.SavedVTableUses.emplace_back();
+      S.SavedVTableUses.back().swap(S.VTableUses);
     }
 
     void perform() {
@@ -9873,26 +9894,28 @@ public:
       // Restore the set of pending vtables.
       assert(S.VTableUses.empty() &&
              "VTableUses should be empty before it is discarded.");
-      S.VTableUses.swap(SavedVTableUses);
+      S.VTableUses.swap(S.SavedVTableUses.back());
+      S.SavedVTableUses.pop_back();
 
       // Restore the set of pending implicit instantiations.
       if (S.TUKind != TU_Prefix || !S.LangOpts.PCHInstantiateTemplates) {
         assert(S.PendingInstantiations.empty() &&
                "PendingInstantiations should be empty before it is discarded.");
-        S.PendingInstantiations.swap(SavedPendingInstantiations);
+        S.PendingInstantiations.swap(S.SavedPendingInstantiations.back());
+        S.SavedPendingInstantiations.pop_back();
       } else {
         // Template instantiations in the PCH may be delayed until the TU.
-        S.PendingInstantiations.swap(SavedPendingInstantiations);
-        S.PendingInstantiations.insert(S.PendingInstantiations.end(),
-                                       SavedPendingInstantiations.begin(),
-                                       SavedPendingInstantiations.end());
+        S.PendingInstantiations.swap(S.SavedPendingInstantiations.back());
+        S.PendingInstantiations.insert(
+            S.PendingInstantiations.end(),
+            S.SavedPendingInstantiations.back().begin(),
+            S.SavedPendingInstantiations.back().end());
+        S.SavedPendingInstantiations.pop_back();
       }
     }
 
   private:
     Sema &S;
-    SmallVector<VTableUse, 16> SavedVTableUses;
-    std::deque<PendingImplicitInstantiation> SavedPendingInstantiations;
     bool Enabled;
   };
 
@@ -10689,6 +10712,9 @@ public:
 
   /// Called on #pragma clang __debug dump II
   void ActOnPragmaDump(Scope *S, SourceLocation Loc, IdentifierInfo *II);
+
+  /// Called on #pragma clang __debug dump E
+  void ActOnPragmaDump(Expr *E);
 
   /// ActOnPragmaDetectMismatch - Call on well-formed \#pragma detect_mismatch
   void ActOnPragmaDetectMismatch(SourceLocation Loc, StringRef Name,
@@ -13928,6 +13954,7 @@ private:
 
   // WebAssembly builtin handling.
   bool BuiltinWasmRefNullExtern(CallExpr *TheCall);
+  bool BuiltinWasmRefNullFunc(CallExpr *TheCall);
 
 public:
   enum FormatStringType {

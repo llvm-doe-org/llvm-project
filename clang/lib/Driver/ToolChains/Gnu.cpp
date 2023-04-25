@@ -405,6 +405,7 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   const llvm::Triple &Triple = getToolChain().getEffectiveTriple();
 
   const llvm::Triple::ArchType Arch = ToolChain.getArch();
+  const bool isOHOSFamily = ToolChain.getTriple().isOHOSFamily();
   const bool isAndroid = ToolChain.getTriple().isAndroid();
   const bool IsIAMCU = ToolChain.getTriple().isOSIAMCU();
   const bool IsVE = ToolChain.getTriple().isVE();
@@ -455,7 +456,7 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   // Most Android ARM64 targets should enable the linker fix for erratum
   // 843419. Only non-Cortex-A53 devices are allowed to skip this flag.
-  if (Arch == llvm::Triple::aarch64 && isAndroid) {
+  if (Arch == llvm::Triple::aarch64 && (isAndroid || isOHOSFamily)) {
     std::string CPU = getCPUName(D, Args, Triple);
     if (CPU.empty() || CPU == "generic" || CPU == "cortex-a53")
       CmdArgs.push_back("--fix-cortex-a53-843419");
@@ -641,7 +642,9 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
         CmdArgs.push_back("--pop-state");
       }
 
-      if (WantPthread && !isAndroid)
+      // We don't need libpthread neither for bionic (Android) nor for musl,
+      // (used by OHOS as runtime library).
+      if (WantPthread && !isAndroid && !isOHOSFamily)
         CmdArgs.push_back("-lpthread");
 
       if (Args.hasArg(options::OPT_fsplit_stack))
@@ -2428,9 +2431,6 @@ void Generic_GCC::GCCInstallationDetector::AddDefaultGCCPrefixes(
     static const char *const AArch64AndroidTriples[] = {
         "aarch64-linux-android"};
     static const char *const ARMAndroidTriples[] = {"arm-linux-androideabi"};
-    static const char *const MIPSELAndroidTriples[] = {"mipsel-linux-android"};
-    static const char *const MIPS64ELAndroidTriples[] = {
-        "mips64el-linux-android"};
     static const char *const X86AndroidTriples[] = {"i686-linux-android"};
     static const char *const X86_64AndroidTriples[] = {"x86_64-linux-android"};
 
@@ -2444,22 +2444,6 @@ void Generic_GCC::GCCInstallationDetector::AddDefaultGCCPrefixes(
     case llvm::Triple::thumb:
       LibDirs.append(begin(ARMLibDirs), end(ARMLibDirs));
       TripleAliases.append(begin(ARMAndroidTriples), end(ARMAndroidTriples));
-      break;
-    case llvm::Triple::mipsel:
-      LibDirs.append(begin(MIPSELLibDirs), end(MIPSELLibDirs));
-      TripleAliases.append(begin(MIPSELAndroidTriples),
-                           end(MIPSELAndroidTriples));
-      BiarchLibDirs.append(begin(MIPS64ELLibDirs), end(MIPS64ELLibDirs));
-      BiarchTripleAliases.append(begin(MIPS64ELAndroidTriples),
-                                 end(MIPS64ELAndroidTriples));
-      break;
-    case llvm::Triple::mips64el:
-      LibDirs.append(begin(MIPS64ELLibDirs), end(MIPS64ELLibDirs));
-      TripleAliases.append(begin(MIPS64ELAndroidTriples),
-                           end(MIPS64ELAndroidTriples));
-      BiarchLibDirs.append(begin(MIPSELLibDirs), end(MIPSELLibDirs));
-      BiarchTripleAliases.append(begin(MIPSELAndroidTriples),
-                                 end(MIPSELAndroidTriples));
       break;
     case llvm::Triple::x86_64:
       LibDirs.append(begin(X86_64LibDirs), end(X86_64LibDirs));
@@ -2900,6 +2884,8 @@ Generic_GCC::getDefaultUnwindTableLevel(const ArgList &Args) const {
   case llvm::Triple::ppcle:
   case llvm::Triple::ppc64:
   case llvm::Triple::ppc64le:
+  case llvm::Triple::riscv32:
+  case llvm::Triple::riscv64:
   case llvm::Triple::x86:
   case llvm::Triple::x86_64:
     return UnwindTableLevel::Asynchronous;
@@ -2930,44 +2916,12 @@ bool Generic_GCC::isPICDefaultForced() const {
 
 bool Generic_GCC::IsIntegratedAssemblerDefault() const {
   switch (getTriple().getArch()) {
-  case llvm::Triple::aarch64:
-  case llvm::Triple::aarch64_be:
-  case llvm::Triple::amdgcn:
-  case llvm::Triple::arm:
-  case llvm::Triple::armeb:
-  case llvm::Triple::avr:
-  case llvm::Triple::bpfel:
-  case llvm::Triple::bpfeb:
-  case llvm::Triple::csky:
-  case llvm::Triple::hexagon:
-  case llvm::Triple::lanai:
-  case llvm::Triple::loongarch32:
-  case llvm::Triple::loongarch64:
-  case llvm::Triple::m68k:
-  case llvm::Triple::mips:
-  case llvm::Triple::mipsel:
-  case llvm::Triple::mips64:
-  case llvm::Triple::mips64el:
-  case llvm::Triple::msp430:
-  case llvm::Triple::ppc:
-  case llvm::Triple::ppcle:
-  case llvm::Triple::ppc64:
-  case llvm::Triple::ppc64le:
-  case llvm::Triple::r600:
-  case llvm::Triple::riscv32:
-  case llvm::Triple::riscv64:
-  case llvm::Triple::sparc:
-  case llvm::Triple::sparcel:
-  case llvm::Triple::sparcv9:
-  case llvm::Triple::systemz:
-  case llvm::Triple::thumb:
-  case llvm::Triple::thumbeb:
-  case llvm::Triple::ve:
-  case llvm::Triple::x86:
-  case llvm::Triple::x86_64:
-    return true;
-  default:
+  case llvm::Triple::nvptx:
+  case llvm::Triple::nvptx64:
+  case llvm::Triple::xcore:
     return false;
+  default:
+    return getTriple().getVendor() != llvm::Triple::Myriad;
   }
 }
 

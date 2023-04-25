@@ -258,8 +258,8 @@ OpFoldResult arith::AddIOp::fold(FoldAdaptor adaptor) {
 
 void arith::AddIOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                                 MLIRContext *context) {
-  patterns.add<AddIAddConstant, AddISubConstantRHS, AddISubConstantLHS>(
-      context);
+  patterns.add<AddIAddConstant, AddISubConstantRHS, AddISubConstantLHS,
+               AddIMulNegativeOneRhs, AddIMulNegativeOneLhs>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1455,12 +1455,15 @@ bool arith::IndexCastOp::areCastCompatible(TypeRange inputs,
 
 OpFoldResult arith::IndexCastOp::fold(FoldAdaptor adaptor) {
   // index_cast(constant) -> constant
-  // A little hack because we go through int. Otherwise, the size of the
-  // constant might need to change.
-  if (auto value = adaptor.getIn().dyn_cast_or_null<IntegerAttr>())
-    return IntegerAttr::get(getType(), value.getInt());
+  unsigned resultBitwidth = 64; // Default for index integer attributes.
+  if (auto intTy = dyn_cast<IntegerType>(getElementTypeOrSelf(getType())))
+    resultBitwidth = intTy.getWidth();
 
-  return {};
+  return constFoldCastOp<IntegerAttr, IntegerAttr>(
+      adaptor.getOperands(), getType(),
+      [resultBitwidth](const APInt &a, bool & /*castStatus*/) {
+        return a.sextOrTrunc(resultBitwidth);
+      });
 }
 
 void arith::IndexCastOp::getCanonicalizationPatterns(
@@ -1479,12 +1482,15 @@ bool arith::IndexCastUIOp::areCastCompatible(TypeRange inputs,
 
 OpFoldResult arith::IndexCastUIOp::fold(FoldAdaptor adaptor) {
   // index_castui(constant) -> constant
-  // A little hack because we go through int. Otherwise, the size of the
-  // constant might need to change.
-  if (auto value = adaptor.getIn().dyn_cast_or_null<IntegerAttr>())
-    return IntegerAttr::get(getType(), value.getValue().getZExtValue());
+  unsigned resultBitwidth = 64; // Default for index integer attributes.
+  if (auto intTy = dyn_cast<IntegerType>(getElementTypeOrSelf(getType())))
+    resultBitwidth = intTy.getWidth();
 
-  return {};
+  return constFoldCastOp<IntegerAttr, IntegerAttr>(
+      adaptor.getOperands(), getType(),
+      [resultBitwidth](const APInt &a, bool & /*castStatus*/) {
+        return a.zextOrTrunc(resultBitwidth);
+      });
 }
 
 void arith::IndexCastUIOp::getCanonicalizationPatterns(

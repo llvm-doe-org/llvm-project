@@ -2154,8 +2154,9 @@ bool Type::isFloatingType() const {
 bool Type::hasFloatingRepresentation() const {
   if (const auto *VT = dyn_cast<VectorType>(CanonicalType))
     return VT->getElementType()->isFloatingType();
-  else
-    return isFloatingType();
+  if (const auto *MT = dyn_cast<MatrixType>(CanonicalType))
+    return MT->getElementType()->isFloatingType();
+  return isFloatingType();
 }
 
 bool Type::isRealFloatingType() const {
@@ -2401,6 +2402,8 @@ bool Type::isVLSTBuiltinType() const {
     case BuiltinType::SveFloat64:
     case BuiltinType::SveBFloat16:
     case BuiltinType::SveBool:
+    case BuiltinType::SveBoolx2:
+    case BuiltinType::SveBoolx4:
       return true;
     default:
       return false;
@@ -3671,6 +3674,10 @@ bool AttributedType::isMSTypeSpec() const {
   llvm_unreachable("invalid attr kind");
 }
 
+bool AttributedType::isWebAssemblyFuncrefSpec() const {
+  return getAttrKind() == attr::WebAssemblyFuncref;
+}
+
 bool AttributedType::isCallingConv() const {
   // FIXME: Generate this with TableGen.
   switch (getAttrKind()) {
@@ -4583,8 +4590,14 @@ AutoType::AutoType(QualType DeducedAsType, AutoTypeKeyword Keyword,
     auto *ArgBuffer =
         const_cast<TemplateArgument *>(getTypeConstraintArguments().data());
     for (const TemplateArgument &Arg : TypeConstraintArgs) {
-      addDependence(
-          toSyntacticDependence(toTypeDependence(Arg.getDependence())));
+      // If we have a deduced type, our constraints never affect semantic
+      // dependence. Prior to deduction, however, our canonical type depends
+      // on the template arguments, so we are a dependent type if any of them
+      // is dependent.
+      TypeDependence ArgDependence = toTypeDependence(Arg.getDependence());
+      if (!DeducedAsType.isNull())
+        ArgDependence = toSyntacticDependence(ArgDependence);
+      addDependence(ArgDependence);
 
       new (ArgBuffer++) TemplateArgument(Arg);
     }

@@ -5957,8 +5957,15 @@ bool Sema::CheckCXXDefaultArgExpr(SourceLocation CallLoc, FunctionDecl *FD,
     assert(!InitWithCleanup->getNumObjects() &&
            "default argument expression has capturing blocks?");
   }
+  // C++ [expr.const]p15.1:
+  //   An expression or conversion is in an immediate function context if it is
+  //   potentially evaluated and [...] its innermost enclosing non-block scope
+  //   is a function parameter scope of an immediate function.
   EnterExpressionEvaluationContext EvalContext(
-      *this, ExpressionEvaluationContext::PotentiallyEvaluated, Param);
+      *this,
+      FD->isConsteval() ? ExpressionEvaluationContext::ImmediateFunctionContext
+                        : ExpressionEvaluationContext::PotentiallyEvaluated,
+      Param);
   ExprEvalContexts.back().IsCurrentlyCheckingDefaultArgumentOrInitializer =
       SkipImmediateInvocations;
   MarkDeclarationsReferencedInExpr(Init, /*SkipLocalVariables*/ true);
@@ -6045,8 +6052,16 @@ ExprResult Sema::BuildCXXDefaultArgExpr(SourceLocation CallLoc,
     // Mark that we are replacing a default argument first.
     // If we are instantiating a template we won't have to
     // retransform immediate calls.
+    // C++ [expr.const]p15.1:
+    //   An expression or conversion is in an immediate function context if it
+    //   is potentially evaluated and [...] its innermost enclosing non-block
+    //   scope is a function parameter scope of an immediate function.
     EnterExpressionEvaluationContext EvalContext(
-        *this, ExpressionEvaluationContext::PotentiallyEvaluated, Param);
+        *this,
+        FD->isConsteval()
+            ? ExpressionEvaluationContext::ImmediateFunctionContext
+            : ExpressionEvaluationContext::PotentiallyEvaluated,
+        Param);
 
     if (Param->hasUninstantiatedDefaultArg()) {
       if (InstantiateDefaultArgument(CallLoc, FD, Param))
@@ -9887,7 +9902,8 @@ Sema::CheckAssignmentConstraints(QualType LHSType, ExprResult &RHS,
         // The default for lax vector conversions with Altivec vectors will
         // change, so if we are converting between vector types where
         // at least one is an Altivec vector, emit a warning.
-        if (anyAltivecTypes(RHSType, LHSType) &&
+        if (Context.getTargetInfo().getTriple().isPPC() &&
+            anyAltivecTypes(RHSType, LHSType) &&
             !Context.areCompatibleVectorTypes(RHSType, LHSType))
           Diag(RHS.get()->getExprLoc(), diag::warn_deprecated_lax_vec_conv_all)
               << RHSType << LHSType;
@@ -9904,9 +9920,10 @@ Sema::CheckAssignmentConstraints(QualType LHSType, ExprResult &RHS,
       const VectorType *VecType = RHSType->getAs<VectorType>();
       if (VecType && VecType->getNumElements() == 1 &&
           isLaxVectorConversion(RHSType, LHSType)) {
-        if (VecType->getVectorKind() == VectorType::AltiVecVector ||
-            VecType->getVectorKind() == VectorType::AltiVecBool ||
-            VecType->getVectorKind() == VectorType::AltiVecPixel)
+        if (Context.getTargetInfo().getTriple().isPPC() &&
+            (VecType->getVectorKind() == VectorType::AltiVecVector ||
+             VecType->getVectorKind() == VectorType::AltiVecBool ||
+             VecType->getVectorKind() == VectorType::AltiVecPixel))
           Diag(RHS.get()->getExprLoc(), diag::warn_deprecated_lax_vec_conv_all)
               << RHSType << LHSType;
         ExprResult *VecExpr = &RHS;
@@ -10867,7 +10884,8 @@ QualType Sema::CheckVectorOperands(ExprResult &LHS, ExprResult &RHS,
   QualType OtherType = LHSVecType ? RHSType : LHSType;
   ExprResult *OtherExpr = LHSVecType ? &RHS : &LHS;
   if (isLaxVectorConversion(OtherType, VecType)) {
-    if (anyAltivecTypes(RHSType, LHSType) &&
+    if (Context.getTargetInfo().getTriple().isPPC() &&
+        anyAltivecTypes(RHSType, LHSType) &&
         !Context.areCompatibleVectorTypes(RHSType, LHSType))
       Diag(Loc, diag::warn_deprecated_lax_vec_conv_all) << RHSType << LHSType;
     // If we're allowing lax vector conversions, only the total (data) size
@@ -17101,6 +17119,7 @@ ExprResult Sema::ActOnSourceLocExpr(SourceLocExpr::IdentKind Kind,
   QualType ResultTy;
   switch (Kind) {
   case SourceLocExpr::File:
+  case SourceLocExpr::FileName:
   case SourceLocExpr::Function: {
     QualType ArrTy = Context.getStringLiteralArrayType(Context.CharTy, 0);
     ResultTy =
@@ -19947,14 +19966,31 @@ static void DoMarkVarDeclReferenced(
           DRE->setDecl(DRE->getDecl());
         else if (auto *ME = dyn_cast_or_null<MemberExpr>(E))
           ME->setMemberDecl(ME->getMemberDecl());
-      } else if (FirstInstantiation ||
-                 isa<VarTemplateSpecializationDecl>(Var)) {
+      } else if (FirstInstantiation) {
+        SemaRef.PendingInstantiations
+            .push_back(std::make_pair(Var, PointOfInstantiation));
+      } else {
+        bool Inserted = false;
+        for (auto &I : SemaRef.SavedPendingInstantiations) {
+          auto Iter = llvm::find_if(
+              I, [Var](const Sema::PendingImplicitInstantiation &P) {
+                return P.first == Var;
+              });
+          if (Iter != I.end()) {
+            SemaRef.PendingInstantiations.push_back(*Iter);
+            I.erase(Iter);
+            Inserted = true;
+            break;
+          }
+        }
+
         // FIXME: For a specialization of a variable template, we don't
         // distinguish between "declaration and type implicitly instantiated"
         // and "implicit instantiation of definition requested", so we have
         // no direct way to avoid enqueueing the pending instantiation
         // multiple times.
-        SemaRef.PendingInstantiations
+        if (isa<VarTemplateSpecializationDecl>(Var) && !Inserted)
+          SemaRef.PendingInstantiations
             .push_back(std::make_pair(Var, PointOfInstantiation));
       }
     }

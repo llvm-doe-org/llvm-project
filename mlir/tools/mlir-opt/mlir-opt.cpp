@@ -40,6 +40,7 @@ void registerSliceAnalysisTestPass();
 void registerSymbolTestPasses();
 void registerRegionTestPasses();
 void registerTestAffineDataCopyPass();
+void registerTestDecomposeAffineOpPass();
 void registerTestAffineLoopUnswitchingPass();
 void registerTestAllReduceLoweringPass();
 void registerTestFunc();
@@ -106,6 +107,7 @@ void registerTestMathAlgebraicSimplificationPass();
 void registerTestMathPolynomialApproximationPass();
 void registerTestMemRefDependenceCheck();
 void registerTestMemRefStrideCalculation();
+void registerTestOneToNTypeConversionPass();
 void registerTestOpaqueLoc();
 void registerTestPadFusion();
 void registerTestPDLByteCodePass();
@@ -124,6 +126,7 @@ void registerTestTransformDialectEraseSchedulePass();
 void registerTestTransformDialectInterpreterPass();
 void registerTestWrittenToPass();
 void registerTestVectorLowerings();
+void registerTestVectorReductionToSPIRVDotProd();
 void registerTestNvgpuLowerings();
 } // namespace test
 } // namespace mlir
@@ -147,6 +150,7 @@ void registerTestPasses() {
   registerSymbolTestPasses();
   registerRegionTestPasses();
   registerTestAffineDataCopyPass();
+  registerTestDecomposeAffineOpPass();
   registerTestAffineLoopUnswitchingPass();
   registerTestAllReduceLoweringPass();
   registerTestFunc();
@@ -215,6 +219,7 @@ void registerTestPasses() {
   mlir::test::registerTestMathPolynomialApproximationPass();
   mlir::test::registerTestMemRefDependenceCheck();
   mlir::test::registerTestMemRefStrideCalculation();
+  mlir::test::registerTestOneToNTypeConversionPass();
   mlir::test::registerTestOpaqueLoc();
   mlir::test::registerTestPadFusion();
   mlir::test::registerTestPDLByteCodePass();
@@ -231,6 +236,7 @@ void registerTestPasses() {
   mlir::test::registerTestTransformDialectEraseSchedulePass();
   mlir::test::registerTestTransformDialectInterpreterPass();
   mlir::test::registerTestVectorLowerings();
+  mlir::test::registerTestVectorReductionToSPIRVDotProd();
   mlir::test::registerTestNvgpuLowerings();
   mlir::test::registerTestWrittenToPass();
 }

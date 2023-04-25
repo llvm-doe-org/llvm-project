@@ -168,6 +168,12 @@ def FunctionLike : SubsetSubject<DeclBase,
                                  [{S->getFunctionType(false) != nullptr}],
                                  "functions, function pointers">;
 
+// Function Pointer is a stricter version of FunctionLike that only allows function
+// pointers.
+def FunctionPointer : SubsetSubject<DeclBase,
+                                    [{S->isFunctionPointerType()}],
+                                    "functions pointers">;
+
 def OpenCLKernelFunction
     : SubsetSubject<Function, [{S->hasAttr<OpenCLKernelAttr>()}],
                     "kernel functions">;
@@ -413,6 +419,7 @@ def TargetRISCV : TargetArch<["riscv32", "riscv64"]>;
 def TargetX86 : TargetArch<["x86"]>;
 def TargetAnyX86 : TargetArch<["x86", "x86_64"]>;
 def TargetWebAssembly : TargetArch<["wasm32", "wasm64"]>;
+def TargetNVPTX : TargetArch<["nvptx", "nvptx64"]>;
 def TargetWindows : TargetSpec {
   let OSes = ["Win32"];
 }
@@ -839,7 +846,8 @@ def XRayLogArgs : InheritableAttr {
 def PatchableFunctionEntry
     : InheritableAttr,
       TargetSpecificAttr<TargetArch<
-          ["aarch64", "aarch64_be", "riscv32", "riscv64", "x86", "x86_64"]>> {
+          ["aarch64", "aarch64_be", "loongarch32", "loongarch64", "riscv32",
+           "riscv64", "x86", "x86_64"]>> {
   let Spellings = [GCC<"patchable_function_entry">];
   let Subjects = SubjectList<[Function, ObjCMethod]>;
   let Args = [UnsignedArgument<"Count">, DefaultIntArgument<"Offset", 0>];
@@ -965,6 +973,7 @@ def Availability : InheritableAttr {
              .Case("maccatalyst_app_extension", "macCatalyst (App Extension)")
              .Case("swift", "Swift")
              .Case("shadermodel", "HLSL ShaderModel")
+             .Case("ohos", "OpenHarmony OS")
              .Default(llvm::StringRef());
 }
 static llvm::StringRef getPlatformNameSourceSpelling(llvm::StringRef Platform) {
@@ -1259,6 +1268,12 @@ def CUDAHost : InheritableAttr {
   let SimpleHandler = 1;
 }
 def : MutualExclusions<[CUDAGlobal, CUDAHost]>;
+
+def NVPTXKernel : InheritableAttr, TargetSpecificAttr<TargetNVPTX> {
+  let Spellings = [Clang<"nvptx_kernel">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [Undocumented];
+}
 
 def HIPManaged : InheritableAttr {
   let Spellings = [GNU<"managed">, Declspec<"__managed__">];
@@ -4194,6 +4209,13 @@ def FunctionReturnThunks : InheritableAttr,
   let Subjects = SubjectList<[Function]>;
   let Documentation = [FunctionReturnThunksDocs];
 }
+
+def WebAssemblyFuncref : TypeAttr, TargetSpecificAttr<TargetWebAssembly> {
+  let Spellings = [Keyword<"__funcref">];
+  let Documentation = [WebAssemblyExportNameDocs];
+  let Subjects = SubjectList<[FunctionPointer], ErrorDiag>;
+}
+
 def ReadOnlyPlacement : InheritableAttr {
   let Spellings = [Clang<"enforce_read_only_placement">];
   let Subjects = SubjectList<[Record]>;

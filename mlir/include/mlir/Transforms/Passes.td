@@ -92,6 +92,9 @@ def PrintIRPass : Pass<"print-ir"> {
     purposes to inspect the IR at a specific point in the pipeline.
   }];
   let constructor = "mlir::createPrintIRPass()";
+  let options = [
+    Option<"label", "label", "std::string", /*default=*/"", "Label">,
+  ];
 }
 
 def GenerateRuntimeVerification : Pass<"generate-runtime-verification"> {
@@ -109,7 +112,7 @@ def Inliner : Pass<"inline"> {
   let constructor = "mlir::createInlinerPass()";
   let options = [
     Option<"defaultPipelineStr", "default-pipeline", "std::string",
-           /*default=*/"", "The default optimizer pipeline used for callables">,
+           /*default=*/"\"canonicalize\"", "The default optimizer pipeline used for callables">,
     ListOption<"opPipelineList", "op-pipelines", "OpPassManager",
                "Callable operation specific optimizer pipelines (in the form "
                "of `dialect.op(pipeline)`)">,

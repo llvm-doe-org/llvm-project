@@ -21,6 +21,19 @@ StringRef CodeGenHwModes::DefaultModeName = "DefaultMode";
 HwMode::HwMode(Record *R) {
   Name = R->getName();
   Features = std::string(R->getValueAsString("Features"));
+
+  std::vector<Record *> PredicateRecs = R->getValueAsListOfDefs("Predicates");
+  SmallString<128> PredicateCheck;
+  raw_svector_ostream OS(PredicateCheck);
+  ListSeparator LS(" && ");
+  for (Record *Pred : PredicateRecs) {
+    StringRef CondString = Pred->getValueAsString("CondString");
+    if (CondString.empty())
+      continue;
+    OS << LS << '(' << CondString << ')';
+  }
+
+  Predicates = std::string(PredicateCheck);
 }
 
 LLVM_DUMP_METHOD
@@ -52,23 +65,16 @@ void HwModeSelect::dump() const {
 }
 
 CodeGenHwModes::CodeGenHwModes(RecordKeeper &RK) : Records(RK) {
-  std::vector<Record*> MRs = Records.getAllDerivedDefinitions("HwMode");
-  // The default mode needs a definition in the .td sources for TableGen
-  // to accept references to it. We need to ignore the definition here.
-  for (auto I = MRs.begin(), E = MRs.end(); I != E; ++I) {
-    if ((*I)->getName() != DefaultModeName)
+  for (Record *R : Records.getAllDerivedDefinitions("HwMode")) {
+    // The default mode needs a definition in the .td sources for TableGen
+    // to accept references to it. We need to ignore the definition here.
+    if (R->getName() == DefaultModeName)
       continue;
-    MRs.erase(I);
-    break;
-  }
-
-  for (Record *R : MRs) {
     Modes.emplace_back(R);
     ModeIds.insert(std::make_pair(R, Modes.size()));
   }
 
-  std::vector<Record*> MSs = Records.getAllDerivedDefinitions("HwModeSelect");
-  for (Record *R : MSs) {
+  for (Record *R : Records.getAllDerivedDefinitions("HwModeSelect")) {
     auto P = ModeSelects.emplace(std::make_pair(R, HwModeSelect(R, *this)));
     assert(P.second);
     (void)P;

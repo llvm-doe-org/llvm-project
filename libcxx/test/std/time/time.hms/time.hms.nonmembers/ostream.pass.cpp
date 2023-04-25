@@ -16,6 +16,8 @@
 // TODO FMT Investigate Windows issues.
 // UNSUPPORTED: msvc, target={{.+}}-windows-gnu
 
+// XFAIL: availability-fp_to_chars-missing
+
 // REQUIRES: locale.fr_FR.UTF-8
 // REQUIRES: locale.ja_JP.UTF-8
 
@@ -27,8 +29,9 @@
 //   basic_ostream<charT, traits>&
 //     operator<<(basic_ostream<charT, traits>& os, const hh_mm_ss<Duration>& hms);
 
-#include <chrono>
 #include <cassert>
+#include <chrono>
+#include <ratio>
 #include <sstream>
 
 #include "make_string.h"

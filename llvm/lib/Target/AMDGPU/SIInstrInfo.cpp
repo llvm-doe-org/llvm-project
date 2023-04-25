@@ -537,7 +537,7 @@ static void reportIllegalCopy(const SIInstrInfo *TII, MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator MI,
                               const DebugLoc &DL, MCRegister DestReg,
                               MCRegister SrcReg, bool KillSrc,
-                              const char *Msg = "illegal SGPR to VGPR copy") {
+                              const char *Msg = "illegal VGPR to SGPR copy") {
   MachineFunction *MF = MBB.getParent();
   DiagnosticInfoUnsupported IllegalCopy(MF->getFunction(), Msg, DL, DS_Error);
   LLVMContext &C = MF->getFunction().getContext();
@@ -1394,6 +1394,14 @@ static unsigned getIndirectSGPRWriteMovRelPseudo32(unsigned VecSize) {
     return AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V5;
   if (VecSize <= 256) // 32 bytes
     return AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V8;
+  if (VecSize <= 288) // 36 bytes
+    return AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V9;
+  if (VecSize <= 320) // 40 bytes
+    return AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V10;
+  if (VecSize <= 352) // 44 bytes
+    return AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V11;
+  if (VecSize <= 384) // 48 bytes
+    return AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V12;
   if (VecSize <= 512) // 64 bytes
     return AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V16;
   if (VecSize <= 1024) // 128 bytes
@@ -2084,6 +2092,10 @@ bool SIInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V4:
   case AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V5:
   case AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V8:
+  case AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V9:
+  case AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V10:
+  case AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V11:
+  case AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V12:
   case AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V16:
   case AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B32_V32:
   case AMDGPU::S_INDIRECT_REG_WRITE_MOVREL_B64_V1:
@@ -4346,7 +4358,7 @@ bool SIInstrInfo::verifyInstruction(const MachineInstr &MI,
 
       // Adjust for packed 16 bit values
       if (D16 && D16->getImm() && !ST.hasUnpackedD16VMem())
-        RegCount >>= 1;
+        RegCount = divideCeil(RegCount, 2);
 
       // Adjust if using LWE or TFE
       if ((LWE && LWE->getImm()) || (TFE && TFE->getImm()))
@@ -4359,7 +4371,7 @@ bool SIInstrInfo::verifyInstruction(const MachineInstr &MI,
         const TargetRegisterClass *DstRC = getOpRegClass(MI, DstIdx);
         uint32_t DstSize = RI.getRegSizeInBits(*DstRC) / 32;
         if (RegCount > DstSize) {
-          ErrInfo = "MIMG instruction returns too many registers for dst "
+          ErrInfo = "Image instruction returns too many registers for dst "
                     "register class";
           return false;
         }
@@ -7875,6 +7887,9 @@ unsigned SIInstrInfo::getMaxMUBUFImmOffset() { return (1 << 12) - 1; }
 
 void SIInstrInfo::fixImplicitOperands(MachineInstr &MI) const {
   if (!ST.isWave32())
+    return;
+
+  if (MI.isInlineAsm())
     return;
 
   for (auto &Op : MI.implicit_operands()) {

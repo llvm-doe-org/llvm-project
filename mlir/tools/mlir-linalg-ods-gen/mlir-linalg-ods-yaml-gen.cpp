@@ -317,10 +317,8 @@ struct ScalarTraits<SerializedAffineMap> {
                          SerializedAffineMap &value) {
     assert(rawYamlContext);
     auto *yamlContext = static_cast<LinalgYAMLContext *>(rawYamlContext);
-    std::string nullTerminatedScalar(scalar);
-    if (auto attr =
-            mlir::parseAttribute(nullTerminatedScalar, yamlContext->mlirContext)
-                .dyn_cast_or_null<AffineMapAttr>())
+    if (auto attr = mlir::parseAttribute(scalar, yamlContext->mlirContext)
+                        .dyn_cast_or_null<AffineMapAttr>())
       value.affineMapAttr = attr;
     else if (!value.affineMapAttr || !value.affineMapAttr.isa<AffineMapAttr>())
       return "could not parse as an affine map attribute";
@@ -871,14 +869,14 @@ exprs.push_back(getAffineConstantExpr(cst{1}, context));
           if (arg.kind != LinalgOperandDefKind::IndexAttr)
             continue;
           assert(arg.indexAttrMap);
-          for (auto &en :
+          for (auto [idx, result] :
                llvm::enumerate(arg.indexAttrMap->affineMap().getResults())) {
-            if (auto symbol = en.value().dyn_cast<AffineSymbolExpr>()) {
+            if (auto symbol = result.dyn_cast<AffineSymbolExpr>()) {
               std::string argName = arg.name;
               argName[0] = toupper(argName[0]);
               symbolBindings[symbol.getPosition()] =
                   llvm::formatv(structuredOpAccessAttrFormat, argName,
-                                symbol.getPosition(), en.index());
+                                symbol.getPosition(), idx);
             }
           }
         }

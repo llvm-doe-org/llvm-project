@@ -640,7 +640,7 @@ ParseResult ContractionOp::parse(OpAsmParser &parser, OperationState &result) {
   auto loc = parser.getCurrentLocation();
   DictionaryAttr dictAttr;
   // TODO: Unify linalg op attribute parsing.
-  if (parser.parseAttribute(dictAttr, "_", result.attributes) ||
+  if (parser.parseAttribute(dictAttr) ||
       parser.parseOperand(lhsInfo) || parser.parseComma() ||
       parser.parseOperand(rhsInfo) || parser.parseComma() ||
       parser.parseOperand(accInfo) ||
@@ -653,7 +653,7 @@ ParseResult ContractionOp::parse(OpAsmParser &parser, OperationState &result) {
       parser.resolveOperand(accInfo, resultType, result.operands) ||
       parser.addTypeToList(resultType, result.types))
     return failure();
-  result.attributes.assign(dictAttr.getValue().begin(),
+  result.attributes.append(dictAttr.getValue().begin(),
                            dictAttr.getValue().end());
 
   // Convert array of string into an array of IteratyType enums. This is needed,
@@ -729,8 +729,6 @@ void ContractionOp::print(OpAsmPrinter &p) {
   auto dictAttr = DictionaryAttr::get(getContext(), attrs);
   p << " " << dictAttr << " " << getLhs() << ", ";
   p << getRhs() << ", " << getAcc();
-  if (getMasks().size() == 2)
-    p << ", " << getMasks();
 
   p.printOptionalAttrDict((*this)->getAttrs(), attrNames);
   p << " : " << getLhs().getType() << ", " << getRhs().getType() << " into "
@@ -897,18 +895,6 @@ LogicalResult ContractionOp::verify() {
   if (failed(verifyOutputShape(*this, lhsType, rhsType, accType, resType,
                                contractingDimMap, batchDimMap)))
     return failure();
-
-  // Verify that either two vector masks are set or none are set.
-  auto lhsMaskType = getLHSVectorMaskType();
-  auto rhsMaskType = getRHSVectorMaskType();
-  if ((lhsMaskType && !rhsMaskType) || (!lhsMaskType && rhsMaskType))
-    return emitOpError("invalid number of vector masks specified");
-  if (lhsMaskType && rhsMaskType) {
-    // Verify mask rank == argument rank.
-    if (lhsMaskType.getShape().size() != lhsType.getShape().size() ||
-        rhsMaskType.getShape().size() != rhsType.getShape().size())
-      return emitOpError("invalid vector mask rank");
-  }
 
   // Verify supported combining kind.
   auto vectorType = resType.dyn_cast<VectorType>();
@@ -1558,7 +1544,7 @@ static Value foldExtractFromShapeCast(ExtractOp extractOp) {
         getDimReverse(shapeCastOp.getSourceVectorType(), i + destinationRank);
   }
   std::reverse(newStrides.begin(), newStrides.end());
-  SmallVector<int64_t, 4> newPosition = delinearize(newStrides, position);
+  SmallVector<int64_t, 4> newPosition = delinearize(position, newStrides);
   // OpBuilder is only used as a helper to build an I64ArrayAttr.
   OpBuilder b(extractOp.getContext());
   extractOp->setAttr(ExtractOp::getPositionAttrStrName(),
@@ -3733,6 +3719,8 @@ namespace {
 /// %1 = vector.transfer_read %t[%p0, %p1], %cst {in_bounds = [true, true]}
 ///     : tensor<?x?xf32>, vector<4x5xf32>
 /// ```
+// TODO: this is brittle and should be deprecated in favor of a more general
+// pattern that applies on-demand.
 struct FoldExtractSliceIntoTransferRead
     : public OpRewritePattern<TransferReadOp> {
 public:
@@ -3883,9 +3871,13 @@ struct TransferReadAfterWriteToBroadcast
 
 void TransferReadOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                  MLIRContext *context) {
-  results
-      .add<FoldExtractSliceIntoTransferRead, TransferReadAfterWriteToBroadcast>(
-          context);
+  // clang-format off
+  results.add <
+               // TODO: this is brittle and should be deprecated in favor of a
+               // more general pattern that applies on-demand.
+               FoldExtractSliceIntoTransferRead,
+               TransferReadAfterWriteToBroadcast>(context);
+  // clang-format on
 }
 
 //===----------------------------------------------------------------------===//
@@ -4235,6 +4227,8 @@ public:
 /// %1 = vector.transfer_write %v, %t2[%a, %b] {in_bounds = [true, true]}
 ///     : vector<4x5xf32>, tensor<?x?xf32>
 /// ```
+// TODO: this is brittle and should be deprecated in favor of a more general
+// pattern that applies on-demand.
 struct FoldInsertSliceIntoTransferWrite
     : public OpRewritePattern<tensor::InsertSliceOp> {
 public:
@@ -4417,8 +4411,13 @@ public:
 
 void TransferWriteOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                   MLIRContext *context) {
-  results.add<FoldWaw, FoldInsertSliceIntoTransferWrite,
+  // clang-format off
+  results.add<FoldWaw,
+              // TODO: this is brittle and should be deprecated in favor of a
+              // more general pattern that applies on-demand.
+              FoldInsertSliceIntoTransferWrite,
               SwapExtractSliceOfTransferWrite>(context);
+  // clang-format on
 }
 
 //===----------------------------------------------------------------------===//
@@ -5265,13 +5264,52 @@ public:
   }
 };
 
+/// Folds transpose(create_mask) into a new transposed create_mask.
+class FoldTransposeCreateMask final : public OpRewritePattern<TransposeOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(TransposeOp transpOp,
+                                PatternRewriter &rewriter) const override {
+    Value transposeSrc = transpOp.getVector();
+    auto createMaskOp = transposeSrc.getDefiningOp<vector::CreateMaskOp>();
+    auto constantMaskOp = transposeSrc.getDefiningOp<vector::ConstantMaskOp>();
+    if (!createMaskOp && !constantMaskOp)
+      return failure();
+
+    // Get the transpose permutation and apply it to the vector.create_mask or
+    // vector.constant_mask operands.
+    SmallVector<int64_t> permutation;
+    transpOp.getTransp(permutation);
+
+    if (createMaskOp) {
+      auto maskOperands = createMaskOp.getOperands();
+      SmallVector<Value> newOperands(maskOperands.begin(), maskOperands.end());
+      applyPermutationToVector(newOperands, permutation);
+
+      rewriter.replaceOpWithNewOp<vector::CreateMaskOp>(
+          transpOp, transpOp.getResultVectorType(), newOperands);
+      return success();
+    }
+
+    // ConstantMaskOp case.
+    auto maskDimSizes = constantMaskOp.getMaskDimSizes();
+    SmallVector<Attribute> newMaskDimSizes(maskDimSizes.getValue());
+    applyPermutationToVector(newMaskDimSizes, permutation);
+
+    rewriter.replaceOpWithNewOp<vector::ConstantMaskOp>(
+        transpOp, transpOp.getResultVectorType(),
+        ArrayAttr::get(transpOp.getContext(), newMaskDimSizes));
+    return success();
+  }
+};
+
 } // namespace
 
 void vector::TransposeOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
-  results
-      .add<FoldTransposedScalarBroadcast, TransposeFolder, FoldTransposeSplat>(
-          context);
+  results.add<FoldTransposeCreateMask, FoldTransposedScalarBroadcast,
+              TransposeFolder, FoldTransposeSplat>(context);
 }
 
 void vector::TransposeOp::getTransp(SmallVectorImpl<int64_t> &results) {
@@ -5497,7 +5535,7 @@ void mlir::vector::MaskOp::print(OpAsmPrinter &p) {
   // Print single masked operation and skip terminator.
   p << " { ";
   Block *singleBlock = &getMaskRegion().getBlocks().front();
-  if (singleBlock && singleBlock->getOperations().size() >= 1)
+  if (singleBlock && !singleBlock->getOperations().empty())
     p.printCustomOrGenericOp(&singleBlock->front());
   p << " }";
 
@@ -5532,13 +5570,12 @@ void MaskOp::ensureTerminator(Region &region, Builder &builder, Location loc) {
   opBuilder.create<vector::YieldOp>(loc, maskedOp->getResults());
   oldYieldOp->dropAllReferences();
   oldYieldOp->erase();
-  return;
 }
 
 LogicalResult MaskOp::verify() {
   // Structural checks.
   Block &block = getMaskRegion().getBlocks().front();
-  if (block.getOperations().size() < 1)
+  if (block.getOperations().empty())
     return emitOpError("expects a terminator within the mask region");
   if (block.getOperations().size() > 2)
     return emitOpError("expects only one operation to mask");

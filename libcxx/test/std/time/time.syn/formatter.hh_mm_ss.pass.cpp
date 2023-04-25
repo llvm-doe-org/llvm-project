@@ -17,6 +17,8 @@
 
 // XFAIL: LIBCXX-FREEBSD-FIXME
 
+// XFAIL: availability-fp_to_chars-missing
+
 // REQUIRES: locale.fr_FR.UTF-8
 // REQUIRES: locale.ja_JP.UTF-8
 
@@ -32,6 +34,7 @@
 #include <concepts>
 #include <locale>
 #include <iostream>
+#include <ratio>
 #include <type_traits>
 
 #include "formatter_tests.h"
@@ -149,7 +152,7 @@ static void test_valid_values() {
            "%EX='03:02:01'\t"
            "\n"),
         fmt,
-        std::chrono::hh_mm_ss(-(3h + 2min + 1s + std::chrono::duration<int64_t, std::pico>(123456789012))));
+        std::chrono::hh_mm_ss(-(3h + 2min + 1s + std::chrono::duration<std::int64_t, std::pico>(123456789012))));
 
   // The number of fractional seconds is 0 according to the Standard
   // TODO FMT Determine what to do.
@@ -260,7 +263,7 @@ static void test_valid_values() {
            "%EX='03:02:01'\t"
            "\n"),
         lfmt,
-        std::chrono::hh_mm_ss(-(3h + 2min + 1s + std::chrono::duration<int64_t, std::pico>(123456789012))));
+        std::chrono::hh_mm_ss(-(3h + 2min + 1s + std::chrono::duration<std::int64_t, std::pico>(123456789012))));
 
   check(SV("%H='01'\t"
            "%OH='01'\t"
@@ -379,7 +382,7 @@ static void test_valid_values() {
 #  endif
            "\n"),
         lfmt,
-        std::chrono::hh_mm_ss(-(3h + 2min + 1s + std::chrono::duration<int64_t, std::pico>(123456789012))));
+        std::chrono::hh_mm_ss(-(3h + 2min + 1s + std::chrono::duration<std::int64_t, std::pico>(123456789012))));
 
   check(loc,
         SV("%H='01'\t"
@@ -466,7 +469,7 @@ static void test_valid_values() {
            "%EX='03時02分01秒'\t"
            "\n"),
         lfmt,
-        std::chrono::hh_mm_ss(-(3h + 2min + 1s + std::chrono::duration<int64_t, std::pico>(123456789012))));
+        std::chrono::hh_mm_ss(-(3h + 2min + 1s + std::chrono::duration<std::int64_t, std::pico>(123456789012))));
 
   check(loc,
         SV("%H='01'\t"

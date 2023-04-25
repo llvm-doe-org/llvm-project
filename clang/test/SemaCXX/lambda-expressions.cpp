@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -std=c++14 -Wno-unused-value -fsyntax-only -verify -verify=expected-cxx14 -fblocks %s
-// RUN: %clang_cc1 -std=c++17 -Wno-unused-value -fsyntax-only -verify -fblocks %s
+// RUN: %clang_cc1 -std=c++17 -Wno-unused-value -verify -ast-dump -fblocks %s | FileCheck %s
 
 namespace std { class type_info; };
 
@@ -688,4 +688,29 @@ void Func1() {
   [[maybe_unused]] auto z = [&](decltype(cpp_attribute::StringLiteral("xx"))) {};
 }
 
+}
+
+#if __cplusplus > 201402L
+namespace GH60936 {
+struct S {
+  int i;
+  // `&i` in default initializer causes implicit `this` access.
+  int *p = &i;
+};
+
+static_assert([]() constexpr {
+  S r = S{2};
+  return r.p != nullptr;
+}());
+} // namespace GH60936
+#endif
+
+// Call operator attributes refering to a variable should
+// be properly handled after D124351
+constexpr int i = 2;
+void foo() {
+  (void)[=][[gnu::aligned(i)]] () {}; // expected-warning{{C++2b extension}}
+  // CHECK: AlignedAttr
+  // CHECK-NEXT: ConstantExpr
+  // CHECK-NEXT: value: Int 2
 }

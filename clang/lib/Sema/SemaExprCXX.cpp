@@ -1137,7 +1137,6 @@ static QualType adjustCVQualifiersForCXXThisWithinLambda(
     auto C = CurLSI->getCXXThisCapture();
 
     if (C.isCopyCapture()) {
-      ClassType.removeLocalCVRQualifiers(Qualifiers::CVRMask);
       if (!CurLSI->Mutable)
         ClassType.addConst();
       return ASTCtx.getPointerType(ClassType);
@@ -1177,7 +1176,6 @@ static QualType adjustCVQualifiersForCXXThisWithinLambda(
     while (Closure &&
            IsThisCaptured(Closure, IsByCopyCapture, IsConstCapture)) {
       if (IsByCopyCapture) {
-        ClassType.removeLocalCVRQualifiers(Qualifiers::CVRMask);
         if (IsConstCapture)
           ClassType.addConst();
         return ASTCtx.getPointerType(ClassType);
@@ -1364,15 +1362,7 @@ bool Sema::CheckCXXThisCapture(SourceLocation Loc, const bool Explicit,
 
     // The type of the corresponding data member (not a 'this' pointer if 'by
     // copy').
-    QualType CaptureType = ThisTy;
-    if (ByCopy) {
-      // If we are capturing the object referred to by '*this' by copy, ignore
-      // any cv qualifiers inherited from the type of the member function for
-      // the type of the closure-type's corresponding data member and any use
-      // of 'this'.
-      CaptureType = ThisTy->getPointeeType();
-      CaptureType.removeLocalCVRQualifiers(Qualifiers::CVRMask);
-    }
+    QualType CaptureType = ByCopy ? ThisTy->getPointeeType() : ThisTy;
 
     bool isNested = NumCapturingClosures > 1;
     CSI->addThisCapture(isNested, Loc, CaptureType, ByCopy);
@@ -1592,6 +1582,9 @@ Sema::BuildCXXTypeConstructExpr(TypeSourceInfo *TInfo,
   Expr *Inner = Result.get();
   if (CXXBindTemporaryExpr *BTE = dyn_cast_or_null<CXXBindTemporaryExpr>(Inner))
     Inner = BTE->getSubExpr();
+  if (auto *CE = dyn_cast<ConstantExpr>(Inner);
+      CE && CE->isImmediateInvocation())
+    Inner = CE->getSubExpr();
   if (!isa<CXXTemporaryObjectExpr>(Inner) &&
       !isa<CXXScalarValueInitExpr>(Inner)) {
     // If we created a CXXTemporaryObjectExpr, that node also represents the
@@ -8254,12 +8247,12 @@ static inline bool VariableCanNeverBeAConstantExpression(VarDecl *Var,
   const VarDecl *DefVD = nullptr;
 
   // If there is no initializer - this can not be a constant expression.
-  if (!Var->getAnyInitializer(DefVD)) return true;
+  const Expr *Init = Var->getAnyInitializer(DefVD);
+  if (!Init)
+    return true;
   assert(DefVD);
-  if (DefVD->isWeak()) return false;
-  EvaluatedStmt *Eval = DefVD->ensureEvaluatedStmt();
-
-  Expr *Init = cast<Expr>(Eval->Value);
+  if (DefVD->isWeak())
+    return false;
 
   if (Var->getType()->isDependentType() || Init->isValueDependent()) {
     // FIXME: Teach the constant evaluator to deal with the non-dependent parts

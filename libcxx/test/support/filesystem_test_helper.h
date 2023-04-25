@@ -19,6 +19,7 @@
 #include <cstdio> // for printf
 #include <string>
 #include <system_error>
+#include <type_traits>
 #include <vector>
 
 #include "assert_macros.h"
@@ -101,7 +102,7 @@ namespace utils {
     // N.B. libc might define some of the foo[64] identifiers using macros from
     // foo64 -> foo or vice versa.
 #if defined(_WIN32)
-    using off64_t = int64_t;
+    using off64_t = std::int64_t;
 #elif defined(__MVS__) || defined(__LP64__)
     using off64_t = ::off_t;
 #else
@@ -335,7 +336,7 @@ private:
         fs::path const cwd = utils::getcwd();
         fs::path const tmp = fs::temp_directory_path();
         std::string base = cwd.filename().string();
-        size_t i = std::hash<std::string>()(cwd.string());
+        std::size_t i = std::hash<std::string>()(cwd.string());
         fs::path p = tmp / (base + "-static_env." + std::to_string(i));
         while (utils::exists(p.string())) {
             p = tmp / (base + "-static_env." + std::to_string(++i));

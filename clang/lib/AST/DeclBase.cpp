@@ -1056,6 +1056,18 @@ const FunctionType *Decl::getFunctionType(bool BlocksToo) const {
   return Ty->getAs<FunctionType>();
 }
 
+bool Decl::isFunctionPointerType() const {
+  QualType Ty;
+  if (const auto *D = dyn_cast<ValueDecl>(this))
+    Ty = D->getType();
+  else if (const auto *D = dyn_cast<TypedefNameDecl>(this))
+    Ty = D->getUnderlyingType();
+  else
+    return false;
+
+  return Ty.getCanonicalType()->isFunctionPointerType();
+}
+
 DeclContext *Decl::getNonTransparentDeclContext() {
   assert(getDeclContext());
   return getDeclContext()->getNonTransparentContext();

@@ -115,6 +115,12 @@ void DAGTypeLegalizer::PromoteIntegerResult(SDNode *N, unsigned ResNo) {
                          Res = PromoteIntRes_VECTOR_SHUFFLE(N); break;
   case ISD::VECTOR_SPLICE:
                          Res = PromoteIntRes_VECTOR_SPLICE(N); break;
+  case ISD::VECTOR_DEINTERLEAVE:
+    Res = PromoteIntRes_VECTOR_DEINTERLEAVE(N);
+    return;
+  case ISD::VECTOR_INTERLEAVE:
+    Res = PromoteIntRes_VECTOR_INTERLEAVE(N);
+    return;
   case ISD::INSERT_VECTOR_ELT:
                          Res = PromoteIntRes_INSERT_VECTOR_ELT(N); break;
   case ISD::BUILD_VECTOR:
@@ -3020,7 +3026,14 @@ void DAGTypeLegalizer::ExpandIntRes_ADDSUB(SDNode *N,
     if (isOneConstant(LoOps[1]))
       Cmp = DAG.getSetCC(dl, getSetCCResultType(NVT), Lo,
                          DAG.getConstant(0, dl, NVT), ISD::SETEQ);
-    else
+    else if (isAllOnesConstant(LoOps[1])) {
+      if (isAllOnesConstant(HiOps[1]))
+        Cmp = DAG.getSetCC(dl, getSetCCResultType(NVT), LoOps[0],
+                           DAG.getConstant(0, dl, NVT), ISD::SETEQ);
+      else
+        Cmp = DAG.getSetCC(dl, getSetCCResultType(NVT), LoOps[0],
+                           DAG.getConstant(0, dl, NVT), ISD::SETNE);
+    } else
       Cmp = DAG.getSetCC(dl, getSetCCResultType(NVT), Lo, LoOps[0],
                          ISD::SETULT);
 
@@ -3031,7 +3044,10 @@ void DAGTypeLegalizer::ExpandIntRes_ADDSUB(SDNode *N,
       Carry = DAG.getSelect(dl, NVT, Cmp, DAG.getConstant(1, dl, NVT),
                              DAG.getConstant(0, dl, NVT));
 
-    Hi = DAG.getNode(ISD::ADD, dl, NVT, Hi, Carry);
+    if (isAllOnesConstant(LoOps[1]) && isAllOnesConstant(HiOps[1]))
+      Hi = DAG.getNode(ISD::SUB, dl, NVT, HiOps[0], Carry);
+    else
+      Hi = DAG.getNode(ISD::ADD, dl, NVT, Hi, Carry);
   } else {
     Lo = DAG.getNode(ISD::SUB, dl, NVT, LoOps);
     Hi = DAG.getNode(ISD::SUB, dl, NVT, ArrayRef(HiOps, 2));
@@ -3150,6 +3166,11 @@ void DAGTypeLegalizer::ExpandIntRes_UADDSUBO(SDNode *N,
       SDValue Or = DAG.getNode(ISD::OR, dl, Lo.getValueType(), Lo, Hi);
       Ovf = DAG.getSetCC(dl, N->getValueType(1), Or,
                          DAG.getConstant(0, dl, Lo.getValueType()), ISD::SETEQ);
+    } else if (N->getOpcode() == ISD::UADDO && isAllOnesConstant(RHS)) {
+      // Special case: uaddo X, -1 overflows if X == 0.
+      Ovf =
+          DAG.getSetCC(dl, N->getValueType(1), LHS,
+                       DAG.getConstant(0, dl, LHS.getValueType()), ISD::SETNE);
     } else {
       // Calculate the overflow: addition overflows iff a + b < a, and
       // subtraction overflows iff a - b > a.
@@ -5306,6 +5327,33 @@ SDValue DAGTypeLegalizer::PromoteIntRes_VECTOR_SPLICE(SDNode *N) {
   EVT OutVT = V0.getValueType();
 
   return DAG.getNode(ISD::VECTOR_SPLICE, dl, OutVT, V0, V1, N->getOperand(2));
+}
+
+SDValue DAGTypeLegalizer::PromoteIntRes_VECTOR_DEINTERLEAVE(SDNode *N) {
+  SDLoc dl(N);
+
+  SDValue V0 = GetPromotedInteger(N->getOperand(0));
+  SDValue V1 = GetPromotedInteger(N->getOperand(1));
+  EVT ResVT = V0.getValueType();
+  SDValue Res = DAG.getNode(ISD::VECTOR_DEINTERLEAVE, dl,
+                            DAG.getVTList(ResVT, ResVT), V0, V1);
+  SetPromotedInteger(SDValue(N, 0), Res.getValue(0));
+  SetPromotedInteger(SDValue(N, 1), Res.getValue(1));
+  return SDValue();
+}
+
+SDValue DAGTypeLegalizer::PromoteIntRes_VECTOR_INTERLEAVE(SDNode *N) {
+  SDLoc dl(N);
+
+  SDValue V0 = GetPromotedInteger(N->getOperand(0));
+  SDValue V1 = GetPromotedInteger(N->getOperand(1));
+
+  EVT ResVT = V0.getValueType();
+  SDValue Res = DAG.getNode(ISD::VECTOR_INTERLEAVE, dl,
+                            DAG.getVTList(ResVT, ResVT), V0, V1);
+  SetPromotedInteger(SDValue(N, 0), Res.getValue(0));
+  SetPromotedInteger(SDValue(N, 1), Res.getValue(1));
+  return SDValue();
 }
 
 SDValue DAGTypeLegalizer::PromoteIntRes_EXTRACT_SUBVECTOR(SDNode *N) {

@@ -11,7 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "LLVMInlining.h"
 #include "TypeDetail.h"
+#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMInterfaces.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/Builders.h"
@@ -21,7 +23,6 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Matchers.h"
-#include "mlir/Transforms/InliningUtils.h"
 
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -185,21 +186,31 @@ void AllocaOp::print(OpAsmPrinter &p) {
   auto funcTy =
       FunctionType::get(getContext(), {getArraySize().getType()}, {getType()});
 
+  if (getInalloca())
+    p << " inalloca";
+
   p << ' ' << getArraySize() << " x " << elemTy;
   if (getAlignment() && *getAlignment() != 0)
-    p.printOptionalAttrDict((*this)->getAttrs(), {kElemTypeAttrName});
-  else
     p.printOptionalAttrDict((*this)->getAttrs(),
-                            {"alignment", kElemTypeAttrName});
+                            {kElemTypeAttrName, getInallocaAttrName()});
+  else
+    p.printOptionalAttrDict(
+        (*this)->getAttrs(),
+        {getAlignmentAttrName(), kElemTypeAttrName, getInallocaAttrName()});
   p << " : " << funcTy;
 }
 
-// <operation> ::= `llvm.alloca` ssa-use `x` type attribute-dict?
-//                 `:` type `,` type
+// <operation> ::= `llvm.alloca` `inalloca`? ssa-use `x` type
+//                  attribute-dict? `:` type `,` type
 ParseResult AllocaOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::UnresolvedOperand arraySize;
   Type type, elemType;
   SMLoc trailingTypeLoc;
+
+  if (succeeded(parser.parseOptionalKeyword("inalloca")))
+    result.addAttribute(getInallocaAttrName(result.name),
+                        UnitAttr::get(parser.getContext()));
+
   if (parser.parseOperand(arraySize) || parser.parseKeyword("x") ||
       parser.parseType(elemType) ||
       parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
@@ -1252,6 +1263,9 @@ LogicalResult LandingpadOp::verify() {
           "llvm.landingpad needs to be in a function with a personality");
   }
 
+  // Consistency of llvm.landingpad result types is checked in
+  // LLVMFuncOp::verify().
+
   if (!getCleanup() && getOperands().empty())
     return emitError("landingpad instruction expects at least one clause or "
                      "cleanup attribute");
@@ -1512,8 +1526,8 @@ LogicalResult ReturnOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult ResumeOp::verify() {
-  if (!getValue().getDefiningOp<LandingpadOp>())
-    return emitOpError("expects landingpad value as operand");
+  // Consistency of llvm.resume value types is checked in LLVMFuncOp::verify().
+
   // No check for personality of function - landingpad op verifies it.
   return success();
 }
@@ -1613,13 +1627,16 @@ void GlobalOp::build(OpBuilder &builder, OperationState &result, Type type,
 
 void GlobalOp::print(OpAsmPrinter &p) {
   p << ' ' << stringifyLinkage(getLinkage()) << ' ';
+  StringRef visibility = stringifyVisibility(getVisibility_());
+  if (!visibility.empty())
+    p << visibility << ' ';
+  if (getThreadLocal_())
+    p << "thread_local ";
   if (auto unnamedAddr = getUnnamedAddr()) {
     StringRef str = stringifyUnnamedAddr(*unnamedAddr);
     if (!str.empty())
       p << str << ' ';
   }
-  if (getThreadLocal_())
-    p << "thread_local ";
   if (getConstant())
     p << "constant ";
   p.printSymbolName(getSymName());
@@ -1630,11 +1647,12 @@ void GlobalOp::print(OpAsmPrinter &p) {
   // Note that the alignment attribute is printed using the
   // default syntax here, even though it is an inherent attribute
   // (as defined in https://mlir.llvm.org/docs/LangRef/#attributes)
-  p.printOptionalAttrDict(
-      (*this)->getAttrs(),
-      {SymbolTable::getSymbolAttrName(), getGlobalTypeAttrName(),
-       getConstantAttrName(), getValueAttrName(), getLinkageAttrName(),
-       getUnnamedAddrAttrName(), getThreadLocal_AttrName()});
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          {SymbolTable::getSymbolAttrName(),
+                           getGlobalTypeAttrName(), getConstantAttrName(),
+                           getValueAttrName(), getLinkageAttrName(),
+                           getUnnamedAddrAttrName(), getThreadLocal_AttrName(),
+                           getVisibility_AttrName()});
 
   // Print the trailing type unless it's a string global.
   if (getValueOrNull().dyn_cast_or_null<StringAttr>())
@@ -1674,6 +1692,7 @@ struct EnumTraits {};
 REGISTER_ENUM_TYPE(Linkage);
 REGISTER_ENUM_TYPE(UnnamedAddr);
 REGISTER_ENUM_TYPE(CConv);
+REGISTER_ENUM_TYPE(Visibility);
 } // namespace
 
 /// Parse an enum from the keyword, or default to the provided default value.
@@ -1707,15 +1726,21 @@ ParseResult GlobalOp::parse(OpAsmParser &parser, OperationState &result) {
                           ctx, parseOptionalLLVMKeyword<Linkage>(
                                    parser, result, LLVM::Linkage::External)));
 
-  if (succeeded(parser.parseOptionalKeyword("thread_local")))
-    result.addAttribute(getThreadLocal_AttrName(result.name),
-                        parser.getBuilder().getUnitAttr());
+  // Parse optional visibility, default to Default.
+  result.addAttribute(getVisibility_AttrName(result.name),
+                      parser.getBuilder().getI64IntegerAttr(
+                          parseOptionalLLVMKeyword<LLVM::Visibility, int64_t>(
+                              parser, result, LLVM::Visibility::Default)));
 
   // Parse optional UnnamedAddr, default to None.
   result.addAttribute(getUnnamedAddrAttrName(result.name),
                       parser.getBuilder().getI64IntegerAttr(
                           parseOptionalLLVMKeyword<UnnamedAddr, int64_t>(
                               parser, result, LLVM::UnnamedAddr::None)));
+
+  if (succeeded(parser.parseOptionalKeyword("thread_local")))
+    result.addAttribute(getThreadLocal_AttrName(result.name),
+                        parser.getBuilder().getUnitAttr());
 
   if (succeeded(parser.parseOptionalKeyword("constant")))
     result.addAttribute(getConstantAttrName(result.name),
@@ -2037,6 +2062,12 @@ ParseResult LLVMFuncOp::parse(OpAsmParser &parser, OperationState &result) {
                        parseOptionalLLVMKeyword<Linkage>(
                            parser, result, LLVM::Linkage::External)));
 
+  // Parse optional visibility, default to Default.
+  result.addAttribute(getVisibility_AttrName(result.name),
+                      parser.getBuilder().getI64IntegerAttr(
+                          parseOptionalLLVMKeyword<LLVM::Visibility, int64_t>(
+                              parser, result, LLVM::Visibility::Default)));
+
   // Default to C Calling Convention if no keyword is provided.
   result.addAttribute(
       getCConvAttrName(result.name),
@@ -2087,6 +2118,9 @@ void LLVMFuncOp::print(OpAsmPrinter &p) {
   p << ' ';
   if (getLinkage() != LLVM::Linkage::External)
     p << stringifyLinkage(getLinkage()) << ' ';
+  StringRef visibility = stringifyVisibility(getVisibility_());
+  if (!visibility.empty())
+    p << visibility << ' ';
   if (getCConv() != LLVM::CConv::C)
     p << stringifyCConv(getCConv()) << ' ';
 
@@ -2108,7 +2142,7 @@ void LLVMFuncOp::print(OpAsmPrinter &p) {
   function_interface_impl::printFunctionAttributes(
       p, *this,
       {getFunctionTypeAttrName(), getArgAttrsAttrName(), getResAttrsAttrName(),
-       getLinkageAttrName(), getCConvAttrName()});
+       getLinkageAttrName(), getCConvAttrName(), getVisibility_AttrName()});
 
   // Print the body if this is not an external function.
   Region &body = getBody();
@@ -2138,6 +2172,42 @@ LogicalResult LLVMFuncOp::verify() {
                            << stringifyLinkage(LLVM::Linkage::ExternWeak)
                            << "' linkage";
     return success();
+  }
+
+  Type landingpadResultTy;
+  StringRef diagnosticMessage;
+  bool isLandingpadTypeConsistent =
+      !walk([&](Operation *op) {
+         const auto checkType = [&](Type type, StringRef errorMessage) {
+           if (!landingpadResultTy) {
+             landingpadResultTy = type;
+             return WalkResult::advance();
+           }
+           if (landingpadResultTy != type) {
+             diagnosticMessage = errorMessage;
+             return WalkResult::interrupt();
+           }
+           return WalkResult::advance();
+         };
+         return TypeSwitch<Operation *, WalkResult>(op)
+             .Case<LandingpadOp>([&](auto landingpad) {
+               constexpr StringLiteral errorMessage =
+                   "'llvm.landingpad' should have a consistent result type "
+                   "inside a function";
+               return checkType(landingpad.getType(), errorMessage);
+             })
+             .Case<ResumeOp>([&](auto resume) {
+               constexpr StringLiteral errorMessage =
+                   "'llvm.resume' should have a consistent input type inside a "
+                   "function";
+               return checkType(resume.getValue().getType(), errorMessage);
+             })
+             .Default([](auto) { return WalkResult::skip(); });
+       }).wasInterrupted();
+  if (!isLandingpadTypeConsistent) {
+    assert(!diagnosticMessage.empty() &&
+           "Expecting a non-empty diagnostic message");
+    return emitError(diagnosticMessage);
   }
 
   return success();
@@ -2408,7 +2478,7 @@ OpFoldResult LLVM::GEPOp::fold(FoldAdaptor adaptor) {
   // Canonicalize any dynamic indices of constant value to constant indices.
   bool changed = false;
   SmallVector<GEPArg> gepArgs;
-  for (auto &iter : llvm::enumerate(indices)) {
+  for (auto iter : llvm::enumerate(indices)) {
     auto integer = iter.value().dyn_cast_or_null<IntegerAttr>();
     // Constant indices can only be int32_t, so if integer does not fit we
     // are forced to keep it dynamic, despite being a constant.
@@ -2747,185 +2817,6 @@ struct LLVMOpAsmDialectInterface : public OpAsmDialectInterface {
 } // namespace
 
 //===----------------------------------------------------------------------===//
-// DialectInlinerInterface
-//===----------------------------------------------------------------------===//
-
-/// Check whether the given alloca is an input to a lifetime intrinsic,
-/// optionally passing through one or more casts on the way. This is not
-/// transitive through block arguments.
-static bool hasLifetimeMarkers(LLVM::AllocaOp allocaOp) {
-  SmallVector<Operation *> stack(allocaOp->getUsers().begin(),
-                                 allocaOp->getUsers().end());
-  while (!stack.empty()) {
-    Operation *op = stack.pop_back_val();
-    if (isa<LLVM::LifetimeStartOp, LLVM::LifetimeEndOp>(op))
-      return true;
-    if (isa<LLVM::BitcastOp>(op))
-      stack.append(op->getUsers().begin(), op->getUsers().end());
-  }
-  return false;
-}
-
-/// Move all alloca operations with a constant size in the former entry block of
-/// the newly inlined callee into the entry block of the caller, and insert
-/// lifetime intrinsics that limit their scope to the inlined blocks.
-static void moveConstantAllocasToEntryBlock(
-    iterator_range<Region::iterator> inlinedBlocks) {
-  Block *calleeEntryBlock = &(*inlinedBlocks.begin());
-  Block *callerEntryBlock = &(*calleeEntryBlock->getParent()->begin());
-  if (calleeEntryBlock == callerEntryBlock)
-    // Nothing to do.
-    return;
-  SmallVector<std::tuple<LLVM::AllocaOp, IntegerAttr, bool>> allocasToMove;
-  bool shouldInsertLifetimes = false;
-  // Conservatively only move alloca operations that are part of the entry block
-  // and do not inspect nested regions, since they may execute conditionally or
-  // have other unknown semantics.
-  for (auto allocaOp : calleeEntryBlock->getOps<LLVM::AllocaOp>()) {
-    IntegerAttr arraySize;
-    if (!matchPattern(allocaOp.getArraySize(), m_Constant(&arraySize)))
-      continue;
-    bool shouldInsertLifetime =
-        arraySize.getValue() != 0 && !hasLifetimeMarkers(allocaOp);
-    shouldInsertLifetimes |= shouldInsertLifetime;
-    allocasToMove.emplace_back(allocaOp, arraySize, shouldInsertLifetime);
-  }
-  if (allocasToMove.empty())
-    return;
-  OpBuilder builder(callerEntryBlock, callerEntryBlock->begin());
-  for (auto &[allocaOp, arraySize, shouldInsertLifetime] : allocasToMove) {
-    auto newConstant = builder.create<LLVM::ConstantOp>(
-        allocaOp->getLoc(), allocaOp.getArraySize().getType(), arraySize);
-    // Insert a lifetime start intrinsic where the alloca was before moving it.
-    if (shouldInsertLifetime) {
-      OpBuilder::InsertionGuard insertionGuard(builder);
-      builder.setInsertionPoint(allocaOp);
-      builder.create<LLVM::LifetimeStartOp>(
-          allocaOp.getLoc(), arraySize.getValue().getLimitedValue(),
-          allocaOp.getResult());
-    }
-    allocaOp->moveAfter(newConstant);
-    allocaOp.getArraySizeMutable().assign(newConstant.getResult());
-  }
-  if (!shouldInsertLifetimes)
-    return;
-  // Insert a lifetime end intrinsic before each return in the callee function.
-  for (Block &block : inlinedBlocks) {
-    if (!block.getTerminator()->hasTrait<OpTrait::ReturnLike>())
-      continue;
-    builder.setInsertionPoint(block.getTerminator());
-    for (auto &[allocaOp, arraySize, shouldInsertLifetime] : allocasToMove) {
-      if (!shouldInsertLifetime)
-        continue;
-      builder.create<LLVM::LifetimeEndOp>(
-          allocaOp.getLoc(), arraySize.getValue().getLimitedValue(),
-          allocaOp.getResult());
-    }
-  }
-}
-
-namespace {
-struct LLVMInlinerInterface : public DialectInlinerInterface {
-  using DialectInlinerInterface::DialectInlinerInterface;
-
-  bool isLegalToInline(Operation *call, Operation *callable,
-                       bool wouldBeCloned) const final {
-    if (!wouldBeCloned)
-      return false;
-    auto callOp = dyn_cast<LLVM::CallOp>(call);
-    auto funcOp = dyn_cast<LLVM::LLVMFuncOp>(callable);
-    if (!callOp || !funcOp)
-      return false;
-    // TODO: Handle argument and result attributes;
-    if (funcOp.getArgAttrs() || funcOp.getResAttrs())
-      return false;
-    // TODO: Handle exceptions.
-    if (funcOp.getPersonality())
-      return false;
-    if (funcOp.getPassthrough()) {
-      // TODO: Used attributes should not be passthrough.
-      DenseSet<StringAttr> disallowed(
-          {StringAttr::get(funcOp->getContext(), "noduplicate"),
-           StringAttr::get(funcOp->getContext(), "noinline"),
-           StringAttr::get(funcOp->getContext(), "optnone"),
-           StringAttr::get(funcOp->getContext(), "presplitcoroutine"),
-           StringAttr::get(funcOp->getContext(), "returns_twice"),
-           StringAttr::get(funcOp->getContext(), "strictfp")});
-      if (llvm::any_of(*funcOp.getPassthrough(), [&](Attribute attr) {
-            auto stringAttr = dyn_cast<StringAttr>(attr);
-            if (!stringAttr)
-              return false;
-            return disallowed.contains(stringAttr);
-          }))
-        return false;
-    }
-    return true;
-  }
-
-  bool isLegalToInline(Region *, Region *, bool, IRMapping &) const final {
-    return true;
-  }
-
-  /// Conservative allowlist of operations supported so far.
-  bool isLegalToInline(Operation *op, Region *, bool, IRMapping &) const final {
-    if (isPure(op))
-      return true;
-    // Some attributes on memory operations require handling during
-    // inlining. Since this is not yet implemented, refuse to inline memory
-    // operations that have any of these attributes.
-    if (auto iface = dyn_cast<AliasAnalysisOpInterface>(op))
-      if (iface.getAliasScopesOrNull() || iface.getNoAliasScopesOrNull())
-        return false;
-    if (auto iface = dyn_cast<AccessGroupOpInterface>(op))
-      if (iface.getAccessGroupsOrNull())
-        return false;
-    return isa<LLVM::CallOp, LLVM::AllocaOp, LLVM::LifetimeStartOp,
-               LLVM::LifetimeEndOp, LLVM::LoadOp, LLVM::StoreOp>(op);
-  }
-
-  /// Handle the given inlined return by replacing it with a branch. This
-  /// overload is called when the inlined region has more than one block.
-  void handleTerminator(Operation *op, Block *newDest) const final {
-    // Only return needs to be handled here.
-    auto returnOp = dyn_cast<LLVM::ReturnOp>(op);
-    if (!returnOp)
-      return;
-
-    // Replace the return with a branch to the dest.
-    OpBuilder builder(op);
-    builder.create<LLVM::BrOp>(op->getLoc(), returnOp.getOperands(), newDest);
-    op->erase();
-  }
-
-  /// Handle the given inlined return by replacing the uses of the call with the
-  /// operands of the return. This overload is called when the inlined region
-  /// only contains one block.
-  void handleTerminator(Operation *op,
-                        ArrayRef<Value> valuesToRepl) const final {
-    // Return will be the only terminator present.
-    auto returnOp = cast<LLVM::ReturnOp>(op);
-
-    // Replace the values directly with the return operands.
-    assert(returnOp.getNumOperands() == valuesToRepl.size());
-    for (const auto &[dst, src] :
-         llvm::zip(valuesToRepl, returnOp.getOperands()))
-      dst.replaceAllUsesWith(src);
-  }
-
-  void processInlinedCallBlocks(
-      Operation *call,
-      iterator_range<Region::iterator> inlinedBlocks) const override {
-    // Alloca operations with a constant size that were in the entry block of
-    // the callee should be moved to the entry block of the caller, as this will
-    // fold into prologue/epilogue code during code generation.
-    // This is not implemented as a standalone pattern because we need to know
-    // which newly inlined block was previously the entry block of the callee.
-    moveConstantAllocasToEntryBlock(inlinedBlocks);
-  }
-};
-} // end anonymous namespace
-
-//===----------------------------------------------------------------------===//
 // LLVMDialect initialization, type parsing, and registration.
 //===----------------------------------------------------------------------===//
 
@@ -2954,9 +2845,9 @@ void LLVMDialect::initialize() {
   // Support unknown operations because not all LLVM operations are registered.
   allowUnknownOperations();
   // clang-format off
-  addInterfaces<LLVMOpAsmDialectInterface,
-                LLVMInlinerInterface>();
+  addInterfaces<LLVMOpAsmDialectInterface>();
   // clang-format on
+  detail::addLLVMInlinerInterface(this);
 }
 
 #define GET_OP_CLASSES

@@ -296,16 +296,14 @@ static void CheckExplicitDataArg(const characteristics::DummyDataObject &dummy,
             "Actual argument associated with TYPE(*) %s may not have type-bound procedure '%s'"_err_en_US,
             dummyName, tbp->name());
       }
-      const auto &finals{
-          derived->typeSymbol().get<DerivedTypeDetails>().finals()};
+      auto finals{FinalsForDerivedTypeInstantiation(*derived)};
       if (!finals.empty()) { // 15.5.2.4(2)
+        SourceName name{finals.front()->name()};
         if (auto *msg{messages.Say(
                 "Actual argument associated with TYPE(*) %s may not have derived type '%s' with FINAL subroutine '%s'"_err_en_US,
-                dummyName, derived->typeSymbol().name(),
-                finals.begin()->first)}) {
-          msg->Attach(finals.begin()->first,
-              "FINAL subroutine '%s' in derived type '%s'"_en_US,
-              finals.begin()->first, derived->typeSymbol().name());
+                dummyName, derived->typeSymbol().name(), name)}) {
+          msg->Attach(name, "FINAL subroutine '%s' in derived type '%s'"_en_US,
+              name, derived->typeSymbol().name());
         }
       }
     }
@@ -496,22 +494,15 @@ static void CheckExplicitDataArg(const characteristics::DummyDataObject &dummy,
 
   // 15.5.2.7 -- dummy is POINTER
   if (dummyIsPointer) {
-    if (dummyIsContiguous && !actualIsContiguous) {
-      messages.Say(
-          "Actual argument associated with CONTIGUOUS POINTER %s must be simply contiguous"_err_en_US,
-          dummyName);
-    }
-    if (!actualIsPointer) {
-      if (dummy.intent == common::Intent::In) {
-        if (scope) {
-          semantics::CheckPointerAssignment(
-              context, messages.at(), dummyName, dummy, actual, *scope);
-        }
-      } else {
-        messages.Say(
-            "Actual argument associated with POINTER %s must also be POINTER unless INTENT(IN)"_err_en_US,
-            dummyName);
+    if (actualIsPointer || dummy.intent == common::Intent::In) {
+      if (scope) {
+        semantics::CheckPointerAssignment(
+            context, messages.at(), dummyName, dummy, actual, *scope);
       }
+    } else if (!actualIsPointer) {
+      messages.Say(
+          "Actual argument associated with POINTER %s must also be POINTER unless INTENT(IN)"_err_en_US,
+          dummyName);
     }
   }
 
@@ -875,8 +866,11 @@ static void RearrangeArguments(const characteristics::Procedure &proc,
         actuals.size(), proc.dummyArguments.size());
   }
   std::map<std::string, evaluate::ActualArgument> kwArgs;
+  bool anyKeyword{false};
+  int which{1};
   for (auto &x : actuals) {
-    if (x && x->keyword()) {
+    if (!x) {
+    } else if (x->keyword()) {
       auto emplaced{
           kwArgs.try_emplace(x->keyword()->ToString(), std::move(*x))};
       if (!emplaced.second) {
@@ -885,7 +879,13 @@ static void RearrangeArguments(const characteristics::Procedure &proc,
             *x->keyword());
       }
       x.reset();
+      anyKeyword = true;
+    } else if (anyKeyword) {
+      messages.Say(x ? x->sourceLocation() : std::nullopt,
+          "Actual argument #%d without a keyword may not follow any actual argument with a keyword"_err_en_US,
+          which);
     }
+    ++which;
   }
   if (!kwArgs.empty()) {
     int index{0};

@@ -2517,7 +2517,8 @@ private:
   /// this is a constructor declarator.
   bool isConstructorDeclarator(
       bool Unqualified, bool DeductionGuide = false,
-      DeclSpec::FriendSpecified IsFriend = DeclSpec::FriendSpecified::No);
+      DeclSpec::FriendSpecified IsFriend = DeclSpec::FriendSpecified::No,
+      const ParsedTemplateInfo *TemplateInfo = nullptr);
 
   /// Specifies the context in which type-id/expression
   /// disambiguation will occur.
@@ -2933,6 +2934,7 @@ private:
                                   SourceLocation AttrNameLoc,
                                   ParsedAttributes &Attrs);
   void ParseMicrosoftTypeAttributes(ParsedAttributes &attrs);
+  void ParseWebAssemblyFuncrefTypeAttribute(ParsedAttributes &Attrs);
   void DiagnoseAndSkipExtendedMicrosoftTypeAttributes();
   SourceLocation SkipExtendedMicrosoftTypeAttributes();
   void ParseMicrosoftInheritanceClassAttributes(ParsedAttributes &attrs);

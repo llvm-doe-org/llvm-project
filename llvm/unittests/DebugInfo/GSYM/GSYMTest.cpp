@@ -2489,14 +2489,14 @@ static void AddFunctionInfo(GsymCreator &GC, const char *FuncName,
 static Expected<GsymReader> FinalizeEncodeAndDecode(GsymCreator &GC) {
   Error FinalizeErr = GC.finalize(llvm::nulls());
   if (FinalizeErr)
-    return FinalizeErr;
+    return std::move(FinalizeErr);
   SmallString<1024> Str;
   raw_svector_ostream OutStrm(Str);
   const auto ByteOrder = support::endian::system_endianness();
   FileWriter FW(OutStrm, ByteOrder);
   llvm::Error Err = GC.encode(FW);
   if (Err)
-    return Err;
+    return std::move(Err);
   return GsymReader::copyBuffer(OutStrm.str());
 }
 

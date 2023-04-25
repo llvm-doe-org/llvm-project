@@ -593,7 +593,7 @@ isPotentiallyReachable(Attributor &A, const Instruction &FromI,
                        const AbstractAttribute &QueryingAA,
                        const AA::InstExclusionSetTy *ExclusionSet,
                        std::function<bool(const Function &F)> GoBackwardsCB) {
-  LLVM_DEBUG({
+  DEBUG_WITH_TYPE(VERBOSE_DEBUG_TYPE, {
     dbgs() << "[AA] isPotentiallyReachable @" << ToFn.getName() << " from "
            << FromI << " [GBCB: " << bool(GoBackwardsCB) << "][#ExS: "
            << (ExclusionSet ? std::to_string(ExclusionSet->size()) : "none")
@@ -3193,6 +3193,10 @@ void Attributor::identifyDefaultAbstractAttributes(Function &F) {
   // Every function might be "no-recurse".
   getOrCreateAAFor<AANoRecurse>(FPos);
 
+  // Every function can be "non-convergent".
+  if (F.hasFnAttribute(Attribute::Convergent))
+    getOrCreateAAFor<AANonConvergent>(FPos);
+
   // Every function might be "readnone/readonly/writeonly/...".
   getOrCreateAAFor<AAMemoryBehavior>(FPos);
 
@@ -3240,6 +3244,8 @@ void Attributor::identifyDefaultAbstractAttributes(Function &F) {
       // Every function with pointer return type might be marked
       // dereferenceable.
       getOrCreateAAFor<AADereferenceable>(RetPos);
+    } else if (AttributeFuncs::isNoFPClassCompatibleType(ReturnType)) {
+      getOrCreateAAFor<AANoFPClass>(RetPos);
     }
   }
 
@@ -3284,6 +3290,8 @@ void Attributor::identifyDefaultAbstractAttributes(Function &F) {
 
       // Every argument with pointer type might be privatizable (or promotable)
       getOrCreateAAFor<AAPrivatizablePtr>(ArgPos);
+    } else if (AttributeFuncs::isNoFPClassCompatibleType(Arg.getType())) {
+      getOrCreateAAFor<AANoFPClass>(ArgPos);
     }
   }
 
@@ -3312,11 +3320,13 @@ void Attributor::identifyDefaultAbstractAttributes(Function &F) {
       return true;
 
     if (!Callee->getReturnType()->isVoidTy() && !CB.use_empty()) {
-
       IRPosition CBRetPos = IRPosition::callsite_returned(CB);
       bool UsedAssumedInformation = false;
       getAssumedSimplified(CBRetPos, nullptr, UsedAssumedInformation,
                            AA::Intraprocedural);
+
+      if (AttributeFuncs::isNoFPClassCompatibleType(Callee->getReturnType()))
+        getOrCreateAAFor<AANoFPClass>(CBInstPos);
     }
 
     for (int I = 0, E = CB.arg_size(); I < E; ++I) {
@@ -3336,8 +3346,14 @@ void Attributor::identifyDefaultAbstractAttributes(Function &F) {
       // Every call site argument might be marked "noundef".
       getOrCreateAAFor<AANoUndef>(CBArgPos);
 
-      if (!CB.getArgOperand(I)->getType()->isPointerTy())
+      Type *ArgTy = CB.getArgOperand(I)->getType();
+
+      if (!ArgTy->isPointerTy()) {
+        if (AttributeFuncs::isNoFPClassCompatibleType(ArgTy))
+          getOrCreateAAFor<AANoFPClass>(CBArgPos);
+
         continue;
+      }
 
       // Call site argument attribute "non-null".
       getOrCreateAAFor<AANonNull>(CBArgPos);

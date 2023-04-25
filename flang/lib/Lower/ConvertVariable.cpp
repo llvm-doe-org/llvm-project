@@ -32,8 +32,8 @@
 #include "flang/Optimizer/Dialect/FIRAttr.h"
 #include "flang/Optimizer/Dialect/FIRDialect.h"
 #include "flang/Optimizer/Dialect/FIROps.h"
+#include "flang/Optimizer/Dialect/Support/FIRContext.h"
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
-#include "flang/Optimizer/Support/FIRContext.h"
 #include "flang/Optimizer/Support/FatalError.h"
 #include "flang/Optimizer/Support/InternalNames.h"
 #include "flang/Semantics/runtime-type-info.h"
@@ -726,13 +726,7 @@ static void deallocateIntentOut(Fortran::lower::AbstractConverter &converter,
           return;
       mlir::Location loc = converter.getCurrentLocation();
       fir::FirOpBuilder &builder = converter.getFirOpBuilder();
-      if (Fortran::semantics::IsOptional(sym)) {
-        auto isPresent = builder.create<fir::IsPresentOp>(
-            loc, builder.getI1Type(), fir::getBase(extVal));
-        builder.genIfThen(loc, isPresent)
-            .genThen([&]() { genDeallocateBox(converter, *mutBox, loc); })
-            .end();
-      } else {
+      auto genDeallocateWithTypeDesc = [&]() {
         if (mutBox->isDerived() || mutBox->isPolymorphic() ||
             mutBox->isUnlimitedPolymorphic()) {
           mlir::Value isAlloc = fir::factory::genIsAllocatedOrAssociatedTest(
@@ -756,6 +750,16 @@ static void deallocateIntentOut(Fortran::lower::AbstractConverter &converter,
         } else {
           genDeallocateBox(converter, *mutBox, loc);
         }
+      };
+
+      if (Fortran::semantics::IsOptional(sym)) {
+        auto isPresent = builder.create<fir::IsPresentOp>(
+            loc, builder.getI1Type(), fir::getBase(extVal));
+        builder.genIfThen(loc, isPresent)
+            .genThen([&]() { genDeallocateWithTypeDesc(); })
+            .end();
+      } else {
+        genDeallocateWithTypeDesc();
       }
     }
   }
@@ -1686,12 +1690,18 @@ void Fortran::lower::mapSymbolAttributes(
              "handled above");
       // The box is read right away because lowering code does not expect
       // a non pointer/allocatable symbol to be mapped to a MutableBox.
+      mlir::Type ty = converter.genType(var);
+      bool isPolymorphic = false;
+      if (auto boxTy = ty.dyn_cast<fir::BaseBoxType>()) {
+        isPolymorphic = ty.isa<fir::ClassType>();
+        ty = boxTy.getEleTy();
+      }
       Fortran::lower::genDeclareSymbol(
           converter, symMap, sym,
           fir::factory::genMutableBoxRead(
               builder, loc,
-              fir::factory::createTempMutableBox(builder, loc,
-                                                 converter.genType(var))));
+              fir::factory::createTempMutableBox(builder, loc, ty, {}, {},
+                                                 isPolymorphic)));
       return true;
     }
     return false;

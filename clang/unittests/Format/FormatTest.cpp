@@ -3205,16 +3205,49 @@ TEST_F(FormatTest, MultiLineControlStatements) {
             format("try{foo();}catch(...){baz();}", Style));
 
   Style.BraceWrapping.AfterFunction = true;
+  Style.BraceWrapping.AfterStruct = false;
   Style.BraceWrapping.AfterControlStatement = FormatStyle::BWACS_MultiLine;
   Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_All;
   Style.ColumnLimit = 80;
   verifyFormat("void shortfunction() { bar(); }", Style);
+  verifyFormat("struct T shortfunction() { return bar(); }", Style);
+  verifyFormat("struct T {};", Style);
 
   Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_None;
   verifyFormat("void shortfunction()\n"
                "{\n"
                "  bar();\n"
                "}",
+               Style);
+  verifyFormat("struct T shortfunction()\n"
+               "{\n"
+               "  return bar();\n"
+               "}",
+               Style);
+  verifyFormat("struct T {};", Style);
+
+  Style.BraceWrapping.AfterFunction = false;
+  Style.BraceWrapping.AfterStruct = true;
+  Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_All;
+  verifyFormat("void shortfunction() { bar(); }", Style);
+  verifyFormat("struct T shortfunction() { return bar(); }", Style);
+  verifyFormat("struct T\n"
+               "{\n"
+               "};",
+               Style);
+
+  Style.AllowShortFunctionsOnASingleLine = FormatStyle::SFS_None;
+  verifyFormat("void shortfunction() {\n"
+               "  bar();\n"
+               "}",
+               Style);
+  verifyFormat("struct T shortfunction() {\n"
+               "  return bar();\n"
+               "}",
+               Style);
+  verifyFormat("struct T\n"
+               "{\n"
+               "};",
                Style);
 }
 
@@ -8010,6 +8043,11 @@ TEST_F(FormatTest, TrailingReturnType) {
                "auto aaaaaaaaaaaaaaaaaaaaaa(T t)\n"
                "    -> decltype(eaaaaaaaaaaaaaaa<T>(t.a).aaaaaaaa());");
 
+  FormatStyle Style = getLLVMStyleWithColumns(60);
+  verifyFormat("#define MAKE_DEF(NAME)                                     \\\n"
+               "  auto NAME() -> int { return 42; }",
+               Style);
+
   // Not trailing return types.
   verifyFormat("void f() { auto a = b->c(); }");
   verifyFormat("auto a = p->foo();");
@@ -11591,6 +11629,10 @@ TEST_F(FormatTest, UnderstandsRvalueReferences) {
   // Not rvalue references:
   verifyFormat("template <bool B, bool C> class A {\n"
                "  static_assert(B && C, \"Something is wrong\");\n"
+               "};");
+  verifyFormat("template <typename T> void swap() noexcept(Bar<T> && Foo<T>);");
+  verifyFormat("template <typename T> struct S {\n"
+               "  explicit(Bar<T> && Foo<T>) S(const S &);\n"
                "};");
   verifyGoogleFormat("#define IF(a, b, c) if (a && (b == c))");
   verifyGoogleFormat("#define WHILE(a, b, c) while (a && (b == c))");
@@ -21914,51 +21956,59 @@ TEST_F(FormatTest, FormatsLambdas) {
                LLVMWithBeforeLambdaBody);
 
   // Lambdas with different indentation styles.
-  Style = getLLVMStyleWithColumns(100);
-  EXPECT_EQ("SomeResult doSomething(SomeObject promise) {\n"
-            "  return promise.then(\n"
-            "      [this, &someVariable, someObject = "
-            "std::mv(s)](std::vector<int> evaluated) mutable {\n"
-            "        return someObject.startAsyncAction().then(\n"
-            "            [this, &someVariable](AsyncActionResult result) "
-            "mutable { result.processMore(); });\n"
-            "      });\n"
-            "}\n",
-            format("SomeResult doSomething(SomeObject promise) {\n"
-                   "  return promise.then([this, &someVariable, someObject = "
-                   "std::mv(s)](std::vector<int> evaluated) mutable {\n"
-                   "    return someObject.startAsyncAction().then([this, "
-                   "&someVariable](AsyncActionResult result) mutable {\n"
-                   "      result.processMore();\n"
-                   "    });\n"
-                   "  });\n"
-                   "}\n",
-                   Style));
+  Style = getLLVMStyleWithColumns(60);
+  verifyFormat("Result doSomething(Promise promise) {\n"
+               "  return promise.then(\n"
+               "      [this, obj = std::move(s)](int bar) mutable {\n"
+               "        return someObject.startAsyncAction().then(\n"
+               "            [this, &obj](Result result) mutable {\n"
+               "              result.processMore();\n"
+               "            });\n"
+               "      });\n"
+               "}\n",
+               Style);
   Style.LambdaBodyIndentation = FormatStyle::LBI_OuterScope;
-  verifyFormat("test() {\n"
-               "  ([]() -> {\n"
+  verifyFormat("Result doSomething(Promise promise) {\n"
+               "  return promise.then(\n"
+               "      [this, obj = std::move(s)](int bar) mutable {\n"
+               "    return obj.startAsyncAction().then(\n"
+               "        [this, &obj](Result result) mutable {\n"
+               "      result.processMore();\n"
+               "    });\n"
+               "  });\n"
+               "}\n",
+               Style);
+  verifyFormat("Result doSomething(Promise promise) {\n"
+               "  return promise.then([this, obj = std::move(s)] {\n"
+               "    return obj.startAsyncAction().then(\n"
+               "        [this, &obj](Result result) mutable {\n"
+               "      result.processMore();\n"
+               "    });\n"
+               "  });\n"
+               "}\n",
+               Style);
+  verifyFormat("void test() {\n"
+               "  ([]() -> auto {\n"
                "    int b = 32;\n"
                "    return 3;\n"
                "  }).foo();\n"
                "}",
                Style);
-  verifyFormat("test() {\n"
-               "  []() -> {\n"
+  verifyFormat("void test() {\n"
+               "  []() -> auto {\n"
                "    int b = 32;\n"
                "    return 3;\n"
                "  }\n"
                "}",
                Style);
   verifyFormat("std::sort(v.begin(), v.end(),\n"
-               "          [](const auto &someLongArgumentName, const auto "
-               "&someOtherLongArgumentName) {\n"
-               "  return someLongArgumentName.someMemberVariable < "
-               "someOtherLongArgumentName.someMemberVariable;\n"
-               "});",
+               "          [](const auto &foo, const auto &bar) {\n"
+               "  return foo.baz < bar.baz;\n"
+               "});\n",
                Style);
-  verifyFormat("test() {\n"
+  verifyFormat("void test() {\n"
                "  (\n"
-               "      []() -> {\n"
+               "      []() -> auto {\n"
                "        int b = 32;\n"
                "        return 3;\n"
                "      },\n"
@@ -21966,8 +22016,8 @@ TEST_F(FormatTest, FormatsLambdas) {
                "      .foo();\n"
                "}",
                Style);
-  verifyFormat("test() {\n"
-               "  ([]() -> {\n"
+  verifyFormat("void test() {\n"
+               "  ([]() -> auto {\n"
                "    int b = 32;\n"
                "    return 3;\n"
                "  })\n"
@@ -21975,51 +22025,14 @@ TEST_F(FormatTest, FormatsLambdas) {
                "      .bar();\n"
                "}",
                Style);
-  EXPECT_EQ("SomeResult doSomething(SomeObject promise) {\n"
-            "  return promise.then(\n"
-            "      [this, &someVariable, someObject = "
-            "std::mv(s)](std::vector<int> evaluated) mutable {\n"
-            "    return someObject.startAsyncAction().then(\n"
-            "        [this, &someVariable](AsyncActionResult result) mutable { "
-            "result.processMore(); });\n"
-            "  });\n"
-            "}\n",
-            format("SomeResult doSomething(SomeObject promise) {\n"
-                   "  return promise.then([this, &someVariable, someObject = "
-                   "std::mv(s)](std::vector<int> evaluated) mutable {\n"
-                   "    return someObject.startAsyncAction().then([this, "
-                   "&someVariable](AsyncActionResult result) mutable {\n"
-                   "      result.processMore();\n"
-                   "    });\n"
-                   "  });\n"
-                   "}\n",
-                   Style));
-  EXPECT_EQ("SomeResult doSomething(SomeObject promise) {\n"
-            "  return promise.then([this, &someVariable] {\n"
-            "    return someObject.startAsyncAction().then(\n"
-            "        [this, &someVariable](AsyncActionResult result) mutable { "
-            "result.processMore(); });\n"
-            "  });\n"
-            "}\n",
-            format("SomeResult doSomething(SomeObject promise) {\n"
-                   "  return promise.then([this, &someVariable] {\n"
-                   "    return someObject.startAsyncAction().then([this, "
-                   "&someVariable](AsyncActionResult result) mutable {\n"
-                   "      result.processMore();\n"
-                   "    });\n"
-                   "  });\n"
-                   "}\n",
-                   Style));
   Style = getGoogleStyle();
   Style.LambdaBodyIndentation = FormatStyle::LBI_OuterScope;
-  EXPECT_EQ("#define A                                       \\\n"
-            "  [] {                                          \\\n"
-            "    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx(        \\\n"
-            "        xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx); \\\n"
-            "      }",
-            format("#define A [] { xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx( \\\n"
-                   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx); }",
-                   Style));
+  verifyFormat("#define A                                       \\\n"
+               "  [] {                                          \\\n"
+               "    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx(        \\\n"
+               "        xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx); \\\n"
+               "      }",
+               Style);
   // TODO: The current formatting has a minor issue that's not worth fixing
   // right now whereby the closing brace is indented relative to the signature
   // instead of being aligned. This only happens with macros.
@@ -24149,6 +24162,14 @@ TEST_F(FormatTest, RequiresClausesPositions) {
                Style);
 
   verifyFormat("template <typename T>\n"
+               "int S::bar(T t) &&\n"
+               "  requires F<T>\n"
+               "{\n"
+               "  return 5;\n"
+               "}",
+               Style);
+
+  verifyFormat("template <typename T>\n"
                "int bar(T t)\n"
                "  requires F<T>;",
                Style);
@@ -24157,6 +24178,14 @@ TEST_F(FormatTest, RequiresClausesPositions) {
   verifyFormat("template <typename T>\n"
                "requires F<T>\n"
                "int bar(T t) {\n"
+               "  return 5;\n"
+               "}",
+               Style);
+
+  verifyFormat("template <typename T>\n"
+               "int S::bar(T t) &&\n"
+               "requires F<T>\n"
+               "{\n"
                "  return 5;\n"
                "}",
                Style);
@@ -24174,6 +24203,7 @@ TEST_F(FormatTest, RequiresClausesPositions) {
                "template <typename T> requires Foo<T> void bar() {}\n"
                "template <typename T> void bar() requires Foo<T> {}\n"
                "template <typename T> void bar() requires Foo<T>;\n"
+               "template <typename T> void S::bar() && requires Foo<T> {}\n"
                "template <typename T> requires Foo<T> Bar(T) -> Bar<T>;",
                Style);
 
@@ -24185,6 +24215,8 @@ TEST_F(FormatTest, RequiresClausesPositions) {
                "requires Foo<T> void bar() {}\n"
                "template <typename AAAAAAA>\n"
                "void bar() requires Foo<T> {}\n"
+               "template <typename T>\n"
+               "void S::bar() && requires Foo<T> {}\n"
                "template <typename AAAAAAA>\n"
                "requires Foo<T> Baz(T) -> Baz<T>;",
                ColumnStyle);
@@ -24229,6 +24261,9 @@ TEST_F(FormatTest, RequiresClausesPositions) {
                "void bar()\n"
                "requires Foo<T>;\n"
                "template <typename T>\n"
+               "void S::bar() &&\n"
+               "requires Foo<T> {}\n"
+               "template <typename T>\n"
                "requires Foo<T> Bar(T) -> Bar<T>;",
                Style);
 
@@ -24257,6 +24292,9 @@ TEST_F(FormatTest, RequiresClausesPositions) {
                "  requires Foo<T> void bar() {}\n"
                "template <typename T>\n"
                "void bar()\n"
+               "  requires Foo<T> {}\n"
+               "template <typename T>\n"
+               "void S::bar() &&\n"
                "  requires Foo<T> {}\n"
                "template <typename T>\n"
                "  requires Foo<T> Bar(T) -> Bar<T>;",
@@ -24289,6 +24327,9 @@ TEST_F(FormatTest, RequiresClausesPositions) {
                "void bar() requires Foo<T>\n"
                "{}\n"
                "template <typename T> void bar() requires Foo<T>;\n"
+               "template <typename T>\n"
+               "void S::bar() && requires Foo<T>\n"
+               "{}\n"
                "template <typename T> requires Foo<T>\n"
                "Bar(T) -> Bar<T>;",
                Style);
@@ -25231,6 +25272,16 @@ TEST_F(FormatTest, RemoveSemicolon) {
 
   verifyFormat("for (;;) {\n"
                "}",
+               Style);
+
+  verifyFormat("class [[deprecated(\"\")]] C {\n"
+               "  int i;\n"
+               "};",
+               Style);
+
+  verifyFormat("struct EXPORT_MACRO [[nodiscard]] C {\n"
+               "  int i;\n"
+               "};",
                Style);
 
   verifyIncompleteFormat("class C final [[deprecated(l]] {});", Style);

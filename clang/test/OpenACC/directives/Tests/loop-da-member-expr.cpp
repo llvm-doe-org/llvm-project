@@ -2,6 +2,14 @@
 // 'this' on "acc loop", but only check cases that are not covered by
 // loop-da-member-expr.c because they are specific to C++.
 
+// FIXME: Some reductions malfunction on ExCL's explorer (AMD GPUs) at -O0.
+// Until that's fixed, work around it with -O1, and suppress tons of resulting
+// diagnostics like the following:
+//
+//   (frontend): loop not vectorized: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering
+//
+// REDEFINE: %{exe:clang:args} = -O1 -Wno-pass-failed
+
 // REDEFINE: %{dmp:fc:args} = -strict-whitespace
 // REDEFINE: %{exe:fc:args} = -strict-whitespace -match-full-lines \
 // REDEFINE:                  -implicit-check-not='{{.}}'

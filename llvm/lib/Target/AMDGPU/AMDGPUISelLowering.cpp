@@ -912,10 +912,6 @@ bool AMDGPUTargetLowering::isZExtFree(EVT Src, EVT Dest) const {
   return Src == MVT::i32 && Dest == MVT::i64;
 }
 
-bool AMDGPUTargetLowering::isZExtFree(SDValue Val, EVT VT2) const {
-  return isZExtFree(Val.getValueType(), VT2);
-}
-
 bool AMDGPUTargetLowering::isNarrowingProfitable(EVT SrcVT, EVT DestVT) const {
   // There aren't really 64-bit registers, but pairs of 32-bit ones and only a
   // limited number of native 64-bit operations. Shrinking an operation to fit
@@ -1329,15 +1325,10 @@ SDValue AMDGPUTargetLowering::LowerGlobalAddress(AMDGPUMachineFunction* MFI,
   GlobalAddressSDNode *G = cast<GlobalAddressSDNode>(Op);
   const GlobalValue *GV = G->getGlobal();
 
-  if (G->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS) {
-    if (!MFI->isModuleEntryFunction()) {
-      if (const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GV)) {
-        if (AMDGPUMachineFunction::isKnownAddressLDSGlobal(*GVar)) {
-          unsigned Offset =
-              AMDGPUMachineFunction::calculateKnownAddressOfLDSGlobal(*GVar);
-          return DAG.getConstant(Offset, SDLoc(Op), Op.getValueType());
-        }
-      }
+  if (!MFI->isModuleEntryFunction()) {
+    if (std::optional<uint32_t> Address =
+            AMDGPUMachineFunction::getLDSAbsoluteAddress(*GV)) {
+      return DAG.getConstant(*Address, SDLoc(Op), Op.getValueType());
     }
   }
 
@@ -1887,13 +1878,13 @@ void AMDGPUTargetLowering::LowerUDIVREM64(SDValue Op,
   SDValue Zero = DAG.getConstant(0, DL, HalfVT);
 
   //HiLo split
+  SDValue LHS_Lo, LHS_Hi;
   SDValue LHS = Op.getOperand(0);
-  SDValue LHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, Zero);
-  SDValue LHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, One);
+  std::tie(LHS_Lo, LHS_Hi) = DAG.SplitScalar(LHS, DL, HalfVT, HalfVT);
 
+  SDValue RHS_Lo, RHS_Hi;
   SDValue RHS = Op.getOperand(1);
-  SDValue RHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, Zero);
-  SDValue RHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, One);
+  std::tie(RHS_Lo, RHS_Hi) = DAG.SplitScalar(RHS, DL, HalfVT, HalfVT);
 
   if (DAG.MaskedValueIsZero(RHS, APInt::getHighBitsSet(64, 32)) &&
       DAG.MaskedValueIsZero(LHS, APInt::getHighBitsSet(64, 32))) {
@@ -1951,10 +1942,9 @@ void AMDGPUTargetLowering::LowerUDIVREM64(SDValue Op,
     SDValue Neg_RHS = DAG.getNode(ISD::SUB, DL, VT, Zero64, RHS);
     SDValue Mullo1 = DAG.getNode(ISD::MUL, DL, VT, Neg_RHS, Rcp64);
     SDValue Mulhi1 = DAG.getNode(ISD::MULHU, DL, VT, Rcp64, Mullo1);
-    SDValue Mulhi1_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, Mulhi1,
-                                    Zero);
-    SDValue Mulhi1_Hi =
-        DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, Mulhi1, One);
+    SDValue Mulhi1_Lo, Mulhi1_Hi;
+    std::tie(Mulhi1_Lo, Mulhi1_Hi) =
+        DAG.SplitScalar(Mulhi1, DL, HalfVT, HalfVT);
     SDValue Add1_Lo = DAG.getNode(ISD::ADDCARRY, DL, HalfCarryVT, Rcp_Lo,
                                   Mulhi1_Lo, Zero1);
     SDValue Add1_Hi = DAG.getNode(ISD::ADDCARRY, DL, HalfCarryVT, Rcp_Hi,
@@ -1965,10 +1955,9 @@ void AMDGPUTargetLowering::LowerUDIVREM64(SDValue Op,
     // Second round of UNR.
     SDValue Mullo2 = DAG.getNode(ISD::MUL, DL, VT, Neg_RHS, Add1);
     SDValue Mulhi2 = DAG.getNode(ISD::MULHU, DL, VT, Add1, Mullo2);
-    SDValue Mulhi2_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, Mulhi2,
-                                    Zero);
-    SDValue Mulhi2_Hi =
-        DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, Mulhi2, One);
+    SDValue Mulhi2_Lo, Mulhi2_Hi;
+    std::tie(Mulhi2_Lo, Mulhi2_Hi) =
+        DAG.SplitScalar(Mulhi2, DL, HalfVT, HalfVT);
     SDValue Add2_Lo = DAG.getNode(ISD::ADDCARRY, DL, HalfCarryVT, Add1_Lo,
                                   Mulhi2_Lo, Zero1);
     SDValue Add2_Hi = DAG.getNode(ISD::ADDCARRY, DL, HalfCarryVT, Add1_Hi,
@@ -1980,8 +1969,8 @@ void AMDGPUTargetLowering::LowerUDIVREM64(SDValue Op,
 
     SDValue Mul3 = DAG.getNode(ISD::MUL, DL, VT, RHS, Mulhi3);
 
-    SDValue Mul3_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, Mul3, Zero);
-    SDValue Mul3_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, Mul3, One);
+    SDValue Mul3_Lo, Mul3_Hi;
+    std::tie(Mul3_Lo, Mul3_Hi) = DAG.SplitScalar(Mul3, DL, HalfVT, HalfVT);
     SDValue Sub1_Lo = DAG.getNode(ISD::SUBCARRY, DL, HalfCarryVT, LHS_Lo,
                                   Mul3_Lo, Zero1);
     SDValue Sub1_Hi = DAG.getNode(ISD::SUBCARRY, DL, HalfCarryVT, LHS_Hi,
@@ -3661,12 +3650,6 @@ SDValue AMDGPUTargetLowering::performMulhuCombine(SDNode *N,
   return DAG.getZExtOrTrunc(Mulhi, DL, VT);
 }
 
-static bool isNegativeOne(SDValue Val) {
-  if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Val))
-    return C->isAllOnes();
-  return false;
-}
-
 SDValue AMDGPUTargetLowering::getFFBX_U32(SelectionDAG &DAG,
                                           SDValue Op,
                                           const SDLoc &DL,
@@ -3709,7 +3692,7 @@ SDValue AMDGPUTargetLowering::performCtlz_CttzCombine(const SDLoc &SL, SDValue C
   // select (setcc x, 0, eq), -1, (cttz_zero_undef x) -> ffbl_u32 x
   if (CCOpcode == ISD::SETEQ &&
       (isCtlzOpc(RHS.getOpcode()) || isCttzOpc(RHS.getOpcode())) &&
-      RHS.getOperand(0) == CmpLHS && isNegativeOne(LHS)) {
+      RHS.getOperand(0) == CmpLHS && isAllOnesConstant(LHS)) {
     unsigned Opc =
         isCttzOpc(RHS.getOpcode()) ? AMDGPUISD::FFBL_B32 : AMDGPUISD::FFBH_U32;
     return getFFBX_U32(DAG, CmpLHS, SL, Opc);
@@ -3719,7 +3702,7 @@ SDValue AMDGPUTargetLowering::performCtlz_CttzCombine(const SDLoc &SL, SDValue C
   // select (setcc x, 0, ne), (cttz_zero_undef x), -1 -> ffbl_u32 x
   if (CCOpcode == ISD::SETNE &&
       (isCtlzOpc(LHS.getOpcode()) || isCttzOpc(LHS.getOpcode())) &&
-      LHS.getOperand(0) == CmpLHS && isNegativeOne(RHS)) {
+      LHS.getOperand(0) == CmpLHS && isAllOnesConstant(RHS)) {
     unsigned Opc =
         isCttzOpc(LHS.getOpcode()) ? AMDGPUISD::FFBL_B32 : AMDGPUISD::FFBH_U32;
 
@@ -4533,7 +4516,7 @@ const char* AMDGPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(CALL)
   NODE_NAME_CASE(TC_RETURN)
   NODE_NAME_CASE(TRAP)
-  NODE_NAME_CASE(RET_FLAG)
+  NODE_NAME_CASE(RET_GLUE)
   NODE_NAME_CASE(RETURN_TO_EPILOG)
   NODE_NAME_CASE(ENDPGM)
   NODE_NAME_CASE(DWORDADDR)

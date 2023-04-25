@@ -167,6 +167,31 @@ def LLVM_MemsetOp : LLVM_ZeroResultIntrOp<"memset", [0, 2], [],
   >];
 }
 
+def LLVM_NoAliasScopeDeclOp
+    : LLVM_ZeroResultIntrOp<"experimental.noalias.scope.decl"> {
+  let arguments = (ins SymbolRefAttr:$scope);
+  string llvmBuilder = [{
+    // Wrap the scope argument into a list since the LLVM IR intrinsic takes
+    // a list containing exactly one scope rather than a scope itself.
+    llvm::MDNode* node = moduleTranslation.getAliasScopes(op, {$scope});
+    builder.CreateNoAliasScopeDeclaration(node);
+  }];
+  string mlirBuilder = [{
+    FailureOr<SmallVector<SymbolRefAttr>> scopeAttrs =
+      moduleImport.matchAliasScopeAttrs(llvmOperands[0]);
+    // Drop the intrinsic if the alias scope translation fails since the scope
+    // is not used by an aliasing operation, such as a load or store, that is
+    // used to convert the alias scope metadata.
+    if (failed(scopeAttrs))
+      return success();
+    if (scopeAttrs->size() != 1)
+      return failure();
+    $_op = $_builder.create<LLVM::NoAliasScopeDeclOp>(
+      $_location, (*scopeAttrs)[0]);
+  }];
+  let assemblyFormat = "$scope attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Lifetime Markers
 //===----------------------------------------------------------------------===//
@@ -381,16 +406,27 @@ def LLVM_StackRestoreOp : LLVM_ZeroResultIntrOp<"stackrestore"> {
 //
 
 // LLVM vector reduction over a single vector.
-class LLVM_VecReductionBase<string mnem, Type element>
+class LLVM_VecReductionBase<string mnem, Type element, bit requiresFastmath=0>
     : LLVM_OneResultIntrOp<"vector.reduce." # mnem, [], [0],
-                           [Pure, SameOperandsAndResultElementType]>,
-      Arguments<(ins LLVM_VectorOf<element>)>;
+                           [Pure, SameOperandsAndResultElementType],
+                           requiresFastmath> {
+      dag commonArgs = (ins LLVM_VectorOf<element>:$in);
+}
 
 class LLVM_VecReductionF<string mnem>
-    : LLVM_VecReductionBase<mnem, AnyFloat>;
+    : LLVM_VecReductionBase<mnem, AnyFloat, /*requiresFastmath=*/1> {
+  dag fmfArg = (
+    ins DefaultValuedAttr<LLVM_FastmathFlagsAttr, "{}">:$fastmathFlags);
+  let arguments = !con(commonArgs, fmfArg);
+
+  let assemblyFormat = "`(` operands `)` custom<LLVMOpAttrs>(attr-dict) `:` "
+      "functional-type(operands, results)";
+}
 
 class LLVM_VecReductionI<string mnem>
-    : LLVM_VecReductionBase<mnem, AnySignlessInteger>;
+    : LLVM_VecReductionBase<mnem, AnySignlessInteger> {
+      let arguments = commonArgs;
+}
 
 // LLVM vector reduction over a single vector, with an initial value,
 // and with permission to reassociate the reduction operations.

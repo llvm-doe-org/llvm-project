@@ -244,9 +244,8 @@ Error GenericKernelTy::launch(
   llvm::SmallVector<void *, 16> Args;
   llvm::SmallVector<void *, 16> Ptrs;
 
-  void *KernelArgsPtr =
-      prepareArgs(GenericDevice, ArgPtrs, ArgOffsets, KernelArgs.NumArgs, Args,
-                  Ptrs, AsyncInfoWrapper);
+  void *KernelArgsPtr = prepareArgs(GenericDevice, ArgPtrs, ArgOffsets,
+                                    KernelArgs.NumArgs, Args, Ptrs);
 
   uint32_t NumThreads = getNumThreads(GenericDevice, KernelArgs.ThreadLimit);
   uint64_t NumBlocks = getNumBlocks(GenericDevice, KernelArgs.NumTeams,
@@ -264,8 +263,7 @@ void *GenericKernelTy::prepareArgs(GenericDeviceTy &GenericDevice,
                                    void **ArgPtrs, ptrdiff_t *ArgOffsets,
                                    int32_t NumArgs,
                                    llvm::SmallVectorImpl<void *> &Args,
-                                   llvm::SmallVectorImpl<void *> &Ptrs,
-                                   AsyncInfoWrapperTy &AsyncInfoWrapper) const {
+                                   llvm::SmallVectorImpl<void *> &Ptrs) const {
   Args.resize(NumArgs);
   Ptrs.resize(NumArgs);
 
@@ -705,7 +703,7 @@ Expected<void *> PinnedAllocationMapTy::lockHostBuffer(void *HstPtr,
   if (Entry) {
     // An already registered intersecting buffer was found. Register a new use.
     if (auto Err = registerEntryUse(*Entry, HstPtr, Size))
-      return Err;
+      return std::move(Err);
 
     // Return the device accessible pointer with the correct offset.
     return advanceVoidPtr(Entry->DevAccessiblePtr,
@@ -720,7 +718,7 @@ Expected<void *> PinnedAllocationMapTy::lockHostBuffer(void *HstPtr,
 
   // Now insert the new entry into the map.
   if (auto Err = insertEntry(HstPtr, *DevAccessiblePtrOrErr, Size))
-    return Err;
+    return std::move(Err);
 
   // Return the device accessible pointer.
   return *DevAccessiblePtrOrErr;
@@ -887,7 +885,7 @@ Expected<void *> GenericDeviceTy::dataAlloc(int64_t Size, void *HostPtr,
   // Register allocated buffer as pinned memory if the type is host memory.
   if (Kind == TARGET_ALLOC_HOST)
     if (auto Err = PinnedAllocs.registerHostBuffer(Alloc, Alloc, Size))
-      return Err;
+      return std::move(Err);
 
   return Alloc;
 }

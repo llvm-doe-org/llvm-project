@@ -13,6 +13,7 @@
 #ifndef LLVM_LIB_TARGET_AMDGPU_AMDGPUINSTRUCTIONSELECTOR_H
 #define LLVM_LIB_TARGET_AMDGPU_AMDGPUINSTRUCTIONSELECTOR_H
 
+#include "SIDefines.h"
 #include "llvm/CodeGen/GlobalISel/InstructionSelector.h"
 #include "llvm/IR/InstrTypes.h"
 
@@ -236,6 +237,8 @@ private:
   bool isDSOffsetLegal(Register Base, int64_t Offset) const;
   bool isDSOffset2Legal(Register Base, int64_t Offset0, int64_t Offset1,
                         unsigned Size) const;
+  bool isFlatScratchBaseLegal(
+      Register Base, uint64_t FlatVariant = SIInstrFlags::FlatScratch) const;
 
   std::pair<Register, unsigned>
   selectDS1Addr1OffsetImpl(MachineOperand &Root) const;
@@ -284,12 +287,6 @@ private:
 
   InstructionSelector::ComplexRendererFns
   selectMUBUFOffset(MachineOperand &Root) const;
-
-  InstructionSelector::ComplexRendererFns
-  selectMUBUFOffsetAtomic(MachineOperand &Root) const;
-
-  InstructionSelector::ComplexRendererFns
-  selectMUBUFAddr64Atomic(MachineOperand &Root) const;
 
   ComplexRendererFns selectSMRDBufferImm(MachineOperand &Root) const;
   ComplexRendererFns selectSMRDBufferImm32(MachineOperand &Root) const;

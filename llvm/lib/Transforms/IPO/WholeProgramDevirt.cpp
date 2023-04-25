@@ -764,7 +764,7 @@ PreservedAnalyses WholeProgramDevirtPass::run(Module &M,
     return FAM.getResult<DominatorTreeAnalysis>(F);
   };
   if (UseCommandLine) {
-    if (DevirtModule::runForTesting(M, AARGetter, OREGetter, LookupDomTree))
+    if (!DevirtModule::runForTesting(M, AARGetter, OREGetter, LookupDomTree))
       return PreservedAnalyses::all();
     return PreservedAnalyses::none();
   }
@@ -895,8 +895,7 @@ static Error checkCombinedSummaryForTesting(ModuleSummaryIndex *Summary) {
   // DevirtIndex::run, not to DevirtModule::run used by opt/runForTesting.
   const auto &ModPaths = Summary->modulePaths();
   if (ClSummaryAction != PassSummaryAction::Import &&
-      ModPaths.find(ModuleSummaryIndex::getRegularLTOModuleName()) ==
-          ModPaths.end())
+      !ModPaths.contains(ModuleSummaryIndex::getRegularLTOModuleName()))
     return createStringError(
         errc::invalid_argument,
         "combined summary should contain Regular LTO module");
@@ -1006,7 +1005,7 @@ bool DevirtModule::tryFindVirtualCallTargets(
       return false;
 
     Constant *Ptr = getPointerAtOffset(TM.Bits->GV->getInitializer(),
-                                       TM.Offset + ByteOffset, M, TM.Bits->GV);
+                                       TM.Offset + ByteOffset, M);
     if (!Ptr)
       return false;
 
@@ -1392,8 +1391,19 @@ void DevirtModule::applyICallBranchFunnel(VTableSlotInfo &SlotInfo,
       IsExported = true;
     if (CSInfo.AllCallSitesDevirted)
       return;
+
+    std::map<CallBase *, CallBase *> CallBases;
     for (auto &&VCallSite : CSInfo.CallSites) {
       CallBase &CB = VCallSite.CB;
+
+      if (CallBases.find(&CB) != CallBases.end()) {
+        // When finding devirtualizable calls, it's possible to find the same
+        // vtable passed to multiple llvm.type.test or llvm.type.checked.load
+        // calls, which can cause duplicate call sites to be recorded in
+        // [Const]CallSites. If we've already found one of these
+        // call instances, just ignore it. It will be replaced later.
+        continue;
+      }
 
       // Jump tables are only profitable if the retpoline mitigation is enabled.
       Attribute FSAttr = CB.getCaller()->getFnAttribute("target-features");
@@ -1441,8 +1451,7 @@ void DevirtModule::applyICallBranchFunnel(VTableSlotInfo &SlotInfo,
           AttributeList::get(M.getContext(), Attrs.getFnAttrs(),
                              Attrs.getRetAttrs(), NewArgAttrs));
 
-      CB.replaceAllUsesWith(NewCS);
-      CB.eraseFromParent();
+      CallBases[&CB] = NewCS;
 
       // This use is no longer unsafe.
       if (VCallSite.NumUnsafeUses)
@@ -1452,6 +1461,11 @@ void DevirtModule::applyICallBranchFunnel(VTableSlotInfo &SlotInfo,
     // retpoline mitigation, which would mean that they are lowered to
     // llvm.type.test and therefore require an llvm.type.test resolution for the
     // type identifier.
+
+    std::for_each(CallBases.begin(), CallBases.end(), [](auto &CBs) {
+      CBs.first->replaceAllUsesWith(CBs.second);
+      CBs.first->eraseFromParent();
+    });
   };
   Apply(SlotInfo.CSInfo);
   for (auto &P : SlotInfo.ConstCSInfo)

@@ -555,7 +555,7 @@ bool llvm::RecursivelyDeleteTriviallyDeadInstructionsPermissive(
     std::function<void(Value *)> AboutToDeleteCallback) {
   unsigned S = 0, E = DeadInsts.size(), Alive = 0;
   for (; S != E; ++S) {
-    auto *I = dyn_cast<Instruction>(DeadInsts[S]);
+    auto *I = dyn_cast_or_null<Instruction>(DeadInsts[S]);
     if (!I || !isInstructionTriviallyDead(I)) {
       DeadInsts[S] = nullptr;
       ++Alive;
@@ -1493,11 +1493,9 @@ static bool PhiHasDebugValue(DILocalVariable *DIVar,
 static bool valueCoversEntireFragment(Type *ValTy, DbgVariableIntrinsic *DII) {
   const DataLayout &DL = DII->getModule()->getDataLayout();
   TypeSize ValueSize = DL.getTypeAllocSizeInBits(ValTy);
-  if (std::optional<uint64_t> FragmentSize = DII->getFragmentSizeInBits()) {
-    assert(!ValueSize.isScalable() &&
-           "Fragments don't work on scalable types.");
-    return ValueSize.getFixedValue() >= *FragmentSize;
-  }
+  if (std::optional<uint64_t> FragmentSize = DII->getFragmentSizeInBits())
+    return TypeSize::isKnownGE(ValueSize, TypeSize::getFixed(*FragmentSize));
+
   // We can't always calculate the size of the DI variable (e.g. if it is a
   // VLA). Try to use the size of the alloca that the dbg intrinsic describes
   // intead.
@@ -1915,17 +1913,14 @@ void llvm::salvageDebugInfoForDbgValues(
     bool IsValidSalvageExpr = SalvagedExpr->getNumElements() <= MaxExpressionSize;
     if (AdditionalValues.empty() && IsValidSalvageExpr) {
       DII->setExpression(SalvagedExpr);
-    } else if (isa<DbgValueInst>(DII) && !isa<DbgAssignIntrinsic>(DII) &&
-               IsValidSalvageExpr &&
+    } else if (isa<DbgValueInst>(DII) && IsValidSalvageExpr &&
                DII->getNumVariableLocationOps() + AdditionalValues.size() <=
                    MaxDebugArgs) {
       DII->addVariableLocationOps(AdditionalValues, SalvagedExpr);
     } else {
       // Do not salvage using DIArgList for dbg.declare, as it is not currently
-      // supported in those instructions. Do not salvage using DIArgList for
-      // dbg.assign yet. FIXME: support this.
-      // Also do not salvage if the resulting DIArgList would contain an
-      // unreasonably large number of values.
+      // supported in those instructions. Also do not salvage if the resulting
+      // DIArgList would contain an unreasonably large number of values.
       DII->setKillLocation();
     }
     LLVM_DEBUG(dbgs() << "SALVAGE: " << *DII << '\n');
@@ -2680,14 +2675,7 @@ void llvm::combineMetadata(Instruction *K, const Instruction *J,
                        intersectAccessGroups(K, J));
         break;
       case LLVMContext::MD_range:
-
-        // If K does move, use most generic range. Otherwise keep the range of
-        // K.
-        if (DoesKMove)
-          // FIXME: If K does move, we should drop the range info and nonnull.
-          //        Currently this function is used with DoesKMove in passes
-          //        doing hoisting/sinking and the current behavior of using the
-          //        most generic range is correct in those cases.
+        if (DoesKMove || !K->hasMetadata(LLVMContext::MD_noundef))
           K->setMetadata(Kind, MDNode::getMostGenericRange(JMD, KMD));
         break;
       case LLVMContext::MD_fpmath:
@@ -2698,16 +2686,16 @@ void llvm::combineMetadata(Instruction *K, const Instruction *J,
         K->setMetadata(Kind, JMD);
         break;
       case LLVMContext::MD_nonnull:
-        // If K does move, keep nonull if it is present in both instructions.
-        if (DoesKMove)
+        if (DoesKMove || !K->hasMetadata(LLVMContext::MD_noundef))
           K->setMetadata(Kind, JMD);
         break;
       case LLVMContext::MD_invariant_group:
         // Preserve !invariant.group in K.
         break;
       case LLVMContext::MD_align:
-        K->setMetadata(Kind,
-          MDNode::getMostGenericAlignmentOrDereferenceable(JMD, KMD));
+        if (DoesKMove || !K->hasMetadata(LLVMContext::MD_noundef))
+          K->setMetadata(
+              Kind, MDNode::getMostGenericAlignmentOrDereferenceable(JMD, KMD));
         break;
       case LLVMContext::MD_dereferenceable:
       case LLVMContext::MD_dereferenceable_or_null:
@@ -2960,7 +2948,8 @@ void llvm::copyRangeMetadata(const DataLayout &DL, const LoadInst &OldLI,
     return;
 
   unsigned BitWidth = DL.getPointerTypeSizeInBits(NewTy);
-  if (!getConstantRangeFromMetadata(*N).contains(APInt(BitWidth, 0))) {
+  if (BitWidth == OldLI.getType()->getScalarSizeInBits() &&
+      !getConstantRangeFromMetadata(*N).contains(APInt(BitWidth, 0))) {
     MDNode *NN = MDNode::get(OldLI.getContext(), std::nullopt);
     NewLI.setMetadata(LLVMContext::MD_nonnull, NN);
   }
@@ -2999,7 +2988,7 @@ void llvm::hoistAllInstructionsInto(BasicBlock *DomBlock, Instruction *InsertPt,
 
   for (BasicBlock::iterator II = BB->begin(), IE = BB->end(); II != IE;) {
     Instruction *I = &*II;
-    I->dropUndefImplyingAttrsAndUnknownMetadata();
+    I->dropUBImplyingAttrsAndUnknownMetadata();
     if (I->isUsedByMetadata())
       dropDebugUsers(*I);
     if (I->isDebugOrPseudoInst()) {

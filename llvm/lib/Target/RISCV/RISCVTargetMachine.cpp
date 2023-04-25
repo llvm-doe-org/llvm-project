@@ -1,4 +1,4 @@
-//===-- RISCVTargetMachine.cpp - Define TargetMachine for RISCV -----------===//
+//===-- RISCVTargetMachine.cpp - Define TargetMachine for RISC-V ----------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Implements the info about RISCV target spec.
+// Implements the info about RISC-V target spec.
 //
 //===----------------------------------------------------------------------===//
 
@@ -66,6 +66,11 @@ static cl::opt<int> RVVVectorBitsMinOpt(
              "autovectorization with fixed width vectors."),
     cl::init(-1), cl::Hidden);
 
+static cl::opt<bool> EnableRISCVCopyPropagation(
+    "riscv-enable-copy-propagation",
+    cl::desc("Enable the copy propagation with RISC-V copy instr"),
+    cl::init(true), cl::Hidden);
+
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   RegisterTargetMachine<RISCVTargetMachine> X(getTheRISCV32Target());
   RegisterTargetMachine<RISCVTargetMachine> Y(getTheRISCV64Target());
@@ -75,8 +80,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVGatherScatterLoweringPass(*PR);
   initializeRISCVCodeGenPreparePass(*PR);
   initializeRISCVMergeBaseOffsetOptPass(*PR);
-  initializeRISCVSExtWRemovalPass(*PR);
-  initializeRISCVStripWSuffixPass(*PR);
+  initializeRISCVOptWInstrsPass(*PR);
   initializeRISCVPreRAExpandPseudoPass(*PR);
   initializeRISCVExpandPseudoPass(*PR);
   initializeRISCVInsertVSETVLIPass(*PR);
@@ -275,11 +279,11 @@ TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
 void RISCVPassConfig::addIRPasses() {
   addPass(createAtomicExpandPass());
 
-  if (getOptLevel() != CodeGenOpt::None)
+  if (getOptLevel() != CodeGenOpt::None) {
     addPass(createRISCVGatherScatterLoweringPass());
-
-  if (getOptLevel() != CodeGenOpt::None)
+    addPass(createInterleavedAccessPass());
     addPass(createRISCVCodeGenPreparePass());
+  }
 
   TargetPassConfig::addIRPasses();
 }
@@ -332,10 +336,19 @@ void RISCVPassConfig::addPreSched2() {}
 void RISCVPassConfig::addPreEmitPass() {
   addPass(&BranchRelaxationPassID);
   addPass(createRISCVMakeCompressibleOptPass());
+
+  // TODO: It would potentially be better to schedule copy propagation after
+  // expanding pseudos (in addPreEmitPass2). However, performing copy
+  // propagation after the machine outliner (which runs after addPreEmitPass)
+  // currently leads to incorrect code-gen, where copies to registers within
+  // outlined functions are removed erroneously.
+  if (TM->getOptLevel() >= CodeGenOpt::Default && EnableRISCVCopyPropagation)
+    addPass(createMachineCopyPropagationPass(true));
 }
 
 void RISCVPassConfig::addPreEmitPass2() {
   addPass(createRISCVExpandPseudoPass());
+
   // Schedule the expansion of AMOs at the last possible moment, avoiding the
   // possibility for other passes to break the requirements for forward
   // progress in the LR/SC block.
@@ -348,8 +361,7 @@ void RISCVPassConfig::addMachineSSAOptimization() {
     addPass(&MachineCombinerID);
 
   if (TM->getTargetTriple().getArch() == Triple::riscv64) {
-    addPass(createRISCVSExtWRemovalPass());
-    addPass(createRISCVStripWSuffixPass());
+    addPass(createRISCVOptWInstrsPass());
   }
 }
 

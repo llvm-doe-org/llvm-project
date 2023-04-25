@@ -1,16 +1,3 @@
-add_subdirectory(UnitTest)
-
-if(LLVM_LIBC_FULL_BUILD AND NOT
-  (LIBC_TARGET_ARCHITECTURE_IS_GPU OR LIBC_TARGET_OS_IS_BAREMETAL))
-  add_subdirectory(IntegrationTest)
-endif()
-
-add_header_library(
-  errno_setter_matcher
-  HDRS
-    ErrnoSetterMatcher.h
-)
-
 add_custom_target(check-libc)
 add_custom_target(libc-unit-tests)
 add_dependencies(check-libc libc-unit-tests)
@@ -18,15 +5,40 @@ add_dependencies(check-libc libc-unit-tests)
 add_custom_target(exhaustive-check-libc)
 add_custom_target(libc-long-running-tests)
 
-add_subdirectory(src)
-add_subdirectory(utils)
+if(NOT LIBC_TARGET_ARCHITECTURE_IS_GPU)
+  add_subdirectory(UnitTest)
+endif()
+
+add_header_library(
+  errno_setter_matcher
+  HDRS
+    ErrnoSetterMatcher.h
+  DEPENDS
+    libc.src.errno.errno
+)
+
+if(LIBC_TARGET_ARCHITECTURE_IS_GPU AND
+   (NOT TARGET libc.utils.gpu.loader OR NOT TARGET libc.startup.gpu.crt1))
+  message(WARNING "Cannot build libc GPU tests, missing loader implementation")
+  return()
+endif()
+
+if(NOT LIBC_TARGET_ARCHITECTURE_IS_GPU)
+  add_subdirectory(src)
+  add_subdirectory(utils)
+endif()
+
+if(LLVM_LIBC_FULL_BUILD AND NOT LIBC_TARGET_OS_IS_BAREMETAL)
+  add_subdirectory(IntegrationTest)
+endif()
 
 if(NOT LLVM_LIBC_FULL_BUILD)
   return()
 endif()
 
-if(NOT (${LIBC_TARGET_OS} STREQUAL "linux") OR CMAKE_COMPILER_IS_GNUCXX)
-  # Integration tests are currently only available for clang on linux.
+if(NOT ${LIBC_TARGET_OS} STREQUAL "linux" AND
+   NOT ${LIBC_TARGET_OS} STREQUAL "gpu")
+  # Integration tests are currently only available for linux and the GPU.
   return()
 endif()
 add_subdirectory(integration)

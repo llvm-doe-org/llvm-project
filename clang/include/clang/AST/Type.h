@@ -2700,6 +2700,8 @@ public:
 
   bool isSVEBool() const { return getKind() == Kind::SveBool; }
 
+  bool isSVECount() const { return getKind() == Kind::SveCount; }
+
   /// Determines whether the given kind corresponds to a placeholder type.
   static bool isPlaceholderTypeKind(Kind K) {
     return K >= Overload;
@@ -4931,6 +4933,8 @@ public:
   bool isQualifier() const;
 
   bool isMSTypeSpec() const;
+
+  bool isWebAssemblyFuncrefSpec() const;
 
   bool isCallingConv() const;
 

@@ -124,6 +124,7 @@ llvm::Error GsymCreator::encode(FileWriter &O) const {
     // introduced when the code changes that can cause problems here so it is
     // good to catch this during testing.
     assert(AddrOffset <= MaxAddressOffset);
+    (void)MaxAddressOffset;
     switch (Hdr.AddrOffSize) {
     case 1:
       O.writeU8(static_cast<uint8_t>(AddrOffset));
@@ -573,5 +574,5 @@ GsymCreator::createSegment(uint64_t SegmentSize, size_t &FuncIdx) const {
     }
     SegmentFuncInfosSize += alignTo(GC->copyFunctionInfo(*this, FuncIdx), 4);
   }
-  return GC;
+  return std::move(GC);
 }

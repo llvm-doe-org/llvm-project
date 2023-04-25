@@ -499,11 +499,6 @@ enum OpenMPOffloadingRequiresDirFlags : int64_t {
   LLVM_MARK_AS_BITMASK_ENUM(/*LargestValue=*/OMP_REQ_DYNAMIC_ALLOCATORS)
 };
 
-enum OpenMPOffloadingReservedDeviceIDs {
-  /// Device ID if the device was not defined, runtime should get it
-  /// from environment variables in the spec.
-  OMP_DEVICEID_UNDEF = -1,
-};
 } // anonymous namespace
 
 /// Describes ident structure that describes a source location.
@@ -1060,7 +1055,7 @@ static FieldDecl *addFieldToRecordDecl(ASTContext &C, DeclContext *DC,
 }
 
 CGOpenMPRuntime::CGOpenMPRuntime(CodeGenModule &CGM)
-    : CGM(CGM), OMPBuilder(CGM.getModule()), OffloadEntriesInfoManager() {
+    : CGM(CGM), OMPBuilder(CGM.getModule()) {
   KmpCriticalNameTy = llvm::ArrayType::get(CGM.Int32Ty, /*NumElements*/ 8);
   llvm::OpenMPIRBuilderConfig Config(CGM.getLangOpts().OpenMPIsDevice, false,
                                      hasRequiresUnifiedSharedMemory(),
@@ -1068,7 +1063,6 @@ CGOpenMPRuntime::CGOpenMPRuntime(CodeGenModule &CGM)
   // Initialize Types used in OpenMPIRBuilder from OMPKinds.def
   OMPBuilder.initialize();
   OMPBuilder.setConfig(Config);
-  OffloadEntriesInfoManager.setConfig(Config);
   loadOffloadInfoMetadata();
 }
 
@@ -1371,7 +1365,8 @@ CGOpenMPRuntime::emitUpdateLocation(CodeGenFunction &CGF, SourceLocation Loc,
   uint32_t SrcLocStrSize;
   llvm::Constant *SrcLocStr;
   if ((!EmitLoc && !IsInOpenACCConstruct &&
-       CGM.getCodeGenOpts().getDebugInfo() == codegenoptions::NoDebugInfo) ||
+       CGM.getCodeGenOpts().getDebugInfo() ==
+           llvm::codegenoptions::NoDebugInfo) ||
       Loc.isInvalid()) {
     SrcLocStr = OMPBuilder.getOrCreateDefaultSrcLocStr(SrcLocStrSize);
   } else {
@@ -1913,7 +1908,7 @@ bool CGOpenMPRuntime::emitDeclareTargetVarDefinition(const VarDecl *VD,
   auto EntryInfo =
       getTargetEntryUniqueInfo(CGM.getContext(), Loc, VD->getName());
   SmallString<128> Buffer, Out;
-  OffloadEntriesInfoManager.getTargetRegionEntryFnName(Buffer, EntryInfo);
+  OMPBuilder.OffloadInfoManager.getTargetRegionEntryFnName(Buffer, EntryInfo);
 
   const Expr *Init = VD->getAnyInitializer();
   if (CGM.getLangOpts().CPlusPlus && PerformInit) {
@@ -1961,7 +1956,7 @@ bool CGOpenMPRuntime::emitDeclareTargetVarDefinition(const VarDecl *VD,
     Out.clear();
     auto CtorEntryInfo = EntryInfo;
     CtorEntryInfo.ParentName = Twine(Buffer, "_ctor").toStringRef(Out);
-    OffloadEntriesInfoManager.registerTargetRegionEntryInfo(
+    OMPBuilder.OffloadInfoManager.registerTargetRegionEntryInfo(
         CtorEntryInfo, Ctor, ID,
         llvm::OffloadEntriesInfoManager::OMPTargetRegionEntryCtor);
   }
@@ -2010,7 +2005,7 @@ bool CGOpenMPRuntime::emitDeclareTargetVarDefinition(const VarDecl *VD,
     Out.clear();
     auto DtorEntryInfo = EntryInfo;
     DtorEntryInfo.ParentName = Twine(Buffer, "_dtor").toStringRef(Out);
-    OffloadEntriesInfoManager.registerTargetRegionEntryInfo(
+    OMPBuilder.OffloadInfoManager.registerTargetRegionEntryInfo(
         DtorEntryInfo, Dtor, ID,
         llvm::OffloadEntriesInfoManager::OMPTargetRegionEntryDtor);
   }
@@ -3003,7 +2998,7 @@ enum KmpTaskTFields {
 void CGOpenMPRuntime::createOffloadEntriesAndInfoMetadata() {
   // If we are in simd mode or there are no entries, we don't need to do
   // anything.
-  if (CGM.getLangOpts().OpenMPSimd || OffloadEntriesInfoManager.empty())
+  if (CGM.getLangOpts().OpenMPSimd || OMPBuilder.OffloadInfoManager.empty())
     return;
 
   llvm::OpenMPIRBuilder::EmitMetadataErrorReportFunctionTy &&ErrorReportFn =
@@ -3047,8 +3042,7 @@ void CGOpenMPRuntime::createOffloadEntriesAndInfoMetadata() {
     }
   };
 
-  OMPBuilder.createOffloadEntriesAndInfoMetadata(OffloadEntriesInfoManager,
-                                                 ErrorReportFn);
+  OMPBuilder.createOffloadEntriesAndInfoMetadata(ErrorReportFn);
 }
 
 /// Loads all the offload entries information from the host IR
@@ -3082,7 +3076,7 @@ void CGOpenMPRuntime::loadOffloadInfoMetadata() {
     return;
   }
 
-  OMPBuilder.loadOffloadInfoMetadata(*ME.get(), OffloadEntriesInfoManager);
+  OMPBuilder.loadOffloadInfoMetadata(*ME.get());
 }
 
 void CGOpenMPRuntime::emitKmpRoutineEntryT(QualType KmpInt32Ty) {
@@ -6170,10 +6164,9 @@ void CGOpenMPRuntime::emitTargetOutlinedFunctionHelper(
   getNumTeamsExprForTargetDirective(CGF, D, DefaultValTeams);
   getNumThreadsExprForTargetDirective(CGF, D, DefaultValThreads);
 
-  OMPBuilder.emitTargetRegionFunction(OffloadEntriesInfoManager, EntryInfo,
-                                      GenerateOutlinedFunction, DefaultValTeams,
-                                      DefaultValThreads, IsOffloadEntry,
-                                      OutlinedFn, OutlinedFnID);
+  OMPBuilder.emitTargetRegionFunction(EntryInfo, GenerateOutlinedFunction,
+                                      DefaultValTeams, DefaultValThreads,
+                                      IsOffloadEntry, OutlinedFn, OutlinedFnID);
 
   if (OutlinedFn != nullptr)
     CGM.getTargetCodeGenInfo().setTargetAttributes(nullptr, OutlinedFn, CGM);
@@ -7221,6 +7214,7 @@ private:
     // double d;
     // int i[100];
     // float *p;
+    // int **a = &i;
     //
     // struct S1 {
     //   int i;
@@ -7253,6 +7247,14 @@ private:
     // &p, &p[1], 24*sizeof(float), TARGET_PARAM | TO | FROM | PTR_AND_OBJ
     // in unified shared memory mode or for local pointers
     // p, &p[1], 24*sizeof(float), TARGET_PARAM | TO | FROM
+    //
+    // map((*a)[0:3])
+    // &(*a), &(*a), sizeof(pointer), TARGET_PARAM | TO | FROM
+    // &(*a), &(*a)[0], 3*sizeof(int), PTR_AND_OBJ | TO | FROM
+    //
+    // map(**a)
+    // &(*a), &(*a), sizeof(pointer), TARGET_PARAM | TO | FROM
+    // &(*a), &(**a), sizeof(int), PTR_AND_OBJ | TO | FROM
     //
     // map(s)
     // &s, &s, sizeof(S2), TARGET_PARAM | TO | FROM
@@ -7546,7 +7548,9 @@ private:
       bool IsMemberReference = isa<MemberExpr>(I->getAssociatedExpression()) &&
                                MapDecl &&
                                MapDecl->getType()->isLValueReferenceType();
-      bool IsNonDerefPointer = IsPointer && !UO && !BO && !IsNonContiguous;
+      bool IsNonDerefPointer = IsPointer &&
+                               !(UO && UO->getOpcode() != UO_Deref) && !BO &&
+                               !IsNonContiguous;
 
       if (OASE)
         ++DimSize;
@@ -8425,7 +8429,8 @@ private:
       // individual members mapped. Emit an extra combined entry.
       if (PartialStruct.Base.isValid()) {
         CurInfo.NonContigInfo.Dims.push_back(0);
-        emitCombinedEntry(CombinedInfo, CurInfo.Types, PartialStruct, VD);
+        emitCombinedEntry(CombinedInfo, CurInfo.Types, PartialStruct,
+                          /*IsMapThis*/ !VD, VD);
       }
 
       // We need to append the results of this capture to what we already
@@ -8491,7 +8496,7 @@ public:
   /// individual struct members.
   void emitCombinedEntry(MapCombinedInfoTy &CombinedInfo,
                          MapFlagsArrayTy &CurTypes,
-                         const StructRangeInfoTy &PartialStruct,
+                         const StructRangeInfoTy &PartialStruct, bool IsMapThis,
                          const ValueDecl *VD = nullptr,
                          bool NotTargetParams = true) const {
     if (CurTypes.size() == 1 &&
@@ -8513,8 +8518,7 @@ public:
     const CXXMethodDecl *MD =
         CGF.CurFuncDecl ? dyn_cast<CXXMethodDecl>(CGF.CurFuncDecl) : nullptr;
     const CXXRecordDecl *RD = MD ? MD->getParent() : nullptr;
-    // When VD is not null, it is not field of class, skip generating this[:1].
-    bool HasBaseClass = RD && !VD ? RD->getNumBases() > 0 : false;
+    bool HasBaseClass = RD && IsMapThis ? RD->getNumBases() > 0 : false;
     // There should not be a mapper for a combined entry.
     if (HasBaseClass) {
       // OpenMP 5.2 148:21:
@@ -9276,7 +9280,8 @@ static void emitOffloadingArrays(
 
     // The information types are only built if there is debug information
     // requested.
-    if (CGM.getCodeGenOpts().getDebugInfo() == codegenoptions::NoDebugInfo &&
+    if (CGM.getCodeGenOpts().getDebugInfo() ==
+            llvm::codegenoptions::NoDebugInfo &&
         !IsInOpenACCConstruct) {
       Info.RTArgs.MapNamesArray = llvm::Constant::getNullValue(
           llvm::Type::getInt8Ty(CGF.Builder.getContext())->getPointerTo());
@@ -9646,7 +9651,8 @@ void CGOpenMPRuntime::emitUserDefinedMapper(const OMPDeclareMapperDecl *D,
         Info.Pointers[I], CGM.getTypes().ConvertTypeForMem(C.VoidPtrTy));
     llvm::Value *CurSizeArg = Info.Sizes[I];
     llvm::Value *CurNameArg =
-        (CGM.getCodeGenOpts().getDebugInfo() == codegenoptions::NoDebugInfo)
+        (CGM.getCodeGenOpts().getDebugInfo() ==
+         llvm::codegenoptions::NoDebugInfo)
             ? llvm::ConstantPointerNull::get(CGM.VoidPtrTy)
             : emitMappingInformation(MapperCGF, OMPBuilder, Info.Exprs[I]);
 
@@ -10012,6 +10018,9 @@ void CGOpenMPRuntime::emitTargetCall(
         DynCGroupMem,
     };
 
+    llvm::OpenMPIRBuilder::InsertPointTy AllocaIP(
+        CGF.AllocaInsertPt->getParent(), CGF.AllocaInsertPt->getIterator());
+
     // The target region is an outlined function launched by the runtime
     // via calls to __tgt_target_kernel().
     //
@@ -10026,7 +10035,7 @@ void CGOpenMPRuntime::emitTargetCall(
     // of teams and threads so no additional calls to the runtime are required.
     // Check the error code and execute the host version if required.
     CGF.Builder.restoreIP(OMPBuilder.emitTargetKernel(
-        CGF.Builder, Return, RTLoc, DeviceID, NumTeams, NumThreads,
+        CGF.Builder, AllocaIP, Return, RTLoc, DeviceID, NumTeams, NumThreads,
         OutlinedFnID, KernelArgs));
 
     llvm::BasicBlock *OffloadFailedBlock =
@@ -10112,8 +10121,8 @@ void CGOpenMPRuntime::emitTargetCall(
       if (PartialStruct.Base.isValid()) {
         CombinedInfo.append(PartialStruct.PreliminaryMapData);
         MEHandler.emitCombinedEntry(
-            CombinedInfo, CurInfo.Types, PartialStruct, nullptr,
-            !PartialStruct.PreliminaryMapData.BasePointers.empty());
+            CombinedInfo, CurInfo.Types, PartialStruct, CI->capturesThis(),
+            nullptr, !PartialStruct.PreliminaryMapData.BasePointers.empty());
       }
 
       // We need to append the results of this capture to what we already have.
@@ -10131,8 +10140,8 @@ void CGOpenMPRuntime::emitTargetCall(
     // Fill up the arrays and create the arguments.
     emitOffloadingArrays(CGF, CombinedInfo, Info, OMPBuilder,
                          IsInOpenACCConstruct);
-    bool EmitDebug =
-        CGF.CGM.getCodeGenOpts().getDebugInfo() != codegenoptions::NoDebugInfo;
+    bool EmitDebug = CGF.CGM.getCodeGenOpts().getDebugInfo() !=
+                     llvm::codegenoptions::NoDebugInfo;
     OMPBuilder.emitOffloadingArraysArgument(CGF.Builder, Info.RTArgs, Info,
                                             EmitDebug, /*ForEndCall=*/false,
                                             IsInOpenACCConstruct);
@@ -10204,7 +10213,7 @@ void CGOpenMPRuntime::scanForTargetRegionsFunctions(const Stmt *S,
 
     // Is this a target region that should not be emitted as an entry point? If
     // so just signal we are done with this target region.
-    if (!OffloadEntriesInfoManager.hasTargetRegionEntryInfo(EntryInfo))
+    if (!OMPBuilder.OffloadInfoManager.hasTargetRegionEntryInfo(EntryInfo))
       return;
 
     switch (E.getDirectiveKind()) {
@@ -10455,10 +10464,12 @@ void CGOpenMPRuntime::registerTargetGlobalVariable(const VarDecl *VD,
     }
     Linkage = CGM.getLLVMLinkageVarDefinition(VD, /*IsConstant=*/false);
     // Temp solution to prevent optimizations of the internal variables.
-    if (CGM.getLangOpts().OpenMPIsDevice && !VD->isExternallyVisible()) {
+    if (CGM.getLangOpts().OpenMPIsDevice &&
+        (!VD->isExternallyVisible() ||
+         Linkage == llvm::GlobalValue::LinkOnceODRLinkage)) {
       // Do not create a "ref-variable" if the original is not also available
       // on the host.
-      if (!OffloadEntriesInfoManager.hasDeviceGlobalVarEntryInfo(VarName))
+      if (!OMPBuilder.OffloadInfoManager.hasDeviceGlobalVarEntryInfo(VarName))
         return;
       std::string RefName = getName({VarName, "ref"});
       if (!CGM.GetGlobalValue(RefName)) {
@@ -10493,7 +10504,7 @@ void CGOpenMPRuntime::registerTargetGlobalVariable(const VarDecl *VD,
     Linkage = llvm::GlobalValue::WeakAnyLinkage;
   }
 
-  OffloadEntriesInfoManager.registerDeviceGlobalVarEntryInfo(
+  OMPBuilder.OffloadInfoManager.registerDeviceGlobalVarEntryInfo(
       VarName, Addr, VarSize, Flags, Linkage);
 }
 
@@ -10628,9 +10639,8 @@ llvm::Function *CGOpenMPRuntime::emitRequiresDirectiveRegFun() {
   // don't need to do anything.
   if (CGM.getLangOpts().OMPTargetTriples.empty() ||
       CGM.getLangOpts().OpenMPSimd || CGM.getLangOpts().OpenMPIsDevice ||
-      (OffloadEntriesInfoManager.empty() &&
-       !HasEmittedDeclareTargetRegion &&
-       !HasEmittedTargetRegion))
+      (OMPBuilder.OffloadInfoManager.empty() &&
+       !HasEmittedDeclareTargetRegion && !HasEmittedTargetRegion))
     return nullptr;
 
   // Create and register the function that handles the requires directives.
@@ -10651,9 +10661,8 @@ llvm::Function *CGOpenMPRuntime::emitRequiresDirectiveRegFun() {
     // passed to the runtime. This avoids the runtime from throwing an error
     // for mismatching requires clauses across compilation units that don't
     // contain at least 1 target region.
-    assert((HasEmittedTargetRegion ||
-            HasEmittedDeclareTargetRegion ||
-            !OffloadEntriesInfoManager.empty()) &&
+    assert((HasEmittedTargetRegion || HasEmittedDeclareTargetRegion ||
+            !OMPBuilder.OffloadInfoManager.empty()) &&
            "Target or declare target region expected.");
     if (HasRequiresUnifiedSharedMemory)
       Flags = OMP_REQ_UNIFIED_SHARED_MEMORY;
@@ -10747,8 +10756,8 @@ void CGOpenMPRuntime::emitTargetDataCalls(
                          IsInOpenACCConstruct, /*IsNonContiguous=*/true);
 
     llvm::OpenMPIRBuilder::TargetDataRTArgs RTArgs;
-    bool EmitDebug =
-        CGF.CGM.getCodeGenOpts().getDebugInfo() != codegenoptions::NoDebugInfo;
+    bool EmitDebug = CGF.CGM.getCodeGenOpts().getDebugInfo() !=
+                     llvm::codegenoptions::NoDebugInfo;
     OMPBuilder.emitOffloadingArraysArgument(CGF.Builder, RTArgs, Info,
                                             EmitDebug, /*ForEndCall=*/false,
                                             IsInOpenACCConstruct);
@@ -10794,8 +10803,8 @@ void CGOpenMPRuntime::emitTargetDataCalls(
     assert(Info.isValid() && "Invalid data environment closing arguments.");
 
     llvm::OpenMPIRBuilder::TargetDataRTArgs RTArgs;
-    bool EmitDebug =
-        CGF.CGM.getCodeGenOpts().getDebugInfo() != codegenoptions::NoDebugInfo;
+    bool EmitDebug = CGF.CGM.getCodeGenOpts().getDebugInfo() !=
+                     llvm::codegenoptions::NoDebugInfo;
     OMPBuilder.emitOffloadingArraysArgument(CGF.Builder, RTArgs, Info,
                                             EmitDebug, /*ForEndCall=*/true,
                                             IsInOpenACCConstruct);
@@ -11018,8 +11027,8 @@ void CGOpenMPRuntime::emitTargetDataStandAloneCall(
                          IsInOpenACCConstruct, /*IsNonContiguous=*/true);
     bool RequiresOuterTask = D.hasClausesOfKind<OMPDependClause>() ||
                              D.hasClausesOfKind<OMPNowaitClause>();
-    bool EmitDebug =
-        CGF.CGM.getCodeGenOpts().getDebugInfo() != codegenoptions::NoDebugInfo;
+    bool EmitDebug = CGF.CGM.getCodeGenOpts().getDebugInfo() !=
+                     llvm::codegenoptions::NoDebugInfo;
     OMPBuilder.emitOffloadingArraysArgument(CGF.Builder, Info.RTArgs, Info,
                                             EmitDebug, /*ForEndCall=*/false,
                                             IsInOpenACCConstruct);

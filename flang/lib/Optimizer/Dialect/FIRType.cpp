@@ -12,7 +12,7 @@
 
 #include "flang/Optimizer/Dialect/FIRType.h"
 #include "flang/Optimizer/Dialect/FIRDialect.h"
-#include "flang/Optimizer/Support/KindMapping.h"
+#include "flang/Optimizer/Dialect/Support/KindMapping.h"
 #include "flang/Tools/PointerModels.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinDialect.h"
@@ -219,12 +219,8 @@ mlir::Type dyn_cast_ptrOrBoxEleTy(mlir::Type t) {
   return llvm::TypeSwitch<mlir::Type, mlir::Type>(t)
       .Case<fir::ReferenceType, fir::PointerType, fir::HeapType,
             fir::LLVMPointerType>([](auto p) { return p.getEleTy(); })
-      .Case<fir::BaseBoxType>([](auto p) {
-        auto eleTy = p.getEleTy();
-        if (auto ty = fir::dyn_cast_ptrEleTy(eleTy))
-          return ty;
-        return eleTy;
-      })
+      .Case<fir::BaseBoxType>(
+          [](auto p) { return unwrapRefType(p.getEleTy()); })
       .Default([](mlir::Type) { return mlir::Type{}; });
 }
 
@@ -304,7 +300,7 @@ bool isScalarBoxedRecordType(mlir::Type ty) {
   return false;
 }
 
-static bool isAssumedType(mlir::Type ty) {
+bool isAssumedType(mlir::Type ty) {
   if (auto boxTy = ty.dyn_cast<fir::BoxType>()) {
     if (boxTy.getEleTy().isa<mlir::NoneType>())
       return true;
@@ -407,13 +403,9 @@ void fir::printFirType(FIROpsDialect *, mlir::Type ty,
 }
 
 bool fir::isa_unknown_size_box(mlir::Type t) {
-  if (auto boxTy = t.dyn_cast<fir::BoxType>()) {
-    auto eleTy = boxTy.getEleTy();
-    if (auto actualEleTy = fir::dyn_cast_ptrEleTy(eleTy))
-      eleTy = actualEleTy;
-    if (eleTy.isa<mlir::NoneType>())
-      return true;
-    if (auto seqTy = eleTy.dyn_cast<fir::SequenceType>())
+  if (auto boxTy = t.dyn_cast<fir::BaseBoxType>()) {
+    auto valueType = fir::unwrapPassByRefType(boxTy);
+    if (auto seqTy = valueType.dyn_cast<fir::SequenceType>())
       if (seqTy.hasUnknownShape())
         return true;
   }
@@ -460,6 +452,8 @@ static bool cannotBePointerOrHeapElementType(mlir::Type eleTy) {
 mlir::LogicalResult
 fir::BoxType::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
                      mlir::Type eleTy) {
+  if (eleTy.isa<fir::BaseBoxType>())
+    return emitError() << "invalid element type\n";
   // TODO
   return mlir::success();
 }

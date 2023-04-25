@@ -221,6 +221,11 @@ public:
   /// registration object (internally a PyDiagnosticHandler).
   pybind11::object attachDiagnosticHandler(pybind11::object callback);
 
+  /// Controls whether error diagnostics should be propagated to diagnostic
+  /// handlers, instead of being captured by `ErrorCapture`.
+  void setEmitErrorDiagnostics(bool value) { emitErrorDiagnostics = value; }
+  struct ErrorCapture;
+
 private:
   PyMlirContext(MlirContext context);
   // Interns the mapping of live MlirContext::ptr to PyMlirContext instances,
@@ -247,6 +252,8 @@ private:
   using LiveOperationMap =
       llvm::DenseMap<void *, std::pair<pybind11::handle, PyOperation *>>;
   LiveOperationMap liveOperations;
+
+  bool emitErrorDiagnostics = false;
 
   MlirContext context;
   friend class PyModule;
@@ -281,6 +288,34 @@ private:
   PyMlirContextRef contextRef;
 };
 
+/// Wrapper around an MlirLocation.
+class PyLocation : public BaseContextObject {
+public:
+  PyLocation(PyMlirContextRef contextRef, MlirLocation loc)
+      : BaseContextObject(std::move(contextRef)), loc(loc) {}
+
+  operator MlirLocation() const { return loc; }
+  MlirLocation get() const { return loc; }
+
+  /// Enter and exit the context manager.
+  pybind11::object contextEnter();
+  void contextExit(const pybind11::object &excType,
+                   const pybind11::object &excVal,
+                   const pybind11::object &excTb);
+
+  /// Gets a capsule wrapping the void* within the MlirLocation.
+  pybind11::object getCapsule();
+
+  /// Creates a PyLocation from the MlirLocation wrapped by a capsule.
+  /// Note that PyLocation instances are uniqued, so the returned object
+  /// may be a pre-existing object. Ownership of the underlying MlirLocation
+  /// is taken by calling this function.
+  static PyLocation createFromCapsule(pybind11::object capsule);
+
+private:
+  MlirLocation loc;
+};
+
 /// Python class mirroring the C MlirDiagnostic struct. Note that these structs
 /// are only valid for the duration of a diagnostic callback and attempting
 /// to access them outside of that will raise an exception. This applies to
@@ -294,6 +329,16 @@ public:
   PyLocation getLocation();
   pybind11::str getMessage();
   pybind11::tuple getNotes();
+
+  /// Materialized diagnostic information. This is safe to access outside the
+  /// diagnostic callback.
+  struct DiagnosticInfo {
+    MlirDiagnosticSeverity severity;
+    PyLocation location;
+    std::string message;
+    std::vector<DiagnosticInfo> notes;
+  };
+  DiagnosticInfo getInfo();
 
 private:
   MlirDiagnostic diagnostic;
@@ -349,6 +394,30 @@ private:
   std::optional<MlirDiagnosticHandlerID> registeredID;
   bool hadError = false;
   friend class PyMlirContext;
+};
+
+/// RAII object that captures any error diagnostics emitted to the provided
+/// context.
+struct PyMlirContext::ErrorCapture {
+  ErrorCapture(PyMlirContextRef ctx)
+      : ctx(ctx), handlerID(mlirContextAttachDiagnosticHandler(
+                      ctx->get(), handler, /*userData=*/this,
+                      /*deleteUserData=*/nullptr)) {}
+  ~ErrorCapture() {
+    mlirContextDetachDiagnosticHandler(ctx->get(), handlerID);
+    assert(errors.empty() && "unhandled captured errors");
+  }
+
+  std::vector<PyDiagnostic::DiagnosticInfo> take() {
+    return std::move(errors);
+  };
+
+private:
+  PyMlirContextRef ctx;
+  MlirDiagnosticHandlerID handlerID;
+  std::vector<PyDiagnostic::DiagnosticInfo> errors;
+
+  static MlirLogicalResult handler(MlirDiagnostic diag, void *userData);
 };
 
 /// Wrapper around an MlirDialect. This is exported as `DialectDescriptor` in
@@ -414,34 +483,6 @@ public:
 
 private:
   MlirDialectRegistry registry;
-};
-
-/// Wrapper around an MlirLocation.
-class PyLocation : public BaseContextObject {
-public:
-  PyLocation(PyMlirContextRef contextRef, MlirLocation loc)
-      : BaseContextObject(std::move(contextRef)), loc(loc) {}
-
-  operator MlirLocation() const { return loc; }
-  MlirLocation get() const { return loc; }
-
-  /// Enter and exit the context manager.
-  pybind11::object contextEnter();
-  void contextExit(const pybind11::object &excType,
-                   const pybind11::object &excVal,
-                   const pybind11::object &excTb);
-
-  /// Gets a capsule wrapping the void* within the MlirLocation.
-  pybind11::object getCapsule();
-
-  /// Creates a PyLocation from the MlirLocation wrapped by a capsule.
-  /// Note that PyLocation instances are uniqued, so the returned object
-  /// may be a pre-existing object. Ownership of the underlying MlirLocation
-  /// is taken by calling this function.
-  static PyLocation createFromCapsule(pybind11::object capsule);
-
-private:
-  MlirLocation loc;
 };
 
 /// Used in function arguments when None should resolve to the current context
@@ -518,6 +559,10 @@ public:
   /// Moves the operation before or after the other operation.
   void moveAfter(PyOperationBase &other);
   void moveBefore(PyOperationBase &other);
+
+  /// Verify the operation. Throws `MLIRError` if verification fails, and
+  /// returns `true` otherwise.
+  bool verify();
 
   /// Each must provide access to the raw Operation.
   virtual PyOperation &getOperation() = 0;
@@ -763,7 +808,7 @@ class PyType : public BaseContextObject {
 public:
   PyType(PyMlirContextRef contextRef, MlirType type)
       : BaseContextObject(std::move(contextRef)), type(type) {}
-  bool operator==(const PyType &other);
+  bool operator==(const PyType &other) const;
   operator MlirType() const { return type; }
   MlirType get() const { return type; }
 
@@ -833,7 +878,7 @@ class PyAttribute : public BaseContextObject {
 public:
   PyAttribute(PyMlirContextRef contextRef, MlirAttribute attr)
       : BaseContextObject(std::move(contextRef)), attr(attr) {}
-  bool operator==(const PyAttribute &other);
+  bool operator==(const PyAttribute &other) const;
   operator MlirAttribute() const { return attr; }
   MlirAttribute get() const { return attr; }
 
@@ -958,7 +1003,7 @@ class PyAffineExpr : public BaseContextObject {
 public:
   PyAffineExpr(PyMlirContextRef contextRef, MlirAffineExpr affineExpr)
       : BaseContextObject(std::move(contextRef)), affineExpr(affineExpr) {}
-  bool operator==(const PyAffineExpr &other);
+  bool operator==(const PyAffineExpr &other) const;
   operator MlirAffineExpr() const { return affineExpr; }
   MlirAffineExpr get() const { return affineExpr; }
 
@@ -985,7 +1030,7 @@ class PyAffineMap : public BaseContextObject {
 public:
   PyAffineMap(PyMlirContextRef contextRef, MlirAffineMap affineMap)
       : BaseContextObject(std::move(contextRef)), affineMap(affineMap) {}
-  bool operator==(const PyAffineMap &other);
+  bool operator==(const PyAffineMap &other) const;
   operator MlirAffineMap() const { return affineMap; }
   MlirAffineMap get() const { return affineMap; }
 
@@ -1006,7 +1051,7 @@ class PyIntegerSet : public BaseContextObject {
 public:
   PyIntegerSet(PyMlirContextRef contextRef, MlirIntegerSet integerSet)
       : BaseContextObject(std::move(contextRef)), integerSet(integerSet) {}
-  bool operator==(const PyIntegerSet &other);
+  bool operator==(const PyIntegerSet &other) const;
   operator MlirIntegerSet() const { return integerSet; }
   MlirIntegerSet get() const { return integerSet; }
 
@@ -1071,6 +1116,16 @@ public:
 private:
   PyOperationRef operation;
   MlirSymbolTable symbolTable;
+};
+
+/// Custom exception that allows access to error diagnostic information. This is
+/// converted to the `ir.MLIRError` python exception when thrown.
+struct MLIRError {
+  MLIRError(llvm::Twine message,
+            std::vector<PyDiagnostic::DiagnosticInfo> &&errorDiagnostics = {})
+      : message(message.str()), errorDiagnostics(std::move(errorDiagnostics)) {}
+  std::string message;
+  std::vector<PyDiagnostic::DiagnosticInfo> errorDiagnostics;
 };
 
 void populateIRAffine(pybind11::module &m);

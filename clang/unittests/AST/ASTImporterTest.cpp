@@ -259,6 +259,10 @@ TEST_P(ImportExpr, ImportSourceLocExpr) {
              Lang_CXX03, Verifier,
              functionDecl(hasDescendant(
                  sourceLocExpr(hasBuiltinStr("__builtin_FILE")))));
+  testImport("void declToImport() { (void)__builtin_FILE_NAME(); }", Lang_CXX03,
+             "", Lang_CXX03, Verifier,
+             functionDecl(hasDescendant(
+                 sourceLocExpr(hasBuiltinStr("__builtin_FILE_NAME")))));
   testImport("void declToImport() { (void)__builtin_COLUMN(); }", Lang_CXX03,
              "", Lang_CXX03, Verifier,
              functionDecl(hasDescendant(
@@ -8376,6 +8380,200 @@ TEST_P(ImportInjectedClassNameType, ImportTypedefType) {
   EXPECT_TRUE(isa<InjectedClassNameType>(ToInjTypedef));
   EXPECT_TRUE(isa<InjectedClassNameType>(ToInjParmVar));
   EXPECT_TRUE(ToCtx.hasSameType(ToInjTypedef, ToInjParmVar));
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase, ImportCorrectTemplateName) {
+  constexpr auto TestCode = R"(
+      template <class T>
+      struct A;
+      template <class T>
+      struct A {};
+      template <template<class> class T = A>
+      struct B {};
+      using C = B<>;
+      )";
+  Decl *ToTU = getToTuDecl(TestCode, Lang_CXX11);
+  Decl *FromTU = getTuDecl(TestCode, Lang_CXX11);
+
+  auto *ToUsingFirst = FirstDeclMatcher<TypeAliasDecl>().match(
+      ToTU, typeAliasDecl(hasName("C")));
+
+  auto *FromUsing = FirstDeclMatcher<TypeAliasDecl>().match(
+      FromTU, typeAliasDecl(hasName("C")));
+  auto *ToUsing = Import(FromUsing, Lang_CXX11);
+  EXPECT_TRUE(ToUsing);
+
+  auto *ToB = FirstDeclMatcher<ClassTemplateDecl>().match(
+      ToTU, classTemplateDecl(hasName("B")));
+  auto *ToB1 = LastDeclMatcher<ClassTemplateDecl>().match(
+      ToTU, classTemplateDecl(hasName("B")));
+  // One template definition of 'B' should exist.
+  EXPECT_EQ(ToB, ToB1);
+
+  // These declarations are imported separately.
+  EXPECT_NE(ToUsingFirst, ToUsing);
+
+  auto SpB = ToB->spec_begin();
+  auto SpE = ToB->spec_end();
+  EXPECT_TRUE(SpB != SpE);
+  ClassTemplateSpecializationDecl *Spec1 = *SpB;
+  ++SpB;
+  // The template 'B' should have one specialization (with default argument).
+  EXPECT_TRUE(SpB == SpE);
+
+  // Even if 'B' has one specialization with the default arguments, the AST
+  // contains after the import two specializations that are linked in the
+  // declaration chain. The 'spec_begin' iteration does not find these because
+  // the template arguments are the same. But the imported type alias has the
+  // link to the second specialization. The template name object in these
+  // specializations must point to the same (and one) instance of definition of
+  // 'B'.
+  auto *Spec2 = cast<ClassTemplateSpecializationDecl>(
+      ToUsing->getUnderlyingType()
+          ->getAs<TemplateSpecializationType>()
+          ->getAsRecordDecl());
+  EXPECT_NE(Spec1, Spec2);
+  EXPECT_TRUE(Spec1->getPreviousDecl() == Spec2 ||
+              Spec2->getPreviousDecl() == Spec1);
+  TemplateDecl *Templ1 =
+      Spec1->getTemplateArgs()[0].getAsTemplate().getAsTemplateDecl();
+  TemplateDecl *Templ2 =
+      Spec2->getTemplateArgs()[0].getAsTemplate().getAsTemplateDecl();
+  EXPECT_EQ(Templ1, Templ2);
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase, VaListC) {
+  Decl *FromTU = getTuDecl(R"(typedef __builtin_va_list va_list;)", Lang_C99);
+
+  auto *FromVaList = FirstDeclMatcher<TypedefDecl>().match(
+      FromTU, typedefDecl(hasName("va_list")));
+  ASSERT_TRUE(FromVaList);
+
+  auto *ToVaList = Import(FromVaList, Lang_C99);
+  ASSERT_TRUE(ToVaList);
+
+  auto *ToBuiltinVaList = FirstDeclMatcher<TypedefDecl>().match(
+      ToAST->getASTContext().getTranslationUnitDecl(),
+      typedefDecl(hasName("__builtin_va_list")));
+
+  ASSERT_TRUE(ToAST->getASTContext().hasSameType(
+      ToVaList->getUnderlyingType(), ToBuiltinVaList->getUnderlyingType()));
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase, VaListCpp) {
+  Decl *FromTU = getTuDecl(R"(typedef __builtin_va_list va_list;)", Lang_CXX03);
+
+  auto *FromVaList = FirstDeclMatcher<TypedefDecl>().match(
+      FromTU, typedefDecl(hasName("va_list")));
+  ASSERT_TRUE(FromVaList);
+
+  auto *ToVaList = Import(FromVaList, Lang_CXX03);
+  ASSERT_TRUE(ToVaList);
+
+  auto *ToBuiltinVaList = FirstDeclMatcher<TypedefDecl>().match(
+      ToAST->getASTContext().getTranslationUnitDecl(),
+      typedefDecl(hasName("__builtin_va_list")));
+
+  ASSERT_TRUE(ToAST->getASTContext().hasSameType(
+      ToVaList->getUnderlyingType(), ToBuiltinVaList->getUnderlyingType()));
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase,
+       ImportDefinitionOfEmptyClassWithNoUniqueAddressField) {
+  Decl *FromTU = getTuDecl(
+      R"(
+      struct B {};
+      struct A { B b; };
+      )",
+      Lang_CXX20);
+
+  CXXRecordDecl *FromD = FirstDeclMatcher<CXXRecordDecl>().match(
+      FromTU, cxxRecordDecl(hasName("A")));
+
+  for (auto *FD : FromD->fields())
+    FD->addAttr(clang::NoUniqueAddressAttr::Create(FromD->getASTContext(),
+                                                   clang::SourceRange()));
+  FromD->markEmpty();
+
+  CXXRecordDecl *ToD = Import(FromD, Lang_CXX20);
+  EXPECT_TRUE(ToD->isEmpty());
+  for (auto *FD : ToD->fields())
+    EXPECT_EQ(true, FD->hasAttr<NoUniqueAddressAttr>());
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase, ImportExistingTypedefToRecord) {
+  const char *Code =
+      R"(
+      struct S { int i; };
+      typedef struct S T;
+      extern T x;
+      )";
+  Decl *ToTU = getToTuDecl(Code, Lang_C99);
+  Decl *FromTU = getTuDecl(Code, Lang_C99);
+
+  auto *FromX =
+      FirstDeclMatcher<VarDecl>().match(FromTU, varDecl(hasName("x")));
+  auto *ToX = Import(FromX, Lang_C99);
+  EXPECT_TRUE(ToX);
+
+  auto *Typedef1 =
+      FirstDeclMatcher<TypedefDecl>().match(ToTU, typedefDecl(hasName("T")));
+  auto *Typedef2 =
+      LastDeclMatcher<TypedefDecl>().match(ToTU, typedefDecl(hasName("T")));
+  EXPECT_EQ(Typedef1, Typedef2);
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase,
+       ImportExistingTypedefToUnnamedRecord) {
+  const char *Code =
+      R"(
+      typedef const struct { int f; } T;
+      extern T x;
+      )";
+  Decl *ToTU = getToTuDecl(Code, Lang_C99);
+  Decl *FromTU = getTuDecl(Code, Lang_C99);
+
+  auto *FromX =
+      FirstDeclMatcher<VarDecl>().match(FromTU, varDecl(hasName("x")));
+  auto *ToX = Import(FromX, Lang_C99);
+  EXPECT_TRUE(ToX);
+
+  auto *Typedef1 =
+      FirstDeclMatcher<TypedefDecl>().match(ToTU, typedefDecl(hasName("T")));
+  auto *Typedef2 =
+      LastDeclMatcher<TypedefDecl>().match(ToTU, typedefDecl(hasName("T")));
+  EXPECT_NE(Typedef1, Typedef2);
+  EXPECT_NE(Typedef1->getUnderlyingType().getTypePtr(),
+            Typedef2->getUnderlyingType().getTypePtr());
+  EXPECT_EQ(ToX->getType()->getAs<TypedefType>()->getDecl(), Typedef2);
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase, ImportTwoTypedefsToUnnamedRecord) {
+  const char *Code =
+      R"(
+      typedef struct { int f; } T1;
+      typedef struct { int f; } T2;
+      extern T1 x1;
+      extern T2 x2;
+      )";
+  Decl *ToTU = getToTuDecl("", Lang_C99);
+  Decl *FromTU = getTuDecl(Code, Lang_C99);
+
+  auto *FromX1 =
+      FirstDeclMatcher<VarDecl>().match(FromTU, varDecl(hasName("x1")));
+  auto *FromX2 =
+      FirstDeclMatcher<VarDecl>().match(FromTU, varDecl(hasName("x2")));
+  auto *ToX1 = Import(FromX1, Lang_C99);
+  EXPECT_TRUE(ToX1);
+  auto *ToX2 = Import(FromX2, Lang_C99);
+  EXPECT_TRUE(ToX2);
+
+  auto *Typedef1 =
+      FirstDeclMatcher<TypedefDecl>().match(ToTU, typedefDecl(hasName("T1")));
+  auto *Typedef2 =
+      FirstDeclMatcher<TypedefDecl>().match(ToTU, typedefDecl(hasName("T2")));
+  EXPECT_NE(Typedef1->getUnderlyingType().getTypePtr(),
+            Typedef2->getUnderlyingType().getTypePtr());
 }
 
 INSTANTIATE_TEST_SUITE_P(ParameterizedTests, ASTImporterLookupTableTest,

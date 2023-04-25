@@ -42,10 +42,40 @@ variables:
   # process does (usually OpenMP tests).  One hour of CPU time should be plenty
   # for any process.  The goal is simply not to let them stick around forever.
   ULIMIT_T: 3600
-  # Which commits to use for OpenACC V&V testing.
+  # TODO: These tests expect runtime diagnostics that certain OMPT callbacks
+  # cannot be registered.  That's true upstream, but Clacc enables those
+  # callbacks, so the tests currently fail under Clacc.  For other offload
+  # targets, upstream has marked the tests unsupported.  Eventually, upstream
+  # will surely adjust the tests to expect successful registration, and it's
+  # not clear the tests will necessarily become unexpected passes at that
+  # point under Clacc, so we'll just have to remember to remove the following
+  # at that time.
+  TEST_CLACC_LIT_XFAIL:
+    "
+    libomptarget :: amdgcn-amd-amdhsa :: ompt/veccopy.c
+    libomptarget :: amdgcn-amd-amdhsa :: ompt/veccopy_disallow_both.c
+    libomptarget :: amdgcn-amd-amdhsa :: ompt/veccopy_emi.c
+    libomptarget :: amdgcn-amd-amdhsa :: ompt/veccopy_emi_map.c
+    libomptarget :: amdgcn-amd-amdhsa :: ompt/veccopy_map.c
+    libomptarget :: amdgcn-amd-amdhsa :: ompt/veccopy_wrong_return.c
+    libomptarget :: powerpc64le-ibm-linux-gnu :: ompt/veccopy.c
+    libomptarget :: powerpc64le-ibm-linux-gnu :: ompt/veccopy_disallow_both.c
+    libomptarget :: powerpc64le-ibm-linux-gnu :: ompt/veccopy_emi.c
+    libomptarget :: powerpc64le-ibm-linux-gnu :: ompt/veccopy_emi_map.c
+    libomptarget :: powerpc64le-ibm-linux-gnu :: ompt/veccopy_map.c
+    libomptarget :: powerpc64le-ibm-linux-gnu :: ompt/veccopy_wrong_return.c
+    libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: ompt/veccopy.c
+    libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: ompt/veccopy_disallow_both.c
+    libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: ompt/veccopy_emi.c
+    libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: ompt/veccopy_emi_map.c
+    libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: ompt/veccopy_map.c
+    libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: ompt/veccopy_wrong_return.c
+    "
+  # Which commits and options to use for OpenACC V&V testing.
   VV_LLVM_TEST_SUITE_COMMIT: da5c250df731c259bd6f15f05ab93f3f7b902b63
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
   VV_CFLAGS:
+  # Which commits and options to use for Kokkos testing.
   KOKKOS_COMMIT: 2f2dff91cd63ac33e4f4c0560778188f9dcfc191
   KOKKOS_TESTS_COMMIT: a883ce8d4806b9ad1a1696ccb1e83f8a043f5be5
   KOKKOS_CMAKE_OPTS:
@@ -116,6 +146,8 @@ stages:
       libomptarget :: nvptx64-nvidia-cuda :: mapping/target_has_device_addr.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/info.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_has_device_addr.c
+      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/target_critical_region.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: offloading/target_critical_region.cpp
       "
     TEST_LIT_XFAIL_NOT:
       "
@@ -135,9 +167,11 @@ stages:
       libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu :: mapping/low_alignment.c
       libomptarget :: powerpc64le-ibm-linux-gnu :: mapping/ompx_hold/struct.c
+      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/target_nowait_target.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: mapping/low_alignment.c
       libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: mapping/ompx_hold/struct.c
       libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: offloading/bug49334.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: offloading/target_nowait_target.cpp
       "
     VV_COMP_LIT_XFAIL:
       ""
@@ -173,12 +207,16 @@ stages:
     LIT_NPROC_DIVISOR: 1
     TEST_LIT_XFAIL:
       "
+      libomptarget :: nvptx64-nvidia-cuda :: mapping/ompx_hold/struct.c
+      libomptarget :: nvptx64-nvidia-cuda :: mapping/target_derefence_array_pointrs.cpp
       libomptarget :: nvptx64-nvidia-cuda :: mapping/target_has_device_addr.c
       libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/close_enter_exit.c
       libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/close_modifier.c
       libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/shared_update.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_has_device_addr.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/info.c
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/ompx_hold/struct.c
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_derefence_array_pointrs.cpp
       libomptarget :: nvptx64-nvidia-cuda-LTO :: unified_shared_memory/close_enter_exit.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: unified_shared_memory/close_modifier.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: unified_shared_memory/shared_update.c
@@ -821,6 +859,9 @@ debug (build):
     # by grep tells us how many test suite summaries we need to search for.
     #...........................................................................
     - echo -e "\e[0Ksection_start:`date +%s`:run_regression_tests[collapsed=true]\r\e[0KRun regression test suite"
+    - if test x"$clacc_branch" != x; then
+        TEST_LIT_XFAIL="$TEST_LIT_XFAIL $TEST_CLACC_LIT_XFAIL";
+      fi
     - export LIT_XFAIL=`
         echo "$TEST_LIT_XFAIL"
         | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
@@ -935,11 +976,8 @@ debug (test):
   extends: [.non-utility, .clacc]
   stage: vv
   script:
-    # Systems without a GPU omit -fopenmp-targets, and this causes linking
-    # problems for libomptarget.so if we don't extend LD_LIBRARY_PATH.
-    - if test x"$GPU_TRIPLE" = x; then
-        export LD_LIBRARY_PATH=$BUILD_DIR/install/lib:$LD_LIBRARY_PATH;
-      fi
+    - export LD_LIBRARY_PATH=$BUILD_DIR/install/lib:$LD_LIBRARY_PATH
+    - echo $LD_LIBRARY_PATH
     - export VV_COMP_LIT_XFAIL=`
         echo "$VV_COMP_LIT_XFAIL"
         | sed -e 's/\([^:]\)  *\([^:]\)/\1;\2/g' -e 's/^ *//' -e 's/ *$//'
@@ -1138,11 +1176,8 @@ debug (vv):
   extends: [.non-utility, .clacc]
   stage: kokkos
   script:
-    # Systems without a GPU omit -fopenmp-targets, and this causes linking
-    # problems for libomptarget.so if we don't extend LD_LIBRARY_PATH.
-    - if test x"$GPU_TRIPLE" = x; then
-        export LD_LIBRARY_PATH=$BUILD_DIR/install/lib:$LD_LIBRARY_PATH;
-      fi
+    - export LD_LIBRARY_PATH=$BUILD_DIR/install/lib:$LD_LIBRARY_PATH
+    - echo $LD_LIBRARY_PATH
     #...........................................................................
     # Clone Kokkos.
     #...........................................................................

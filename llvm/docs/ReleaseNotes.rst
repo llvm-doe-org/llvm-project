@@ -56,6 +56,20 @@ Changes to the LLVM IR
 * The ``nofpclass`` attribute was introduced. This allows more
   optimizations around special floating point value comparisons.
 
+* The constant expression variants of the following instructions have been
+  removed:
+
+  * ``select``
+
+Changes to LLVM infrastructure
+------------------------------
+
+* The legacy optimization pipeline has been removed.
+
+* Alloca merging in the inliner has been removed, since it only worked with the
+  legacy inliner pass. Backend stack coloring should handle cases alloca
+  merging initially set out to handle.
+
 Changes to building LLVM
 ------------------------
 
@@ -70,6 +84,12 @@ Changes to the AArch64 Backend
 
 Changes to the AMDGPU Backend
 -----------------------------
+* More fine-grained synchronization around barriers for newer architectures
+  (gfx90a+, gfx10+). The AMDGPU backend now omits previously automatically
+  generated waitcnt instructions before barriers, allowing for more precise
+  control. Users must now use memory fences to implement fine-grained
+  synchronization strategies around barriers. Refer to `AMDGPU memory model
+  <AMDGPUUsage.html#memory-model>`__.
 
 Changes to the ARM Backend
 --------------------------
@@ -102,7 +122,13 @@ Changes to the MIPS Backend
 Changes to the PowerPC Backend
 ------------------------------
 
-* ...
+* A new option ``-mxcoff-roptr`` is added to ``clang`` and ``llc``. When this
+  option is present, constant objects with relocatable address values are put
+  into the RO data section. This option should be used with the ``-fdata-sections``
+  option, and is not supported with ``-fno-data-sections``. The option is
+  only supported on AIX.
+* On AIX, teach the profile runtime to check for a build-id string; such string
+  can be created by the -mxcoff-build-id option.
 
 Changes to the RISC-V Backend
 -----------------------------
@@ -124,6 +150,12 @@ Changes to the RISC-V Backend
 * Adds support for the vendor-defined XTHeadCmo (cache management operations) extension.
 * Adds support for the vendor-defined XTHeadSync (multi-core synchronization instructions) extension.
 * Added support for the vendor-defined XTHeadFMemIdx (indexed memory operations for floating point) extension.
+* Assembler support for RV64E was added.
+* Assembler support was added for the experimental Zicond (integer conditional
+  operations) extension.
+* I, F, D, and A extension versions have been update to the 20191214 spec versions.
+  New version I2.1, F2.2, D2.2, A2.1. This should not impact code generation.
+  Immpacts versions accepted in ``-march`` and reported in ELF attributes.
 
 Changes to the WebAssembly Backend
 ----------------------------------
@@ -147,6 +179,16 @@ Changes to the C API
   pointer, has been removed.
 * Functions for adding legacy passes like ``LLVMAddInstructionCombiningPass``
   have been removed.
+* Removed ``LLVMPassManagerBuilderRef`` and functions interacting with it.
+  These belonged to the no longer supported legacy pass manager.
+* As part of the opaque pointer transition, ``LLVMGetElementType`` no longer
+  gives the pointee type of a pointer type.
+* The following functions for creating constant expressions have been removed,
+  because the underlying constant expressions are no longer supported. Instead,
+  an instruction should be created using the ``LLVMBuildXYZ`` APIs, which will
+  constant fold the operands if possible and create an instruction otherwise:
+
+  * ``LLVMConstSelect``
 
 Changes to the FastISel infrastructure
 --------------------------------------
@@ -179,16 +221,37 @@ Changes to the Debug Info
 
 Changes to the LLVM tools
 ---------------------------------
+* llvm-lib now supports the /def option for generating a Windows import library from a definition file.
+
+* Made significant changes to JSON output format of `llvm-readobj`/`llvm-readelf`
+  to improve correctness and clarity.
 
 Changes to LLDB
 ---------------------------------
 
-* In the results of commands such as `expr` and `frame var`, type summaries will now
+* In the results of commands such as ``expr`` and ``frame var``, type summaries will now
   omit defaulted template parameters. The full template parameter list can still be
-  viewed with `expr --raw-output`/`frame var --raw-output`. (`D141828 <https://reviews.llvm.org/D141828>`_)
+  viewed with ``expr --raw-output``/``frame var --raw-output``. (`D141828 <https://reviews.llvm.org/D141828>`_)
+
+* LLDB is now able to show the subtype of signals found in a core file. For example
+  memory tagging specific segfaults such as ``SIGSEGV: sync tag check fault``.
 
 Changes to Sanitizers
 ---------------------
+* For Darwin users that override weak symbols, note that the dynamic linker will
+  only consider symbols in other mach-o modules which themselves contain at
+  least one weak symbol. A consequence is that if your program or dylib contains
+  an intended override of a weak symbol, then it must contain at least one weak
+  symbol as well for the override to be effective. That weak symbol may be the
+  intended override itself, an otherwise usused weak symbol added solely to meet
+  the requirement, or an existing but unrelated weak symbol.
+
+    Examples:
+      __attribute__((weak)) const char * __asan_default_options(void) {...}
+
+      __attribute__((weak,unused)) unsigned __enableOverrides;
+      
+      __attribute__((weak)) bool unrelatedWeakFlag;
 
 Other Changes
 -------------

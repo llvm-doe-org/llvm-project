@@ -714,6 +714,7 @@ public:
 
   std::optional<unsigned> getMaxVScale() const { return std::nullopt; }
   std::optional<unsigned> getVScaleForTuning() const { return std::nullopt; }
+  bool isVScaleKnownToBeAPowerOfTwo() const { return false; }
 
   /// Estimate the overhead of scalarizing an instruction. Insert and Extract
   /// are set if the demanded result elements need to be inserted and/or
@@ -2334,6 +2335,7 @@ public:
   InstructionCost getArithmeticReductionCost(unsigned Opcode, VectorType *Ty,
                                              std::optional<FastMathFlags> FMF,
                                              TTI::TargetCostKind CostKind) {
+    assert(Ty && "Unknown reduction vector type");
     if (TTI::requiresOrderedReduction(FMF))
       return getOrderedReductionCost(Opcode, Ty, CostKind);
     return getTreeReductionCost(Opcode, Ty, CostKind);

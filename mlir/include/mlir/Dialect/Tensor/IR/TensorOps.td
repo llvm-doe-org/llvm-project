@@ -858,6 +858,10 @@ def Tensor_InsertSliceOp : Tensor_OpWithOffsetSizesAndStrides<"insert_slice", [
       return {rank, rank, rank};
     }
 
+    /// Return the dimensions of the dest that are omitted to insert a source
+    /// when the result is rank-extended.
+    llvm::SmallBitVector getDroppedDims();
+
     /// Return the number of leading operands before the `offsets`, `sizes` and
     /// and `strides` operands.
     static unsigned getOffsetSizeAndStrideStartOperandIndex() { return 2; }
@@ -985,7 +989,7 @@ class Tensor_ReassociativeReshapeOp<string mnemonic, list<Trait> traits = []> :
               return indexAttr.cast<IntegerAttr>().getInt();
             })));
       return reassociationIndices;
-    };
+    }
     RankedTensorType getSrcType() {
       return getSrc().getType().cast<RankedTensorType>();
     }
@@ -1295,13 +1299,13 @@ def Tensor_PadOp : Tensor_Op<"pad", [
 
   let builders = [
     // Build a PadOp with mixed static and dynamic entries.
-    OpBuilder<(ins "Value":$source, "ArrayRef<int64_t>":$staticLow,
-      "ArrayRef<int64_t>":$staticHigh, "ValueRange":$low, "ValueRange":$high,
-      CArg<"bool", "false">:$nofold,
+    OpBuilder<(ins "Type":$resultType, "Value":$source,
+      "ArrayRef<int64_t>":$staticLow, "ArrayRef<int64_t>":$staticHigh,
+      "ValueRange":$low, "ValueRange":$high, CArg<"bool", "false">:$nofold,
       CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs)>,
     // Build a PadOp with all dynamic entries.
-    OpBuilder<(ins "Value":$source, "ValueRange":$low, "ValueRange":$high,
-      CArg<"bool", "false">:$nofold,
+    OpBuilder<(ins "Type":$resultType, "Value":$source, "ValueRange":$low,
+      "ValueRange":$high, CArg<"bool", "false">:$nofold,
       CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs)>,
     // Build a PadOp with mixed static and dynamic entries and custom
     // result type. If the type passed is nullptr, it is inferred.
@@ -1787,6 +1791,13 @@ def Tensor_PackOp : Tensor_RelayoutOp<"pack", [
     static ShapedType inferPackedType(ShapedType sourceType,
         ArrayRef<int64_t> innerTileSizes, ArrayRef<int64_t> innerDimsPos,
         ArrayRef<int64_t> outerDimsPerm = {});
+
+    // Returns true if we have enough static information to catch undefined
+    // behavior when the tile size does not divide perfectly the dimension of
+    // the input tensor.
+    static bool requirePaddingValue(ArrayRef<int64_t> inputShape,
+                                    ArrayRef<int64_t> innerDimsPos,
+                                    ArrayRef<OpFoldResult> innerTiles);
 
     static Value createDestinationTensor(OpBuilder &b, Location loc,
         Value source, ArrayRef<OpFoldResult> innerTileSizes,

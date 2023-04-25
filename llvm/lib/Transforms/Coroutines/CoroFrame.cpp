@@ -943,7 +943,7 @@ void FrameTypeBuilder::finish(StructType *Ty) {
 static void cacheDIVar(FrameDataInfo &FrameData,
                        DenseMap<Value *, DILocalVariable *> &DIVarCache) {
   for (auto *V : FrameData.getAllDefs()) {
-    if (DIVarCache.find(V) != DIVarCache.end())
+    if (DIVarCache.contains(V))
       continue;
 
     auto DDIs = FindDbgDeclareUses(V);
@@ -1166,7 +1166,7 @@ static void buildFrameDebugInfo(Function &F, coro::Shape &Shape,
                                   dwarf::DW_ATE_unsigned_char)});
 
   for (auto *V : FrameData.getAllDefs()) {
-    if (DIVarCache.find(V) == DIVarCache.end())
+    if (!DIVarCache.contains(V))
       continue;
 
     auto Index = FrameData.getFieldIndex(V);
@@ -1198,7 +1198,7 @@ static void buildFrameDebugInfo(Function &F, coro::Shape &Shape,
   // fields confilicts with each other.
   unsigned UnknownTypeNum = 0;
   for (unsigned Index = 0; Index < FrameTy->getNumElements(); Index++) {
-    if (OffsetCache.find(Index) == OffsetCache.end())
+    if (!OffsetCache.contains(Index))
       continue;
 
     std::string Name;
@@ -1213,7 +1213,7 @@ static void buildFrameDebugInfo(Function &F, coro::Shape &Shape,
     AlignInBits = OffsetCache[Index].first * 8;
     OffsetInBits = OffsetCache[Index].second * 8;
 
-    if (NameCache.find(Index) != NameCache.end()) {
+    if (NameCache.contains(Index)) {
       Name = NameCache[Index].str();
       DITy = TyCache[Index];
     } else {
@@ -1709,10 +1709,11 @@ static void createFramePtr(coro::Shape &Shape) {
 static void insertSpills(const FrameDataInfo &FrameData, coro::Shape &Shape) {
   auto *CB = Shape.CoroBegin;
   LLVMContext &C = CB->getContext();
+  Function *F = CB->getFunction();
   IRBuilder<> Builder(C);
   StructType *FrameTy = Shape.FrameTy;
   Value *FramePtr = Shape.FramePtr;
-  DominatorTree DT(*CB->getFunction());
+  DominatorTree DT(*F);
   SmallDenseMap<llvm::Value *, llvm::AllocaInst *, 4> DbgPtrAllocaCache;
 
   // Create a GEP with the given index into the coroutine frame for the original
@@ -1846,6 +1847,21 @@ static void insertSpills(const FrameDataInfo &FrameData, coro::Shape &Shape) {
               SpillAlignment, E.first->getName() + Twine(".reload"));
 
         TinyPtrVector<DbgDeclareInst *> DIs = FindDbgDeclareUses(Def);
+        // Try best to find dbg.declare. If the spill is a temp, there may not
+        // be a direct dbg.declare. Walk up the load chain to find one from an
+        // alias.
+        if (F->getSubprogram()) {
+          auto *CurDef = Def;
+          while (DIs.empty() && isa<LoadInst>(CurDef)) {
+            auto *LdInst = cast<LoadInst>(CurDef);
+            // Only consider ptr to ptr same type load.
+            if (LdInst->getPointerOperandType() != LdInst->getType())
+              break;
+            CurDef = LdInst->getPointerOperand();
+            DIs = FindDbgDeclareUses(CurDef);
+          }
+        }
+
         for (DbgDeclareInst *DDI : DIs) {
           bool AllowUnresolved = false;
           // This dbg.declare is preserved for all coro-split function

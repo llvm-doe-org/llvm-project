@@ -6,11 +6,13 @@ add_flang_unittest(FlangRuntimeTests
   CommandTest.cpp
   Complex.cpp
   CrashHandlerFixture.cpp
+  Derived.cpp
   ExternalIOTest.cpp
   Format.cpp
   Inquiry.cpp
   ListInputTest.cpp
   Matmul.cpp
+  MatmulTranspose.cpp
   MiscIntrinsic.cpp
   Namelist.cpp
   Numeric.cpp

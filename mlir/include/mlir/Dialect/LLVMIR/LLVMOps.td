@@ -173,7 +173,8 @@ def LLVM_FNegOp : LLVM_UnaryFloatArithmeticOp<
 def LLVM_AllocaOp : LLVM_Op<"alloca">, LLVM_MemOpPatterns {
   let arguments = (ins AnyInteger:$arraySize,
                    OptionalAttr<I64Attr>:$alignment,
-                   OptionalAttr<TypeAttr>:$elem_type);
+                   OptionalAttr<TypeAttr>:$elem_type,
+                   UnitAttr:$inalloca);
   let results = (outs Res<LLVM_AnyPointer, "",
                           [MemAlloc<AutomaticAllocationScopeResource>]>:$res);
   string llvmInstName = "Alloca";
@@ -184,16 +185,18 @@ def LLVM_AllocaOp : LLVM_Op<"alloca">, LLVM_MemOpPatterns {
                    : op.getType().cast<LLVMPointerType>().getElementType());
     auto *inst = builder.CreateAlloca(elementType, addrSpace, $arraySize);
     }] # setAlignmentCode # [{
+    inst->setUsedWithInAlloca($inalloca);
     $res = inst;
   }];
-  // FIXME: Import attributes.
   string mlirBuilder = [{
     auto *allocaInst = cast<llvm::AllocaInst>(inst);
     Type allocatedType =
       moduleImport.convertType(allocaInst->getAllocatedType());
     unsigned alignment = allocaInst->getAlign().value();
     $res = $_builder.create<LLVM::AllocaOp>(
-      $_location, $_resultType, allocatedType, $arraySize, alignment);
+      $_location, $_resultType, $arraySize,
+      alignment == 0 ? IntegerAttr() : $_builder.getI64IntegerAttr(alignment),
+      TypeAttr::get(allocatedType), allocaInst->isUsedWithInAlloca());
   }];
   let builders = [
     OpBuilder<(ins "Type":$resultType, "Value":$arraySize,
@@ -203,9 +206,9 @@ def LLVM_AllocaOp : LLVM_Op<"alloca">, LLVM_MemOpPatterns {
              "pass the allocated type explicitly if opaque pointers are used");
       if (alignment == 0)
         return build($_builder, $_state, resultType, arraySize, IntegerAttr(),
-                     TypeAttr());
+                     TypeAttr(), false);
       build($_builder, $_state, resultType, arraySize,
-        $_builder.getI64IntegerAttr(alignment), TypeAttr());
+        $_builder.getI64IntegerAttr(alignment), TypeAttr(), false);
     }]>,
     OpBuilder<(ins "Type":$resultType, "Type":$elementType, "Value":$arraySize,
                CArg<"unsigned", "0">:$alignment),
@@ -216,7 +219,7 @@ def LLVM_AllocaOp : LLVM_Op<"alloca">, LLVM_MemOpPatterns {
       build($_builder, $_state, resultType, arraySize,
             alignment == 0 ? IntegerAttr()
                            : $_builder.getI64IntegerAttr(alignment),
-            elemTypeAttr);
+            elemTypeAttr, false);
 
     }]>
     ];
@@ -768,17 +771,22 @@ def LLVM_ShuffleVectorOp : LLVM_Op<"shufflevector",
 // Misc operations.
 def LLVM_SelectOp
     : LLVM_Op<"select",
-          [Pure, AllTypesMatch<["trueValue", "falseValue", "res"]>]>,
+          [Pure, AllTypesMatch<["trueValue", "falseValue", "res"]>,
+           DeclareOpInterfaceMethods<FastmathFlagsInterface>]>,
       LLVM_Builder<
           "$res = builder.CreateSelect($condition, $trueValue, $falseValue);"> {
   let arguments = (ins LLVM_ScalarOrVectorOf<I1>:$condition,
-                   LLVM_Type:$trueValue, LLVM_Type:$falseValue);
+                   LLVM_Type:$trueValue, LLVM_Type:$falseValue,
+                   DefaultValuedAttr<LLVM_FastmathFlagsAttr,
+                                     "{}">:$fastmathFlags);
   let results = (outs LLVM_Type:$res);
   let assemblyFormat = "operands attr-dict `:` type($condition) `,` type($res)";
   string llvmInstName = "Select";
   string mlirBuilder = [{
-    $res = $_builder.create<LLVM::SelectOp>(
+    auto op = $_builder.create<LLVM::SelectOp>(
       $_location, $_resultType, $condition, $trueValue, $falseValue);
+    moduleImport.setFastmathFlagsAttr(inst, op);
+    $res = op;
   }];
 }
 def LLVM_FreezeOp : LLVM_Op<"freeze", [SameOperandsAndResultType]> {
@@ -1298,7 +1306,8 @@ def LLVM_GlobalOp : LLVM_Op<"mlir.global",
     OptionalAttr<I64Attr>:$alignment,
     DefaultValuedAttr<ConfinedAttr<I32Attr, [IntNonNegative]>, "0">:$addr_space,
     OptionalAttr<UnnamedAddr>:$unnamed_addr,
-    OptionalAttr<StrAttr>:$section
+    OptionalAttr<StrAttr>:$section,
+    DefaultValuedAttr<Visibility, "mlir::LLVM::Visibility::Default">:$visibility_
   );
   let summary = "LLVM dialect global.";
   let description = [{
@@ -1543,7 +1552,8 @@ def LLVM_LLVMFuncOp : LLVM_Op<"func", [
     OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictArrayAttr>:$res_attrs,
     OptionalAttr<I64Attr>:$function_entry_count,
-    OptionalAttr<LLVM_MemoryEffectsAttr>:$memory
+    OptionalAttr<LLVM_MemoryEffectsAttr>:$memory,
+    DefaultValuedAttr<Visibility, "mlir::LLVM::Visibility::Default">:$visibility_
   );
 
   let regions = (region AnyRegion:$body);
@@ -1573,6 +1583,10 @@ def LLVM_LLVMFuncOp : LLVM_Op<"func", [
     /// Returns the result types of this function.
     ArrayRef<Type> getResultTypes() { return getFunctionType().getReturnTypes(); }
 
+    //===------------------------------------------------------------------===//
+    // CallableOpInterface
+    //===------------------------------------------------------------------===//
+
     /// Returns the callable region, which is the function body. If the function
     /// is external, returns null.
     Region *getCallableRegion();
@@ -1586,6 +1600,17 @@ def LLVM_LLVMFuncOp : LLVM_Op<"func", [
       return getFunctionType().getReturnTypes();
     }
 
+    /// Returns the argument attributes for all callable region arguments or
+    /// null if there are none.
+    ::mlir::ArrayAttr getCallableArgAttrs() {
+      return getArgAttrs().value_or(nullptr);
+    }
+
+    /// Returns the result attributes for all callable region results or
+    /// null if there are none.
+    ::mlir::ArrayAttr getCallableResAttrs() {
+      return getResAttrs().value_or(nullptr);
+    }
   }];
 
   let hasCustomAssemblyFormat = 1;
@@ -1627,13 +1652,35 @@ def LLVM_UndefOp : LLVM_Op<"mlir.undef", [Pure]>,
     Unlike LLVM IR, MLIR does not have first-class undefined values. Such values
     must be created as SSA values using `llvm.mlir.undef`. This operation has no
     operands or attributes. It creates an undefined value of the specified LLVM
-    IR dialect type wrapping an LLVM IR structure type.
+    IR dialect type.
 
     Example:
 
     ```mlir
     // Create a structure with a 32-bit integer followed by a float.
     %0 = llvm.mlir.undef : !llvm.struct<(i32, f32)>
+    ```
+  }];
+  let results = (outs LLVM_Type:$res);
+  let builders = [LLVM_OneResultOpBuilder];
+  let assemblyFormat = "attr-dict `:` type($res)";
+}
+
+def LLVM_PoisonOp : LLVM_Op<"mlir.poison", [Pure]>,
+                    LLVM_Builder<"$res = llvm::PoisonValue::get($_resultType);"> {
+  let summary = "Creates a poison value of LLVM dialect type.";
+  let description = [{
+    Unlike LLVM IR, MLIR does not have first-class poison values. Such values
+    must be created as SSA values using `llvm.mlir.poison`. This operation has
+    no operands or attributes. It creates a poison value of the specified LLVM
+    IR dialect type.
+
+    Example:
+
+    ```mlir
+    // Create a poison value for a structure with a 32-bit integer followed
+    // by a float.
+    %0 = llvm.mlir.poison : !llvm.struct<(i32, f32)>
     ```
   }];
   let results = (outs LLVM_Type:$res);
