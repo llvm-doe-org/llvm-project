@@ -150,9 +150,8 @@ uint64_t ThreadProperties::GetMaxBacktraceDepth() const {
 
 // Thread Event Data
 
-ConstString Thread::ThreadEventData::GetFlavorString() {
-  static ConstString g_flavor("Thread::ThreadEventData");
-  return g_flavor;
+llvm::StringRef Thread::ThreadEventData::GetFlavorString() {
+  return "Thread::ThreadEventData";
 }
 
 Thread::ThreadEventData::ThreadEventData(const lldb::ThreadSP thread_sp)
@@ -264,10 +263,11 @@ void Thread::BroadcastSelectedFrameChange(StackID &new_frame_id) {
                    new ThreadEventData(this->shared_from_this(), new_frame_id));
 }
 
-lldb::StackFrameSP Thread::GetSelectedFrame() {
+lldb::StackFrameSP
+Thread::GetSelectedFrame(SelectMostRelevant select_most_relevant) {
   StackFrameListSP stack_frame_list_sp(GetStackFrameList());
   StackFrameSP frame_sp = stack_frame_list_sp->GetFrameAtIndex(
-      stack_frame_list_sp->GetSelectedFrameIndex());
+      stack_frame_list_sp->GetSelectedFrameIndex(select_most_relevant));
   FrameSelectedCallback(frame_sp.get());
   return frame_sp;
 }
@@ -298,7 +298,7 @@ bool Thread::SetSelectedFrameByIndexNoisily(uint32_t frame_idx,
   const bool broadcast = true;
   bool success = SetSelectedFrameByIndex(frame_idx, broadcast);
   if (success) {
-    StackFrameSP frame_sp = GetSelectedFrame();
+    StackFrameSP frame_sp = GetSelectedFrame(DoNoSelectMostRelevantFrame);
     if (frame_sp) {
       bool already_shown = false;
       SymbolContext frame_sc(
@@ -588,35 +588,8 @@ std::string Thread::GetStopDescriptionRaw() {
   return raw_stop_description;
 }
 
-void Thread::SelectMostRelevantFrame() {
-  Log *log = GetLog(LLDBLog::Thread);
-
-  auto frames_list_sp = GetStackFrameList();
-
-  // Only the top frame should be recognized.
-  auto frame_sp = frames_list_sp->GetFrameAtIndex(0);
-
-  auto recognized_frame_sp = frame_sp->GetRecognizedFrame();
-
-  if (!recognized_frame_sp) {
-    LLDB_LOG(log, "Frame #0 not recognized");
-    return;
-  }
-
-  if (StackFrameSP most_relevant_frame_sp =
-          recognized_frame_sp->GetMostRelevantFrame()) {
-    LLDB_LOG(log, "Found most relevant frame at index {0}",
-             most_relevant_frame_sp->GetFrameIndex());
-    SetSelectedFrame(most_relevant_frame_sp.get());
-  } else {
-    LLDB_LOG(log, "No relevant frame!");
-  }
-}
-
 void Thread::WillStop() {
   ThreadPlan *current_plan = GetCurrentPlan();
-
-  SelectMostRelevantFrame();
 
   // FIXME: I may decide to disallow threads with no plans.  In which
   // case this should go to an assert.

@@ -75,17 +75,28 @@ translateDataLayout(DataLayoutSpecInterface attribute,
       auto value = entry.getValue().cast<StringAttr>();
       bool isLittleEndian =
           value.getValue() == DLTIDialect::kDataLayoutEndiannessLittle;
-      layoutStream << (isLittleEndian ? "e" : "E");
+      layoutStream << "-" << (isLittleEndian ? "e" : "E");
       layoutStream.flush();
       continue;
     }
     if (key.getValue() == DLTIDialect::kDataLayoutAllocaMemorySpaceKey) {
       auto value = entry.getValue().cast<IntegerAttr>();
-      if (value != 0) {
-        // Only emit non-default address space.
-        layoutStream << "A" << value;
-        layoutStream.flush();
-      }
+      uint64_t space = value.getValue().getZExtValue();
+      // Skip the default address space.
+      if (space == 0)
+        continue;
+      layoutStream << "-A" << space;
+      layoutStream.flush();
+      continue;
+    }
+    if (key.getValue() == DLTIDialect::kDataLayoutStackAlignmentKey) {
+      auto value = entry.getValue().cast<IntegerAttr>();
+      uint64_t alignment = value.getValue().getZExtValue();
+      // Skip the default stack alignment.
+      if (alignment == 0)
+        continue;
+      layoutStream << "-S" << alignment;
+      layoutStream.flush();
       continue;
     }
     emitError(*loc) << "unsupported data layout key " << key;
@@ -396,8 +407,8 @@ llvm::Constant *mlir::LLVM::detail::getLLVMConstant(
 
   // Fall back to element-by-element construction otherwise.
   if (auto elementsAttr = attr.dyn_cast<ElementsAttr>()) {
-    assert(elementsAttr.getType().hasStaticShape());
-    assert(!elementsAttr.getType().getShape().empty() &&
+    assert(elementsAttr.getShapedType().hasStaticShape());
+    assert(!elementsAttr.getShapedType().getShape().empty() &&
            "unexpected empty elements attribute shape");
 
     SmallVector<llvm::Constant *, 8> constants;
@@ -411,7 +422,7 @@ llvm::Constant *mlir::LLVM::detail::getLLVMConstant(
     }
     ArrayRef<llvm::Constant *> constantsRef = constants;
     llvm::Constant *result = buildSequentialConstant(
-        constantsRef, elementsAttr.getType().getShape(), llvmType, loc);
+        constantsRef, elementsAttr.getShapedType().getShape(), llvmType, loc);
     assert(constantsRef.empty() && "did not consume all elemental constants");
     return result;
   }

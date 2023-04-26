@@ -732,7 +732,7 @@ static bool isTypeCompatibleWithAtomicOp(Type type, bool isPointerTypeAllowed) {
   if (type.isa<LLVMPointerType>())
     return isPointerTypeAllowed;
 
-  std::optional<unsigned> bitWidth = std::nullopt;
+  std::optional<unsigned> bitWidth;
   if (auto floatType = type.dyn_cast<FloatType>()) {
     if (!isCompatibleFloatingPointType(type))
       return false;
@@ -1518,17 +1518,6 @@ LogicalResult ReturnOp::verify() {
     diag.attachNote(parent->getLoc()) << "when returning from function";
     return diag;
   }
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
-// ResumeOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult ResumeOp::verify() {
-  // Consistency of llvm.resume value types is checked in LLVMFuncOp::verify().
-
-  // No check for personality of function - landingpad op verifies it.
   return success();
 }
 

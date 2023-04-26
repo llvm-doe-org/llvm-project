@@ -89,7 +89,7 @@ C++20 Feature Support
   an error to a warning under the ``-Wreserved-module-identifier`` warning
   group. This warning is enabled by default. This addresses `#61446
   <https://github.com/llvm/llvm-project/issues/61446>`_ and allows easier
-  building of precompiled modules. This diagnostic may be strengthened into an
+  building of standard modules. This diagnostic may be strengthened into an
   error again in the future once there is a less fragile way to mark a module
   as being part of the implementation rather than a user module.
 
@@ -103,11 +103,17 @@ C++2b Feature Support
 
 Resolutions to C++ Defect Reports
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Implemented `DR2397 <https://wg21.link/CWG2397>`_ which allows ``auto`` specifier for pointers
+  and reference to arrays.
 
 C Language Changes
 ------------------
 - Support for outputs from asm goto statements along indirect edges has been
   added. (`#53562 <https://github.com/llvm/llvm-project/issues/53562>`_)
+- Fixed a bug that prevented initialization of an ``_Atomic``-qualified pointer
+  from a null pointer constant.
+- Fixed a bug that prevented casting to an ``_Atomic``-qualified type.
+  (`#39596 <https://github.com/llvm/llvm-project/issues/39596>`_)
 
 C2x Feature Support
 ^^^^^^^^^^^^^^^^^^^
@@ -120,6 +126,18 @@ C2x Feature Support
 - Implemented `WG14 N2934 <https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2934.pdf>`_
   which introduces the ``bool``, ``static_assert``, ``alignas``, ``alignof``,
   and ``thread_local`` keywords in C2x.
+
+- Implemented `WG14 N2900 <https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2900.htm>`_
+  and `WG14 N3011 <https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3011.htm>`_
+  which allows for empty braced initialization in C.
+
+  .. code-block:: c
+
+    struct S { int x, y } s = {}; // Initializes s.x and s.y to 0
+
+  As part of this change, the ``-Wgnu-empty-initializer`` warning group was
+  removed, as this is no longer a GNU extension but a C2x extension. You can
+  use ``-Wno-c2x-extensions`` to silence the extension warning instead.
 
 Non-comprehensive list of changes in this release
 -------------------------------------------------
@@ -134,6 +152,11 @@ Non-comprehensive list of changes in this release
 - Clang now supports ``__builtin_assume_separate_storage`` that indicates that
   its arguments point to objects in separate storage allocations.
 - Clang now supports expressions in ``#pragma clang __debug dump``.
+- Clang now supports declaration of multi-dimensional arrays with
+  ``__declspec(property)``.
+- A new builtin type trait ``__is_trivially_equaltiy_comparable`` has been added,
+  which checks whether comparing two instances of a type is equivalent to
+  ``memcmp(&lhs, &rhs, sizeof(T)) == 0``.
 
 New Compiler Flags
 ------------------
@@ -184,8 +207,8 @@ Improvements to Clang's diagnostics
 - Diagnostic notes and fix-its are now generated for ``ifunc``/``alias`` attributes
   which point to functions whose names are mangled.
 - Diagnostics relating to macros on the command line of a preprocessed assembly
-  file are now reported as coming from the file ``<command line>`` instead of
-  ``<built-in>``.
+  file or precompiled header are now reported as coming from the file
+  ``<command line>`` instead of ``<built-in>``.
 - Clang constexpr evaluator now provides a more concise diagnostic when calling
   function pointer that is known to be null.
 - Clang now avoids duplicate warnings on unreachable ``[[fallthrough]];`` statements
@@ -196,6 +219,18 @@ Improvements to Clang's diagnostics
 - Clang now checks for completeness of the second and third arguments in the
   conditional operator.
   (`#59718 <https://github.com/llvm/llvm-project/issues/59718>`_)
+- There were some cases in which the diagnostic for the unavailable attribute
+  might not be issued, this fixes those cases.
+  (`61815 <https://github.com/llvm/llvm-project/issues/61815>`_)
+- Clang now avoids unnecessary diagnostic warnings for obvious expressions in
+  the case of binary operators with logical OR operations.
+  (`#57906 <https://github.com/llvm/llvm-project/issues/57906>`_)
+- Clang's "static assertion failed" diagnostic now points to the static assertion
+  expression instead of pointing to the ``static_assert`` token.
+  (`#61951 <https://github.com/llvm/llvm-project/issues/61951>`_)
+- ``-Wformat`` now recognizes ``%lb`` for the ``printf``/``scanf`` family of
+  functions.
+  (`#62247: <https://github.com/llvm/llvm-project/issues/62247>`_).
 
 Bug Fixes in This Version
 -------------------------
@@ -259,7 +294,33 @@ Bug Fixes in This Version
   (`#60887 <https://github.com/llvm/llvm-project/issues/60887>`_)
 - Fix incorrect merging of lambdas across modules.
   (`#60985 <https://github.com/llvm/llvm-project/issues/60985>`_)
-
+- Fix crash when handling nested immediate invocations in initializers of global
+  variables.
+  (`#58207 <https://github.com/llvm/llvm-project/issues/58207>`_)
+- Fix crash when generating code coverage information for `PseudoObjectExpr` in
+  Clang AST.
+  (`#45481 <https://github.com/llvm/llvm-project/issues/45481>`_)
+- Fix the assertion hit when a template consteval function appears in a nested
+  consteval/constexpr call chain.
+  (`#61142 <https://github.com/llvm/llvm-project/issues/61142>`_)
+- Clang now better diagnose placeholder types constrained with a concept that is
+  not a type concept.
+- Fix crash when a doc comment contains a line splicing.
+  (`#62054 <https://github.com/llvm/llvm-project/issues/62054>`_)
+- Work around with a clang coverage crash which happens when visiting 
+  expressions/statements with invalid source locations in non-assert builds. 
+  Assert builds may still see assertions triggered from this.
+- Fix a failed assertion due to an invalid source location when trying to form
+  a coverage report for an unresolved constructor expression.
+  (`#62105 <https://github.com/llvm/llvm-project/issues/62105>`_)
+- Fix defaulted equality operator so that it does not attempt to compare unnamed
+  bit-fields. This fixes:
+  (`#61355 <https://github.com/llvm/llvm-project/issues/61335>`_) and
+  (`#61417 <https://github.com/llvm/llvm-project/issues/61417>`_)
+- Fix crash after suggesting typo correction to constexpr if condition.
+  (`#61885 <https://github.com/llvm/llvm-project/issues/61885>`_)
+- Clang constexpr evaluator now treats comparison of [[gnu::weak]]-attributed
+  member pointer as an invalid expression.
 
 Bug Fixes to Compiler Builtins
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -304,6 +365,11 @@ Miscellaneous Bug Fixes
 Miscellaneous Clang Crashes Fixed
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+- Dumping the AST to JSON no longer causes a failed assertion when targetting
+  the Microsoft ABI and the AST to be dumped contains dependent names that
+  would not typically be mangled.
+  (`#61440 <https://github.com/llvm/llvm-project/issues/61440>`_)
+
 Target Specific Changes
 -----------------------
 
@@ -319,6 +385,9 @@ AMDGPU Support
 
 X86 Support
 ^^^^^^^^^^^
+
+- Add ISA of ``AMX-COMPLEX`` which supports ``tcmmimfp16ps`` and
+  ``tcmmrlfp16ps``.
 
 Arm and AArch64 Support
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -405,6 +474,7 @@ clang-format
   put the initializers on the next line only.
 - Add additional Qualifier Ordering support for special cases such
   as templates, requires clauses, long qualified names.
+- Fix all known issues associated with ``LambdaBodyIndentation: OuterScope``.
 
 libclang
 --------
@@ -436,6 +506,12 @@ Static Analyzer
 Sanitizers
 ----------
 
+Python Binding Changes
+----------------------
+The following methods have been added:
+
+- ``clang_Location_isInSystemHeader`` exposed via the ``is_in_system_header``
+  property of the `Location` class.
 
 Additional Information
 ======================

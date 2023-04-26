@@ -764,6 +764,12 @@ void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,
       D.Diag(clang::diag::warn_drv_fjmc_for_elf_only);
   }
 
+  if (Args.hasFlag(options::OPT_femulated_tls, options::OPT_fno_emulated_tls,
+                   ToolChain.getTriple().hasDefaultEmulatedTLS())) {
+    CmdArgs.push_back(
+        Args.MakeArgString(Twine(PluginOptPrefix) + "-emulated-tls"));
+  }
+
   if (Args.hasFlag(options::OPT_fstack_size_section,
                    options::OPT_fno_stack_size_section, false))
     CmdArgs.push_back(
@@ -818,10 +824,11 @@ void tools::addArchSpecificRPath(const ToolChain &TC, const ArgList &Args,
                     options::OPT_fno_rtlib_add_rpath, DefaultValue))
     return;
 
-  std::string CandidateRPath = TC.getArchSpecificLibPath();
-  if (TC.getVFS().exists(CandidateRPath)) {
-    CmdArgs.push_back("-rpath");
-    CmdArgs.push_back(Args.MakeArgString(CandidateRPath));
+  for (const auto &CandidateRPath : TC.getArchSpecificLibPaths()) {
+    if (TC.getVFS().exists(CandidateRPath)) {
+      CmdArgs.push_back("-rpath");
+      CmdArgs.push_back(Args.MakeArgString(CandidateRPath));
+    }
   }
 }
 

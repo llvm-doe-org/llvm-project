@@ -597,6 +597,6 @@
 # CHECK: PASS: shtest-shell :: valid-shell.txt
 
 #      CHECK: Testing Time
-# CHECK-NEXT: Passed           :  8
+# CHECK-NEXT: Passed           :  9
 # CHECK-NEXT: Expectedly Failed:  1
 # CHECK-NEXT: Failed           : 35

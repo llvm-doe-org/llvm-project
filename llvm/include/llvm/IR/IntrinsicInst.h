@@ -195,29 +195,29 @@ public:
   }
   bool operator==(const location_op_iterator &RHS) const { return I == RHS.I; }
   const Value *operator*() const {
-    ValueAsMetadata *VAM = I.is<ValueAsMetadata *>()
-                               ? I.get<ValueAsMetadata *>()
-                               : *I.get<ValueAsMetadata **>();
+    ValueAsMetadata *VAM = isa<ValueAsMetadata *>(I)
+                               ? cast<ValueAsMetadata *>(I)
+                               : *cast<ValueAsMetadata **>(I);
     return VAM->getValue();
   };
   Value *operator*() {
-    ValueAsMetadata *VAM = I.is<ValueAsMetadata *>()
-                               ? I.get<ValueAsMetadata *>()
-                               : *I.get<ValueAsMetadata **>();
+    ValueAsMetadata *VAM = isa<ValueAsMetadata *>(I)
+                               ? cast<ValueAsMetadata *>(I)
+                               : *cast<ValueAsMetadata **>(I);
     return VAM->getValue();
   }
   location_op_iterator &operator++() {
-    if (I.is<ValueAsMetadata *>())
-      I = I.get<ValueAsMetadata *>() + 1;
+    if (isa<ValueAsMetadata *>(I))
+      I = cast<ValueAsMetadata *>(I) + 1;
     else
-      I = I.get<ValueAsMetadata **>() + 1;
+      I = cast<ValueAsMetadata **>(I) + 1;
     return *this;
   }
   location_op_iterator &operator--() {
-    if (I.is<ValueAsMetadata *>())
-      I = I.get<ValueAsMetadata *>() - 1;
+    if (isa<ValueAsMetadata *>(I))
+      I = cast<ValueAsMetadata *>(I) - 1;
     else
-      I = I.get<ValueAsMetadata **>() - 1;
+      I = cast<ValueAsMetadata **>(I) - 1;
     return *this;
   }
 };
@@ -374,6 +374,19 @@ public:
   /// Get the FragmentInfo for the variable.
   std::optional<DIExpression::FragmentInfo> getFragment() const {
     return getExpression()->getFragmentInfo();
+  }
+
+  /// Get the FragmentInfo for the variable if it exists, otherwise return a
+  /// FragmentInfo that covers the entire variable if the variable size is
+  /// known, otherwise return a zero-sized fragment.
+  DIExpression::FragmentInfo getFragmentOrEntireVariable() const {
+    DIExpression::FragmentInfo VariableSlice(0, 0);
+    // Get the fragment or variable size, or zero.
+    if (auto Sz = getFragmentSizeInBits())
+      VariableSlice.SizeInBits = *Sz;
+    if (auto Frag = getExpression()->getFragmentInfo())
+      VariableSlice.OffsetInBits = Frag->OffsetInBits;
+    return VariableSlice;
   }
 
   /// \name Casting methods
@@ -575,8 +588,17 @@ public:
     return getFunctionalOpcodeForVP(getIntrinsicID());
   }
 
+  // Equivalent non-predicated constrained ID
+  std::optional<unsigned> getConstrainedIntrinsicID() const {
+    return getConstrainedIntrinsicIDForVP(getIntrinsicID());
+  }
+
   // Equivalent non-predicated opcode
   static std::optional<unsigned> getFunctionalOpcodeForVP(Intrinsic::ID ID);
+
+  // Equivalent non-predicated constrained ID
+  static std::optional<unsigned>
+  getConstrainedIntrinsicIDForVP(Intrinsic::ID ID);
 };
 
 /// This represents vector predication reduction intrinsics.
@@ -1404,6 +1426,17 @@ class InstrProfIncrementInstStep : public InstrProfIncrementInst {
 public:
   static bool classof(const IntrinsicInst *I) {
     return I->getIntrinsicID() == Intrinsic::instrprof_increment_step;
+  }
+  static bool classof(const Value *V) {
+    return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
+  }
+};
+
+/// This represents the llvm.instrprof.timestamp intrinsic.
+class InstrProfTimestampInst : public InstrProfInstBase {
+public:
+  static bool classof(const IntrinsicInst *I) {
+    return I->getIntrinsicID() == Intrinsic::instrprof_timestamp;
   }
   static bool classof(const Value *V) {
     return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));

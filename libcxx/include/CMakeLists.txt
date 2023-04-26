@@ -222,8 +222,6 @@ set(files
   __bit/popcount.h
   __bit/rotate.h
   __bit_reference
-  __bsd_locale_defaults.h
-  __bsd_locale_fallbacks.h
   __charconv/chars_format.h
   __charconv/from_chars_integral.h
   __charconv/from_chars_result.h
@@ -302,7 +300,6 @@ set(files
   __coroutine/trivial_awaitables.h
   __debug
   __debug_utils/randomize_range.h
-  __errc
   __exception/exception.h
   __exception/exception_ptr.h
   __exception/nested_exception.h
@@ -358,6 +355,7 @@ set(files
   __format/range_default_formatter.h
   __format/range_formatter.h
   __format/unicode.h
+  __format/width_estimation_table.h
   __functional/binary_function.h
   __functional/binary_negate.h
   __functional/bind.h
@@ -439,6 +437,9 @@ set(files
   __iterator/unreachable_sentinel.h
   __iterator/wrap_iter.h
   __locale
+  __locale_dir/locale_base_api/bsd_locale_defaults.h
+  __locale_dir/locale_base_api/bsd_locale_fallbacks.h
+  __locale_dir/locale_base_api/locale_guard.h
   __mbstate_t.h
   __memory/addressof.h
   __memory/align.h
@@ -569,7 +570,6 @@ set(files
   __ranges/views.h
   __ranges/zip_view.h
   __split_buffer
-  __std_stream
   __string/char_traits.h
   __string/constexpr_c_functions.h
   __string/extern_template_lists.h
@@ -589,20 +589,24 @@ set(files
   __support/xlocale/__nop_locale_mgmt.h
   __support/xlocale/__posix_l_fallback.h
   __support/xlocale/__strtonum_fallback.h
+  __system_error/errc.h
+  __system_error/error_category.h
+  __system_error/error_code.h
+  __system_error/error_condition.h
+  __system_error/system_error.h
   __thread/poll_with_backoff.h
   __thread/timed_backoff_policy.h
   __threading_support
   __tree
-  __tuple_dir/apply_cv.h
-  __tuple_dir/make_tuple_types.h
-  __tuple_dir/pair_like.h
-  __tuple_dir/sfinae_helpers.h
-  __tuple_dir/tuple_element.h
-  __tuple_dir/tuple_indices.h
-  __tuple_dir/tuple_like.h
-  __tuple_dir/tuple_like_ext.h
-  __tuple_dir/tuple_size.h
-  __tuple_dir/tuple_types.h
+  __tuple/make_tuple_types.h
+  __tuple/pair_like.h
+  __tuple/sfinae_helpers.h
+  __tuple/tuple_element.h
+  __tuple/tuple_indices.h
+  __tuple/tuple_like.h
+  __tuple/tuple_like_ext.h
+  __tuple/tuple_size.h
+  __tuple/tuple_types.h
   __type_traits/add_const.h
   __type_traits/add_cv.h
   __type_traits/add_lvalue_reference.h

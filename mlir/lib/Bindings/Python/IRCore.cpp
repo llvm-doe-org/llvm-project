@@ -13,11 +13,9 @@
 
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/BuiltinAttributes.h"
-#include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/Debug.h"
 #include "mlir-c/Diagnostics.h"
 #include "mlir-c/IR.h"
-//#include "mlir-c/Registration.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -152,6 +150,11 @@ static const char kValueDunderStrDocstring[] =
 If the value is a block argument, this is the assembly form of its type and the
 position in the argument list. If the value is an operation result, this is
 equivalent to printing the operation that produced it.
+)";
+
+static const char kValueReplaceAllUsesWithDocstring[] =
+    R"(Replace all uses of value with the new value, updating anything in
+the IR that uses 'self' to use the other value instead.
 )";
 
 //------------------------------------------------------------------------------
@@ -3260,6 +3263,7 @@ void mlir::python::populateIRCore(py::module &m) {
   // Mapping of Value.
   //----------------------------------------------------------------------------
   py::class_<PyValue>(m, "Value", py::module_local())
+      .def(py::init<PyValue &>(), py::keep_alive<0, 1>(), py::arg("value"))
       .def_property_readonly(MLIR_PYTHON_CAPI_PTR_ATTR, &PyValue::getCapsule)
       .def(MLIR_PYTHON_CAPI_FACTORY_ATTR, &PyValue::createFromCapsule)
       .def_property_readonly(
@@ -3315,10 +3319,18 @@ void mlir::python::populateIRCore(py::module &m) {
             return printAccum.join();
           },
           kValueDunderStrDocstring)
-      .def_property_readonly("type", [](PyValue &self) {
-        return PyType(self.getParentOperation()->getContext(),
-                      mlirValueGetType(self.get()));
-      });
+      .def_property_readonly("type",
+                             [](PyValue &self) {
+                               return PyType(
+                                   self.getParentOperation()->getContext(),
+                                   mlirValueGetType(self.get()));
+                             })
+      .def(
+          "replace_all_uses_with",
+          [](PyValue &self, PyValue &with) {
+            mlirValueReplaceAllUsesOfWith(self.get(), with.get());
+          },
+          kValueReplaceAllUsesWithDocstring);
   PyBlockArgument::bind(m);
   PyOpResult::bind(m);
   PyOpOperand::bind(m);

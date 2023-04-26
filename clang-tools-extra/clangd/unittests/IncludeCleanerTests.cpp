@@ -29,6 +29,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -411,6 +412,70 @@ TEST(IncludeCleaner, MacroExpandedThroughIncludes) {
   // FIXME: Point at the spelling location, rather than the include.
   EXPECT_EQ(halfOpenToRange(SM, RefRange.toCharRange(SM)), MainFile.range());
   EXPECT_EQ(RefRange, Findings[1].SymRefRange);
+}
+
+TEST(IncludeCleaner, NoCrash) {
+  TestTU TU;
+  Annotations MainCode(R"cpp(
+    #include "all.h"
+    void test() {
+      [[1s]];
+    }
+    )cpp");
+  TU.Code = MainCode.code();
+  TU.AdditionalFiles["foo.h"] =
+      guard("int operator\"\"s(unsigned long long) { return 0; }");
+  TU.AdditionalFiles["all.h"] = guard("#include \"foo.h\"");
+  ParsedAST AST = TU.build();
+  const auto &MissingIncludes =
+      computeIncludeCleanerFindings(AST).MissingIncludes;
+  EXPECT_THAT(MissingIncludes, testing::SizeIs(1));
+  auto &SM = AST.getSourceManager();
+  EXPECT_EQ(
+      halfOpenToRange(SM, MissingIncludes.front().SymRefRange.toCharRange(SM)),
+      MainCode.range());
+}
+
+TEST(IncludeCleaner, FirstMatchedProvider) {
+  struct {
+    const char *Code;
+    const std::vector<include_cleaner::Header> Providers;
+    const std::optional<include_cleaner::Header> ExpectedProvider;
+  } Cases[] = {
+      {R"cpp(
+        #include "bar.h"
+        #include "foo.h"
+      )cpp",
+       {include_cleaner::Header{"bar.h"}, include_cleaner::Header{"foo.h"}},
+       include_cleaner::Header{"bar.h"}},
+      {R"cpp(
+        #include "bar.h"
+        #include "foo.h"
+      )cpp",
+       {include_cleaner::Header{"foo.h"}, include_cleaner::Header{"bar.h"}},
+       include_cleaner::Header{"foo.h"}},
+      {"#include \"bar.h\"",
+       {include_cleaner::Header{"bar.h"}},
+       include_cleaner::Header{"bar.h"}},
+      {"#include \"bar.h\"", {include_cleaner::Header{"foo.h"}}, std::nullopt},
+      {"#include \"bar.h\"", {}, std::nullopt}};
+  for (const auto &Case : Cases) {
+    Annotations Code{Case.Code};
+    SCOPED_TRACE(Code.code());
+
+    TestTU TU;
+    TU.Code = Code.code();
+    TU.AdditionalFiles["bar.h"] = "";
+    TU.AdditionalFiles["foo.h"] = "";
+
+    auto AST = TU.build();
+    std::optional<include_cleaner::Header> MatchedProvider =
+        firstMatchedProvider(
+            convertIncludes(AST.getSourceManager(),
+                            AST.getIncludeStructure().MainFileIncludes),
+            Case.Providers);
+    EXPECT_EQ(MatchedProvider, Case.ExpectedProvider);
+  }
 }
 
 } // namespace

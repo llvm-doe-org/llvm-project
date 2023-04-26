@@ -21,7 +21,6 @@
 
 ; CHECK-O: Running pass: WholeProgramDevirtPass
 ; CHECK-O: Running pass: LowerTypeTestsPass
-; CHECK-O: Running pass: ForceFunctionAttrsPass
 ; CHECK-O: Running pass: PGOIndirectCallPromotion
 ; CHECK-O: Running pass: InferFunctionAttrsPass
 ; CHECK-O: Running pass: LowerExpectIntrinsicPass on main
@@ -51,7 +50,6 @@
 ; CHECK-O: Running pass: TailCallElimPass on main
 ; CHECK-O: Running pass: SimplifyCFGPass on main
 ; CHECK-O: Running pass: ReassociatePass on main
-; CHECK-O: Running pass: RequireAnalysisPass<{{.*}}OptimizationRemarkEmitterAnalysis
 ; CHECK-O: Running pass: LoopSimplifyPass on main
 ; CHECK-O: Running pass: LCSSAPass on main
 ; CHECK-O: Running pass: SimplifyCFGPass on main
@@ -96,7 +94,6 @@
 ; CHECK-O: Running pass: LoopUnrollPass on main
 ; CHECK-O: Running pass: WarnMissedTransformationsPass on main
 ; CHECK-O: Running pass: InstCombinePass on main
-; CHECK-O: Running pass: RequireAnalysisPass<{{.*}}OptimizationRemarkEmitterAnalysis
 ; CHECK-O: Running pass: LoopSimplifyPass on main
 ; CHECK-O: Running pass: LCSSAPass on main
 ; CHECK-O: Running pass: LICMPass on b

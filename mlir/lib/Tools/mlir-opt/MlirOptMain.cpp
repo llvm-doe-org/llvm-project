@@ -13,9 +13,13 @@
 
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
+#include "mlir/Debug/CLOptionsSetup.h"
 #include "mlir/Debug/Counter.h"
+#include "mlir/Debug/DebuggerExecutionContextHook.h"
 #include "mlir/Debug/ExecutionContext.h"
 #include "mlir/Debug/Observers/ActionLogging.h"
+#include "mlir/Dialect/IRDL/IR/IRDL.h"
+#include "mlir/Dialect/IRDL/IRDLLoading.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -30,6 +34,9 @@
 #include "mlir/Support/Timing.h"
 #include "mlir/Support/ToolUtilities.h"
 #include "mlir/Tools/ParseUtilities.h"
+#include "mlir/Tools/Plugins/DialectPlugin.h"
+#include "mlir/Tools/Plugins/PassPlugin.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/InitLLVM.h"
@@ -67,17 +74,21 @@ struct MlirOptMainConfigCLOptions : public MlirOptMainConfig {
         "emit-bytecode", cl::desc("Emit bytecode when generating output"),
         cl::location(emitBytecodeFlag), cl::init(false));
 
+    static cl::opt<std::string, /*ExternalStorage=*/true> irdlFile(
+        "irdl-file",
+        cl::desc("IRDL file to register before processing the input"),
+        cl::location(irdlFileFlag), cl::init(""), cl::value_desc("filename"));
+
+    static cl::opt<bool, /*ExternalStorage=*/true> enableDebuggerHook(
+        "mlir-enable-debugger-hook",
+        cl::desc("Enable Debugger hook for debugging MLIR Actions"),
+        cl::location(enableDebuggerActionHookFlag), cl::init(false));
+
     static cl::opt<bool, /*ExternalStorage=*/true> explicitModule(
         "no-implicit-module",
         cl::desc("Disable implicit addition of a top-level module op during "
                  "parsing"),
         cl::location(useExplicitModuleFlag), cl::init(false));
-
-    static cl::opt<std::string, /*ExternalStorage=*/true> logActionsTo{
-        "log-actions-to",
-        cl::desc("Log action execution to a file, or stderr if "
-                 " '-' is passed"),
-        cl::location(logActionsToFlag)};
 
     static cl::opt<bool, /*ExternalStorage=*/true> showDialects(
         "show-dialects",
@@ -101,17 +112,45 @@ struct MlirOptMainConfigCLOptions : public MlirOptMainConfig {
         cl::desc("Run the verifier after each transformation pass"),
         cl::location(verifyPassesFlag), cl::init(true));
 
+    static cl::list<std::string> passPlugins(
+        "load-pass-plugin", cl::desc("Load passes from plugin library"));
+    /// Set the callback to load a pass plugin.
+    passPlugins.setCallback([&](const std::string &pluginPath) {
+      auto plugin = PassPlugin::load(pluginPath);
+      if (!plugin) {
+        errs() << "Failed to load passes from '" << pluginPath
+               << "'. Request ignored.\n";
+        return;
+      }
+      plugin.get().registerPassRegistryCallbacks();
+    });
+
+    static cl::list<std::string> dialectPlugins(
+        "load-dialect-plugin", cl::desc("Load dialects from plugin library"));
+    this->dialectPlugins = std::addressof(dialectPlugins);
+
     static PassPipelineCLParser passPipeline("", "Compiler passes to run", "p");
     setPassPipelineParser(passPipeline);
   }
+
+  /// Set the callback to load a dialect plugin.
+  void setDialectPluginsCallback(DialectRegistry &registry);
+
+  /// Pointer to static dialectPlugins variable in constructor, needed by
+  /// setDialectPluginsCallback(DialectRegistry&).
+  cl::list<std::string> *dialectPlugins = nullptr;
 };
 } // namespace
 
 ManagedStatic<MlirOptMainConfigCLOptions> clOptionsConfig;
 
-void MlirOptMainConfig::registerCLOptions() { *clOptionsConfig; }
+void MlirOptMainConfig::registerCLOptions(DialectRegistry &registry) {
+  clOptionsConfig->setDialectPluginsCallback(registry);
+  tracing::DebugConfig::registerCLOptions();
+}
 
 MlirOptMainConfig MlirOptMainConfig::createFromCLOptions() {
+  clOptionsConfig->setDebugConfig(tracing::DebugConfig::createFromCLOptions());
   return *clOptionsConfig;
 }
 
@@ -134,40 +173,18 @@ MlirOptMainConfig &MlirOptMainConfig::setPassPipelineParser(
   return *this;
 }
 
-/// Set the ExecutionContext on the context and handle the observers.
-class InstallDebugHandler {
-public:
-  InstallDebugHandler(MLIRContext &context, const MlirOptMainConfig &config) {
-    if (config.getLogActionsTo().empty()) {
-      if (tracing::DebugCounter::isActivated())
-        context.registerActionHandler(tracing::DebugCounter());
+void MlirOptMainConfigCLOptions::setDialectPluginsCallback(
+    DialectRegistry &registry) {
+  dialectPlugins->setCallback([&](const std::string &pluginPath) {
+    auto plugin = DialectPlugin::load(pluginPath);
+    if (!plugin) {
+      errs() << "Failed to load dialect plugin from '" << pluginPath
+             << "'. Request ignored.\n";
       return;
-    }
-    if (tracing::DebugCounter::isActivated())
-      emitError(UnknownLoc::get(&context),
-                "Debug counters are incompatible with --log-actions-to option "
-                "and are disabled");
-    std::string errorMessage;
-    logActionsFile = openOutputFile(config.getLogActionsTo(), &errorMessage);
-    if (!logActionsFile) {
-      emitError(UnknownLoc::get(&context),
-                "Opening file for --log-actions-to failed: ")
-          << errorMessage << "\n";
-      return;
-    }
-    logActionsFile->keep();
-    raw_fd_ostream &logActionsStream = logActionsFile->os();
-    actionLogger = std::make_unique<tracing::ActionLogger>(logActionsStream);
-
-    executionContext.registerObserver(actionLogger.get());
-    context.registerActionHandler(executionContext);
-  }
-
-private:
-  std::unique_ptr<llvm::ToolOutputFile> logActionsFile;
-  std::unique_ptr<tracing::ActionLogger> actionLogger;
-  tracing::ExecutionContext executionContext;
-};
+    };
+    plugin.get().registerDialectRegistryCallbacks(registry);
+  });
+}
 
 /// Perform the actions on the input file indicated by the command line flags
 /// within the specified context.
@@ -234,6 +251,33 @@ performActions(raw_ostream &os,
   return success();
 }
 
+LogicalResult loadIRDLDialects(StringRef irdlFile, MLIRContext &ctx) {
+  DialectRegistry registry;
+  registry.insert<irdl::IRDLDialect>();
+  ctx.appendDialectRegistry(registry);
+
+  // Set up the input file.
+  std::string errorMessage;
+  std::unique_ptr<MemoryBuffer> file = openInputFile(irdlFile, &errorMessage);
+  if (!file) {
+    emitError(UnknownLoc::get(&ctx)) << errorMessage;
+    return failure();
+  }
+
+  // Give the buffer to the source manager.
+  // This will be picked up by the parser.
+  SourceMgr sourceMgr;
+  sourceMgr.AddNewSourceBuffer(std::move(file), SMLoc());
+
+  SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &ctx);
+
+  // Parse the input file.
+  OwningOpRef<ModuleOp> module(parseSourceFile<ModuleOp>(sourceMgr, &ctx));
+
+  // Load IRDL dialects.
+  return irdl::loadDialects(module.get());
+}
+
 /// Parses the memory buffer.  If successfully, run a series of passes against
 /// it and print the result.
 static LogicalResult processBuffer(raw_ostream &os,
@@ -251,14 +295,17 @@ static LogicalResult processBuffer(raw_ostream &os,
   if (threadPool)
     context.setThreadPool(*threadPool);
 
+  StringRef irdlFile = config.getIrdlFile();
+  if (!irdlFile.empty() && failed(loadIRDLDialects(irdlFile, context)))
+    return failure();
+
   // Parse the input file.
-  if (config.shouldPreloadDialectsInContext())
-    context.loadAllAvailableDialects();
   context.allowUnregisteredDialects(config.shouldAllowUnregisteredDialects());
   if (config.shouldVerifyDiagnostics())
     context.printOpOnDiagnostic(false);
 
-  InstallDebugHandler installDebugHandler(context, config);
+  tracing::InstallDebugHandler installDebugHandler(context,
+                                                   config.getDebugConfig());
 
   // If we are in verify diagnostics mode then we have a lot of work to do,
   // otherwise just perform the actions without worrying about it.
@@ -313,48 +360,8 @@ LogicalResult mlir::MlirOptMain(llvm::raw_ostream &outputStream,
                                /*insertMarkerInOutput=*/true);
 }
 
-LogicalResult mlir::MlirOptMain(raw_ostream &outputStream,
-                                std::unique_ptr<MemoryBuffer> buffer,
-                                PassPipelineFn passManagerSetupFn,
-                                DialectRegistry &registry, bool splitInputFile,
-                                bool verifyDiagnostics, bool verifyPasses,
-                                bool allowUnregisteredDialects,
-                                bool preloadDialectsInContext,
-                                bool emitBytecode, bool explicitModule) {
-  return MlirOptMain(outputStream, std::move(buffer), registry,
-                     MlirOptMainConfig{}
-                         .splitInputFile(splitInputFile)
-                         .verifyDiagnostics(verifyDiagnostics)
-                         .verifyPasses(verifyPasses)
-                         .allowUnregisteredDialects(allowUnregisteredDialects)
-                         .preloadDialectsInContext(preloadDialectsInContext)
-                         .emitBytecode(emitBytecode)
-                         .useExplicitModule(explicitModule)
-                         .setPassPipelineSetupFn(passManagerSetupFn));
-}
-
-LogicalResult mlir::MlirOptMain(
-    raw_ostream &outputStream, std::unique_ptr<MemoryBuffer> buffer,
-    const PassPipelineCLParser &passPipeline, DialectRegistry &registry,
-    bool splitInputFile, bool verifyDiagnostics, bool verifyPasses,
-    bool allowUnregisteredDialects, bool preloadDialectsInContext,
-    bool emitBytecode, bool explicitModule, bool dumpPassPipeline) {
-  return MlirOptMain(outputStream, std::move(buffer), registry,
-                     MlirOptMainConfig{}
-                         .splitInputFile(splitInputFile)
-                         .verifyDiagnostics(verifyDiagnostics)
-                         .verifyPasses(verifyPasses)
-                         .allowUnregisteredDialects(allowUnregisteredDialects)
-                         .preloadDialectsInContext(preloadDialectsInContext)
-                         .emitBytecode(emitBytecode)
-                         .useExplicitModule(explicitModule)
-                         .dumpPassPipeline(dumpPassPipeline)
-                         .setPassPipelineParser(passPipeline));
-}
-
 LogicalResult mlir::MlirOptMain(int argc, char **argv, llvm::StringRef toolName,
-                                DialectRegistry &registry,
-                                bool preloadDialectsInContext) {
+                                DialectRegistry &registry) {
   static cl::opt<std::string> inputFilename(
       cl::Positional, cl::desc("<input file>"), cl::init("-"));
 
@@ -365,7 +372,7 @@ LogicalResult mlir::MlirOptMain(int argc, char **argv, llvm::StringRef toolName,
   InitLLVM y(argc, argv);
 
   // Register any command line options.
-  MlirOptMainConfig::registerCLOptions();
+  MlirOptMainConfig::registerCLOptions(registry);
   registerAsmPrinterCLOptions();
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
@@ -382,7 +389,6 @@ LogicalResult mlir::MlirOptMain(int argc, char **argv, llvm::StringRef toolName,
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, helpHeader);
   MlirOptMainConfig config = MlirOptMainConfig::createFromCLOptions();
-  config.preloadDialectsInContext(preloadDialectsInContext);
 
   // When reading from stdin and the input is a tty, it is often a user mistake
   // and the process "appears to be stuck". Print a message to let the user know

@@ -14,11 +14,22 @@
 #ifndef MLIR_DIALECT_AFFINE_TRANSFORMS_TRANSFORMS_H
 #define MLIR_DIALECT_AFFINE_TRANSFORMS_TRANSFORMS_H
 
+#include "mlir/Interfaces/ValueBoundsOpInterface.h"
 #include "mlir/Support/LogicalResult.h"
 
 namespace mlir {
+class Location;
+class OpBuilder;
+class OpFoldResult;
 class RewritePatternSet;
 class RewriterBase;
+class Value;
+
+namespace presburger {
+enum class BoundType;
+} // namespace presburger
+
+namespace affine {
 class AffineApplyOp;
 
 /// Populate patterns that expand affine index operations into more fundamental
@@ -40,6 +51,41 @@ void reorderOperandsByHoistability(RewriterBase &rewriter, AffineApplyOp op);
 /// maximally compose chains of AffineApplyOps.
 FailureOr<AffineApplyOp> decompose(RewriterBase &rewriter, AffineApplyOp op);
 
+/// Reify a bound for the given index-typed value in terms of SSA values for
+/// which `stopCondition` is met. If no stop condition is specified, reify in
+/// terms of the operands of the owner op.
+///
+/// By default, lower/equal bounds are closed and upper bounds are open. If
+/// `closedUB` is set to "true", upper bounds are also closed.
+///
+/// Example:
+/// %0 = arith.addi %a, %b : index
+/// %1 = arith.addi %0, %c : index
+///
+/// * If `stopCondition` evaluates to "true" for %0 and %c, "%0 + %c" is an EQ
+///   bound for %1.
+/// * If `stopCondition` evaluates to "true" for %a, %b and %c, "%a + %b + %c"
+///   is an EQ bound for %1.
+/// * Otherwise, if the owners of %a, %b or %c do not implement the
+///   ValueBoundsOpInterface, no bound can be computed.
+FailureOr<OpFoldResult> reifyIndexValueBound(
+    OpBuilder &b, Location loc, presburger::BoundType type, Value value,
+    ValueBoundsConstraintSet::StopConditionFn stopCondition = nullptr,
+    bool closedUB = false);
+
+/// Reify a bound for the specified dimension of the given shaped value in terms
+/// of SSA values for which `stopCondition` is met. If no stop condition is
+/// specified, reify in terms of the operands of the owner op.
+///
+/// By default, lower/equal bounds are closed and upper bounds are open. If
+/// `closedUB` is set to "true", upper bounds are also closed.
+FailureOr<OpFoldResult> reifyShapedValueDimBound(
+    OpBuilder &b, Location loc, presburger::BoundType type, Value value,
+    int64_t dim,
+    ValueBoundsConstraintSet::StopConditionFn stopCondition = nullptr,
+    bool closedUB = false);
+
+} // namespace affine
 } // namespace mlir
 
 #endif // MLIR_DIALECT_AFFINE_TRANSFORMS_TRANSFORMS_H

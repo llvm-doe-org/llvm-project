@@ -967,8 +967,10 @@ def cxx_isystem : JoinedOrSeparate<["-"], "cxx-isystem">, Group<clang_i_Group>,
   MetaVarName<"<directory>">;
 def c : Flag<["-"], "c">, Flags<[NoXarchOption, FlangOption]>, Group<Action_Group>,
   HelpText<"Only run preprocess, compile, and assemble steps">;
-def fconvergent_functions : Flag<["-"], "fconvergent-functions">, Group<f_Group>, Flags<[CC1Option]>,
-  HelpText<"Assume functions may be convergent">;
+defm convergent_functions : BoolFOption<"convergent-functions",
+  LangOpts<"ConvergentFunctions">, DefaultFalse,
+  NegFlag<SetFalse, [], "Assume all functions may be convergent.">,
+  PosFlag<SetTrue, [CC1Option]>>;
 
 def gpu_use_aux_triple_only : Flag<["--"], "gpu-use-aux-triple-only">,
   InternalDriverOpt, HelpText<"Prepare '-aux-triple' only without populating "
@@ -1590,7 +1592,7 @@ def femit_all_decls : Flag<["-"], "femit-all-decls">, Group<f_Group>, Flags<[CC1
 defm emulated_tls : BoolFOption<"emulated-tls",
   CodeGenOpts<"EmulatedTLS">, DefaultFalse,
   PosFlag<SetTrue, [CC1Option], "Use emutls functions to access thread_local variables">,
-  NegFlag<SetFalse>, BothFlags<[CC1Option]>>;
+  NegFlag<SetFalse>>;
 def fencoding_EQ : Joined<["-"], "fencoding=">, Group<f_Group>;
 def ferror_limit_EQ : Joined<["-"], "ferror-limit=">, Group<f_Group>, Flags<[CoreOption]>;
 defm exceptions : BoolFOption<"exceptions",
@@ -2680,26 +2682,39 @@ def fopenmp_cuda_blocks_per_sm_EQ : Joined<["-"], "fopenmp-cuda-blocks-per-sm=">
   Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
 def fopenmp_cuda_teams_reduction_recs_num_EQ : Joined<["-"], "fopenmp-cuda-teams-reduction-recs-num=">, Group<f_Group>,
   Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
-def fopenmp_target_debug : Flag<["-"], "fopenmp-target-debug">, Group<f_Group>, Flags<[CC1Option, NoArgumentUnused]>,
+
+//===----------------------------------------------------------------------===//
+// Shared cc1 + fc1 OpenMP Target Options
+//===----------------------------------------------------------------------===//
+
+let Flags = [CC1Option, FC1Option, NoArgumentUnused] in {
+let Group = f_Group in {
+
+def fopenmp_target_debug : Flag<["-"], "fopenmp-target-debug">,
   HelpText<"Enable debugging in the OpenMP offloading device RTL">;
-def fno_openmp_target_debug : Flag<["-"], "fno-openmp-target-debug">, Group<f_Group>, Flags<[NoArgumentUnused]>;
-def fopenmp_target_debug_EQ : Joined<["-"], "fopenmp-target-debug=">, Group<f_Group>, Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
-def fopenmp_assume_teams_oversubscription : Flag<["-"], "fopenmp-assume-teams-oversubscription">,
-  Group<f_Group>, Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
-def fopenmp_assume_threads_oversubscription : Flag<["-"], "fopenmp-assume-threads-oversubscription">,
-  Group<f_Group>, Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
-def fno_openmp_assume_teams_oversubscription : Flag<["-"], "fno-openmp-assume-teams-oversubscription">,
-  Group<f_Group>, Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
-def fno_openmp_assume_threads_oversubscription : Flag<["-"], "fno-openmp-assume-threads-oversubscription">,
-  Group<f_Group>, Flags<[CC1Option, NoArgumentUnused, HelpHidden]>;
-def fopenmp_assume_no_thread_state : Flag<["-"], "fopenmp-assume-no-thread-state">, Group<f_Group>,
-  Flags<[CC1Option, NoArgumentUnused, HelpHidden]>,
+def fno_openmp_target_debug : Flag<["-"], "fno-openmp-target-debug">;
+
+} // let Group = f_Group
+} // let Flags = [CC1Option, FC1Option, NoArgumentUnused]
+
+let Flags = [CC1Option, FC1Option, NoArgumentUnused, HelpHidden] in {
+let Group = f_Group in {
+
+def fopenmp_target_debug_EQ : Joined<["-"], "fopenmp-target-debug=">;
+def fopenmp_assume_teams_oversubscription : Flag<["-"], "fopenmp-assume-teams-oversubscription">;
+def fopenmp_assume_threads_oversubscription : Flag<["-"], "fopenmp-assume-threads-oversubscription">;
+def fno_openmp_assume_teams_oversubscription : Flag<["-"], "fno-openmp-assume-teams-oversubscription">;
+def fno_openmp_assume_threads_oversubscription : Flag<["-"], "fno-openmp-assume-threads-oversubscription">;
+def fopenmp_assume_no_thread_state : Flag<["-"], "fopenmp-assume-no-thread-state">,
   HelpText<"Assert no thread in a parallel region modifies an ICV">,
   MarshallingInfoFlag<LangOpts<"OpenMPNoThreadState">>;
-def fopenmp_assume_no_nested_parallelism : Flag<["-"], "fopenmp-assume-no-nested-parallelism">, Group<f_Group>,
-  Flags<[CC1Option, NoArgumentUnused, HelpHidden]>,
+def fopenmp_assume_no_nested_parallelism : Flag<["-"], "fopenmp-assume-no-nested-parallelism">,
   HelpText<"Assert no nested parallel regions in the GPU">,
   MarshallingInfoFlag<LangOpts<"OpenMPNoNestedParallelism">>;
+
+} // let Group = f_Group
+} // let Flags = [CC1Option, FC1Option, NoArgumentUnused, HelpHidden]
+
 def fopenmp_offload_mandatory : Flag<["-"], "fopenmp-offload-mandatory">, Group<f_Group>,
   Flags<[CC1Option, NoArgumentUnused]>,
   HelpText<"Do not create a host fallback if offloading to the device fails.">,
@@ -2722,11 +2737,11 @@ def offload_new_driver : Flag<["--"], "offload-new-driver">, Flags<[CC1Option]>,
   MarshallingInfoFlag<LangOpts<"OffloadingNewDriver">>, HelpText<"Use the new driver for offloading compilation.">;
 def no_offload_new_driver : Flag<["--"], "no-offload-new-driver">, Flags<[CC1Option]>, Group<f_Group>,
   HelpText<"Don't Use the new driver for offloading compilation.">;
-def offload_device_only : Flag<["--"], "offload-device-only">,
+def offload_device_only : Flag<["--"], "offload-device-only">, Flags<[FlangOption]>,
   HelpText<"Only compile for the offloading device.">;
-def offload_host_only : Flag<["--"], "offload-host-only">,
+def offload_host_only : Flag<["--"], "offload-host-only">, Flags<[FlangOption]>,
   HelpText<"Only compile for the offloading host.">;
-def offload_host_device : Flag<["--"], "offload-host-device">,
+def offload_host_device : Flag<["--"], "offload-host-device">, Flags<[FlangOption]>,
   HelpText<"Only compile for the offloading host.">;
 def cuda_device_only : Flag<["--"], "cuda-device-only">, Alias<offload_device_only>,
   HelpText<"Compile CUDA code for device only">;
@@ -4711,6 +4726,8 @@ def m68030 : Flag<["-"], "m68030">, Group<m_m68k_Features_Group>;
 def m68040 : Flag<["-"], "m68040">, Group<m_m68k_Features_Group>;
 def m68060 : Flag<["-"], "m68060">, Group<m_m68k_Features_Group>;
 
+def m68881 : Flag<["-"], "m68881">, Group<m_m68k_Features_Group>;
+
 foreach i = {0-6} in
   def ffixed_a#i : Flag<["-"], "ffixed-a"#i>, Group<m_m68k_Features_Group>,
     HelpText<"Reserve the a"#i#" register (M68k only)">;
@@ -4732,6 +4749,8 @@ def m3dnowa : Flag<["-"], "m3dnowa">, Group<m_x86_Features_Group>;
 def mno_3dnowa : Flag<["-"], "mno-3dnowa">, Group<m_x86_Features_Group>;
 def mamx_bf16 : Flag<["-"], "mamx-bf16">, Group<m_x86_Features_Group>;
 def mno_amx_bf16 : Flag<["-"], "mno-amx-bf16">, Group<m_x86_Features_Group>;
+def mamx_complex : Flag<["-"], "mamx-complex">, Group<m_x86_Features_Group>;
+def mno_amx_complex : Flag<["-"], "mno-amx-complex">, Group<m_x86_Features_Group>;
 def mamx_fp16 : Flag<["-"], "mamx-fp16">, Group<m_x86_Features_Group>;
 def mno_amx_fp16 : Flag<["-"], "mno-amx-fp16">, Group<m_x86_Features_Group>;
 def mamx_int8 : Flag<["-"], "mamx-int8">, Group<m_x86_Features_Group>;
@@ -5226,7 +5245,9 @@ def fno_automatic : Flag<["-"], "fno-automatic">, Group<f_Group>,
 defm stack_arrays : BoolOptionWithoutMarshalling<"f", "stack-arrays",
   PosFlag<SetTrue, [], "Attempt to allocate array temporaries on the stack, no matter their size">,
   NegFlag<SetFalse, [], "Allocate array temporaries on the heap (default)">>;
-
+defm loop_versioning : BoolOptionWithoutMarshalling<"f", "version-loops-for-stride",
+  PosFlag<SetTrue, [], "Create unit-strided versions of loops">,
+   NegFlag<SetFalse, [], "Do not create unit-strided loops (default)">>;
 } // let Flags = [FC1Option, FlangOption, FlangOnlyOption]
 
 def J : JoinedOrSeparate<["-"], "J">,
@@ -5870,7 +5891,7 @@ def fctor_dtor_return_this : Flag<["-"], "fctor-dtor-return-this">,
            "and non-deleting destructors. (No effect on Microsoft ABI)">,
   MarshallingInfoFlag<CodeGenOpts<"CtorDtorReturnThis">>;
 
-def experimental_assignment_tracking_EQ : Joined<["-"], "fexperimental-assignment-tracking=">,
+def fexperimental_assignment_tracking_EQ : Joined<["-"], "fexperimental-assignment-tracking=">,
   Group<f_Group>, CodeGenOpts<"EnableAssignmentTracking">,
   NormalizedValuesScope<"CodeGenOptions::AssignmentTrackingOpts">,
   Values<"disabled,enabled,forced">, NormalizedValues<["Disabled","Enabled","Forced"]>,
@@ -6609,12 +6630,14 @@ def fno_cuda_host_device_constexpr : Flag<["-"], "fno-cuda-host-device-constexpr
 // OpenMP Options
 //===----------------------------------------------------------------------===//
 
+let Flags = [CC1Option, FC1Option, NoDriverOption] in {
+
 def fopenmp_is_device : Flag<["-"], "fopenmp-is-device">,
-  HelpText<"Generate code only for an OpenMP target device.">,
-  Flags<[CC1Option, FC1Option, NoDriverOption]>;
+  HelpText<"Generate code only for an OpenMP target device.">;
 def fopenmp_host_ir_file_path : Separate<["-"], "fopenmp-host-ir-file-path">,
-  HelpText<"Path to the IR file produced by the frontend for the host.">,
-  Flags<[CC1Option, NoDriverOption]>;
+  HelpText<"Path to the IR file produced by the frontend for the host.">;
+
+} // let Flags = [CC1Option, FC1Option, NoDriverOption]
 
 //===----------------------------------------------------------------------===//
 // SYCL Options

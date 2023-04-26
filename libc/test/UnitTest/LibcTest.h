@@ -14,15 +14,14 @@
 
 #include "PlatformDefs.h"
 
+#include "src/__support/CPP/string.h"
 #include "src/__support/CPP/string_view.h"
 #include "src/__support/CPP/type_traits.h"
-#include "utils/testutils/ExecuteFunction.h"
-#include "utils/testutils/StreamWrapper.h"
+#include "test/UnitTest/ExecuteFunction.h"
+#include "test/UnitTest/TestLogger.h"
 
 namespace __llvm_libc {
 namespace testing {
-
-class RunContext;
 
 // Only the following conditions are supported. Notice that we do not have
 // a TRUE or FALSE condition. That is because, C library funtions do not
@@ -41,6 +40,18 @@ enum TestCondition {
 
 namespace internal {
 
+class RunContext {
+public:
+  enum RunResult { Result_Pass = 1, Result_Fail = 2 };
+
+  RunResult status() const { return Status; }
+
+  void markFail() { Status = Result_Fail; }
+
+private:
+  RunResult Status = Result_Pass;
+};
+
 template <typename ValType>
 bool test(RunContext *Ctx, TestCondition Cond, ValType LHS, ValType RHS,
           const char *LHSStr, const char *RHSStr, const char *File,
@@ -50,9 +61,7 @@ bool test(RunContext *Ctx, TestCondition Cond, ValType LHS, ValType RHS,
 
 struct MatcherBase {
   virtual ~MatcherBase() {}
-  virtual void explainError(testutils::StreamWrapper &OS) {
-    OS << "unknown error\n";
-  }
+  virtual void explainError() { tlog << "unknown error\n"; }
   // Override and return true to skip `explainError` step.
   virtual bool is_silent() const { return false; }
 };
@@ -66,9 +75,9 @@ template <typename T> struct Matcher : public MatcherBase {
 class Test {
 private:
   Test *Next = nullptr;
-  RunContext *Ctx = nullptr;
+  internal::RunContext *Ctx = nullptr;
 
-  void setContext(RunContext *C) { Ctx = C; }
+  void setContext(internal::RunContext *C) { Ctx = C; }
 
 public:
   virtual ~Test() {}
@@ -119,6 +128,14 @@ protected:
     return internal::test(Ctx, Cond, LHS, RHS, LHSStr, RHSStr, File, Line);
   }
 
+  template <typename ValType,
+            cpp::enable_if_t<cpp::is_same_v<ValType, __llvm_libc::cpp::string>,
+                             int> = 0>
+  bool test(TestCondition Cond, ValType LHS, ValType RHS, const char *LHSStr,
+            const char *RHSStr, const char *File, unsigned long Line) {
+    return internal::test(Ctx, Cond, LHS, RHS, LHSStr, RHSStr, File, Line);
+  }
+
   bool testStrEq(const char *LHS, const char *RHS, const char *LHSStr,
                  const char *RHSStr, const char *File, unsigned long Line);
 
@@ -153,6 +170,10 @@ private:
   static Test *Start;
   static Test *End;
 };
+
+extern int argc;
+extern char **argv;
+extern char **envp;
 
 namespace internal {
 

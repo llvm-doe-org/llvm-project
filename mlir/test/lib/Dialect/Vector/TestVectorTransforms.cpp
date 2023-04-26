@@ -53,7 +53,7 @@ struct TestVectorToVectorLowering
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<AffineDialect>();
+    registry.insert<affine::AffineDialect>();
   }
 
   Option<bool> unroll{*this, "unroll", llvm::cl::desc("Include unrolling"),
@@ -128,8 +128,8 @@ struct TestVectorContractionPrepareForMMTLowering
   TestVectorContractionPrepareForMMTLowering() = default;
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry
-        .insert<AffineDialect, arith::ArithDialect, vector::VectorDialect>();
+    registry.insert<affine::AffineDialect, arith::ArithDialect,
+                    vector::VectorDialect>();
   }
 
   void runOnOperation() override {
@@ -246,7 +246,7 @@ struct TestVectorTransferUnrollingPatterns
       : PassWrapper(pass) {}
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<AffineDialect>();
+    registry.insert<affine::AffineDialect>();
   }
   StringRef getArgument() const final {
     return "test-vector-transfer-unrolling-patterns";
@@ -261,8 +261,8 @@ struct TestVectorTransferUnrollingPatterns
     UnrollVectorOptions opts;
     opts.setNativeShape(ArrayRef<int64_t>{2, 2})
         .setFilterConstraint([](Operation *op) {
-          return success(
-              isa<vector::TransferReadOp, vector::TransferWriteOp>(op));
+          return success(isa<vector::TransferReadOp, vector::TransferWriteOp,
+                             vector::GatherOp>(op));
         });
     if (reverseUnrollOrder.getValue()) {
       opts.setUnrollTraversalOrderFn(
@@ -272,6 +272,8 @@ struct TestVectorTransferUnrollingPatterns
               numLoops = readOp.getVectorType().getRank();
             else if (auto writeOp = dyn_cast<vector::TransferWriteOp>(op))
               numLoops = writeOp.getVectorType().getRank();
+            else if (auto gatherOp = dyn_cast<vector::GatherOp>(op))
+              numLoops = gatherOp.getVectorType().getRank();
             else
               return std::nullopt;
             auto order = llvm::reverse(llvm::seq<int64_t>(0, numLoops));
@@ -305,8 +307,8 @@ struct TestScalarVectorTransferLoweringPatterns
   TestScalarVectorTransferLoweringPatterns() = default;
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<AffineDialect, memref::MemRefDialect, tensor::TensorDialect,
-                    vector::VectorDialect>();
+    registry.insert<affine::AffineDialect, memref::MemRefDialect,
+                    tensor::TensorDialect, vector::VectorDialect>();
   }
 
   void runOnOperation() override {
@@ -342,7 +344,7 @@ struct TestVectorTransferCollapseInnerMostContiguousDims
       const TestVectorTransferCollapseInnerMostContiguousDims &pass) = default;
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<memref::MemRefDialect, AffineDialect>();
+    registry.insert<memref::MemRefDialect, affine::AffineDialect>();
   }
 
   StringRef getArgument() const final {
@@ -488,7 +490,7 @@ struct TestVectorDistribution
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<scf::SCFDialect, memref::MemRefDialect, gpu::GPUDialect,
-                    AffineDialect>();
+                    affine::AffineDialect>();
   }
 
   StringRef getArgument() const final { return "test-vector-warp-distribute"; }

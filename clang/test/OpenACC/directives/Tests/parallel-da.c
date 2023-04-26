@@ -98,8 +98,8 @@
 // RUN: %{check-llvm}( -DMODE=MODE_P                  %)
 // RUN: %{check-llvm}( -DMODE=MODE_P -DSTORAGE=static %)
 //
-// LLVM: define internal void @.omp_outlined.
-// LLVM-SAME: (ptr {{[a-z ]+}} %{{[^, )]*}},
+// LLVM: define internal void @__omp_offloading_{{[_a-z0-9]+}}.omp_outlined
+// LLVM-SAME: {{^}}(ptr {{[a-z ]+}} %{{[^, )]*}},
 // LLVM-SAME: {{^ *}} ptr {{[a-z ]+}} %{{[^, )]*}})
 
 // END.

@@ -146,7 +146,9 @@ stages:
       libomptarget :: nvptx64-nvidia-cuda :: mapping/target_has_device_addr.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/info.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_has_device_addr.c
+      libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/barrier_fence.c
       libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/target_critical_region.cpp
+      libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: offloading/barrier_fence.c
       libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: offloading/target_critical_region.cpp
       "
     TEST_LIT_XFAIL_NOT:

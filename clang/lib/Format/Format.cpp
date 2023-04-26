@@ -722,23 +722,23 @@ template <> struct MappingTraits<FormatStyle::TrailingCommentsAlignmentStyle> {
                         FormatStyle::TrailingCommentsAlignmentStyle &Value) {
     IO.enumCase(Value, "Leave",
                 FormatStyle::TrailingCommentsAlignmentStyle(
-                    {FormatStyle::TCAS_Leave, 1}));
+                    {FormatStyle::TCAS_Leave, 0}));
 
     IO.enumCase(Value, "Always",
                 FormatStyle::TrailingCommentsAlignmentStyle(
-                    {FormatStyle::TCAS_Always, 1}));
+                    {FormatStyle::TCAS_Always, 0}));
 
     IO.enumCase(Value, "Never",
                 FormatStyle::TrailingCommentsAlignmentStyle(
-                    {FormatStyle::TCAS_Never, 1}));
+                    {FormatStyle::TCAS_Never, 0}));
 
     // For backwards compatibility
     IO.enumCase(Value, "true",
                 FormatStyle::TrailingCommentsAlignmentStyle(
-                    {FormatStyle::TCAS_Always, 1}));
+                    {FormatStyle::TCAS_Always, 0}));
     IO.enumCase(Value, "false",
                 FormatStyle::TrailingCommentsAlignmentStyle(
-                    {FormatStyle::TCAS_Never, 1}));
+                    {FormatStyle::TCAS_Never, 0}));
   }
 
   static void mapping(IO &IO,
@@ -1038,6 +1038,8 @@ template <> struct MappingTraits<FormatStyle> {
     IO.mapOptional("TabWidth", Style.TabWidth);
     IO.mapOptional("TypenameMacros", Style.TypenameMacros);
     IO.mapOptional("UseTab", Style.UseTab);
+    IO.mapOptional("VerilogBreakBetweenInstancePorts",
+                   Style.VerilogBreakBetweenInstancePorts);
     IO.mapOptional("WhitespaceSensitiveMacros",
                    Style.WhitespaceSensitiveMacros);
     IO.mapOptional("Macros", Style.Macros);
@@ -1462,6 +1464,7 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
   LLVMStyle.StatementMacros.push_back("QT_REQUIRE_VERSION");
   LLVMStyle.TabWidth = 8;
   LLVMStyle.UseTab = FormatStyle::UT_Never;
+  LLVMStyle.VerilogBreakBetweenInstancePorts = true;
   LLVMStyle.WhitespaceSensitiveMacros.push_back("BOOST_PP_STRINGIZE");
   LLVMStyle.WhitespaceSensitiveMacros.push_back("CF_SWIFT_NAME");
   LLVMStyle.WhitespaceSensitiveMacros.push_back("NS_SWIFT_NAME");
@@ -2696,6 +2699,8 @@ private:
         "NSDecimalNumber",
         "NSDictionary",
         "NSEdgeInsets",
+        "NSError",
+        "NSErrorDomain",
         "NSHashTable",
         "NSIndexPath",
         "NSIndexSet",
@@ -2757,6 +2762,7 @@ private:
                                 FormatTok->TokenText)) ||
             FormatTok->is(TT_ObjCStringLiteral) ||
             FormatTok->isOneOf(Keywords.kw_NS_CLOSED_ENUM, Keywords.kw_NS_ENUM,
+                               Keywords.kw_NS_ERROR_ENUM,
                                Keywords.kw_NS_OPTIONS, TT_ObjCBlockLBrace,
                                TT_ObjCBlockLParen, TT_ObjCDecl, TT_ObjCForIn,
                                TT_ObjCMethodExpr, TT_ObjCMethodSpecifier,
@@ -2800,7 +2806,7 @@ struct JavaImportDirective {
 // Determines whether 'Ranges' intersects with ('Start', 'End').
 static bool affectsRange(ArrayRef<tooling::Range> Ranges, unsigned Start,
                          unsigned End) {
-  for (auto Range : Ranges) {
+  for (const auto &Range : Ranges) {
     if (Range.getOffset() < End &&
         Range.getOffset() + Range.getLength() > Start) {
       return true;
@@ -3441,11 +3447,11 @@ reformat(const FormatStyle &Style, StringRef Code,
     tooling::Replacements Replaces =
         Formatter(*Env, Style, Status).process().first;
     // add a replacement to remove the "x = " from the result.
-    if (!Replaces.add(tooling::Replacement(FileName, 0, 4, ""))) {
-      // apply the reformatting changes and the removal of "x = ".
-      if (applyAllReplacements(Code, Replaces))
-        return {Replaces, 0};
-    }
+    Replaces = Replaces.merge(
+        tooling::Replacements(tooling::Replacement(FileName, 0, 4, "")));
+    // apply the reformatting changes and the removal of "x = ".
+    if (applyAllReplacements(Code, Replaces))
+      return {Replaces, 0};
     return {tooling::Replacements(), 0};
   }
 
