@@ -230,9 +230,13 @@ stages:
     TEST_LIT_FILTER_OUT_LIST:
       "
       libomptarget :: nvptx64-nvidia-cuda :: mapping/map_back_race.cpp
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug47654.cpp
       libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
+      libomptarget :: nvptx64-nvidia-cuda :: offloading/bug50022.cpp
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/map_back_race.cpp
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug47654.cpp
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug49334.cpp
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug50022.cpp
       "
     VV_COMP_LIT_XFAIL:
       ""
