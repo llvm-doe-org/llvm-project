@@ -91,6 +91,8 @@ install Clacc:
 ```
 $ git clone -c feature.manyFiles=true https://github.com/spack/spack.git
 $ . spack/share/spack/setup-env.sh # different shells require different scripts
+$ spack config add 'modules:prefix_inspections:lib64:[LD_LIBRARY_PATH]'
+$ spack config add 'modules:prefix_inspections:lib:[LD_LIBRARY_PATH]'
 
 $ spack install llvm-doe@develop.clacc # might take hours to build
 $ spack load llvm-doe@develop.clacc # adjusts PATH, LD_LIBRARY_PATH, etc.
@@ -111,8 +113,8 @@ From Git:
 $ git clone -b clacc/main https://github.com/llvm-doe-org/llvm-project.git
 $ cd llvm-project
 $ mkdir build && cd build
-$ module load nvhpc/21.7
-$ PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/21.7/cuda/11.4/bin:$PATH
+$ module load nvhpc/22.11
+$ PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11/cuda/11.8/bin:$PATH
 $ cmake -DCMAKE_INSTALL_PREFIX=../install    \
         -DCMAKE_BUILD_TYPE=Release           \
         -DLLVM_ENABLE_PROJECTS=clang         \
@@ -131,9 +133,11 @@ From Spack:
 
 ```
 $ git clone -c feature.manyFiles=true https://github.com/spack/spack.git
+$ module load llvm/14.0.0
 $ . spack/share/spack/setup-env.sh
-$ module load llvm/13.0.1
-$ spack install llvm-doe@develop.clacc % clang@13.0.1 +cuda cuda_arch=70
+$ spack config add 'modules:prefix_inspections:lib64:[LD_LIBRARY_PATH]'
+$ spack config add 'modules:prefix_inspections:lib:[LD_LIBRARY_PATH]'
+$ spack install llvm-doe@develop.clacc % clang@14.0.0 +cuda cuda_arch=70 -libcxx -internal_unwind
 $ spack load llvm-doe@develop.clacc
 ```
 
@@ -167,7 +171,9 @@ From Spack:
 ```
 $ git clone -c feature.manyFiles=true https://github.com/spack/spack.git
 $ . spack/share/spack/setup-env.sh
-$ spack install llvm-doe@develop.clacc % clang@10.0.0
+$ spack config add 'modules:prefix_inspections:lib64:[LD_LIBRARY_PATH]'
+$ spack config add 'modules:prefix_inspections:lib:[LD_LIBRARY_PATH]'
+$ spack install llvm-doe@develop.clacc % clang@14.0.0 -libcxx -internal_unwind
 $ spack load llvm-doe@develop.clacc
 ```
 
@@ -182,8 +188,8 @@ From Git:
 $ git clone -b clacc/main https://github.com/llvm-doe-org/llvm-project.git
 $ cd llvm-project
 $ mkdir build && cd build
-$ module load cmake/3.19.2 gnu/9.2.0 nvhpc/22.2
-$ PATH=/opt/nvidia/hpc_sdk/Linux_ppc64le/22.2/cuda/11.6/bin:$PATH
+$ module load cmake/3.19.2 gnu/9.2.0 nvhpc/22.11
+$ PATH=/opt/nvidia/hpc_sdk/Linux_ppc64le/22.11/cuda/11.8/bin:$PATH
 $ cmake -DCMAKE_INSTALL_PREFIX=../install    \
         -DCMAKE_BUILD_TYPE=Release           \
         -DLLVM_ENABLE_PROJECTS=clang         \
@@ -203,17 +209,11 @@ From Spack:
 
 ```
 $ git clone -c feature.manyFiles=true https://github.com/spack/spack.git
-$ . spack/share/spack/setup-env.sh
 $ module load gnu/10.2.0
-$ cp spack/var/spack/repos/builtin/packages/llvm/llvm14-hwloc-ompd.patch \
-     spack/var/spack/repos/builtin/packages/llvm-doe
-# Open spack/var/spack/repos/builtin/packages/llvm-doe/package.py in an editor.
-# Add the following lines after the existing calls to the 'patch' function,
-# making sure to indent the same amount as those calls:
-#
-#   # patch for missing hwloc.h include for libompd
-#   patch('llvm14-hwloc-ompd.patch', when="@develop.clacc")
-$ spack install llvm-doe@develop.clacc % gcc@10.2.0 +cuda cuda_arch=70
+$ . spack/share/spack/setup-env.sh
+$ spack config add 'modules:prefix_inspections:lib64:[LD_LIBRARY_PATH]'
+$ spack config add 'modules:prefix_inspections:lib:[LD_LIBRARY_PATH]'
+$ spack install llvm-doe@develop.clacc % gcc@10.2.0 +cuda cuda_arch=70 -internal_unwind
 $ spack load llvm-doe@develop.clacc
 ```
 
@@ -238,30 +238,34 @@ int main() {
 To compile and run only for host:
 
 ```
-$ clang -fopenacc test.c && ./a.out
+$ clang -fopenacc test.c
+$ ./a.out
 Hello World: 2
 ```
 
 To compile and run for an NVIDIA GPU:
 
 ```
-$ clang -fopenacc -fopenmp-targets=nvptx64-nvidia-cuda test.c && ./a.out
+$ clang -fopenacc -fopenmp-targets=nvptx64-nvidia-cuda test.c
+$ ./a.out
 Hello World: 2
 ```
 
 To compile and run for an AMD GPU:
 
 ```
-$ clang -fopenacc -fopenmp-targets=amdgcn-amd-amdhsa test.c && ./a.out
+$ clang -fopenacc -fopenmp-targets=amdgcn-amd-amdhsa test.c
+$ ./a.out
 Hello World: 2
 ```
 
-If you see an error for any of the above examples, try appending `-L` followed
-by the root `lib` directory of your Clacc install directory to the end of the
-`clang` command line.  The problem is that `clang` sometimes tries to link
-systems libraries (e.g., `/usr/lib64/libomptarget.so`) instead of the libraries
-that were built and installed for it.  This problem is inherited from LLVM
-upstream and is not unique to Clacc.
+If you see an error for any of the above examples, try extending the `clang`
+command line with `-L` followed by the root `lib` directory of your Clacc
+install directory.  For a spack install, `spack find -p llvm-doe@develop.clacc`
+identifies the Clacc install directory.  The problem is that `clang` sometimes
+tries to link systems libraries (e.g., `/usr/lib64/libomptarget.so`) instead of
+the libraries that were built and installed for it.  This problem is inherited
+from upstream LLVM and is not unique to Clacc.
 
 ## Usage from a Build Directory
 
