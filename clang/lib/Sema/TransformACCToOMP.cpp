@@ -766,7 +766,7 @@ public:
       StmtResult Res = getDerived().TransformStmt(CS);
       EnclosingCompoundStmt.finalize(Res);
       if (!Res.isInvalid())
-        D->setOMPNode(Res.get(), /*DirectiveDiscardedForOMP=*/true);
+        D->setOMPNode(Res.get(), /*OMPDirectiveCount=*/0);
       return Res;
     }
 
@@ -813,15 +813,25 @@ public:
     getSema().EndOpenMPDSABlock(Res.get());
     EnclosingCompoundStmt.finalize(Res);
     if (!Res.isInvalid())
-      D->setOMPNode(Res.get());
+      D->setOMPNode(Res.get(), /*OMPDirectiveCount=*/1);
     return Res;
   }
 
   StmtResult TransformACCParallelLoopDirective(ACCParallelLoopDirective *D) {
-    StmtResult Res = TransformACCParallelDirective(
-        cast<ACCParallelDirective>(D->getEffectiveDirective()));
-    if (!Res.isInvalid())
-      D->setOMPNode(Res.get());
+    Stmt *Effective = D->getEffectiveDirective();
+    StmtResult Res =
+        TransformACCParallelDirective(cast<ACCParallelDirective>(Effective));
+    if (Res.isInvalid())
+      return Res;
+    int OMPDirectiveCount = 0;
+    for (int I = 0, E = getOpenACCEffectiveDirectives(D->getDirectiveKind());
+         I < E; ++I) {
+      ACCDirectiveStmt *ACCEffective = cast<ACCDirectiveStmt>(Effective);
+      OMPDirectiveCount += ACCEffective->getOMPDirectiveCount();
+      Effective = ACCEffective->getAssociatedStmt();
+      assert(Effective && "expected more effective directives");
+    }
+    D->setOMPNode(Res.get(), OMPDirectiveCount);
     return Res;
   }
 

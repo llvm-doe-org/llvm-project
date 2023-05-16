@@ -2708,7 +2708,7 @@ void ASTStmtWriter::VisitACCDirectiveStmt(ACCDirectiveStmt *E) {
   Record.AddStmt(E->getEffectiveDirective());
   if (E->hasOMPNode()) {
     Record.AddStmt(E->getOMPNode());
-    Record.push_back(E->directiveDiscardedForOMP());
+    Record.push_back(E->getOMPDirectiveCount());
   }
   else
     Record.AddStmt(nullptr);

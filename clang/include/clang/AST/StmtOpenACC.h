@@ -50,9 +50,14 @@ class ACCDirectiveStmt : public DirectiveStmt {
   /// followed by NumChildren pointers to child stmts/exprs (if the directive
   /// type requires an associated stmt, then it has to be the first of them).
   const unsigned ClausesOffset;
-  ACCDirectiveStmt *EffectiveDirective = nullptr;
+  /// The outermost effective directive.  \c nullptr if not yet set or this is
+  /// a non-combined directive.
+  ACCDirectiveStmt *EffectiveDirective;
+  /// The root node of the OpenMP translation.  \c nullptr if not yet set.
   Stmt *OMPNode;
-  bool DirectiveDiscardedForOMP;
+  /// The number of OpenMP directives to which the OpenACC directive was
+  /// translated.  0 if none or not yet set.
+  unsigned OMPDirectiveCount;
 
   /// Get the full storage for the clauses.
   MutableArrayRef<ACCClause *> getClauseStorage() {
@@ -99,7 +104,7 @@ protected:
         EndLoc(std::move(EndLoc)), NumClauses(NumClauses),
         MaxAddClauses(MaxAddClauses), NumChildren(NumChildren),
         ClausesOffset(llvm::alignTo(sizeof(T), alignof(ACCClause *))),
-        OMPNode(nullptr), DirectiveDiscardedForOMP(false) {}
+        EffectiveDirective(nullptr), OMPNode(nullptr), OMPDirectiveCount(0) {}
 
   /// Sets the list of clauses for this directive.
   ///
@@ -140,23 +145,31 @@ public:
            S->getStmtClass() <= lastACCDirectiveStmtConstant;
   }
 
-  /// Set the statement to which this directive has been translated for OpenMP.
-  /// In most cases, it's an OpenMP directive.  In some cases, it's a compound
-  /// statement that contains an OpenMP directive.  If the OpenACC directive
-  /// was discarded rather than translated to an OpenMP directive,
-  /// \p DirectiveDiscardedForOMP must be true.  Fails an assertion if
-  /// \c hasOMPNode (and possibly \c directiveDiscardedForOMP) already returns
-  /// true.
-  void setOMPNode(Stmt *OMPNode, bool DirectiveDiscardedForOMP = false) {
-    assert(!hasOMPNode() && !directiveDiscardedForOMP() &&
-           "expected not to have OpenMP translation already");
+  /// Set \p OMPNode, which must not be \c nullptr, as the root node of the
+  /// OpenMP translation of this OpenACC directive.  In most cases, it's an
+  /// OpenMP directive.  In some cases, it's a compound statement that might or
+  /// might not contain an OpenMP directive.
+  ///
+  /// \p OMPDirectiveCount must be the number of OpenMP directives to which this
+  /// OpenACC directive was translated, and each such OpenMP directive must
+  /// appear in the subtree rooted at \p OMPNode.  \p OMPDirectiveCount must not
+  /// include OpenMP directives appearing in the translation of this OpenACC
+  /// directive's associated statement.  If this OpenACC directive was discarded
+  /// rather than translated to any OpenMP directive, then \p OMPDirectiveCount
+  /// must be zero.  If this OpenACC directive is a combined OpenACC directive,
+  /// then \p OMPDirectiveCount must be the sum of the \p OMPDirectiveCount
+  /// values for its effective OpenACC directives.
+  ///
+  /// Fails an assertion if \c setOMPNode has already been called for this
+  /// OpenACC directive.
+  void setOMPNode(Stmt *OMPNode, unsigned OMPDirectiveCount = 1) {
+    assert(!hasOMPNode() && "expected not to have OpenMP translation already");
     assert(OMPNode != nullptr && "expected OMPNode");
-    assert(
-        (!DirectiveDiscardedForOMP || !isa<OMPExecutableDirective>(OMPNode)) &&
-        "expected OMPNode not to be an OpenMP directive when translation "
-        "discards directive");
+    assert((OMPDirectiveCount > 0 || !isa<OMPExecutableDirective>(OMPNode)) &&
+           "expected OMPNode not to be an OpenMP directive when translation "
+           "discards directive");
     this->OMPNode = OMPNode;
-    this->DirectiveDiscardedForOMP = DirectiveDiscardedForOMP;
+    this->OMPDirectiveCount = OMPDirectiveCount;
   }
 
   /// Has this directive been translated to an OpenMP directive?  If false, then
@@ -171,35 +184,54 @@ public:
     return OMPNode;
   }
 
+  /// The number of OpenMP directives to which this directive was translated.
+  /// Fails an assertion if \c hasOMPNode returns false.
+  unsigned getOMPDirectiveCount() const {
+    assert(hasOMPNode() && "expected to have OpenMP translation already");
+    return OMPDirectiveCount;
+  }
+
   /// Was the OpenACC directive discarded rather than translated to an OpenMP
-  /// directive?
-  bool directiveDiscardedForOMP() const { return DirectiveDiscardedForOMP; }
+  /// directive?  Fails an assertion if \c hasOMPNode returns false.
+  bool directiveDiscardedForOMP() const {
+    assert(hasOMPNode() && "expected to have OpenMP translation already");
+    return OMPDirectiveCount == 0;
+  }
 
   // Are the OpenACC and OpenMP versions of an OpenACC construct different
-  // enough that, when printing both versions, the associated statements must
-  // be printed separately?
+  // enough that, when printing both versions, it is not as simple as printing
+  // the associated statement once (possibly containing multiple versions of
+  // nested OpenACC constructs) preceded by both the OpenACC and OpenMP
+  // directives (one within comments)?
   //
-  // For example, StmtPrinter prints both versions (one within comments) when
-  // Policy.OpenACCPrint is OpenACCPrint_ACC_OMP or OpenACCPrint_OMP_ACC.  When
-  // the result of ompStmtPrintsDifferently is true, StmtPrinter must print the
-  // OpenACC directive plus its associated statement completely separately (one
-  // within comments) from the OpenMP directive plus its associated statement.
-  // When the result is false, StmtPrinter prints the OpenACC directive
-  // separately (one within comments) from the OpenMP directive but prints the
-  // associated statement once afterward.
+  // For example, StmtPrinter and RewriteOpenACC print both versions (one within
+  // comments) when Policy.OpenACCPrint is OpenACCPrint_ACC_OMP or
+  // OpenACCPrint_OMP_ACC.  When the result of ompStmtPrintsDifferently is true,
+  // StmtPrinter/RewriteOpenACC must print the OpenACC directive plus its
+  // associated statement completely separately (one within comments) from the
+  // corresponding OpenMP directives and their associated statement.  When the
+  // result is false, StmtPrinter/RewriteOpenACC can usually print the OpenACC
+  // directive separately from the OpenMP directives (one within comments) and
+  // print the associated statement once afterward.  RewriteOpenACC also calls
+  // ompStmtPrintsDifferently when Policy.OpenACCPrint is OpenACCPrint_OMP.
+  // When the result is true, RewriteOpenACC rewrites the OpenACC construct
+  // entirely.  When the result is false, RewriteOpenACC rewrites only the
+  // OpenACC directive and then any descendant OpenACC constructs as needed.
   //
   // ompStmtPrintsDifferently makes its determination by checking whether all
   // portions of the associated statements except nested OpenACC regions are
-  // identical when printed.  The reason it doesn't check nested OpenACC
-  // regions is that they can be split if necessary within this region (it
-  // checks them for the need to split when its reaches them while printing
-  // this region).  A degenerate case is when there is no associated statement
-  // at all (standalone directive), and then it returns false because there's
-  // nothing to split. Another special case is when the OpenMP version is not
-  // an OpenMP directive (OpenACC directive was dropped but perhaps some new
-  // code was inserted into a new compound statement enclosing the possibly
-  // transformed associated statement), and then it just compares the entire
-  // OpenMP version with the OpenACC version's associated statement.
+  // identical when printed.  The reason it doesn't check nested OpenACC regions
+  // is that they can be split if necessary within this region (the need to
+  // split them is checked by calling ompStmtPrintsDifferently when
+  // printing/rewriting later reaches them).  A degenerate case is when
+  // there is no associated statement at all (standalone directive), and then it
+  // returns false because there's nothing to split.  Another special case is
+  // when the corresponding OpenMP directives are not consecutive, and then it
+  // returns true because there's interleaving code that must be printed only in
+  // the OpenMP version.  Another special case is when the OpenMP version
+  // contains no OpenMP directives, and then it compares the entire OpenMP
+  // version with the OpenACC version's associated statement to see if the
+  // translation modified the latter.
   //
   // \param Policy The base printing policy to use for comparisons.
   // \param Context AST context.

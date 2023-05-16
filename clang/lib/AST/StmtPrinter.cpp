@@ -146,13 +146,13 @@ namespace {
     void PrintRawSEHFinallyStmt(SEHFinallyStmt *S);
     void PrintOMPExecutableDirective(OMPExecutableDirective *S,
                                      bool ForceNoStmt = false);
-    /// Within comments if \p Com, print at most \p EffectiveDirectives
+    /// Within comments if \p Com, print at most \p OMPDirectiveCount
     /// consecutive OpenMP directives found by traversing downward from \p S.
     /// Align them all at the current indentation level so that, when used for
     /// OpenACC source-to-source mode, the printed OpenMP has the style of
     /// consecutive directives usually seen in the input source.
     void PrintOMPExecutableDirectiveHead(Stmt *S, bool Com,
-                                         unsigned EffectiveDirectives);
+                                         unsigned OMPDirectiveCount);
     void PrintACCDirectiveStmtHead(ACCDirectiveStmt *S, bool ComACC,
                                    bool ComDirectiveDiscardedForOMP);
     void PrintACCDirectiveStmtBody(ACCDirectiveStmt *S);
@@ -1427,9 +1427,9 @@ void ACCClausePrinter::VisitACCCompareClause(ACCCompareClause *Node) {
 //  OpenACC directives printing methods
 //===----------------------------------------------------------------------===//
 
-void StmtPrinter::PrintOMPExecutableDirectiveHead(
-    Stmt *S, bool Com, unsigned EffectiveDirectives) {
-  if (EffectiveDirectives == 0)
+void StmtPrinter::PrintOMPExecutableDirectiveHead(Stmt *S, bool Com,
+                                                  unsigned OMPDirectiveCount) {
+  if (OMPDirectiveCount == 0)
     return;
   OMPExecutableDirective *OMPDir = dyn_cast<OMPExecutableDirective>(S);
   if (!OMPDir)
@@ -1457,7 +1457,7 @@ void StmtPrinter::PrintOMPExecutableDirectiveHead(
   Stmt *AssociatedStmt = OMPDir->getAssociatedStmt();
   if (isa<CapturedStmt>(AssociatedStmt))
     AssociatedStmt = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
-  PrintOMPExecutableDirectiveHead(AssociatedStmt, Com, EffectiveDirectives - 1);
+  PrintOMPExecutableDirectiveHead(AssociatedStmt, Com, OMPDirectiveCount - 1);
 }
 
 void StmtPrinter::PrintACCDirectiveStmtHead(ACCDirectiveStmt *S, bool ComACC,
@@ -1497,8 +1497,6 @@ void StmtPrinter::PrintACCDirectiveStmt(ACCDirectiveStmt *S) {
          "ACCDirectiveStmt and its OMP node must either both or neither have "
          "an associated statement");
 #endif
-  unsigned EffectiveDirectives =
-      getOpenACCEffectiveDirectives(S->getDirectiveKind());
   switch (Policy.OpenACCPrint) {
   case OpenACCPrint_ACC:
     PrintACCDirectiveStmtHead(S, false, false);
@@ -1524,7 +1522,7 @@ void StmtPrinter::PrintACCDirectiveStmt(ACCDirectiveStmt *S) {
     } else {
       PrintACCDirectiveStmtHead(S, false, true);
       PrintOMPExecutableDirectiveHead(S->getOMPNode(), /*Com=*/true,
-                                      EffectiveDirectives);
+                                      S->getOMPDirectiveCount());
       PrintACCDirectiveStmtBody(S);
     }
     break;
@@ -1543,7 +1541,7 @@ void StmtPrinter::PrintACCDirectiveStmt(ACCDirectiveStmt *S) {
       Indent() << "// ^----------ACC----------^\n";
     } else {
       PrintOMPExecutableDirectiveHead(S->getOMPNode(), /*Com=*/false,
-                                      EffectiveDirectives);
+                                      S->getOMPDirectiveCount());
       PrintACCDirectiveStmtHead(S, true, true);
       PrintACCDirectiveStmtBody(S);
     }
@@ -1551,7 +1549,7 @@ void StmtPrinter::PrintACCDirectiveStmt(ACCDirectiveStmt *S) {
   }
   case OpenACCPrint_OMP_HEAD:
     PrintOMPExecutableDirectiveHead(S->getOMPNode(), /*Com=*/false,
-                                    EffectiveDirectives);
+                                    S->getOMPDirectiveCount());
     break;
   }
 }

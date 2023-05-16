@@ -2740,8 +2740,8 @@ void ASTStmtReader::VisitACCDirectiveStmt(ACCDirectiveStmt *E) {
   if (EffectiveDirective)
     E->setEffectiveDirective(cast<ACCDirectiveStmt>(EffectiveDirective));
   Stmt *OMPNode = Record.readSubStmt();
-  bool DirectiveDiscardedForOMP = OMPNode && Record.readInt();
-  E->setOMPNode(OMPNode, DirectiveDiscardedForOMP);
+  unsigned OMPDirectiveCount = OMPNode ? Record.readUInt32() : 0;
+  E->setOMPNode(OMPNode, OMPDirectiveCount);
 }
 
 void ASTStmtReader::VisitACCUpdateDirective(ACCUpdateDirective *D) {

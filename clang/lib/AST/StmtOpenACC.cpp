@@ -57,23 +57,26 @@ bool ACCDirectiveStmt::ompStmtPrintsDifferently(const PrintingPolicy &Policy,
     return false;
   // Get the OpenACC directive's associated statement.  If that's also an
   // OpenACC directive, get its OpenMP translation so we can compare by node
-  // address and potentially avoid wasting time printing.
+  // address and potentially avoid wasting time printing and comparing.
   Stmt *ACCStmt = getAssociatedStmt();
   if (auto *ACCDir = dyn_cast<ACCDirectiveStmt>(ACCStmt)) {
     if (ACCDir->hasOMPNode())
       ACCStmt = ACCDir->getOMPNode();
   }
   // Find the corresponding associated statement on the OpenMP side by
-  // traversing all associated OpenMP directives in the translation.
+  // traversing all of the OpenACC directive's corresponding OpenMP directives.
+  // If those OpenMP directives are not consecutive, then there is intervening
+  // code in the OpenMP version, so return true.
   Stmt *OMPStmt = getOMPNode();
-  for (int i = 0, e = getOpenACCEffectiveDirectives(getDirectiveKind());
-       i < e; ++i) {
-    if (auto *OMPDir = dyn_cast<OMPExecutableDirective>(OMPStmt)) {
-      OMPStmt = OMPDir->getAssociatedStmt();
-      if (isa<CapturedStmt>(OMPStmt))
-        OMPStmt = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
-    }
+  for (int I = 0, E = getOMPDirectiveCount(); I < E; ++I) {
+    OMPExecutableDirective *OMPDir = dyn_cast<OMPExecutableDirective>(OMPStmt);
+    if (!OMPDir)
+      return true;
+    OMPStmt = OMPDir->getAssociatedStmt();
+    if (isa<CapturedStmt>(OMPStmt))
+      OMPStmt = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
   }
+  // Skip printing and comparing if possible.
   if (ACCStmt == OMPStmt)
     return false;
   PrintingPolicy PolicyOMP = Policy;
