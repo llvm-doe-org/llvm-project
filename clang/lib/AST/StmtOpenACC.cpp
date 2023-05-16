@@ -55,18 +55,16 @@ bool ACCDirectiveStmt::ompStmtPrintsDifferently(const PrintingPolicy &Policy,
                                                 const ASTContext *Context) {
   if (!hasAssociatedStmt())
     return false;
+  // Get the OpenACC directive's associated statement.  If that's also an
+  // OpenACC directive, get its OpenMP translation so we can compare by node
+  // address and potentially avoid wasting time printing.
   Stmt *ACCStmt = getAssociatedStmt();
-  // If the associated statement is an OpenACC node, print its OpenMP node
-  // directly instead of printing it via the OpenACC node.  This matters in the
-  // case of a combined OpenACC construct, for which indentation of the OpenMP
-  // translations of the effective OpenACC directives is aligned when printing
-  // via the OpenACC node but progressively indented when printing the OpenMP
-  // nodes directly.  A difference in indentation is not a good reason to
-  // return true.
   if (auto *ACCDir = dyn_cast<ACCDirectiveStmt>(ACCStmt)) {
     if (ACCDir->hasOMPNode())
       ACCStmt = ACCDir->getOMPNode();
   }
+  // Find the corresponding associated statement on the OpenMP side by
+  // traversing all associated OpenMP directives in the translation.
   Stmt *OMPStmt = getOMPNode();
   for (int i = 0, e = getOpenACCEffectiveDirectives(getDirectiveKind());
        i < e; ++i) {
@@ -79,6 +77,12 @@ bool ACCDirectiveStmt::ompStmtPrintsDifferently(const PrintingPolicy &Policy,
   if (ACCStmt == OMPStmt)
     return false;
   PrintingPolicy PolicyOMP = Policy;
+  // A difference in where indentation is added is not a good reason to return
+  // true, so suppress all indentation to avoid such differences.  For example,
+  // at least at one time, in the case of a combined OpenACC construct, the
+  // indentation of OpenMP directives was aligned when printing via the OpenACC
+  // node but progressively indented when printing the OpenMP nodes directly.
+  PolicyOMP.Indentation = 0;
   PolicyOMP.OpenACCPrint = OpenACCPrint_OMP;
   std::string ACCStr, OMPStr;
   llvm::raw_string_ostream ACCStrStr(ACCStr), OMPStrStr(OMPStr);

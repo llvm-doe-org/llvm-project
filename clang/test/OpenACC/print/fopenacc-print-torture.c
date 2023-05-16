@@ -87,6 +87,7 @@ void dirOnlyRewriteNotNested() {
       // PRT-NEXT:      ;
       ;
 
+  //............................................................................
   // Directive appears to end in macro expansion, but Clang doesn't record
   // #pragma end locations that way, so rewrite succeeds.
 
@@ -102,6 +103,7 @@ void dirOnlyRewriteNotNested() {
   ;
   #undef MAC
 
+  //............................................................................
   // Associated statement end is in macro expansion, but only directive needs
   // to be rewritten, so rewrite succeeds.
 
@@ -175,33 +177,57 @@ void dirOnlyRewriteNested() {
       // PRT-NEXT:      ;
       ;
 
-  // The following case is special in that an OpenACC construct has an
-  // associated statement that is a combined OpenACC construct.  The issue is
+  //............................................................................
+  // The following cases are special in that an OpenACC construct has an
+  // associated statement containing a combined OpenACC construct.  The issue is
   // that, for the combined OpenACC construct, the indentation of the OpenMP
   // translations of the effective OpenACC directives is aligned when printing
   // via the OpenACC node but progressively indented when printing the OpenMP
   // nodes directly.  Thus, when Clang checks to see if the original associated
-  // statement is identical to its OpenMP translatation in order to decide
-  // whether it should print them separately for acc-omp or omp-acc mode, it
-  // cannot simply print them both as OpenMP and compare the results or they
-  // will look different due merely to indentation.
+  // statement is identical to its OpenMP translation in order to decide whether
+  // it should print them separately for acc-omp or omp-acc mode, it cannot
+  // simply print them both as OpenMP and compare the results or they will look
+  // different due merely to indentation.
 
+  // The combined construct is the immediate child.
   //  PRT-A-NEXT:  #pragma acc data copy(i)
   // PRT-AO-NEXT:  // #pragma omp target data map(ompx_hold,tofrom: i)
   //  PRT-O-NEXT:  #pragma omp target data map(ompx_hold,tofrom: i)
   // PRT-OA-NEXT:  // #pragma acc data copy(i)
-  #pragma acc data copy(i)
   //  PRT-A-NEXT:  #pragma acc parallel loop gang
   // PRT-AO-NEXT:  // #pragma omp target teams
   // PRT-AO-NEXT:  // #pragma omp distribute
   //  PRT-O-NEXT:  #pragma omp target teams
   //  PRT-O-NEXT:  #pragma omp distribute
   // PRT-OA-NEXT:  // #pragma acc parallel loop gang
+  //    PRT-NEXT:  for (int i = 0; i < 5; ++i)
+  //    PRT-NEXT:    ;
+  #pragma acc data copy(i)
   #pragma acc parallel loop gang
-  // PRT-NEXT:  for (int i = 0; i < 5; ++i)
   for (int i = 0; i < 5; ++i)
-    // PRT-NEXT:    ;
     ;
+
+  // The combined construct is not the immediate child.
+  //  PRT-A-NEXT:  #pragma acc data copy(i)
+  // PRT-AO-NEXT:  // #pragma omp target data map(ompx_hold,tofrom: i)
+  //  PRT-O-NEXT:  #pragma omp target data map(ompx_hold,tofrom: i)
+  // PRT-OA-NEXT:  // #pragma acc data copy(i)
+  //    PRT-NEXT:  {
+  //  PRT-A-NEXT:    #pragma acc parallel loop gang
+  // PRT-AO-NEXT:    // #pragma omp target teams
+  // PRT-AO-NEXT:    // #pragma omp distribute
+  //  PRT-O-NEXT:    #pragma omp target teams
+  //  PRT-O-NEXT:    #pragma omp distribute
+  // PRT-OA-NEXT:    // #pragma acc parallel loop gang
+  //    PRT-NEXT:    for (int i = 0; i < 5; ++i)
+  //    PRT-NEXT:      ;
+  //    PRT-NEXT:  }
+  #pragma acc data copy(i)
+  {
+    #pragma acc parallel loop gang
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
 }// PRT-NEXT:}
 
 //------------------------------------------------------------------------------
@@ -270,6 +296,7 @@ void dirOnlyRewriteDirDiscard_routine_user() {
 
 // PRT-NEXT:void fullRewriteOuterDirOnly() {
 void fullRewriteOuterDirOnly() {
+  //............................................................................
   // Null statement: There are no descendants, and the end location is from the
   // final semicolon.
 
@@ -342,6 +369,7 @@ void fullRewriteOuterDirOnly() {
     ;
   #undef MAC
 
+  //............................................................................
   // Compound statement: The end location is from the closing brace, which is
   // not a descendant.
 
@@ -431,6 +459,7 @@ void fullRewriteOuterDirOnly() {
     var = non_const_expr;
   }
 
+  //............................................................................
   // Expression statement: The end location is from the token before the
   // semicolon, and only the preceding token might be a descendant.
 
@@ -938,6 +967,7 @@ MAC2}
 
 // PRT-NEXT:void fullRewriteInnerDirOnly() {
 void fullRewriteInnerDirOnly() {
+  //............................................................................
   // Null statement: There are no descendants, and the end location is from the
   // final semicolon.
 
@@ -1021,6 +1051,7 @@ void fullRewriteInnerDirOnly() {
       ;
   }
 
+  //............................................................................
   // Compound statement: The end location is from the closing brace, which is
   // not a descendant.
 
@@ -1124,6 +1155,7 @@ void fullRewriteInnerDirOnly() {
     }
   }
 
+  //............................................................................
   // Expression statement: The end location is from the token before the
   // semicolon, and only the preceding token might be a descendant.
 
@@ -1289,6 +1321,65 @@ void fullRewriteInnerDirOnly() {
     #pragma acc loop vector
     for (i = 0; i < 5; ++i)
       printf("hello world\n");
+  }
+
+  //............................................................................
+  // Inner directive is a combined construct.
+  //
+  // The following case is special in that the inner OpenACC directive is a
+  // combined OpenACC construct.  The issue is that, for that combined OpenACC
+  // construct, the indentation of the OpenMP translations of the effective
+  // OpenACC directives is aligned when printing via the OpenACC node but
+  // progressively indented when printing the OpenMP nodes directly.  Thus, when
+  // Clang checks to see if the outer OpenACC directive's associated statement
+  // is identical to its OpenMP translation in order to decide whether it should
+  // print them separately for acc-omp or omp-acc mode, it cannot simply print
+  // them both as OpenMP and compare the results or they will look different due
+  // merely to indentation.
+
+  //    PRT-NEXT:  int x, i;
+  //
+  //  PRT-A-NEXT:  #pragma acc data copy(x)
+  // PRT-AO-NEXT:  // #pragma omp target data map(ompx_hold,tofrom: x)
+  //  PRT-A-NEXT:  {
+  // PRT-AO-NEXT:    // v----------ACC----------v
+  //  PRT-A-NEXT:    #pragma acc parallel loop vector private(i)
+  //  PRT-A-NEXT:    for (i = 0; i < 5; ++i)
+  //  PRT-A-NEXT:      ;
+  // PRT-AO-NEXT:    // ---------ACC->OMP--------
+  // PRT-AO-NEXT:    // #pragma omp target teams
+  // PRT-AO-NEXT:    // {
+  // PRT-AO-NEXT:    //     int i;
+  // PRT-AO-NEXT:    //     #pragma omp distribute simd
+  // PRT-AO-NEXT:    //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:    //             ;
+  // PRT-AO-NEXT:    // }
+  // PRT-AO-NEXT:    // ^----------OMP----------^
+  //  PRT-A-NEXT:  }
+  //
+  //  PRT-O-NEXT:  #pragma omp target data map(ompx_hold,tofrom: x)
+  // PRT-OA-NEXT:  // #pragma acc data copy(x)
+  //  PRT-O-NEXT:  {
+  // PRT-OA-NEXT:    // v----------OMP----------v
+  //  PRT-O-NEXT:    #pragma omp target teams
+  //  PRT-O-NEXT:    {
+  //  PRT-O-NEXT:        int i;
+  //  PRT-O-NEXT:        #pragma omp distribute simd
+  //  PRT-O-NEXT:            for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                ;
+  //  PRT-O-NEXT:    }
+  // PRT-OA-NEXT:    // ---------OMP<-ACC--------
+  // PRT-OA-NEXT:    // #pragma acc parallel loop vector private(i)
+  // PRT-OA-NEXT:    // for (i = 0; i < 5; ++i)
+  // PRT-OA-NEXT:    //   ;
+  // PRT-OA-NEXT:    // ^----------ACC----------^
+  //  PRT-O-NEXT:  }
+  int x, i;
+  #pragma acc data copy(x)
+  {
+    #pragma acc parallel loop vector private(i)
+    for (i = 0; i < 5; ++i)
+      ;
   }
 }// PRT-NEXT:}
 
@@ -1525,6 +1616,7 @@ void macroInClauses() {
   //    PRT-NEXT:    ;
     ;
 
+  //............................................................................
   // Macro is at end of directive and only directive is rewritten.
   // Fortunately, Clang's end location for a directive is after the last
   // clause, so the rewrite succeeds.
