@@ -146,11 +146,43 @@ namespace {
     void PrintRawSEHFinallyStmt(SEHFinallyStmt *S);
     void PrintOMPExecutableDirective(OMPExecutableDirective *S,
                                      bool ForceNoStmt = false);
+    /// Within comments if \p Com, print at most \p EffectiveDirectives
+    /// consecutive OpenMP directives found by traversing downward from \p S.
+    /// Print them all at the current indentation level so that, when used for
+    /// OpenACC source-to-source mode, the printed OpenMP has the style of
+    /// consecutive directives usually seen in the input source.  Decrement
+    /// \p EffectiveDirectives for each such directive printed.  Return the
+    /// remaining body, which is either (1) \p S if no such directives are
+    /// found, (2) the last printed OpenMP directive's associated statement
+    /// without any enclosing capture statements, or (3) \c nullptr if the last
+    /// printed OpenMP directive is a standalone statement or otherwise has no
+    /// associated statement.
     Stmt *PrintOMPExecutableDirectiveHead(Stmt *S, bool Com,
-                                          int EffectiveDirectives);
+                                          unsigned &EffectiveDirectives);
     void PrintACCDirectiveStmtHead(ACCDirectiveStmt *S, bool ComACC,
                                    bool ComDirectiveDiscardedForOMP);
-    void PrintOMPExecutableDirectiveBody(Stmt *S);
+    /// Print the OpenMP directive body, \p S, returned by
+    /// \c PrintOMPExecutableDirectiveHead.  \p LeftoverOMPDirectives must be:
+    /// - True if \c PrintOMPExecutableDirectiveHead left its
+    ///   \c EffectiveDirectives as non-zero.  Indentation is not incremented
+    ///   immediately for \p S (although indentation will be adjusted within
+    ///   \p S where usual for AST printing) because \p S is positioned where an
+    ///   OpenMP directive would normally be positioned that wouldn't be further
+    ///   indented (see \c PrintOMPExecutableDirectiveHead documentation).
+    ///   More importantly, \p S might be at the start of an OpenACC directive's
+    ///   translation (e.g., acc loop seq), where indentation might have already
+    ///   just been incremented, and we do not want it to be doubly incremented.
+    ///   If it's not at the start, \p S is likely the translation of an
+    ///   effective OpenACC directive (e.g., acc loop seq) from a combined
+    ///   OpenACC directive (e.g., acc parallel loop seq), and we want
+    ///   indentation to be consistent with the non-combined case (the acc loop
+    ///   seq translation is not further indented in either case).
+    /// - False otherwise.  Indentation will be incremented immediately for \p S
+    ///   because that is the normal style for a directive's associated
+    ///   statement in AST printing, even if \p S is another directive (which
+    ///   was necessarily not part of the same OpenACC directive's translation
+    ///   but only part of its associated statement's translation).
+    void PrintOMPExecutableDirectiveBody(Stmt *S, bool LeftoverOMPDirectives);
     void PrintACCDirectiveStmtBody(ACCDirectiveStmt *S);
     void PrintACCDirectiveStmt(ACCDirectiveStmt *S);
     void PrintFPPragmas(CompoundStmt *S);
@@ -1423,9 +1455,11 @@ void ACCClausePrinter::VisitACCCompareClause(ACCCompareClause *Node) {
 //  OpenACC directives printing methods
 //===----------------------------------------------------------------------===//
 
-Stmt *StmtPrinter::PrintOMPExecutableDirectiveHead(Stmt *S, bool Com,
-                                                   int EffectiveDirectives) {
-  assert(EffectiveDirectives && "expected at least one effective directive");
+Stmt *
+StmtPrinter::PrintOMPExecutableDirectiveHead(Stmt *S, bool Com,
+                                             unsigned &EffectiveDirectives) {
+  if (EffectiveDirectives == 0)
+    return S;
   OMPExecutableDirective *OMPDir = dyn_cast<OMPExecutableDirective>(S);
   if (!OMPDir)
     return S;
@@ -1440,11 +1474,21 @@ Stmt *StmtPrinter::PrintOMPExecutableDirectiveHead(Stmt *S, bool Com,
       Printer.Visit(*I);
     }
   OS << NL;
-  if (EffectiveDirectives == 1)
-    return OMPDir;
-  return PrintOMPExecutableDirectiveHead(
-      OMPDir->getInnermostCapturedStmt()->getCapturedStmt(), Com,
-      EffectiveDirectives - 1);
+  // An OpenMP standalone directive, such as "omp target update" can have a
+  // CapturedStmt as an associated statement, and that prints as an empty
+  // compound statement.  However, the printed source code shouldn't show that,
+  // so skip printing it here.  (Similarly, standalone directive visit
+  // functions, such as StmtPrinter::VisitOMPTargetUpdateDirective suppress
+  // printing of the associated statement by specifying ForceNoStmt=true when
+  // calling PrintOMPExecutableDirective.)
+  if (OMPDir->isStandaloneDirective() || !OMPDir->hasAssociatedStmt())
+    return nullptr;
+  Stmt *AssociatedStmt = OMPDir->getAssociatedStmt();
+  if (isa<CapturedStmt>(AssociatedStmt))
+    AssociatedStmt = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
+  --EffectiveDirectives;
+  return PrintOMPExecutableDirectiveHead(AssociatedStmt, Com,
+                                         EffectiveDirectives);
 }
 
 void StmtPrinter::PrintACCDirectiveStmtHead(ACCDirectiveStmt *S, bool ComACC,
@@ -1464,25 +1508,14 @@ void StmtPrinter::PrintACCDirectiveStmtHead(ACCDirectiveStmt *S, bool ComACC,
   OS << NL;
 }
 
-void StmtPrinter::PrintOMPExecutableDirectiveBody(Stmt *S) {
-  auto OMPDir = dyn_cast<OMPExecutableDirective>(S);
-  if (!OMPDir) {
-    PrintStmt(S, 0);
+void StmtPrinter::PrintOMPExecutableDirectiveBody(Stmt *S,
+                                                  bool LeftoverOMPDirectives) {
+  if (!S)
     return;
-  }
-  // An OpenMP standalone directive, such as "omp target update" can have a
-  // CapturedStmt as an associated statement, and that prints as an empty
-  // compound statement.  However, the printed source code shouldn't show that,
-  // so skip printing it here.  (Similarly, standalone directive visit
-  // functions, such as StmtPrinter::VisitOMPTargetUpdateDirective suppress
-  // printing of the associated statement by specifying ForceNoStmt=true when
-  // calling PrintOMPExecutableDirective.)
-  if (OMPDir->hasAssociatedStmt() && !OMPDir->isStandaloneDirective()) {
-    Stmt *OMPStmt = OMPDir->getAssociatedStmt();
-    if (isa<CapturedStmt>(OMPStmt))
-      OMPStmt = OMPDir->getInnermostCapturedStmt()->getCapturedStmt();
-    PrintStmt(OMPStmt);
-  }
+  if (LeftoverOMPDirectives)
+    PrintStmt(S, 0);
+  else
+    PrintStmt(S);
 }
 
 void StmtPrinter::PrintACCDirectiveStmtBody(ACCDirectiveStmt *S) {
@@ -1505,7 +1538,7 @@ void StmtPrinter::PrintACCDirectiveStmt(ACCDirectiveStmt *S) {
          "ACCDirectiveStmt and its OMP node must either both or neither have "
          "an associated statement");
 #endif
-  int EffectiveDirectives =
+  unsigned EffectiveDirectives =
       getOpenACCEffectiveDirectives(S->getDirectiveKind());
   switch (Policy.OpenACCPrint) {
   case OpenACCPrint_ACC:
@@ -1513,9 +1546,9 @@ void StmtPrinter::PrintACCDirectiveStmt(ACCDirectiveStmt *S) {
     PrintACCDirectiveStmtBody(S);
     break;
   case OpenACCPrint_OMP: {
-    Stmt *OMPInnerDir = PrintOMPExecutableDirectiveHead(S->getOMPNode(), false,
-                                                        EffectiveDirectives);
-    PrintOMPExecutableDirectiveBody(OMPInnerDir);
+    Stmt *OMPInnerDir = PrintOMPExecutableDirectiveHead(
+        S->getOMPNode(), /*Com=*/false, EffectiveDirectives);
+    PrintOMPExecutableDirectiveBody(OMPInnerDir, EffectiveDirectives);
     break;
   }
   case OpenACCPrint_ACC_OMP:
@@ -1531,13 +1564,14 @@ void StmtPrinter::PrintACCDirectiveStmt(ACCDirectiveStmt *S) {
                                              true);
       StmtPrinter ComPrinter(ComStream, Helper, Policy, 0, NL, Context);
       Stmt *OMPInnerDir = ComPrinter.PrintOMPExecutableDirectiveHead(
-          S->getOMPNode(), false, EffectiveDirectives);
-      ComPrinter.PrintOMPExecutableDirectiveBody(OMPInnerDir);
+          S->getOMPNode(), /*Com=*/false, EffectiveDirectives);
+      ComPrinter.PrintOMPExecutableDirectiveBody(OMPInnerDir,
+                                                 EffectiveDirectives);
       Indent() << "// ^----------OMP----------^\n";
     }
     else {
       PrintACCDirectiveStmtHead(S, false, true);
-      PrintOMPExecutableDirectiveHead(S->getOMPNode(), true,
+      PrintOMPExecutableDirectiveHead(S->getOMPNode(), /*Com=*/true,
                                       EffectiveDirectives);
       PrintACCDirectiveStmtBody(S);
     }
@@ -1546,8 +1580,8 @@ void StmtPrinter::PrintACCDirectiveStmt(ACCDirectiveStmt *S) {
     if (S->ompStmtPrintsDifferently(Policy, Context)) {
       Indent() << "// v----------OMP----------v\n";
       Stmt *OMPInnerDir = PrintOMPExecutableDirectiveHead(
-          S->getOMPNode(), false, EffectiveDirectives);
-      PrintOMPExecutableDirectiveBody(OMPInnerDir);
+          S->getOMPNode(), /*Com=*/false, EffectiveDirectives);
+      PrintOMPExecutableDirectiveBody(OMPInnerDir, EffectiveDirectives);
       Indent() << "// ---------OMP<-ACC--------\n";
       clang::commented_raw_ostream ComStream(OS, IndentLevel*2, false, 1,
                                              true);
@@ -1559,7 +1593,7 @@ void StmtPrinter::PrintACCDirectiveStmt(ACCDirectiveStmt *S) {
       Indent() << "// ^----------ACC----------^\n";
     }
     else {
-      PrintOMPExecutableDirectiveHead(S->getOMPNode(), false,
+      PrintOMPExecutableDirectiveHead(S->getOMPNode(), /*Com=*/false,
                                       EffectiveDirectives);
       PrintACCDirectiveStmtHead(S, true, true);
       PrintACCDirectiveStmtBody(S);
@@ -1567,7 +1601,7 @@ void StmtPrinter::PrintACCDirectiveStmt(ACCDirectiveStmt *S) {
     break;
   }
   case OpenACCPrint_OMP_HEAD:
-    PrintOMPExecutableDirectiveHead(S->getOMPNode(), false,
+    PrintOMPExecutableDirectiveHead(S->getOMPNode(), /*Com=*/false,
                                     EffectiveDirectives);
     break;
   }
