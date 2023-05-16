@@ -181,13 +181,15 @@ void dirOnlyRewriteNested() {
   // The following cases are special in that an OpenACC construct has an
   // associated statement containing a combined OpenACC construct.  The issue is
   // that, for the combined OpenACC construct, the indentation of the OpenMP
-  // translations of the effective OpenACC directives is aligned when printing
-  // via the OpenACC node but progressively indented when printing the OpenMP
-  // nodes directly.  Thus, when Clang checks to see if the original associated
-  // statement is identical to its OpenMP translation in order to decide whether
-  // it should print them separately for acc-omp or omp-acc mode, it cannot
-  // simply print them both as OpenMP and compare the results or they will look
-  // different due merely to indentation.
+  // translations of the effective OpenACC directives used to be aligned when
+  // printing via the OpenACC node but progressively indented when printing the
+  // OpenMP nodes directly.  Thus, when Clang checked to see if the original
+  // associated statement was identical to its OpenMP translation in order to
+  // decide whether it should print them separately for acc-omp or omp-acc mode,
+  // it could not simply print them both as OpenMP and compare the results or
+  // they would look different due merely to indentation.  While the indentation
+  // style in each case might evolve over time and eliminate this issue, we keep
+  // the test to avoid regression.
 
   // The combined construct is the immediate child.
   //  PRT-A-NEXT:  #pragma acc data copy(i)
@@ -341,22 +343,22 @@ void fullRewriteOuterDirOnly() {
   //  PRT-A-NEXT:    ;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp distribute simd
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             ;
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
+  // PRT-AO-NEXT:  //             for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //                 ;
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp distribute simd
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              ;
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          #pragma omp distribute simd
+  //  PRT-O-NEXT:              for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                  ;
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // MAC
@@ -426,26 +428,26 @@ void fullRewriteOuterDirOnly() {
   //  PRT-A-NEXT:  }
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp distribute simd
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i) {
-  // PRT-AO-NEXT:  //             var = 5;
-  // PRT-AO-NEXT:  //             var = non_const_expr;
-  // PRT-AO-NEXT:  //         }
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
+  // PRT-AO-NEXT:  //             for (i = 0; i < 5; ++i) {
+  // PRT-AO-NEXT:  //                 var = 5;
+  // PRT-AO-NEXT:  //                 var = non_const_expr;
+  // PRT-AO-NEXT:  //             }
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr)
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp distribute simd
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i) {
-  //  PRT-O-NEXT:              var = 5;
-  //  PRT-O-NEXT:              var = non_const_expr;
-  //  PRT-O-NEXT:          }
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          #pragma omp distribute simd
+  //  PRT-O-NEXT:              for (i = 0; i < 5; ++i) {
+  //  PRT-O-NEXT:                  var = 5;
+  //  PRT-O-NEXT:                  var = non_const_expr;
+  //  PRT-O-NEXT:              }
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i) {
@@ -506,22 +508,22 @@ void fullRewriteOuterDirOnly() {
   //  PRT-A-NEXT:    var = MAC ;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp distribute simd
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             var = non_const_expr;
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
+  // PRT-AO-NEXT:  //             for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //                 var = non_const_expr;
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr)
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp distribute simd
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              var = non_const_expr;
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          #pragma omp distribute simd
+  //  PRT-O-NEXT:              for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                  var = non_const_expr;
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
@@ -581,22 +583,22 @@ void fullRewriteOuterDirOnly() {
   //  PRT-A-NEXT:    MAC("hello world\n");
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp distribute simd
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             printf("hello world\n");
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
+  // PRT-AO-NEXT:  //             for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //                 printf("hello world\n");
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp distribute simd
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              printf("hello world\n");
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          #pragma omp distribute simd
+  //  PRT-O-NEXT:              for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                  printf("hello world\n");
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
@@ -616,22 +618,22 @@ void fullRewriteOuterDirOnly() {
   //  PRT-A-NEXT:    var = _Generic(var, int : 0, default : 1);
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp distribute simd
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             var = _Generic(var, int: 0, default: 1);
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
+  // PRT-AO-NEXT:  //             for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //                 var = _Generic(var, int: 0, default: 1);
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp distribute simd
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              var = _Generic(var, int: 0, default: 1);
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          #pragma omp distribute simd
+  //  PRT-O-NEXT:              for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                  var = _Generic(var, int: 0, default: 1);
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
@@ -648,22 +650,22 @@ void fullRewriteOuterDirOnly() {
   //  PRT-A-NEXT:    ptr = (int[]){0,1};
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(ptr)
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp distribute simd
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             ptr = (int[2]){0, 1};
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
+  // PRT-AO-NEXT:  //             for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //                 ptr = (int[2]){0, 1};
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(ptr)
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp distribute simd
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              ptr = (int[2]){0, 1};
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          #pragma omp distribute simd
+  //  PRT-O-NEXT:              for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                  ptr = (int[2]){0, 1};
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
@@ -680,22 +682,22 @@ void fullRewriteOuterDirOnly() {
   //  PRT-A-NEXT:    var = ptr[0];
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,ptr)
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp distribute simd
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             var = ptr[0];
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
+  // PRT-AO-NEXT:  //             for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //                 var = ptr[0];
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,ptr)
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp distribute simd
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              var = ptr[0];
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          #pragma omp distribute simd
+  //  PRT-O-NEXT:              for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                  var = ptr[0];
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
@@ -713,22 +715,22 @@ void fullRewriteOuterDirOnly() {
   //  PRT-A-NEXT:    var = sizeof(int);
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp distribute simd
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             var = sizeof(int);
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
+  // PRT-AO-NEXT:  //             for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //                 var = sizeof(int);
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp distribute simd
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              var = sizeof(int);
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          #pragma omp distribute simd
+  //  PRT-O-NEXT:              for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                  var = sizeof(int);
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
@@ -746,22 +748,22 @@ void fullRewriteOuterDirOnly() {
   //  PRT-A-NEXT:    var = _Alignof(int);
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp distribute simd
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             var = _Alignof(int);
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
+  // PRT-AO-NEXT:  //             for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //                 var = _Alignof(int);
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp distribute simd
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              var = _Alignof(int);
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          #pragma omp distribute simd
+  //  PRT-O-NEXT:              for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                  var = _Alignof(int);
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
@@ -779,22 +781,22 @@ void fullRewriteOuterDirOnly() {
   //  PRT-A-NEXT:    var = sizeof(int[i]);
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp distribute simd
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             var = sizeof(int[i]);
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
+  // PRT-AO-NEXT:  //             for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //                 var = sizeof(int[i]);
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp distribute simd
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              var = sizeof(int[i]);
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          #pragma omp distribute simd
+  //  PRT-O-NEXT:              for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                  var = sizeof(int[i]);
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
@@ -812,22 +814,22 @@ void fullRewriteOuterDirOnly() {
   //  PRT-A-NEXT:    var = _Alignof(int[i]);
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp distribute simd
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             var = _Alignof(int[i]);
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
+  // PRT-AO-NEXT:  //             for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //                 var = _Alignof(int[i]);
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp distribute simd
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              var = _Alignof(int[i]);
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          #pragma omp distribute simd
+  //  PRT-O-NEXT:              for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                  var = _Alignof(int[i]);
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
@@ -845,22 +847,22 @@ void fullRewriteOuterDirOnly() {
   //  PRT-A-NEXT:    var = sizeof i;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp distribute simd
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             var = sizeof i;
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
+  // PRT-AO-NEXT:  //             for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //                 var = sizeof i;
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp distribute simd
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              var = sizeof i;
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          #pragma omp distribute simd
+  //  PRT-O-NEXT:              for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                  var = sizeof i;
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
@@ -878,22 +880,22 @@ void fullRewriteOuterDirOnly() {
   //  PRT-A-NEXT:    var = sizeof(i);
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var)
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     #pragma omp distribute simd
-  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //             var = sizeof (i);
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
+  // PRT-AO-NEXT:  //             for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //                 var = sizeof (i);
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var)
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      #pragma omp distribute simd
-  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:              var = sizeof (i);
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          #pragma omp distribute simd
+  //  PRT-O-NEXT:              for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                  var = sizeof (i);
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
@@ -1329,13 +1331,15 @@ void fullRewriteInnerDirOnly() {
   // The following case is special in that the inner OpenACC directive is a
   // combined OpenACC construct.  The issue is that, for that combined OpenACC
   // construct, the indentation of the OpenMP translations of the effective
-  // OpenACC directives is aligned when printing via the OpenACC node but
-  // progressively indented when printing the OpenMP nodes directly.  Thus, when
-  // Clang checks to see if the outer OpenACC directive's associated statement
-  // is identical to its OpenMP translation in order to decide whether it should
-  // print them separately for acc-omp or omp-acc mode, it cannot simply print
-  // them both as OpenMP and compare the results or they will look different due
-  // merely to indentation.
+  // OpenACC directives used to be aligned when printing via the OpenACC node
+  // but progressively indented when printing the OpenMP nodes directly.  Thus,
+  // when Clang checked to see if the outer OpenACC directive's associated
+  // statement is identical to its OpenMP translation in order to decide whether
+  // it should print them separately for acc-omp or omp-acc mode, it could not
+  // simply print them both as OpenMP and compare the results or they would look
+  // different due merely to indentation.  While the indentation style in each
+  // case might evolve over time and eliminate this issue, we keep the test to
+  // avoid regression.
 
   //    PRT-NEXT:  int x, i;
   //
@@ -1348,12 +1352,12 @@ void fullRewriteInnerDirOnly() {
   //  PRT-A-NEXT:      ;
   // PRT-AO-NEXT:    // ---------ACC->OMP--------
   // PRT-AO-NEXT:    // #pragma omp target teams
-  // PRT-AO-NEXT:    // {
-  // PRT-AO-NEXT:    //     int i;
-  // PRT-AO-NEXT:    //     #pragma omp distribute simd
-  // PRT-AO-NEXT:    //         for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:    //             ;
-  // PRT-AO-NEXT:    // }
+  // PRT-AO-NEXT:    //     {
+  // PRT-AO-NEXT:    //         int i;
+  // PRT-AO-NEXT:    //         #pragma omp distribute simd
+  // PRT-AO-NEXT:    //             for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:    //                 ;
+  // PRT-AO-NEXT:    //     }
   // PRT-AO-NEXT:    // ^----------OMP----------^
   //  PRT-A-NEXT:  }
   //
@@ -1362,12 +1366,12 @@ void fullRewriteInnerDirOnly() {
   //  PRT-O-NEXT:  {
   // PRT-OA-NEXT:    // v----------OMP----------v
   //  PRT-O-NEXT:    #pragma omp target teams
-  //  PRT-O-NEXT:    {
-  //  PRT-O-NEXT:        int i;
-  //  PRT-O-NEXT:        #pragma omp distribute simd
-  //  PRT-O-NEXT:            for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:                ;
-  //  PRT-O-NEXT:    }
+  //  PRT-O-NEXT:        {
+  //  PRT-O-NEXT:            int i;
+  //  PRT-O-NEXT:            #pragma omp distribute simd
+  //  PRT-O-NEXT:                for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:                    ;
+  //  PRT-O-NEXT:        }
   // PRT-OA-NEXT:    // ---------OMP<-ACC--------
   // PRT-OA-NEXT:    // #pragma acc parallel loop vector private(i)
   // PRT-OA-NEXT:    // for (i = 0; i < 5; ++i)
@@ -1568,20 +1572,20 @@ void fullRewriteDirDiscard() {
   //  PRT-A-NEXT:    var = non_const_expr;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // #pragma omp target teams firstprivate(var,non_const_expr)
-  // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     int i;
-  // PRT-AO-NEXT:  //     for (i = 0; i < 5; ++i)
-  // PRT-AO-NEXT:  //         var = non_const_expr;
-  // PRT-AO-NEXT:  // }
+  // PRT-AO-NEXT:  //     {
+  // PRT-AO-NEXT:  //         int i;
+  // PRT-AO-NEXT:  //         for (i = 0; i < 5; ++i)
+  // PRT-AO-NEXT:  //             var = non_const_expr;
+  // PRT-AO-NEXT:  //     }
   // PRT-AO-NEXT:  // ^----------OMP----------^
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  #pragma omp target teams firstprivate(var,non_const_expr)
-  //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      int i;
-  //  PRT-O-NEXT:      for (i = 0; i < 5; ++i)
-  //  PRT-O-NEXT:          var = non_const_expr;
-  //  PRT-O-NEXT:  }
+  //  PRT-O-NEXT:      {
+  //  PRT-O-NEXT:          int i;
+  //  PRT-O-NEXT:          for (i = 0; i < 5; ++i)
+  //  PRT-O-NEXT:              var = non_const_expr;
+  //  PRT-O-NEXT:      }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
   // PRT-OA-NEXT:  // #pragma acc parallel loop seq private(i)
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
