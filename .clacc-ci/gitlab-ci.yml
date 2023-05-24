@@ -188,10 +188,10 @@ stages:
       -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
       -DOPENMP_TEST_FLAGS=-L$BUILD_DIR/build/lib
 
-.oswald02:
-  tags: [shell, oswald02]
+.oswald:
+  tags: [shell, oswald]
   variables:
-    BUILD_ID: oswald02
+    BUILD_ID: oswald
     MODULES: git cmake gnu/11.1.0 nvhpc/23.3
     PATH_PREPEND:
       /opt/nvidia/hpc_sdk/Linux_x86_64/23.3/cuda/12.0/bin
@@ -243,10 +243,10 @@ stages:
     VV_RUN_LIT_XFAIL:
       ""
 
-.oswald02-assert:
-  extends: [.oswald02]
+.oswald-assert:
+  extends: [.oswald]
   variables:
-    BUILD_ID: oswald02-assert
+    BUILD_ID: oswald-assert
     CMAKE_BUILD_OPTS: -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=True
 
 .explorer:
@@ -408,11 +408,11 @@ leconte (setup):
 leconte-assert (setup):
   extends: [.leconte-assert, .setup]
 
-oswald02 (setup):
-  extends: [.oswald02, .setup]
+oswald (setup):
+  extends: [.oswald, .setup]
 
-oswald02-assert (setup):
-  extends: [.oswald02-assert, .setup]
+oswald-assert (setup):
+  extends: [.oswald-assert, .setup]
 
 explorer (setup):
   extends: [.explorer, .setup]
@@ -476,27 +476,27 @@ leconte-assert (cleanup):
       artifacts: false
       optional: true
 
-oswald02 (cleanup):
-  extends: [.oswald02, .cleanup]
+oswald (cleanup):
+  extends: [.oswald, .cleanup]
   needs:
-    - job: oswald02 (test)
+    - job: oswald (test)
       artifacts: false
-    - job: oswald02 (vv)
+    - job: oswald (vv)
       artifacts: false
       optional: true
-    - job: oswald02 (kokkos)
+    - job: oswald (kokkos)
       artifacts: false
       optional: true
 
-oswald02-assert (cleanup):
-  extends: [.oswald02-assert, .cleanup]
+oswald-assert (cleanup):
+  extends: [.oswald-assert, .cleanup]
   needs:
-    - job: oswald02-assert (test)
+    - job: oswald-assert (test)
       artifacts: false
-    - job: oswald02-assert (vv)
+    - job: oswald-assert (vv)
       artifacts: false
       optional: true
-    - job: oswald02-assert (kokkos)
+    - job: oswald-assert (kokkos)
       artifacts: false
       optional: true
 
@@ -566,11 +566,11 @@ leconte (manual cleanup):
 leconte-assert (manual cleanup):
   extends: [.leconte-assert, .manual-cleanup]
 
-oswald02 (manual cleanup):
-  extends: [.oswald02, .manual-cleanup]
+oswald (manual cleanup):
+  extends: [.oswald, .manual-cleanup]
 
-oswald02-assert (manual cleanup):
-  extends: [.oswald02-assert, .manual-cleanup]
+oswald-assert (manual cleanup):
+  extends: [.oswald-assert, .manual-cleanup]
 
 explorer (manual cleanup):
   extends: [.explorer, .manual-cleanup]
@@ -662,16 +662,16 @@ leconte-assert (config):
     - job: leconte-assert (setup)
       artifacts: false
 
-oswald02 (config):
-  extends: [.oswald02, .config]
+oswald (config):
+  extends: [.oswald, .config]
   needs:
-    - job: oswald02 (setup)
+    - job: oswald (setup)
       artifacts: false
 
-oswald02-assert (config):
-  extends: [.oswald02-assert, .config]
+oswald-assert (config):
+  extends: [.oswald-assert, .config]
   needs:
-    - job: oswald02-assert (setup)
+    - job: oswald-assert (setup)
       artifacts: false
 
 explorer (config):
@@ -734,16 +734,16 @@ leconte-assert (build):
     - job: leconte-assert (config)
       artifacts: false
 
-oswald02 (build):
-  extends: [.oswald02, .build]
+oswald (build):
+  extends: [.oswald, .build]
   needs:
-    - job: oswald02 (config)
+    - job: oswald (config)
       artifacts: false
 
-oswald02-assert (build):
-  extends: [.oswald02-assert, .build]
+oswald-assert (build):
+  extends: [.oswald-assert, .build]
   needs:
-    - job: oswald02-assert (config)
+    - job: oswald-assert (config)
       artifacts: false
 
 explorer (build):
@@ -920,16 +920,16 @@ leconte-assert (test):
     - job: leconte-assert (build)
       artifacts: false
 
-oswald02 (test):
-  extends: [.oswald02, .test]
+oswald (test):
+  extends: [.oswald, .test]
   needs:
-    - job: oswald02 (build)
+    - job: oswald (build)
       artifacts: false
 
-oswald02-assert (test):
-  extends: [.oswald02-assert, .test]
+oswald-assert (test):
+  extends: [.oswald-assert, .test]
   needs:
-    - job: oswald02-assert (build)
+    - job: oswald-assert (build)
       artifacts: false
 
 explorer (test):
@@ -1129,16 +1129,16 @@ leconte-assert (vv):
     - job: leconte-assert (build)
       artifacts: false
 
-oswald02 (vv):
-  extends: [.oswald02, .vv]
+oswald (vv):
+  extends: [.oswald, .vv]
   needs:
-    - job: oswald02 (build)
+    - job: oswald (build)
       artifacts: false
 
-oswald02-assert (vv):
-  extends: [.oswald02-assert, .vv]
+oswald-assert (vv):
+  extends: [.oswald-assert, .vv]
   needs:
-    - job: oswald02-assert (build)
+    - job: oswald-assert (build)
       artifacts: false
 
 explorer (vv):
@@ -1391,16 +1391,16 @@ leconte-assert (kokkos):
     - job: leconte-assert (build)
       artifacts: false
 
-oswald02 (kokkos):
-  extends: [.oswald02, .kokkos]
+oswald (kokkos):
+  extends: [.oswald, .kokkos]
   needs:
-    - job: oswald02 (build)
+    - job: oswald (build)
       artifacts: false
 
-oswald02-assert (kokkos):
-  extends: [.oswald02-assert, .kokkos]
+oswald-assert (kokkos):
+  extends: [.oswald-assert, .kokkos]
   needs:
-    - job: oswald02-assert (build)
+    - job: oswald-assert (build)
       artifacts: false
 
 explorer (kokkos):
