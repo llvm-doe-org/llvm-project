@@ -378,10 +378,13 @@ considered for standardization. Please post on the
 |Category                      | Feature                                                                           | Status                   | Reviews                                                |
 +==============================+===================================================================================+==========================+========================================================+
 | atomic extension             | `'atomic' strictly nested within 'teams'                                          | :good:`prototyped`       | D126323                                                |
-|                              | <https://openmp.llvm.org/docs/openacc/OpenMPExtensions.html#atomicWithinTeams>`_  |                          |                                                        |
+|                              | <https://openmp.llvm.org/docs/openacc/OpenMPExtensions.html#withinTeams>`_        |                          |                                                        |
 +------------------------------+-----------------------------------------------------------------------------------+--------------------------+--------------------------------------------------------+
 | device extension             | `'ompx_hold' map type modifier                                                    | :good:`prototyped`       | D106509, D106510                                       |
 |                              | <https://openmp.llvm.org/docs/openacc/OpenMPExtensions.html#ompx-hold>`_          |                          |                                                        |
++------------------------------+-----------------------------------------------------------------------------------+--------------------------+--------------------------------------------------------+
+| tile extension               | `'tile' strictly nested within 'teams'                                            | :good:`prototyped`       | D151350                                                |
+|                              | <https://openmp.llvm.org/docs/openacc/OpenMPExtensions.html#withinTeams>`_        |                          |                                                        |
 +------------------------------+-----------------------------------------------------------------------------------+--------------------------+--------------------------------------------------------+
 
 .. _Discourse forums (Runtimes - OpenMP category): https://discourse.llvm.org/c/runtimes/openmp/35

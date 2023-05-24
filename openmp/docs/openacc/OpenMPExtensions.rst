@@ -138,10 +138,10 @@ the runtime level.  That is, OpenACC's dynamic reference count is
 OpenMP's dynamic reference count, and OpenACC's structured reference
 count is our OpenMP hold reference count extension.
 
-.. _atomicWithinTeams:
+.. _withinTeams:
 
-``atomic`` Strictly Nested Within ``teams``
--------------------------------------------
+Regions Strictly Nested Within ``teams``
+----------------------------------------
 
 Example
 ^^^^^^^
@@ -149,7 +149,7 @@ Example
 OpenMP 5.2, sec. 10.2 "teams Construct", p. 232, L9-12 restricts what
 regions can be strictly nested within a ``teams`` region.  As an
 extension, Clang relaxes that restriction in the case of the
-``atomic`` construct so that, for example, the following case is
+``atomic`` or ``tile`` construct.  For example, the following case is
 permitted:
 
 .. code-block:: c++
