@@ -609,7 +609,9 @@ public:
     ASTContext &Context = getSema().getASTContext();
 
     // Declare a num_workers variable in an enclosing compound statement, if
-    // needed.
+    // needed.  FIXME: This generates an unused __clang_acc_num_workers__
+    // declaration when the only loop worker clause is discarded due to a tile
+    // clause or when there's just a call to a worker function.
     auto NumWorkersClauses = D->getClausesOfKind<ACCNumWorkersClause>();
     if (NumWorkersClauses.begin() != NumWorkersClauses.end()) {
       DirEntry.NumWorkersExpr = NumWorkersClauses.begin()->getNumWorkers();
@@ -661,12 +663,84 @@ public:
     return Res;
   }
 
+  StmtResult transformACCTileToOMPTile(ACCLoopDirective *D, ACCTileClause *C) {
+    if (getSema().isStrictlyNestedInOpenMPTeamsRegion()) {
+      getSema().Diag(D->getBeginLoc(), diag::warn_acc_omp_tile_in_teams)
+          << D->getSourceRange();
+      getSema().Diag(D->getBeginLoc(), diag::note_acc_disable_diag)
+          << DiagnosticIDs::getWarningOptionForDiag(
+                 diag::warn_acc_omp_tile_in_teams);
+      getSema().Diag(D->getBeginLoc(), diag::note_acc_disable_all_omp_ext_diags)
+          << DiagnosticIDs::getWarningOptionForGroup(
+                 diag::Group::OpenACCOMPExt);
+    }
+    getSema().StartOpenMPDSABlock(OMPD_tile, DeclarationNameInfo(),
+                                  /*CurScope=*/nullptr, D->getBeginLoc());
+    bool Err = false;
+    llvm::SmallVector<OMPClause *, 1> TClauses;
+    {
+      OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_sizes);
+      llvm::SmallVector<Expr *, 16> TSizeExprs;
+      for (Expr *SizeExpr : C->sizelist()) {
+        ExprResult TSizeExpr;
+        if (isa<ACCStarExpr>(SizeExpr) ||
+            !SizeExpr->isIntegerConstantExpr(getSema().getASTContext()))
+          TSizeExpr = getSema().ActOnIntegerConstant(SizeExpr->getExprLoc(), 1);
+        else
+          TSizeExpr = getDerived().TransformExpr(SizeExpr);
+        if (TSizeExpr.isInvalid())
+          Err = true;
+        else
+          TSizeExprs.push_back(TSizeExpr.get());
+      }
+      ExplicitClauseLocs L(D, C, C->getLParenLoc());
+      OMPClauseResult TSizesClause = getDerived().RebuildOMPSizesClause(
+          TSizeExprs, L.LParenLoc, L.LParenLoc, L.LocEnd);
+      if (TSizesClause.isInvalid())
+        Err = true;
+      else
+        TClauses.push_back(TSizesClause.get());
+    }
+    StmtResult AssociatedStmt =
+        transformACCAssociatedStmt(D, OMPD_tile, TClauses);
+    if (AssociatedStmt.isInvalid())
+      Err = true;
+    StmtResult Res;
+    if (Err)
+      Res = StmtError();
+    else
+      Res = getDerived().RebuildOMPExecutableDirective(
+          OMPD_tile, DeclarationNameInfo(), OMPD_unknown, TClauses,
+          AssociatedStmt.get(), C->getBeginLoc(), C->getEndLoc());
+    getSema().EndOpenMPDSABlock(Res.get());
+    return Res;
+  }
+
   StmtResult TransformACCLoopDirective(ACCLoopDirective *D) {
     DirStackEntryRAII TheDirStackEntryRAII(*this, D);
     DirStackEntry &DirEntry = DirStack.back();
 
-    // What OpenACC clauses do we have?
+    // What OpenACC level-of-parallelism clauses do we have?
     ACCPartitioningKind Partitioning = D->getPartitioning();
+
+    // OpenACC 3.3, sec. 2.9.8 "tile clause", L2189-2192:
+    // "If the vector clause appears on the loop construct, the vector clause is
+    // applied to the element loops. If the gang clause appears on the loop
+    // construct, the gang clause is applied to the tile loops. If the worker
+    // clause appears on the loop construct, the worker clause is applied to the
+    // element loops if no vector clause appears, and to the tile loops
+    // otherwise."
+    //
+    // If there's a tile clause, Partitioning is for the tile loops.  Remove the
+    // levels of parallelism that apply for the element loops.  TODO: Currently,
+    // OpenMP's tile construct gives us no way to apply those to the element
+    // loops, so we just discard them entirely.
+    ACCTileClause *TileClause = D->getTheClauseOfKind<ACCTileClause>();
+    if (TileClause) {
+      if (!Partitioning.hasVectorPartitioning())
+        Partitioning.removeWorker();
+      Partitioning.removeVector();
+    }
 
     // What kind of OpenMP directive should we build?
     // OMPD_unknown means none (so sequential).
@@ -759,14 +833,17 @@ public:
       }
     }
 
-    // Handle case of no OpenMP directive.
+    // Handle case of no OpenMP loop-partitioning directive.
     if (TDKind == OMPD_unknown) {
       Sema::CompoundScopeRAII CompoundScope(getSema());
-      Stmt *CS = D->getAssociatedStmt();
-      StmtResult Res = getDerived().TransformStmt(CS);
+      StmtResult Res;
+      if (TileClause)
+        Res = transformACCTileToOMPTile(D, TileClause);
+      else
+        Res = getDerived().TransformStmt(D->getAssociatedStmt());
       EnclosingCompoundStmt.finalize(Res);
       if (!Res.isInvalid())
-        D->setOMPNode(Res.get(), /*OMPDirectiveCount=*/0);
+        D->setOMPNode(Res.get(), /*OMPDirectiveCount=*/TileClause ? 1 : 0);
       return Res;
     }
 
@@ -797,7 +874,14 @@ public:
     transformACCClauses(D, TDKind, TClauses, TClausesEmptyCount);
 
     // Transform associated statement.
-    StmtResult AssociatedStmt = transformACCAssociatedStmt(D, TDKind, TClauses);
+    StmtResult AssociatedStmt;
+    if (TileClause) {
+      getSema().ActOnOpenMPRegionStart(TDKind, /*CurScope=*/nullptr);
+      AssociatedStmt = transformACCTileToOMPTile(D, TileClause);
+      AssociatedStmt = getSema().ActOnOpenMPRegionEnd(AssociatedStmt, TClauses);
+    } else {
+      AssociatedStmt = transformACCAssociatedStmt(D, TDKind, TClauses);
+    }
 
     // Build OpenMP directive and finalize enclosing compound statement, if
     // any.
@@ -813,7 +897,7 @@ public:
     getSema().EndOpenMPDSABlock(Res.get());
     EnclosingCompoundStmt.finalize(Res);
     if (!Res.isInvalid())
-      D->setOMPNode(Res.get(), /*OMPDirectiveCount=*/1);
+      D->setOMPNode(Res.get(), /*OMPDirectiveCount=*/TileClause ? 2 : 1);
     return Res;
   }
 
@@ -932,9 +1016,15 @@ public:
   OMPClauseResult TransformACCTileClause(ACCDirectiveStmt *D,
                                          OpenMPDirectiveKind TDKind,
                                          ACCTileClause *C) {
-    // TODO: Actually translate it.  Currently, this should be reachable only
-    // if -fopenacc-fake-tile-clause.
-    return OMPClauseEmpty();
+    if (C->sizelist_size() == 1)
+      return OMPClauseEmpty();
+    ExplicitClauseLocs L(D, C, C->getLParenLoc());
+    ExprResult Num =
+        getSema().ActOnIntegerConstant(L.LocStart, C->sizelist_size());
+    if (Num.isInvalid())
+      return OMPClauseError();
+    return getDerived().RebuildOMPCollapseClause(Num.get(), L.LocStart,
+                                                 L.LParenLoc, L.LocEnd);
   }
 
   OMPClauseResult TransformACCAsyncClause(ACCDirectiveStmt *D,

@@ -345,7 +345,6 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
   // with other occurrences of itself or with other clauses would be baseless
   // and confusing, so we suppress them.
   if ((CKind != ACCC_unknown && !isAllowedClauseForDirective(DKind, CKind)) ||
-      (CKind == ACCC_tile && !Actions.getLangOpts().OpenACCFakeTileClause) ||
       ((CKind == ACCC_async || CKind == ACCC_wait) &&
        !Actions.getLangOpts().OpenACCFakeAsyncWait)) {
     Diag(Tok, diag::err_acc_unexpected_clause) << getOpenACCName(CKind)

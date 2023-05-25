@@ -1039,8 +1039,7 @@ debug (test):
     # correctly without a full implementation of the associated OpenACC
     # features.  The V&V suite is a convenient way to check for unexpected
     # issues with the incomplete implementations.
-    - export VV_CFLAGS="-fopenacc -fopenacc-fake-async-wait
-                        -fopenacc-fake-tile-clause -lm $VV_CFLAGS"
+    - export VV_CFLAGS="-fopenacc -fopenacc-fake-async-wait -lm $VV_CFLAGS"
     - if test x"$GPU_TRIPLE" != x; then
         export VV_CFLAGS="$VV_CFLAGS -fopenmp-targets=$GPU_TRIPLE";
       fi

@@ -37,11 +37,13 @@
 int main() {
   int v, x;
 
+  // When the diagnostic is an error, translation of remaining OpenACC to OpenMP
+  // is suppressed, so we don't see the error again.
   #pragma acc parallel
-  // error-error@+6  {{the '#pragma acc atomic' translation produces a '#pragma omp atomic' strictly nested within an '#pragma omp target teams', but that nesting is an OpenMP extension that might not be supported yet by other compilers}}
+  // error-error@+6  {{the '#pragma acc atomic' translation produces a '#pragma omp atomic' strictly nested within a '#pragma omp target teams', but that nesting is an OpenMP extension that might not be supported yet by other compilers}}
   // error-note@+5   {{you can disable this diagnostic with '-Wno-openacc-omp-atomic-in-teams'}}
   // error-note@+4   {{you can disable all diagnostics about OpenMP extensions appearing in the translation with '-Wno-openacc-omp-ext'}}
-  // warn-warning@+3 {{the '#pragma acc atomic' translation produces a '#pragma omp atomic' strictly nested within an '#pragma omp target teams', but that nesting is an OpenMP extension that might not be supported yet by other compilers}}
+  // warn-warning@+3 {{the '#pragma acc atomic' translation produces a '#pragma omp atomic' strictly nested within a '#pragma omp target teams', but that nesting is an OpenMP extension that might not be supported yet by other compilers}}
   // warn-note@+2    {{you can disable this diagnostic with '-Wno-openacc-omp-atomic-in-teams'}}
   // warn-note@+1    {{you can disable all diagnostics about OpenMP extensions appearing in the translation with '-Wno-openacc-omp-ext'}}
   #pragma acc atomic read
@@ -49,7 +51,7 @@ int main() {
 
   #pragma acc parallel
   {
-    // warn-warning@+3 {{the '#pragma acc atomic' translation produces a '#pragma omp atomic' strictly nested within an '#pragma omp target teams', but that nesting is an OpenMP extension that might not be supported yet by other compilers}}
+    // warn-warning@+3 {{the '#pragma acc atomic' translation produces a '#pragma omp atomic' strictly nested within a '#pragma omp target teams', but that nesting is an OpenMP extension that might not be supported yet by other compilers}}
     // warn-note@+2    {{you can disable this diagnostic with '-Wno-openacc-omp-atomic-in-teams'}}
     // warn-note@+1    {{you can disable all diagnostics about OpenMP extensions appearing in the translation with '-Wno-openacc-omp-ext'}}
     #pragma acc atomic write
@@ -58,7 +60,7 @@ int main() {
 
   #pragma acc parallel loop seq
   for (int i = 0; i < 5; ++i) {
-    // warn-warning@+3 {{the '#pragma acc atomic' translation produces a '#pragma omp atomic' strictly nested within an '#pragma omp target teams', but that nesting is an OpenMP extension that might not be supported yet by other compilers}}
+    // warn-warning@+3 {{the '#pragma acc atomic' translation produces a '#pragma omp atomic' strictly nested within a '#pragma omp target teams', but that nesting is an OpenMP extension that might not be supported yet by other compilers}}
     // warn-note@+2    {{you can disable this diagnostic with '-Wno-openacc-omp-atomic-in-teams'}}
     // warn-note@+1    {{you can disable all diagnostics about OpenMP extensions appearing in the translation with '-Wno-openacc-omp-ext'}}
     #pragma acc atomic update
@@ -69,7 +71,7 @@ int main() {
   {
     #pragma acc loop seq
     for (int i = 0; i < 5; ++i) {
-      // warn-warning@+3 {{the '#pragma acc atomic' translation produces a '#pragma omp atomic' strictly nested within an '#pragma omp target teams', but that nesting is an OpenMP extension that might not be supported yet by other compilers}}
+      // warn-warning@+3 {{the '#pragma acc atomic' translation produces a '#pragma omp atomic' strictly nested within a '#pragma omp target teams', but that nesting is an OpenMP extension that might not be supported yet by other compilers}}
       // warn-note@+2    {{you can disable this diagnostic with '-Wno-openacc-omp-atomic-in-teams'}}
       // warn-note@+1    {{you can disable all diagnostics about OpenMP extensions appearing in the translation with '-Wno-openacc-omp-ext'}}
       #pragma acc atomic capture

@@ -111,8 +111,9 @@ int main() {
   // expected-error@+1 {{unexpected OpenACC clause 'vector' in directive '#pragma acc data'}}
   #pragma acc data independent copy(i) auto seq gang worker vector
     ;
-  // expected-error@+1 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc data'}}
-  #pragma acc data collapse(1) copy(i)
+  // expected-error@+2 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc data'}}
+  // expected-error@+1 {{unexpected OpenACC clause 'tile' in directive '#pragma acc data'}}
+  #pragma acc data collapse(1) copy(i) tile(2)
     ;
   // expected-error@+5 {{unexpected OpenACC clause 'read' in directive '#pragma acc data'}}
   // expected-error@+4 {{unexpected OpenACC clause 'write' in directive '#pragma acc data'}}

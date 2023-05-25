@@ -11259,9 +11259,14 @@ def warn_acc_omp_map_ompx_no_alloc_from_visible : Warning<
   InGroup<OpenACCOMPMapOmpxNoAlloc>, DefaultIgnore;
 def warn_acc_omp_atomic_in_teams : Warning<
   "the '#pragma acc atomic' translation produces a '#pragma omp atomic' "
-  "strictly nested within an '#pragma omp target teams', but that nesting is "
+  "strictly nested within a '#pragma omp target teams', but that nesting is "
   "an OpenMP extension that might not be supported yet by other compilers">,
   InGroup<OpenACCOMPAtomicInTeams>, DefaultIgnore;
+def warn_acc_omp_tile_in_teams : Warning<
+  "the OpenACC 'tile' clause translation produces a '#pragma omp tile' "
+  "strictly nested within a '#pragma omp target teams', but that nesting is "
+  "an OpenMP extension that might not be supported yet by other compilers">,
+  InGroup<OpenACCOMPTileInTeams>, DefaultIgnore;
 def note_acc_alternate_omp : Note<
   "an alternative OpenMP translation can be specified with, for example, "
   "'-fopenacc-%0-omp=%1'">;

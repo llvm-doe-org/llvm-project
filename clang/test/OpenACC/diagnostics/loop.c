@@ -608,7 +608,9 @@ void fn(int param) {
   // collapse clause
   //----------------------------------------------------------------------------
 
+  //............................................................................
   // Syntax
+
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
 #endif
@@ -640,7 +642,9 @@ void fn(int param) {
       ;
   }
 
+  //............................................................................
   // Invalid argument
+
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
 #endif
@@ -781,15 +785,16 @@ void fn(int param) {
     #pragma acc CMB_PAR loop gang worker vector collapse(-5L) auto
     for (int i = 0; i < 5; ++i)
       ;
-
   }
 
+  //............................................................................
   // Not enough loops.
+
 #if PARENT == PARENT_SEPARATE
   #pragma acc parallel
 #endif
   {
-    // 1 too few.
+    // 1 too few, 1 required.
 
     // expected-note@+1 {{as specified in 'collapse' clause}}
     #pragma acc CMB_PAR loop collapse((_Bool)1)
@@ -812,14 +817,53 @@ void fn(int param) {
         ;
     }
     // expected-note@+1 {{as specified in 'collapse' clause}}
-    #pragma acc CMB_PAR loop auto collapse(2)
+    #pragma acc CMB_PAR loop auto collapse(1)
+    // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+    // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+    {
+      int i;
+      for (i = 0; i < 5; ++i)
+        ;
+    }
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop gang collapse(1)
+    // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+    // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+    {
+      int i;
+      for (i = 0; i < 5; ++i)
+        ;
+    }
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop worker collapse(1)
+    // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+    // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+    {
+      int i;
+      for (i = 0; i < 5; ++i)
+        ;
+    }
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop vector collapse(1)
+    // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+    // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+    {
+      int i;
+      for (i = 0; i < 5; ++i)
+        ;
+    }
+
+    // 1 too few, >1 required.
+
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop collapse(2)
     for (i = 0; i < 5; ++i) {
       // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
       // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
       ;
     }
     // expected-note@+1 {{as specified in 'collapse' clause}}
-    #pragma acc CMB_PAR loop gang collapse(3)
+    #pragma acc CMB_PAR loop independent collapse(3)
     for (i = 0; i < 5; ++i)
       for (int j = 0; j < 5; ++j)
       // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
@@ -830,7 +874,7 @@ void fn(int param) {
         ;
       }
     // expected-note@+1 {{as specified in 'collapse' clause}}
-    #pragma acc CMB_PAR loop worker collapse(4u)
+    #pragma acc CMB_PAR loop seq collapse(4u)
     for (int i = 0; i < 5; ++i) {
       for (jk = 0; jk < 5; ++jk) {
         for (int k = 0; k < 5; ++k) {
@@ -839,6 +883,34 @@ void fn(int param) {
           f += 0.5;
         }
       }
+    }
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop auto collapse(2)
+    for (i = 0; i < 5; ++i) {
+      // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
+    }
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop gang collapse(2)
+    for (i = 0; i < 5; ++i) {
+      // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
+    }
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop worker collapse(2)
+    for (i = 0; i < 5; ++i) {
+      // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
+    }
+    // expected-note@+1 {{as specified in 'collapse' clause}}
+    #pragma acc CMB_PAR loop vector collapse(2)
+    for (i = 0; i < 5; ++i) {
+      // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
     }
 
     // 2 too few.
@@ -903,6 +975,418 @@ void fn(int param) {
             ;
     // expected-note@+1 {{as specified in 'collapse' clause}}
     #pragma acc CMB_PAR loop worker collapse(3)
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+        // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+        #pragma acc loop vector
+        for (int k = 0; k < 5; ++k)
+          for (int l = 0; l < 5; ++l)
+            ;
+  }
+
+  //----------------------------------------------------------------------------
+  // tile clause
+  //----------------------------------------------------------------------------
+
+  //............................................................................
+  // Syntax
+
+#if PARENT == PARENT_SEPARATE
+  #pragma acc parallel
+#endif
+  {
+    // expected-error@+1 {{expected '(' after 'tile'}}
+    #pragma acc CMB_PAR loop tile
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+3 {{expected expression}}
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop independent tile(
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop auto tile(2
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        ;
+    // expected-error@+2 {{expected ')'}}
+    // expected-note@+1 {{to match this '('}}
+    #pragma acc CMB_PAR loop auto tile(*
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        ;
+    // expected-error@+1 {{expected expression}}
+    #pragma acc CMB_PAR loop seq tile()
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{expected ',' or ')' in 'tile' clause}}
+    #pragma acc CMB_PAR loop gang tile(1 2)
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        ;
+    // expected-error@+1 {{expected expression}}
+    #pragma acc CMB_PAR loop gang tile(1 *)
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        ;
+    // expected-error@+1 {{expected ',' or ')' in 'tile' clause}}
+    #pragma acc CMB_PAR loop gang tile(* 1)
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        ;
+    // expected-error@+1 {{expected expression}}
+    #pragma acc CMB_PAR loop gang tile(1 , )
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        ;
+    // expected-error@+1 {{expected expression}}
+    #pragma acc CMB_PAR loop gang tile(* , )
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        ;
+    // orph-sep-error@+2 {{directive '#pragma acc loop' cannot contain more than one 'tile' clause}}
+    // cmb-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'tile' clause}}
+    #pragma acc CMB_PAR loop gang tile(1) worker tile(1) vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{unexpected OpenACC clause 'collapse', 'tile' is specified already}}
+    #pragma acc CMB_PAR loop tile(1) collapse(1)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{unexpected OpenACC clause 'tile', 'collapse' is specified already}}
+    #pragma acc CMB_PAR loop collapse(1) tile(1)
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
+
+  //............................................................................
+  // Invalid argument
+  //
+  // TODO: Currently, non-constant expressions are accepted, but eventually they
+  // won't be, and then we can change xxpected -> expected below.
+
+#if PARENT == PARENT_SEPARATE
+  // sep-note@+1 {{'copy' clause implied here}}
+  #pragma acc parallel
+#endif
+  {
+    // Not integer type and not constant expression
+
+    // expected-error@+4 {{expression must have integral or unscoped enumeration type, not 'int[]'}}
+    // xxpected-error@+3 {{argument to 'tile' clause must be an integer constant expression}}
+    // sep-cmb-error@+2 {{variable in implied 'copy' clause cannot have incomplete type 'int[]'}}
+    // cmb-note@+1 {{'copy' clause implied here}}
+    #pragma acc CMB_PAR loop tile(incomplete)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int[2]'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop independent tile(a)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int *'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop seq tile(p)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'float'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop auto tile(f)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'double'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop gang tile(d)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not '_Complex float'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop worker tile(fc)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not '_Complex double'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop vector tile(dc)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'struct S'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop gang worker tile(s)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'union U'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop gang vector tile(u)
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // Integer type but not constant expression
+
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop worker vector tile(b)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop gang worker vector tile(e)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+3 {{expected ',' or ')' in 'tile' clause}}
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int *'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop tile(*p)
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        ;
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop tile(i) independent
+    for (int i = 0; i < 5; ++i)
+      ;
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop tile(constI) seq
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // Constant expression but not integer type
+
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int[2]'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop tile((int[]){1, 2}) auto
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'int *'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop tile((int*)0) gang
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'float'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop tile(1.3f) worker
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'double'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop tile(0.2) vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not '_Complex float'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop tile((float _Complex)0.09f) gang worker
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not '_Complex double'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop tile((double _Complex)-10.0) gang vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'struct S'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop tile((struct S){5}) gang worker vector
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'union U'}}
+    // xxpected-error@+1 {{argument to 'tile' clause must be an integer constant expression}}
+    #pragma acc CMB_PAR loop independent gang tile((union U){5})
+    for (int i = 0; i < 5; ++i)
+      ;
+
+    // Integer type and constant expression but not positive
+
+    // expected-error@+1 {{argument to 'tile' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop auto worker tile((_Bool)0)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{argument to 'tile' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop vector tile(0) independent
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{argument to 'tile' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop tile(0u) auto gang
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{argument to 'tile' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop worker independent tile(E0)
+    for (int i = 0; i < 5; ++i)
+      ;
+    // expected-error@+1 {{argument to 'tile' clause must be a strictly positive integer value}}
+    #pragma acc CMB_PAR loop gang worker vector tile(-5L) auto
+    for (int i = 0; i < 5; ++i)
+      ;
+  }
+
+  //............................................................................
+  // Not enough loops.
+
+#if PARENT == PARENT_SEPARATE
+  #pragma acc parallel
+#endif
+  {
+    // 1 too few, 1 required.
+
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop tile(1)
+      // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop independent tile(2)
+      // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      while (1)
+        ;
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop seq tile(3)
+    // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+    // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+    {
+      int i;
+      for (i = 0; i < 5; ++i)
+        ;
+    }
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop auto tile(*)
+    // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+    // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+    {
+      int i;
+      for (i = 0; i < 5; ++i)
+        ;
+    }
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop gang tile(*)
+    // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+    // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+    {
+      int i;
+      for (i = 0; i < 5; ++i)
+        ;
+    }
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop worker tile(*)
+    // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+    // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+    {
+      int i;
+      for (i = 0; i < 5; ++i)
+        ;
+    }
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop vector tile(*)
+    // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+    // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+    {
+      int i;
+      for (i = 0; i < 5; ++i)
+        ;
+    }
+
+    // 1 too few, >1 required.
+
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop tile(1, 2)
+    for (i = 0; i < 5; ++i) {
+      // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
+    }
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop independent tile(*, *, *)
+    for (i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+      // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      {
+        for (int k = 0; k < 5; ++k)
+          ;
+        ;
+      }
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop seq tile(1, *, *, 4)
+    for (int i = 0; i < 5; ++i) {
+      for (jk = 0; jk < 5; ++jk) {
+        for (int k = 0; k < 5; ++k) {
+          // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+          // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+          f += 0.5;
+        }
+      }
+    }
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop auto tile(1, 2)
+    for (i = 0; i < 5; ++i) {
+      // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
+    }
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop gang tile(1, 2)
+    for (i = 0; i < 5; ++i) {
+      // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
+    }
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop worker tile(1, 2)
+    for (i = 0; i < 5; ++i) {
+      // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
+    }
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop vector tile(1, 2)
+    for (i = 0; i < 5; ++i) {
+      // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      ;
+    }
+
+    // 2 too few.
+
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop vector tile(1, 2, 3, 4, 5)
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        for (jk = 0; jk < 5; ++jk)
+          // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+          // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+          ;
+
+    // 3 too few.
+
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop gang worker tile(7, 6, 5, 4, 3, 2, 1)
+    for (i = 0; i < 5; ++i)
+      for (jk = 0; jk < 5; ++jk)
+        for (int k = 0; k < 5; ++k)
+          for (int l = 0; l < 5; ++l)
+            // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+            // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+            ;
+
+    // Enough but some have their own loop directives.
+
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop gang tile(*, 3)
+    for (i = 0; i < 5; ++i)
+      // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+      // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+      #pragma acc loop worker
+      for (int j = 0; j < 5; ++j)
+        ;
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop gang tile(2, 2, 2)
+    for (int i = 0; i < 5; ++i)
+      for (int j = 0; j < 5; ++j)
+        // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}
+        // cmb-error@+1 {{statement after '#pragma acc parallel loop' must be a for loop}}
+        #pragma acc loop vector tile(2)
+        for (int k = 0; k < 5; ++k)
+          for (int l = 0; l < 5; ++l)
+            ;
+    // expected-note@+1 {{as specified in 'tile' clause}}
+    #pragma acc CMB_PAR loop worker tile(1, 1, 1)
     for (int i = 0; i < 5; ++i)
       for (int j = 0; j < 5; ++j)
         // orph-sep-error@+2 {{statement after '#pragma acc loop' must be a for loop}}

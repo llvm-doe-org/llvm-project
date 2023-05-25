@@ -7348,7 +7348,7 @@ void ACCClauseWriter::VisitACCCollapseClause(ACCCollapseClause *C) {
 void ACCClauseWriter::VisitACCTileClause(ACCTileClause *C) {
   Record.push_back(C->sizelist_size());
   Record.AddSourceLocation(C->getLParenLoc());
-  for (auto *VE : C->sizelists())
+  for (auto *VE : C->sizelist())
     Record.AddStmt(VE);
 }
 

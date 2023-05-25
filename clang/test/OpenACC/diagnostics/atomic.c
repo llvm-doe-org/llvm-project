@@ -144,14 +144,15 @@ int main() {
   // expected-error@+1 {{unexpected OpenACC clause 'vector_length' in directive '#pragma acc atomic'}}
   #pragma acc atomic num_gangs(1) update num_workers(2) vector_length(3)
   x++;
-  // expected-error@+7 {{unexpected OpenACC clause 'seq' in directive '#pragma acc atomic'}}
-  // expected-error@+6 {{unexpected OpenACC clause 'independent' in directive '#pragma acc atomic'}}
-  // expected-error@+5 {{unexpected OpenACC clause 'auto' in directive '#pragma acc atomic'}}
-  // expected-error@+4 {{unexpected OpenACC clause 'gang' in directive '#pragma acc atomic'}}
-  // expected-error@+3 {{unexpected OpenACC clause 'worker' in directive '#pragma acc atomic'}}
-  // expected-error@+2 {{unexpected OpenACC clause 'vector' in directive '#pragma acc atomic'}}
-  // expected-error@+1 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc atomic'}}
-  #pragma acc atomic seq independent auto capture gang worker vector collapse(1)
+  // expected-error@+8 {{unexpected OpenACC clause 'seq' in directive '#pragma acc atomic'}}
+  // expected-error@+7 {{unexpected OpenACC clause 'independent' in directive '#pragma acc atomic'}}
+  // expected-error@+6 {{unexpected OpenACC clause 'auto' in directive '#pragma acc atomic'}}
+  // expected-error@+5 {{unexpected OpenACC clause 'gang' in directive '#pragma acc atomic'}}
+  // expected-error@+4 {{unexpected OpenACC clause 'worker' in directive '#pragma acc atomic'}}
+  // expected-error@+3 {{unexpected OpenACC clause 'vector' in directive '#pragma acc atomic'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc atomic'}}
+  // expected-error@+1 {{unexpected OpenACC clause 'tile' in directive '#pragma acc atomic'}}
+  #pragma acc atomic seq independent auto capture gang worker vector collapse(1) tile(1)
   v = x++;
 
   //----------------------------------------------------------------------------

@@ -127,10 +127,11 @@ void UNIQUE_NAME();
 void UNIQUE_NAME();
 // Note that it does not complain that seq conflicts with independent (as on acc
 // loop) because the latter isn't permitted here at all.
-// expected-error@+3 {{unexpected OpenACC clause 'independent' in directive '#pragma acc routine'}}
-// expected-error@+2 {{unexpected OpenACC clause 'auto' in directive '#pragma acc routine'}}
-// expected-error@+1 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc routine'}}
-#pragma acc routine independent auto collapse(1) seq
+// expected-error@+4 {{unexpected OpenACC clause 'independent' in directive '#pragma acc routine'}}
+// expected-error@+3 {{unexpected OpenACC clause 'auto' in directive '#pragma acc routine'}}
+// expected-error@+2 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc routine'}}
+// expected-error@+1 {{unexpected OpenACC clause 'tile' in directive '#pragma acc routine'}}
+#pragma acc routine independent auto collapse(1) seq tile(5)
 void UNIQUE_NAME();
 // expected-error@+5 {{unexpected OpenACC clause 'read' in directive '#pragma acc routine'}}
 // expected-error@+4 {{unexpected OpenACC clause 'write' in directive '#pragma acc routine'}}

@@ -270,7 +270,6 @@ ENUM_LANGOPT(OpenACCNoCreateOMP, OpenACCNoCreateOMPKind, 1,
              OpenACCNoCreateOMP_OmpxNoAlloc,
              "The OpenMP translation of the OpenACC 'no_create' clause")
 LANGOPT(OpenACCFakeAsyncWait, 1, 0, "Fake OpenACC async/wait support")
-LANGOPT(OpenACCFakeTileClause, 1, 0, "Fake OpenACC 'tile' clause support")
 LANGOPT(RenderScript      , 1, 0, "RenderScript")
 
 LANGOPT(HLSL, 1, 0, "HLSL")

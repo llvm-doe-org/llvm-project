@@ -11483,7 +11483,7 @@ template <typename Derived>
 ACCClause *TreeTransform<Derived>::TransformACCTileClause(ACCTileClause *C) {
   llvm::SmallVector<Expr *, 16> SizeExprs;
   SizeExprs.reserve(C->sizelist_size());
-  for (auto *SE : C->sizelists()) {
+  for (auto *SE : C->sizelist()) {
     ExprResult SET = getDerived().TransformExpr(cast<Expr>(SE));
     if (SET.isInvalid())
       return nullptr;

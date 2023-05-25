@@ -74,6 +74,7 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
     * `-Wopenacc-omp-map-present`
     * `-Wopenacc-omp-map-ompx-no-alloc`
     * `-Wopenacc-omp-atomic-in-teams`
+    * `-Wopenacc-omp-tile-in-teams`
     * `-Wopenacc-omp-ext`
     * See the section "OpenMP Extensions" below for details.
 * Other diagnostic options
@@ -119,34 +120,8 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
           still produce compile-time diagnostics.  We are adding them as the
           need arises in the applications we are investigating.
     * `-fopenacc-fake-tile-clause`
-        * Clacc accepts but mostly discards the OpenACC `tile` clause.  That is,
-          it has no OpenMP translation in source-to-source mode, but it can
-          cause predetermined `private` clauses, as described below.
-        * If a `collapse` clause and a `tile` clause appear on the same `loop`
-          construct, a compile-time error diagnostic is produced.  While OpenACC
-          3.3 does not specify this restriction, both NVHPC 22.11 and GCC 12.2.0
-          enforce it.
-        * If a `tile` clause contains *N* size expressions, there must be *N*
-          tightly nested loops following the `loop` construct, or a compile-time
-          error diagnostic is produced.
-        * Predetermined `private` is computed for the loop control variables in
-          those *N* loops in the same manner as it would be in the case of a
-          `collapse(`*N*`)` clause.  This appears to mimic the behavior of GCC
-          12.2.0.  OpenACC 3.3 uses the term "associated loop" in the
-          specification of predetermined `private` clauses and `collapse`
-          clauses but not in the specification of `tile` clauses, so this
-          behavior is not clear.  NVHPC 22.11 instead performs a liveness
-          analysis to determine data attributes.
-        * Each size expression within a `tile` clause must be either `*` or a
-          positive constant integer expression.  Otherwise, a compile-time error
-          diagnostic is produced.  There is one exception for now: a size
-          expression can also be a non-constant integer expression.  OpenACC 3.3
-          does not require support for non-constant integer expressions, GCC
-          12.2.0 rejects them with compile-time error diagnostics, and NVHPC
-          22.11 ignores the entire `tile` clause if it contains one (as reported
-          by `-Minfo`).   Clacc accepts them for now just because Kokkos's
-          OpenACC backend currently uses them (even though they are apparently
-          discarded by NVHPC).
+        * Clacc now fully supports the `tile` clause, so this option is
+          deprecated and has no effect.
 
 Run-Time Environment Variables
 ------------------------------
@@ -375,7 +350,6 @@ Run-Time Environment Variables
     * Implicit `gang` clause
     * For now, if none of these clauses appear (explicitly or
       implicitly), then a sequential loop is produced.
-* The `collapse` clause is supported.
 * Supported data attributes and clauses
     * A loop control variable is:
         * Implicit `shared` if `seq` is explicitly specified and loop
@@ -407,6 +381,52 @@ Run-Time Environment Variables
           Clarifications" section in `README-OpenACC-design.md`.
     * See "Data Expressions in Clauses" below for details of their support in
       these clauses.
+* Supported multiloop clauses
+    * `collapse`
+    * `tile`
+    * If a `collapse` clause and a `tile` clause appear on the same `loop`
+      construct, a compile-time error diagnostic is produced.
+        * While OpenACC 3.3 does not specify this restriction, both NVHPC 22.11
+          and GCC 12.2.0 enforce it.
+    * If a `collapse` clause's argument is *N*, or if a `tile` clause contains
+      *N* size expressions, there must be *N* tightly nested loops following the
+      `loop` construct, or a compile-time error diagnostic is produced.
+    * Predetermined `private` is computed for the loop control variables in
+      those *N* loops in the same manner as it would be for a single loop
+      without a `collapse` or `tile` clause.
+        * This appears to mimic the behavior of GCC 12.2.0.
+        * OpenACC 3.3 uses the term "associated loop" in the specification of
+          predetermined `private` clauses and `collapse` clauses but not in the
+          specification of `tile` clauses, so this behavior is not clear.
+        * NVHPC 22.11 instead performs a liveness analysis to determine data
+          attributes.
+    * A `collapse` clause's argument must be a positive constant integer
+      expression, and each size expression within a `tile` clause must be either
+      `*` or a positive constant integer expression.  Otherwise, a compile-time
+      error diagnostic is produced.
+        * There is one exception for now: a size expression in a `tile` clause
+          can also be a non-constant integer expression.
+            * Clacc currently implements each such size expression as `1` but
+              might produce a compile-time error diagnostic in the future.
+            * Clacc accepts them for now just because the version of Kokkos's
+              OpenACC backend that we target uses them (even though they are
+              apparently discarded by NVHPC).
+            * OpenACC 3.3 does not require support for non-constant integer
+              expressions.
+            * GCC 12.2.0 rejects them with compile-time error diagnostics.
+            * NVHPC 22.11 ignores the entire `tile` clause if it contains one,
+              as reported by `-Minfo`.
+        * `*` is currently implemented as `1` because there currently is no
+          corresponding OpenMP 5.2 feature.
+    * Where OpenACC 3.3 specifies that `worker` and `vector` are applied to the
+      generated element loop, Clacc currently discards them instead because
+      there appears to be no way to express this behavior in OpenMP 5.2.  Thus,
+      the generated element loops are always sequential.
+    * The above rules apply and tiling is performed regardless of whether the
+      associated loop nest is partitioned or executed sequentially (e.g., due to
+      a `seq` clause).
+    * See the section "OpenMP Extensions" below for caveats related to
+      source-to-source mode and the `tile` clause.
 * Detection of `break` statement for the associated loop
     * Compile error if implicit/explicit `independent`.
     * No error if `seq` or `auto`.
@@ -1235,7 +1255,7 @@ translations from OpenACC to OpenMP.  Thus, it is not yet recommended
 for use in hand-written OpenMP code as it might not integrate well
 with some OpenMP features.
 
-### `atomic` in Gang-Redundant Mode ###
+### `atomic` Construct in Gang-Redundant Mode ###
 
 * OpenACC Features Affected
     * `atomic` construct
@@ -1253,6 +1273,30 @@ with some OpenMP features.
     * `-Wopenacc-omp-atomic-in-teams`
     * `-Wno-error=openacc-omp-atomic-in-teams`
     * `-Wno-openacc-omp-atomic-in-teams`
+    * These warnings diagnose use of the above OpenMP extension only when the
+      nesting is lexical.  Dynamic cases are not diagnosed by Clacc's compiler.
+* Translation Options
+    * None.
+
+### `tile` Clause in Gang-Redundant Mode ###
+
+* OpenACC Features Affected
+    * `tile` clause on sequential `loop` construct
+* OpenMP Extension Employed
+    * `tile` construct strictly nested in `target teams` region (not permitted
+      in OpenMP 5.2)
+* OpenACC Semantics Required
+    * OpenACC 3.3 permits a sequential `loop` construct with a `tile` clause in
+      gang-redundant mode.  This case occurs when a sequential `loop` construct
+      with a `tile` clause is encountered within a `parallel` region and there
+      is no partitioned `loop` region nested in between.
+    * Clacc strictly nests OpenMP's `tile` construct within a `target teams`
+      region to implement the case that an OpenACC sequential `loop` construct
+      with a `tile` clause appears in gang-redundant mode.
+* Diagnostic Options
+    * `-Wopenacc-omp-tile-in-teams`
+    * `-Wno-error=openacc-omp-tile-in-teams`
+    * `-Wno-openacc-omp-tile-in-teams`
     * These warnings diagnose use of the above OpenMP extension only when the
       nesting is lexical.  Dynamic cases are not diagnosed by Clacc's compiler.
 * Translation Options

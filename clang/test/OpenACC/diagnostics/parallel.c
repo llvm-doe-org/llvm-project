@@ -144,6 +144,9 @@ int main() {
   // par-error@+1 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc parallel'}}
   #pragma acc parallel LOOP collapse(1)
     FORLOOP
+  // par-error@+1 {{unexpected OpenACC clause 'tile' in directive '#pragma acc parallel'}}
+  #pragma acc parallel LOOP tile(4)
+    FORLOOP
   // par-error@+10    {{unexpected OpenACC clause 'read' in directive '#pragma acc parallel'}}
   // parloop-error@+9 {{unexpected OpenACC clause 'read' in directive '#pragma acc parallel loop'}}
   // par-error@+8     {{unexpected OpenACC clause 'write' in directive '#pragma acc parallel'}}

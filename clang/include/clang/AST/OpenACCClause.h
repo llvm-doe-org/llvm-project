@@ -1794,10 +1794,10 @@ public:
   unsigned sizelist_size() const { return NumSizeExprs; }
   bool sizelist_empty() const { return NumSizeExprs == 0; }
 
-  sizelist_range sizelists() {
+  sizelist_range sizelist() {
     return sizelist_range(sizelist_begin(), sizelist_end());
   }
-  sizelist_const_range sizelists() const {
+  sizelist_const_range sizelist() const {
     return sizelist_const_range(sizelist_begin(), sizelist_end());
   }
 

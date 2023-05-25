@@ -3434,8 +3434,6 @@ void CompilerInvocation::GenerateLangArgs(const LangOptions &Opts,
                 SA);
     if (Opts.OpenACCFakeAsyncWait)
       GenerateArg(Args, OPT_fopenacc_fake_async_wait, SA);
-    if (Opts.OpenACCFakeTileClause)
-      GenerateArg(Args, OPT_fopenacc_fake_tile_clause, SA);
   }
 
   // OpenMP was requested via '-fopenmp', not implied by '-fopenmp-simd' or
@@ -3895,7 +3893,6 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
 
   // Check if -fopenacc-fake-* are specified.
   Opts.OpenACCFakeAsyncWait = Args.hasArg(OPT_fopenacc_fake_async_wait);
-  Opts.OpenACCFakeTileClause = Args.hasArg(OPT_fopenacc_fake_tile_clause);
 
   // Check if -fopenmp is specified and set default version to 5.0.
   Opts.OpenMP = Args.hasArg(OPT_fopenmp) ? 50 : 0;

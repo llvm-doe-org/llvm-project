@@ -4090,7 +4090,7 @@ bool RecursiveASTVisitor<Derived>::VisitACCCollapseClause(
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitACCTileClause(ACCTileClause *C) {
-  for (auto *E : C->sizelists())
+  for (auto *E : C->sizelist())
     TRY_TO(TraverseStmt(E));
   return true;
 }

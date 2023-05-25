@@ -289,6 +289,16 @@ public:
     return getClausesOfKind<SpecificClause>(clauses());
   }
 
+  template <typename SpecificClause>
+  SpecificClause *getTheClauseOfKind() const {
+    auto Clauses = getClausesOfKind<SpecificClause>(clauses());
+    if (Clauses.begin() == Clauses.end())
+      return nullptr;
+    assert(std::next(Clauses.begin()) == Clauses.end() &&
+           "expected at most one clause of the specified kind");
+    return *Clauses.begin();
+  }
+
   /// Returns true if the current directive has one or more clauses of a
   /// specific kind.
   template <typename SpecificClause>
@@ -776,6 +786,11 @@ public:
       return ACCRoutineDeclAttr::Vector;
     return ACCRoutineDeclAttr::Seq;
   }
+
+  // Remove any worker clause and partitioning.
+  void removeWorker() { Worker = false; }
+  // Remove any vector clause and partitioning.
+  void removeVector() { Vector = false; }
 };
 
 /// This represents '#pragma acc loop' directive.
