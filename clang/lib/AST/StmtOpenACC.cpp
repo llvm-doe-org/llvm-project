@@ -201,7 +201,7 @@ ACCDataDirective *ACCDataDirective::CreateEmpty(const ASTContext &C,
 ACCParallelDirective *ACCParallelDirective::Create(
     const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
     ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
-    bool NestedWorkerPartitioning) {
+    bool NestedExplicitWorkerPartitioning) {
   unsigned Size =
       llvm::alignTo(sizeof(ACCParallelDirective), alignof(ACCClause *));
   void *Mem =
@@ -210,7 +210,7 @@ ACCParallelDirective *ACCParallelDirective::Create(
       new (Mem) ACCParallelDirective(StartLoc, EndLoc, Clauses.size());
   Dir->setClauses(Clauses);
   Dir->setAssociatedStmt(AssociatedStmt);
-  Dir->setNestedWorkerPartitioning(NestedWorkerPartitioning);
+  Dir->setNestedExplicitWorkerPartitioning(NestedExplicitWorkerPartitioning);
   return Dir;
 }
 
@@ -224,15 +224,15 @@ ACCParallelDirective *ACCParallelDirective::CreateEmpty(const ASTContext &C,
   return new (Mem) ACCParallelDirective(NumClauses);
 }
 
-ACCLoopDirective *
-ACCLoopDirective::Create(
+ACCLoopDirective *ACCLoopDirective::Create(
     const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
     ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
     const ArrayRef<VarDecl *> &LCVs, ACCPartitioningKind Partitioning,
-    bool NestedGangPartitioning) {
+    bool NestedExplicitGangPartitioning, bool NestedExplicitWorkerPartitioning,
+    bool NestedExplicitVectorPartitioning) {
   unsigned Size = llvm::alignTo(sizeof(ACCLoopDirective),
                                 alignof(ACCClause *));
-  void *Mem = C.Allocate(Size + sizeof(ACCClause *) * (Clauses.size() + 1) +
+  void *Mem = C.Allocate(Size + sizeof(ACCClause *) * (Clauses.size() + 3) +
                          sizeof(Stmt *) + sizeof(VarDecl *) * LCVs.size());
   ACCLoopDirective *Dir =
       new (Mem) ACCLoopDirective(StartLoc, EndLoc, Clauses.size(),
@@ -241,7 +241,9 @@ ACCLoopDirective::Create(
   Dir->setAssociatedStmt(AssociatedStmt);
   Dir->setLoopControlVariables(LCVs);
   Dir->setPartitioning(Partitioning);
-  Dir->setNestedGangPartitioning(NestedGangPartitioning);
+  Dir->setNestedExplicitGangPartitioning(NestedExplicitGangPartitioning);
+  Dir->setNestedExplicitWorkerPartitioning(NestedExplicitWorkerPartitioning);
+  Dir->setNestedExplicitVectorPartitioning(NestedExplicitVectorPartitioning);
   return Dir;
 }
 

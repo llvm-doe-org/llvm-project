@@ -50,6 +50,12 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
     * See the section "Using" in `../README.md` for more usage details.
     * See the section "Interaction with OpenMP Support" in
       `README-OpenACC-design.md` for design details.
+* `-f[no-]openacc-implicit-worker` and `-f[no-]openacc-implicit-vector`
+    * Enables (or disables) implicitly determining `worker` and `vector` clauses
+      on `loop` constructs to try to increase parallelism and thus performance.
+    * Currently, they are disabled by default, but that might change in the
+      future.
+    * See the section "`loop` Directive" below for details.
 * Other OpenMP options
     * `-fopenmp` produces an error when OpenACC support is enabled as
       Clacc does not currently support combining OpenMP and OpenACC in
@@ -348,6 +354,29 @@ Run-Time Environment Variables
     * For now, all three are ignored when combined with `auto` clause
       because, for now, `auto` produces a sequential loop.
     * Implicit `gang` clause
+        * This is always enabled because it is specified by OpenACC (introduced
+          in 3.1) and can be important for correct behavior of the application.
+    * Implicit `worker` and `vector` clauses
+        * These are enabled/disabled by `-f[no-]openacc-implicit-worker` and
+          `-f[no-]openacc-implicit-vector`.  Currently, they are disabled by
+          default, but that might change in the future.
+        * Their purpose is to try to increase parallelism and thus performance.
+        * For a conforming OpenACC application (e.g., `loop` constructs are
+          never misidentified as `independent`), they should never affect
+          behavioral correctness.  Thus, the OpenACC specification does not
+          specify whether or how they are determined but also does not prohibit
+          them, and OpenACC compilers typically implement them.
+        * The current algorithm for determining which `loop` constructs should
+          receive implicit `worker` and `vector` clauses uses a simple heuristic
+          similar to the algorithm specified by OpenACC for implicit `gang`
+          clauses: after any conversion of `auto` clauses to `seq`, and after
+          determining implicit `routine` directives (see "Implicit `routine`
+          directive" below), select each loop nest's outermost `loop` constructs
+          on which `worker` and `vector` clauses are permitted.  A more
+          sophisticated analysis might be employed in the future.
+        * Currently, Clang might misbehave when a `loop` construct receives an
+          implicit `worker` clause and appears within a `parallel` construct
+          that has a `num_workers` clause with a non-constant expression.
     * For now, if none of these clauses appear (explicitly or
       implicitly), then a sequential loop is produced.
 * Supported data attributes and clauses
@@ -601,11 +630,11 @@ Run-Time Environment Variables
           `routine` directive is computed for the lambda, and thus the implied
           level of parallelism from that `loop` construct is `seq`.  This
           behavior could change based on committee discussions.
-        * Currently, implicit `gang` clauses on the aforementioned `loop`
-          constructs are computed after the implicit `routine` directive on the
-          lambda and thus only if the lambda body contains other `loop`
-          constructs or calls with gang parallelism.  This behavior could change
-          based on committee discussions.
+        * Currently, implicit `gang`, `worker`, and `vector` clauses on the
+          aforementioned `loop` constructs are computed after the implicit
+          `routine` directive on the lambda and thus only if the lambda body
+          contains other `loop` constructs or calls with sufficient parallelism.
+          This behavior could change based on committee discussions.
     * An implicit `routine` directive has scope throughout the compilation unit
       and thus triggers the above diagnostics for the function definition's body
       as long it's in the same compilation unit.  Caveat:
@@ -720,7 +749,7 @@ OpenACC Runtime Library API and Preprocessor
           3.1, sec. A.1.2 "AMD GPU Targets".
         * `acc_device_x86_64` and `acc_device_ppc64le` are supported
           but are not mentioned by OpenACC 3.1
-    * `acc_device_not_host` may include devices that no
+    * `acc_device_not_host` might include devices that no
       architecture-specific enumerator includes.  This situation is
       not ideal but can arise when either the OpenMP implementation's
       `omp_device_t` (a Clacc extension) or Clacc's `acc_device_t` is
@@ -861,7 +890,7 @@ OpenACC Runtime Library API and Preprocessor
     * `acc_hostptr`
         * As in other OpenACC implementations, Clacc's implementation
           of `acc_hostptr` has poor performance.  Calls to
-          `acc_hostptr` are not recommended in production code but may
+          `acc_hostptr` are not recommended in production code but might
           be useful for debugging.
         * OpenACC 3.1 is unclear about the behavior for shared memory.
           Clacc returns the specified device pointer in that case.

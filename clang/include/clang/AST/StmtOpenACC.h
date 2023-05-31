@@ -547,7 +547,7 @@ public:
 ///
 class ACCParallelDirective : public ACCDirectiveStmt {
   friend class ASTStmtReader;
-  bool NestedWorkerPartitioning = false;
+  bool NestedExplicitWorkerPartitioning = false;
 
   /// Build directive with the given start and end location.
   ///
@@ -567,10 +567,12 @@ class ACCParallelDirective : public ACCDirectiveStmt {
   }
 
   /// Record whether this parallel construct encloses one of the following that
-  /// is not in an enclosed function definition: either an effective loop
-  /// directive with worker partitioning, or a function call with a routine
-  /// worker directive.
-  void setNestedWorkerPartitioning(bool V) { NestedWorkerPartitioning = V; }
+  /// is not in an enclosed function definition: either a loop directive with
+  /// explicit worker partitioning (after auto clause analysis), or a function
+  /// call with a routine worker directive.
+  void setNestedExplicitWorkerPartitioning(bool V) {
+    NestedExplicitWorkerPartitioning = V;
+  }
 
 public:
   /// Creates directive.
@@ -580,14 +582,15 @@ public:
   /// \param EndLoc Ending Location of the directive.
   /// \param Clauses List of clauses.
   /// \param AssociatedStmt Statement associated with the directive.
-  /// \param NestedWorkerPartitioning Whether this parallel construct encloses
-  ///        one of the following that is not in an enclosed function
-  ///        definition: either an effective loop directive with worker
-  ///        partitioning, or a function call with a routine worker directive.
+  /// \param NestedExplicitWorkerPartitioning Whether this parallel construct
+  ///        encloses one of the following that is not in an enclosed function
+  ///        definition: either an effective loop directive with explicit worker
+  ///        partitioning (after auto clause analysis), or a function call with
+  ///        a routine worker directive.
   static ACCParallelDirective *
   Create(const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
          ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
-         bool NestedWorkerPartitioning);
+         bool NestedExplicitWorkerPartitioning);
 
   /// Creates an empty directive.
   ///
@@ -602,10 +605,12 @@ public:
   }
 
   /// Return true if this parallel construct encloses one of the following that
-  /// is not in an enclosed function definition: either an effective loop
-  /// directive with worker partitioning, or a function call with a routine
-  /// worker directive.
-  bool getNestedWorkerPartitioning() const { return NestedWorkerPartitioning; }
+  /// is not in an enclosed function definition: either a loop directive with
+  /// explicit worker partitioning (after auto clause analysis), or a function
+  /// call with a routine worker directive.
+  bool getNestedExplicitWorkerPartitioning() const {
+    return NestedExplicitWorkerPartitioning;
+  }
 };
 
 /// How a loop is partitioned.
@@ -806,7 +811,9 @@ class ACCLoopDirective : public ACCDirectiveStmt {
   friend class ASTStmtReader;
   MutableArrayRef<VarDecl *> LCVs;
   ACCPartitioningKind Partitioning;
-  bool NestedGangPartitioning = false;
+  bool NestedExplicitGangPartitioning = false;
+  bool NestedExplicitWorkerPartitioning = false;
+  bool NestedExplicitVectorPartitioning = false;
 
   static MutableArrayRef<VarDecl *> reserveLCVs(
       ACCLoopDirective *D, unsigned NumClauses, unsigned MaxAddClauses,
@@ -832,9 +839,9 @@ class ACCLoopDirective : public ACCDirectiveStmt {
   ACCLoopDirective(SourceLocation StartLoc, SourceLocation EndLoc,
                    unsigned NumClauses, unsigned NumLCVs)
       : ACCDirectiveStmt(this, ACCLoopDirectiveClass, ACCD_loop, StartLoc,
-                         EndLoc, NumClauses, /*MaxAddClauses=*/1,
+                         EndLoc, NumClauses, /*MaxAddClauses=*/3,
                          /*NumChildren=*/1),
-        LCVs(reserveLCVs(this, NumClauses, /*MaxAddClauses=*/1, NumLCVs)) {}
+        LCVs(reserveLCVs(this, NumClauses, /*MaxAddClauses=*/3, NumLCVs)) {}
 
   /// Build an empty directive.
   ///
@@ -860,11 +867,21 @@ class ACCLoopDirective : public ACCDirectiveStmt {
       this->LCVs[I++] = LCV;
   }
 
+  ///@{
   /// Record whether this loop construct encloses one of the following that is
   /// not in an enclosed function definition: either a loop directive with
-  /// explicit gang partitioning, or a function call with a routine gang
-  /// directive.
-  void setNestedGangPartitioning(bool V) { NestedGangPartitioning = V; }
+  /// explicit gang/worker/vector partitioning (after auto clause analysis), or
+  /// a function call with a routine gang/worker/vector directive.
+  void setNestedExplicitGangPartitioning(bool V) {
+    NestedExplicitGangPartitioning = V;
+  }
+  void setNestedExplicitWorkerPartitioning(bool V) {
+    NestedExplicitWorkerPartitioning = V;
+  }
+  void setNestedExplicitVectorPartitioning(bool V) {
+    NestedExplicitVectorPartitioning = V;
+  }
+  ///@}
 
   /// Set how the loop is partitioned.
   void setPartitioning(ACCPartitioningKind V) { Partitioning = V; }
@@ -880,15 +897,28 @@ public:
   /// \param LCVs Loop control variables that are assigned but not declared in
   ///        the inits of the for loops associated with the directive.
   /// \param Partitioning How this loop is partitioned.
-  /// \param NestedGangPartitioning Whether this loop construct encloses one of
-  ///        the following that is not in an enclosed function definition:
-  ///        either a loop directive with explicit gang partitioning, or a
-  ///        function call with a routine gang directive.
-  static ACCLoopDirective *Create(
-      const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
-      ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
-      const ArrayRef<VarDecl *> &LCVs, ACCPartitioningKind Partitioning,
-      bool NestedGangPartitioning);
+  /// \param NestedExplicitGangPartitioning Whether this loop construct encloses
+  ///        one of the following that is not in an enclosed function
+  ///        definition: either a loop directive with explicit gang partitioning
+  ///        (after auto clause analysis), or a function call with a routine
+  ///        gang directive.
+  /// \param NestedExplicitWorkerPartitioning Whether this loop construct
+  ///        encloses one of the following that is not in an enclosed function
+  ///        definition: either a loop directive with explicit worker
+  ///        partitioning (after auto clause analysis), or a function call with
+  ///        a routine worker directive.
+  /// \param NestedExplicitVectorPartitioning Whether this loop construct
+  ///        encloses one of the following that is not in an enclosed function
+  ///        definition: either a loop directive with explicit vector
+  ///        partitioning (after auto clause analysis), or a function call with
+  ///        a routine vector directive.
+  static ACCLoopDirective *
+  Create(const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
+         ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt,
+         const ArrayRef<VarDecl *> &LCVs, ACCPartitioningKind Partitioning,
+         bool NestedExplicitGangPartitioning,
+         bool NestedExplicitWorkerPartitioning,
+         bool NestedExplicitVectorPartitioning);
 
   /// Creates an empty directive.
   ///
@@ -913,9 +943,19 @@ public:
 
   /// Return true if this loop construct encloses one of the following that is
   /// not in an enclosed function definition: either a loop directive with
-  /// explicit gang partitioning, or a function call with a routine gang
-  /// directive.
-  bool getNestedGangPartitioning() const { return NestedGangPartitioning; }
+  /// explicit gang/worker/vector partitioning (after auto clause analysis), or
+  /// a function call with a routine gang/worker/vector directive.
+  ///@{
+  bool getNestedExplicitGangPartitioning() const {
+    return NestedExplicitGangPartitioning;
+  }
+  bool getNestedExplicitWorkerPartitioning() const {
+    return NestedExplicitWorkerPartitioning;
+  }
+  bool getNestedExplicitVectorPartitioning() const {
+    return NestedExplicitVectorPartitioning;
+  }
+  ///@}
 
   /// Get how the loop is partitioned.
   ACCPartitioningKind getPartitioning() const { return Partitioning; }
@@ -924,13 +964,36 @@ public:
   ///
   /// Must not be called if there's already a gang clause or if this directive
   /// was constructed using CreateEmpty.
-  ///
   void addImplicitGangClause() {
     assert(!hasClausesOfKind<ACCGangClause>() &&
            "expected loop directive not to already have a gang clause");
     addClause(new ACCGangClause(ACC_IMPLICIT, SourceLocation(),
                                 SourceLocation()));
     Partitioning.setGang();
+  }
+
+  /// Add an implicit worker clause.
+  ///
+  /// Must not be called if there's already a worker clause or if this directive
+  /// was constructed using CreateEmpty.
+  void addImplicitWorkerClause() {
+    assert(!hasClausesOfKind<ACCWorkerClause>() &&
+           "expected loop directive not to already have a worker clause");
+    addClause(
+        new ACCWorkerClause(ACC_IMPLICIT, SourceLocation(), SourceLocation()));
+    Partitioning.setWorker();
+  }
+
+  /// Add an implicit vector clause.
+  ///
+  /// Must not be called if there's already a vector clause or if this directive
+  /// was constructed using CreateEmpty.
+  void addImplicitVectorClause() {
+    assert(!hasClausesOfKind<ACCVectorClause>() &&
+           "expected loop directive not to already have a vector clause");
+    addClause(
+        new ACCVectorClause(ACC_IMPLICIT, SourceLocation(), SourceLocation()));
+    Partitioning.setVector();
   }
 };
 

@@ -611,11 +611,12 @@ public:
     // Declare a num_workers variable in an enclosing compound statement, if
     // needed.  FIXME: This generates an unused __clang_acc_num_workers__
     // declaration when the only loop worker clause is discarded due to a tile
-    // clause or when there's just a call to a worker function.
+    // clause or when there's just a call to a worker function.  Moreover, it
+    // isn't generated when there's a loop with an implicit worker clause.
     auto NumWorkersClauses = D->getClausesOfKind<ACCNumWorkersClause>();
     if (NumWorkersClauses.begin() != NumWorkersClauses.end()) {
       DirEntry.NumWorkersExpr = NumWorkersClauses.begin()->getNumWorkers();
-      if (D->getNestedWorkerPartitioning()) {
+      if (D->getNestedExplicitWorkerPartitioning()) {
         if (!DirEntry.NumWorkersExpr->isIntegerConstantExpr(Context))
           DirEntry.NumWorkersVarDecl = EnclosingCompoundStmt.addNewPrivateDecl(
               "__clang_acc_num_workers__",

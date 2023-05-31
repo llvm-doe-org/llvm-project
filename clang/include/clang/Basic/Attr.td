@@ -3919,7 +3919,7 @@ def ACCRoutineDecl : ACCDeclAttr {
   let Subjects = SubjectList<[Function]>;
   let Args = [
     // Sorted in increasing order by level of parallelism so they can be
-    // compared by value later.
+    // compared by value and iterated.
     EnumArgument<"Partitioning", "PartitioningTy",
                  [ "seq", "vector", "worker", "gang" ],
                  [ "Seq", "Vector", "Worker", "Gang" ]>

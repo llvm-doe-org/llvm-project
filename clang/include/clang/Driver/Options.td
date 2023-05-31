@@ -2776,6 +2776,18 @@ def fopenacc_ast_print_EQ : Joined<["-"], "fopenacc-ast-print=">,
            " a result, the output will have preprocessor expansions and"
            " reformatting.">,
   Values<"acc,omp,acc-omp,omp-acc">;
+defm openacc_implicit_worker: BoolFOption<"openacc-implicit-worker",
+  LangOpts<"OpenACCImplicitWorker">, DefaultFalse,
+  PosFlag<SetTrue, [CC1Option, NoArgumentUnused],
+          "Enable implicitly determining worker clauses on loop constructs">,
+  NegFlag<SetFalse, [CC1Option, NoArgumentUnused],
+          "Disable implicitly determining worker clauses on loop constructs">>;
+defm openacc_implicit_vector: BoolFOption<"openacc-implicit-vector",
+  LangOpts<"OpenACCImplicitVector">, DefaultFalse,
+  PosFlag<SetTrue, [CC1Option, NoArgumentUnused],
+          "Enable implicitly determining vector clauses on loop constructs">,
+  NegFlag<SetFalse, [CC1Option, NoArgumentUnused],
+          "Disable implicitly determining vector clauses on loop constructs">>;
 def fopenacc_update_present_omp_EQ :
   Joined<["-"], "fopenacc-update-present-omp=">,
   Flags<[CC1Option, NoArgumentUnused]>, Group<f_Group>,

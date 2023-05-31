@@ -832,21 +832,23 @@ clauses Clacc currently implements.
 Notation
 --------
 
-For conciseness, we use the following notation when describing clauses
-and data attributes:
+For conciseness, we use the following notation when describing directives,
+clauses, and data attributes:
 
-* *exp* labels a clause, possibly specifying a data attribute, that is
-  explicitly specified in the source.
-* *pre* labels a data attribute that is predetermined by the compiler
-  (that is, cannot be overridden by an *exp* clause) and is not
-  specified by an *exp* clause.
-* *imp* labels a data attribute that is implicitly determined by the
-  compiler (that is, can be overridden by an *exp* clause) and is not
-  specified by an *exp* clause.
-* *not* labels a clause that is not *exp*.
-* The notation *L C* -> *L' C'* specifies that clause or data
-  attribute *C* under the condition identified by label *L* maps to
-  clause or data attribute *C'* under the condition identified by
+* *exp* labels a directive or clause (possibly specifying a data attribute) that
+  is explicitly specified in the source.
+* *pre* labels a directive, clause, or data attribute that is predetermined by
+  the compiler.  Thus, it is not specified by an *exp* directive or clause, and
+  it is not permitted to be overridden by a conflicting one.
+* *imp* labels a directive, clause, or data attribute that is implicitly
+  determined by the compiler.  Thus, it is not specified by an *exp* directive
+  or clause, and it is not overridden by a conflicting one, but it is permitted
+  to be overridden by a conflicting one.
+* *not* labels a directive, clause, or data attribute that is not determined in
+  any matter.  Thus, it is not *exp*, not *imp*, and not *pre*.
+* The notation *L C* -> *L' C'* specifies that directive, clause, or data
+  attribute *C* under the condition identified by label *L* maps to the
+  directive, clause, or data attribute *C'* under the condition identified by
   label *L'*, where a label is *exp*, *pre*, *imp*, or *not*.
 * The notation *L*|*L' C* -> *L'' C'* specifies both of the following
   mappings:
@@ -1396,100 +1398,6 @@ clarify these points in future versions of the OpenACC specification.
     * For OpenACC, gcc 7.2.0 also enforces this constraint, but pgcc
       18.4-0 does not enforce it.
 
-### Implicit Gang Clauses ###
-
-OpenACC 3.1 introduced a specification of *imp* `gang` clauses to
-standardize a behavior of existing OpenACC implementations that is
-contrary to OpenACC 3.0 and earlier.
-
-Like an *exp* `gang` clause, an *imp* `gang` clause converts a `loop`
-construct from gang-redundant mode to gang-partitioned mode.  Thus,
-the exact conditions for adding *imp* `gang` clauses are important for
-both performance portability and behavioral portability of OpenACC
-applications.  Below is a summary of the specification plus notes on
-its rationale and on Clacc's implementation:
-
-* *imp* `gang` clauses are not yet specified for `acc kernels`
-  constructs.  Notes:
-    * The OpenACC technical committee hasn't yet determined an
-      appropriate specification for this case.
-    * Clacc doesn't yet support `acc kernels` anyway.
-* Any required conversions of *exp* `auto` to *imp* `seq` on `acc
-  loop` constructs and consequently dropping any `gang`, `worker`, or
-  `vector` there are performed before computing *imp* `gang`
-  placement.  Notes:
-    * An alternative condition would be to perform *imp* `gang`
-      placement first so it would not depend on the outcome of `auto`
-      conversions:
-        * That condition would perhaps make it marginally simpler for
-          the application programmer to predict application behavior
-          across implementations' varying loop analysis capabilities.
-          For example, in an `acc loop auto` nest, the *imp* `gang`
-          would then always be placed on the outermost loop based on
-          the remaining conditions below.  Thus, the entire loop nest
-          would be either gang-redundant or gang-partitioned depending
-          on whether compiler is able determine that the outermost
-          loop's iterations are data-independent.
-        * However, in that example, consider the case when the
-          outermost loop would become gang-redundant.  That is, this
-          alternative condition would sometimes lead the compiler to
-          place *imp* `gang` on a loop where it would be ignored when
-          `auto` would later become `seq`, thus losing performance
-          gains that could have been achieved by placing *imp* `gang`
-          on a different loop in the same loop nest.  Performing
-          `auto` conversions before computing *imp* `gang` placement
-          avoids that scenario because of the rule that `gang` cannot
-          be added to `seq`.
-    * Currently, Clacc always converts *exp* `auto` to *imp* `seq`.
-      Obviously, as Clacc grows a descriptive interpretation of
-      `auto`, some such constructs will be handled as if they have
-      *imp* `independent` instead.
-* Within that context, an `acc loop` construct has *imp* `gang` if all
-  of the following are true:
-    * *not* `gang`.  Notes:
-        * This just prevents ending up with *imp* `gang` and *exp*
-          `gang` on the same `acc loop`.  It would be equivalent to
-          remove this condition and state that the presence of both is
-          the same as the presence of just one.
-    * *exp* `gang` would be permitted.  Notes:
-        * Based on OpenACC 3.2, *exp* `gang` would not be permitted on
-          any `acc loop` construct that has (a) an ancestor `acc loop`
-          construct with *exp* `gang`, *exp* `worker`, or *exp*
-          `vector`, (b) *exp* `seq`, (c) a nested `acc loop` construct
-          with *exp* `gang`, or (d) an enclosed call to a function to
-          which an `acc routine gang` applies.
-        * These restrictions are relaxed a bit for *imp* `gang`
-          because `auto` conversions are performed first.  For
-          example, an `acc loop auto gang` that becomes a sequential
-          loop prevents a nested `acc loop` from having an *exp*
-          `gang` clause but not from having an *imp* `gang` clause.
-        * An implementation doesn't actually need to check whether an
-          enclosing loop has *exp* `worker` or *exp* `vector`.  That
-          is, if there is such an enclosing loop, then *exp* `gang` is
-          either already present or permitted on some enclosing loop,
-          so other conditions are sufficient to rule out adding an
-          *imp* `gang` clause to the current loop.
-    * There is no ancestor `acc loop` construct that is permitted to
-      have *exp* `gang`.  Notes:
-        * The point here is to choose the outermost construct
-          possible.
-        * The spec also says that an ancestor `acc loop` isn't
-          relevant for this condition if there's a compute construct
-          in between.  However, like most OpenACC implementations,
-          Clacc currently doesn't permit a compute construct within an
-          `acc loop`.
-    * Notes:
-        * An additional constraint of *not* `worker`, and *not*
-          `vector` was considered, but it's not how existing
-          implementations behave.
-        * The goal of the additional constraint was to give the
-          OpenACC programmer some means to specify partitioning
-          exactly as he sees fit.
-        * Interestingly, because we do not have this constraint, the
-          only way to specify gang-redundant mode combined with
-          worker-partitioned or vector-partitioned mode is via an
-          orphaned loop.
-
 ### Executable Directive Placement ###
 
 `acc update`, `acc enter data`, or `acc exit data` may not be an
@@ -1900,28 +1808,8 @@ Clacc treats an `acc loop` directive as sequential if any of the
 following are true:
 
 * *exp* `seq`
-* *exp* `auto`
-* *not* `gang`, *not* `worker`, *not* `vector`, and not *imp* `gang`
-* Notes:
-    * The latter two cases normally depend on the OpenACC compiler to
-      determine the best way to parallelize the loop.  Again, Clacc
-      does not yet support the necessary analyses and so depends on
-      the application developer to prescribe the parallelization, so
-      Clacc makes the conservative choice of a sequential loop
-      instead.
-    * The third case (without the other two) would certainly be the
-      more straightforward case to improve because OpenACC specifies
-      that the loop iterations are then required to be
-      data-independent (that is, *exp*|*imp* `independent`).  This is
-      a case where a simple AST-level analysis could go a long way for
-      existing OpenACC applications that expect a descriptive
-      interpretation: Clacc could add whichever of `worker` or
-      `vector` doesn't conflict with other clauses on ancestor or
-      nested loops.
-    * Actually, the placement of *imp* `gang` is already a step in
-      this direction.  Unlike an *imp* `worker` or *imp* `vector`,
-      it's necessitated due to the shift in semantics between
-      gang-redundant and gang-partitioned mode.
+* *exp* `auto` (because Clacc currently always converts `auto` to `seq`)
+* *not* `gang`, *not* `worker`, and *not* `vector`
 
 Clacc's current mapping of a sequential `acc loop` directive and its
 clauses to OpenMP is as follows:
@@ -1959,9 +1847,8 @@ clauses to OpenMP is as follows:
   converted to `1`.
 * Else, translation discards the `acc loop` directive.
 
-A sequential `acc loop` directive is gang-redundant, worker-single,
-vector-single mode.  Thus, as far as partitioning is concerned, simple
-C `for` loops are sufficient.  We considered mapping instead to
+As far as partitioning is concerned, a simple C `for` loop is sufficient to
+implement a sequential `acc loop` directive.  We considered mapping instead to
 various OpenMP directives so that `private` and `reduction` clauses
 could simply be translated to OpenMP clauses.  To understand the
 desired properties of the chosen mapping described above, it's
@@ -1998,26 +1885,28 @@ its clauses to OpenMP is as follows:
 
 * `acc loop` -> `omp`
 * *exp*|*imp* `gang` -> `distribute`
-* If *exp* `tile` and *not* `vector`, then translation discards *exp* `worker`.
-  Note: In this case, `worker` should be applied to the element/intra-tile loop
-  generated by the `tile` clause according to OpenACC 3.3, but there appears to
-  be no way to express that behavior in OpenMP 5.2, as discussed in the `tile`
-  documentation in `README-OpenACC-status.md`.
-* Else, *exp* `worker` -> `parallel for`
-* If *exp* `tile`, then translation discards *exp* `vector`.
+* If *exp* `tile` and *not* `vector`, then translation discards *exp*|*imp*
+  `worker`.  Note: In this case, `worker` should be applied to the
+  element/intra-tile loop generated by the `tile` clause according to
+  OpenACC 3.3, but there appears to be no way to express that behavior in
+  OpenMP 5.2, as discussed in the `tile` documentation in
+  `README-OpenACC-status.md`.
+* Else, *exp*|*imp* `worker` -> `parallel for`
+* If *exp* `tile`, then translation discards *exp*|*imp* `vector`.
   Note: In this case, `vector` should be applied to the element/intra-tile loop
   generated by the `tile` clause according to OpenACC 3.3, but there appears to
   be no way to express that behavior in OpenMP 5.2, as discussed in the `tile`
   documentation in `README-OpenACC-status.md`.
-* Else, *exp* `vector` -> `simd`
+* Else, *exp*|*imp* `vector` -> `simd`
 * The output `distribute`, `parallel for`, and `simd` OpenMP directive
   components are sorted in the above order before all clauses regardless of the
   input clause order.
-* If *exp* `worker` and either *not* `tile` or *exp* `vector`, then *exp*
-  `num_workers` from ancestor `acc parallel` -> *exp* `num_threads` where the
-  argument is either (1) the original *exp* `num_workers` argument if it is a
-  constant expression or (2) otherwise an expression containing only a reference
-  to the local `const` variable generated for that *exp* `num_workers`.  Notes:
+* If *exp*|*imp* `worker` and either *not* `tile` or *exp*|*imp* `vector`, then
+  *exp* `num_workers` from ancestor `acc parallel` -> *exp* `num_threads` where
+  the argument is either (1) the original *exp* `num_workers` argument if it is
+  a constant expression or (2) otherwise an expression containing only a
+  reference to the local `const` variable generated for that *exp*
+  `num_workers`.  Notes:
     * For the ancestor `acc parallel` and for all OpenACC directives
       nested between it and this `acc loop`, Clacc leaves the OpenMP
       data sharing attribute for the local `const` variable for
@@ -2026,7 +1915,7 @@ its clauses to OpenMP is as follows:
       efficient, but not all OpenMP directives permit an *exp*
       `shared` clause.  Thus, relying on implicit data sharing
       attributes throughout simplifies the implementation.
-* If *exp* `vector` and *not* `tile`, then *exp* `vector_length` with a
+* If *exp*|*imp* `vector` and *not* `tile`, then *exp* `vector_length` with a
   constant-expression argument from ancestor `acc parallel` -> *exp* `simdlen`.
 * `static:*` within `gang` -> `dist_schedule(static)`
 * `static:`*N* within `gang` -> `dist_schedule(static,`*N*`)`
@@ -2054,7 +1943,7 @@ its clauses to OpenMP is as follows:
   init of an attached `for` loop -> *pre* `private`.  Notes:
     * Mapping to *exp* `private` would be erroneous because it would
       refer to a variable from the enclosing scope.
-* If *exp* `vector` and the loop control variable is just assigned
+* If *exp*|*imp* `vector` and the loop control variable is just assigned
   instead of declared in the init of an attached `for` loop, then
   *exp*|*pre* `private` for that variable -> *pre* `linear`.  Then,
   wrap the `omp simd` in a compound statement, and declare an
@@ -2071,8 +1960,8 @@ its clauses to OpenMP is as follows:
       some other target compiler's OpenMP implementation to extract it
       for us.
 * In all other cases, *exp*|*pre* `private` -> *exp* `private`.
-* If *exp* `worker` or *exp* `vector`, then *exp* `reduction` -> *exp*
-  `reduction`.
+* If *exp*|*imp* `worker` or *exp*|*imp* `vector`, then *exp* `reduction` ->
+  *exp* `reduction`.
 * Else, translation discards *exp* `reduction`.  Notes:
     * *exp* `reduction` for a gang-private variable is discarded here
       because it is a trivial gang reduction, as discussed under

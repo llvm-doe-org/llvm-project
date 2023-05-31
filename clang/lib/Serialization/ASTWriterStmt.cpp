@@ -2747,7 +2747,7 @@ void ASTStmtWriter::VisitACCParallelDirective(ACCParallelDirective *D) {
   Record.push_back(D->getNumClauses());
   VisitACCDirectiveStmt(D);
   Code = serialization::STMT_ACC_PARALLEL_DIRECTIVE;
-  Record.push_back(D->getNestedWorkerPartitioning());
+  Record.push_back(D->getNestedExplicitWorkerPartitioning());
 }
 
 void ASTStmtWriter::VisitACCLoopDirective(ACCLoopDirective *D) {
@@ -2763,7 +2763,9 @@ void ASTStmtWriter::VisitACCLoopDirective(ACCLoopDirective *D) {
                 "ACCPartitioningKind is too large in ASTStmtWriter");
   ACCPartitioningKind Part = D->getPartitioning();
   Record.push_back(*reinterpret_cast<uint64_t*>(&Part));
-  Record.push_back(D->getNestedGangPartitioning());
+  Record.push_back(D->getNestedExplicitGangPartitioning());
+  Record.push_back(D->getNestedExplicitWorkerPartitioning());
+  Record.push_back(D->getNestedExplicitVectorPartitioning());
 }
 
 void ASTStmtWriter::VisitACCParallelLoopDirective(

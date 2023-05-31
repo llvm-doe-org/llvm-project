@@ -2777,7 +2777,7 @@ void ASTStmtReader::VisitACCParallelDirective(ACCParallelDirective *D) {
   // The NumClauses field was read in ReadStmtFromStream.
   Record.skipInts(1);
   VisitACCDirectiveStmt(D);
-  D->setNestedWorkerPartitioning(Record.readInt());
+  D->setNestedExplicitWorkerPartitioning(Record.readInt());
 }
 
 void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
@@ -2794,7 +2794,9 @@ void ASTStmtReader::VisitACCLoopDirective(ACCLoopDirective *D) {
                 "ACCPartitioningKind is too large in ASTStmtReader");
   uint64_t Part = Record.readInt();
   D->setPartitioning(*reinterpret_cast<ACCPartitioningKind*>(&Part));
-  D->setNestedGangPartitioning(Record.readInt());
+  D->setNestedExplicitGangPartitioning(Record.readInt());
+  D->setNestedExplicitWorkerPartitioning(Record.readInt());
+  D->setNestedExplicitVectorPartitioning(Record.readInt());
 }
 
 void ASTStmtReader::VisitACCParallelLoopDirective(ACCParallelLoopDirective *D)

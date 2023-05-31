@@ -6242,6 +6242,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     Args.addOptOutFlag(CmdArgs, options::OPT_fopenmp_extensions,
                        options::OPT_fno_openmp_extensions);
   }
+  Args.addOptInFlag(CmdArgs, options::OPT_fopenacc_implicit_worker,
+                    options::OPT_fno_openacc_implicit_worker);
+  Args.addOptInFlag(CmdArgs, options::OPT_fopenacc_implicit_vector,
+                    options::OPT_fno_openacc_implicit_vector);
   Args.AddLastArg(CmdArgs, options::OPT_fopenacc_print_EQ);
   Args.AddLastArg(CmdArgs, options::OPT_fopenacc_ast_print_EQ);
   Args.AddAllArgs(CmdArgs, options::OPT_fopenacc_update_present_omp_EQ);

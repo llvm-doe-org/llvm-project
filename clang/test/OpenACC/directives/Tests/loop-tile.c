@@ -1,6 +1,9 @@
 // Check tile clause on "acc parallel loop", on "acc loop" within
 // "acc parallel", and on orphaned "acc loop".
-
+//
+// Interaction with implicit worker and vector clauses is checked in
+// loop-implicit-gang-worker-vector.c.
+//
 // Keep these FileCheck variable definitions in sync with preprocessor macro
 // definitions below.
 // REDEFINE: %{all:fc:args} = \
@@ -18,7 +21,7 @@
 // RUN: %{acc-check-dmp}
 // RUN: %{acc-check-prt}
 // RUN: %{acc-check-exe}
-
+//
 // END.
 
 /* expected-no-diagnostics */

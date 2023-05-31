@@ -257,6 +257,8 @@ LANGOPT(OpenMPNoNestedParallelism  , 1, 0, "Assume that no thread in a parallel 
 LANGOPT(OpenMPOffloadMandatory  , 1, 0, "Assert that offloading is mandatory and do not create a host fallback.")
 LANGOPT(NoGPULib  , 1, 0, "Indicate a build without the standard GPU libraries.")
 LANGOPT(OpenACC           , 1, 0, "OpenACC support")
+LANGOPT(OpenACCImplicitWorker, 1, 0, "Add implicit worker clauses to loop constructs")
+LANGOPT(OpenACCImplicitVector, 1, 0, "Add implicit vector clauses to loop constructs")
 ENUM_LANGOPT(OpenACCUpdatePresentOMP, OpenACCUpdatePresentOMPKind, 1,
              OpenACCUpdatePresentOMP_Present,
              "The OpenMP translation of the OpenACC 'update' directive without 'if_present'")

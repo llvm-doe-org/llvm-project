@@ -111,21 +111,23 @@ private:
     SourceLocation LoopBreakLoc; // invalid if no break statement or not loop
     unsigned AssociatedLoops = 1; // from collapse or tile clause
     unsigned AssociatedLoopsParsed = 0; // how many have been parsed so far
+    ///@{
     /// True if this is an effective compute or loop construct that encloses one
     /// of the following that is not in an enclosed function definition: either
-    /// an effective loop directive with explicit gang partitioning, or a
-    /// function call with a routine gang directive.
+    /// an effective loop directive with explicit gang/worker/vector
+    /// partitioning (after auto clause analysis), or a function call with a
+    /// routine gang/worker/vector directive.
     ///
-    /// Implicit gang clauses are later added by ImplicitGangAdder after an
-    /// entire parallel construct or outermost orphaned loop construct is parsed
-    /// and thus after this stack is popped for all effective nested loop
-    /// directives, so we don't bother to update this then.
+    /// Implicit gang/worker/vector clauses are added by
+    /// \c ImplicitGangWorkerVectorAdder after an entire parallel construct or
+    /// outermost orphaned loop construct is parsed and thus after this stack is
+    /// popped for all effective nested loop directives, so it's too late to
+    /// update these fields then.  Thus, these fields only track explicit
+    /// partitioning.
     bool NestedExplicitGangPartitioning = false;
-    /// True if this is an effective compute or loop construct that encloses one
-    /// of the following that is not in an enclosed function definition: either
-    /// an effective loop directive with worker partitioning, or a function call
-    /// with a routine worker directive.
-    bool NestedWorkerPartitioning = false;
+    bool NestedExplicitWorkerPartitioning = false;
+    bool NestedExplicitVectorPartitioning = false;
+    ///@}
     DirStackEntryTy(FunctionDecl *EnclosingFn, OpenACCDirectiveKind RealDKind,
                     OpenACCDirectiveKind EffectiveDKind,
                     SourceLocation StartLoc)
@@ -258,7 +260,8 @@ public:
       I->LoopDirectiveKind = Kind;
       ++I;
     }
-    if (Kind.hasGangPartitioning() || Kind.hasWorkerPartitioning()) {
+    if (Kind.hasGangPartitioning() || Kind.hasWorkerPartitioning() ||
+        Kind.hasVectorPartitioning()) {
       FunctionDecl *CurFn = SemaRef.getCurFunctionDecl(/*AllowLambda=*/true);
       for (auto E = Stack.rend(); I != E && I->EnclosingFn == CurFn; ++I) {
         bool IsComputeConstruct = isOpenACCComputeDirective(I->EffectiveDKind);
@@ -267,7 +270,9 @@ public:
         if (Kind.hasGangPartitioning())
           I->NestedExplicitGangPartitioning = true;
         if (Kind.hasWorkerPartitioning())
-          I->NestedWorkerPartitioning = true;
+          I->NestedExplicitWorkerPartitioning = true;
+        if (Kind.hasVectorPartitioning())
+          I->NestedExplicitVectorPartitioning = true;
         // Outside a compute directive, we expect only data directives, which
         // need not be marked.
         if (IsComputeConstruct)
@@ -316,27 +321,32 @@ public:
     }
     return ACCPartitioningKind();
   }
-  /// Is this is an effective compute or loop construct that encloses one of
-  /// the following that is not in an enclosed function definition: either an
-  /// effective loop directive with explicit gang partitioning, or a function
-  /// call with a routine gang directive?
-  //
-  /// Implicit gang clauses are later added by ImplicitGangAdder after an
-  /// entire parallel construct or outermost orphaned loop construct is parsed
-  /// and thus after this stack is popped for all effective nested loop
-  /// directives, so we don't bother to update this then.
+  ///@{
+  /// Is this an effective compute or loop construct that encloses one of the
+  /// following that is not in an enclosed function definition: either an
+  /// effective loop directive with explicit gang/worker/vector partitioning
+  /// (after auto clause analysis), or a function call with a routine
+  /// gang/worker/vector directive?
+  ///
+  /// Implicit gang/worker/vector clauses are added by
+  /// \c ImplicitGangWorkerVectorAdder after an entire parallel construct or
+  /// outermost orphaned loop construct is parsed and thus after this stack is
+  /// popped for all effective nested loop directives, so it's too late to
+  /// update these fields then.  Thus, these fields only track explicit
+  /// partitioning.
   bool getNestedExplicitGangPartitioning() const {
     assert(!Stack.empty() && "expected non-empty directive stack");
     return Stack.back().NestedExplicitGangPartitioning;
   }
-  /// Is this an effective compute or loop construct that encloses one of the
-  /// following that is not in an enclosed function definition: either an
-  /// effective loop directive with worker partitioning, or a function call with
-  /// a routine worker directive?
-  bool getNestedWorkerPartitioning() const {
+  bool getNestedExplicitWorkerPartitioning() const {
     assert(!Stack.empty() && "expected non-empty directive stack");
-    return Stack.back().NestedWorkerPartitioning;
+    return Stack.back().NestedExplicitWorkerPartitioning;
   }
+  bool getNestedExplicitVectorPartitioning() const {
+    assert(!Stack.empty() && "expected non-empty directive stack");
+    return Stack.back().NestedExplicitVectorPartitioning;
+  }
+  ///@}
 
 private:
   struct DMATraits {
@@ -1317,40 +1327,129 @@ void Sema::EndOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind) {
 }
 
 namespace {
-/// See the section "Implicit Gang Clauses" in the Clang OpenACC design
-/// document.
-class ImplicitGangAdder : public StmtVisitor<ImplicitGangAdder> {
+/// Computes implicit gang, worker, and vector clauses on loop constructs.
+///
+/// For implicit gang clause, this follows the OpenACC spec.  Implicit worker
+/// and vector clauses are not specified by OpenACC, but this follows a similar
+/// approach as for implicit gang clauses.  See the Clang OpenACC status
+/// document for details.
+class ImplicitGangWorkerVectorAdder
+    : public StmtVisitor<ImplicitGangWorkerVectorAdder> {
+private:
+  Sema &SemaRef;
+  llvm::SmallVector<ACCRoutineDeclAttr::PartitioningTy> MaxPartStack;
+  /// \p MaxPart must be the maximum partitioning level permitted for the
+  /// current context.  If \p LD is not \c nullptr, then it must be within the
+  /// current context.  In that case, add implicit gang, worker, and vector
+  /// clauses to \p LD if possible, and consider the body of \p LD to be the
+  /// current context now.  In either case, compute and return a new \p MaxPart
+  /// appropriate for the current context while excluding any partitioning
+  /// levels for which implicit clauses are disabled.
+  ACCRoutineDeclAttr::PartitioningTy
+  updateMaxPartAndLoop(ACCRoutineDeclAttr::PartitioningTy MaxPart,
+                       ACCLoopDirective *LD = nullptr) {
+    // If we have an independent loop, try to add partitioning levels.
+    if (LD && LD->getPartitioning().hasIndependent()) {
+      ACCRoutineDeclAttr::PartitioningTy MinPartExcl = ACCRoutineDeclAttr::Seq;
+      if (LD->getNestedExplicitGangPartitioning())
+        MinPartExcl = ACCRoutineDeclAttr::Gang;
+      else if (LD->getNestedExplicitWorkerPartitioning())
+        MinPartExcl = ACCRoutineDeclAttr::Worker;
+      else if (LD->getNestedExplicitVectorPartitioning())
+        MinPartExcl = ACCRoutineDeclAttr::Vector;
+      // (MinPartExcl,MaxPart] is now the partitioning range permitted on LD.
+      for (int Part = MaxPart; Part > MinPartExcl; --Part) {
+        switch ((ACCRoutineDeclAttr::PartitioningTy)Part) {
+        case ACCRoutineDeclAttr::Gang:
+          if (!LD->getPartitioning().hasGangPartitioning())
+            LD->addImplicitGangClause();
+          break;
+        case ACCRoutineDeclAttr::Worker:
+          if (SemaRef.getLangOpts().OpenACCImplicitWorker &&
+              !LD->getPartitioning().hasWorkerPartitioning())
+            LD->addImplicitWorkerClause();
+          break;
+        case ACCRoutineDeclAttr::Vector:
+          if (SemaRef.getLangOpts().OpenACCImplicitVector &&
+              !LD->getPartitioning().hasVectorPartitioning())
+            LD->addImplicitVectorClause();
+          break;
+        case ACCRoutineDeclAttr::Seq:
+          llvm_unreachable("expected seq to be excluded from iteration");
+        }
+      }
+      // Every partitioning above MinPartExcl cannot be added within LD for one
+      // of the following reasons: it's above the original MaxPart, it's already
+      // on LD, it was just added to LD, or adding it implicitly anywhere is
+      // disabled.  Thus, MinPartExcl is the new MaxPart.
+      MaxPart = MinPartExcl;
+    }
+    // Look for potential remaining partitioning in this context.
+    int Part;
+    for (Part = MaxPart; Part > ACCRoutineDeclAttr::Seq; --Part) {
+      bool Found = false;
+      switch ((ACCRoutineDeclAttr::PartitioningTy)Part) {
+      case ACCRoutineDeclAttr::Gang:
+        Found = true;
+        break;
+      case ACCRoutineDeclAttr::Worker:
+        if (SemaRef.getLangOpts().OpenACCImplicitWorker)
+          Found = true;
+        break;
+      case ACCRoutineDeclAttr::Vector:
+        if (SemaRef.getLangOpts().OpenACCImplicitVector)
+          Found = true;
+        break;
+      case ACCRoutineDeclAttr::Seq:
+        llvm_unreachable("expected seq to be excluded from iteration");
+      }
+      if (Found)
+        break;
+    }
+    return (ACCRoutineDeclAttr::PartitioningTy)Part;
+  }
+
 public:
   void VisitACCDirectiveStmt(ACCDirectiveStmt *D) {
-    if (isOpenACCLoopDirective(D->getDirectiveKind())) {
-      auto *LD = cast<ACCLoopDirective>(D);
-      ACCPartitioningKind Part = LD->getPartitioning();
-      // If this loop is gang-partitioned, don't add an implicit gang clause,
-      // which would be redundant, and don't continue to descendants because
-      // they cannot then be gang-partitioned.
-      if (Part.hasGangPartitioning())
-        return;
-      // We haven't encountered any enclosing gang-partitioned loop.  If there's
-      // also no enclosed gang-partitioned loop and no call to a function with a
-      // routine gang directive, and if this loop has been determined to be
-      // independent, then this is the outermost loop meeting all those
-      // conditions.  Thus, an implicit gang clause belongs here, and don't
-      // continue to descendants because they cannot then be gang-partitioned.
-      if (!LD->getNestedGangPartitioning() && Part.hasIndependent()) {
-        LD->addImplicitGangClause();
-        return;
-      }
-    }
+    ACCLoopDirective *LD = dyn_cast<ACCLoopDirective>(D);
+    // It shouldn't be possible to encounter a combined loop construct because
+    // ImplicitGangWorkerVectorAdder is always called on a compute construct
+    // body, an accelerator function's body, or an orphaned loop.
+    assert(isOpenACCLoopDirective(D->getDirectiveKind()) == (LD != nullptr) &&
+           "expected non-combined acc loop directive");
+    ACCRoutineDeclAttr::PartitioningTy MaxPart =
+        updateMaxPartAndLoop(MaxPartStack.back(), LD);
+    if (MaxPart == ACCRoutineDeclAttr::PartitioningTy::Seq)
+      return;
+    if (LD)
+      MaxPartStack.push_back(MaxPart);
     for (auto *C : D->children()) {
       if (C)
         Visit(C);
     }
+    if (LD)
+      MaxPartStack.pop_back();
   }
   void VisitStmt(Stmt *S) {
+    // Running updateMaxPartAndLoop is useless here because nothing can have
+    // changed the maximum partitioning level since the last time it was run.
+    // However, the constructor cannot stop the AST descent, so check if it
+    // discovered that implicit partitioning is already exhausted.
+    if (MaxPartStack.back() == ACCRoutineDeclAttr::Seq)
+      return;
     for (Stmt *C : S->children()) {
       if (C)
         Visit(C);
     }
+  }
+  /// \p MaxPart must be the maximum partitioning level permitted in the current
+  /// context (e.g., by a routine directive).
+  ImplicitGangWorkerVectorAdder(Sema &SemaRef,
+                                ACCRoutineDeclAttr::PartitioningTy MaxPart)
+      : SemaRef(SemaRef) {
+    // Running updateMaxPartAndLoop here tries to eliminate partitioning levels
+    // for which implicit clauses are disabled.
+    MaxPartStack.push_back(updateMaxPartAndLoop(MaxPart));
   }
 };
 
@@ -2229,13 +2328,16 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
     // case?
   }
 
-  // Compute implicit gang clauses within compute constructs, predetermined DAs,
-  // and implicit DAs.  Complain about reductions for loop control variables.
-  if (AStmt && (isOpenACCParallelDirective(DKind) ||
-                isOpenACCLoopDirective(DKind))) {
-    // Add implicit gang clauses to acc loops nested in the acc parallel.
+  // Compute implicit gang/worker/vector clauses within compute constructs,
+  // compute predetermined DAs, and compute implicit DAs.  Complain about
+  // reductions for loop control variables.
+  if (AStmt &&
+      (isOpenACCParallelDirective(DKind) || isOpenACCLoopDirective(DKind))) {
+    // Add implicit gang/worker/vector clauses to acc loops nested in the acc
+    // parallel.
     if (isOpenACCParallelDirective(DKind))
-      ImplicitGangAdder().Visit(AStmt);
+      ImplicitGangWorkerVectorAdder(*this, ACCRoutineDeclAttr::Gang)
+          .Visit(AStmt);
 
     // Iterate acc loop control variables.
     llvm::SmallVector<Expr *, 8> PrePrivate;
@@ -2577,7 +2679,7 @@ StmtResult Sema::ActOnOpenACCParallelDirective(ArrayRef<ACCClause *> Clauses,
   DirStackTy &DirStack = OpenACCData->DirStack;
   return ACCParallelDirective::Create(
       Context, DirStack.getDirectiveStartLoc(), DirStack.getDirectiveEndLoc(),
-      Clauses, AStmt, DirStack.getNestedWorkerPartitioning());
+      Clauses, AStmt, DirStack.getNestedExplicitWorkerPartitioning());
 }
 
 void Sema::ActOnOpenACCLoopInitialization(SourceLocation ForLoc, Stmt *Init) {
@@ -2621,10 +2723,9 @@ Stmt *Sema::ActOnFinishFunctionBodyForOpenACC(FunctionDecl *FD, Stmt *Body) {
   if (isLambdaCallOperator(FD)) {
     ImplicitRoutineDirInfo.fullyDetermineImplicitRoutineDir(FD);
     ACCRoutineDeclAttr *FnAttr = FD->getAttr<ACCRoutineDeclAttr>();
-    // Implicit gang clauses are not permitted if the routine directive
-    // doesn't specify gang.
-    if (FnAttr && FnAttr->getPartitioning() == ACCRoutineDeclAttr::Gang)
-      ImplicitGangAdder().Visit(Body);
+    ACCRoutineDeclAttr::PartitioningTy Part =
+        FnAttr ? FnAttr->getPartitioning() : ACCRoutineDeclAttr::Seq;
+    ImplicitGangWorkerVectorAdder(*this, Part).Visit(Body);
   }
   return transformACCToOMP(
       FD, Body, ImplicitRoutineDirInfo.hasOrphanedLoopConstructImplier(FD));
@@ -2855,27 +2956,27 @@ StmtResult Sema::ActOnOpenACCLoopDirective(ArrayRef<ACCClause *> Clauses,
   ACCLoopDirective *Res = ACCLoopDirective::Create(
       Context, DirStack.getDirectiveStartLoc(), DirStack.getDirectiveEndLoc(),
       Clauses, AStmt, LCVs, DirStack.getLoopPartitioning(),
-      DirStack.getNestedExplicitGangPartitioning());
+      DirStack.getNestedExplicitGangPartitioning(),
+      DirStack.getNestedExplicitWorkerPartitioning(),
+      DirStack.getNestedExplicitVectorPartitioning());
 
   // If this is an outermost orphaned loop construct and there's an explicit
   // routine directive, TransformACCToOMP is about to run on it, so run
-  // ImplicitGangAdder first.
+  // ImplicitGangWorkerVectorAdder first.
   //
   // Normally, an orphaned loop construct must appear in a function with an
   // explicit routine directive, which must appear before the function
   // definition.  However, in the case of a lambda, the routine directive can be
   // implied within the lambda's body and isn't fully determined until the end
   // of the body.  Moreover, rules might be violated during error recovery.  For
-  // the sake of the last two cases, skip ImplicitGangAdder here if there's no
-  // routine direcive.
+  // the sake of the last two cases, skip ImplicitGangWorkerVectorAdder here if
+  // there's no routine direcive.
   if (!isOpenACCDirectiveStmt(DirStack.getEffectiveParentDirective())) {
     FunctionDecl *CurFnDecl = getCurFunctionDecl(/*AllowLambda=*/true);
     if (CurFnDecl) {
-      ACCRoutineDeclAttr *FnAttr = CurFnDecl->getAttr<ACCRoutineDeclAttr>();
-      // Implicit gang clauses are not permitted if the routine directive
-      // doesn't specify gang.
-      if (FnAttr && FnAttr->getPartitioning() == ACCRoutineDeclAttr::Gang)
-        ImplicitGangAdder().Visit(Res);
+      if (ACCRoutineDeclAttr *FnAttr = CurFnDecl->getAttr<ACCRoutineDeclAttr>())
+        ImplicitGangWorkerVectorAdder(*this, FnAttr->getPartitioning())
+            .Visit(Res);
     }
   }
 
