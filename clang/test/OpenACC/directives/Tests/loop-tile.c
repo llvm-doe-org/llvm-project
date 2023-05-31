@@ -14,8 +14,8 @@
 // REDEFINE: %{exe:fc:args} = -strict-whitespace -match-full-lines \
 // REDEFINE:                  -implicit-check-not='{{.}}'
 //
-// FIXME: Without -O1, num_threads(NUM_WORKERS) is sometimes treated as
-// num_threads(1) on at least nvptx64.
+// FIXME: Without -O1, thread_limit(NUM_WORKERS) is sometimes treated as
+// thread_limit(1) on at least nvptx64.
 // REDEFINE: %{exe:clang:args} = -O1
 //
 // RUN: %{acc-check-dmp}
@@ -46,11 +46,11 @@ typedef struct Order {
   // of gang gangIdx during execution of the loop nest.  Thus, 0 <= that index
   // < I_NTILES * J_NTILES * I_NELEMS * J_NELEMS if the element is visited.
   // That index < 0 if the element is unvisited.
-  int indices[NUM_GANGS][NUM_WORKERS][I_NTILES][J_NTILES][I_NELEMS][J_NELEMS];
+  short indices[NUM_GANGS][NUM_WORKERS][I_NTILES][J_NTILES][I_NELEMS][J_NELEMS];
   // nexts[gangIdx][workerIdx] is the next index to record in
   // indices[gangIdx][workerIdx] for any element visited by worker workerIdx of
   // gang gangIdx.
-  int nexts[NUM_GANGS][NUM_WORKERS];
+  short nexts[NUM_GANGS][NUM_WORKERS];
 } Order;
 
 // Initialize Order.
@@ -815,8 +815,8 @@ int main() {
   //    PRT-NEXT: initOrder(&order);
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}){{$}}
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker tile({{I_NELEMS,J_NELEMS|[0-9]+,[0-9]+}}){{$}}
@@ -871,10 +871,10 @@ int main() {
   //    PRT-NEXT: initOrder(&order);
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) worker tile({{I_NELEMS,J_NELEMS|[0-9]+,[0-9]+}}){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute collapse(2){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp tile sizes([[#I_NELEMS]], [[#J_NELEMS]]){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
   //  PRT-O-NEXT: {{^ *}}#pragma omp distribute collapse(2){{$}}
   //  PRT-O-NEXT: {{^ *}}#pragma omp tile sizes([[#I_NELEMS]], [[#J_NELEMS]]){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) worker tile({{I_NELEMS,J_NELEMS|[0-9]+,[0-9]+}}){{$}}
@@ -1027,8 +1027,6 @@ int main() {
   //  DMP-NEXT:     DeclRefExpr {{.*}} 'order'
   //  DMP-NEXT:   ACCGangClause {{.*}} <implicit>
   //  DMP-NEXT:   impl: OMPDistributeParallelForDirective
-  //  DMP-NEXT:     OMPNum_threadsClause
-  //  DMP-NEXT:       IntegerLiteral {{.*}} [[#NUM_WORKERS]]
   //  DMP-NEXT:     OMPCollapseClause
   //  DMP-NEXT:       ConstantExpr {{.*}} 'int'
   //  DMP-NEXT:         value: Int 2
@@ -1043,14 +1041,14 @@ int main() {
   //    PRT-NEXT: initOrder(&order);
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) vector_length({{VECTOR_LENGTH|[0-9]+}}){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) vector_length({{VECTOR_LENGTH|[0-9]+}}){{$}}
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker vector tile({{I_NELEMS,J_NELEMS|[0-9]+,[0-9]+}}){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads([[#NUM_WORKERS]]) collapse(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for collapse(2){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp tile sizes([[#I_NELEMS]], [[#J_NELEMS]]){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads([[#NUM_WORKERS]]) collapse(2){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for collapse(2){{$}}
   //  PRT-O-NEXT: {{^ *}}#pragma omp tile sizes([[#I_NELEMS]], [[#J_NELEMS]]){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector tile({{I_NELEMS,J_NELEMS|[0-9]+,[0-9]+}}){{$}}
   //
@@ -1087,8 +1085,6 @@ int main() {
   //  DMP-NEXT:     DeclRefExpr {{.*}} 'order'
   //  DMP-NEXT:   ACCGangClause {{.*}} <implicit>
   //  DMP-NEXT:   impl: OMPDistributeParallelForDirective
-  //  DMP-NEXT:     OMPNum_threadsClause
-  //  DMP-NEXT:       IntegerLiteral {{.*}} [[#NUM_WORKERS]]
   //  DMP-NEXT:     OMPCollapseClause
   //  DMP-NEXT:       ConstantExpr {{.*}} 'int'
   //  DMP-NEXT:         value: Int 2
@@ -1103,11 +1099,11 @@ int main() {
   //    PRT-NEXT: initOrder(&order);
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) vector_length({{VECTOR_LENGTH|[0-9]+}}) worker vector tile({{I_NELEMS,J_NELEMS|[0-9]+,[0-9]+}}){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads([[#NUM_WORKERS]]) collapse(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for collapse(2){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp tile sizes([[#I_NELEMS]], [[#J_NELEMS]]){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads([[#NUM_WORKERS]]) collapse(2){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for collapse(2){{$}}
   //  PRT-O-NEXT: {{^ *}}#pragma omp tile sizes([[#I_NELEMS]], [[#J_NELEMS]]){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) vector_length({{VECTOR_LENGTH|[0-9]+}}) worker vector tile({{I_NELEMS,J_NELEMS|[0-9]+,[0-9]+}}){{$}}
   //
@@ -1254,14 +1250,14 @@ int main() {
   //    PRT-NEXT: initOrder(&order);
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) vector_length({{VECTOR_LENGTH|[0-9]+}}){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) vector_length({{VECTOR_LENGTH|[0-9]+}}){{$}}
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker vector tile({{I_NELEMS|[0-9]+}}){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads([[#NUM_WORKERS]]){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp tile sizes([[#I_NELEMS]]){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads([[#NUM_WORKERS]]){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
   //  PRT-O-NEXT: {{^ *}}#pragma omp tile sizes([[#I_NELEMS]]){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector tile({{I_NELEMS|[0-9]+}}){{$}}
   //
@@ -1463,8 +1459,8 @@ int main() {
   //    PRT-NEXT: initOrder(&order);
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}){{$}}
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc loop tile({{I_NELEMS|[0-9]+}}){{$}}
@@ -1477,9 +1473,9 @@ int main() {
   //    PRT-NEXT: for (int i ={{.*}})
   //
   //  PRT-A-NEXT:   {{^ *}}#pragma acc loop worker vector tile({{J_NELEMS|[0-9]+}}){{$}}
-  // PRT-AO-NEXT:   {{^ *}}// #pragma omp parallel for num_threads([[#NUM_WORKERS]]){{$}}
+  // PRT-AO-NEXT:   {{^ *}}// #pragma omp parallel for{{$}}
   // PRT-AO-NEXT:   {{^ *}}// #pragma omp tile sizes([[#J_NELEMS]]){{$}}
-  //  PRT-O-NEXT:   {{^ *}}#pragma omp parallel for num_threads([[#NUM_WORKERS]]){{$}}
+  //  PRT-O-NEXT:   {{^ *}}#pragma omp parallel for{{$}}
   //  PRT-O-NEXT:   {{^ *}}#pragma omp tile sizes([[#J_NELEMS]]){{$}}
   // PRT-OA-NEXT:   {{^ *}}// #pragma acc loop worker vector tile({{J_NELEMS|[0-9]+}}){{$}}
   //
@@ -1862,8 +1858,6 @@ int main() {
   //  DMP-NEXT:     DeclRefExpr {{.*}} 'order'
   //  DMP-NEXT:   ACCGangClause {{.*}} <implicit>
   //  DMP-NEXT:   impl: OMPDistributeParallelForDirective
-  //  DMP-NEXT:     OMPNum_threadsClause
-  //  DMP-NEXT:       IntegerLiteral {{.*}} [[#NUM_WORKERS]]
   //  DMP-NEXT:     OMPCollapseClause
   //  DMP-NEXT:       ConstantExpr {{.*}} 'int'
   //  DMP-NEXT:         value: Int 2
@@ -1881,14 +1875,14 @@ int main() {
   //         PRT: initOrder(&order);
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) vector_length({{VECTOR_LENGTH|[0-9]+}}) copy(i,j){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: i,j) map(ompx_hold,tofrom: order,iPerGang,jPerGang){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: i,j) map(ompx_hold,tofrom: order,iPerGang,jPerGang){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: i,j) map(ompx_hold,tofrom: order,iPerGang,jPerGang){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: i,j) map(ompx_hold,tofrom: order,iPerGang,jPerGang){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) vector_length({{VECTOR_LENGTH|[0-9]+}}) copy(i,j){{$}}
   //    PRT-NEXT: {
   //  PRT-A-NEXT:   {{^ *}}#pragma acc loop worker vector tile({{I_NELEMS,J_NELEMS|[0-9]+,[0-9]+}}){{$}}
-  // PRT-AO-NEXT:   {{^ *}}// #pragma omp distribute parallel for num_threads([[#NUM_WORKERS]]) collapse(2) private(i,j){{$}}
+  // PRT-AO-NEXT:   {{^ *}}// #pragma omp distribute parallel for collapse(2) private(i,j){{$}}
   // PRT-AO-NEXT:   {{^ *}}// #pragma omp tile sizes([[#I_NELEMS]], [[#J_NELEMS]]){{$}}
-  //  PRT-O-NEXT:   {{^ *}}#pragma omp distribute parallel for num_threads([[#NUM_WORKERS]]) collapse(2) private(i,j){{$}}
+  //  PRT-O-NEXT:   {{^ *}}#pragma omp distribute parallel for collapse(2) private(i,j){{$}}
   //  PRT-O-NEXT:   {{^ *}}#pragma omp tile sizes([[#I_NELEMS]], [[#J_NELEMS]]){{$}}
   // PRT-OA-NEXT:   {{^ *}}// #pragma acc loop worker vector tile({{I_NELEMS,J_NELEMS|[0-9]+,[0-9]+}}){{$}}
   //    PRT-NEXT:   for (i ={{.*}})
@@ -1952,8 +1946,6 @@ int main() {
   //  DMP-NEXT:     DeclRefExpr {{.*}} 'order'
   //  DMP-NEXT:   ACCGangClause {{.*}} <implicit>
   //  DMP-NEXT:   impl: OMPDistributeParallelForDirective
-  //  DMP-NEXT:     OMPNum_threadsClause
-  //  DMP-NEXT:       IntegerLiteral {{.*}} [[#NUM_WORKERS]]
   //  DMP-NEXT:     OMPCollapseClause
   //  DMP-NEXT:       ConstantExpr {{.*}} 'int'
   //  DMP-NEXT:         value: Int 2
@@ -1971,11 +1963,11 @@ int main() {
   //         PRT: initOrder(&order);
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) vector_length({{VECTOR_LENGTH|[0-9]+}}) worker vector tile({{I_NELEMS,J_NELEMS|[0-9]+,[0-9]+}}){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads([[#NUM_WORKERS]]) collapse(2) private(i,j){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for collapse(2) private(i,j){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp tile sizes([[#I_NELEMS]], [[#J_NELEMS]]){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads([[#NUM_WORKERS]]) collapse(2) private(i,j){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for collapse(2) private(i,j){{$}}
   //  PRT-O-NEXT: {{^ *}}#pragma omp tile sizes([[#I_NELEMS]], [[#J_NELEMS]]){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) vector_length({{VECTOR_LENGTH|[0-9]+}}) worker vector tile({{I_NELEMS,J_NELEMS|[0-9]+,[0-9]+}}){{$}}
   //    PRT-NEXT: for (i ={{.*}})
@@ -2154,8 +2146,6 @@ int main() {
   //  DMP-NEXT:     DeclRefExpr {{.*}} 'order'
   //  DMP-NEXT:   ACCGangClause {{.*}} <implicit>
   //  DMP-NEXT:   impl: OMPDistributeParallelForDirective
-  //  DMP-NEXT:     OMPNum_threadsClause
-  //  DMP-NEXT:       IntegerLiteral {{.*}} [[#NUM_WORKERS]]
   //  DMP-NEXT:     OMPCollapseClause
   //  DMP-NEXT:       ConstantExpr {{.*}} 'int'
   //  DMP-NEXT:         value: Int 2
@@ -2170,14 +2160,14 @@ int main() {
   //         PRT: initOrder(&order);
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) vector_length({{VECTOR_LENGTH|[0-9]+}}){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order) firstprivate(nonConstTileSize){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) map(ompx_hold,tofrom: order) firstprivate(nonConstTileSize){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order) firstprivate(nonConstTileSize){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams({{[0-9]+}}) thread_limit({{[0-9]+}}) map(ompx_hold,tofrom: order) firstprivate(nonConstTileSize){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs({{NUM_GANGS|[0-9]+}}) num_workers({{NUM_WORKERS|[0-9]+}}) vector_length({{VECTOR_LENGTH|[0-9]+}}){{$}}
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker vector tile(nonConstTileSize,*){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads([[#NUM_WORKERS]]) collapse(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for collapse(2){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp tile sizes(1, 1){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads([[#NUM_WORKERS]]) collapse(2){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for collapse(2){{$}}
   //  PRT-O-NEXT: {{^ *}}#pragma omp tile sizes(1, 1){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector tile(nonConstTileSize,*){{$}}
   //
@@ -2265,42 +2255,14 @@ int main() {
                     /*workerPartitioned=*/false))
     printf("  verified\n");
 
-  // FIXME: num_workers currently has no effect on orphaned loops (in the
-  // expWorkerVectorWithinGangFn and expWorkerVectorWithinWorkerFn cases), so we
-  // need to manage the number of threads some other way to avoid the following
-  // problems:
-  // - Having too many threads and overflowing order's arrays.  The following
-  //   omp_set_teams_thread_limit call helps when not offloading or when
-  //   offloading to x86_64 or ppc64le (except on hosts where the number of
-  //   hardware threads / NUM_GANGS = NUM_WORKERS already).  However, the
-  //   omp_set_num_threads calls below are needed when offloading to nvptx64 or
-  //   amdgcn.  For each case, the call for the other case seems to have no
-  //   effect.
-  // - Having too few threads and ending up with incorrect results.  So far,
-  //   this only occurs when offloading to nvptx64 or amdgcn because a small
-  //   value passed to the omp_set_num_threads call then has the same effect as
-  //   1.  In those cases, we thus validate with workerPartitioned=false.
-  void omp_set_teams_thread_limit(int);
-  omp_set_teams_thread_limit(NUM_WORKERS);
-
   // EXE-LABEL:expWorkerVectorWithinGangFn
   //  EXE-NEXT:  verified
   printf("expWorkerVectorWithinGangFn\n");
   initOrder(&order);
   #pragma acc parallel num_gangs(NUM_GANGS) num_workers(NUM_WORKERS) vector_length(VECTOR_LENGTH)
-  {
-    // FIXME: See the fixme on the omp_set_teams_thread_limit call above for why
-    // this is needed.
-    void omp_set_num_threads(int);
-    omp_set_num_threads(NUM_WORKERS);
-    expWorkerVectorWithinGangFn(&order);
-  }
+  expWorkerVectorWithinGangFn(&order);
   if (!checkOrder2D(&order, /*gangPartitioned=*/true,
-#if !TGT_NVPTX64 && !TGT_AMDGCN
                     /*workerPartitioned=*/true))
-#else
-                    /*workerPartitioned=*/false))
-#endif
     printf("  verified\n");
 
   // EXE-LABEL:expSeqWithinWorkerFn
@@ -2348,19 +2310,9 @@ int main() {
   printf("expWorkerVectorWithinWorkerFn\n");
   initOrder(&order);
   #pragma acc parallel num_gangs(NUM_GANGS) num_workers(NUM_WORKERS) vector_length(VECTOR_LENGTH)
-  {
-    // FIXME: See the fixme on the omp_set_teams_thread_limit call above for why
-    // this is needed.
-    void omp_set_num_threads(int);
-    omp_set_num_threads(NUM_WORKERS);
-    expWorkerVectorWithinWorkerFn(&order);
-  }
+  expWorkerVectorWithinWorkerFn(&order);
   if (!checkOrder2D(&order, /*gangPartitioned=*/false,
-#if !TGT_NVPTX64 && !TGT_AMDGCN
                     /*workerPartitioned=*/true))
-#else
-                    /*workerPartitioned=*/false))
-#endif
     printf("  verified\n");
 
   // EXE-LABEL:expSeqWithinVectorFn

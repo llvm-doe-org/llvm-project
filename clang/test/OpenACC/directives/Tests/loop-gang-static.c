@@ -283,8 +283,6 @@ int main() {
   // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
   // DMP-NEXT:     DeclRefExpr {{.*}} 'scheds'
   //      DMP:   impl: OMPDistributeParallelForDirective
-  // DMP-NEXT:     OMPNum_threadsClause
-  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     OMPDist_scheduleClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 8
   //  DMP-NOT:     OMP
@@ -297,8 +295,8 @@ int main() {
   // PRT-OA-NEXT: // #pragma acc parallel
 
   //  PRT-A-NEXT: #pragma acc loop gang(static: 8) worker{{$}}
-  // PRT-AO-NEXT: // #pragma omp distribute parallel for num_threads(2) dist_schedule(static, 8){{$}}
-  //  PRT-O-NEXT: #pragma omp distribute parallel for num_threads(2) dist_schedule(static, 8){{$}}
+  // PRT-AO-NEXT: // #pragma omp distribute parallel for dist_schedule(static, 8){{$}}
+  //  PRT-O-NEXT: #pragma omp distribute parallel for dist_schedule(static, 8){{$}}
   // PRT-OA-NEXT: // #pragma acc loop gang(static: 8) worker{{$}}
   //    PRT-NEXT: for ({{.*}})
   //    PRT-NEXT:   scheds
@@ -391,8 +389,6 @@ int main() {
   // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
   // DMP-NEXT:     DeclRefExpr {{.*}} 'scheds'
   //      DMP:   impl: OMPDistributeParallelForSimdDirective
-  // DMP-NEXT:     OMPNum_threadsClause
-  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     OMPSimdlenClause
   // DMP-NEXT:       ConstantExpr
   // DMP-NEXT:         value: Int 256
@@ -409,8 +405,8 @@ int main() {
   // PRT-OA-NEXT: // #pragma acc parallel
 
   //  PRT-A-NEXT: #pragma acc loop gang(static: 8) worker vector{{$}}
-  // PRT-AO-NEXT: // #pragma omp distribute parallel for simd num_threads(2) simdlen(256) dist_schedule(static, 8){{$}}
-  //  PRT-O-NEXT: #pragma omp distribute parallel for simd num_threads(2) simdlen(256) dist_schedule(static, 8){{$}}
+  // PRT-AO-NEXT: // #pragma omp distribute parallel for simd simdlen(256) dist_schedule(static, 8){{$}}
+  //  PRT-O-NEXT: #pragma omp distribute parallel for simd simdlen(256) dist_schedule(static, 8){{$}}
   // PRT-OA-NEXT: // #pragma acc loop gang(static: 8) worker vector{{$}}
   //    PRT-NEXT: for ({{.*}})
   //

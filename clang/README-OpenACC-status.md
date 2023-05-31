@@ -299,13 +299,12 @@ Run-Time Environment Variables
       does not use the clause and reports a warning diagnostic, which
       can be suppressed or converted to an error using the
       `-W{no-,error=}openacc-ignored-clause` command-line options.
-    * `num_workers` and `vector_length` currently do not affect
-      orphaned `loop` constructs.
+    * `vector_length` currently does not affect orphaned `loop` constructs.
     * Notes:
-        * OpenACC 2.6 specifies only that the arguments must be
-          integer expressions.  However, OpenMP specifies the stricter
-          requirements above for `num_teams`, `num_threads`, and
-          `simdlen`, to which Clacc translates the above clauses.
+        * In the cases of `num_workers` and `vector_length`, OpenACC 3.3
+          specifies only that the arguments must be integer expressions.
+          However, OpenMP 5.2 specifies the stricter requirements above for
+          `thread_limit` and `simdlen`, to which Clacc translates them.
         * A non-positive value here probably doesn't make sense
           anyway.  Moreover, if the argument is an integer constant
           (so that it can be statically analyzed), gcc 7.3.0 warns if
@@ -374,9 +373,6 @@ Run-Time Environment Variables
           directive" below), select each loop nest's outermost `loop` constructs
           on which `worker` and `vector` clauses are permitted.  A more
           sophisticated analysis might be employed in the future.
-        * Currently, Clang might misbehave when a `loop` construct receives an
-          implicit `worker` clause and appears within a `parallel` construct
-          that has a `num_workers` clause with a non-constant expression.
     * For now, if none of these clauses appear (explicitly or
       implicitly), then a sequential loop is produced.
 * Supported data attributes and clauses

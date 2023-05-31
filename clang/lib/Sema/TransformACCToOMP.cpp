@@ -43,20 +43,11 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     llvm::DenseMap<ACCDataVar, DAVarData> DAMap;
     ///@{
     /// Before translating the associated statement of an acc parallel
-    /// directive, TransformACCParallelDirective sets these as follows, and they
-    /// are copied to descendant stack entries as those entries are created.
+    /// directive, TransformACCParallelDirective sets this as follows, and it
+    /// is copied to descendant stack entries as those entries are created.
     ///
-    /// If the acc parallel directive has a num_workers or constant-expression
-    /// vector_length clause, then NumWorkersExpr or VectorLengthExpr,
-    /// respectively, is set to its value.
-    ///
-    /// If the acc parallel directive has a num_workers clause with a
-    /// non-constant expression and it has a (separate or combined with this
-    /// directive) nested acc loop directive with worker partitioning, then
-    /// NumWorkersVarDecl is set to the declaration of a constant variable
-    /// generated for the sake of OpenMP and initialized with NumWorkersExpr.
-    VarDecl *NumWorkersVarDecl = nullptr;
-    Expr *NumWorkersExpr = nullptr;
+    /// If the acc parallel directive has a constant-expression vector_length
+    /// clause, then VectorLengthExpr is set to its value.
     Expr *VectorLengthExpr = nullptr;
     ///@}
   };
@@ -133,8 +124,6 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       }
 
       // Copy data from parent directive.
-      DirEntry.NumWorkersVarDecl = ParentDirEntry.NumWorkersVarDecl;
-      DirEntry.NumWorkersExpr = ParentDirEntry.NumWorkersExpr;
       DirEntry.VectorLengthExpr = ParentDirEntry.VectorLengthExpr;
     }
     /// Pop top directive's data from Transform.DirStack.
@@ -364,7 +353,8 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     ConditionalCompoundStmtRAII(TransformACCToOMP &Tx)
         : Tx(Tx), Started(false), Finalized(false), Err(false) {}
     /// Add a variable declaration that privatizes an enclosing declaration.
-    /// Use \c addNewPrivateDecl instead if it's an entirely new variable.
+    /// (For an entirely new variable, we once had an \c addNewPrivateDecl, but
+    /// there are currently no uses.)
     void addPrivatizingDecl(SourceLocation RefStartLoc, SourceLocation RefEndLoc,
                             VarDecl *VD) {
       prepForAdd();
@@ -383,23 +373,6 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       add(Tx.getSema().ActOnDeclStmt(
           Tx.getSema().ConvertDeclToDeclGroup(DPrivate), RefStartLoc,
           RefEndLoc));
-    }
-    /// Add a local variable declaration that doesn't privatize an enclosing
-    /// declaration.  Use \c addPrivatizingDecl instead if it does.
-    VarDecl *addNewPrivateDecl(StringRef Name, QualType Ty, Expr *Init,
-                               SourceLocation Loc) {
-      prepForAdd();
-      ASTContext &Context = Tx.getSema().getASTContext();
-      DeclContext *DC = Tx.getSema().CurContext;
-      IdentifierInfo *II = &Tx.getSema().PP.getIdentifierTable().get(Name);
-      TypeSourceInfo *TInfo = Context.getTrivialTypeSourceInfo(Ty, Loc);
-      VarDecl *VD = VarDecl::Create(Context, DC, Loc, Loc, II, Ty, TInfo,
-                                    SC_None);
-      Tx.getSema().AddInitializerToDecl(VD, Init, false);
-      add(Tx.getSema().ActOnDeclStmt(
-          Tx.getSema().ConvertDeclToDeclGroup(VD), VD->getBeginLoc(),
-          VD->getEndLoc()));
-      return VD;
     }
     /// Evaluate an expression that has side effects but whose original use has
     /// been removed.
@@ -608,23 +581,6 @@ public:
     ConditionalCompoundStmtRAII EnclosingCompoundStmt(*this);
     ASTContext &Context = getSema().getASTContext();
 
-    // Declare a num_workers variable in an enclosing compound statement, if
-    // needed.  FIXME: This generates an unused __clang_acc_num_workers__
-    // declaration when the only loop worker clause is discarded due to a tile
-    // clause or when there's just a call to a worker function.  Moreover, it
-    // isn't generated when there's a loop with an implicit worker clause.
-    auto NumWorkersClauses = D->getClausesOfKind<ACCNumWorkersClause>();
-    if (NumWorkersClauses.begin() != NumWorkersClauses.end()) {
-      DirEntry.NumWorkersExpr = NumWorkersClauses.begin()->getNumWorkers();
-      if (D->getNestedExplicitWorkerPartitioning()) {
-        if (!DirEntry.NumWorkersExpr->isIntegerConstantExpr(Context))
-          DirEntry.NumWorkersVarDecl = EnclosingCompoundStmt.addNewPrivateDecl(
-              "__clang_acc_num_workers__",
-              DirEntry.NumWorkersExpr->getType().withConst(),
-              DirEntry.NumWorkersExpr, DirEntry.NumWorkersExpr->getBeginLoc());
-      } else if (DirEntry.NumWorkersExpr->HasSideEffects(Context))
-        EnclosingCompoundStmt.addUnusedExpr(DirEntry.NumWorkersExpr);
-    }
     auto VectorLengthClauses = D->getClausesOfKind<ACCVectorLengthClause>();
     if (VectorLengthClauses.begin() != VectorLengthClauses.end()) {
       Expr *E = VectorLengthClauses.begin()->getVectorLength();
@@ -746,7 +702,6 @@ public:
     // What kind of OpenMP directive should we build?
     // OMPD_unknown means none (so sequential).
     OpenMPDirectiveKind TDKind;
-    Expr *AddNumThreadsExpr = nullptr;
     Expr *AddSimdlenExpr = nullptr;
     bool AddScopeWithLCVPrivate = false;
     bool AddScopeWithAllPrivates = false;
@@ -757,18 +712,6 @@ public:
       TDKind = OMPD_unknown;
       AddScopeWithAllPrivates = true;
     } else {
-      if (Partitioning.hasWorkerPartitioning()) {
-        if (DirEntry.NumWorkersVarDecl) {
-          ExprResult Res = getSema().BuildDeclRefExpr(
-              DirEntry.NumWorkersVarDecl,
-              DirEntry.NumWorkersVarDecl->getType().getNonReferenceType(),
-              VK_PRValue, D->getEndLoc());
-          assert(!Res.isInvalid() &&
-                 "expected valid reference to num_workers variable");
-          AddNumThreadsExpr = Res.get();
-        } else
-          AddNumThreadsExpr = DirEntry.NumWorkersExpr;
-      }
       if (Partitioning.hasVectorPartitioning()) {
         AddSimdlenExpr = DirEntry.VectorLengthExpr;
         AddScopeWithLCVPrivate = true;
@@ -852,16 +795,9 @@ public:
     getSema().StartOpenMPDSABlock(TDKind, DeclarationNameInfo(),
                                   /*CurScope=*/nullptr, D->getBeginLoc());
 
-    // Add num_threads and simdlen clauses, as needed.
+    // Add simdlen clause if needed.
     llvm::SmallVector<OMPClause *, 16> TClauses;
     size_t NumClausesAdded = 0;
-    if (AddNumThreadsExpr) {
-      OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_num_threads);
-      TClauses.push_back(getDerived().RebuildOMPNumThreadsClause(
-          AddNumThreadsExpr, AddNumThreadsExpr->getBeginLoc(),
-          AddNumThreadsExpr->getBeginLoc(), AddNumThreadsExpr->getEndLoc()));
-      ++NumClausesAdded;
-    }
     if (AddSimdlenExpr) {
       OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_simdlen);
       TClauses.push_back(getDerived().RebuildOMPSimdlenClause(
@@ -997,7 +933,9 @@ public:
   OMPClauseResult TransformACCNumWorkersClause(ACCDirectiveStmt *D,
                                                OpenMPDirectiveKind TDKind,
                                                ACCNumWorkersClause *C) {
-    return OMPClauseEmpty();
+    ExplicitClauseLocs L(D, C, C->getLParenLoc());
+    return getDerived().RebuildOMPThreadLimitClause(
+        C->getNumWorkers(), L.LocStart, L.LParenLoc, L.LocEnd);
   }
 
   OMPClauseResult TransformACCVectorLengthClause(ACCDirectiveStmt *D,

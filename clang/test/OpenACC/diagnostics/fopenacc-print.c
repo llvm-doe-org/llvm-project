@@ -8,7 +8,8 @@
 
 // DEFINE: %{check}( PRT_ARG %, PRT_CHK %, PRT_VER %) =                        \
 // DEFINE:   %clang -Xclang -verify=%{PRT_VER} -fopenacc-print=%{PRT_ARG}      \
-// DEFINE:          -Wno-openacc-omp-ext -ferror-limit=100 %t-acc.c |          \
+// DEFINE:          -Wno-openacc-ignored-clause  -Wno-openacc-omp-ext          \
+// DEFINE:          -ferror-limit=100 %t-acc.c |                               \
 // DEFINE:   FileCheck -check-prefixes=%{PRT_CHK} -match-full-lines            \
 // DEFINE:             -strict-whitespace %s
 
@@ -22,13 +23,17 @@
 /* noerrs-no-diagnostics */
 
 //      PRT:int i;
-// PRT-NEXT:int non_const_expr = 2;
+// PRT-NEXT:int possibleSideEffects() {
+// PRT-NEXT:  return 2;
+// PRT-NEXT:}
 int i;
-int non_const_expr = 2;
+int possibleSideEffects() {
+  return 2;
+}
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Translatable directives are translated before any error.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void beforeError() {
 void beforeError() {
@@ -57,10 +62,10 @@ void beforeError() {
 #pragma acc routine seq
 void beforeError_routine();
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive in macro expansion: yes
 // No associated code.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void inMacroNoAssoc() {
 void inMacroNoAssoc() {
@@ -74,10 +79,10 @@ void inMacroNoAssoc() {
   #undef MAC
 }// PRT-NEXT:}
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive in macro expansion: yes
 // Associated code ends in macro expansion: no
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void inMacroAssocEndNotInMacro() {
 void inMacroAssocEndNotInMacro() {
@@ -104,7 +109,7 @@ MAC
 void inMacroAssocEndNotInMacro_routine();
 #undef MAC
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive in macro expansion: yes
 // Associated code ends in macro expansion: yes
 //
@@ -112,7 +117,7 @@ void inMacroAssocEndNotInMacro_routine();
 // exercise different code paths, so check all of them.  For expression
 // statements, whether the token preceding the semicolon is part of the same
 // macro expansion also affects the code path.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void inMacroAssocEndInMacro() {
 void inMacroAssocEndInMacro() {
@@ -281,10 +286,10 @@ MAC2 MAC3
 #undef MAC2
 #undef MAC3
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive in macro expansion: no
 // No associated code.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void notInMacroNoAssoc() {
 void notInMacroNoAssoc() {
@@ -294,10 +299,10 @@ void notInMacroNoAssoc() {
   _Pragma("acc update device(i)")
 }// PRT-NEXT:}
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive in macro expansion: no
 // Associated code ends in macro expansion: no
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:/* expected-error{{.*}} */
 // PRT-NEXT:_Pragma("acc routine seq")
@@ -306,7 +311,7 @@ void notInMacroNoAssoc() {
 _Pragma("acc routine seq")
 void notInMacroAssocEndNotInMacro_routine();
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Directive in macro expansion: no
 // Associated code ends in macro expansion: yes
 //
@@ -319,20 +324,20 @@ void notInMacroAssocEndNotInMacro_routine();
 // so check all of them.  For expression statements and function prototypes,
 // whether the token preceding the semicolon is part of the same macro expansion
 // also affects the code path.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void notInMacroAssocEndInMacro() {
 void notInMacroAssocEndInMacro() {
   // PRT-NEXT:  #define MAC ;
-  // PRT-NEXT:  #pragma acc parallel num_workers(non_const_expr)
-  // PRT-NEXT:  #pragma acc loop worker
+  // PRT-NEXT:  #pragma acc parallel vector_length(possibleSideEffects())
+  // PRT-NEXT:  #pragma acc loop vector
   // PRT-NEXT:  for (int i = 0; i < 5; ++i)
   // PRT-NEXT:    /* expected-error{{.*}} */
   // PRT-NEXT:    MAC
   // PRT-NEXT:  #undef MAC
   #define MAC ;
-  #pragma acc parallel num_workers(non_const_expr)
-  #pragma acc loop worker
+  #pragma acc parallel vector_length(possibleSideEffects())
+  #pragma acc loop vector
   for (int i = 0; i < 5; ++i)
     /* expected-error@+1 {{cannot rewrite OpenACC construct ending within a macro expansion}} */
     MAC
@@ -350,15 +355,15 @@ void notInMacroAssocEndInMacro() {
   #undef MAC
 
   // PRT-NEXT:  #define MAC {}
-  // PRT-NEXT:  #pragma acc parallel num_workers(non_const_expr)
-  // PRT-NEXT:  #pragma acc loop worker
+  // PRT-NEXT:  #pragma acc parallel vector_length(possibleSideEffects())
+  // PRT-NEXT:  #pragma acc loop vector
   // PRT-NEXT:  for (int i = 0; i < 5; ++i)
   // PRT-NEXT:    /* expected-error{{.*}} */
   // PRT-NEXT:    MAC
   // PRT-NEXT:  #undef MAC
   #define MAC {}
-  #pragma acc parallel num_workers(non_const_expr)
-  #pragma acc loop worker
+  #pragma acc parallel vector_length(possibleSideEffects())
+  #pragma acc loop vector
   for (int i = 0; i < 5; ++i)
     /* expected-error@+1 {{cannot rewrite OpenACC construct ending within a macro expansion}} */
     MAC
@@ -376,15 +381,15 @@ void notInMacroAssocEndInMacro() {
   #undef MAC
 
   // PRT-NEXT:  #define MAC }
-  // PRT-NEXT:  #pragma acc parallel num_workers(non_const_expr)
-  // PRT-NEXT:  #pragma acc loop worker
+  // PRT-NEXT:  #pragma acc parallel vector_length(possibleSideEffects())
+  // PRT-NEXT:  #pragma acc loop vector
   // PRT-NEXT:  for (int i = 0; i < 5; ++i)
   // PRT-NEXT:    /* expected-error{{.*}} */
   // PRT-NEXT:    {MAC
   // PRT-NEXT:  #undef MAC
   #define MAC }
-  #pragma acc parallel num_workers(non_const_expr)
-  #pragma acc loop worker
+  #pragma acc parallel vector_length(possibleSideEffects())
+  #pragma acc loop vector
   for (int i = 0; i < 5; ++i)
     /* expected-error@+1 {{cannot rewrite OpenACC construct ending within a macro expansion}} */
     {MAC
@@ -402,15 +407,15 @@ void notInMacroAssocEndInMacro() {
   #undef MAC
 
   // PRT-NEXT:  #define MAC (i = 3);
-  // PRT-NEXT:  #pragma acc parallel num_workers(non_const_expr)
-  // PRT-NEXT:  #pragma acc loop worker
+  // PRT-NEXT:  #pragma acc parallel vector_length(possibleSideEffects())
+  // PRT-NEXT:  #pragma acc loop vector
   // PRT-NEXT:  for (int j = 0; j < 5; ++j)
   // PRT-NEXT:    /* expected-error{{.*}} */
   // PRT-NEXT:    MAC
   // PRT-NEXT:  #undef MAC
   #define MAC (i = 3);
-  #pragma acc parallel num_workers(non_const_expr)
-  #pragma acc loop worker
+  #pragma acc parallel vector_length(possibleSideEffects())
+  #pragma acc loop vector
   for (int j = 0; j < 5; ++j)
     /* expected-error@+1 {{cannot rewrite OpenACC construct ending within a macro expansion}} */
     MAC
@@ -428,15 +433,15 @@ void notInMacroAssocEndInMacro() {
   #undef MAC
 
   // PRT-NEXT:  #define MAC ;
-  // PRT-NEXT:  #pragma acc parallel num_workers(non_const_expr)
-  // PRT-NEXT:  #pragma acc loop worker
+  // PRT-NEXT:  #pragma acc parallel vector_length(possibleSideEffects())
+  // PRT-NEXT:  #pragma acc loop vector
   // PRT-NEXT:  for (int j = 0; j < 5; ++j)
   // PRT-NEXT:    /* expected-error{{.*}} */
   // PRT-NEXT:    (i = 3) MAC
   // PRT-NEXT:  #undef MAC
   #define MAC ;
-  #pragma acc parallel num_workers(non_const_expr)
-  #pragma acc loop worker
+  #pragma acc parallel vector_length(possibleSideEffects())
+  #pragma acc loop vector
   for (int j = 0; j < 5; ++j)
     /* expected-error@+1 {{cannot rewrite OpenACC construct ending within a macro expansion}} */
     (i = 3) MAC
@@ -455,8 +460,8 @@ void notInMacroAssocEndInMacro() {
 
   // PRT-NEXT:  #define MAC1 )
   // PRT-NEXT:  #define MAC2 ;
-  // PRT-NEXT:  #pragma acc parallel num_workers(non_const_expr)
-  // PRT-NEXT:  #pragma acc loop worker
+  // PRT-NEXT:  #pragma acc parallel vector_length(possibleSideEffects())
+  // PRT-NEXT:  #pragma acc loop vector
   // PRT-NEXT:  for (int j = 0; j < 5; ++j)
   // PRT-NEXT:    /* expected-error{{.*}} */
   // PRT-NEXT:    (i = 3 MAC1 MAC2
@@ -464,8 +469,8 @@ void notInMacroAssocEndInMacro() {
   // PRT-NEXT:  #undef MAC2
   #define MAC1 )
   #define MAC2 ;
-  #pragma acc parallel num_workers(non_const_expr)
-  #pragma acc loop worker
+  #pragma acc parallel vector_length(possibleSideEffects())
+  #pragma acc loop vector
   for (int j = 0; j < 5; ++j)
     /* expected-error@+1 {{cannot rewrite OpenACC construct ending within a macro expansion}} */
     (i = 3 MAC1 MAC2
@@ -543,9 +548,9 @@ void notInMacroAssocEndInMacro_routineProtoLastTwoTokens(MAC
 void notInMacroAssocEndInMacro_routineProtoLastToken() MAC
 #undef MAC
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 // Translatable directives are translated after any error.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 // PRT-NEXT:void afterError() {
 void afterError() {

@@ -54,10 +54,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4){{$}}
   #pragma acc parallel num_gangs(2) num_workers(4)
   // DMP:      ACCLoopDirective
@@ -148,10 +150,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) num_workers(4){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
-  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) thread_limit(4){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) num_workers(4){{$}}
   #pragma acc parallel num_gangs(1) num_workers(4)
   // DMP:      ACCLoopDirective
@@ -253,10 +257,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) num_workers(4){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
-  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) thread_limit(4){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) num_workers(4){{$}}
   #pragma acc parallel num_gangs(1) num_workers(4)
   // DMP:      ACCLoopDirective
@@ -362,10 +368,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) num_workers(4){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
-  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) thread_limit(4){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) num_workers(4){{$}}
   #pragma acc parallel num_gangs(1) num_workers(4)
   // DMP:      ACCLoopDirective
@@ -459,10 +467,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) num_workers(4){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1){{$}}
-  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) thread_limit(4){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) num_workers(4){{$}}
   #pragma acc parallel num_gangs(1) num_workers(4)
   // DMP:      ACCLoopDirective
@@ -472,8 +482,6 @@ int main() {
   // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
   // DMP-NEXT:   impl: OMPDistributeParallelForDirective
-  // DMP-NEXT:     OMPNum_threadsClause
-  // DMP-NEXT:       IntegerLiteral {{.*}} 4
   // DMP-NEXT:     OMPCollapseClause
   // DMP-NEXT:       ConstantExpr {{.*}} 'int'
   // DMP-NEXT:         value: Int 2
@@ -481,8 +489,8 @@ int main() {
   // DMP:          ForStmt
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker collapse(2){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4) collapse(2){{$}}
-  // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for num_threads(4) collapse(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for collapse(2){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp distribute parallel for collapse(2){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker collapse(2){{$}}
   // PRT-NEXT:    for (int i ={{.*}})
   #pragma acc loop worker collapse(2)
@@ -849,10 +857,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(4) num_workers(4){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4){{$}}
-  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) thread_limit(4){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(4) num_workers(4){{$}}
   #pragma acc parallel num_gangs(4) num_workers(4)
   // DMP:      ACCLoopDirective
@@ -887,8 +897,6 @@ int main() {
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
       // DMP-NEXT:   impl: OMPParallelForDirective
-      // DMP-NEXT:     OMPNum_threadsClause
-      // DMP-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-NEXT:     OMPCollapseClause
       // DMP-NEXT:       ConstantExpr {{.*}} 'int'
       // DMP-NEXT:         value: Int 2
@@ -897,8 +905,8 @@ int main() {
       //      DMP:     ForStmt
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker collapse(2){{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(4) collapse(2){{$}}
-      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(4) collapse(2){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for collapse(2){{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for collapse(2){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker collapse(2){{$}}
       // PRT-NEXT:    for (int k ={{.*}})
       #pragma acc loop worker collapse(2)
@@ -950,6 +958,8 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   // DMP:          ACCLoopDirective
   // DMP-NEXT:       ACCCollapseClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 2
@@ -963,10 +973,10 @@ int main() {
   // DMP:              ForStmt
   //
   // PRT-A-NEXT:  {{^ *}}#pragma acc parallel loop num_gangs(4) num_workers(4) vector_length(4) collapse(2){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(4) thread_limit(4){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute collapse(2){{$}}
   //
-  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4){{$}}
+  // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(4) thread_limit(4){{$}}
   // PRT-O-NEXT:  {{^ *}}#pragma omp distribute collapse(2){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(4) num_workers(4) vector_length(4) collapse(2){{$}}
   //
@@ -985,8 +995,6 @@ int main() {
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:     DeclRefExpr {{.*}} 'j' 'int'
       // DMP-NEXT:   impl: OMPParallelForDirective
-      // DMP-NEXT:     OMPNum_threadsClause
-      // DMP-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-NEXT:     OMPCollapseClause
       // DMP-NEXT:       ConstantExpr {{.*}} 'int'
       // DMP-NEXT:         value: Int 2
@@ -995,8 +1003,8 @@ int main() {
       //      DMP:     ForStmt
       //
       // PRT-A-NEXT:  {{^ *}}#pragma acc loop worker collapse(2){{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for num_threads(4) collapse(2){{$}}
-      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for num_threads(4) collapse(2){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for collapse(2){{$}}
+      // PRT-O-NEXT:  {{^ *}}#pragma omp parallel for collapse(2){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker collapse(2){{$}}
       // PRT-NEXT:    for (int k ={{.*}})
       #pragma acc loop worker collapse(2)
@@ -1224,10 +1232,12 @@ int main() {
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 1
+    // DMP-NEXT:     OMPThread_limitClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 8
     //
     // PRT-A-NEXT:  {{^ *}}#pragma acc parallel num_gangs(1) num_workers(8){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) firstprivate(k){{$}}
-    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1) firstprivate(k){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(1) thread_limit(8) firstprivate(k){{$}}
+    // PRT-O-NEXT:  {{^ *}}#pragma omp target teams num_teams(1) thread_limit(8) firstprivate(k){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(1) num_workers(8){{$}}
     #pragma acc parallel num_gangs(1) num_workers(8)
     //      DMP: ACCLoopDirective
@@ -1242,8 +1252,6 @@ int main() {
     // DMP-NEXT:     DeclRefExpr {{.*}} 'k' 'int'
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeParallelForDirective
-    // DMP-NEXT:     OMPNum_threadsClause
-    // DMP-NEXT:       IntegerLiteral {{.*}} 8
     // DMP-NEXT:     OMPCollapseClause
     // DMP-NEXT:       ConstantExpr {{.*}} 'int'
     // DMP-NEXT:         value: Int 2
@@ -1259,8 +1267,8 @@ int main() {
     //      DMP:         ForStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker collapse(2){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(8) collapse(2) private(i,j){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(8) collapse(2) private(i,j){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for collapse(2) private(i,j){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for collapse(2) private(i,j){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker collapse(2){{$}}
     //    PRT-NEXT: for (i ={{.*}}) {
     //    PRT-NEXT:   for (j ={{.*}}) {
@@ -1432,10 +1440,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(2) vector_length(2){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(2){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(2){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(2) vector_length(2){{$}}
   //    PRT-NEXT: {
   //    PRT-NEXT:   withinGangFn();

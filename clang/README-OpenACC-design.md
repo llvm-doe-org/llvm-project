@@ -1773,18 +1773,7 @@ to OpenMP is as follows:
 * *exp*|*imp* `firstprivate` -> *exp* `firstprivate`
 * *exp* `private` -> *exp* `private`
 * *exp* `num_gangs` -> *exp* `num_teams`
-* If *exp* `num_workers` with a non-constant-expression argument, and
-  if there is a nested worker-partitioned `acc loop`, then *exp*
-  `num_workers` -> wrap the `omp target teams` in a compound statement
-  and declare a local `const` variable with the same type and value as
-  the *exp* `num_workers` argument.
-* Else if *exp* `num_workers` with a non-constant-expression argument
-  that potentially has side effects, then *exp* `num_workers` -> wrap
-  the `omp target teams` in a compound statement and insert a
-  statement that casts the argument's expression to `void`.
-* Else, translation discards *exp* `num_workers`.  Notes:
-    * A constant-expression argument here might be used by a nested
-      worker-partitioned `acc loop`.
+* *exp* `num_workers` -> *exp* `thread_limit`
 * If *exp* `vector_length` with a non-constant-expression argument
   that potentially has side effects, then *exp* `vector_length` ->
   wrap the `omp target teams` in a compound statement and insert a
@@ -1901,20 +1890,6 @@ its clauses to OpenMP is as follows:
 * The output `distribute`, `parallel for`, and `simd` OpenMP directive
   components are sorted in the above order before all clauses regardless of the
   input clause order.
-* If *exp*|*imp* `worker` and either *not* `tile` or *exp*|*imp* `vector`, then
-  *exp* `num_workers` from ancestor `acc parallel` -> *exp* `num_threads` where
-  the argument is either (1) the original *exp* `num_workers` argument if it is
-  a constant expression or (2) otherwise an expression containing only a
-  reference to the local `const` variable generated for that *exp*
-  `num_workers`.  Notes:
-    * For the ancestor `acc parallel` and for all OpenACC directives
-      nested between it and this `acc loop`, Clacc leaves the OpenMP
-      data sharing attribute for the local `const` variable for
-      `num_workers` as implicit.  Because the variable is `const`,
-      private copies are not useful, so sharing is probably most
-      efficient, but not all OpenMP directives permit an *exp*
-      `shared` clause.  Thus, relying on implicit data sharing
-      attributes throughout simplifies the implementation.
 * If *exp*|*imp* `vector` and *not* `tile`, then *exp* `vector_length` with a
   constant-expression argument from ancestor `acc parallel` -> *exp* `simdlen`.
 * `static:*` within `gang` -> `dist_schedule(static)`
@@ -2114,10 +2089,9 @@ possible solutions:
   computed automatically.  If `acc loop vector` were mapped to `omp
   parallel for`, `vector_length` with a non-constant-expression
   argument would be possible.
-* Orphaned `acc loop` directive that observes `num_workers` and
-  `vector_length` because the enclosing compute construct from which
-  those clauses would normally be applied during translation is not
-  statically visible.
+* Orphaned `acc loop` directive that observes `vector_length` because the
+  enclosing compute construct from which `vector_length` would normally be
+  copied during translation is not statically visible.
 * Subarrays specifying non-contiguous blocks in dynamic
   multidimensional arrays because these cannot be mapped to OpenMP
   array sections.  Notes:
@@ -3037,18 +3011,26 @@ support currently include:
             * `num_gangs`, `num_workers`, and `vector_length` are
               omitted because we do not know how to obtain them via
               OMPT:
-                * The problem with `num_gangs` is that OpenACC 2.7
-                  says it's the number of gangs *created*, but the
-                  `ompt_callback_target_submit` callback only provides
-                  the number of teams *requested*.  It might possible
-                  to retrieve the required data from OMPT trace
-                  records, but we have not implemented that support
-                  yet.
-                * The problem with `num_workers` and `vector_length`
-                  is that, in contrast with OpenACC compute
-                  directives, `num_threads` and `simdlen` are not
-                  specified at the level of an OpenMP target
-                  directive.
+                * OpenACC 3.3, sec. 5.2.2, p. 132 says they're the "number of
+                  gangs, workers, and vector lanes created for this kernel
+                  launch."
+                * The problem with `num_gangs` is that the
+                  `ompt_callback_target_submit` callback provides only the
+                  number of teams *requested*.  It might be possible to retrieve
+                  the number of teams *created* from OMPT trace records, but we
+                  have not implemented that support yet.
+                * The problem with `num_workers` is that the `thread_limit`
+                  clause at the `omp target teams` directive specifies only the
+                  *limit* on the number of threads to be created *later* at an
+                  OpenMP `parallel` directive.  There appears to be no data
+                  provided by the `ompt_callback_target_submit` callback or
+                  associated OMPT trace records on the actual number of threads
+                  that will be created at that later point in time.  We might
+                  investigate whether an OpenMP Runtime Library Routine can be
+                  called to accurately predict this value.
+                * The problem with `vector_length` is that `simdlen` is
+                  specified later on a `simd` directive rather than at the
+                  `omp target teams` directive.
     * `acc_api_info`:
         * `device_api` is always set to `acc_device_api_none` because
           it's used to indicate the semantics of later fields we do

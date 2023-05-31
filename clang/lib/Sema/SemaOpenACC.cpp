@@ -4740,7 +4740,7 @@ ACCClause *Sema::ActOnOpenACCNumWorkersClause(Expr *NumWorkers,
                                               SourceLocation StartLoc,
                                               SourceLocation LParenLoc,
                                               SourceLocation EndLoc) {
-  // OpenMP says num_threads must evaluate to a positive integer value.
+  // OpenMP says thread_limit must evaluate to a positive integer value.
   // OpenACC doesn't specify such a restriction that I see for num_workers, but
   // it seems reasonable.
   if (PosIntError == IsPositiveIntegerValue(NumWorkers, *this, ACCC_num_workers,

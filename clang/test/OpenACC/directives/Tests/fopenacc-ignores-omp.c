@@ -10,12 +10,16 @@
 // means most of our execution checks on amdgcn don't verify much except that
 // nothing crashes.
 //
-// REDEFINE: %{all:clang:args} = -Wsource-uses-openmp
+// REDEFINE: %{all:clang:args-stable} = \
+// REDEFINE:   -Wsource-uses-openmp -Wno-openacc-ignored-clause
 // RUN: %{acc-check-dmp}
 // RUN: %{acc-check-prt}
 // RUN: %{acc-check-exe-no-s2s}
 //
-// REDEFINE: %{all:clang:args} = -Wsource-uses-openmp -DONLY_IN_ACC
+// The warning about OpenMP is only triggered on the first occurrence, so above
+// we saw it only for OpenMP outside OpenACC constructs.  Try again with OpenMP
+// only in OpenACC constructs.
+// REDEFINE: %{all:clang:args} = -DOMP_ONLY_IN_ACC
 // RUN: %{acc-check-prt}
 
 // END.
@@ -33,21 +37,21 @@ int main() {
   // EXE: start
   printf("start\n");
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // OpenMP without OpenACC
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // DMP-NOT: OMP{{[^ ]*}}Directive
   // DMP-NOT: OMP{{[^ ]*}}Clause
   //
-  // PRT-SRC:      {{^ *}}#if !ONLY_IN_ACC
+  // PRT-SRC:      {{^ *}}#if !OMP_ONLY_IN_ACC
   // PRT-SRC-NEXT: {{^ *}}  /* noacc-
   // PRT-SRC-NEXT: {{^ *}}  /* acc-
   // PRT-SRC-NEXT: {{^ *}}  #pragma omp target teams num_teams(2)
   // PRT-SRC-NEXT: {{^ *}}#endif
   // PRT-NEXT:     {{^ *}}  {
   // PRT-NEXT:     {{^ *}}    printf("hello world\n");
-  // PRT-SRC-NEXT: {{^ *}}#if !ONLY_IN_ACC
+  // PRT-SRC-NEXT: {{^ *}}#if !OMP_ONLY_IN_ACC
   // PRT-SRC-NEXT: {{^ *}}    #pragma omp distribute
   // PRT-SRC-NEXT: {{^ *}}#endif
   // PRT-NEXT:     {{^ *}}    for (int i = 0; i < 2; ++i)
@@ -59,23 +63,23 @@ int main() {
   // EXE-NEXT: hello world
   // EXE-NEXT: i=0
   // EXE-NEXT: i=1
-#if !ONLY_IN_ACC
+#if !OMP_ONLY_IN_ACC
   /* noacc-warning@+2 {{unexpected '#pragma omp ...' in program}} */
   /* acc-warning@+1 {{unexpected '#pragma omp ...' in program}} */
   #pragma omp target teams num_teams(2)
 #endif
   {
     printf("hello world\n");
-#if !ONLY_IN_ACC
+#if !OMP_ONLY_IN_ACC
     #pragma omp distribute
 #endif
     for (int i = 0; i < 2; ++i)
       printf("i=%d\n", i);
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // OpenMP within OpenACC where only directive is rewritten when printing
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // DMP:      ACCParallelDirective
   // DMP-NEXT:   ACCNumGangsClause
@@ -98,7 +102,7 @@ int main() {
   // EXE-TGT-USE-STDIO-DAG: i=1
   // EXE-TGT-USE-STDIO-DAG: i=0
   // EXE-TGT-USE-STDIO-DAG: i=1
-#if ONLY_IN_ACC
+#if OMP_ONLY_IN_ACC
   /* noacc-warning@+4 {{unexpected '#pragma omp ...' in program}} */
   /* acc-warning@+3 {{unexpected '#pragma omp ...' in program}} */
 #endif
@@ -107,7 +111,7 @@ int main() {
   for (int i = 0; i < 2; ++i)
     TGT_PRINTF("i=%d\n", i);
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // OpenMP within OpenACC where full construct is rewritten when printing
   //
   // For the original OpenACC, -fopenacc-print prints the source OpenMP
@@ -115,31 +119,26 @@ int main() {
   // source OpenMP directive was never parsed into the AST.  However, for the
   // OpenMP translation, even with -fopenacc-print, the rewritten construct is
   // printed from the AST, so the source OpenMP directive is not printed.
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // DMP:      ACCParallelDirective
-  // DMP-NEXT:   ACCNumWorkersClause
+  // DMP-NEXT:   ACCVectorLengthClause
   // DMP-NEXT:     ParenExpr
   // DMP-NEXT:       BinaryOperator
   // DMP-NEXT:         DeclRefExpr
   // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:   impl: CompoundStmt
-  // DMP-NEXT:     DeclStmt
-  // DMP-NEXT:       VarDecl {{.*}} __clang_acc_num_workers__
+  // DMP-NEXT:     CStyleCastExpr {{.*}} 'void' <ToVoid>
   // DMP-NEXT:       ParenExpr
   // DMP-NEXT:         BinaryOperator
   // DMP-NEXT:           DeclRefExpr
   // DMP-NEXT:             IntegerLiteral {{.*}} 'int' 2
   // DMP-NEXT:     OMPTargetTeamsDirective
-  // DMP-NEXT:       OMPFirstprivateClause {{.*}} <implicit>
-  // DMP-NEXT:         DeclRefExpr {{.*}} '__clang_acc_num_workers__'
   // DMP:        ACCLoopDirective
-  // DMP-NEXT:     ACCWorkerClause
+  // DMP-NEXT:     ACCVectorClause
   // DMP-NEXT:     ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:     ACCGangClause {{.*}} <implicit>
-  // DMP-NEXT:     impl: OMPDistributeParallelForDirective
-  // DMP-NEXT:       OMPNum_threadsClause
-  // DMP-NEXT:         DeclRefExpr {{.*}} '__clang_acc_num_workers__'
+  // DMP-NEXT:     impl: OMPDistributeSimdDirective
   // DMP:            ForStmt
   // DMP-NOT:          OMP
   // DMP:              ForStmt
@@ -150,17 +149,17 @@ int main() {
   // PRT:             {{^ *}}int x = 0;
   //
   // PRT-AO-NEXT:     {{^ *}}// v----------ACC----------v
-  // PRT-A-NEXT:      {{^ *}}#pragma acc parallel num_workers((x = 2))
-  // PRT-A-NEXT:      {{^ *}}#pragma acc loop worker
+  // PRT-A-NEXT:      {{^ *}}#pragma acc parallel vector_length((x = 2))
+  // PRT-A-NEXT:      {{^ *}}#pragma acc loop vector
   // PRT-A-NEXT:      {{^ *}}for (int i = 0; i < 2; ++i)
   // PRT-A-SRC-NEXT:  {{^ *}}  #pragma omp simd
   // PRT-A-NEXT:      {{^ *}}  for (int j = 0; j < 2; ++j)
   // PRT-A-NEXT:      {{^ *}}    {{printf|TGT_PRINTF}}("i=%d, j=%d\n", i, j);
   // PRT-AO-NEXT:     {{^ *}}// ---------ACC->OMP--------
   // PRT-AO-NEXT:     {{^ *}}// {
-  // PRT-AO-NEXT:     {{^ *}}//   const int __clang_acc_num_workers__ = (x = 2);
+  // PRT-AO-NEXT:     {{^ *}}//   (void)(x = 2);
   // PRT-AO-NEXT:     {{^ *}}//   #pragma omp target teams
-  // PRT-AO-NEXT:     {{^ *}}//   #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:     {{^ *}}//   #pragma omp distribute simd
   // PRT-AO-NEXT:     {{^ *}}//   for (int i = 0; i < 2; ++i)
   // PRT-AO-NEXT:     {{^ *}}//     for (int j = 0; j < 2; ++j)
   // PRT-AO-NEXT:     {{^ *}}//       printf("i=%d, j=%d\n", i, j);
@@ -169,16 +168,16 @@ int main() {
 
   // PRT-OA-NEXT:     {{^ *}}// v----------OMP----------v
   // PRT-O-NEXT:      {{^ *}}{
-  // PRT-O-NEXT:      {{^ *}}  const int __clang_acc_num_workers__ = (x = 2);
+  // PRT-O-NEXT:      {{^ *}}  (void)(x = 2);
   // PRT-O-NEXT:      {{^ *}}  #pragma omp target teams
-  // PRT-O-NEXT:      {{^ *}}  #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
+  // PRT-O-NEXT:      {{^ *}}  #pragma omp distribute simd
   // PRT-O-NEXT:      {{^ *}}  for (int i = 0; i < 2; ++i)
   // PRT-O-NEXT:      {{^ *}}    for (int j = 0; j < 2; ++j)
   // PRT-O-NEXT:      {{^ *}}      printf("i=%d, j=%d\n", i, j);
   // PRT-O-NEXT:      {{^ *}}}
   // PRT-OA-NEXT:     {{^ *}}// ---------OMP<-ACC--------
-  // PRT-OA-NEXT:     {{^ *}}// #pragma acc parallel num_workers((x = 2))
-  // PRT-OA-NEXT:     {{^ *}}// #pragma acc loop worker
+  // PRT-OA-NEXT:     {{^ *}}// #pragma acc parallel vector_length((x = 2))
+  // PRT-OA-NEXT:     {{^ *}}// #pragma acc loop vector
   // PRT-OA-NEXT:     {{^ *}}// for (int i = 0; i < 2; ++i)
   // PRT-OA-SRC-NEXT: {{^ *}}//   #pragma omp simd
   // PRT-OA-NEXT:     {{^ *}}//   for (int j = 0; j < 2; ++j)
@@ -190,8 +189,8 @@ int main() {
   // EXE-TGT-USE-STDIO-DAG: i=1, j=0
   // EXE-TGT-USE-STDIO-DAG: i=1, j=1
   int x = 0;
-  #pragma acc parallel num_workers((x = 2))
-  #pragma acc loop worker
+  #pragma acc parallel vector_length((x = 2))
+  #pragma acc loop vector
   for (int i = 0; i < 2; ++i)
     #pragma omp simd
     for (int j = 0; j < 2; ++j)

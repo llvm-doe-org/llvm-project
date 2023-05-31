@@ -98,12 +98,14 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //  DMP-NOT:     OMP
   //      DMP:     CompoundStmt
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   //    PRT-NEXT: {
   #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8)
@@ -115,8 +117,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -127,9 +127,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
     //        PRT-NEXT: for ({{.*}})
     //        PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -149,8 +149,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -161,9 +159,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang{{$}}
     //        PRT-NEXT: for ({{.*}})
     //        PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -183,8 +181,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeParallelForDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    //     DMP-NEXT:     OMPNum_threadsClause
-    //     DMP-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -194,10 +190,10 @@ int main() {
     //          DMP:       ForStmt
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop worker{{$}}
-    //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-    //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+    //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker{{$}}
     //        PRT-NEXT: for ({{.*}})
     //        PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -217,8 +213,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCWorkerClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeSimdDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     //     DMP-NEXT:     OMPSimdlenClause
     //     DMP-NEXT:       ConstantExpr
     //     DMP-NEXT:         value: Int 8
@@ -229,9 +223,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop vector{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(8){{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute simd simdlen(8){{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector{{$}}
     //        PRT-NEXT: for ({{.*}})
     //        PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -295,8 +289,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeParallelForDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    //     DMP-NEXT:     OMPNum_threadsClause
-    //     DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -306,10 +298,10 @@ int main() {
     //          DMP:       ForStmt
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang worker{{$}}
-    //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-    //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+    //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang worker{{$}}
     //        PRT-NEXT: for ({{.*}})
     //        PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -329,8 +321,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCWorkerClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeSimdDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     //     DMP-NEXT:     OMPSimdlenClause
     //     DMP-NEXT:       ConstantExpr
     //     DMP-NEXT:         value: Int 8
@@ -341,9 +331,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang vector{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(8){{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute simd simdlen(8){{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang vector{{$}}
     //        PRT-NEXT: for ({{.*}})
     //        PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -362,8 +352,6 @@ int main() {
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-NEXT:     OMPNum_threadsClause
-    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:     OMPSimdlenClause
     // DMP-NEXT:       ConstantExpr
     // DMP-NEXT:         value: Int 8
@@ -373,8 +361,8 @@ int main() {
     //      DMP:       ForStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker vector{{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector{{$}}
     //    PRT-NEXT: for ({{.*}})
     //    PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -394,8 +382,6 @@ int main() {
     // DMP-NOT:      <implicit>
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-NEXT:     OMPNum_threadsClause
-    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:     OMPSimdlenClause
     // DMP-NEXT:       ConstantExpr
     // DMP-NEXT:         value: Int 8
@@ -405,8 +391,8 @@ int main() {
     //      DMP:       ForStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc loop gang worker vector{{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang worker vector{{$}}
     //    PRT-NEXT: for ({{.*}})
     //    PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -467,6 +453,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   //     DMP-NEXT:       ACCGangClause {{.*}} <implicit>
@@ -474,8 +462,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 4
   // DMP-GWV-NEXT:         OMPSimdlenClause
   // DMP-GWV-NEXT:           ConstantExpr
   // DMP-GWV-NEXT:             value: Int 8
@@ -485,12 +471,12 @@ int main() {
   //          DMP:           CallExpr
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   //        PRT-NEXT: for ({{.*}})
   //        PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -525,6 +511,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCGangClause
   //      DMP-NOT:         <implicit>
@@ -533,8 +521,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:       OMPNum_threadsClause
-  // DMP-GWV-NEXT:         IntegerLiteral {{.*}} 4
   // DMP-GWV-NEXT:       OMPSimdlenClause
   // DMP-GWV-NEXT:         ConstantExpr
   // DMP-GWV-NEXT:           value: Int 8
@@ -544,12 +530,12 @@ int main() {
   //          DMP:           CallExpr
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang{{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang{{$}}
   //        PRT-NEXT: for ({{.*}})
   //        PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -584,6 +570,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCWorkerClause
   //      DMP-NOT:         <implicit>
@@ -592,8 +580,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeParallelForDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  //     DMP-NEXT:         OMPNum_threadsClause
-  //     DMP-NEXT:           IntegerLiteral {{.*}} 'int' 4
   // DMP-GWV-NEXT:         OMPSimdlenClause
   // DMP-GWV-NEXT:           ConstantExpr
   // DMP-GWV-NEXT:             value: Int 8
@@ -603,12 +589,12 @@ int main() {
   //          DMP:           CallExpr
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) worker{{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
-  //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) worker{{$}}
   //        PRT-NEXT: for ({{.*}})
   //        PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -643,6 +629,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCVectorClause
   //      DMP-NOT:         <implicit>
@@ -651,8 +639,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCWorkerClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeSimdDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 4
   //     DMP-NEXT:         OMPSimdlenClause
   //     DMP-NEXT:           ConstantExpr
   //     DMP-NEXT:             value: Int 8
@@ -662,12 +648,12 @@ int main() {
   //          DMP:           CallExpr
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) vector{{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(8){{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute simd simdlen(8){{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) vector{{$}}
   //        PRT-NEXT: for ({{.*}})
   //        PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -778,6 +764,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCGangClause
   //      DMP-NOT:         <implicit>
@@ -787,8 +775,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeParallelForDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  //     DMP-NEXT:         OMPNum_threadsClause
-  //     DMP-NEXT:           IntegerLiteral {{.*}} 'int' 4
   // DMP-GWV-NEXT:         OMPSimdlenClause
   // DMP-GWV-NEXT:           ConstantExpr
   // DMP-GWV-NEXT:             value: Int 8
@@ -798,12 +784,12 @@ int main() {
   //          DMP:           CallExpr
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang worker{{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
-  //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang worker{{$}}
   //        PRT-NEXT: for ({{.*}})
   //        PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -840,6 +826,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCGangClause
   //      DMP-NOT:         <implicit>
@@ -849,8 +837,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCWorkerClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeSimdDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 4
   //     DMP-NEXT:         OMPSimdlenClause
   //     DMP-NEXT:           ConstantExpr
   //     DMP-NEXT:             value: Int 8
@@ -860,12 +846,12 @@ int main() {
   //          DMP:           CallExpr
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang vector{{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(8){{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute simd simdlen(8){{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang vector{{$}}
   //        PRT-NEXT: for ({{.*}})
   //        PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -902,6 +888,8 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCWorkerClause
   //  DMP-NOT:         <implicit>
@@ -910,8 +898,6 @@ int main() {
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
   // DMP-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-NEXT:         OMPNum_threadsClause
-  // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 4
   //  DMP-NOT:         OMP
   // DMP-NEXT:         OMPSimdlenClause
   // DMP-NEXT:           ConstantExpr
@@ -921,10 +907,10 @@ int main() {
   //      DMP:           CallExpr
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) worker vector{{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) worker vector{{$}}
   //    PRT-NEXT: for ({{.*}})
   //    PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -963,6 +949,8 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCGangClause
   //  DMP-NOT:         <implicit>
@@ -972,8 +960,6 @@ int main() {
   //  DMP-NOT:         <implicit>
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-NEXT:         OMPNum_threadsClause
-  // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 4
   //  DMP-NOT:         OMP
   // DMP-NEXT:         OMPSimdlenClause
   // DMP-NEXT:           ConstantExpr
@@ -983,10 +969,10 @@ int main() {
   //      DMP:           CallExpr
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang worker vector{{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang worker vector{{$}}
   //    PRT-NEXT: for ({{.*}})
   //    PRT-NEXT:   {{TGT_PRINTF|printf}}
@@ -1060,11 +1046,13 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //  DMP-NOT:     OMP
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8)
   // DMP: CompoundStmt
@@ -1077,8 +1065,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -1087,9 +1073,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
     #pragma acc loop
     // DMP: ForStmt
@@ -1127,8 +1113,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -1137,9 +1121,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang{{$}}
     #pragma acc loop gang
     // DMP: ForStmt
@@ -1178,8 +1162,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeParallelForDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    //     DMP-NEXT:     OMPNum_threadsClause
-    //     DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -1187,10 +1169,10 @@ int main() {
     //      DMP-NOT:     OMP
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop worker{{$}}
-    //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-    //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+    //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker{{$}}
     #pragma acc loop worker
     // DMP: ForStmt
@@ -1228,8 +1210,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCWorkerClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeSimdDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     //     DMP-NEXT:     OMPSimdlenClause
     //     DMP-NEXT:       ConstantExpr
     //     DMP-NEXT:         value: Int 8
@@ -1238,9 +1218,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop vector{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(8){{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute simd simdlen(8){{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop vector{{$}}
     #pragma acc loop vector
     // DMP: ForStmt
@@ -1291,8 +1271,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPDistributeDirective
       // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      // DMP-GWV-NEXT:     OMPNum_threadsClause
-      // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-GWV-NEXT:     OMPSimdlenClause
       // DMP-GWV-NEXT:       ConstantExpr
       // DMP-GWV-NEXT:         value: Int 8
@@ -1301,9 +1279,9 @@ int main() {
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
       //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
       //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
       #pragma acc loop
       // DMP: ForStmt
@@ -1341,8 +1319,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPDistributeDirective
       // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      // DMP-GWV-NEXT:     OMPNum_threadsClause
-      // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-GWV-NEXT:     OMPSimdlenClause
       // DMP-GWV-NEXT:       ConstantExpr
       // DMP-GWV-NEXT:         value: Int 8
@@ -1351,9 +1327,9 @@ int main() {
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
       //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
       //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
       #pragma acc loop
       // DMP: ForStmt
@@ -1378,8 +1354,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeParallelForDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    //     DMP-NEXT:     OMPNum_threadsClause
-    //     DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -1387,10 +1361,10 @@ int main() {
     //      DMP-NOT:     OMP
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang worker{{$}}
-    //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-    //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+    //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang worker{{$}}
     #pragma acc loop gang worker
     // DMP: ForStmt
@@ -1429,8 +1403,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCWorkerClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeSimdDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     //     DMP-NEXT:     OMPSimdlenClause
     //     DMP-NEXT:       ConstantExpr
     //     DMP-NEXT:         value: Int 8
@@ -1439,9 +1411,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang vector{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(8){{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute simd simdlen(8){{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang vector{{$}}
     #pragma acc loop gang vector
     // DMP: ForStmt
@@ -1479,8 +1451,6 @@ int main() {
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:   ACCGangClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-NEXT:     OMPNum_threadsClause
-    // DMP-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-NEXT:     OMPSimdlenClause
     // DMP-NEXT:       ConstantExpr
     // DMP-NEXT:         value: Int 8
@@ -1488,8 +1458,8 @@ int main() {
     //  DMP-NOT:     OMP
     //
     //    PRT-A-NEXT: {{^ *}}#pragma acc loop worker vector{{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //   PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector{{$}}
     #pragma acc loop worker vector
     // DMP: ForStmt
@@ -1528,8 +1498,6 @@ int main() {
     //  DMP-NOT:     <implicit>
     // DMP-NEXT:   ACCIndependentClause {{.*}} <implicit>
     // DMP-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-NEXT:     OMPNum_threadsClause
-    // DMP-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-NEXT:     OMPSimdlenClause
     // DMP-NEXT:       ConstantExpr
     // DMP-NEXT:         value: Int 8
@@ -1537,8 +1505,8 @@ int main() {
     //  DMP-NOT:     OMP
     //
     //    PRT-A-NEXT: {{^ *}}#pragma acc loop gang worker vector{{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //   PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang worker vector{{$}}
     #pragma acc loop gang worker vector
     // DMP: ForStmt
@@ -1592,8 +1560,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPDistributeDirective
       // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      // DMP-GWV-NEXT:     OMPNum_threadsClause
-      // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-GWV-NEXT:     OMPSimdlenClause
       // DMP-GWV-NEXT:       ConstantExpr
       // DMP-GWV-NEXT:         value: Int 8
@@ -1602,9 +1568,9 @@ int main() {
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
       //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
       //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
       #pragma acc loop
       // DMP: ForStmt
@@ -1645,6 +1611,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   //     DMP-NEXT:       ACCGangClause {{.*}} <implicit>
@@ -1652,8 +1620,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 4
   // DMP-GWV-NEXT:         OMPSimdlenClause
   // DMP-GWV-NEXT:           ConstantExpr
   // DMP-GWV-NEXT:             value: Int 8
@@ -1661,12 +1627,12 @@ int main() {
   //      DMP-NOT:         OMP
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8)
   // DMP: ForStmt
@@ -1720,6 +1686,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCGangClause
   //      DMP-NOT:         <implicit>
@@ -1728,8 +1696,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 4
   // DMP-GWV-NEXT:         OMPSimdlenClause
   // DMP-GWV-NEXT:           ConstantExpr
   // DMP-GWV-NEXT:             value: Int 8
@@ -1737,12 +1703,12 @@ int main() {
   //      DMP-NOT:         OMP
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang{{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang{{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang
   // DMP: ForStmt
@@ -1796,6 +1762,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCWorkerClause
   //      DMP-NOT:         <implicit>
@@ -1804,8 +1772,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeParallelForDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  //     DMP-NEXT:         OMPNum_threadsClause
-  //     DMP-NEXT:           IntegerLiteral {{.*}} 'int' 4
   // DMP-GWV-NEXT:         OMPSimdlenClause
   // DMP-GWV-NEXT:           ConstantExpr
   // DMP-GWV-NEXT:             value: Int 8
@@ -1813,12 +1779,12 @@ int main() {
   //      DMP-NOT:         OMP
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) worker{{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
-  //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) worker{{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) worker
   // DMP: ForStmt
@@ -1872,6 +1838,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCVectorClause
   //      DMP-NOT:         <implicit>
@@ -1880,8 +1848,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCWorkerClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeSimdDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 4
   //     DMP-NEXT:         OMPSimdlenClause
   //     DMP-NEXT:           ConstantExpr
   //     DMP-NEXT:             value: Int 8
@@ -1889,12 +1855,12 @@ int main() {
   //      DMP-NOT:         OMP
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) vector{{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(8){{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute simd simdlen(8){{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) vector{{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) vector
   // DMP: ForStmt
@@ -1949,14 +1915,16 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCSeqClause
   //  DMP-NOT:         <implicit>
   // DMP-NEXT:       impl: ForStmt
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) seq{{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) seq{{$}}
   //    PRT-NEXT: for ({{.*}}) {
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) seq
@@ -1970,8 +1938,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -1980,9 +1946,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
     //        PRT-NEXT: for ({{.*}})
     #pragma acc loop
@@ -2020,14 +1986,16 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCAutoClause
   //  DMP-NOT:         <implicit>
   // DMP-NEXT:       impl: ForStmt
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) auto{{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) auto{{$}}
   //    PRT-NEXT: for ({{.*}}) {
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) auto
@@ -2041,8 +2009,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -2051,9 +2017,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
     //        PRT-NEXT: for ({{.*}})
     #pragma acc loop
@@ -2093,6 +2059,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCGangClause
   //      DMP-NOT:         <implicit>
@@ -2102,8 +2070,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeParallelForDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  //     DMP-NEXT:         OMPNum_threadsClause
-  //     DMP-NEXT:           IntegerLiteral {{.*}} 'int' 4
   // DMP-GWV-NEXT:         OMPSimdlenClause
   // DMP-GWV-NEXT:           ConstantExpr
   // DMP-GWV-NEXT:             value: Int 8
@@ -2111,12 +2077,12 @@ int main() {
   //      DMP-NOT:         OMP
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang worker{{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
-  //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang worker{{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang worker
   // DMP: ForStmt
@@ -2172,6 +2138,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCGangClause
   //      DMP-NOT:         <implicit>
@@ -2181,8 +2149,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCWorkerClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeSimdDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 'int' 4
   //     DMP-NEXT:         OMPSimdlenClause
   //     DMP-NEXT:           ConstantExpr
   //     DMP-NEXT:             value: Int 8
@@ -2190,12 +2156,12 @@ int main() {
   //      DMP-NOT:         OMP
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang vector{{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(8){{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute simd simdlen(8){{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang vector{{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang vector
   // DMP: ForStmt
@@ -2251,6 +2217,8 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCWorkerClause
   //  DMP-NOT:         <implicit>
@@ -2259,8 +2227,6 @@ int main() {
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
   // DMP-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-NEXT:         OMPNum_threadsClause
-  // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 4
   // DMP-NEXT:         OMPSimdlenClause
   // DMP-NEXT:           ConstantExpr
   // DMP-NEXT:             value: Int 8
@@ -2268,10 +2234,10 @@ int main() {
   //  DMP-NOT:         OMP
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) worker vector{{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) worker vector{{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) worker vector
   // DMP: ForStmt
@@ -2329,6 +2295,8 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCGangClause
   //  DMP-NOT:         <implicit>
@@ -2338,8 +2306,6 @@ int main() {
   //  DMP-NOT:         <implicit>
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-NEXT:         OMPNum_threadsClause
-  // DMP-NEXT:           IntegerLiteral {{.*}} 'int' 4
   // DMP-NEXT:         OMPSimdlenClause
   // DMP-NEXT:           ConstantExpr
   // DMP-NEXT:             value: Int 8
@@ -2347,10 +2313,10 @@ int main() {
   //  DMP-NOT:         OMP
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang worker vector{{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang worker vector{{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang worker vector
   // DMP: ForStmt
@@ -2406,6 +2372,8 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCGangClause
   //  DMP-NOT:         <implicit>
@@ -2414,8 +2382,8 @@ int main() {
   // DMP-NEXT:       impl: ForStmt
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang auto{{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang auto{{$}}
   //    PRT-NEXT: for ({{.*}}) {
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8) gang auto
@@ -2429,8 +2397,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -2439,9 +2405,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
     //        PRT-NEXT: for ({{.*}})
     #pragma acc loop
@@ -2479,11 +2445,13 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //  DMP-NOT:     OMP
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8)
   // DMP: CompoundStmt
@@ -2511,8 +2479,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPDistributeDirective
       // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      // DMP-GWV-NEXT:     OMPNum_threadsClause
-      // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-GWV-NEXT:     OMPSimdlenClause
       // DMP-GWV-NEXT:       ConstantExpr
       // DMP-GWV-NEXT:         value: Int 8
@@ -2521,9 +2487,9 @@ int main() {
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang{{$}}
       //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
       //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang{{$}}
       #pragma acc loop gang
       // DMP: ForStmt
@@ -2561,8 +2527,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPParallelForDirective
       // DMP-GWV-NEXT:   impl: OMPParallelForSimdDirective
-      //     DMP-NEXT:     OMPNum_threadsClause
-      //     DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
       // DMP-GWV-NEXT:     OMPSimdlenClause
       // DMP-GWV-NEXT:       ConstantExpr
       // DMP-GWV-NEXT:         value: Int 8
@@ -2570,10 +2534,10 @@ int main() {
       //      DMP-NOT:     OMP
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop worker{{$}}
-      //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp parallel for num_threads(4){{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(4) simdlen(8){{$}}
-      //    PRT-O-G-NEXT: {{^ *}}#pragma omp parallel for num_threads(4){{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp parallel for simd num_threads(4) simdlen(8){{$}}
+      //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp parallel for{{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp parallel for simd simdlen(8){{$}}
+      //    PRT-O-G-NEXT: {{^ *}}#pragma omp parallel for{{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker{{$}}
       #pragma acc loop worker
       // DMP: ForStmt
@@ -2594,15 +2558,13 @@ int main() {
     // DMP-GWV-NEXT:   ACCWorkerClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     //      DMP-NOT:     OMP
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
     #pragma acc loop
     // DMP: ForStmt
@@ -2645,8 +2607,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -2655,9 +2615,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
     #pragma acc loop
     // DMP: ForStmt
@@ -2696,8 +2656,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -2706,9 +2664,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
     #pragma acc loop
     // DMP: ForStmt
@@ -2762,8 +2720,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPDistributeParallelForDirective
       // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      //     DMP-NEXT:     OMPNum_threadsClause
-      //     DMP-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-GWV-NEXT:     OMPSimdlenClause
       // DMP-GWV-NEXT:       ConstantExpr
       // DMP-GWV-NEXT:         value: Int 8
@@ -2771,10 +2727,10 @@ int main() {
       //      DMP-NOT:     OMP
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang worker{{$}}
-      //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-      //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+      //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang worker{{$}}
       #pragma acc loop gang worker
       // DMP: ForStmt
@@ -2812,8 +2768,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCWorkerClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPDistributeSimdDirective
       // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      // DMP-GWV-NEXT:     OMPNum_threadsClause
-      // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
       //     DMP-NEXT:     OMPSimdlenClause
       //     DMP-NEXT:       ConstantExpr
       //     DMP-NEXT:         value: Int 8
@@ -2822,9 +2776,9 @@ int main() {
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang vector{{$}}
       //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(8){{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
       //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute simd simdlen(8){{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang vector{{$}}
       #pragma acc loop gang vector
       // DMP: ForStmt
@@ -2862,8 +2816,6 @@ int main() {
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   impl: OMPParallelForSimdDirective
-      // DMP-NEXT:     OMPNum_threadsClause
-      // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
       // DMP-NEXT:     OMPSimdlenClause
       // DMP-NEXT:       ConstantExpr
       // DMP-NEXT:         value: Int 8
@@ -2871,8 +2823,8 @@ int main() {
       //  DMP-NOT:     OMP
       //
       //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker vector{{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(4) simdlen(8){{$}}
-      //  PRT-O-NEXT: {{^ *}}#pragma omp parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd simdlen(8){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp parallel for simd simdlen(8){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector{{$}}
       #pragma acc loop worker vector
       // DMP: ForStmt
@@ -2910,8 +2862,6 @@ int main() {
       // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
       // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
       // DMP-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      // DMP-NEXT:     OMPNum_threadsClause
-      // DMP-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-NEXT:     OMPSimdlenClause
       // DMP-NEXT:       ConstantExpr
       // DMP-NEXT:         value: Int 8
@@ -2919,8 +2869,8 @@ int main() {
       //  DMP-NOT:     OMP
       //
       //  PRT-A-NEXT: {{^ *}}#pragma acc loop gang worker vector{{$}}
-      // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-      //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+      //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang worker vector{{$}}
       #pragma acc loop gang worker vector
       // DMP: ForStmt
@@ -2942,8 +2892,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -2952,9 +2900,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
     #pragma acc loop
     // DMP: ForStmt
@@ -3016,13 +2964,15 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:       impl: ForStmt
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   //    PRT-NEXT: for ({{.*}}) {
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8)
@@ -3037,8 +2987,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -3047,9 +2995,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang{{$}}
     #pragma acc loop gang
     // DMP: ForStmt
@@ -3086,6 +3034,8 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
@@ -3093,9 +3043,9 @@ int main() {
   //  DMP-NOT:         OMP
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //  PRT-O-NEXT: {{^ *}}#pragma omp distribute{{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8)
@@ -3111,8 +3061,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPParallelForDirective
     // DMP-GWV-NEXT:   impl: OMPParallelForSimdDirective
-    //     DMP-NEXT:     OMPNum_threadsClause
-    //     DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -3120,10 +3068,10 @@ int main() {
     //      DMP-NOT:     OMP
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop worker{{$}}
-    //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp parallel for num_threads(4){{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(4) simdlen(8){{$}}
-    //    PRT-O-G-NEXT: {{^ *}}#pragma omp parallel for num_threads(4){{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp parallel for simd num_threads(4) simdlen(8){{$}}
+    //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp parallel for{{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp parallel for simd simdlen(8){{$}}
+    //    PRT-O-G-NEXT: {{^ *}}#pragma omp parallel for{{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker{{$}}
     #pragma acc loop worker
     // DMP: ForStmt
@@ -3160,23 +3108,23 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   //     DMP-NEXT:       ACCGangClause {{.*}} <implicit>
   // DMP-GWV-NEXT:       ACCWorkerClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 4
   //      DMP-NOT:         OMP
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8)
   // DMP: ForStmt
@@ -3234,6 +3182,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   //     DMP-NEXT:       ACCGangClause {{.*}} <implicit>
@@ -3241,8 +3191,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 4
   // DMP-GWV-NEXT:         OMPSimdlenClause
   // DMP-GWV-NEXT:           ConstantExpr
   // DMP-GWV-NEXT:             value: Int 8
@@ -3252,12 +3200,12 @@ int main() {
   //          DMP:           CallExpr
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8)
   // DMP: ForStmt
@@ -3310,6 +3258,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   //     DMP-NEXT:       ACCGangClause {{.*}} <implicit>
@@ -3317,8 +3267,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 4
   // DMP-GWV-NEXT:         OMPSimdlenClause
   // DMP-GWV-NEXT:           ConstantExpr
   // DMP-GWV-NEXT:             value: Int 8
@@ -3328,12 +3276,12 @@ int main() {
   //          DMP:           CallExpr
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8)
   // DMP: ForStmt
@@ -3386,13 +3334,15 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:       impl: ForStmt
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   //    PRT-NEXT: for ({{.*}}) {
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8)
@@ -3408,8 +3358,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeParallelForDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    //     DMP-NEXT:     OMPNum_threadsClause
-    //     DMP-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -3417,10 +3365,10 @@ int main() {
     //      DMP-NOT:     OMP
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang worker{{$}}
-    //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-    //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+    //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang worker{{$}}
     #pragma acc loop gang worker
     // DMP: ForStmt
@@ -3457,13 +3405,15 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:       impl: ForStmt
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   //    PRT-NEXT: for ({{.*}}) {
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8)
@@ -3479,8 +3429,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCWorkerClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeSimdDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     //     DMP-NEXT:     OMPSimdlenClause
     //     DMP-NEXT:       ConstantExpr
     //     DMP-NEXT:         value: Int 8
@@ -3489,9 +3437,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang vector{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(8){{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute simd simdlen(8){{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang vector{{$}}
     #pragma acc loop gang vector
     // DMP: ForStmt
@@ -3528,6 +3476,8 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
@@ -3535,9 +3485,9 @@ int main() {
   //  DMP-NOT:         OMP
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //  PRT-O-NEXT: {{^ *}}#pragma omp distribute{{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8)
@@ -3553,8 +3503,6 @@ int main() {
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   impl: OMPParallelForSimdDirective
-    // DMP-NEXT:     OMPNum_threadsClause
-    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:     OMPSimdlenClause
     // DMP-NEXT:       ConstantExpr
     // DMP-NEXT:         value: Int 8
@@ -3562,8 +3510,8 @@ int main() {
     //  DMP-NOT:     OMP
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc loop worker vector{{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(4) simdlen(8){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp parallel for simd simdlen(8){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp parallel for simd simdlen(8){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker vector{{$}}
     #pragma acc loop worker vector
     // DMP: ForStmt
@@ -3600,13 +3548,15 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:       impl: ForStmt
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   //    PRT-NEXT: for ({{.*}}) {
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8)
@@ -3622,8 +3572,6 @@ int main() {
     // DMP-NEXT:   ACCSharedClause {{.*}} <implicit>
     // DMP-NEXT:     DeclRefExpr {{.*}} 'i' 'int'
     // DMP-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-NEXT:     OMPNum_threadsClause
-    // DMP-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-NEXT:     OMPSimdlenClause
     // DMP-NEXT:       ConstantExpr
     // DMP-NEXT:         value: Int 8
@@ -3631,8 +3579,8 @@ int main() {
     //  DMP-NOT:     OMP
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc loop gang worker vector{{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang worker vector{{$}}
     #pragma acc loop gang worker vector
     // DMP: ForStmt
@@ -3669,6 +3617,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   //     DMP-NEXT:       ACCGangClause {{.*}} <implicit>
@@ -3676,8 +3626,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 4
   // DMP-GWV-NEXT:         OMPSimdlenClause
   // DMP-GWV-NEXT:           ConstantExpr
   // DMP-GWV-NEXT:             value: Int 8
@@ -3687,12 +3635,12 @@ int main() {
   //          DMP:           CallExpr
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8)
   // DMP: ForStmt
@@ -3748,11 +3696,13 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //  DMP-NOT:     OMP
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8)
   // DMP: CompoundStmt
@@ -3807,8 +3757,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCWorkerClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     //      DMP-NOT:     OMP
     //          DMP:     ForStmt
     //          DMP:       CallExpr
@@ -3816,9 +3764,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
     //        PRT-NEXT: for ({{.*}})
     //        PRT-NEXT:   vectorFn({{.*}});
@@ -3836,8 +3784,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -3849,9 +3795,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
     //        PRT-NEXT: for ({{.*}})
     //        PRT-NEXT:   seqFn({{.*}});
@@ -3869,8 +3815,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -3882,9 +3826,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
     //        PRT-NEXT: for ({{.*}})
     //        PRT-NEXT:   impFn({{.*}});
@@ -3953,6 +3897,8 @@ int main() {
   // DMP-NEXT:     impl: OMPTargetTeamsDirective
   // DMP-NEXT:       OMPNum_teamsClause
   // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:       OMPThread_limitClause
+  // DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //      DMP:     ACCLoopDirective
   // DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   // DMP-NEXT:       ACCGangClause {{.*}} <implicit>
@@ -3963,9 +3909,9 @@ int main() {
   //      DMP:             DeclRefExpr {{.*}} 'workerFn'
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-AO-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //  PRT-O-NEXT: {{^ *}}#pragma omp distribute{{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4){{$}}
   //    PRT-NEXT: for ({{.*}})
@@ -3999,26 +3945,26 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   //     DMP-NEXT:       ACCGangClause {{.*}} <implicit>
   // DMP-GWV-NEXT:       ACCWorkerClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 4
   //      DMP-NOT:         OMP
   //          DMP:         ForStmt
   //          DMP:           CallExpr
   //          DMP:             DeclRefExpr {{.*}} 'vectorFn'
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   //        PRT-NEXT: for ({{.*}})
   //        PRT-NEXT:   vectorFn({{.*}});
@@ -4051,6 +3997,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   //     DMP-NEXT:       ACCGangClause {{.*}} <implicit>
@@ -4058,8 +4006,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 4
   // DMP-GWV-NEXT:         OMPSimdlenClause
   // DMP-GWV-NEXT:           ConstantExpr
   // DMP-GWV-NEXT:             value: Int 8
@@ -4070,12 +4016,12 @@ int main() {
   //          DMP:             DeclRefExpr {{.*}} 'seqFn'
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   //        PRT-NEXT: for ({{.*}})
   //        PRT-NEXT:   seqFn({{.*}});
@@ -4108,6 +4054,8 @@ int main() {
   //     DMP-NEXT:     impl: OMPTargetTeamsDirective
   //     DMP-NEXT:       OMPNum_teamsClause
   //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:       OMPThread_limitClause
+  //     DMP-NEXT:         IntegerLiteral {{.*}} 'int' 4
   //          DMP:     ACCLoopDirective
   //     DMP-NEXT:       ACCIndependentClause {{.*}} <implicit>
   //     DMP-NEXT:       ACCGangClause {{.*}} <implicit>
@@ -4115,8 +4063,6 @@ int main() {
   // DMP-GWV-NEXT:       ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:       impl: OMPDistributeDirective
   // DMP-GWV-NEXT:       impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:         OMPNum_threadsClause
-  // DMP-GWV-NEXT:           IntegerLiteral {{.*}} 4
   // DMP-GWV-NEXT:         OMPSimdlenClause
   // DMP-GWV-NEXT:           ConstantExpr
   // DMP-GWV-NEXT:             value: Int 8
@@ -4127,12 +4073,12 @@ int main() {
   //          DMP:             DeclRefExpr {{.*}} 'impFn'
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel loop num_gangs(2) num_workers(4) vector_length(8){{$}}
   //        PRT-NEXT: for ({{.*}})
   //        PRT-NEXT:   impFn({{.*}});
@@ -4162,10 +4108,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8)
   //          DMP: ACCLoopDirective
@@ -4175,8 +4123,6 @@ int main() {
   // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:   impl: OMPDistributeDirective
   // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:     OMPNum_threadsClause
-  // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
   // DMP-GWV-NEXT:     OMPSimdlenClause
   // DMP-GWV-NEXT:       ConstantExpr
   // DMP-GWV-NEXT:         value: Int 8
@@ -4185,9 +4131,9 @@ int main() {
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
   #pragma acc loop
   // DMP: ForStmt
@@ -4257,10 +4203,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8)
   //      DMP: ACCLoopDirective
@@ -4287,8 +4235,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPDistributeDirective
       // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      // DMP-GWV-NEXT:     OMPNum_threadsClause
-      // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-GWV-NEXT:     OMPSimdlenClause
       // DMP-GWV-NEXT:       ConstantExpr
       // DMP-GWV-NEXT:         value: Int 8
@@ -4297,9 +4243,9 @@ int main() {
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang{{$}}
       //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
       //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang{{$}}
       #pragma acc loop gang
       // DMP: ForStmt
@@ -4323,8 +4269,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPDistributeDirective
       // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      // DMP-GWV-NEXT:     OMPNum_threadsClause
-      // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-GWV-NEXT:     OMPSimdlenClause
       // DMP-GWV-NEXT:       ConstantExpr
       // DMP-GWV-NEXT:         value: Int 8
@@ -4333,9 +4277,9 @@ int main() {
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
       //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
       //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
       #pragma acc loop
       // DMP: ForStmt
@@ -4367,10 +4311,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8)
   //      DMP: ACCLoopDirective
@@ -4405,8 +4351,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPDistributeDirective
       // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      // DMP-GWV-NEXT:     OMPNum_threadsClause
-      // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-GWV-NEXT:     OMPSimdlenClause
       // DMP-GWV-NEXT:       ConstantExpr
       // DMP-GWV-NEXT:         value: Int 8
@@ -4415,9 +4359,9 @@ int main() {
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
       //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
       //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
       #pragma acc loop
       // DMP: ForStmt
@@ -4449,10 +4393,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8)
   //      DMP: ACCLoopDirective
@@ -4478,8 +4424,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPDistributeDirective
       // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      // DMP-GWV-NEXT:     OMPNum_threadsClause
-      // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-GWV-NEXT:     OMPSimdlenClause
       // DMP-GWV-NEXT:       ConstantExpr
       // DMP-GWV-NEXT:         value: Int 8
@@ -4488,9 +4432,9 @@ int main() {
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
       //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
       //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
       #pragma acc loop
       // DMP: ForStmt
@@ -4515,8 +4459,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPDistributeDirective
       // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      // DMP-GWV-NEXT:     OMPNum_threadsClause
-      // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-GWV-NEXT:     OMPSimdlenClause
       // DMP-GWV-NEXT:       ConstantExpr
       // DMP-GWV-NEXT:         value: Int 8
@@ -4525,9 +4467,9 @@ int main() {
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang{{$}}
       //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
       //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang{{$}}
       #pragma acc loop gang
       // DMP: ForStmt
@@ -4559,10 +4501,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8)
   //      DMP: ACCLoopDirective
@@ -4588,8 +4532,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPDistributeDirective
       // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-      // DMP-GWV-NEXT:     OMPNum_threadsClause
-      // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-GWV-NEXT:     OMPSimdlenClause
       // DMP-GWV-NEXT:       ConstantExpr
       // DMP-GWV-NEXT:         value: Int 8
@@ -4598,9 +4540,9 @@ int main() {
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
       //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
       //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
       #pragma acc loop
       // DMP: ForStmt
@@ -4645,10 +4587,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8)
   //      DMP: ACCLoopDirective
@@ -4673,8 +4617,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -4684,9 +4626,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop gang{{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop gang{{$}}
     //        PRT-NEXT: for ({{.*}})
     #pragma acc loop gang
@@ -4726,8 +4668,6 @@ int main() {
       // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: OMPParallelForDirective
       // DMP-GWV-NEXT:   impl: OMPParallelForSimdDirective
-      //     DMP-NEXT:     OMPNum_threadsClause
-      //     DMP-NEXT:       IntegerLiteral {{.*}} 4
       // DMP-GWV-NEXT:     OMPSimdlenClause
       // DMP-GWV-NEXT:       ConstantExpr
       // DMP-GWV-NEXT:         value: Int 8
@@ -4736,10 +4676,10 @@ int main() {
       //          DMP:     ForStmt
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop worker{{$}}
-      //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp parallel for num_threads(4){{$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp parallel for simd num_threads(4) simdlen(8){{$}}
-      //    PRT-O-G-NEXT: {{^ *}}#pragma omp parallel for num_threads(4){{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp parallel for simd num_threads(4) simdlen(8){{$}}
+      //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp parallel for{{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp parallel for simd simdlen(8){{$}}
+      //    PRT-O-G-NEXT: {{^ *}}#pragma omp parallel for{{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp parallel for simd simdlen(8){{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop worker{{$}}
       //        PRT-NEXT: for ({{.*}})
       #pragma acc loop worker
@@ -4765,16 +4705,14 @@ int main() {
       // DMP-GWV-NEXT:   ACCWorkerClause {{.*}} <implicit>
       //   DMP-G-NEXT:   impl: ForStmt
       // DMP-GWV-NEXT:   impl: OMPParallelForDirective
-      // DMP-GWV-NEXT:     OMPNum_threadsClause
-      // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
       //  DMP-GWV-NOT:     OMP
       //      DMP-GWV:     ForStmt
       //
       //      PRT-A-NEXT: {{^ *}}#pragma acc loop
       //   PRT-AO-G-SAME: {{^}} // discarded in OpenMP translation
       //      PRT-A-SAME: {{^$}}
-      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp parallel for num_threads(4){{$}}
-      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp parallel for num_threads(4){{$}}
+      // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp parallel for{{$}}
+      //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp parallel for{{$}}
       //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop
       //   PRT-OA-G-SAME: {{^}} // discarded in OpenMP translation
       //     PRT-OA-SAME: {{^$}}
@@ -4992,12 +4930,14 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //  DMP-NOT:     OMP
   //      DMP:     CompoundStmt
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   //    PRT-NEXT: {
   #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8)
@@ -5011,8 +4951,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     //          DMP:     OMPTileDirective
     //     DMP-NEXT:       OMPSizesClause
     //     DMP-NEXT:         IntegerLiteral {{.*}} 2
@@ -5022,10 +4960,10 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop tile(2){{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
     //     PRT-AO-NEXT: {{^ *}}// #pragma omp tile sizes(2){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
     //      PRT-O-NEXT: {{^ *}}#pragma omp tile sizes(2){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop tile(2){{$}}
     //        PRT-NEXT: for ({{.*}})
@@ -5053,12 +4991,14 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //  DMP-NOT:     OMP
   //      DMP:     CompoundStmt
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   //    PRT-NEXT: {
   #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8)
@@ -5118,12 +5058,14 @@ int main() {
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     OMPThread_limitClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
     //  DMP-NOT:     OMP
     //      DMP:     CompoundStmt
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
     //    PRT-NEXT: {
     #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8)
@@ -5145,8 +5087,6 @@ int main() {
       // DMP-GWV-NEXT:     DeclStmt
       // DMP-GWV-NEXT:       VarDecl {{.*}} i 'int'
       // DMP-GWV-NEXT:     OMPDistributeParallelForSimdDirective
-      // DMP-GWV-NEXT:       OMPNum_threadsClause
-      // DMP-GWV-NEXT:         IntegerLiteral {{.*}} 4
       // DMP-GWV-NEXT:       OMPSimdlenClause
       // DMP-GWV-NEXT:         ConstantExpr
       // DMP-GWV-NEXT:           value: Int 8
@@ -5172,7 +5112,7 @@ int main() {
       // PRT-AO-GWV-NEXT: // ---------ACC->OMP--------
       // PRT-AO-GWV-NEXT: // {
       // PRT-AO-GWV-NEXT: //   int i;
-      // PRT-AO-GWV-NEXT: //   #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      // PRT-AO-GWV-NEXT: //   #pragma omp distribute parallel for simd simdlen(8){{$}}
       // PRT-AO-GWV-NEXT: //   for ({{.*}})
       // PRT-AO-GWV-NEXT: //     {{TGT_PRINTF|printf}}
       // PRT-AO-GWV-NEXT: // }
@@ -5181,7 +5121,7 @@ int main() {
       // PRT-OA-GWV-NEXT: // v----------OMP----------v
       //  PRT-O-GWV-NEXT: {
       //  PRT-O-GWV-NEXT:   int i;
-      //  PRT-O-GWV-NEXT:   {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+      //  PRT-O-GWV-NEXT:   {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
       //  PRT-O-GWV-NEXT:   for ({{.*}})
       //  PRT-O-GWV-NEXT:     {{TGT_PRINTF|printf}}
       //  PRT-O-GWV-NEXT: }
@@ -5233,14 +5173,16 @@ int main() {
     // DMP-NEXT:   impl: OMPTargetTeamsDirective
     // DMP-NEXT:     OMPNum_teamsClause
     // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+    // DMP-NEXT:     OMPThread_limitClause
+    // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
     // DMP-NEXT:     OMPMapClause
     // DMP-NEXT:       DeclRefExpr {{.*}} 'x'
     // DMP-NEXT:     OMPReductionClause
     // DMP-NEXT:       DeclRefExpr {{.*}} 'x'
     //
     //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8) copy(x){{$}}
-    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: x) reduction(+: x){{$}}
-    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: x) reduction(+: x){{$}}
+    // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4) map(ompx_hold,tofrom: x) reduction(+: x){{$}}
+    //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4) map(ompx_hold,tofrom: x) reduction(+: x){{$}}
     // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8) copy(x){{$}}
     #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8) copy(x)
     //          DMP: ACCLoopDirective
@@ -5252,8 +5194,6 @@ int main() {
     // DMP-GWV-NEXT:   ACCVectorClause {{.*}} <implicit>
     //   DMP-G-NEXT:   impl: OMPDistributeDirective
     // DMP-GWV-NEXT:   impl: OMPDistributeParallelForSimdDirective
-    // DMP-GWV-NEXT:     OMPNum_threadsClause
-    // DMP-GWV-NEXT:       IntegerLiteral {{.*}} 4
     // DMP-GWV-NEXT:     OMPSimdlenClause
     // DMP-GWV-NEXT:       ConstantExpr
     // DMP-GWV-NEXT:         value: Int 8
@@ -5266,9 +5206,9 @@ int main() {
     //
     //      PRT-A-NEXT: {{^ *}}#pragma acc loop reduction(+: x){{$}}
     //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8) reduction(+: x){{$}}
+    // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8) reduction(+: x){{$}}
     //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8) reduction(+: x){{$}}
+    //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8) reduction(+: x){{$}}
     //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop reduction(+: x){{$}}
     //        PRT-NEXT: for ({{.*}})
     //        PRT-NEXT:   x += i;
@@ -5295,10 +5235,12 @@ int main() {
   // DMP-NEXT:   impl: OMPTargetTeamsDirective
   // DMP-NEXT:     OMPNum_teamsClause
   // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  // DMP-NEXT:     OMPThread_limitClause
+  // DMP-NEXT:       IntegerLiteral {{.*}} 'int' 4
   //
   //  PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2){{$}}
-  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2){{$}}
+  // PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4){{$}}
+  //  PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4){{$}}
   // PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   //    PRT-NEXT: {
   //    PRT-NEXT:   withinGangFn();

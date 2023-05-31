@@ -29,12 +29,12 @@
 //    PRT-NEXT:   printf
 //    PRT-NEXT:   int x =
 //  PRT-A-NEXT:   {{^ *}}#pragma acc parallel num_gangs(1) num_workers(1) vector_length(1) copy(x){{$}}
-// PRT-AO-NEXT:   {{^ *}}// #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: x){{$}}
-//  PRT-O-NEXT:   {{^ *}}#pragma omp target teams num_teams(1) map(ompx_hold,tofrom: x){{$}}
+// PRT-AO-NEXT:   {{^ *}}// #pragma omp target teams num_teams(1) thread_limit(1) map(ompx_hold,tofrom: x){{$}}
+//  PRT-O-NEXT:   {{^ *}}#pragma omp target teams num_teams(1) thread_limit(1) map(ompx_hold,tofrom: x){{$}}
 // PRT-OA-NEXT:   {{^ *}}// #pragma acc parallel num_gangs(1) num_workers(1) vector_length(1) copy(x){{$}}
 //  PRT-A-NEXT:   {{^ *}}#pragma acc loop gang worker vector{{$}}
-// PRT-AO-NEXT:   {{^ *}}// #pragma omp distribute parallel for simd num_threads(1) simdlen(1){{$}}
-//  PRT-O-NEXT:   {{^ *}}#pragma omp distribute parallel for simd num_threads(1) simdlen(1){{$}}
+// PRT-AO-NEXT:   {{^ *}}// #pragma omp distribute parallel for simd simdlen(1){{$}}
+//  PRT-O-NEXT:   {{^ *}}#pragma omp distribute parallel for simd simdlen(1){{$}}
 // PRT-OA-NEXT:   {{^ *}}// #pragma acc loop gang worker vector{{$}}
 //    PRT-NEXT:   for (int i = 0; i < 8; ++i) {
 //    PRT-NEXT:     auto lambda = [&x]() {
@@ -67,10 +67,10 @@ void lambdaAssignInAccLoop() {
 //    PRT-NEXT:   printf
 //    PRT-NEXT:   int x =
 //  PRT-A-NEXT:   {{^ *}}#pragma acc parallel loop num_gangs(1) num_workers(1) vector_length(1) copy(x) gang worker vector{{$}}
-// PRT-AO-NEXT:   {{^ *}}// #pragma omp target teams num_teams(1) map(ompx_hold,tofrom: x){{$}}
-// PRT-AO-NEXT:   {{^ *}}// #pragma omp distribute parallel for simd num_threads(1) simdlen(1){{$}}
-//  PRT-O-NEXT:   {{^ *}}#pragma omp target teams num_teams(1) map(ompx_hold,tofrom: x){{$}}
-//  PRT-O-NEXT:   {{^ *}}#pragma omp distribute parallel for simd num_threads(1) simdlen(1){{$}}
+// PRT-AO-NEXT:   {{^ *}}// #pragma omp target teams num_teams(1) thread_limit(1) map(ompx_hold,tofrom: x){{$}}
+// PRT-AO-NEXT:   {{^ *}}// #pragma omp distribute parallel for simd simdlen(1){{$}}
+//  PRT-O-NEXT:   {{^ *}}#pragma omp target teams num_teams(1) thread_limit(1) map(ompx_hold,tofrom: x){{$}}
+//  PRT-O-NEXT:   {{^ *}}#pragma omp distribute parallel for simd simdlen(1){{$}}
 // PRT-OA-NEXT:   {{^ *}}// #pragma acc parallel loop num_gangs(1) num_workers(1) vector_length(1) copy(x) gang worker vector{{$}}
 //    PRT-NEXT:   for (int i = 0; i < 8; ++i) {
 //    PRT-NEXT:     auto lambda = [&x]() {

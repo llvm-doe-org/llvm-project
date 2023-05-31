@@ -84,6 +84,8 @@ int main() {
   //     DMP-NEXT:   impl: OMPTargetTeamsDirective
   //     DMP-NEXT:     OMPNum_teamsClause
   //     DMP-NEXT:       IntegerLiteral {{.*}} 'int' 2
+  //     DMP-NEXT:     OMPThread_limitClause
+  //     DMP-NEXT:       IntegerLiteral {{.*}} 4
   //     DMP-NEXT:     OMPMapClause
   //     DMP-NEXT:       DeclRefExpr {{.*}} 'count'
   //          DMP:   ACCLoopDirective
@@ -97,16 +99,12 @@ int main() {
   // DMP-GWV-NEXT:     ACCVectorClause {{.*}} <implicit>
   //   DMP-G-NEXT:     impl: OMPDistributeDirective
   //  DMP-GW-NEXT:     impl: OMPDistributeParallelForDirective
-  //  DMP-GW-NEXT:       OMPNum_threadsClause
-  //  DMP-GW-NEXT:         IntegerLiteral {{.*}} 4
   //  DMP-GV-NEXT:     impl: OMPDistributeSimdDirective
   //  DMP-GV-NEXT:       OMPSimdlenClause
   //  DMP-GV-NEXT:         ConstantExpr
   //  DMP-GV-NEXT:           value: Int 8
   //  DMP-GV-NEXT:           IntegerLiteral {{.*}} 'int' 8
   // DMP-GWV-NEXT:     impl: OMPDistributeParallelForSimdDirective
-  // DMP-GWV-NEXT:       OMPNum_threadsClause
-  // DMP-GWV-NEXT:         IntegerLiteral {{.*}} 4
   // DMP-GWV-NEXT:       OMPSimdlenClause
   // DMP-GWV-NEXT:         ConstantExpr
   // DMP-GWV-NEXT:           value: Int 8
@@ -120,20 +118,20 @@ int main() {
   //        PRT-NEXT:   count[i] = 0;
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
-  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) map(ompx_hold,tofrom: count){{$}}
-  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) map(ompx_hold,tofrom: count){{$}}
+  //     PRT-AO-NEXT: {{^ *}}// #pragma omp target teams num_teams(2) thread_limit(4) map(ompx_hold,tofrom: count){{$}}
+  //      PRT-O-NEXT: {{^ *}}#pragma omp target teams num_teams(2) thread_limit(4) map(ompx_hold,tofrom: count){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc parallel num_gangs(2) num_workers(4) vector_length(8){{$}}
   //
   //      PRT-A-NEXT: {{^ *}}#pragma acc loop{{$}}
   //   PRT-AO-G-NEXT: {{^ *}}// #pragma omp distribute{{$}}
-  //  PRT-AO-GW-NEXT: {{^ *}}// #pragma omp distribute parallel for num_threads(4){{$}}
+  //  PRT-AO-GW-NEXT: {{^ *}}// #pragma omp distribute parallel for{{$}}
   //  PRT-AO-GV-NEXT: {{^ *}}// #pragma omp distribute simd simdlen(8){{$}}
-  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  // PRT-AO-GWV-NEXT: {{^ *}}// #pragma omp distribute parallel for simd simdlen(8){{$}}
   //
   //    PRT-O-G-NEXT: {{^ *}}#pragma omp distribute{{$}}
-  //   PRT-O-GW-NEXT: {{^ *}}#pragma omp distribute parallel for num_threads(4){{$}}
+  //   PRT-O-GW-NEXT: {{^ *}}#pragma omp distribute parallel for{{$}}
   //   PRT-O-GV-NEXT: {{^ *}}#pragma omp distribute simd simdlen(8){{$}}
-  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd num_threads(4) simdlen(8){{$}}
+  //  PRT-O-GWV-NEXT: {{^ *}}#pragma omp distribute parallel for simd simdlen(8){{$}}
   //     PRT-OA-NEXT: {{^ *}}// #pragma acc loop{{$}}
   //
   //        PRT-NEXT: for ({{.*}})

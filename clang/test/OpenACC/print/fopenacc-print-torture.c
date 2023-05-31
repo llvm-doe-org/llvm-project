@@ -18,7 +18,7 @@
 // DEFINE: %{check-prt-arg}( PRT_ARG %, PRT_CHK %, CPP %) =                    \
 // DEFINE:   : '---------- -fopenacc-print=%{PRT_ARG} %{CPP} ----------' &&    \
 // DEFINE:   %clang -Xclang -verify -fopenacc-print=%{PRT_ARG} %{CPP} %t-acc.c \
-// DEFINE:          -Wno-openacc-omp-ext |                                     \
+// DEFINE:          -Wno-openacc-ignored-clause -Wno-openacc-omp-ext |         \
 // DEFINE:     FileCheck -check-prefixes=%{PRT_CHK} -match-full-lines          \
 // DEFINE:               -strict-whitespace %s
 //
@@ -48,13 +48,18 @@
 
 // PRT-NEXT:float f = 0;
 // PRT-NEXT:int non_const_expr = 2;
+// PRT-NEXT:int possibleSideEffects() {
+// PRT-NEXT:  return 2;
+// PRT-NEXT:}
 // PRT-NEXT:int var, i;
 // PRT-NEXT:const int *ptr = 0;
 float f = 0;
 int non_const_expr = 2;
+int possibleSideEffects() {
+  return 2;
+}
 int var, i;
 const int *ptr = 0;
-
 //------------------------------------------------------------------------------
 // Directive only rewrite, not nested.
 //------------------------------------------------------------------------------
@@ -303,15 +308,15 @@ void fullRewriteOuterDirOnly() {
   // final semicolon.
 
   // PRT-AO-NEXT:  // v----------ACC----------v
-  //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
-  //  PRT-A-NEXT:  #pragma acc loop worker
+  //  PRT-A-NEXT:  #pragma acc parallel vector_length(possibleSideEffects())
+  //  PRT-A-NEXT:  #pragma acc loop vector
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    ;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
+  // PRT-AO-NEXT:  //     (void)possibleSideEffects();
   // PRT-AO-NEXT:  //     #pragma omp target teams
-  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 ;
   // PRT-AO-NEXT:  // }
@@ -319,20 +324,20 @@ void fullRewriteOuterDirOnly() {
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
+  //  PRT-O-NEXT:      (void)possibleSideEffects();
   //  PRT-O-NEXT:      #pragma omp target teams
-  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
+  //  PRT-O-NEXT:          #pragma omp distribute simd
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  ;
   //  PRT-O-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
-  // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
-  // PRT-OA-NEXT:  // #pragma acc loop worker
+  // PRT-OA-NEXT:  // #pragma acc parallel vector_length(possibleSideEffects())
+  // PRT-OA-NEXT:  // #pragma acc loop vector
   // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   ;
   // PRT-OA-NEXT:  // ^----------ACC----------^
-  #pragma acc parallel num_workers(non_const_expr)
-  #pragma acc loop worker
+  #pragma acc parallel vector_length(possibleSideEffects())
+  #pragma acc loop vector
   for (int i = 0; i < 5; ++i)
     ;
 
@@ -377,16 +382,16 @@ void fullRewriteOuterDirOnly() {
 
   //    PRT-NEXT:  #define MAC var = non_const_expr;
   // PRT-AO-NEXT:  // v----------ACC----------v
-  //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
-  //  PRT-A-NEXT:  #pragma acc loop worker
+  //  PRT-A-NEXT:  #pragma acc parallel vector_length(possibleSideEffects())
+  //  PRT-A-NEXT:  #pragma acc loop vector
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i) {
   //  PRT-A-NEXT:    var = 5;
   //  PRT-A-NEXT:    MAC}
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
+  // PRT-AO-NEXT:  //     (void)possibleSideEffects();
   // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr){{$}}
-  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd{{$}}
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i) {
   // PRT-AO-NEXT:  //                 var = 5;
   // PRT-AO-NEXT:  //                 var = non_const_expr;
@@ -396,25 +401,25 @@ void fullRewriteOuterDirOnly() {
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
+  //  PRT-O-NEXT:      (void)possibleSideEffects();
   //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr){{$}}
-  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
+  //  PRT-O-NEXT:          #pragma omp distribute simd{{$}}
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i) {
   //  PRT-O-NEXT:                  var = 5;
   //  PRT-O-NEXT:                  var = non_const_expr;
   //  PRT-O-NEXT:              }
   //  PRT-O-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
-  // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
-  // PRT-OA-NEXT:  // #pragma acc loop worker
+  // PRT-OA-NEXT:  // #pragma acc parallel vector_length(possibleSideEffects())
+  // PRT-OA-NEXT:  // #pragma acc loop vector
   // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i) {
   // PRT-OA-NEXT:  //   var = 5;
   // PRT-OA-NEXT:  //   MAC}
   // PRT-OA-NEXT:  // ^----------ACC----------^
   //    PRT-NEXT:  #undef MAC
   #define MAC var = non_const_expr;
-  #pragma acc parallel num_workers(non_const_expr)
-  #pragma acc loop worker
+  #pragma acc parallel vector_length(possibleSideEffects())
+  #pragma acc loop vector
   for (int i = 0; i < 5; ++i) {
     var = 5;
     MAC}
@@ -467,15 +472,15 @@ void fullRewriteOuterDirOnly() {
 
   // Preceding token is a descendant.
   // PRT-AO-NEXT:  // v----------ACC----------v
-  //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
-  //  PRT-A-NEXT:  #pragma acc loop worker
+  //  PRT-A-NEXT:  #pragma acc parallel vector_length(possibleSideEffects())
+  //  PRT-A-NEXT:  #pragma acc loop vector
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    var = non_const_expr;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
+  // PRT-AO-NEXT:  //     (void)possibleSideEffects();
   // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr){{$}}
-  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd{{$}}
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 var = non_const_expr;
   // PRT-AO-NEXT:  // }
@@ -483,20 +488,20 @@ void fullRewriteOuterDirOnly() {
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
+  //  PRT-O-NEXT:      (void)possibleSideEffects();
   //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr){{$}}
-  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
+  //  PRT-O-NEXT:          #pragma omp distribute simd{{$}}
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  var = non_const_expr;
   //  PRT-O-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
-  // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
-  // PRT-OA-NEXT:  // #pragma acc loop worker
+  // PRT-OA-NEXT:  // #pragma acc parallel vector_length(possibleSideEffects())
+  // PRT-OA-NEXT:  // #pragma acc loop vector
   // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   var = non_const_expr;
   // PRT-OA-NEXT:  // ^----------ACC----------^
-  #pragma acc parallel num_workers(non_const_expr)
-  #pragma acc loop worker
+  #pragma acc parallel vector_length(possibleSideEffects())
+  #pragma acc loop vector
   for (int i = 0; i < 5; ++i)
     var = non_const_expr;
 
@@ -539,15 +544,15 @@ void fullRewriteOuterDirOnly() {
   // Preceding token is closing parenthesis in ParenExpr.
   //    PRT-NEXT:  #define MAC (non_const_expr)
   // PRT-AO-NEXT:  // v----------ACC----------v
-  //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
-  //  PRT-A-NEXT:  #pragma acc loop worker
+  //  PRT-A-NEXT:  #pragma acc parallel vector_length(possibleSideEffects())
+  //  PRT-A-NEXT:  #pragma acc loop vector
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    var = MAC ;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
+  // PRT-AO-NEXT:  //     (void)possibleSideEffects();
   // PRT-AO-NEXT:  //     #pragma omp target teams firstprivate(var,non_const_expr){{$}}
-  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
+  // PRT-AO-NEXT:  //         #pragma omp distribute simd{{$}}
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 var = (non_const_expr);
   // PRT-AO-NEXT:  // }
@@ -555,22 +560,22 @@ void fullRewriteOuterDirOnly() {
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
+  //  PRT-O-NEXT:      (void)possibleSideEffects();
   //  PRT-O-NEXT:      #pragma omp target teams firstprivate(var,non_const_expr){{$}}
-  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__){{$}}
+  //  PRT-O-NEXT:          #pragma omp distribute simd{{$}}
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  var = (non_const_expr);
   //  PRT-O-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
-  // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
-  // PRT-OA-NEXT:  // #pragma acc loop worker
+  // PRT-OA-NEXT:  // #pragma acc parallel vector_length(possibleSideEffects())
+  // PRT-OA-NEXT:  // #pragma acc loop vector
   // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   var = MAC ;
   // PRT-OA-NEXT:  // ^----------ACC----------^
   //    PRT-NEXT:  #undef MAC
   #define MAC (non_const_expr)
-  #pragma acc parallel num_workers(non_const_expr)
-  #pragma acc loop worker
+  #pragma acc parallel vector_length(possibleSideEffects())
+  #pragma acc loop vector
   for (int i = 0; i < 5; ++i)
     var = MAC ;
   #undef MAC
@@ -1394,17 +1399,17 @@ void fullRewriteInnerDirOnly() {
 // PRT-NEXT:void fullRewriteOuterAndInnerDir() {
 void fullRewriteOuterAndInnerDir() {
   // PRT-AO-NEXT:  // v----------ACC----------v
-  //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
+  //  PRT-A-NEXT:  #pragma acc parallel vector_length(possibleSideEffects())
   //  PRT-A-NEXT:  #pragma acc loop worker vector
   //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    ;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
+  // PRT-AO-NEXT:  //     (void)possibleSideEffects();
   // PRT-AO-NEXT:  //     #pragma omp target teams
   // PRT-AO-NEXT:  //         {
   // PRT-AO-NEXT:  //             int i;
-  // PRT-AO-NEXT:  //             #pragma omp distribute parallel for simd num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:  //             #pragma omp distribute parallel for simd
   // PRT-AO-NEXT:  //                 for (i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                     ;
   // PRT-AO-NEXT:  //         }
@@ -1413,37 +1418,37 @@ void fullRewriteOuterAndInnerDir() {
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
+  //  PRT-O-NEXT:      (void)possibleSideEffects();
   //  PRT-O-NEXT:      #pragma omp target teams
   //  PRT-O-NEXT:          {
   //  PRT-O-NEXT:              int i;
-  //  PRT-O-NEXT:              #pragma omp distribute parallel for simd num_threads(__clang_acc_num_workers__)
+  //  PRT-O-NEXT:              #pragma omp distribute parallel for simd
   //  PRT-O-NEXT:                  for (i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                      ;
   //  PRT-O-NEXT:          }
   //  PRT-O-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
-  // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
+  // PRT-OA-NEXT:  // #pragma acc parallel vector_length(possibleSideEffects())
   // PRT-OA-NEXT:  // #pragma acc loop worker vector
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   ;
   // PRT-OA-NEXT:  // ^----------ACC----------^
-  #pragma acc parallel num_workers(non_const_expr)
+  #pragma acc parallel vector_length(possibleSideEffects())
   #pragma acc loop worker vector
   for (i = 0; i < 5; ++i)
     ;
 
   // PRT-AO-NEXT:  // v----------ACC----------v
-  //  PRT-A-NEXT:  #pragma acc parallel loop worker num_workers(non_const_expr)
+  //  PRT-A-NEXT:  #pragma acc parallel loop worker vector_length(possibleSideEffects())
   //  PRT-A-NEXT:  for (int j = 0; j < 5; ++j)
   //  PRT-A-NEXT:    #pragma acc loop vector
   //  PRT-A-NEXT:    for (i = 0; i < 5; ++i)
   //  PRT-A-NEXT:      ;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
+  // PRT-AO-NEXT:  //     (void)possibleSideEffects();
   // PRT-AO-NEXT:  //     #pragma omp target teams
-  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for
   // PRT-AO-NEXT:  //             for (int j = 0; j < 5; ++j) {
   // PRT-AO-NEXT:  //                 int i;
   // PRT-AO-NEXT:  //                 #pragma omp simd
@@ -1455,9 +1460,9 @@ void fullRewriteOuterAndInnerDir() {
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
+  //  PRT-O-NEXT:      (void)possibleSideEffects();
   //  PRT-O-NEXT:      #pragma omp target teams
-  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
+  //  PRT-O-NEXT:          #pragma omp distribute parallel for
   //  PRT-O-NEXT:              for (int j = 0; j < 5; ++j) {
   //  PRT-O-NEXT:                  int i;
   //  PRT-O-NEXT:                  #pragma omp simd
@@ -1466,31 +1471,31 @@ void fullRewriteOuterAndInnerDir() {
   //  PRT-O-NEXT:              }
   //  PRT-O-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
-  // PRT-OA-NEXT:  // #pragma acc parallel loop worker num_workers(non_const_expr)
+  // PRT-OA-NEXT:  // #pragma acc parallel loop worker vector_length(possibleSideEffects())
   // PRT-OA-NEXT:  // for (int j = 0; j < 5; ++j)
   // PRT-OA-NEXT:  //   #pragma acc loop vector
   // PRT-OA-NEXT:  //   for (i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //     ;
   // PRT-OA-NEXT:  // ^----------ACC----------^
-  #pragma acc parallel loop worker num_workers(non_const_expr)
+  #pragma acc parallel loop worker vector_length(possibleSideEffects())
   for (int j = 0; j < 5; ++j)
     #pragma acc loop vector
     for (i = 0; i < 5; ++i)
       ;
 
   // PRT-AO-NEXT:  // v----------ACC----------v
-  //  PRT-A-NEXT:  #pragma acc parallel loop worker vector num_workers(non_const_expr)
+  //  PRT-A-NEXT:  #pragma acc parallel loop worker vector vector_length(possibleSideEffects())
   //  PRT-A-NEXT:  for (i = 0; i < 5; ++i)
   //  PRT-A-NEXT:    #pragma acc loop seq private(var)
   //  PRT-A-NEXT:    for (var = 0; var < 5; ++var)
   //  PRT-A-NEXT:      ;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
+  // PRT-AO-NEXT:  //     (void)possibleSideEffects();
   // PRT-AO-NEXT:  //     #pragma omp target teams
   // PRT-AO-NEXT:  //         {
   // PRT-AO-NEXT:  //             int i;
-  // PRT-AO-NEXT:  //             #pragma omp distribute parallel for simd num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:  //             #pragma omp distribute parallel for simd
   // PRT-AO-NEXT:  //                 for (i = 0; i < 5; ++i) {
   // PRT-AO-NEXT:  //                     int var;
   // PRT-AO-NEXT:  //                     for (var = 0; var < 5; ++var)
@@ -1502,11 +1507,11 @@ void fullRewriteOuterAndInnerDir() {
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
+  //  PRT-O-NEXT:      (void)possibleSideEffects();
   //  PRT-O-NEXT:      #pragma omp target teams
   //  PRT-O-NEXT:          {
   //  PRT-O-NEXT:              int i;
-  //  PRT-O-NEXT:              #pragma omp distribute parallel for simd num_threads(__clang_acc_num_workers__)
+  //  PRT-O-NEXT:              #pragma omp distribute parallel for simd
   //  PRT-O-NEXT:                  for (i = 0; i < 5; ++i) {
   //  PRT-O-NEXT:                      int var;
   //  PRT-O-NEXT:                      for (var = 0; var < 5; ++var)
@@ -1515,13 +1520,13 @@ void fullRewriteOuterAndInnerDir() {
   //  PRT-O-NEXT:          }
   //  PRT-O-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
-  // PRT-OA-NEXT:  // #pragma acc parallel loop worker vector num_workers(non_const_expr)
+  // PRT-OA-NEXT:  // #pragma acc parallel loop worker vector vector_length(possibleSideEffects())
   // PRT-OA-NEXT:  // for (i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   #pragma acc loop seq private(var)
   // PRT-OA-NEXT:  //   for (var = 0; var < 5; ++var)
   // PRT-OA-NEXT:  //     ;
   // PRT-OA-NEXT:  // ^----------ACC----------^
-  #pragma acc parallel loop worker vector num_workers(non_const_expr)
+  #pragma acc parallel loop worker vector vector_length(possibleSideEffects())
   for (i = 0; i < 5; ++i)
     #pragma acc loop seq private(var)
     for (var = 0; var < 5; ++var)
@@ -1927,16 +1932,16 @@ void commentAfterDirOnlyRewrite_routineMultiline();
 // PRT-NEXT:void trailingTextAfterFullRewrite() {
 void trailingTextAfterFullRewrite() {
   // PRT-AO-NEXT:  // v----------ACC----------v
-  //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
+  //  PRT-A-NEXT:  #pragma acc parallel vector_length(possibleSideEffects())
   //  PRT-A-NEXT:  #pragma acc loop worker
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
   // PRT-AA-NEXT:    ;var = 5;
   // PRT-AO-NEXT:    ;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
+  // PRT-AO-NEXT:  //     (void)possibleSideEffects();
   // PRT-AO-NEXT:  //     #pragma omp target teams
-  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 ;
   // PRT-AO-NEXT:  // }
@@ -1945,21 +1950,21 @@ void trailingTextAfterFullRewrite() {
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
+  //  PRT-O-NEXT:      (void)possibleSideEffects();
   //  PRT-O-NEXT:      #pragma omp target teams
-  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
+  //  PRT-O-NEXT:          #pragma omp distribute parallel for
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  ;
   // PRT-OO-NEXT:  }var = 5;
   // PRT-OA-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
-  // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
+  // PRT-OA-NEXT:  // #pragma acc parallel vector_length(possibleSideEffects())
   // PRT-OA-NEXT:  // #pragma acc loop worker
   // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   ;
   // PRT-OA-NEXT:  // ^----------ACC----------^
   // PRT-OA-NEXT:var = 5;
-  #pragma acc parallel num_workers(non_const_expr)
+  #pragma acc parallel vector_length(possibleSideEffects())
   #pragma acc loop worker
   for (int i = 0; i < 5; ++i)
     ;var = 5;
@@ -1969,16 +1974,16 @@ void trailingTextAfterFullRewrite() {
   // pick up var in the range.
 
   // PRT-AO-NEXT:  // v----------ACC----------v
-  //  PRT-A-NEXT:  #pragma acc parallel num_workers(non_const_expr)
+  //  PRT-A-NEXT:  #pragma acc parallel vector_length(possibleSideEffects())
   //  PRT-A-NEXT:  #pragma acc loop worker
   //  PRT-A-NEXT:  for (int i = 0; i < 5; ++i)
   // PRT-AA-NEXT:    ;{{  }}
   // PRT-AO-NEXT:    ;
   // PRT-AO-NEXT:  // ---------ACC->OMP--------
   // PRT-AO-NEXT:  // {
-  // PRT-AO-NEXT:  //     const int __clang_acc_num_workers__ = non_const_expr;
+  // PRT-AO-NEXT:  //     (void)possibleSideEffects();
   // PRT-AO-NEXT:  //     #pragma omp target teams
-  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
+  // PRT-AO-NEXT:  //         #pragma omp distribute parallel for
   // PRT-AO-NEXT:  //             for (int i = 0; i < 5; ++i)
   // PRT-AO-NEXT:  //                 ;
   // PRT-AO-NEXT:  // }
@@ -1986,20 +1991,20 @@ void trailingTextAfterFullRewrite() {
   //
   // PRT-OA-NEXT:  // v----------OMP----------v
   //  PRT-O-NEXT:  {
-  //  PRT-O-NEXT:      const int __clang_acc_num_workers__ = non_const_expr;
+  //  PRT-O-NEXT:      (void)possibleSideEffects();
   //  PRT-O-NEXT:      #pragma omp target teams
-  //  PRT-O-NEXT:          #pragma omp distribute parallel for num_threads(__clang_acc_num_workers__)
+  //  PRT-O-NEXT:          #pragma omp distribute parallel for
   //  PRT-O-NEXT:              for (int i = 0; i < 5; ++i)
   //  PRT-O-NEXT:                  ;
   // PRT-OO-NEXT:  }{{  }}
   // PRT-OA-NEXT:  }
   // PRT-OA-NEXT:  // ---------OMP<-ACC--------
-  // PRT-OA-NEXT:  // #pragma acc parallel num_workers(non_const_expr)
+  // PRT-OA-NEXT:  // #pragma acc parallel vector_length(possibleSideEffects())
   // PRT-OA-NEXT:  // #pragma acc loop worker
   // PRT-OA-NEXT:  // for (int i = 0; i < 5; ++i)
   // PRT-OA-NEXT:  //   ;
   // PRT-OA-NEXT:  // ^----------ACC----------^{{  }}
-  #pragma acc parallel num_workers(non_const_expr)
+  #pragma acc parallel vector_length(possibleSideEffects())
   #pragma acc loop worker
   for (int i = 0; i < 5; ++i)
     ;  // comment stripped by a RUN command, but it shows intended whitespace
@@ -2080,10 +2085,8 @@ void afterError() {
 // PRT-NEXT:#if ERRS
 #if ERRS
   // PRT-NEXT:  /* expected-error{{.*}} */
-  // PRT-NEXT:  /* expected-warning{{.*}} */
   // PRT-NEXT:  #pragma acc parallel vector_length(f)
-  /* expected-error@+2 {{expression must have integral or unscoped enumeration type, not 'float'}} */
-  /* expected-warning@+1 {{'vector_length' ignored because argument is not an integer constant expression}} */
+  /* expected-error@+1 {{expression must have integral or unscoped enumeration type, not 'float'}} */
   #pragma acc parallel vector_length(f)
   // PRT-NEXT:  #pragma acc loop
   #pragma acc loop
