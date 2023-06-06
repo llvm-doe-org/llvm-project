@@ -76,8 +76,8 @@ variables:
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
   VV_CFLAGS:
   # Which commits and options to use for Kokkos testing.
-  KOKKOS_COMMIT: 4ad68368a0881487f2edc3a70e7b4ea4666db4d2
-  KOKKOS_TESTS_COMMIT: a883ce8d4806b9ad1a1696ccb1e83f8a043f5be5
+  KOKKOS_COMMIT: 995a50793497c411c4f4f535bae7b3f8e902b652
+  KOKKOS_TESTS_COMMIT: 02f9f3bace5f12388a1d921c67a2ed98f37b2323
   KOKKOS_CMAKE_OPTS:
   KOKKOS_CFLAGS:
 
@@ -1334,6 +1334,24 @@ debug (vv):
     - time $NINJA -l `nproc`
     - time ./openacctest
     - echo -e "\e[0Ksection_end:`date +%s`:openacc-performance-multidimensional\r\e[0K"
+    #...........................................................................
+    # Build and run kokkos-ornl-int-test.git/examples/openacc-performance-scan
+    #...........................................................................
+    - echo -e "\e[0Ksection_start:`date +%s`:openacc-performance-scan[collapsed=true]\r\e[0KCheck kokkos-ornl-int-test.git/examples/openacc-performance-scan"
+    - cd $BUILD_DIR/kokkos/kokkos-ornl-int-test/examples/openacc-performance-scan
+    - mkdir build && cd build
+    - echo $CMAKE
+    - $CMAKE --version
+    - time $CMAKE -G Ninja
+        -DKokkos_ROOT=$BUILD_DIR/kokkos/kokkos/install
+        -DCMAKE_CXX_COMPILER=$BUILD_DIR/install/bin/clang++
+        -DCMAKE_CXX_FLAGS="-DVERIFY -O3 -lm $KOKKOS_CFLAGS"
+        ..
+    - echo $NINJA
+    - $NINJA --version
+    - time $NINJA -l `nproc`
+    - time ./openacctest
+    - echo -e "\e[0Ksection_end:`date +%s`:openacc-performance-scan\r\e[0K"
     #...........................................................................
     # Build and run kokkos-ornl-int-test.git/examples/openacc-performance-teams
     #
