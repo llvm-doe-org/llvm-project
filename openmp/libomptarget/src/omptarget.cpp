@@ -108,10 +108,9 @@ static const int64_t MaxAlignment = 16;
 /// Return the alignment requirement of partially mapped structs, see
 /// MaxAlignment above.
 static uint64_t getPartialStructRequiredAlignment(void *HstPtrBase) {
-  auto BaseAlignment = MaxAlignment;
-  while (reinterpret_cast<uintptr_t>(HstPtrBase) % BaseAlignment)
-    BaseAlignment /= 2;
-  return BaseAlignment;
+  int LowestOneBit = __builtin_ffsl(reinterpret_cast<uintptr_t>(HstPtrBase));
+  uint64_t BaseAlignment = 1 << (LowestOneBit - 1);
+  return MaxAlignment < BaseAlignment ? MaxAlignment : BaseAlignment;
 }
 
 /// Map global data and execute pending ctors
