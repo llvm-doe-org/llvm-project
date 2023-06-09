@@ -161,17 +161,13 @@ stages:
       libomp :: worksharing/for/kmp_set_dispatch_buf.c
       libomptarget :: nvptx64-nvidia-cuda :: mapping/low_alignment.c
       libomptarget :: nvptx64-nvidia-cuda :: mapping/map_back_race.cpp
-      libomptarget :: nvptx64-nvidia-cuda :: mapping/ompx_hold/struct.c
       libomptarget :: nvptx64-nvidia-cuda :: offloading/bug49334.cpp
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/low_alignment.c
-      libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/ompx_hold/struct.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/bug49334.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/bug49334.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu :: mapping/low_alignment.c
-      libomptarget :: powerpc64le-ibm-linux-gnu :: mapping/ompx_hold/struct.c
       libomptarget :: powerpc64le-ibm-linux-gnu :: offloading/target_nowait_target.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: mapping/low_alignment.c
-      libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: mapping/ompx_hold/struct.c
       libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: offloading/bug49334.cpp
       libomptarget :: powerpc64le-ibm-linux-gnu-LTO :: offloading/target_nowait_target.cpp
       "
@@ -209,13 +205,11 @@ stages:
     LIT_NPROC_DIVISOR: 1
     TEST_LIT_XFAIL:
       "
-      libomptarget :: nvptx64-nvidia-cuda :: mapping/ompx_hold/struct.c
       libomptarget :: nvptx64-nvidia-cuda :: mapping/target_derefence_array_pointrs.cpp
       libomptarget :: nvptx64-nvidia-cuda :: mapping/target_has_device_addr.c
       libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/close_enter_exit.c
       libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/close_modifier.c
       libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/shared_update.c
-      libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/ompx_hold/struct.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_derefence_array_pointrs.cpp
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_has_device_addr.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/info.c
