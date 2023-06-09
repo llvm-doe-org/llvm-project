@@ -215,10 +215,10 @@ stages:
       libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/close_enter_exit.c
       libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/close_modifier.c
       libomptarget :: nvptx64-nvidia-cuda :: unified_shared_memory/shared_update.c
-      libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_has_device_addr.c
-      libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/info.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/ompx_hold/struct.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_derefence_array_pointrs.cpp
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: mapping/target_has_device_addr.c
+      libomptarget :: nvptx64-nvidia-cuda-LTO :: offloading/info.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: unified_shared_memory/close_enter_exit.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: unified_shared_memory/close_modifier.c
       libomptarget :: nvptx64-nvidia-cuda-LTO :: unified_shared_memory/shared_update.c
