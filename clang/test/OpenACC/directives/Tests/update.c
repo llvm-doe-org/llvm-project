@@ -50,14 +50,12 @@
 // DEFINE:   %{check-case}( caseMemberPresent        %,                                        %,                                  %) && \
 // DEFINE:   %{check-case}( caseMemberAbsent         %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
 // DEFINE:   %{check-case}( caseMembersDisjoint      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
-// DEFINE:   %{check-case}( caseMembersConcat2       %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
 // DEFINE:   %{check-case}( caseMemberFullStruct     %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
 // DEFINE:   %{check-case}( caseSubarrayPresent      %,                                        %,                                  %) && \
 // DEFINE:   %{check-case}( caseSubarrayPresent2     %,                                        %,                                  %) && \
 // DEFINE:   %{check-case}( caseSubarrayDisjoint     %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
 // DEFINE:   %{check-case}( caseSubarrayOverlapStart %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
 // DEFINE:   %{check-case}( caseSubarrayOverlapEnd   %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
-// DEFINE:   %{check-case}( caseSubarrayConcat2      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %) && \
 // DEFINE:   %{check-case}( caseSubarrayNonSubarray  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %)
 
 // Generate the enum of cases.
@@ -832,68 +830,6 @@ CASE(caseMembersDisjoint) {
   }
 }
 
-// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseMembersConcat2
-// PRT-LABEL: {{.*}}caseMembersConcat2{{.*}} {
-CASE(caseMembersConcat2) {
-  struct S { int i; int j; } s, h, d;
-  PRINT_VAR_INFO(h.i);
-  PRINT_VAR_INFO(h);
-
-  #pragma acc data create(s.i, h.i, d.i)
-  #pragma acc data create(s.j, h.j, d.j)
-  {
-    setHostInt(s.i, 10);
-    setHostInt(s.j, 20);
-    setHostInt(h.i, 30);
-    setHostInt(h.j, 40);
-    setHostInt(d.i, 50);
-    setHostInt(d.j, 60);
-    setDeviceInt(s.i, 11);
-    setDeviceInt(s.j, 21);
-    setDeviceInt(h.i, 31);
-    setDeviceInt(h.j, 41);
-    setDeviceInt(d.i, 51);
-    setDeviceInt(d.j, 61);
-
-    // We need multiple directives here so we can control which clause
-    // produces the runtime error.  We vary which clause produces the runtime
-    // error across the various CASE_* that produce it.
-    #pragma acc update host(h) IF_PRESENT
-    #pragma acc update self(s) device(d) IF_PRESENT
-
-    //  EXE-OFF-caseMembersConcat2-PASS-NEXT:   host s.i=10{{$}}
-    //  EXE-OFF-caseMembersConcat2-PASS-NEXT:   host s.j=20{{$}}
-    //  EXE-OFF-caseMembersConcat2-PASS-NEXT:   host h.i=30{{$}}
-    //  EXE-OFF-caseMembersConcat2-PASS-NEXT:   host h.j=40{{$}}
-    //  EXE-OFF-caseMembersConcat2-PASS-NEXT:   host d.i=50{{$}}
-    //  EXE-OFF-caseMembersConcat2-PASS-NEXT:   host d.j=60{{$}}
-    // EXE-HOST-caseMembersConcat2-PASS-NEXT:   host s.i=11{{$}}
-    // EXE-HOST-caseMembersConcat2-PASS-NEXT:   host s.j=21{{$}}
-    // EXE-HOST-caseMembersConcat2-PASS-NEXT:   host h.i=31{{$}}
-    // EXE-HOST-caseMembersConcat2-PASS-NEXT:   host h.j=41{{$}}
-    // EXE-HOST-caseMembersConcat2-PASS-NEXT:   host d.i=51{{$}}
-    // EXE-HOST-caseMembersConcat2-PASS-NEXT:   host d.j=61{{$}}
-    //      EXE-caseMembersConcat2-PASS-NEXT: device s.i=11{{$}}
-    //      EXE-caseMembersConcat2-PASS-NEXT: device s.j=21{{$}}
-    //      EXE-caseMembersConcat2-PASS-NEXT: device h.i=31{{$}}
-    //      EXE-caseMembersConcat2-PASS-NEXT: device h.j=41{{$}}
-    //      EXE-caseMembersConcat2-PASS-NEXT: device d.i=51{{$}}
-    //      EXE-caseMembersConcat2-PASS-NEXT: device d.j=61{{$}}
-    printHostInt(s.i);
-    printHostInt(s.j);
-    printHostInt(h.i);
-    printHostInt(h.j);
-    printHostInt(d.i);
-    printHostInt(d.j);
-    printDeviceInt(s.i);
-    printDeviceInt(s.j);
-    printDeviceInt(h.i);
-    printDeviceInt(h.j);
-    printDeviceInt(d.i);
-    printDeviceInt(d.j);
-  }
-}
-
 // DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseMemberFullStruct
 // PRT-LABEL: {{.*}}caseMemberFullStruct{{.*}} {
 CASE(caseMemberFullStruct) {
@@ -1557,112 +1493,6 @@ CASE(caseSubarrayOverlapEnd) {
     printDeviceInt(h[2]);
     printDeviceInt(d[1]);
     printDeviceInt(d[2]);
-  }
-}
-
-// DMP-LABEL: FunctionDecl {{.*}} prev {{.*}} caseSubarrayConcat2
-// PRT-LABEL: {{.*}}caseSubarrayConcat2{{.*}} {
-CASE(caseSubarrayConcat2) {
-  int s[4];
-  int h[4];
-  int d[4];
-  PRINT_SUBARRAY_INFO(s, 0, 2);
-  PRINT_SUBARRAY_INFO(s, 0, 4);
-
-  #pragma acc data create(s[0:2], h[0:2], d[0:2])
-  #pragma acc data create(s[2:2], h[2:2], d[2:2])
-  {
-    setHostInt(s[0], 10);
-    setHostInt(s[1], 20);
-    setHostInt(s[2], 30);
-    setHostInt(s[3], 40);
-    setHostInt(h[0], 50);
-    setHostInt(h[1], 60);
-    setHostInt(h[2], 70);
-    setHostInt(h[3], 80);
-    setHostInt(d[0], 90);
-    setHostInt(d[1], 100);
-    setHostInt(d[2], 110);
-    setHostInt(d[3], 120);
-    setDeviceInt(s[0], 11);
-    setDeviceInt(s[1], 21);
-    setDeviceInt(s[2], 31);
-    setDeviceInt(s[3], 41);
-    setDeviceInt(h[0], 51);
-    setDeviceInt(h[1], 61);
-    setDeviceInt(h[2], 71);
-    setDeviceInt(h[3], 81);
-    setDeviceInt(d[0], 91);
-    setDeviceInt(d[1], 101);
-    setDeviceInt(d[2], 111);
-    setDeviceInt(d[3], 121);
-
-    // We need multiple directives here so we can control which clause
-    // produces the runtime error.  We vary which clause produces the runtime
-    // error across the various CASE_* that produce it.
-    #pragma acc update self(s[0:4]) IF_PRESENT
-    #pragma acc update host(h[0:4]) device(d[0:4]) IF_PRESENT
-
-    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host s[0]=10{{$}}
-    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host s[1]=20{{$}}
-    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host s[2]=30{{$}}
-    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host s[3]=40{{$}}
-    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host h[0]=50{{$}}
-    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host h[1]=60{{$}}
-    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host h[2]=70{{$}}
-    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host h[3]=80{{$}}
-    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host d[0]=90{{$}}
-    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host d[1]=100{{$}}
-    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host d[2]=110{{$}}
-    //  EXE-OFF-caseSubarrayConcat2-PASS-NEXT:   host d[3]=120{{$}}
-    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host s[0]=11{{$}}
-    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host s[1]=21{{$}}
-    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host s[2]=31{{$}}
-    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host s[3]=41{{$}}
-    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host h[0]=51{{$}}
-    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host h[1]=61{{$}}
-    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host h[2]=71{{$}}
-    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host h[3]=81{{$}}
-    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host d[0]=91{{$}}
-    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host d[1]=101{{$}}
-    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host d[2]=111{{$}}
-    // EXE-HOST-caseSubarrayConcat2-PASS-NEXT:   host d[3]=121{{$}}
-    //      EXE-caseSubarrayConcat2-PASS-NEXT: device s[0]=11{{$}}
-    //      EXE-caseSubarrayConcat2-PASS-NEXT: device s[1]=21{{$}}
-    //      EXE-caseSubarrayConcat2-PASS-NEXT: device s[2]=31{{$}}
-    //      EXE-caseSubarrayConcat2-PASS-NEXT: device s[3]=41{{$}}
-    //      EXE-caseSubarrayConcat2-PASS-NEXT: device h[0]=51{{$}}
-    //      EXE-caseSubarrayConcat2-PASS-NEXT: device h[1]=61{{$}}
-    //      EXE-caseSubarrayConcat2-PASS-NEXT: device h[2]=71{{$}}
-    //      EXE-caseSubarrayConcat2-PASS-NEXT: device h[3]=81{{$}}
-    //      EXE-caseSubarrayConcat2-PASS-NEXT: device d[0]=91{{$}}
-    //      EXE-caseSubarrayConcat2-PASS-NEXT: device d[1]=101{{$}}
-    //      EXE-caseSubarrayConcat2-PASS-NEXT: device d[2]=111{{$}}
-    //      EXE-caseSubarrayConcat2-PASS-NEXT: device d[3]=121{{$}}
-    printHostInt(s[0]);
-    printHostInt(s[1]);
-    printHostInt(s[2]);
-    printHostInt(s[3]);
-    printHostInt(h[0]);
-    printHostInt(h[1]);
-    printHostInt(h[2]);
-    printHostInt(h[3]);
-    printHostInt(d[0]);
-    printHostInt(d[1]);
-    printHostInt(d[2]);
-    printHostInt(d[3]);
-    printDeviceInt(s[0]);
-    printDeviceInt(s[1]);
-    printDeviceInt(s[2]);
-    printDeviceInt(s[3]);
-    printDeviceInt(h[0]);
-    printDeviceInt(h[1]);
-    printDeviceInt(h[2]);
-    printDeviceInt(h[3]);
-    printDeviceInt(d[0]);
-    printDeviceInt(d[1]);
-    printDeviceInt(d[2]);
-    printDeviceInt(d[3]);
   }
 }
 

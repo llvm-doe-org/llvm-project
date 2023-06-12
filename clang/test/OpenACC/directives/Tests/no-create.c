@@ -51,50 +51,48 @@
 // cases are probably sufficient.
 //
 // DEFINE: %{check-cases}( NO_ALLOC_OR_ALLOC %, NOT_CRASH_IF_OFF_AND_ALLOC %) =                                             \
-//                          CASE                                NO_ALLOC_OR_ALLOC       NOT_CRASH_IF_FAIL
-// DEFINE:   %{check-case}( caseDataScalarPresent            %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseDataScalarAbsent             %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseDataStructPresent            %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseDataStructAbsent             %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseDataArrayPresent             %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseDataArrayAbsent              %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseDataMemberPresent            %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseDataMemberAbsent             %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseDataMembersDisjoint          %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseDataMembersConcat2           %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
-// DEFINE:   %{check-case}( caseDataMemberFullStruct         %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
-// DEFINE:   %{check-case}( caseDataSubarrayPresent          %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseDataSubarrayDisjoint         %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseDataSubarrayOverlapStart     %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
-// DEFINE:   %{check-case}( caseDataSubarrayOverlapEnd       %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
-// DEFINE:   %{check-case}( caseDataSubarrayConcat2          %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
-// DEFINE:   %{check-case}( caseDataSubarrayNonSubarray      %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
-// DEFINE:   %{check-case}( caseParallelScalarPresent        %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseParallelScalarAbsent         %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseParallelStructPresent        %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseParallelStructAbsent         %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseParallelArrayPresent         %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseParallelArrayAbsent          %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseParallelMemberPresent        %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseParallelMemberAbsent         %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseParallelMembersDisjoint      %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseParallelMembersConcat2       %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
-// DEFINE:   %{check-case}( caseParallelMemberFullStruct     %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
-// DEFINE:   %{check-case}( caseParallelPtrMemberFullStruct  %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
-// DEFINE:   %{check-case}( caseParallelSubarrayPresent      %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseParallelSubarrayDisjoint     %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseParallelSubarrayOverlapStart %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
-// DEFINE:   %{check-case}( caseParallelSubarrayOverlapEnd   %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
-// DEFINE:   %{check-case}( caseParallelSubarrayConcat2      %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
-// DEFINE:   %{check-case}( caseParallelSubarrayNonSubarray  %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
-// DEFINE:   %{check-case}( caseParallelLoopScalarPresent    %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseParallelLoopScalarAbsent     %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseConstPresent                 %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseConstAbsent                  %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseInheritedPresent             %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseInheritedAbsent              %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseInheritedSubarrayPresent     %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
-// DEFINE:   %{check-case}( caseInheritedSubarrayAbsent      %, %{NO_ALLOC_OR_ALLOC} %,                               %)
+//                          CASE                                  NO_ALLOC_OR_ALLOC       NOT_CRASH_IF_FAIL
+// DEFINE:   %{check-case}( caseDataScalarPresent              %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataScalarAbsent               %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataStructPresent              %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataStructAbsent               %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataArrayPresent               %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataArrayAbsent                %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataMemberPresent              %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataMemberAbsent               %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataMembersDisjoint            %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataMemberFullStruct           %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayPresent            %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayDisjoint           %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayDisjointDevicePad  %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayOverlapStart       %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayOverlapEnd         %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseDataSubarrayNonSubarray        %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseParallelScalarPresent          %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelScalarAbsent           %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelStructPresent          %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelStructAbsent           %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelArrayPresent           %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelArrayAbsent            %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelMemberPresent          %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelMemberAbsent           %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelMembersDisjointSingles %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelMembersDisjoint        %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelMemberFullStruct       %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseParallelPtrMemberFullStruct    %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayPresent        %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayDisjoint       %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayOverlapStart   %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayOverlapEnd     %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseParallelSubarrayNonSubarray    %, %{NO_ALLOC_OR_ALLOC} %, %{NOT_CRASH_IF_OFF_AND_ALLOC} %) && \
+// DEFINE:   %{check-case}( caseParallelLoopScalarPresent      %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseParallelLoopScalarAbsent       %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseConstPresent                   %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseConstAbsent                    %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseInheritedPresent               %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseInheritedAbsent                %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseInheritedSubarrayPresent       %, %{NO_ALLOC_OR_ALLOC} %,                               %) && \
+// DEFINE:   %{check-case}( caseInheritedSubarrayAbsent        %, %{NO_ALLOC_OR_ALLOC} %,                               %)
 
 // Generate the enum of cases.
 //
@@ -605,70 +603,16 @@ CASE(caseDataMemberAbsent) {
 //       EXE-OFF-caseDataMembersDisjoint-NEXT:   acc_ev_delete
 //       EXE-OFF-caseDataMembersDisjoint-NEXT:   acc_ev_free
 //        EXE-OFF-caseDataMembersDisjoint-NOT: {{.}}
+//
+// This case is valid when -fopenacc-no-create-omp=ompx-no-alloc but invalid
+// when -fopenacc-no-create-omp=no-ompx-no-alloc because, in the latter case
+// only, the no_create attempts to extend a partial mapping of an object.  For
+// now, the runtime doesn't complain.  If it does in the future, we'll have to
+// change the expected results here.
 CASE(caseDataMembersDisjoint) {
   struct S { int x; int y; } s;
   #pragma acc data copy(s.x)
   #pragma acc data no_create(s.y)
-  ;
-}
-
-//   PRT-LABEL: {{.*}}caseDataMembersConcat2{{.*}} {
-//    PRT-NEXT:   struct S {
-//         PRT:   } s;
-//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-//
-//  PRT-A-NEXT:   #pragma acc data copyout(s.x){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,from: s.x){{$}}
-//  PRT-A-NEXT:   #pragma acc data copy(s.y){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: s.y){{$}}
-//  PRT-A-NEXT:   #pragma acc data no_create(s){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: s){{$}}
-//
-//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,from: s.x){{$}}
-// PRT-OA-NEXT:   // #pragma acc data copyout(s.x){{$}}
-//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: s.y){{$}}
-// PRT-OA-NEXT:   // #pragma acc data copy(s.y){{$}}
-//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: s){{$}}
-// PRT-OA-NEXT:   // #pragma acc data no_create(s){{$}}
-//
-//    PRT-NEXT:   ;
-//    PRT-NEXT: }
-//
-//  EXE-HOST-caseDataMembersConcat2-NOT: {{.}}
-//      EXE-HOST-caseDataMembersConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
-// EXE-HOST-caseDataMembersConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
-//
-//           EXE-OFF-caseDataMembersConcat2-NOT: {{.}}
-//               EXE-OFF-caseDataMembersConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
-//          EXE-OFF-caseDataMembersConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
-//          EXE-OFF-caseDataMembersConcat2-NEXT: acc_ev_enter_data_start
-//          EXE-OFF-caseDataMembersConcat2-NEXT:   acc_ev_alloc
-//          EXE-OFF-caseDataMembersConcat2-NEXT:   acc_ev_create
-//          EXE-OFF-caseDataMembersConcat2-NEXT:   acc_ev_enter_data_start
-//          EXE-OFF-caseDataMembersConcat2-NEXT:     acc_ev_alloc
-//          EXE-OFF-caseDataMembersConcat2-NEXT:     acc_ev_create
-//          EXE-OFF-caseDataMembersConcat2-NEXT:     acc_ev_enter_data_start
-//    EXE-OFF-caseDataMembersConcat2-ALLOC-NEXT:     Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
-//    EXE-OFF-caseDataMembersConcat2-ALLOC-NEXT:     Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-//    EXE-OFF-caseDataMembersConcat2-ALLOC-NEXT:     Libomptarget error: Consult {{.*}}
-//    EXE-OFF-caseDataMembersConcat2-ALLOC-NEXT:     {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-//                                                    # An abort message usually follows.
-//     EXE-OFF-caseDataMembersConcat2-ALLOC-NOT:     Libomptarget
-// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT:     acc_ev_exit_data_start
-// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT:   acc_ev_exit_data_start
-// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT:     acc_ev_delete
-// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT:     acc_ev_free
-// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT: acc_ev_exit_data_start
-// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT:   acc_ev_delete
-// EXE-OFF-caseDataMembersConcat2-NO-ALLOC-NEXT:   acc_ev_free
-CASE(caseDataMembersConcat2) {
-  struct S { int x; int y; } s;
-  PRINT_VAR_INFO(s.x);
-  PRINT_VAR_INFO(s);
-  #pragma acc data copyout(s.x)
-  #pragma acc data copy(s.y)
-  #pragma acc data no_create(s)
   ;
 }
 
@@ -812,11 +756,52 @@ CASE(caseDataSubarrayPresent) {
 //       EXE-OFF-caseDataSubarrayDisjoint-NEXT:   acc_ev_delete
 //       EXE-OFF-caseDataSubarrayDisjoint-NEXT:   acc_ev_free
 //        EXE-OFF-caseDataSubarrayDisjoint-NOT: {{.}}
+//
+// This case is valid when -fopenacc-no-create-omp=ompx-no-alloc but invalid
+// when -fopenacc-no-create-omp=no-ompx-no-alloc because, in the latter case
+// only, the no_create attempts to extend a partial mapping of an object.  For
+// now, the runtime doesn't complain.  If it does in the future, we'll have to
+// change the expected results here.
 CASE(caseDataSubarrayDisjoint) {
   int arr[4];
   #pragma acc data copy(arr[0:2])
   #pragma acc data no_create(arr[2:2])
   ;
+}
+
+//        EXE-OFF-caseDataSubarrayDisjointDevicePad-NOT: {{.}}
+//            EXE-OFF-caseDataSubarrayDisjointDevicePad: acc_ev_enter_data_start
+//       EXE-OFF-caseDataSubarrayDisjointDevicePad-NEXT:   acc_ev_alloc
+//       EXE-OFF-caseDataSubarrayDisjointDevicePad-NEXT:   acc_ev_create
+//       EXE-OFF-caseDataSubarrayDisjointDevicePad-NEXT: acc_ev_enter_data_start
+// EXE-OFF-caseDataSubarrayDisjointDevicePad-ALLOC-NEXT:   acc_ev_alloc
+// EXE-OFF-caseDataSubarrayDisjointDevicePad-ALLOC-NEXT:   acc_ev_create
+//       EXE-OFF-caseDataSubarrayDisjointDevicePad-NEXT:   acc_ev_exit_data_start
+//       EXE-OFF-caseDataSubarrayDisjointDevicePad-NEXT:     acc_ev_delete
+//       EXE-OFF-caseDataSubarrayDisjointDevicePad-NEXT:     acc_ev_free
+//       EXE-OFF-caseDataSubarrayDisjointDevicePad-NEXT: acc_ev_exit_data_start
+// EXE-OFF-caseDataSubarrayDisjointDevicePad-ALLOC-NEXT:   acc_ev_delete
+// EXE-OFF-caseDataSubarrayDisjointDevicePad-ALLOC-NEXT:   acc_ev_free
+//        EXE-OFF-caseDataSubarrayDisjointDevicePad-NOT: {{.}}
+//
+// Like caseDataSubarrayDisjoint, this case is valid when
+// -fopenacc-no-create-omp=ompx-no-alloc but invalid when
+// -fopenacc-no-create-omp=no-ompx-no-alloc, but the runtime currently doesn't
+// complain.
+//
+// Consider only the normal case of -fopenacc-no-create-omp=ompx-no-alloc.  s is
+// always at least 8-byte aligned in host memory due to s.z, so libomptarget
+// always adds at least 4 bytes of device padding for copyin(s.y,s.z).  At one
+// time, s.x appeared to be present as a result, so no_create incremented s's
+// reference count, and copyout didn't unmap it.  libomptarget has since been
+// fixed not to consider device padding to be mapped to host memory.
+CASE(caseDataSubarrayDisjointDevicePad) {
+  struct S { int x; int y; double z; } s;
+  #pragma acc enter data copyin(s.y, s.z)
+  #pragma acc data no_create(s.x) // should do nothing as s.x is not present
+  {
+    #pragma acc exit data copyout(s.y, s.z) // should copy out
+  }
 }
 
 //   PRT-LABEL: {{.*}}caseDataSubarrayOverlapStart{{.*}} {
@@ -912,65 +897,6 @@ CASE(caseDataSubarrayOverlapEnd) {
   PRINT_SUBARRAY_INFO(arr, 2, 2);
   #pragma acc data copyin(arr[1:2])
   #pragma acc data no_create(arr[2:2])
-  ;
-}
-
-//   PRT-LABEL: {{.*}}caseDataSubarrayConcat2{{.*}} {
-//    PRT-NEXT:   int arr[4];
-//    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
-//    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
-//
-//  PRT-A-NEXT:   #pragma acc data copyout(arr[0:2]){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,from: arr[0:2]){{$}}
-//  PRT-A-NEXT:   #pragma acc data copy(arr[2:2]){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: arr[2:2]){{$}}
-//  PRT-A-NEXT:   #pragma acc data no_create(arr[0:4]){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map([[NO_CREATE_MT]]: arr[0:4]){{$}}
-//
-//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,from: arr[0:2]){{$}}
-// PRT-OA-NEXT:   // #pragma acc data copyout(arr[0:2]){{$}}
-//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: arr[2:2]){{$}}
-// PRT-OA-NEXT:   // #pragma acc data copy(arr[2:2]){{$}}
-//  PRT-O-NEXT:   #pragma omp target data map([[NO_CREATE_MT]]: arr[0:4]){{$}}
-// PRT-OA-NEXT:   // #pragma acc data no_create(arr[0:4]){{$}}
-//
-//    PRT-NEXT:   ;
-//    PRT-NEXT: }
-//
-//  EXE-HOST-caseDataSubarrayConcat2-NOT: {{.}}
-//      EXE-HOST-caseDataSubarrayConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
-// EXE-HOST-caseDataSubarrayConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
-//
-//           EXE-OFF-caseDataSubarrayConcat2-NOT: {{.}}
-//               EXE-OFF-caseDataSubarrayConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
-//          EXE-OFF-caseDataSubarrayConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
-//          EXE-OFF-caseDataSubarrayConcat2-NEXT: acc_ev_enter_data_start
-//          EXE-OFF-caseDataSubarrayConcat2-NEXT:   acc_ev_alloc
-//          EXE-OFF-caseDataSubarrayConcat2-NEXT:   acc_ev_create
-//          EXE-OFF-caseDataSubarrayConcat2-NEXT:   acc_ev_enter_data_start
-//          EXE-OFF-caseDataSubarrayConcat2-NEXT:     acc_ev_alloc
-//          EXE-OFF-caseDataSubarrayConcat2-NEXT:     acc_ev_create
-//          EXE-OFF-caseDataSubarrayConcat2-NEXT:     acc_ev_enter_data_start
-//    EXE-OFF-caseDataSubarrayConcat2-ALLOC-NEXT:     Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
-//    EXE-OFF-caseDataSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-//    EXE-OFF-caseDataSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Consult {{.*}}
-//    EXE-OFF-caseDataSubarrayConcat2-ALLOC-NEXT:     {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-//                                                    # An abort message usually follows.
-//     EXE-OFF-caseDataSubarrayConcat2-ALLOC-NOT:     Libomptarget
-// EXE-OFF-caseDataSubarrayConcat2-NO-ALLOC-NEXT:     acc_ev_exit_data_start
-// EXE-OFF-caseDataSubarrayConcat2-NO-ALLOC-NEXT:   acc_ev_exit_data_start
-// EXE-OFF-caseDataSubarrayConcat2-NO-ALLOC-NEXT:     acc_ev_delete
-// EXE-OFF-caseDataSubarrayConcat2-NO-ALLOC-NEXT:     acc_ev_free
-// EXE-OFF-caseDataSubarrayConcat2-NO-ALLOC-NEXT: acc_ev_exit_data_start
-// EXE-OFF-caseDataSubarrayConcat2-NO-ALLOC-NEXT:   acc_ev_delete
-// EXE-OFF-caseDataSubarrayConcat2-NO-ALLOC-NEXT:   acc_ev_free
-CASE(caseDataSubarrayConcat2) {
-  int arr[4];
-  PRINT_SUBARRAY_INFO(arr, 0, 2);
-  PRINT_SUBARRAY_INFO(arr, 0, 4);
-  #pragma acc data copyout(arr[0:2])
-  #pragma acc data copy(arr[2:2])
-  #pragma acc data no_create(arr[0:4])
   ;
 }
 
@@ -1277,6 +1203,34 @@ CASE(caseParallelMemberAbsent) {
   if (use) s.y = 1;
 }
 
+//        EXE-OFF-caseParallelMembersDisjointSingles-NOT: {{.}}
+//            EXE-OFF-caseParallelMembersDisjointSingles: acc_ev_enter_data_start
+//       EXE-OFF-caseParallelMembersDisjointSingles-NEXT:   acc_ev_alloc
+//       EXE-OFF-caseParallelMembersDisjointSingles-NEXT:   acc_ev_create
+//       EXE-OFF-caseParallelMembersDisjointSingles-NEXT:   acc_ev_enter_data_start
+// EXE-OFF-caseParallelMembersDisjointSingles-ALLOC-NEXT:     acc_ev_alloc
+// EXE-OFF-caseParallelMembersDisjointSingles-ALLOC-NEXT:     acc_ev_create
+//       EXE-OFF-caseParallelMembersDisjointSingles-NEXT:   acc_ev_exit_data_start
+// EXE-OFF-caseParallelMembersDisjointSingles-ALLOC-NEXT:     acc_ev_delete
+// EXE-OFF-caseParallelMembersDisjointSingles-ALLOC-NEXT:     acc_ev_free
+//       EXE-OFF-caseParallelMembersDisjointSingles-NEXT: acc_ev_exit_data_start
+//       EXE-OFF-caseParallelMembersDisjointSingles-NEXT:   acc_ev_delete
+//       EXE-OFF-caseParallelMembersDisjointSingles-NEXT:   acc_ev_free
+//        EXE-OFF-caseParallelMembersDisjointSingles-NOT: {{.}}
+//
+// This case is valid when -fopenacc-no-create-omp=ompx-no-alloc but invalid
+// when -fopenacc-no-create-omp=no-ompx-no-alloc because, in the latter case
+// only, the no_create attempts to extend a partial mapping of an object.  For
+// now, the runtime doesn't complain.  If it does in the future, we'll have to
+// change the expected results here.
+CASE(caseParallelMembersDisjointSingles) {
+  struct S { int x; int y; } s;
+  int use = 0;
+  #pragma acc data copy(s.x)
+  #pragma acc parallel no_create(s.y)
+  if (use) s.y = 1;
+}
+
 //        EXE-OFF-caseParallelMembersDisjoint-NOT: {{.}}
 //            EXE-OFF-caseParallelMembersDisjoint: acc_ev_enter_data_start
 //       EXE-OFF-caseParallelMembersDisjoint-NEXT:   acc_ev_alloc
@@ -1291,64 +1245,18 @@ CASE(caseParallelMemberAbsent) {
 //       EXE-OFF-caseParallelMembersDisjoint-NEXT:   acc_ev_delete
 //       EXE-OFF-caseParallelMembersDisjoint-NEXT:   acc_ev_free
 //        EXE-OFF-caseParallelMembersDisjoint-NOT: {{.}}
-CASE(caseParallelMembersDisjoint) {
-  // FIXME: The commented code should work, but it fails with libomptarget data
-  // extension errors when alignment concerns cause libomptarget to prepend
-  // padding to the second mapping and the first mapping is within that padding.
-  // libomptarget doesn't add padding when mapping only a single member at a
-  // time, so this problem doesn't arise.
-  //
-  // struct S { int w; int x; int y; int z; } s;
-  // int use = 0;
-  // #pragma acc data copy(s.w, s.x)
-  // #pragma acc parallel no_create(s.y, s.z)
-  // if (use) s.y = 1;
-  struct S { int x; int y; } s;
-  int use = 0;
-  #pragma acc data copy(s.x)
-  #pragma acc parallel no_create(s.y)
-  if (use) s.y = 1;
-}
-
-//  EXE-HOST-caseParallelMembersConcat2-NOT: {{.}}
-//      EXE-HOST-caseParallelMembersConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
-// EXE-HOST-caseParallelMembersConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
 //
-//           EXE-OFF-caseParallelMembersConcat2-NOT: {{.}}
-//               EXE-OFF-caseParallelMembersConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
-//          EXE-OFF-caseParallelMembersConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
-//          EXE-OFF-caseParallelMembersConcat2-NEXT: acc_ev_enter_data_start
-//          EXE-OFF-caseParallelMembersConcat2-NEXT:   acc_ev_alloc
-//          EXE-OFF-caseParallelMembersConcat2-NEXT:   acc_ev_create
-//          EXE-OFF-caseParallelMembersConcat2-NEXT:   acc_ev_enter_data_start
-//          EXE-OFF-caseParallelMembersConcat2-NEXT:     acc_ev_alloc
-//          EXE-OFF-caseParallelMembersConcat2-NEXT:     acc_ev_create
-//          EXE-OFF-caseParallelMembersConcat2-NEXT:     acc_ev_enter_data_start
-//    EXE-OFF-caseParallelMembersConcat2-ALLOC-NEXT:     Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
-//                                                        # FIXME: Names like getTargetPointer are meaningless to users.
-//    EXE-OFF-caseParallelMembersConcat2-ALLOC-NEXT:     Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-//    EXE-OFF-caseParallelMembersConcat2-ALLOC-NEXT:     Libomptarget error: Call to targetDataBegin failed, abort target.
-//    EXE-OFF-caseParallelMembersConcat2-ALLOC-NEXT:     Libomptarget error: Failed to process data before launching the kernel.
-//    EXE-OFF-caseParallelMembersConcat2-ALLOC-NEXT:     Libomptarget error: Consult {{.*}}
-//    EXE-OFF-caseParallelMembersConcat2-ALLOC-NEXT:     {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-//                                                        # An abort message usually follows.
-//     EXE-OFF-caseParallelMembersConcat2-ALLOC-NOT:     Libomptarget
-// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT:     acc_ev_exit_data_start
-// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT:   acc_ev_exit_data_start
-// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT:     acc_ev_delete
-// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT:     acc_ev_free
-// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT: acc_ev_exit_data_start
-// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT:   acc_ev_delete
-// EXE-OFF-caseParallelMembersConcat2-NO-ALLOC-NEXT:   acc_ev_free
-CASE(caseParallelMembersConcat2) {
-  struct S { int x; int y; } s;
-  PRINT_VAR_INFO(s.x);
-  PRINT_VAR_INFO(s);
+// This case is valid when -fopenacc-no-create-omp=ompx-no-alloc but invalid
+// when -fopenacc-no-create-omp=no-ompx-no-alloc because, in the latter case
+// only, the no_create attempts to extend a partial mapping of an object.  For
+// now, the runtime doesn't complain.  If it does in the future, we'll have to
+// change the expected results here.
+CASE(caseParallelMembersDisjoint) {
+  struct S { int w; int x; int y; int z; } s;
   int use = 0;
-  #pragma acc data copyout(s.x)
-  #pragma acc data copy(s.y)
-  #pragma acc parallel no_create(s)
-  if (use) s.x = 1;
+  #pragma acc data copy(s.w, s.x)
+  #pragma acc parallel no_create(s.y, s.z)
+  if (use) s.y = 1;
 }
 
 //  EXE-HOST-caseParallelMemberFullStruct-NOT: {{.}}
@@ -1536,6 +1444,12 @@ CASE(caseParallelSubarrayPresent) {
 //       EXE-OFF-caseParallelSubarrayDisjoint-NEXT:   acc_ev_delete
 //       EXE-OFF-caseParallelSubarrayDisjoint-NEXT:   acc_ev_free
 //        EXE-OFF-caseParallelSubarrayDisjoint-NOT: {{.}}
+//
+// This case is valid when -fopenacc-no-create-omp=ompx-no-alloc but invalid
+// when -fopenacc-no-create-omp=no-ompx-no-alloc because, in the latter case
+// only, the no_create attempts to extend a partial mapping of an object.  For
+// now, the runtime doesn't complain.  If it does in the future, we'll have to
+// change the expected results here.
 CASE(caseParallelSubarrayDisjoint) {
   int arr[4];
   int use = 0;
@@ -1611,47 +1525,6 @@ CASE(caseParallelSubarrayOverlapEnd) {
   #pragma acc data copyin(arr[3:4])
   #pragma acc parallel no_create(arr[4:4])
   if (use) arr[4] = 1;
-}
-
-//  EXE-HOST-caseParallelSubarrayConcat2-NOT: {{.}}
-//      EXE-HOST-caseParallelSubarrayConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
-// EXE-HOST-caseParallelSubarrayConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
-//
-//           EXE-OFF-caseParallelSubarrayConcat2-NOT: {{.}}
-//               EXE-OFF-caseParallelSubarrayConcat2: addr=0x[[#%x,OLD_MAP_ADDR:]], size=[[#%u,OLD_MAP_SIZE:]]
-//          EXE-OFF-caseParallelSubarrayConcat2-NEXT: addr=0x[[#%x,NEW_MAP_ADDR:]], size=[[#%u,NEW_MAP_SIZE:]]
-//          EXE-OFF-caseParallelSubarrayConcat2-NEXT: acc_ev_enter_data_start
-//          EXE-OFF-caseParallelSubarrayConcat2-NEXT:   acc_ev_alloc
-//          EXE-OFF-caseParallelSubarrayConcat2-NEXT:   acc_ev_create
-//          EXE-OFF-caseParallelSubarrayConcat2-NEXT:   acc_ev_enter_data_start
-//          EXE-OFF-caseParallelSubarrayConcat2-NEXT:     acc_ev_alloc
-//          EXE-OFF-caseParallelSubarrayConcat2-NEXT:     acc_ev_create
-//          EXE-OFF-caseParallelSubarrayConcat2-NEXT:     acc_ev_enter_data_start
-//    EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NEXT:     Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#NEW_MAP_ADDR]] ([[#NEW_MAP_SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#OLD_MAP_ADDR]] ([[#OLD_MAP_SIZE]] bytes)
-//                                                        # FIXME: Names like getTargetPointer are meaningless to users.
-//    EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-//    EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Call to targetDataBegin failed, abort target.
-//    EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Failed to process data before launching the kernel.
-//    EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NEXT:     Libomptarget error: Consult {{.*}}
-//    EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NEXT:     {{.*:[0-9]+:[0-9]+}}: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-//                                                        # An abort message usually follows.
-//     EXE-OFF-caseParallelSubarrayConcat2-ALLOC-NOT:     Libomptarget
-// EXE-OFF-caseParallelSubarrayConcat2-NO-ALLOC-NEXT:     acc_ev_exit_data_start
-// EXE-OFF-caseParallelSubarrayConcat2-NO-ALLOC-NEXT:   acc_ev_exit_data_start
-// EXE-OFF-caseParallelSubarrayConcat2-NO-ALLOC-NEXT:     acc_ev_delete
-// EXE-OFF-caseParallelSubarrayConcat2-NO-ALLOC-NEXT:     acc_ev_free
-// EXE-OFF-caseParallelSubarrayConcat2-NO-ALLOC-NEXT: acc_ev_exit_data_start
-// EXE-OFF-caseParallelSubarrayConcat2-NO-ALLOC-NEXT:   acc_ev_delete
-// EXE-OFF-caseParallelSubarrayConcat2-NO-ALLOC-NEXT:   acc_ev_free
-CASE(caseParallelSubarrayConcat2) {
-  int arr[4];
-  PRINT_SUBARRAY_INFO(arr, 0, 2);
-  PRINT_SUBARRAY_INFO(arr, 0, 4);
-  int use = 0;
-  #pragma acc data copyout(arr[0:2])
-  #pragma acc data copy(arr[2:2])
-  #pragma acc parallel no_create(arr[0:4])
-  if (use) arr[0] = 1;
 }
 
 //  EXE-HOST-caseParallelSubarrayNonSubarray-NOT: {{.}}

@@ -65,13 +65,11 @@
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataMemberPresent            %, data      %,                                        %,                                  %,                                  %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataMemberAbsent             %, data      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataMembersDisjoint          %, data      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
-// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataMembersConcat2           %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataMemberFullStruct         %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayPresent          %, data      %,                                        %,                                  %,                                  %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayDisjoint         %, data      %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayOverlapStart     %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayOverlapEnd       %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
-// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayConcat2          %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseDataSubarrayNonSubarray      %, data      %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelScalarPresent        %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelScalarAbsent         %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
@@ -82,13 +80,11 @@
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelMemberPresent        %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelMemberAbsent         %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelMembersDisjoint      %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
-// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelMembersConcat2       %, parallel  %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelMemberFullStruct     %, parallel  %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayPresent      %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayDisjoint     %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayOverlapStart %, parallel  %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayOverlapEnd   %, parallel  %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
-// DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayConcat2      %, parallel  %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelSubarrayNonSubarray  %, parallel  %, %if-tgt-host<|not --crash>             %, %if-tgt-host<|not>               %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|not> %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelLoopScalarPresent    %, parallel  %,                                        %,                                  %,                                  %,                    %) && \
 // DEFINE:   %{check-case}( %{LINE}, %(line) %, caseParallelLoopScalarAbsent     %, parallel  %, %if-tgt-host<|%{NOT_CRASH_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %, %if-tgt-host<|%{NOT_IF_PRESENT}> %,                    %) && \
@@ -460,6 +456,11 @@ CASE(caseDataMemberAbsent) {
 //
 //    PRT-NEXT:   ;
 //    PRT-NEXT: }
+//
+// This case is also invalid when -fopenacc-present-omp=no-present because the
+// present clause then attempts to extend a partial mapping of an object.  For
+// now, the runtime doesn't complain.  If it does in the future, we'll have to
+// change the expected results here.
 CASE(caseDataMembersDisjoint) {
   struct S { int x; int y; } s;
   PRINT_VAR_INFO(s.x);
@@ -467,38 +468,6 @@ CASE(caseDataMembersDisjoint) {
   #pragma acc data copy(s.x)
   #pragma acc data present(s.y)
   USE_VAR(s.y = 1);
-}
-
-//   PRT-LABEL: {{.*}}caseDataMembersConcat2{{.*}} {
-//    PRT-NEXT:   struct S {
-//         PRT:   } s;
-//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-//    PRT-NEXT:   {{(PRINT_VAR_INFO|fprintf)\(.*\);}}
-//
-//  PRT-A-NEXT:   #pragma acc data copyout(s.x){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,from: s.x){{$}}
-//  PRT-A-NEXT:   #pragma acc data copy(s.y){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: s.y){{$}}
-//  PRT-A-NEXT:   #pragma acc data present(s){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: s){{$}}
-//
-//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,from: s.x){{$}}
-// PRT-OA-NEXT:   // #pragma acc data copyout(s.x){{$}}
-//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: s.y){{$}}
-// PRT-OA-NEXT:   // #pragma acc data copy(s.y){{$}}
-//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: s){{$}}
-// PRT-OA-NEXT:   // #pragma acc data present(s){{$}}
-//
-//    PRT-NEXT:   ;
-//    PRT-NEXT: }
-CASE(caseDataMembersConcat2) {
-  struct S { int x; int y; } s;
-  PRINT_VAR_INFO(s.x);
-  PRINT_VAR_INFO(s);
-  #pragma acc data copyout(s.x)
-  #pragma acc data copy(s.y)
-  #pragma acc data present(s)
-  USE_VAR(s.x = 1);
 }
 
 CASE(caseDataMemberFullStruct) {
@@ -576,6 +545,11 @@ CASE(caseDataSubarrayPresent) {
 //
 //    PRT-NEXT:   ;
 //    PRT-NEXT: }
+//
+// This case is also invalid when -fopenacc-present-omp=no-present because the
+// present clause then attempts to extend a partial mapping of an object.  For
+// now, the runtime doesn't complain.  If it does in the future, we'll have to
+// change the expected results here.
 CASE(caseDataSubarrayDisjoint) {
   int arr[4];
   PRINT_SUBARRAY_INFO(arr, 0, 2);
@@ -635,37 +609,6 @@ CASE(caseDataSubarrayOverlapEnd) {
   #pragma acc data copyin(arr[1:2])
   #pragma acc data present(arr[2:2])
   USE_VAR(arr[2] = 1);
-}
-
-//   PRT-LABEL: {{.*}}caseDataSubarrayConcat2{{.*}} {
-//    PRT-NEXT:   int arr[4];
-//    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
-//    PRT-NEXT:   {{(PRINT_SUBARRAY_INFO|fprintf)\(.*\);}}
-//
-//  PRT-A-NEXT:   #pragma acc data copyout(arr[0:2]){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,from: arr[0:2]){{$}}
-//  PRT-A-NEXT:   #pragma acc data copy(arr[2:2]){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map(ompx_hold,tofrom: arr[2:2]){{$}}
-//  PRT-A-NEXT:   #pragma acc data present(arr[0:4]){{$}}
-// PRT-AO-NEXT:   // #pragma omp target data map([[PRESENT_MT]]: arr[0:4]){{$}}
-//
-//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,from: arr[0:2]){{$}}
-// PRT-OA-NEXT:   // #pragma acc data copyout(arr[0:2]){{$}}
-//  PRT-O-NEXT:   #pragma omp target data map(ompx_hold,tofrom: arr[2:2]){{$}}
-// PRT-OA-NEXT:   // #pragma acc data copy(arr[2:2]){{$}}
-//  PRT-O-NEXT:   #pragma omp target data map([[PRESENT_MT]]: arr[0:4]){{$}}
-// PRT-OA-NEXT:   // #pragma acc data present(arr[0:4]){{$}}
-//
-//    PRT-NEXT:   ;
-//    PRT-NEXT: }
-CASE(caseDataSubarrayConcat2) {
-  int arr[4];
-  PRINT_SUBARRAY_INFO(arr, 0, 2);
-  PRINT_SUBARRAY_INFO(arr, 0, 4);
-  #pragma acc data copyout(arr[0:2])
-  #pragma acc data copy(arr[2:2])
-  #pragma acc data present(arr[0:4])
-  USE_VAR(arr[0] = 1);
 }
 
 CASE(caseDataSubarrayNonSubarray) {
@@ -784,6 +727,10 @@ CASE(caseParallelMemberAbsent) {
   USE_VAR(s.y = 1);
 }
 
+// This case is also invalid when -fopenacc-present-omp=no-present because the
+// present clause then attempts to extend a partial mapping of an object.  For
+// now, the runtime doesn't complain.  If it does in the future, we'll have to
+// change the expected results here.
 CASE(caseParallelMembersDisjoint) {
   struct S { int x; int y; } s;
   PRINT_VAR_INFO(s.x);
@@ -791,16 +738,6 @@ CASE(caseParallelMembersDisjoint) {
   #pragma acc data copy(s.x)
   #pragma acc parallel present(s.y)
   USE_VAR(s.y = 1);
-}
-
-CASE(caseParallelMembersConcat2) {
-  struct S { int x; int y; } s;
-  PRINT_VAR_INFO(s.x);
-  PRINT_VAR_INFO(s);
-  #pragma acc data copyout(s.x)
-  #pragma acc data copy(s.y)
-  #pragma acc parallel present(s)
-  USE_VAR(s.x = 1);
 }
 
 CASE(caseParallelMemberFullStruct) {
@@ -828,6 +765,10 @@ CASE(caseParallelSubarrayPresent) {
   }
 }
 
+// This case is also invalid when -fopenacc-present-omp=no-present because the
+// present clause then attempts to extend a partial mapping of an object.  For
+// now, the runtime doesn't complain.  If it does in the future, we'll have to
+// change the expected results here.
 CASE(caseParallelSubarrayDisjoint) {
   int arr[4];
   PRINT_SUBARRAY_INFO(arr, 0, 2);
@@ -853,16 +794,6 @@ CASE(caseParallelSubarrayOverlapEnd) {
   #pragma acc data copyin(arr[3:4])
   #pragma acc parallel present(arr[4:4])
   USE_VAR(arr[4] = 1);
-}
-
-CASE(caseParallelSubarrayConcat2) {
-  int arr[4];
-  PRINT_SUBARRAY_INFO(arr, 0, 2);
-  PRINT_SUBARRAY_INFO(arr, 0, 4);
-  #pragma acc data copyout(arr[0:2])
-  #pragma acc data copy(arr[2:2])
-  #pragma acc parallel present(arr[0:4])
-  USE_VAR(arr[0] = 1);
 }
 
 CASE(caseParallelSubarrayNonSubarray) {

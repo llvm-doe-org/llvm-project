@@ -34,22 +34,18 @@
 // DEFINE:   %{check-case}( caseCopyinExtendsAfter         %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseCopyinExtendsBefore        %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseCopyinSubsumes             %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
-// DEFINE:   %{check-case}( caseCopyinConcat2              %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseCreateExtendsAfter         %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseCreateExtendsBefore        %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseCreateSubsumes             %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
-// DEFINE:   %{check-case}( caseCreateConcat2              %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseUpdateRoutinesSuccess      %,                %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseUpdateDeviceAbsent         %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseUpdateDeviceExtendsAfter   %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseUpdateDeviceExtendsBefore  %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseUpdateDeviceSubsumes       %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
-// DEFINE:   %{check-case}( caseUpdateDeviceConcat2        %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseUpdateSelfAbsent           %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseUpdateSelfExtendsAfter     %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseUpdateSelfExtendsBefore    %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseUpdateSelfSubsumes         %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
-// DEFINE:   %{check-case}( caseUpdateSelfConcat2          %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseMallocFreeSuccess          %,                %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseMapUnmapSuccess            %, %{NOT_IF_HOST} %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseMapBytesZero               %,                %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
@@ -96,9 +92,7 @@
 // DEFINE:   %{check-case}( caseMemcpyD2dDestExtendsBefore %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseMemcpyD2dSrcExtendsBefore  %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
 // DEFINE:   %{check-case}( caseMemcpyD2dDestSubsumes      %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
-// DEFINE:   %{check-case}( caseMemcpyD2dSrcSubsumes       %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
-// DEFINE:   %{check-case}( caseMemcpyD2dDestConcat2       %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %) && \
-// DEFINE:   %{check-case}( caseMemcpyD2dSrcConcat2        %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %)
+// DEFINE:   %{check-case}( caseMemcpyD2dSrcSubsumes       %, %{NOT_IF_OFF}  %, %{RUN_ENV} %, %{HOST_OR_OFF} %)
 
 // Generate the enum of cases.
 //
@@ -1635,27 +1629,6 @@ CASE(caseCopyinSubsumes) {
   PRINT_INT_STDERR(arr[2]);
   return 0;
 }
-CASE(caseCopyinConcat2) {
-  //      ERR-caseCopyinConcat2-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
-  // ERR-caseCopyinConcat2-HOST-NEXT: arr[0] present: 0x[[#HOST]]                          -> 0x[[#HOST]],                          10 -> 10
-  // ERR-caseCopyinConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
-  // ERR-caseCopyinConcat2-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
-  //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST]] ([[#ELE_SIZE]] bytes)
-  //                                  # FIXME: getTargetPointer is meaningless to users.
-  //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-  //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget error: Consult {{.*}}
-  //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget error: Source location information not present. Compile with -g or -gline-tables-only.
-  //  ERR-caseCopyinConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-  int arr[] = {10, 20, 30};
-  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
-  #pragma acc data create(arr[0:1])
-  #pragma acc data create(arr[1:2])
-  acc_copyin(arr, sizeof arr);
-  PRINT_INT_STDERR(arr[0]);
-  PRINT_INT_STDERR(arr[1]);
-  PRINT_INT_STDERR(arr[2]);
-  return 0;
-}
 
 CASE(caseCreateExtendsAfter) {
   //      ERR-caseCreateExtendsAfter-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
@@ -1707,27 +1680,6 @@ CASE(caseCreateSubsumes) {
   int arr[] = {10, 20, 30};
   fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
   #pragma acc data create(arr[1:1])
-  acc_create(arr, sizeof arr);
-  PRINT_INT_STDERR(arr[0]);
-  PRINT_INT_STDERR(arr[1]);
-  PRINT_INT_STDERR(arr[2]);
-  return 0;
-}
-CASE(caseCreateConcat2) {
-  //      ERR-caseCreateConcat2-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
-  // ERR-caseCreateConcat2-HOST-NEXT: arr[0] present: 0x[[#HOST]]                          -> 0x[[#HOST]],                          10 -> 10
-  // ERR-caseCreateConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]]            -> 0x[[#%x,HOST + ELE_SIZE]],            20 -> 20
-  // ERR-caseCreateConcat2-HOST-NEXT: arr[2] present: 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE + ELE_SIZE]], 30 -> 30
-  //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget message: explicit extension not allowed: host address specified is 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes), but device allocation maps to host at 0x{{0*}}[[#%x,HOST]] ([[#ELE_SIZE]] bytes)
-  //                                  # FIXME: getTargetPointer is meaningless to users.
-  //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget error: Call to getTargetPointer returned null pointer (device failure or illegal mapping).
-  //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget error: Consult {{.*}}
-  //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget error: Source location information not present. Compile with -g or -gline-tables-only.
-  //  ERR-caseCreateConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-  int arr[] = {10, 20, 30};
-  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
-  #pragma acc data create(arr[0:1])
-  #pragma acc data create(arr[1:2])
   acc_create(arr, sizeof arr);
   PRINT_INT_STDERR(arr[0]);
   PRINT_INT_STDERR(arr[1]);
@@ -2030,23 +1982,6 @@ CASE(caseUpdateDeviceSubsumes) {
   PRINT_INT_STDERR(arr[2]);
   return 0;
 }
-CASE(caseUpdateDeviceConcat2) {
-  //      ERR-caseUpdateDeviceConcat2-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
-  // ERR-caseUpdateDeviceConcat2-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
-  // ERR-caseUpdateDeviceConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
-  //  ERR-caseUpdateDeviceConcat2-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
-  //  ERR-caseUpdateDeviceConcat2-OFF-NEXT: Libomptarget error: Consult {{.*}}
-  //  ERR-caseUpdateDeviceConcat2-OFF-NEXT: Libomptarget error: Source location information not present. Compile with -g or -gline-tables-only.
-  //  ERR-caseUpdateDeviceConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-  int arr[] = {10, 20};
-  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
-  #pragma acc data create(arr[0:1])
-  #pragma acc data create(arr[1:1])
-  acc_update_device(arr, sizeof arr);
-  PRINT_INT_STDERR(arr[0]);
-  PRINT_INT_STDERR(arr[1]);
-  return 0;
-}
 
 CASE(caseUpdateSelfAbsent) {
   //      ERR-caseUpdateSelfAbsent-NEXT: 0x[[#%x,HOST:]], [[#%u,SIZE:]]
@@ -2109,23 +2044,6 @@ CASE(caseUpdateSelfSubsumes) {
   PRINT_INT_STDERR(arr[0]);
   PRINT_INT_STDERR(arr[1]);
   PRINT_INT_STDERR(arr[2]);
-  return 0;
-}
-CASE(caseUpdateSelfConcat2) {
-  //      ERR-caseUpdateSelfConcat2-NEXT: 0x[[#%x,HOST:]], [[#%u,ELE_SIZE:]], [[#%u,SIZE:]]
-  // ERR-caseUpdateSelfConcat2-HOST-NEXT: arr[0] present: 0x[[#HOST]]               -> 0x[[#HOST]],               10 -> 10
-  // ERR-caseUpdateSelfConcat2-HOST-NEXT: arr[1] present: 0x[[#%x,HOST + ELE_SIZE]] -> 0x[[#%x,HOST + ELE_SIZE]], 20 -> 20
-  //  ERR-caseUpdateSelfConcat2-OFF-NEXT: Libomptarget message: device mapping required by 'present' motion modifier does not exist for host address 0x{{0*}}[[#HOST]] ([[#SIZE]] bytes)
-  //  ERR-caseUpdateSelfConcat2-OFF-NEXT: Libomptarget error: Consult {{.*}}
-  //  ERR-caseUpdateSelfConcat2-OFF-NEXT: Libomptarget error: Source location information not present. Compile with -g or -gline-tables-only.
-  //  ERR-caseUpdateSelfConcat2-OFF-NEXT: Libomptarget fatal error 1: failure of target construct while offloading is mandatory
-  int arr[] = {10, 20};
-  fprintf(stderr, "%p, %ld, %ld\n", arr, sizeof *arr, sizeof arr);
-  #pragma acc data create(arr[0:1])
-  #pragma acc data create(arr[1:1])
-  acc_update_self(arr, sizeof arr);
-  PRINT_INT_STDERR(arr[0]);
-  PRINT_INT_STDERR(arr[1]);
   return 0;
 }
 
@@ -3426,32 +3344,6 @@ CASE(caseMemcpyD2dSrcSubsumes) {
   PRINT_INT_STDERR(dst[0]);
   PRINT_INT_STDERR(dst[1]);
   PRINT_INT_STDERR(dst[2]);
-  return 0;
-}
-CASE(caseMemcpyD2dDestConcat2) {
-  // ERR-caseMemcpyD2dDestConcat2-HOST-NEXT: dst[0] present: 0x[[#%x,]] -> 0x[[#%x,]], 30 -> 30
-  // ERR-caseMemcpyD2dDestConcat2-HOST-NEXT: dst[1] present: 0x[[#%x,]] -> 0x[[#%x,]], 40 -> 40
-  //  ERR-caseMemcpyD2dDestConcat2-OFF-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with inaccessible destination data
-  int dst[] = {10, 20};
-  int src[] = {30, 40};
-  #pragma acc data create(dst[0:1], src)
-  #pragma acc data create(dst[1:1], src)
-  acc_memcpy_d2d(dst, src, sizeof dst, getDevNum(), getDevNum());
-  PRINT_INT_STDERR(dst[0]);
-  PRINT_INT_STDERR(dst[1]);
-  return 0;
-}
-CASE(caseMemcpyD2dSrcConcat2) {
-  // ERR-caseMemcpyD2dSrcConcat2-HOST-NEXT: dst[0] present: 0x[[#%x,]] -> 0x[[#%x,]], 30 -> 30
-  // ERR-caseMemcpyD2dSrcConcat2-HOST-NEXT: dst[1] present: 0x[[#%x,]] -> 0x[[#%x,]], 40 -> 40
-  //  ERR-caseMemcpyD2dSrcConcat2-OFF-NEXT: OMP: Error #[[#]]: acc_memcpy_d2d called with inaccessible source data
-  int dst[] = {10, 20};
-  int src[] = {30, 40};
-  #pragma acc data create(dst, src[0:1])
-  #pragma acc data create(dst, src[1:1])
-  acc_memcpy_d2d(dst, src, sizeof dst, getDevNum(), getDevNum());
-  PRINT_INT_STDERR(dst[0]);
-  PRINT_INT_STDERR(dst[1]);
   return 0;
 }
 
