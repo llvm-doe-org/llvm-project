@@ -76,7 +76,7 @@ variables:
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
   VV_CFLAGS:
   # Which commits and options to use for Kokkos testing.
-  KOKKOS_COMMIT: 995a50793497c411c4f4f535bae7b3f8e902b652
+  KOKKOS_COMMIT: ddeb708f7db313b271fa87f5aa996ecec4fc47bf
   KOKKOS_TESTS_COMMIT: 02f9f3bace5f12388a1d921c67a2ed98f37b2323
   KOKKOS_CMAKE_OPTS:
   KOKKOS_CFLAGS:
