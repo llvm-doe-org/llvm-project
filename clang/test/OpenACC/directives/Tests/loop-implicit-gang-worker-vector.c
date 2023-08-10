@@ -6,7 +6,7 @@
 //
 // We check with implicit worker and vector clauses both enabled or both
 // disabled.  fopenacc-implicit-worker-vector.c checks various combinations of
-// -f[no-]openacc-implicit-{worker,vector}.
+// the associated command line options.
 //
 // Positive testing for gang reductions appears in loop-reduction.c.  Testing
 // for diagnostics about conflicting gang reductions appears in

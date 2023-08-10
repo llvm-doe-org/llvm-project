@@ -2776,18 +2776,44 @@ def fopenacc_ast_print_EQ : Joined<["-"], "fopenacc-ast-print=">,
            " a result, the output will have preprocessor expansions and"
            " reformatting.">,
   Values<"acc,omp,acc-omp,omp-acc">;
-defm openacc_implicit_worker: BoolFOption<"openacc-implicit-worker",
-  LangOpts<"OpenACCImplicitWorker">, DefaultFalse,
-  PosFlag<SetTrue, [CC1Option, NoArgumentUnused],
-          "Enable implicitly determining worker clauses on loop constructs">,
-  NegFlag<SetFalse, [CC1Option, NoArgumentUnused],
-          "Disable implicitly determining worker clauses on loop constructs">>;
-defm openacc_implicit_vector: BoolFOption<"openacc-implicit-vector",
-  LangOpts<"OpenACCImplicitVector">, DefaultFalse,
-  PosFlag<SetTrue, [CC1Option, NoArgumentUnused],
-          "Enable implicitly determining vector clauses on loop constructs">,
-  NegFlag<SetFalse, [CC1Option, NoArgumentUnused],
-          "Disable implicitly determining vector clauses on loop constructs">>;
+def fopenacc_implicit_worker_EQ :
+  Joined<["-"], "fopenacc-implicit-worker=">, Group<f_Group>,
+  Flags<[CC1Option, NoArgumentUnused]>, MetaVarName<"<where>">,
+  HelpText<"Implicitly determine worker clauses on loop constructs specified "
+           "by <where> as permitted.  'none' (default) suppresses all implicit "
+           "worker clauses.  'vector' specifies loop constructs with explicit "
+           "vector clauses.  'outer' specifies the outermost loop constructs "
+           "permitted in every loop nest.  'vector-outer' applies 'vector' "
+           "followed by 'outer'.">,
+  Values<"none,vector,outer,vector-outer">;
+def fopenacc_implicit_worker:
+  Flag<["-"], "fopenacc-implicit-worker">, Group<f_Group>,
+  Flags<[CC1Option, NoArgumentUnused]>,
+  Alias<fopenacc_implicit_worker_EQ>, AliasArgs<["outer"]>,
+  HelpText<"Equivalent to -fopenacc-implicit-worker=outer">;
+def fno_openacc_implicit_worker:
+  Flag<["-"], "fno-openacc-implicit-worker">, Group<f_Group>,
+  Flags<[CC1Option, NoArgumentUnused]>,
+  Alias<fopenacc_implicit_worker_EQ>, AliasArgs<["none"]>,
+  HelpText<"Equivalent to -fopenacc-implicit-worker=none">;
+def fopenacc_implicit_vector_EQ :
+  Joined<["-"], "fopenacc-implicit-vector=">, Group<f_Group>,
+  Flags<[CC1Option, NoArgumentUnused]>, MetaVarName<"<where>">,
+  HelpText<"Implicitly determine vector clauses on loop constructs specified "
+           "by <where> as permitted.  'none' (default) suppresses all implicit "
+           "vector clauses.  'outer' specifies the outermost loop constructs "
+           "permitted in every loop nest.">,
+  Values<"none,outer">;
+def fopenacc_implicit_vector:
+  Flag<["-"], "fopenacc-implicit-vector">, Group<f_Group>,
+  Flags<[CC1Option, NoArgumentUnused]>,
+  Alias<fopenacc_implicit_vector_EQ>, AliasArgs<["outer"]>,
+  HelpText<"Equivalent to -fopenacc-implicit-vector=outer">;
+def fno_openacc_implicit_vector:
+  Flag<["-"], "fno-openacc-implicit-vector">, Group<f_Group>,
+  Flags<[CC1Option, NoArgumentUnused]>,
+  Alias<fopenacc_implicit_vector_EQ>, AliasArgs<["none"]>,
+  HelpText<"Equivalent to -fopenacc-implicit-vector=none">;
 def fopenacc_update_present_omp_EQ :
   Joined<["-"], "fopenacc-update-present-omp=">,
   Flags<[CC1Option, NoArgumentUnused]>, Group<f_Group>,

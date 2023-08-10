@@ -50,11 +50,18 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
     * See the section "Using" in `../README.md` for more usage details.
     * See the section "Interaction with OpenMP Support" in
       `README-OpenACC-design.md` for design details.
-* `-f[no-]openacc-implicit-worker` and `-f[no-]openacc-implicit-vector`
-    * Enables (or disables) implicitly determining `worker` and `vector` clauses
-      on `loop` constructs to try to increase parallelism and thus performance.
-    * Currently, they are disabled by default, but that might change in the
-      future.
+* Options controlling the implicit determination of `worker` and `vector`
+  clauses on `loop` constructs
+    * The goal is to try to increase parallelism and thus performance.
+    * Currently, implicit `worker` and `vector` clauses are disabled by default.
+    * `-fopenacc-implicit-worker=none|vector|outer|vector-outer` specifies the
+      `loop` constructs on which `worker` clauses are implicitly determined.
+    * `-fopenacc-implicit-vector=none|outer` specifies the `loop` constructs on
+       which `vector` clauses are implicitly determined.
+    * `-f[no-]openacc-implicit-worker` are currently aliases for
+      `-fopenacc-implicit-worker=none|outer`.
+    * `-f[no-]openacc-implicit-vector` are currently aliases for
+      `-fopenacc-implicit-vector=none|outer`.
     * See the section "`loop` Directive" below for details.
 * Other OpenMP options
     * `-fopenmp` produces an error when OpenACC support is enabled as
@@ -67,14 +74,10 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
       warnings for them.
 * Options controlling the translation to OpenMP and their associated
   diagnostics
-    * `-fopenacc-update-present-omp=KIND` where `KIND` is either
-      `present` or `no-present`
-    * `-fopenacc-structured-ref-count-omp=KIND` where `KIND` is either
-      `ompx-hold` or `no-ompx-hold`
-    * `-fopenacc-present-omp=KIND` where `KIND` is either `present` or
-      `no-present`
-    * `-fopenacc-no-create-omp=KIND` where `KIND` is either
-      `ompx-no-alloc` or `no-ompx-no-alloc`
+    * `-fopenacc-update-present-omp=present|no-present`
+    * `-fopenacc-structured-ref-count-omp=ompx-hold|no-ompx-hold`
+    * `-fopenacc-present-omp=present|no-present`
+    * `-fopenacc-no-create-omp=ompx-no-alloc|no-ompx-no-alloc`
     * `-Wopenacc-omp-update-present`
     * `-Wopenacc-omp-map-ompx-hold`
     * `-Wopenacc-omp-map-present`
@@ -356,23 +359,46 @@ Run-Time Environment Variables
         * This is always enabled because it is specified by OpenACC (introduced
           in 3.1) and can be important for correct behavior of the application.
     * Implicit `worker` and `vector` clauses
-        * These are enabled/disabled by `-f[no-]openacc-implicit-worker` and
-          `-f[no-]openacc-implicit-vector`.  Currently, they are disabled by
-          default, but that might change in the future.
-        * Their purpose is to try to increase parallelism and thus performance.
+        * Currently, they are disabled by default, but that might change in the
+          future.
+        * Their goal is to try to increase parallelism and thus performance.
         * For a conforming OpenACC application (e.g., `loop` constructs are
           never misidentified as `independent`), they should never affect
           behavioral correctness.  Thus, the OpenACC specification does not
           specify whether or how they are determined but also does not prohibit
           them, and OpenACC compilers typically implement them.
-        * The current algorithm for determining which `loop` constructs should
-          receive implicit `worker` and `vector` clauses uses a simple heuristic
-          similar to the algorithm specified by OpenACC for implicit `gang`
-          clauses: after any conversion of `auto` clauses to `seq`, and after
-          determining implicit `routine` directives (see "Implicit `routine`
-          directive" below), select each loop nest's outermost `loop` constructs
-          on which `worker` and `vector` clauses are permitted.  A more
-          sophisticated analysis might be employed in the future.
+        * The OpenACC spec does specify the implicit determination of `gang`
+          clauses.  Like implicit `gang` clauses, implicit `worker` and `vector`
+          clauses are determined after any conversion of `auto` clauses to `seq`
+          and after implicit `routine` directives are determined (see "Implicit
+          `routine` directive" below).
+        * `-fopenacc-implicit-worker=none|vector|outer|vector-outer` specifies
+          the `loop` constructs on which `worker` clauses are implicitly
+          determined:
+          - `none` suppresses all implicit `worker` clauses.
+            `-fno-openacc-implicit-worker` is an alias.
+          - `vector` specifies `loop` constructs with explicit `vector` clauses.
+            This choice can be useful when compiling OpenACC applications
+            primarily employing explicit `gang` and `vector` clauses while
+            targeting an OpenMP implementation (like Clacc's) for which
+            `omp simd` (to which Clacc translates `vector`) does not increase
+            parallelism for the given offload devices.
+          - `outer` specifies each loop nest's outermost `loop` constructs on
+             which `worker` clauses are permitted.  This is similar to how the
+             OpenACC spec places implicit `gang` clauses.
+            `-fopenacc-implicit-worker` is currently an alias.
+          - `vector-outer` applies `vector` followed by `outer`.
+        * `-fopenacc-implicit-vector=none|outer` specifies the `loop` constructs
+          on which `vector` clauses are implicitly determined:
+          - `none` suppresses all implicit `vector` clauses.
+            `-fno-openacc-implicit-vector` is an alias.
+          - `outer` specifies each loop nest's outermost `loop` constructs on
+             which `vector` clauses are permitted.  This is similar to how the
+             OpenACC spec places implicit `gang` clauses.
+            `-fopenacc-implicit-vector` is currently an alias.
+        * The algorithms selected by `-fopenacc-implicit-worker` and
+          `-fopenacc-implicit-vector` might change in the future as we determine
+          better defaults.
     * For now, if none of these clauses appear (explicitly or
       implicitly), then a sequential loop is produced.
 * Supported data attributes and clauses

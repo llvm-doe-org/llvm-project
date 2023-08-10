@@ -136,6 +136,44 @@ public:
     DCC_RegCall
   };
 
+  enum OpenACCImplicitWorkerKind {
+    OpenACCImplicitWorker_None,
+    OpenACCImplicitWorker_Vector,
+    OpenACCImplicitWorker_Outer,
+    OpenACCImplicitWorker_VectorOuter,
+    OpenACCImplicitWorker_Last = OpenACCImplicitWorker_VectorOuter
+  };
+  static StringRef
+  getOpenACCImplicitWorkerValue(OpenACCImplicitWorkerKind K) {
+    switch (K) {
+    case OpenACCImplicitWorker_None:
+      return "none";
+    case OpenACCImplicitWorker_Vector:
+      return "vector";
+    case OpenACCImplicitWorker_Outer:
+      return "outer";
+    case OpenACCImplicitWorker_VectorOuter:
+      return "vector-outer";
+    }
+    llvm_unreachable("unexpected OpenACCImplicitWorkerKind");
+  }
+
+  enum OpenACCImplicitVectorKind {
+    OpenACCImplicitVector_None,
+    OpenACCImplicitVector_Outer,
+    OpenACCImplicitVector_Last = OpenACCImplicitVector_Outer
+  };
+  static StringRef
+  getOpenACCImplicitVectorValue(OpenACCImplicitVectorKind K) {
+    switch (K) {
+    case OpenACCImplicitVector_None:
+      return "none";
+    case OpenACCImplicitVector_Outer:
+      return "outer";
+    }
+    llvm_unreachable("unexpected OpenACCImplicitVectorKind");
+  }
+
   enum OpenACCUpdatePresentOMPKind {
     OpenACCUpdatePresentOMP_Present,
     OpenACCUpdatePresentOMP_NoPresent,

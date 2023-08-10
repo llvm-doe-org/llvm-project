@@ -1348,6 +1348,30 @@ private:
   ACCRoutineDeclAttr::PartitioningTy
   updateMaxPartAndLoop(ACCRoutineDeclAttr::PartitioningTy MaxPart,
                        ACCLoopDirective *LD = nullptr) {
+    bool ImpWorkerOnVector = false;
+    bool ImpWorkerOnOuter = false;
+    switch (SemaRef.getLangOpts().getOpenACCImplicitWorker()) {
+    case LangOptions::OpenACCImplicitWorker_None:
+      break;
+    case LangOptions::OpenACCImplicitWorker_Vector:
+      ImpWorkerOnVector = true;
+      break;
+    case LangOptions::OpenACCImplicitWorker_Outer:
+      ImpWorkerOnOuter = true;
+      break;
+    case LangOptions::OpenACCImplicitWorker_VectorOuter:
+      ImpWorkerOnVector = true;
+      ImpWorkerOnOuter = true;
+      break;
+    }
+    bool ImpVectorOnOuter = false;
+    switch (SemaRef.getLangOpts().getOpenACCImplicitVector()) {
+    case LangOptions::OpenACCImplicitVector_None:
+      break;
+    case LangOptions::OpenACCImplicitVector_Outer:
+      ImpVectorOnOuter = true;
+      break;
+    }
     // If we have an independent loop, try to add partitioning levels.
     if (LD && LD->getPartitioning().hasIndependent()) {
       ACCRoutineDeclAttr::PartitioningTy MinPartExcl = ACCRoutineDeclAttr::Seq;
@@ -1356,7 +1380,8 @@ private:
       else if (LD->getNestedExplicitWorkerPartitioning())
         MinPartExcl = ACCRoutineDeclAttr::Worker;
       else if (LD->getNestedExplicitVectorPartitioning())
-        MinPartExcl = ACCRoutineDeclAttr::Vector;
+        MinPartExcl = ImpWorkerOnVector ? ACCRoutineDeclAttr::Worker
+                                        : ACCRoutineDeclAttr::Vector;
       // (MinPartExcl,MaxPart] is now the partitioning range permitted on LD.
       for (int Part = MaxPart; Part > MinPartExcl; --Part) {
         switch ((ACCRoutineDeclAttr::PartitioningTy)Part) {
@@ -1365,12 +1390,15 @@ private:
             LD->addImplicitGangClause();
           break;
         case ACCRoutineDeclAttr::Worker:
-          if (SemaRef.getLangOpts().OpenACCImplicitWorker &&
-              !LD->getPartitioning().hasWorkerPartitioning())
+          if (LD->getPartitioning().hasWorkerPartitioning())
+            break;
+          if (ImpWorkerOnOuter ||
+              (ImpWorkerOnVector &&
+               LD->getPartitioning().hasVectorPartitioning()))
             LD->addImplicitWorkerClause();
           break;
         case ACCRoutineDeclAttr::Vector:
-          if (SemaRef.getLangOpts().OpenACCImplicitVector &&
+          if (ImpVectorOnOuter &&
               !LD->getPartitioning().hasVectorPartitioning())
             LD->addImplicitVectorClause();
           break;
@@ -1393,11 +1421,14 @@ private:
         Found = true;
         break;
       case ACCRoutineDeclAttr::Worker:
-        if (SemaRef.getLangOpts().OpenACCImplicitWorker)
+        if (ImpWorkerOnOuter)
+          Found = true;
+        else if (ImpWorkerOnVector &&
+                 (!LD || LD->getNestedExplicitVectorPartitioning()))
           Found = true;
         break;
       case ACCRoutineDeclAttr::Vector:
-        if (SemaRef.getLangOpts().OpenACCImplicitVector)
+        if (ImpVectorOnOuter)
           Found = true;
         break;
       case ACCRoutineDeclAttr::Seq:

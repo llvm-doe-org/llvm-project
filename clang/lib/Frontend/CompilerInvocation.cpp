@@ -3416,6 +3416,14 @@ void CompilerInvocation::GenerateLangArgs(const LangOptions &Opts,
 
   if (Opts.OpenACC) {
     GenerateArg(Args, OPT_fopenacc, SA);
+    GenerateArg(Args, OPT_fopenacc_implicit_worker_EQ,
+                LangOptions::getOpenACCImplicitWorkerValue(
+                    Opts.getOpenACCImplicitWorker()),
+                SA);
+    GenerateArg(Args, OPT_fopenacc_implicit_vector_EQ,
+                LangOptions::getOpenACCImplicitVectorValue(
+                    Opts.getOpenACCImplicitVector()),
+                SA);
     GenerateArg(Args, OPT_fopenacc_update_present_omp_EQ,
                 LangOptions::getOpenACCUpdatePresentOMPValue(
                     Opts.getOpenACCUpdatePresentOMP()),
@@ -3829,6 +3837,36 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   Opts.OpenACC = Args.hasArg(OPT_fopenacc) ||
                  Args.hasArg(OPT_fopenacc_print_EQ) ||
                  Args.hasArg(OPT_fopenacc_ast_print_EQ);
+
+  // Check if -fopenacc-implicit-worker is specified.
+  if (Arg *A = Args.getLastArg(OPT_fopenacc_implicit_worker_EQ)) {
+    StringRef Val = A->getValue();
+    unsigned I;
+    for (I = 0; I <= (unsigned)LangOptions::OpenACCImplicitWorker_Last; ++I) {
+      auto K = (LangOptions::OpenACCImplicitWorkerKind)I;
+      if (Val == LangOptions::getOpenACCImplicitWorkerValue(K)) {
+        Opts.setOpenACCImplicitWorker(K);
+        break;
+      }
+    }
+    if (I == LangOptions::OpenACCImplicitWorker_Last + 1)
+      Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
+  }
+
+  // Check if -fopenacc-implicit-vector is specified.
+  if (Arg *A = Args.getLastArg(OPT_fopenacc_implicit_vector_EQ)) {
+    StringRef Val = A->getValue();
+    unsigned I;
+    for (I = 0; I <= (unsigned)LangOptions::OpenACCImplicitVector_Last; ++I) {
+      auto K = (LangOptions::OpenACCImplicitVectorKind)I;
+      if (Val == LangOptions::getOpenACCImplicitVectorValue(K)) {
+        Opts.setOpenACCImplicitVector(K);
+        break;
+      }
+    }
+    if (I == LangOptions::OpenACCImplicitVector_Last + 1)
+      Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
+  }
 
   // Check if -fopenacc-update-present-omp is specified.
   if (Arg *A = Args.getLastArg(OPT_fopenacc_update_present_omp_EQ)) {
