@@ -76,7 +76,7 @@ variables:
   VV_COMMIT: 5ba1bbcdebc63237e650fa2fbf7a5e0781f6d724
   VV_CFLAGS:
   # Which commits and options to use for Kokkos testing.
-  KOKKOS_COMMIT: ddeb708f7db313b271fa87f5aa996ecec4fc47bf
+  KOKKOS_COMMIT: c0b44471a15185cb0831705502349c58abf8677d
   KOKKOS_TESTS_COMMIT: 02f9f3bace5f12388a1d921c67a2ed98f37b2323
   KOKKOS_CMAKE_OPTS:
   KOKKOS_CFLAGS:
@@ -124,6 +124,8 @@ stages:
     MODULES: git cmake/3.19.2 gnu/9.2.0 nvhpc/22.11
     PATH_PREPEND:
       /opt/nvidia/hpc_sdk/Linux_ppc64le/22.11/cuda/11.8/bin
+    CUDA_PATH: # used by Kokkos build
+      /opt/nvidia/hpc_sdk/Linux_ppc64le/22.11/cuda/11.8
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
@@ -191,6 +193,8 @@ stages:
     MODULES: git cmake gnu/11.1.0 nvhpc/23.7
     PATH_PREPEND:
       /opt/nvidia/hpc_sdk/Linux_x86_64/23.7/cuda/12.2/bin
+    CUDA_PATH: # used by Kokkos build
+      /opt/nvidia/hpc_sdk/Linux_x86_64/23.7/cuda/12.2
     CMAKE: cmake
     NINJA: ninja
     PYTHON: /usr/bin/python3
@@ -249,6 +253,8 @@ stages:
     BUILD_ID: explorer
     MODULES: git
     PATH_PREPEND: ""
+    ROCM_PATH: # used by Kokkos build
+      /opt/rocm
     CMAKE: cmake
     GCC_DIR: /usr
     NINJA: ninja
