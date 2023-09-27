@@ -168,6 +168,27 @@ ACCExitDataDirective *ACCExitDataDirective::CreateEmpty(const ASTContext &C,
   return new (Mem) ACCExitDataDirective(NumClauses);
 }
 
+ACCWaitDirective *
+ACCWaitDirective::Create(const ASTContext &C, SourceLocation StartLoc,
+                         SourceLocation EndLoc, ArrayRef<ACCClause *> Clauses) {
+  unsigned Size =
+      llvm::alignTo(sizeof(ACCWaitDirective), alignof(ACCClause *));
+  void *Mem = C.Allocate(Size + sizeof(ACCClause *) * Clauses.size());
+  ACCWaitDirective *Dir =
+      new (Mem) ACCWaitDirective(StartLoc, EndLoc, Clauses.size());
+  Dir->setClauses(Clauses);
+  return Dir;
+}
+
+ACCWaitDirective *ACCWaitDirective::CreateEmpty(const ASTContext &C,
+                                                unsigned NumClauses,
+                                                EmptyShell) {
+  unsigned Size =
+      llvm::alignTo(sizeof(ACCWaitDirective), alignof(ACCClause *));
+  void *Mem = C.Allocate(Size + sizeof(ACCClause *) * NumClauses);
+  return new (Mem) ACCWaitDirective(NumClauses);
+}
+
 ACCDataDirective *ACCDataDirective::Create(
     const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
     ArrayRef<ACCClause *> Clauses, Stmt *AssociatedStmt) {

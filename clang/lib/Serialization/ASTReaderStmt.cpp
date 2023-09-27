@@ -2765,6 +2765,13 @@ void ASTStmtReader::VisitACCExitDataDirective(ACCExitDataDirective *D) {
   VisitACCDirectiveStmt(D);
 }
 
+void ASTStmtReader::VisitACCWaitDirective(ACCWaitDirective *D) {
+  VisitStmt(D);
+  // The NumClauses field was read in ReadStmtFromStream.
+  Record.skipInts(1);
+  VisitACCDirectiveStmt(D);
+}
+
 void ASTStmtReader::VisitACCDataDirective(ACCDataDirective *D) {
   VisitStmt(D);
   // The NumClauses field was read in ReadStmtFromStream.
@@ -3858,6 +3865,12 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
     case STMT_ACC_EXIT_DATA_DIRECTIVE: {
       unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
       S = ACCExitDataDirective::CreateEmpty(Context, NumClauses, Empty);
+      break;
+    }
+
+    case STMT_ACC_WAIT_DIRECTIVE: {
+      unsigned NumClauses = Record[ASTStmtReader::NumStmtFields];
+      S = ACCWaitDirective::CreateEmpty(Context, NumClauses, Empty);
       break;
     }
 

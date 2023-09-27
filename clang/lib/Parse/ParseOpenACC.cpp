@@ -142,6 +142,7 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective(
   case ACCD_update:
   case ACCD_enter_data:
   case ACCD_exit_data:
+  case ACCD_wait:
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
@@ -220,8 +221,8 @@ Parser::DeclGroupPtrTy Parser::ParseOpenACCDeclarativeDirective(
 ///
 ///   directive-stmt:
 ///     annot_pragma_openacc
-///     'update' | 'enter data' | 'exit data' | 'data' | 'parallel' | 'loop'
-///     | 'parallel loop' | 'atomic'
+///     'update' | 'enter data' | 'exit data' | 'wait' | 'data' | 'parallel'
+///     | 'loop' | 'parallel loop' | 'atomic'
 ///     {clause}
 ///     annot_pragma_openacc_end
 ///
@@ -243,6 +244,7 @@ StmtResult Parser::ParseOpenACCDirectiveStmt(ParsedAttributes &DeclAttrs,
   case ACCD_update:
   case ACCD_enter_data:
   case ACCD_exit_data:
+  case ACCD_wait:
     // OpenACC 3.0 sec. 2.14.4 "Update Directive" L2296-2298:
     //   "The update directive is executable.  It must not appear in place of
     //   the statement following an if, while, do, switch, or label in C or C++,

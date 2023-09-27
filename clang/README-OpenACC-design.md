@@ -2065,6 +2065,14 @@ to OpenMP is as follows:
 In the Clang AST, a single `OMPDeclareTargetDeclAttr` represents an
 `omp declare target` and `omp end declare target` pair.
 
+Wait Directive
+--------------
+
+Clacc's current mapping of an `acc wait` directive and its clauses to OpenMP is
+as follows:
+
+* `acc wait` -> `omp taskwait`
+
 Potentially Unmappable Features
 -------------------------------
 

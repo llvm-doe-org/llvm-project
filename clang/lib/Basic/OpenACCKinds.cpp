@@ -158,6 +158,8 @@ bool clang::isAllowedDAForDirective(OpenACCDirectiveKind DKind,
       break;
     }
     break;
+  case ACCD_wait:
+    break;
   case ACCD_data:
     switch (DMAKind) {
 #define OPENACC_DATA_DMA(Name) \
@@ -241,6 +243,8 @@ bool clang::isAllowedDAForDirective(OpenACCDirectiveKind DKind,
       break;
     }
     break;
+  case ACCD_wait:
+    break;
   case ACCD_data:
     switch (DSAKind) {
 #define OPENACC_DATA_DSA(Name) \
@@ -317,6 +321,16 @@ bool clang::isAllowedClauseForDirective(OpenACCDirectiveKind DKind,
   case ACCD_exit_data:
     switch (CKind) {
 #define OPENACC_EXIT_DATA_CLAUSE(Name)                                         \
+    case ACCC_##Name:                                                          \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
+  case ACCD_wait:
+    switch (CKind) {
+#define OPENACC_WAIT_CLAUSE(Name)                                              \
     case ACCC_##Name:                                                          \
       return true;
 #include "clang/Basic/OpenACCKinds.def"
@@ -423,6 +437,16 @@ bool clang::isAllowedParentForDirective(OpenACCDirectiveKind DKind,
       break;
     }
     break;
+  case ACCD_wait:
+    switch (ParentDKind) {
+#define OPENACC_WAIT_PARENT(Name)                                         \
+    case ACCD_##Name:                                                          \
+      return true;
+#include "clang/Basic/OpenACCKinds.def"
+    default:
+      break;
+    }
+    break;
   case ACCD_data:
     switch (ParentDKind) {
 #define OPENACC_DATA_PARENT(Name)                                              \
@@ -494,6 +518,7 @@ int clang::getOpenACCEffectiveDirectives(OpenACCDirectiveKind DKind) {
   case ACCD_update:
   case ACCD_enter_data:
   case ACCD_exit_data:
+  case ACCD_wait:
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
@@ -512,6 +537,7 @@ bool clang::isOpenACCDirectiveStmt(OpenACCDirectiveKind DKind) {
   case ACCD_update:
   case ACCD_enter_data:
   case ACCD_exit_data:
+  case ACCD_wait:
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:

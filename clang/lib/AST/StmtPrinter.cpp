@@ -1566,6 +1566,10 @@ void StmtPrinter::VisitACCExitDataDirective(ACCExitDataDirective *Node) {
   PrintACCDirectiveStmt(Node);
 }
 
+void StmtPrinter::VisitACCWaitDirective(ACCWaitDirective *Node) {
+  PrintACCDirectiveStmt(Node);
+}
+
 void StmtPrinter::VisitACCDataDirective(ACCDataDirective *Node) {
   PrintACCDirectiveStmt(Node);
 }

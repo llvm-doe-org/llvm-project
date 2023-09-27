@@ -11113,6 +11113,12 @@ TreeTransform<Derived>::TransformACCExitDataDirective(ACCExitDataDirective *D) {
 
 template <typename Derived>
 StmtResult
+TreeTransform<Derived>::TransformACCWaitDirective(ACCWaitDirective *D) {
+  return getDerived().TransformACCDirectiveStmt(D);
+}
+
+template <typename Derived>
+StmtResult
 TreeTransform<Derived>::TransformACCDataDirective(ACCDataDirective *D) {
   return getDerived().TransformACCDirectiveStmt(D);
 }

@@ -3888,6 +3888,8 @@ DEF_TRAVERSE_STMT(ACCEnterDataDirective,
 DEF_TRAVERSE_STMT(ACCExitDataDirective,
                   { TRY_TO(TraverseACCDirectiveStmt(S)); })
 
+DEF_TRAVERSE_STMT(ACCWaitDirective, { TRY_TO(TraverseACCDirectiveStmt(S)); })
+
 DEF_TRAVERSE_STMT(ACCDataDirective, { TRY_TO(TraverseACCDirectiveStmt(S)); })
 
 DEF_TRAVERSE_STMT(ACCParallelDirective,

@@ -1419,6 +1419,7 @@ CanThrowResult Sema::canThrow(const Stmt *S) {
   case Stmt::ACCUpdateDirectiveClass:
   case Stmt::ACCEnterDataDirectiveClass:
   case Stmt::ACCExitDataDirectiveClass:
+  case Stmt::ACCWaitDirectiveClass:
   case Stmt::ACCDataDirectiveClass:
   case Stmt::ACCLoopDirectiveClass:
   case Stmt::ACCParallelDirectiveClass:

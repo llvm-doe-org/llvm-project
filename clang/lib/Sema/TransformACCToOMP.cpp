@@ -298,6 +298,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
     case ACCD_parallel_loop:
       break;
     case ACCD_update:
+    case ACCD_wait:
     case ACCD_loop:
     case ACCD_routine:
     case ACCD_atomic:
@@ -537,6 +538,32 @@ public:
       Res = getDerived().RebuildOMPExecutableDirective(
           OMPD_target_exit_data, DeclarationNameInfo(), OMPD_unknown, TClauses,
           AssociatedStmt.get(), D->getBeginLoc(), D->getEndLoc());
+    getSema().EndOpenMPDSABlock(Res.get());
+    if (!Res.isInvalid())
+      D->setOMPNode(Res.get());
+    return Res;
+  }
+
+  StmtResult TransformACCWaitDirective(ACCWaitDirective *D) {
+    DirStackEntryRAII TheDirStackEntryRAII(*this, D);
+
+    // Start OpenMP DA block.
+    getSema().StartOpenMPDSABlock(OMPD_taskwait, DeclarationNameInfo(),
+                                  /*CurScope=*/nullptr, D->getBeginLoc());
+
+    // Transform OpenACC clauses.
+    llvm::SmallVector<OMPClause *, 16> TClauses;
+    size_t TClausesEmptyCount;
+    transformACCClauses(D, OMPD_taskwait, TClauses, TClausesEmptyCount);
+
+    // Build OpenMP directive and finalize enclosing compound statement, if any.
+    StmtResult Res;
+    if (TClauses.size() != D->clauses().size() - TClausesEmptyCount)
+      Res = StmtError();
+    else
+      Res = getDerived().RebuildOMPExecutableDirective(
+          OMPD_taskwait, DeclarationNameInfo(), /*CancelRegion=*/OMPD_unknown,
+          TClauses, /*AStmt=*/nullptr, D->getBeginLoc(), D->getEndLoc());
     getSema().EndOpenMPDSABlock(Res.get());
     if (!Res.isInvalid())
       D->setOMPNode(Res.get());

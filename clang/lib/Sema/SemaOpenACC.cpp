@@ -1119,6 +1119,7 @@ bool Sema::StartOpenACCDirectiveAndAssociate(OpenACCDirectiveKind RealDKind,
   case ACCD_update:
   case ACCD_enter_data:
   case ACCD_exit_data:
+  case ACCD_wait:
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
@@ -2316,6 +2317,7 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
   case ACCD_update:
   case ACCD_enter_data:
   case ACCD_exit_data:
+  case ACCD_wait:
   case ACCD_data:
   case ACCD_parallel:
   case ACCD_loop:
@@ -2519,6 +2521,11 @@ StmtResult Sema::ActOnOpenACCDirectiveStmt(OpenACCDirectiveKind DKind,
            "expected no associated statement for 'acc exit data' directive");
     Res = ActOnOpenACCExitDataDirective(ComputedClauses);
     break;
+  case ACCD_wait:
+    assert(!AStmt &&
+           "expected no associated statement for 'acc wait' directive");
+    Res = ActOnOpenACCWaitDirective(ComputedClauses);
+    break;
   case ACCD_data:
     Res = ActOnOpenACCDataDirective(ComputedClauses, AStmt);
     break;
@@ -2656,6 +2663,13 @@ StmtResult Sema::ActOnOpenACCExitDataDirective(ArrayRef<ACCClause *> Clauses) {
   }
 
   return ACCExitDataDirective::Create(Context, StartLoc, EndLoc, Clauses);
+}
+
+StmtResult Sema::ActOnOpenACCWaitDirective(ArrayRef<ACCClause *> Clauses) {
+  DirStackTy &DirStack = OpenACCData->DirStack;
+  SourceLocation StartLoc = DirStack.getDirectiveStartLoc();
+  SourceLocation EndLoc = DirStack.getDirectiveEndLoc();
+  return ACCWaitDirective::Create(Context, StartLoc, EndLoc, Clauses);
 }
 
 StmtResult Sema::ActOnOpenACCDataDirective(ArrayRef<ACCClause *> Clauses,

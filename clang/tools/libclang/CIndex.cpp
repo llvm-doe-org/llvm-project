@@ -6015,6 +6015,8 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
     return cxstring::createRef("ACCEnterDataDirective");
   case CXCursor_ACCExitDataDirective:
     return cxstring::createRef("ACCExitDataDirective");
+  case CXCursor_ACCWaitDirective:
+    return cxstring::createRef("ACCWaitDataDirective");
   case CXCursor_ACCDataDirective:
     return cxstring::createRef("ACCDataDirective");
   case CXCursor_ACCParallelDirective:

@@ -12324,6 +12324,8 @@ public:
   StmtResult ActOnOpenACCEnterDataDirective(ArrayRef<ACCClause *> Clauses);
   /// Called on well-formed '\#pragma acc exit data'.
   StmtResult ActOnOpenACCExitDataDirective(ArrayRef<ACCClause *> Clauses);
+  /// Called on well-formed '\#pragma acc wait'.
+  StmtResult ActOnOpenACCWaitDirective(ArrayRef<ACCClause *> Clauses);
   /// Called on well-formed '\#pragma acc data' after parsing of the associated
   /// statement.
   StmtResult ActOnOpenACCDataDirective(ArrayRef<ACCClause *> Clauses,

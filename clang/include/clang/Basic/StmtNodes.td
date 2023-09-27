@@ -302,6 +302,7 @@ def ACCDirectiveStmt : StmtNode<DirectiveStmt, 1>;
 def ACCUpdateDirective : StmtNode<ACCDirectiveStmt>;
 def ACCEnterDataDirective : StmtNode<ACCDirectiveStmt>;
 def ACCExitDataDirective : StmtNode<ACCDirectiveStmt>;
+def ACCWaitDirective : StmtNode<ACCDirectiveStmt>;
 def ACCDataDirective : StmtNode<ACCDirectiveStmt>;
 def ACCParallelDirective : StmtNode<ACCDirectiveStmt>;
 def ACCLoopDirective : StmtNode<ACCDirectiveStmt>;

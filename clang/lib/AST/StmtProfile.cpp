@@ -1431,6 +1431,10 @@ void StmtProfiler::VisitACCExitDataDirective(const ACCExitDataDirective *S) {
   VisitACCDirectiveStmt(S);
 }
 
+void StmtProfiler::VisitACCWaitDirective(const ACCWaitDirective *S) {
+  VisitACCDirectiveStmt(S);
+}
+
 void StmtProfiler::VisitACCDataDirective(const ACCDataDirective *S) {
   VisitACCDirectiveStmt(S);
 }

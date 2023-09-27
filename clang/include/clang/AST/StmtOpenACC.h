@@ -496,6 +496,47 @@ public:
   }
 };
 
+/// This represents '#pragma acc wait' directive.
+class ACCWaitDirective : public ACCDirectiveStmt {
+  /// Build directive with the given start and end location.
+  ///
+  /// \param StartLoc Starting location of the directive (directive keyword).
+  /// \param EndLoc Ending Location of the directive.
+  /// \param NumClauses Number of clauses.
+  ACCWaitDirective(SourceLocation StartLoc, SourceLocation EndLoc,
+                   unsigned NumClauses)
+      : ACCDirectiveStmt(this, ACCWaitDirectiveClass, ACCD_wait, StartLoc,
+                         EndLoc, NumClauses, 0, 0) {}
+
+  /// Build an empty directive.
+  explicit ACCWaitDirective(unsigned NumClauses)
+      : ACCDirectiveStmt(this, ACCWaitDirectiveClass, ACCD_wait,
+                         SourceLocation(), SourceLocation(), NumClauses, 0, 0) {
+  }
+
+public:
+  /// Creates directive.
+  ///
+  /// \param C AST context.
+  /// \param StartLoc Starting location of the directive kind.
+  /// \param EndLoc Ending Location of the directive.
+  /// \param Clauses List of clauses.
+  static ACCWaitDirective *Create(const ASTContext &C, SourceLocation StartLoc,
+                                  SourceLocation EndLoc,
+                                  ArrayRef<ACCClause *> Clauses);
+
+  /// Creates an empty directive.
+  ///
+  /// \param C AST context.
+  /// \param NumClauses Number of clauses.
+  static ACCWaitDirective *CreateEmpty(const ASTContext &C, unsigned NumClauses,
+                                       EmptyShell);
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == ACCWaitDirectiveClass;
+  }
+};
+
 /// This represents '#pragma acc data' directive.
 ///
 class ACCDataDirective : public ACCDirectiveStmt {

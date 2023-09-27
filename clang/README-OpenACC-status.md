@@ -680,6 +680,14 @@ Run-Time Environment Variables
         * A `new` expression's calls to a `new` operator, constructor, and
           `delete` operator.
 
+`wait` Directive
+------------------
+
+* Lexical context
+    * Appearing outside any OpenACC construct is supported.
+    * Appearing within a `data` construct is supported.
+* Only usage without clauses is supported so far.
+
 Data Expressions in Clauses
 ---------------------------
 

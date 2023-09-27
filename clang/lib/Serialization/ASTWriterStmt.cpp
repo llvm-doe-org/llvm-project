@@ -2735,6 +2735,13 @@ void ASTStmtWriter::VisitACCExitDataDirective(ACCExitDataDirective *D) {
   Code = serialization::STMT_ACC_EXIT_DATA_DIRECTIVE;
 }
 
+void ASTStmtWriter::VisitACCWaitDirective(ACCWaitDirective *D) {
+  VisitStmt(D);
+  Record.push_back(D->getNumClauses());
+  VisitACCDirectiveStmt(D);
+  Code = serialization::STMT_ACC_WAIT_DIRECTIVE;
+}
+
 void ASTStmtWriter::VisitACCDataDirective(ACCDataDirective *D) {
   VisitStmt(D);
   Record.push_back(D->getNumClauses());

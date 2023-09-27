@@ -875,6 +875,9 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
   case Stmt::ACCExitDataDirectiveClass:
     K = CXCursor_ACCExitDataDirective;
     break;
+  case Stmt::ACCWaitDirectiveClass:
+    K = CXCursor_ACCWaitDirective;
+    break;
   case Stmt::ACCDataDirectiveClass:
     K = CXCursor_ACCDataDirective;
     break;
