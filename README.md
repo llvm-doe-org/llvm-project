@@ -21,9 +21,34 @@ issues, etc. can be found in the wiki:
 
 > <https://github.com/llvm-doe-org/llvm-project/wiki>
 
+## Existing Deployments
+
+Clacc has been deployed on several popular systems and can be loaded using the
+instructions below.  In many cases, [TAU](http://www.tau.uoregon.edu/) has also
+been deployed and can optionally be loaded in order to profile Clacc-compiled
+OpenACC applications with a command like: `tau_exec -T serial -openacc ./a.out`
+
+* ORNL's Frontier
+
+    ```
+    $ module load ums ums025 rocm clacc
+    $ module help clacc
+    $ module load ums ums002 tau/2.32.1-clang-acc # optional
+    ```
+
+* ANL's Polaris
+
+    ```
+    $ module use --append /home/jdenny/shared/polaris/modules
+    $ module load clacc
+    $ module help clacc
+    $ module load tau-clacc # optional
+    ```
+
 ## Building and Installing
 
-This section describes two approaches for building and installing Clacc: (1) by
+If you are working on a system without an existing installation of Clacc, this
+section describes two approaches for building and installing Clacc: (1) by
 directly cloning Clacc from its git repo, running cmake, etc., or (2) by using
 Spack.  The first approach enables maximum control over the build, is regularly
 tested during Clacc development, and is recommended for anyone who wishes to
