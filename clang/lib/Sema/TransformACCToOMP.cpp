@@ -520,7 +520,7 @@ public:
     transformACCClauses(D, OMPD_target_exit_data, TClauses, TClausesEmptyCount);
 
     // Neither acc exit data nor omp target exit data have associated
-    // statements, but for some reason OMPTargetEnterDataDirective expects one.
+    // statements, but for some reason OMPTargetExitDataDirective expects one.
     assert(!D->hasAssociatedStmt() &&
            "expected no associated statement on 'acc exit data' directive");
     getSema().ActOnOpenMPRegionStart(OMPD_target_exit_data, nullptr);

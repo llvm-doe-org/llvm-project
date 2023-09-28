@@ -2041,8 +2041,9 @@ to OpenMP is as follows:
           documented in `README-OpenACC-status.md` about the limited visibility
           of an `acc routine` directive.
 * Elsewhere:
-    * *exp* `acc routine` -> `omp declare target` plus an
-      `omp end declare target` following the associated function declaration.
+    * *exp* `acc routine` -> *exp* `omp declare target` plus an
+      *exp* `omp end declare target` following the associated function
+      declaration.
     * The translation discards *exp* `gang`|`worker`|`vector`|`seq`.
       Notes:
         * These clauses appear to have no counterpart in OpenMP.
