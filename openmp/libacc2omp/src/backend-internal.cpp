@@ -90,6 +90,9 @@ acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId) {
   case acc2omp_msg_get_device_num_invalid_type:
     Msg.DefaultFmt = "acc_get_device_num called for invalid device type %d";
     break;
+  case acc2omp_msg_set_default_async_invalid:
+    Msg.DefaultFmt = "acc_set_default_async called with invalid async-arg %d";
+    break;
   case acc2omp_msg_map_data_host_pointer_null:
     Msg.DefaultFmt = "acc_map_data called with null host pointer";
     break;
@@ -166,6 +169,9 @@ acc2omp_msg_t acc2omp_msg(acc2omp_msgid_t MsgId) {
     break;
   case acc2omp_msg_memcpy_d2d_fail:
     Msg.DefaultFmt = "acc_memcpy_d2d failed";
+    break;
+  case acc2omp_msg_async2dep_invalid:
+    Msg.DefaultFmt = "acc2omp_async2dep called with invalid async-arg %d";
     break;
   }
   assert(Msg.DefaultFmt && "expected acc2omp_msg_t to be handled in switch");

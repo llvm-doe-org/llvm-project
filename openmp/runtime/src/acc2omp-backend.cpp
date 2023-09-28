@@ -58,6 +58,8 @@ static kmp_i18n_id_t acc2omp_msg_to_llvm(acc2omp_msgid_t MsgId) {
     return kmp_i18n_msg_AccSetDeviceNumInvalidNum;
   case acc2omp_msg_get_device_num_invalid_type:
     return kmp_i18n_msg_AccGetDeviceNumInvalidType;
+  case acc2omp_msg_set_default_async_invalid:
+    return kmp_i18n_msg_AccSetDefaultAsyncInvalid;
   case acc2omp_msg_map_data_host_pointer_null:
     return kmp_i18n_msg_AccMapDataHostPointerNull;
   case acc2omp_msg_map_data_device_pointer_null:
@@ -106,6 +108,8 @@ static kmp_i18n_id_t acc2omp_msg_to_llvm(acc2omp_msgid_t MsgId) {
     return kmp_i18n_msg_AccMemcpyD2dSrcDataInaccessible;
   case acc2omp_msg_memcpy_d2d_fail:
     return kmp_i18n_msg_AccMemcpyD2dFail;
+  case acc2omp_msg_async2dep_invalid:
+    return kmp_i18n_msg_AccAsync2depInvalid;
   }
   KMP_ASSERT2(0, "unexpected acc2omp_msg_t");
   return kmp_i18n_null;

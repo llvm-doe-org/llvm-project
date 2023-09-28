@@ -20,9 +20,9 @@
 extern "C" {
 #endif
 
-//----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // OpenACC Types.
-//----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 #define ACC2OMP_FOREACH_ARCH_DEVICE(Macro)                                     \
   Macro(nvidia)                                                                \
@@ -57,9 +57,9 @@ enum {
 #undef ACC2OMP_ASYNC_ENUMERATOR
 };
 
-//----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // OpenACC device management routines.
-//----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 int acc_get_num_devices(acc_device_t dev_type);
 void acc_set_device_type(acc_device_t dev_type);
@@ -67,7 +67,14 @@ acc_device_t acc_get_device_type();
 void acc_set_device_num(int dev_num, acc_device_t dev_type);
 int acc_get_device_num(acc_device_t dev_type);
 
-//----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// OpenACC async/wait management routines.
+//------------------------------------------------------------------------------
+
+int acc_get_default_async(void);
+void acc_set_default_async(int async_arg);
+
+//------------------------------------------------------------------------------
 // OpenACC device test routine (acc_on_device).
 //
 // Either of the following errors indicates the current architecture isn't yet
@@ -126,7 +133,7 @@ int acc_get_device_num(acc_device_t dev_type);
 //   -fopenacc-ast-print instead of -fopenacc-print, acc_on_device currently
 //   behaves as if always called on the host because Clang's AST printing
 //   facility currently does not print OpenMP variants correctly.
-//----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 #ifndef ACC2OMP_ENUM_VARIANTS_SUPPORTED
 # define ACC2OMP_ENUM_VARIANTS_SUPPORTED 1
@@ -190,9 +197,9 @@ ACC2OMP_DEVICE_VARIANT(arch, ppc64le, acc_device_ppc64le)
 
 #endif // _OPENMP
 
-//----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // OpenACC data and memory management routines.
-//----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 void *acc_malloc(size_t bytes);
 void acc_free(void *data_dev);
@@ -220,6 +227,24 @@ void acc_memcpy_from_device(void *data_host_dest, void *data_dev_src,
 void acc_memcpy_device(void *data_dev_dest, void *data_dev_src, size_t bytes);
 void acc_memcpy_d2d(void *data_arg_dest, void *data_arg_src, size_t bytes,
                     int dev_num_dest, int dev_num_src);
+
+//------------------------------------------------------------------------------
+// libacc2omp-provided declarations used in Clang's OpenMP translation of
+// OpenACC directives and in libacc2omp's implementation of OpenACC runtime
+// library routines.  These are not intended for direct use within OpenACC
+// application source code.
+//------------------------------------------------------------------------------
+
+/// \p async_arg must be an OpenACC \c async-argument, which can be used to
+/// select an activity queue in an \c async or \c wait clause, \c wait
+/// directive, or an asynchronous runtime library routine.  Return the host
+/// memory address that uniquely identifies the selected activity queue in
+/// OpenMP \c depend clauses produced by Clang's translation of OpenACC
+/// directives.  The return type of \c char* is convenient for dereferencing to
+/// produce an lvalue in a \c depend clause (\c void* would be less convenient),
+/// and it reflects that host memory addresses identifying other activity queues
+/// might be just one byte away.
+char *acc2omp_async2dep(int async_arg);
 
 #ifdef __cplusplus
 } // extern "C"

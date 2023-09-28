@@ -839,6 +839,12 @@ OpenACC Runtime Library API and Preprocessor
           first device included by `dev_type`.
         * OpenACC 3.1 does not mention how `dev_type` affects the
           result.
+* Async/wait management routines supported on the host are:
+    * `int acc_get_default_async(void)`
+    * `void acc_set_default_async(async_arg)`
+        * Produces a runtime error if `async_arg` is neither a non-negative
+          integer nor the value of `acc_async_sync`, `acc_async_noval`, or
+          `acc_async_default`.
 * `acc_on_device` is supported on the host and on offloading devices:
     * The result is always false if the argument is `acc_device_none`.
       This behavior appears to follow nvc 20.9-0's behavior.  OpenACC

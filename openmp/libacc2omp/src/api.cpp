@@ -61,6 +61,17 @@
 #include "internal.h"
 
 /*****************************************************************************
+ * Runtime state.
+ *
+ * FIXME: Access is not thread-safe.  Does it need to be?
+ ****************************************************************************/
+
+namespace {
+  const unsigned accDefaultAsyncVarInit = 0;
+  unsigned accDefaultAsyncVar = accDefaultAsyncVarInit;
+}
+
+/*****************************************************************************
  * Internal helper definitions.
  ****************************************************************************/
 
@@ -524,6 +535,30 @@ int acc_get_device_num(acc_device_t dev_type) {
   }
   acc2omp_fatal(ACC2OMP_MSG(get_device_num_invalid_type), dev_type);
   return -1;
+}
+
+/*****************************************************************************
+ * OpenACC async/wait management routines.
+ ****************************************************************************/
+
+int acc_get_default_async(void) { return accDefaultAsyncVar; }
+
+void acc_set_default_async(int async_arg) {
+  switch (async_arg) {
+  case acc_async_sync:
+    accDefaultAsyncVar = async_arg;
+    return;
+  case acc_async_noval:
+    return;
+  case acc_async_default:
+    accDefaultAsyncVar = accDefaultAsyncVarInit;
+    return;
+  }
+  if (async_arg < 0) {
+    acc2omp_fatal(ACC2OMP_MSG(set_default_async_invalid), async_arg);
+    return;
+  }
+  accDefaultAsyncVar = async_arg;
 }
 
 /*****************************************************************************
@@ -1406,4 +1441,37 @@ extern "C" void acc2omp_set_omp_default_device() {
   // the type.
   setDeviceNumAndType(DevNum, DevType, SetOmpDefaultDevice, !DevNumEnv,
                       !DevTypeEnv);
+}
+
+/*****************************************************************************
+ * libacc2omp-provided declarations used in Clang's OpenMP translation of
+ * OpenACC directives and in libacc2omp's implementation of OpenACC runtime
+ * library routines.
+ ****************************************************************************/
+
+char *acc2omp_async2dep(int async_arg) {
+  // sync must precede async so that &sync != &async + async_arg, assuming
+  // 0 <= async_arg.
+  static char sync, async;
+  switch (async_arg) {
+  case acc_async_sync:
+    return &sync;
+  case acc_async_noval:
+    if (accDefaultAsyncVar == acc_async_sync)
+      return &sync;
+    ACC2OMP_ASSERT(0 <= accDefaultAsyncVar,
+                   "expected current default activity queue to be "
+                   "acc_async_sync or non-negative");
+    return &async + accDefaultAsyncVar;
+  case acc_async_default:
+    ACC2OMP_ASSERT(0 <= accDefaultAsyncVarInit,
+                   "expected initial default activity queue to be "
+                   "non-negative");
+    return &async + accDefaultAsyncVarInit;
+  }
+  if (async_arg < 0) {
+    acc2omp_fatal(ACC2OMP_MSG(async2dep_invalid), async_arg);
+    return 0;
+  }
+  return &async + async_arg;
 }

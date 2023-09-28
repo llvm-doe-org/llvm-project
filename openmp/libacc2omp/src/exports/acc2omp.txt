@@ -8,6 +8,8 @@ VERS1.0 {
     acc_get_device_type;
     acc_set_device_num;
     acc_get_device_num;
+    acc_get_default_async;
+    acc_set_default_async;
     acc_malloc;
     acc_free;
     acc_copyin;
@@ -31,6 +33,7 @@ VERS1.0 {
     acc_memcpy_from_device;
     acc_memcpy_device;
     acc_memcpy_d2d;
+    acc2omp_async2dep;
   local:
     *;
 };

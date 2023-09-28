@@ -503,6 +503,7 @@ AccSetDeviceTypeNoDevices           "acc_set_device_type called for %1$s, which 
 AccSetDeviceNumInvalidType          "acc_set_device_num called for invalid device type %1$d"
 AccSetDeviceNumInvalidNum           "acc_set_device_num called with invalid device number %1$d for %2$s"
 AccGetDeviceNumInvalidType          "acc_get_device_num called for invalid device type %1$d"
+AccSetDefaultAsyncInvalid           "acc_set_default_async called with invalid async-arg %1$d"
 AccMapDataHostPointerNull           "acc_map_data called with null host pointer"
 AccMapDataDevicePointerNull         "acc_map_data called with null device pointer"
 AccMapDataSharedMemory              "acc_map_data called for shared memory"
@@ -527,6 +528,7 @@ AccMemcpyD2dSrcDeviceInvalid        "acc_memcpy_d2d called with invalid source d
 AccMemcpyD2dDestDataInaccessible    "acc_memcpy_d2d called with inaccessible destination data"
 AccMemcpyD2dSrcDataInaccessible     "acc_memcpy_d2d called with inaccessible source data"
 AccMemcpyD2dFail                    "acc_memcpy_d2d failed"
+AccAsync2depInvalid                 "acc2omp_async2dep called with invalid async-arg %1$d"
 
 # --------------------------------------------------------------------------------------------------
 -*- HINTS -*-
