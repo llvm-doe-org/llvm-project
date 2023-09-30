@@ -78,3 +78,16 @@
 # RUN: FileCheck --check-prefix=CHECK-CMDLINE-OVERRIDE-ERR < %t.pass.cmdover.err %s
 
 # CHECK-CMDLINE-OVERRIDE-ERR: Forcing timeout to be 3600 seconds
+
+
+###############################################################################
+# Check that ALLOW_RETRIES will retry after a timeout
+###############################################################################
+
+# RUN: rm -f %t.counter
+# RUN: %{lit} %{inputs}/shtest-timeout/allow-retries.py -v --timeout 5 \
+# RUN:     -Dcounter=%t.counter -Dexternal=0 2>&1 | \
+# RUN:   FileCheck --check-prefix=CHECK-RETRY %s
+
+# CHECK-RETRY: FLAKYPASS: per_test_timeout :: allow-retries.py
+# CHECK-RETRY: Passed With Retry: 1

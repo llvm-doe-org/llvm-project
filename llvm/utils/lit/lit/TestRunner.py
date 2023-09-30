@@ -2054,7 +2054,7 @@ def _runShTest(test, litConfig, useExternalSh, script, tmpBase):
             return res
 
         out,err,exitCode,timeoutInfo,status = res
-        if status != Test.FAIL:
+        if status != Test.FAIL and status != Test.TIMEOUT:
             break
 
     # If we had to run the test more than once, count it as a flaky pass. These
