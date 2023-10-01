@@ -110,6 +110,8 @@ int main() {
   // expected-error@+2 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc update'}}
   // expected-error@+1 {{unexpected OpenACC clause 'tile' in directive '#pragma acc update'}}
   #pragma acc update collapse(1) device(i) tile(6)
+  // expected-error@+1 {{unexpected OpenACC clause 'async' in directive '#pragma acc update'}}
+  #pragma acc update device(i) async
   // expected-error@+5 {{unexpected OpenACC clause 'read' in directive '#pragma acc update'}}
   // expected-error@+4 {{unexpected OpenACC clause 'write' in directive '#pragma acc update'}}
   // expected-error@+3 {{unexpected OpenACC clause 'update' in directive '#pragma acc update'}}

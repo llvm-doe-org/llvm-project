@@ -133,6 +133,9 @@ void UNIQUE_NAME();
 // expected-error@+1 {{unexpected OpenACC clause 'tile' in directive '#pragma acc routine'}}
 #pragma acc routine independent auto collapse(1) seq tile(5)
 void UNIQUE_NAME();
+// expected-error@+1 {{unexpected OpenACC clause 'async' in directive '#pragma acc routine'}}
+#pragma acc routine seq async
+void UNIQUE_NAME();
 // expected-error@+5 {{unexpected OpenACC clause 'read' in directive '#pragma acc routine'}}
 // expected-error@+4 {{unexpected OpenACC clause 'write' in directive '#pragma acc routine'}}
 // expected-error@+3 {{unexpected OpenACC clause 'update' in directive '#pragma acc routine'}}

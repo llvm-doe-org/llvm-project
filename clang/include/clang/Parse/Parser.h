@@ -3531,7 +3531,6 @@ public:
   ///        directive.  It's indexed by \c OpenACCClauseKind to record which
   ///        clauses have been seen except it omits those that are never
   ///        permitted on the directive.
-  ///
   ACCClause *ParseOpenACCClause(OpenACCDirectiveKind DKind,
                                 OpenACCClauseKind CKind,
                                 SmallVectorImpl<bool> &SeenClauses);
@@ -3540,9 +3539,11 @@ public:
   /// \param Kind Kind of current clause.
   /// \param ParseOnly true to skip the clause's semantic actions and return
   /// nullptr.
-  ///
+  /// \param Async2Dep The currently visible declaration for
+  ///        \c acc2omp_async2dep, or \c nullptr if none or if \c CKind is not
+  ///        \c ACCC_async.
   ACCClause *ParseOpenACCSingleExprClause(OpenACCClauseKind Kind,
-                                          bool ParseOnly);
+                                          bool ParseOnly, NamedDecl *Async2Dep);
   /// Parses OpenACC 'gang' clause with an argument.
   ///
   /// \param ParseOnly true to skip the clause's semantic actions and return
@@ -3554,8 +3555,11 @@ public:
   /// \param Kind Kind of current clause.
   /// \param ParseOnly true to skip the clause's semantic actions and return
   /// nullptr.
-  ///
-  ACCClause *ParseOpenACCNoArgClause(OpenACCClauseKind Kind, bool ParseOnly);
+  /// \param Async2Dep The currently visible declaration for
+  ///        \c acc2omp_async2dep, or \c nullptr if none or if \c CKind is not
+  ///        \c ACCC_async.
+  ACCClause *ParseOpenACCNoArgClause(OpenACCClauseKind Kind, bool ParseOnly,
+                                     NamedDecl *Async2Dep);
   /// Parses clause with the list of variables of a kind \a Kind.
   ///
   /// \param Kind Kind of current clause.

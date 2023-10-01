@@ -11799,8 +11799,10 @@ void ACCClauseReader::VisitACCTileClause(ACCTileClause *C) {
 }
 
 void ACCClauseReader::VisitACCAsyncClause(ACCAsyncClause *C) {
-  C->setAsyncArg(Record.readSubExpr());
   C->setLParenLoc(Record.readSourceLocation());
+  C->setAsyncArg(Record.readSubExpr());
+  C->setAsyncArgStatus(Record.readEnum<ACCAsyncClause::AsyncArgStatus>());
+  C->setAsync2Dep(Record.readDeclAs<NamedDecl>());
 }
 
 void ACCClauseReader::VisitACCWaitClause(ACCWaitClause *C) {

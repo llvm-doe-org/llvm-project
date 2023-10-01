@@ -2707,11 +2707,12 @@ public:
   ///
   /// By default, performs semantic analysis to build the new statement.
   /// Subclasses may override this routine to provide different behavior.
-  ACCClause *RebuildACCAsyncClause(Expr *AsyncArg, SourceLocation StartLoc,
+  ACCClause *RebuildACCAsyncClause(Expr *AsyncArg, NamedDecl *Async2Dep,
+                                   SourceLocation StartLoc,
                                    SourceLocation LParenLoc,
                                    SourceLocation EndLoc) {
-    return getSema().ActOnOpenACCAsyncClause(AsyncArg, StartLoc, LParenLoc,
-                                             EndLoc);
+    return getSema().ActOnOpenACCAsyncClause(AsyncArg, Async2Dep, StartLoc,
+                                             LParenLoc, EndLoc);
   }
 
   /// Build a new OpenACC 'wait' clause.
@@ -11508,8 +11509,16 @@ ACCClause *TreeTransform<Derived>::TransformACCAsyncClause(ACCAsyncClause *C) {
       return nullptr;
     AsyncArg = E.get();
   }
-  return getDerived().RebuildACCAsyncClause(AsyncArg, C->getBeginLoc(),
-                                            C->getLParenLoc(), C->getEndLoc());
+  NamedDecl *Async2Dep = C->getAsync2Dep();
+  if (Async2Dep) {
+    Async2Dep = cast_or_null<NamedDecl>(getDerived().TransformDecl(
+        Async2Dep->getLocation(), Async2Dep));
+    if (!Async2Dep)
+      return nullptr;
+  }
+  return getDerived().RebuildACCAsyncClause(AsyncArg, Async2Dep,
+                                            C->getBeginLoc(), C->getLParenLoc(),
+                                            C->getEndLoc());
 }
 
 template <typename Derived>

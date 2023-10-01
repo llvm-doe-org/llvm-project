@@ -12359,16 +12359,15 @@ public:
                                     OpenACCDetermination Determination,
                                     SourceLocation StartLoc,
                                     SourceLocation EndLoc, DeclGroupRef Decl);
-  ACCClause *ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
-                                          Expr *Expr,
+  ACCClause *ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind, Expr *Expr,
                                           SourceLocation StartLoc,
                                           SourceLocation LParenLoc,
-                                          SourceLocation EndLoc);
+                                          SourceLocation EndLoc,
+                                          NamedDecl *Async2Dep);
   /// Called on well-formed clauses that take no arguments.  Assumes they are
   /// explicit clauses.
-  ACCClause *ActOnOpenACCClause(OpenACCClauseKind Kind,
-                                SourceLocation StartLoc,
-                                SourceLocation EndLoc);
+  ACCClause *ActOnOpenACCClause(OpenACCClauseKind Kind, SourceLocation StartLoc,
+                                SourceLocation EndLoc, NamedDecl *Async2Dep);
   /// Called on well-formed 'seq' clause.
   ACCClause *ActOnOpenACCSeqClause(OpenACCDetermination Determination,
                                    SourceLocation StartLoc,
@@ -12503,7 +12502,8 @@ public:
                                     SourceLocation LParenLoc,
                                     SourceLocation EndLoc);
   /// Called on well-formed 'async' clause.
-  ACCClause *ActOnOpenACCAsyncClause(Expr *AsyncArg, SourceLocation StartLoc,
+  ACCClause *ActOnOpenACCAsyncClause(Expr *AsyncArg, NamedDecl *Async2Dep,
+                                     SourceLocation StartLoc,
                                      SourceLocation LParenLoc,
                                      SourceLocation EndLoc);
   /// Called on well-formed 'wait' clause.

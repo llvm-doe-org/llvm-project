@@ -1836,30 +1836,76 @@ public:
 class ACCAsyncClause : public ACCClause {
   friend class ACCClauseReader;
 
+public:
+  enum {
+    // These enumerator values must be kept in sync with
+    // openmp/libacc2omp/src/include/openacc.h.var.
+    Acc2ompAccAsyncSync = -1,
+    Acc2ompAccAsyncNoval = -2,
+    Acc2ompAccAsyncDefault = -3,
+  };
+
+  enum AsyncArgStatus {
+    AsyncArgIsSync, ///< definitely the synchronous activity queue
+    AsyncArgIsAsync, ///< definitely an asynchronous activity queue
+    AsyncArgIsUnknown, ///< might be synchronous or asynchronous activity queue
+    AsyncArgIsError, ///< invalid async-arg
+  };
+
+  static constexpr StringRef Async2DepName = "acc2omp_async2dep";
+
+private:
   /// Location of '('.
   SourceLocation LParenLoc;
 
   /// Original AsyncArg expression.
   Stmt *AsyncArg = nullptr;
 
+  /// Status of AsyncArg.
+  AsyncArgStatus TheAsyncArgStatus = AsyncArgIsError;
+
+  /// The \c acc2omp_async2dep symbol found in scope at this clause, or
+  /// \c nullptr if none.
+  NamedDecl *Async2Dep = nullptr;
+
   /// Set the original AsyncArg expression.
   ///
   /// \param E AsyncArg expression.
   void setAsyncArg(Expr *E) { AsyncArg = E; }
 
+  /// Set AsyncArg status, which must not be \c AsyncArgIsError.
+  void setAsyncArgStatus(AsyncArgStatus TheAsyncArgStatus) {
+    assert(TheAsyncArgStatus != AsyncArgIsError &&
+           "expected valid async-arg status");
+    this->TheAsyncArgStatus = TheAsyncArgStatus;
+  }
+
+  /// Set the \c acc2omp_async2dep symbol found in scope at this clause, or
+  /// \c nullptr if none.
+  void setAsync2Dep(NamedDecl *ND) { Async2Dep = ND; }
+
 public:
   /// Build 'async' clause.
   ///
-  /// \param E Original expression associated with this clause, or \c nullptr if
-  ///        omitted.
+  /// \param AsyncArg Original expression associated with this clause, or
+  ///        \c nullptr if omitted.
+  /// \param TheAsyncArgStatus Status of \c AsyncArg.  Must not be
+  ///        \c AsyncArgIsError.
+  /// \param Async2Dep The \c acc2omp_async2dep symbol found in scope at this
+  ///        clause, or \c nullptr if none.
   /// \param StartLoc Starting location of the clause.
   /// \param LParenLoc Location of '(', or an invalid location if argument
   ///        omitted.
   /// \param EndLoc Ending location of the clause.
-  ACCAsyncClause(Expr *E, SourceLocation StartLoc, SourceLocation LParenLoc,
-                 SourceLocation EndLoc)
+  ACCAsyncClause(Expr *AsyncArg, AsyncArgStatus TheAsyncArgStatus,
+                 NamedDecl *Async2Dep, SourceLocation StartLoc,
+                 SourceLocation LParenLoc, SourceLocation EndLoc)
       : ACCClause(ACCC_async, ACC_EXPLICIT, StartLoc, EndLoc),
-        LParenLoc(LParenLoc), AsyncArg(E) {}
+        LParenLoc(LParenLoc), AsyncArg(AsyncArg),
+        TheAsyncArgStatus(TheAsyncArgStatus), Async2Dep(Async2Dep) {
+    assert(TheAsyncArgStatus != AsyncArgIsError &&
+           "expected valid async-arg status");
+  }
 
   /// Build an empty clause.
   ACCAsyncClause() : ACCClause(ACCC_async) {}
@@ -1875,6 +1921,13 @@ public:
 
   /// Return the original AsyncArg expression or \c nullptr if omitted.
   Expr *getAsyncArg() const { return cast_or_null<Expr>(AsyncArg); }
+
+  /// Return AsyncArg status, which is never \c AsyncArgIsError.
+  AsyncArgStatus getAsyncArgStatus() const { return TheAsyncArgStatus; }
+
+  /// Get the \c acc2omp_async2dep symbol found in scope at this clause, or
+  /// \c nullptr if none.
+  NamedDecl *getAsync2Dep() const { return Async2Dep; }
 
   child_range children() { return child_range(&AsyncArg, &AsyncArg + 1); }
 

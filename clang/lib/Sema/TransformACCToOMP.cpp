@@ -338,7 +338,7 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       assert(!Finalized &&
              "expected compound statement not to be finalized yet");
       if (!Started) {
-        Tx.getSema().ActOnStartOfCompoundStmt(false);
+        Tx.getSema().ActOnStartOfCompoundStmt(/*IsStmtExpr=*/false);
         Started = true;
       }
     }
@@ -372,8 +372,8 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       Decl *DPrivate = Tx.getDerived().TransformDefinition(RefStartLoc, VD,
                                                            /*DropInit=*/true);
       add(Tx.getSema().ActOnDeclStmt(
-          Tx.getSema().ConvertDeclToDeclGroup(DPrivate), RefStartLoc,
-          RefEndLoc));
+              Tx.getSema().ConvertDeclToDeclGroup(DPrivate), RefStartLoc,
+              RefEndLoc));
     }
     /// Evaluate an expression that has side effects but whose original use has
     /// been removed.
@@ -389,6 +389,12 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       TypeSourceInfo *TInfo = Context.getTrivialTypeSourceInfo(Context.VoidTy,
                                                                Loc);
       add(Tx.getSema().BuildCStyleCastExpr(Loc, TInfo, Loc, Res.get()));
+    }
+    /// Add a statement that does not require any transformation and that does
+    /// not terminate the compound statement.
+    void addNewStmt(StmtResult &S) {
+      prepForAdd();
+      add(S);
     }
     /// Add the statement that terminates the compound statement.
     void finalize(StmtResult &S) {
@@ -425,6 +431,202 @@ class TransformACCToOMP : public TransformContext<TransformACCToOMP> {
       Tx.getSema().ActOnFinishOfCompoundStmt();
     }
   };
+
+  // We map locations as follows:
+  //
+  // 1. If C has an async_arg and Async2DepArg is its OpenMP transformation:
+  //
+  //      L.LocStart  L.LParenLoc                            L.LocEnd
+  //      async       (                           async_arg  )
+  //      depend      (inout:*acc2omp_async2dep(  async_arg  ))
+  //
+  //    It's up to the caller to ensure that L correctly represents C's location
+  //    info and thus that C's async_arg's location info is between L.LParenLoc
+  //    and L.LocEnd.
+  //
+  // 2. If C has no async_arg or Async2DepArg is not its OpenMP transformation:
+  //
+  //      L.LocStart  L.LParenLoc = L.LocEnd
+  //      async
+  //      depend      (inout:*acc2omp_async2dep(async_arg_gen))
+  //
+  //      L.LocStart              L.LParenLoc = L.LocEnd
+  //      async       (async_arg  )
+  //      depend                  (inout:*acc2omp_async2dep(async_arg_gen))
+  //
+  //    It's up to the caller to ensure that L.LocStart and L.LocEnd correctly
+  //    represent C's location info and that L.LParenLoc == L.LocEnd.
+  OMPClauseResult buildOMPDependClause(ACCAsyncClause *C, ExplicitClauseLocs L,
+                                       Expr *Async2DepArg) {
+    ASTContext &Ctxt = getSema().getASTContext();
+
+    // Get acc2omp_async2dep.
+    NamedDecl *Async2DepND = C->getAsync2Dep();
+    if (!Async2DepND) {
+      // If we just reported this error for C, don't repeat it.
+      static ACCAsyncClause *CErr = nullptr;
+      if (C != CErr) {
+        CErr = C;
+        // TODO: Eventually, we want to insert the prototype if missing.  Be
+        // sure to make it 'extern "C"' so it resolves to libacc2omp's
+        // implementation even if we're in, for example, a C++ namespace.
+        getSema().Diag(C->getBeginLoc(), diag::err_acc_missing_function)
+            << ACCAsyncClause::Async2DepName;
+        getSema().Diag(C->getBeginLoc(), diag::note_acc_required_by_clause)
+            << getOpenACCName(C->getClauseKind()) << C->getSourceRange();
+        getSema().Diag(C->getBeginLoc(), diag::note_acc_include_openacc_h);
+      }
+      return OMPClauseError();
+    }
+    FunctionDecl *Async2DepFD = dyn_cast<FunctionDecl>(Async2DepND);
+    QualType Async2DepExpectedType =
+        Ctxt.getFunctionType(/*ResultTy=*/Ctxt.getPointerType(Ctxt.CharTy),
+                             /*Args=*/{Ctxt.IntTy},
+                             FunctionProtoType::ExtProtoInfo());
+    if (!Async2DepFD || Async2DepFD->getType() != Async2DepExpectedType) {
+      // If we just reported this error for C, don't repeat it.
+      static ACCAsyncClause *CErr = nullptr;
+      if (C != CErr) {
+        CErr = C;
+        getSema().Diag(Async2DepND->getBeginLoc(), diag::err_acc_not_function)
+            << ACCAsyncClause::Async2DepName << Async2DepExpectedType
+            << Async2DepND->getSourceRange();
+        getSema().Diag(C->getBeginLoc(), diag::note_acc_required_by_clause)
+            << getOpenACCName(C->getClauseKind()) << C->getSourceRange();
+        getSema().Diag(C->getBeginLoc(), diag::note_acc_include_openacc_h);
+      }
+      return OMPClauseError();
+    }
+
+    // Build *acc2omp_async2dep(async_arg).
+    DeclRefExpr *Async2DepDRE = getSema().BuildDeclRefExpr(
+        Async2DepFD, Async2DepFD->getType(), VK_LValue, L.LParenLoc);
+    if (!Async2DepDRE)
+      return OMPClauseError();
+    Expr *Async2DepArgs[] = {Async2DepArg};
+    ExprResult Async2DepCall = getSema().BuildCallExpr(
+        getSema().getCurScope(), Async2DepDRE, L.LParenLoc, Async2DepArgs,
+        L.LocEnd);
+    if (Async2DepCall.isInvalid())
+      return OMPClauseError();
+    ExprResult Async2DepCallDeref = getSema().BuildUnaryOp(
+        getSema().getCurScope(), L.LParenLoc, UO_Deref, Async2DepCall.get());
+    if (Async2DepCallDeref.isInvalid())
+      return OMPClauseError();
+
+    // Build depend clause.
+    Expr *DependClauseArgs[] = {Async2DepCallDeref.get()};
+    return getDerived().RebuildOMPDependClause(
+      {OMPC_DEPEND_inout, /*DepLoc=*/L.LParenLoc, /*ColonLoc=*/L.LParenLoc,
+       /*OmpAllMemoryLoc=*/SourceLocation()},
+      /*DepModifier=*/nullptr, DependClauseArgs, L.LocStart, L.LParenLoc,
+      L.LocEnd);
+  }
+
+  void transformACCAsyncClauseToOMPClauses(
+      ACCDirectiveStmt *D, ACCAsyncClause *C,
+      llvm::SmallVectorImpl<OMPClause *> &TClauses,
+      size_t &TClausesAddedCount) {
+    // We cannot have asynchronous behavior while some wait features are faked.
+    if (getSema().getLangOpts().OpenACCFakeAsyncWait)
+      return;
+
+    // We can simply discard the async clause if it's definitely acc_async_sync.
+    if (C->getAsyncArgStatus() == ACCAsyncClause::AsyncArgIsSync)
+      return;
+
+    // If we return before adding two clauses, there was an error.
+    TClausesAddedCount += 2;
+    ExplicitClauseLocs L(D, C,
+                         C->getLParenLoc().isInvalid() ? C->getEndLoc()
+                                                       : C->getLParenLoc());
+
+    // Add nowait clause.
+    OMPClause *NowaitClause = getSema().ActOnOpenMPNowaitClause(L.LocStart,
+                                                                L.LocEnd);
+    if (!NowaitClause)
+      return;
+    TClauses.push_back(NowaitClause);
+
+    // Transform the async_arg.
+    OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_depend);
+    ExprResult TAsyncArg;
+    if (Expr *AsyncArg = C->getAsyncArg())
+      TAsyncArg = getDerived().TransformExpr(C->getAsyncArg());
+    else
+      TAsyncArg = getSema().ActOnIntegerConstant(
+          L.LocEnd, ACCAsyncClause::Acc2ompAccAsyncNoval);
+    if (TAsyncArg.isInvalid())
+      return;
+
+    // Build and add the depend clause.
+    OMPClauseResult DependClause = buildOMPDependClause(C, L,
+                                                        TAsyncArg.get());
+    if (!DependClause.isInvalid())
+      TClauses.push_back(DependClause.get());
+  }
+
+  // To handle acc_async_sync, we need a taskwait for the sync queue after the
+  // construct.  The simplest way to implement that (given that the parent might
+  // not be a compound statement), is to add a compound statement enclosing
+  // both.
+  void transformACCAsyncClauseToTrailingOMPTaskwait(
+      ACCDirectiveStmt *D, ConditionalCompoundStmtRAII &EnclosingCompoundStmt,
+      StmtResult &Res) {
+    // If we don't have asynchronous behavior because there's no async clause or
+    // because we're faking (see transformACCAsyncClauseToOMPClauses), then this
+    // taskwait is useless.
+    ACCAsyncClause *C = D->getTheClauseOfKind<ACCAsyncClause>();
+    if (!C || getSema().getLangOpts().OpenACCFakeAsyncWait) {
+      EnclosingCompoundStmt.finalize(Res);
+      return;
+    }
+    // We only need a taskwait for the synchronous queue if we cannot determine
+    // at compile time whether we have synchronous or asynchronous behavior
+    // (whether the async_arg is acc_async_sync).  That is, we need nowait if it
+    // might be asynchronous, and in that case we need the taskwait if it might
+    // be synchronous.
+    switch (C->getAsyncArgStatus()) {
+      case ACCAsyncClause::AsyncArgIsSync:
+      case ACCAsyncClause::AsyncArgIsAsync:
+        EnclosingCompoundStmt.finalize(Res);
+        return;
+      case ACCAsyncClause::AsyncArgIsUnknown:
+        break;
+      case ACCAsyncClause::AsyncArgIsError:
+        llvm_unreachable("expected valid async-arg");
+    }
+    EnclosingCompoundStmt.addNewStmt(Res);
+    ExplicitClauseLocs L(D, C, C->getEndLoc());
+
+    // Build the async_arg.
+    ExprResult Async2DepArg =
+        getSema().ActOnIntegerConstant(L.LocEnd,
+                                       ACCAsyncClause::Acc2ompAccAsyncSync);
+    if (Async2DepArg.isInvalid()) {
+      Res = StmtError();
+      return;
+    }
+
+    // Build the depend clause.
+    OMPClauseResult DependClause = buildOMPDependClause(C, L,
+                                                        Async2DepArg.get());
+    if (DependClause.isInvalid()) {
+      Res = StmtError();
+      return;
+    }
+
+    // Build OpenMP directive and finalize enclosing compound statement.
+    DirStackEntryRAII TheDirStackEntryRAII(*this, D);
+    getSema().StartOpenMPDSABlock(OMPD_taskwait, DeclarationNameInfo(),
+                                  /*CurScope=*/nullptr, L.LocStart);
+    OMPClause *TaskwaitClauses[] = {DependClause.get()};
+    Res = getDerived().RebuildOMPExecutableDirective(
+        OMPD_taskwait, DeclarationNameInfo(), /*CancelRegion=*/OMPD_unknown,
+        TaskwaitClauses, /*AStmt=*/nullptr, L.LocStart, L.LocEnd);
+    getSema().EndOpenMPDSABlock(Res.get());
+    EnclosingCompoundStmt.finalize(Res);
+  }
 
 public:
   TransformACCToOMP(Sema &SemaRef) : BaseTransform(SemaRef) {}
@@ -623,8 +825,11 @@ public:
 
     // Transform OpenACC clauses.
     llvm::SmallVector<OMPClause *, 16> TClauses;
+    size_t TClausesAddedCount = 0;
     size_t TClausesEmptyCount;
     transformACCClauses(D, OMPD_target_teams, TClauses, TClausesEmptyCount);
+    if (ACCAsyncClause *C = D->getTheClauseOfKind<ACCAsyncClause>())
+      transformACCAsyncClauseToOMPClauses(D, C, TClauses, TClausesAddedCount);
 
     // Transform associated statement.
     StmtResult AssociatedStmt = transformACCAssociatedStmt(D, OMPD_target_teams,
@@ -634,14 +839,15 @@ public:
     // any.
     StmtResult Res;
     if (AssociatedStmt.isInvalid() ||
-        TClauses.size() != D->clauses().size() - TClausesEmptyCount)
+        TClauses.size() != D->clauses().size() - TClausesEmptyCount +
+                           TClausesAddedCount)
       Res = StmtError();
     else
       Res = getDerived().RebuildOMPExecutableDirective(
           OMPD_target_teams, DeclarationNameInfo(), OMPD_unknown, TClauses,
           AssociatedStmt.get(), D->getBeginLoc(), D->getEndLoc());
     getSema().EndOpenMPDSABlock(Res.get());
-    EnclosingCompoundStmt.finalize(Res);
+    transformACCAsyncClauseToTrailingOMPTaskwait(D, EnclosingCompoundStmt, Res);
     if (!Res.isInvalid())
       D->setOMPNode(Res.get());
     return Res;
@@ -824,13 +1030,13 @@ public:
 
     // Add simdlen clause if needed.
     llvm::SmallVector<OMPClause *, 16> TClauses;
-    size_t NumClausesAdded = 0;
+    size_t TClausesAddedCount = 0;
     if (AddSimdlenExpr) {
       OpenMPStartEndClauseRAII ClauseRAII(getSema(), OMPC_simdlen);
       TClauses.push_back(getDerived().RebuildOMPSimdlenClause(
           AddSimdlenExpr, AddSimdlenExpr->getBeginLoc(),
           AddSimdlenExpr->getBeginLoc(), AddSimdlenExpr->getEndLoc()));
-      ++NumClausesAdded;
+      ++TClausesAddedCount;
     }
 
     // Transform OpenACC clauses.
@@ -852,7 +1058,7 @@ public:
     StmtResult Res;
     if (AssociatedStmt.isInvalid() ||
         TClauses.size() != D->clauses().size() - TClausesEmptyCount +
-                           NumClausesAdded)
+                           TClausesAddedCount)
       Res = StmtError();
     else
       Res = getDerived().RebuildOMPExecutableDirective(
@@ -996,8 +1202,6 @@ public:
   OMPClauseResult TransformACCAsyncClause(ACCDirectiveStmt *D,
                                           OpenMPDirectiveKind TDKind,
                                           ACCAsyncClause *C) {
-    // TODO: Actually translate it.  Currently, this should be reachable only
-    // if -fopenacc-fake-async-wait.
     return OMPClauseEmpty();
   }
 

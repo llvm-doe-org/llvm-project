@@ -118,9 +118,9 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
         * Each option will be removed when Clacc develops full support for the
           associated features.
     * `-fopenacc-fake-async-wait`
-        * Clacc accepts but discards OpenACC directives and clauses associated
-          with async/wait support.  That is, they have no OpenMP translation in
-          source-to-source mode.
+        * Clacc accepts but discards some OpenACC directives and clauses
+          associated with async/wait support.  That is, they have no OpenMP
+          translation in source-to-source mode.
         * Clacc inserts preprocessor definitions to handle OpenACC Runtime
           Library API routines and other symbols associated with async/wait
           support.
@@ -128,6 +128,19 @@ OpenACC-related and OpenMP-related command-line options, run Clacc's
         * Some async/wait features might not be covered yet and thus will
           still produce compile-time diagnostics.  We are adding them as the
           need arises in the applications we are investigating.
+        * Some async/wait features are starting to be supported when
+          `-fopenacc-fake-async-wait` is not specified.  They are documented
+          along with other supported features below.  However,
+          `-fopenacc-fake-async-wait` fakes even those async features that
+          Clacc otherwise supports because they are not safe while it fakes at
+          least some wait features.  Because that produces synchronous behavior,
+          wait features have no effect on correctness, so
+          `-fopenacc-fake-async-wait` does not bother to fake wait features that
+          are already supported.
+        * Summary: If an application uses only fully supported async/wait
+          features, it doesn't need `-fopenacc-fake-async-wait`.  Otherwise,
+          `-fopenacc-fake-async-wait` might enable the application to compile
+          and run successfully, but it will eliminate the asynchronous behavior.
     * `-fopenacc-fake-tile-clause`
         * Clacc now fully supports the `tile` clause, so this option is
           deprecated and has no effect.
@@ -319,6 +332,27 @@ Run-Time Environment Variables
           `simdlen`.  OpenACC does permit the compiler to ignore
           `vector_length` as a hint, so we choose to ignore it and
           warn in the case of a non-constant expression.
+* `async` clause
+    * The argument can be omitted, or it must be an integer expression.  It must
+      evaluate to a non-negative integer or the value of `acc_async_sync`,
+      `acc_async_noval`, or `acc_async_default` as defined in Clacc's
+      `openacc.h`.  An argument that is not of integer type or that is an
+      integer constant expression that does not meet the above restrictions
+      produces a compile-time error diagnostic.  Otherwise, an expression that
+      does not meet the above restrictions produces a runtime error.
+    * The function prototype `char *acc2omp_async2dep(int)` must be in scope
+      and must link to Clacc's implementation of it in `libacc2omp.so`.  The
+      easiest way to accomplish this is usually to just add
+      `#include <openacc.h>`.  In the future, Clacc might insert the prototype
+      automatically where it is not in scope.  Also see "Source-to-Source Mode
+      Limitations" below.
+    * Activity queues are currently common to all offload devices instead of per
+      device, limiting some concurrency.  In the future, this limitation might
+      be removed.
+    * Due to a nondeterminism apparently inherited from upstream Clang's OpenMP
+      implementation, concurrent execution of activity queues is not guaranteed.
+      Moreover, there are occasional runtime assertion failures when targeting
+      the host.  We need to investigate these issues further.
 
 `loop` Directive
 ----------------
@@ -982,6 +1016,9 @@ Language Support
 Source-to-Source Mode Limitations
 =================================
 
+These limitations affect source-to-source mode but have no effect on traditional
+compilation mode.
+
 * Calls to the OpenACC Runtime Library API are not translated to
   OpenMP at compile time:
     * `acc_on_device` is implemented in terms of OpenMP fully within
@@ -994,6 +1031,9 @@ Source-to-Source Mode Limitations
       Runtime Library Routines and require Clacc's OpenACC runtime
       library to be linked.  See the section "Linking" in
       `../README.md` for details.
+* Calls to `acc2omp_async2dep` are used in the translation of `async` clauses
+  but are not specified by OpenMP.  It also requires Clacc's OpenACC runtime
+  library to be linked.
 * Occurrences of the `_OPENACC` preprocessor macro are not translated
   to OpenMP:
     * Instead, the compiler inserts its `_OPENACC` definition at the

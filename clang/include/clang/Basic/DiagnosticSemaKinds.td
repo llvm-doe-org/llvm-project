@@ -11362,6 +11362,13 @@ def note_acc_routine_implicit : Note<
 def err_acc_routine_for_orphaned_loop : Error<
   "function '%0' has no explicit '#pragma acc routine' but contains orphaned "
   "'#pragma acc loop'">;
+def err_acc_missing_function : Error<"function '%0' prototype is not in scope">;
+def err_acc_not_function : Error<"'%0' is not a function of type %1">;
+def note_acc_required_by_clause : Note <"required by '%0' clause here">;
+def note_acc_include_openacc_h : Note<"try including openacc.h">;
+def err_acc_clause_not_async_arg : Error<
+  "argument to '%0' clause must be a non-negative integer, acc_async_sync, "
+  "acc_async_noval, or acc_async_default">;
 } // end of OpenACC category
 
 let CategoryName = "Related Result Type Issue" in {

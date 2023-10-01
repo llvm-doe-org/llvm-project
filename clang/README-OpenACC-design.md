@@ -1783,6 +1783,39 @@ to OpenMP is as follows:
     * A constant expression argument here might be used by a nested
       vector-partitioned `acc loop`, but a non-constant-expression
       argument is not (this follows "Semantic Clarifications" above).
+* *exp* `async` with no argument ->
+  `nowait depend(inout:*acc2omp_async2dep(acc_async_noval))`
+* *exp* `async(`*async_arg*`)` such that *async_arg* is a constant integer
+  expression whose value is `acc_async_sync` -> discarded by the translation
+* *exp* `async(`*async_arg*`)` otherwise ->
+  `nowait depend(inout:*acc2omp_async2dep(`*async_arg*`))`
+* Wrap the `omp target teams` and its associated statement in a compound
+  statement and insert an
+  `omp taskwait depend(inout:*acc2omp_async2dep(acc_async_sync))` directive at
+  the end of it if any of the following conditions hold:
+    * *exp* `async` with no argument.
+    * *exp* `async(`*async_arg*`)` such that *async_arg* is a constant integer
+      expression whose value is `acc_async_noval`.
+    * *exp* `async(`*async_arg*`)` such that *async_arg* is a non-constant
+      expression of signed type.
+* Notes for the `async` translation:
+    * `char *acc2omp_async2dep(int)` is prototyped in Clacc's `openacc.h` and
+      implemented in libacc2omp.  It maps each *async_arg* to an lvalue
+      appropriate for an OpenMP `depends` clauses.  See the discussion of it in
+      `README-OpenACC-status.md`.
+    * As described above, `nowait` and `depend` are needed if the selected
+      activity queue might be an asynchronous activity queue at run time.  When
+      that possibility exists but the possibility also exists that the selected
+      activity queue might be the synchronous activity queue, then the trailing
+      `omp taskwait` is also needed.
+    * When *async_arg* is a constant integer expression whose value is
+      `acc_async_default`, Clacc's Clang assumes the selected activity queue is
+      asynchronous because it assumes libacc2omp's implementation, which selects
+      queue 0 as the initial default activity queue.
+    * The enclosing compound statement in the case of the `omp taskwait` is not
+      strictly necessary in many contexts.  In the Clang AST, it simply makes it
+      easier to attach the full OpenMP translation to the original OpenACC node
+      because the compound statement subtree has a single root node.
 
 Loop Directives
 ---------------

@@ -115,6 +115,9 @@ int main() {
   // expected-error@+1 {{unexpected OpenACC clause 'tile' in directive '#pragma acc data'}}
   #pragma acc data collapse(1) copy(i) tile(2)
     ;
+  // expected-error@+1 {{unexpected OpenACC clause 'async' in directive '#pragma acc data'}}
+  #pragma acc data async copy(i)
+    ;
   // expected-error@+5 {{unexpected OpenACC clause 'read' in directive '#pragma acc data'}}
   // expected-error@+4 {{unexpected OpenACC clause 'write' in directive '#pragma acc data'}}
   // expected-error@+3 {{unexpected OpenACC clause 'update' in directive '#pragma acc data'}}

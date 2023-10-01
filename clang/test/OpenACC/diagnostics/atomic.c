@@ -154,6 +154,9 @@ int main() {
   // expected-error@+1 {{unexpected OpenACC clause 'tile' in directive '#pragma acc atomic'}}
   #pragma acc atomic seq independent auto capture gang worker vector collapse(1) tile(1)
   v = x++;
+  // expected-error@+1 {{unexpected OpenACC clause 'async' in directive '#pragma acc atomic'}}
+  #pragma acc atomic async
+  x++;
 
   //----------------------------------------------------------------------------
   // Malformed clauses not permitted here.

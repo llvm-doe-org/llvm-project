@@ -184,6 +184,11 @@ void fn(int param) {
     for (int i = 0; i < 5; ++i)
       ;
 
+    // orph-sep-error@+1 {{unexpected OpenACC clause 'async' in directive '#pragma acc loop'}}
+    #pragma acc CMB_PAR loop async
+    for (int i = 0; i < 5; ++i)
+      ;
+
     // orph-sep-error@+10 {{unexpected OpenACC clause 'read' in directive '#pragma acc loop'}}
     // orph-sep-error@+9  {{unexpected OpenACC clause 'write' in directive '#pragma acc loop'}}
     // orph-sep-error@+8  {{unexpected OpenACC clause 'update' in directive '#pragma acc loop'}}

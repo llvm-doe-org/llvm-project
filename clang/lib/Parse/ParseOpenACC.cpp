@@ -347,8 +347,9 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
   // with other occurrences of itself or with other clauses would be baseless
   // and confusing, so we suppress them.
   if ((CKind != ACCC_unknown && !isAllowedClauseForDirective(DKind, CKind)) ||
-      ((CKind == ACCC_async || CKind == ACCC_wait) &&
-       !Actions.getLangOpts().OpenACCFakeAsyncWait)) {
+      (!Actions.getLangOpts().OpenACCFakeAsyncWait &&
+       (CKind == ACCC_wait ||
+        (CKind == ACCC_async && !isOpenACCParallelDirective(DKind))))) {
     Diag(Tok, diag::err_acc_unexpected_clause) << getOpenACCName(CKind)
                                                << getOpenACCName(DKind);
     ErrorFound = true;
@@ -361,7 +362,7 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
   case ACCC_num_workers:
   case ACCC_vector_length:
   case ACCC_collapse:
-  case ACCC_async:
+  case ACCC_async: {
     if (!WrongDirective) {
       if (SeenClauses[CKind]) {
         Diag(Tok, diag::err_acc_more_one_clause)
@@ -372,11 +373,24 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
                                       {ACCC_collapse, ACCC_tile});
       }
     }
+    NamedDecl *Async2Dep = nullptr;
+    if (CKind == ACCC_async) {
+      // Sema::getCurScope's documentation says it's safe to call during parsing
+      // but not in any code that might be called during C++ template
+      // instantiation, like Sema actions.  Thus, we perform this lookup here
+      // and pass it through to Sema.
+      DeclarationName Async2DepDN(
+          &Actions.getASTContext().Idents.get(ACCAsyncClause::Async2DepName));
+      Async2Dep = Actions.LookupSingleName(getCurScope(), Async2DepDN,
+                                           Tok.getLocation(),
+                                           Sema::LookupOrdinaryName);
+    }
     if (CKind == ACCC_async && PP.LookAhead(/*N=*/0).isNot(tok::l_paren))
-      Clause = ParseOpenACCNoArgClause(CKind, WrongDirective);
+      Clause = ParseOpenACCNoArgClause(CKind, WrongDirective, Async2Dep);
     else
-      Clause = ParseOpenACCSingleExprClause(CKind, WrongDirective);
+      Clause = ParseOpenACCSingleExprClause(CKind, WrongDirective, Async2Dep);
     break;
+  }
   case ACCC_wait:
     if (!WrongDirective && SeenClauses[CKind]) {
       Diag(Tok, diag::err_acc_more_one_clause)
@@ -384,7 +398,8 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
       ErrorFound = true;
     }
     if (PP.LookAhead(/*N=*/0).isNot(tok::l_paren))
-      Clause = ParseOpenACCNoArgClause(CKind, WrongDirective);
+      Clause = ParseOpenACCNoArgClause(CKind, WrongDirective,
+                                       /*Async2Dep=*/nullptr);
     else
       Clause = ParseOpenACCWaitClauseWithArg(WrongDirective);
     break;
@@ -420,7 +435,8 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
         PP.LookAhead(/*N=*/0).is(tok::l_paren))
       Clause = ParseOpenACCGangClauseWithArg(WrongDirective);
     else
-      Clause = ParseOpenACCNoArgClause(CKind, WrongDirective);
+      Clause = ParseOpenACCNoArgClause(CKind, WrongDirective,
+                                       /*Async2Dep=*/nullptr);
     break;
   case ACCC_present:
 #define OPENACC_CLAUSE_ALIAS_copy(Name) \
@@ -479,7 +495,8 @@ ACCClause *Parser::ParseOpenACCClause(OpenACCDirectiveKind DKind,
             {ACCC_read, ACCC_write, ACCC_update, ACCC_capture, ACCC_compare});
       }
     }
-    Clause = ParseOpenACCNoArgClause(CKind, WrongDirective);
+    Clause = ParseOpenACCNoArgClause(CKind, WrongDirective,
+                                     /*Async2Dep=*/nullptr);
     break;
   case ACCC_unknown:
     Diag(Tok, diag::warn_acc_extra_tokens_at_eol) << getOpenACCName(DKind);
@@ -530,7 +547,8 @@ ExprResult Parser::ParseOpenACCParensExpr(StringRef ClauseName,
 ///      'num_gangs' '(' expression ')'
 ///
 ACCClause *Parser::ParseOpenACCSingleExprClause(OpenACCClauseKind Kind,
-                                                bool ParseOnly) {
+                                                bool ParseOnly,
+                                                NamedDecl *Async2Dep) {
   SourceLocation Loc = ConsumeToken();
   SourceLocation LLoc = Tok.getLocation();
   SourceLocation RLoc;
@@ -542,7 +560,8 @@ ACCClause *Parser::ParseOpenACCSingleExprClause(OpenACCClauseKind Kind,
 
   if (ParseOnly)
     return nullptr;
-  return Actions.ActOnOpenACCSingleExprClause(Kind, Val.get(), Loc, LLoc, RLoc);
+  return Actions.ActOnOpenACCSingleExprClause(Kind, Val.get(), Loc, LLoc, RLoc,
+                                              Async2Dep);
 }
 
 /// Parsing of OpenACC 'gang' clause's argument.
@@ -631,13 +650,14 @@ ACCClause *Parser::ParseOpenACCGangClauseWithArg(bool ParseOnly) {
 ///         'seq'
 ///
 ACCClause *Parser::ParseOpenACCNoArgClause(OpenACCClauseKind Kind,
-                                           bool ParseOnly) {
+                                           bool ParseOnly,
+                                           NamedDecl *Async2Dep) {
   SourceLocation Loc = Tok.getLocation();
   ConsumeToken();
 
   if (ParseOnly)
     return nullptr;
-  return Actions.ActOnOpenACCClause(Kind, Loc, Tok.getLocation());
+  return Actions.ActOnOpenACCClause(Kind, Loc, Tok.getLocation(), Async2Dep);
 }
 
 void Parser::checkMutuallyExclusiveClauses(

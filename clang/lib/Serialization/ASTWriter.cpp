@@ -7353,8 +7353,10 @@ void ACCClauseWriter::VisitACCTileClause(ACCTileClause *C) {
 }
 
 void ACCClauseWriter::VisitACCAsyncClause(ACCAsyncClause *C) {
-  Record.AddStmt(C->getAsyncArg());
   Record.AddSourceLocation(C->getLParenLoc());
+  Record.AddStmt(C->getAsyncArg());
+  Record.writeEnum(C->getAsyncArgStatus());
+  Record.AddDeclRef(C->getAsync2Dep());
 }
 
 void ACCClauseWriter::VisitACCWaitClause(ACCWaitClause *C) {

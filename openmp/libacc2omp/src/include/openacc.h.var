@@ -45,6 +45,8 @@ typedef enum {
 #undef ACC2OMP_DEVICE_ENUMERATOR
 } acc_device_t;
 
+// These enumerator values must be kept in sync with the associated enum in
+// ACCAsyncClause in clang/include/clang/AST/OpenACCClause.h.
 #define ACC2OMP_FOREACH_ASYNC(Macro)                                           \
   Macro(sync,    -1)                                                           \
   Macro(noval,   -2)                                                           \

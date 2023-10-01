@@ -30,14 +30,28 @@
 // DEFINE:      -Wno-openacc-ignored-clause %{CFLAGS} -DADD_LOOP_TO_PAR %s
 
 // RUN: %{check}( -DERR=ERR_ACC                                 %)
+// RUN: %{check}( -DERR=ERR_ACC2OMP_ASYNC2DEP_FOR_SYNC          %)
+// RUN: %{check}( -DERR=ERR_ACC2OMP_ASYNC2DEP_MISSING_FOR_ASYNC %)
+// RUN: %{check}( -DERR=ERR_ACC2OMP_ASYNC2DEP_NOT_FN_FOR_ASYNC  %)
+// RUN: %{check}( -DERR=ERR_ACC2OMP_ASYNC2DEP_BAD_FN_FOR_ASYNC  %)
+// RUN: %{check}( -DERR=ERR_ACC2OMP_ASYNC2DEP_MISSING_FOR_DEF   %)
+// RUN: %{check}( -DERR=ERR_ACC2OMP_ASYNC2DEP_NOT_FN_FOR_DEF    %)
+// RUN: %{check}( -DERR=ERR_ACC2OMP_ASYNC2DEP_BAD_FN_FOR_DEF    %)
 // RUN: %{check}( -DERR=ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_AP %)
 // RUN: %{check}( -DERR=ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_PP %)
 
 // END.
 
 #define ERR_ACC                                 1
-#define ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_AP 2
-#define ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_PP 3
+#define ERR_ACC2OMP_ASYNC2DEP_FOR_SYNC          2
+#define ERR_ACC2OMP_ASYNC2DEP_MISSING_FOR_ASYNC 3
+#define ERR_ACC2OMP_ASYNC2DEP_NOT_FN_FOR_ASYNC  4
+#define ERR_ACC2OMP_ASYNC2DEP_BAD_FN_FOR_ASYNC  5
+#define ERR_ACC2OMP_ASYNC2DEP_MISSING_FOR_DEF   6
+#define ERR_ACC2OMP_ASYNC2DEP_NOT_FN_FOR_DEF    7
+#define ERR_ACC2OMP_ASYNC2DEP_BAD_FN_FOR_DEF    8
+#define ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_AP 9
+#define ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_PP 10
 
 #if !ADD_LOOP_TO_PAR
 # define LOOP
@@ -83,16 +97,16 @@ int main() {
   union U *pu;
   struct SS *pss;
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // No clauses
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   #pragma acc parallel LOOP
     FORLOOP
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Unrecognized clauses
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // Bogus clauses.
 
@@ -181,9 +195,9 @@ int main() {
   #pragma acc parallel LOOP shared(i
     FORLOOP
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Data clauses: syntax
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // expected-error@+1 {{expected '(' after 'present'}}
   #pragma acc parallel LOOP present
@@ -780,9 +794,9 @@ int main() {
   #pragma acc parallel LOOP create(incomplete[0:]) no_create((*ap)[0:])
     FORLOOP
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Data clauses: arg semantics
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // Unknown reduction operator.
 
@@ -2127,9 +2141,9 @@ int main() {
                             firstprivate(d)
     FORLOOP
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Partition count clauses
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // expected-error@+3 {{expected '(' after 'num_gangs'}}
   // expected-error@+2 {{expected '(' after 'num_workers'}}
@@ -2209,9 +2223,71 @@ int main() {
   #pragma acc parallel LOOP num_gangs(1.0f) num_workers(2e3) vector_length(1.3l)
     FORLOOP
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
+  // async clause
+  //----------------------------------------------------------------------------
+
+  #pragma acc parallel LOOP async
+    FORLOOP
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP async(1
+    FORLOOP
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP async( i
+    FORLOOP
+  // expected-error@+2 {{expected ')'}}
+  // expected-note@+1 {{to match this '('}}
+  #pragma acc parallel LOOP async (3 + 5
+    FORLOOP
+  // par-error@+2 {{directive '#pragma acc parallel' cannot contain more than one 'async' clause}}
+  // parloop-error@+1 {{directive '#pragma acc parallel loop' cannot contain more than one 'async' clause}}
+  #pragma acc parallel LOOP async(i) async( i)
+    FORLOOP
+  // expected-error@+1 {{use of undeclared identifier 'bogus'}}
+  #pragma acc parallel LOOP async(bogus)
+    FORLOOP
+  // expected-error@+1 {{argument to 'async' clause must be a non-negative integer, acc_async_sync, acc_async_noval, or acc_async_default}}
+  #pragma acc parallel LOOP async(-10)
+    FORLOOP
+  // expected-error@+1 {{argument to 'async' clause must be a non-negative integer, acc_async_sync, acc_async_noval, or acc_async_default}}
+  #pragma acc parallel LOOP async(-5)
+    FORLOOP
+  #pragma acc parallel LOOP async(0)
+    FORLOOP
+  #pragma acc parallel LOOP async(1)
+    FORLOOP
+  #pragma acc parallel LOOP async(15)
+    FORLOOP
+  #pragma acc parallel LOOP async(29)
+    FORLOOP
+  #pragma acc parallel LOOP async(3 * 10 - 1)
+    FORLOOP
+  // expected-error@+1 {{argument to 'async' clause must be a non-negative integer, acc_async_sync, acc_async_noval, or acc_async_default}}
+  #pragma acc parallel LOOP async(10 - 20)
+    FORLOOP
+  #pragma acc parallel LOOP async(i*1)
+    FORLOOP
+  // expected-error@+1 {{expression must have integral or unscoped enumeration type, not 'float'}}
+  #pragma acc parallel LOOP async(1.0f)
+    FORLOOP
+  // expected-error@+1 {{expression must have integral or unscoped enumeration type, not 'double'}}
+  #pragma acc parallel LOOP async(d)
+    FORLOOP
+  // expected-error@+1 {{expression must have integral or unscoped enumeration type, not 'float'}}
+  #pragma acc parallel LOOP async(f)
+    FORLOOP
+  // expected-error@+1 {{expression must have integral or unscoped enumeration type, not '_Complex float'}}
+  #pragma acc parallel LOOP async(fc)
+    FORLOOP
+  // expected-error@+1 {{expression must have integral or unscoped enumeration type, not 'int[2]'}}
+  #pragma acc parallel LOOP async(a)
+    FORLOOP
+
+  //----------------------------------------------------------------------------
   // Nesting
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   #pragma acc parallel // expected-note {{enclosing '#pragma acc parallel' here}}
   // par-error@+2 {{'#pragma acc parallel' cannot be nested within '#pragma acc parallel'}}
@@ -2238,9 +2314,9 @@ int main() {
       FORLOOP
   }
 
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
   // Miscellaneous
-  //--------------------------------------------------
+  //----------------------------------------------------------------------------
 
   // At one time, an assert failed due to the use of arrNoSize.
   int arrNoSize[]; // expected-noacc-error {{definition of variable with array type needs an explicit size or an initializer}}
@@ -2256,7 +2332,121 @@ int main() {
 // Complete to suppress an additional warning, but it's too late for pragmas.
 int incomplete[3];
 
-//--------------------------------------------------
+//------------------------------------------------------------------------------
+// The following diagnostics are produced by the transform from OpenACC to
+// OpenMP, which is skipped if there have been any previous diagnostics.  Thus,
+// each must be tested in a separate compilation.
+//------------------------------------------------------------------------------
+
+//..............................................................................
+// acc_async_sync (-1) doesn't require acc2omp_async2dep, so these shouldn't
+// trigger diagnostics that it's missing or defined incorrectly.
+//..............................................................................
+
+#elif ERR == ERR_ACC2OMP_ASYNC2DEP_FOR_SYNC
+
+int main() {
+  // expected-noacc-no-diagnostics
+  #pragma acc parallel async(-1)
+  ;
+  int acc2omp_async2dep;
+  // expected-noacc-no-diagnostics
+  #pragma acc parallel async(-1)
+  ;
+  return 0;
+}
+
+//..............................................................................
+// Asynchronous queues (like 0) do require acc2omp_async2dep, just once for the
+// depends clause on the target teams directive.
+//..............................................................................
+
+#elif ERR == ERR_ACC2OMP_ASYNC2DEP_MISSING_FOR_ASYNC
+
+int main() {
+  // noacc-no-diagnostics
+  // expected-error@+3 {{function 'acc2omp_async2dep' prototype is not in scope}}
+  // expected-note@+2 {{required by 'async' clause here}}
+  // expected-note@+1 {{try including openacc.h}}
+  #pragma acc parallel async(0)
+  ;
+  return 0;
+}
+
+#elif ERR == ERR_ACC2OMP_ASYNC2DEP_NOT_FN_FOR_ASYNC
+
+int main() {
+  // expected-error@+1 {{'acc2omp_async2dep' is not a function of type 'char *(int)'}}
+  int acc2omp_async2dep;
+  // noacc-no-diagnostics
+  // expected-note@+2 {{required by 'async' clause here}}
+  // expected-note@+1 {{try including openacc.h}}
+  #pragma acc parallel async(0)
+  ;
+  return 0;
+}
+
+#elif ERR == ERR_ACC2OMP_ASYNC2DEP_BAD_FN_FOR_ASYNC
+
+int main() {
+  // expected-error@+1 {{'acc2omp_async2dep' is not a function of type 'char *(int)'}}
+  void acc2omp_async2dep(int);
+  // noacc-no-diagnostics
+  // expected-note@+2 {{required by 'async' clause here}}
+  // expected-note@+1 {{try including openacc.h}}
+  #pragma acc parallel async(0)
+  ;
+  return 0;
+}
+
+//..............................................................................
+// The default queue might be synchronous or asynchronous, so acc2omp_async2dep
+// is required for the depends clauses on both the target teams directive and on
+// a following taskwait directive.  Check that we avoid duplicating the
+// diagnostic across them.
+//..............................................................................
+
+#elif ERR == ERR_ACC2OMP_ASYNC2DEP_MISSING_FOR_DEF
+
+int main() {
+  // noacc-no-diagnostics
+  // expected-error@+3 {{function 'acc2omp_async2dep' prototype is not in scope}}
+  // expected-note@+2 {{required by 'async' clause here}}
+  // expected-note@+1 {{try including openacc.h}}
+  #pragma acc parallel async
+  ;
+  return 0;
+}
+
+#elif ERR == ERR_ACC2OMP_ASYNC2DEP_NOT_FN_FOR_DEF
+
+// noacc-no-diagnostics
+// expected-error@+1 {{'acc2omp_async2dep' is not a function of type 'char *(int)'}}
+int acc2omp_async2dep;
+
+int main() {
+  // expected-note@+2 {{required by 'async' clause here}}
+  // expected-note@+1 {{try including openacc.h}}
+  #pragma acc parallel async
+  ;
+  return 0;
+}
+
+#elif ERR == ERR_ACC2OMP_ASYNC2DEP_BAD_FN_FOR_DEF
+
+// noacc-no-diagnostics
+// expected-error@+1 {{'acc2omp_async2dep' is not a function of type 'char *(int)'}}
+char *acc2omp_async2dep();
+
+int main() {
+  // expected-note@+2 {{required by 'async' clause here}}
+  // expected-note@+1 {{try including openacc.h}}
+  #pragma acc parallel async
+  ;
+  return 0;
+}
+
+//------------------------------------------------------------------------------
 // The remaining diagnostics are currently produced by OpenMP sema during the
 // transform from OpenACC to OpenMP, which is skipped if there have been any
 // previous diagnostics.  Thus, each must be tested in a separate compilation.
@@ -2269,7 +2459,7 @@ int incomplete[3];
 // TODO: We currently don't even check one of each diagnostic kind.  Look in
 // ActOnOpenMPMapClause and its callees, such as checkMappableExpressionList
 // and checkMapClauseExpressionBase in SemaOpenMP.cpp.
-//--------------------------------------------------
+//------------------------------------------------------------------------------
 
 #elif ERR == ERR_OMP_ARRAY_SECTION_NON_CONTIGUOUS_AP
 

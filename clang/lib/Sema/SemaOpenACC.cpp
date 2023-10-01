@@ -3789,7 +3789,8 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
                                               Expr *Expr,
                                               SourceLocation StartLoc,
                                               SourceLocation LParenLoc,
-                                              SourceLocation EndLoc) {
+                                              SourceLocation EndLoc,
+                                              NamedDecl *Async2Dep) {
   ACCClause *Res = nullptr;
   switch (Kind) {
   case ACCC_if:
@@ -3808,7 +3809,7 @@ ACCClause *Sema::ActOnOpenACCSingleExprClause(OpenACCClauseKind Kind,
     Res = ActOnOpenACCCollapseClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
   case ACCC_async:
-    Res = ActOnOpenACCAsyncClause(Expr, StartLoc, LParenLoc, EndLoc);
+    Res = ActOnOpenACCAsyncClause(Expr, Async2Dep, StartLoc, LParenLoc, EndLoc);
     break;
   case ACCC_nomap:
   case ACCC_present:
@@ -4592,7 +4593,11 @@ ACCClause *Sema::ActOnOpenACCDeviceClause(ArrayRef<Expr *> VarList,
   return ACCDeviceClause::Create(Context, StartLoc, LParenLoc, EndLoc, Vars);
 }
 
-enum PosIntResult {PosIntConst, PosIntNonConst, PosIntError};
+enum PosIntResult {
+  PosIntConst,
+  PosIntNonConst,
+  PosIntError,
+};
 
 static PosIntResult IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
                                            OpenACCClauseKind CKind,
@@ -4634,9 +4639,67 @@ static PosIntResult IsPositiveIntegerValue(Expr *&ValExpr, Sema &SemaRef,
   return PosIntConst;
 }
 
+static ACCAsyncClause::AsyncArgStatus checkAsyncArg(
+    Expr *&AsyncArg, Sema &SemaRef, OpenACCClauseKind CKind) {
+  // If there's no async-arg, that's the same as acc_async_noval below.
+  if (!AsyncArg)
+    return ACCAsyncClause::AsyncArgIsUnknown;
+  SourceLocation Loc = AsyncArg->getExprLoc();
+
+  // This uses err_omp_* diagnostics, but none currently mention OpenMP or
+  // OpenMP-specific constructs, so they should work fine for OpenACC.
+  ExprResult Value =
+      SemaRef.PerformOpenMPImplicitIntegerConversion(Loc, AsyncArg);
+  if (Value.isInvalid())
+    return ACCAsyncClause::AsyncArgIsError;
+
+  // AsyncArg->getIntegerConstantExpr() fails if AsyncArg->isValueDependent(),
+  // which might be true after an error with typo correction.
+  if (AsyncArg->isValueDependent())
+    return ACCAsyncClause::AsyncArgIsError;
+
+  // If it's non-negative, it's for an asynchronous activity queue.
+  if (AsyncArg->getType()->isUnsignedIntegerType())
+    return ACCAsyncClause::AsyncArgIsAsync;
+
+  // It's signed.  If it's not a constant expression or we cannot represent the
+  // value, then we don't know whether it's for a synchronous or asynchronous
+  // activity queue.
+  AsyncArg = Value.get();
+  std::optional<llvm::APSInt> ICE =
+      AsyncArg->getIntegerConstantExpr(SemaRef.Context);
+  if (!ICE)
+    return ACCAsyncClause::AsyncArgIsUnknown;
+  std::optional<int64_t> SignedVal = ICE.value().tryExtValue();
+  if (!SignedVal)
+    return ACCAsyncClause::AsyncArgIsUnknown;
+
+  // If it's non-negative, it's for an asynchronous activity queue.
+  if (0 <= SignedVal.value())
+    return ACCAsyncClause::AsyncArgIsAsync;
+
+  // Check known negative values.
+  switch (SignedVal.value()) {
+    case ACCAsyncClause::Acc2ompAccAsyncSync:
+      return ACCAsyncClause::AsyncArgIsSync;
+    case ACCAsyncClause::Acc2ompAccAsyncNoval:
+      // Could be changed by acc_set_default_async.
+      return ACCAsyncClause::AsyncArgIsUnknown;
+    case ACCAsyncClause::Acc2ompAccAsyncDefault:
+      // libacc2omp uses 0 for this case.
+      return ACCAsyncClause::AsyncArgIsAsync;
+  }
+
+  // Complain for unknown negative values.
+  SemaRef.Diag(Loc, diag::err_acc_clause_not_async_arg)
+      << getOpenACCName(CKind) << AsyncArg->getSourceRange();
+  return ACCAsyncClause::AsyncArgIsError;
+}
+
 ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
                                     SourceLocation StartLoc,
-                                    SourceLocation EndLoc) {
+                                    SourceLocation EndLoc,
+                                    NamedDecl *Async2Dep) {
   ACCClause *Res = nullptr;
   switch (Kind) {
   case ACCC_if_present:
@@ -4661,7 +4724,7 @@ ACCClause *Sema::ActOnOpenACCClause(OpenACCClauseKind Kind,
     Res = ActOnOpenACCVectorClause(ACC_EXPLICIT, StartLoc, EndLoc);
     break;
   case ACCC_async:
-    Res = ActOnOpenACCAsyncClause(/*AsyncArg=*/nullptr, StartLoc,
+    Res = ActOnOpenACCAsyncClause(/*AsyncArg=*/nullptr, Async2Dep, StartLoc,
                                   /*LParenLoc=*/SourceLocation(), EndLoc);
     break;
   case ACCC_wait:
@@ -4860,13 +4923,16 @@ ACCClause *Sema::ActOnOpenACCTileClause(ArrayRef<Expr *> SizeExprList,
                                SizeExprList);
 }
 
-ACCClause *Sema::ActOnOpenACCAsyncClause(Expr *AsyncArg,
+ACCClause *Sema::ActOnOpenACCAsyncClause(Expr *AsyncArg, NamedDecl *Async2Dep,
                                          SourceLocation StartLoc,
                                          SourceLocation LParenLoc,
                                          SourceLocation EndLoc) {
-  // TODO: Check that it's an integer expression.  Currently, this should only
-  // be reachable if -fopenacc-fake-async-wait.
-  return new (Context) ACCAsyncClause(AsyncArg, StartLoc, LParenLoc, EndLoc);
+  ACCAsyncClause::AsyncArgStatus TheAsyncArgStatus =
+      checkAsyncArg(AsyncArg, *this, ACCC_async);
+  if (TheAsyncArgStatus == ACCAsyncClause::AsyncArgIsError)
+    return nullptr;
+  return new (Context) ACCAsyncClause(AsyncArg, TheAsyncArgStatus, Async2Dep,
+                                      StartLoc, LParenLoc, EndLoc);
 }
 
 ACCClause *Sema::ActOnOpenACCWaitClause(ArrayRef<Expr *> QueueExprList,

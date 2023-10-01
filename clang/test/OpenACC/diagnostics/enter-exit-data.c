@@ -191,15 +191,23 @@ int main() {
   // expected-error@+2 {{unexpected OpenACC clause 'tile' in directive '#pragma acc enter data'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
   #pragma acc enter data seq independent auto gang worker vector collapse(1) tile(3)
-  // expected-error@+8 {{unexpected OpenACC clause 'independent' in directive '#pragma acc exit data'}}
-  // expected-error@+7 {{unexpected OpenACC clause 'auto' in directive '#pragma acc exit data'}}
-  // expected-error@+6 {{unexpected OpenACC clause 'seq' in directive '#pragma acc exit data'}}
-  // expected-error@+5 {{unexpected OpenACC clause 'gang' in directive '#pragma acc exit data'}}
-  // expected-error@+4 {{unexpected OpenACC clause 'worker' in directive '#pragma acc exit data'}}
-  // expected-error@+3 {{unexpected OpenACC clause 'vector' in directive '#pragma acc exit data'}}
-  // expected-error@+2 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc exit data'}}
+  // expected-error@+9 {{unexpected OpenACC clause 'independent' in directive '#pragma acc exit data'}}
+  // expected-error@+8 {{unexpected OpenACC clause 'auto' in directive '#pragma acc exit data'}}
+  // expected-error@+7 {{unexpected OpenACC clause 'seq' in directive '#pragma acc exit data'}}
+  // expected-error@+6 {{unexpected OpenACC clause 'gang' in directive '#pragma acc exit data'}}
+  // expected-error@+5 {{unexpected OpenACC clause 'worker' in directive '#pragma acc exit data'}}
+  // expected-error@+4 {{unexpected OpenACC clause 'vector' in directive '#pragma acc exit data'}}
+  // expected-error@+3 {{unexpected OpenACC clause 'collapse' in directive '#pragma acc exit data'}}
+  // expected-error@+2 {{unexpected OpenACC clause 'tile' in directive '#pragma acc exit data'}}
   // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
-  #pragma acc exit data seq independent auto gang worker vector collapse(1)
+  #pragma acc exit data seq independent auto gang worker vector collapse(1) tile(3)
+
+  // expected-error@+2 {{unexpected OpenACC clause 'async' in directive '#pragma acc enter data'}}
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc enter data'}}
+  #pragma acc enter data async
+  // expected-error@+2 {{unexpected OpenACC clause 'async' in directive '#pragma acc exit data'}}
+  // expected-error@+1 {{expected at least one data clause for '#pragma acc exit data'}}
+  #pragma acc exit data async
 
   // expected-error@+5 {{unexpected OpenACC clause 'read' in directive '#pragma acc enter data'}}
   // expected-error@+4 {{unexpected OpenACC clause 'write' in directive '#pragma acc enter data'}}
