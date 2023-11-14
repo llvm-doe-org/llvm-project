@@ -38,10 +38,6 @@ variables:
   CHECK_TARGETS: check-all
   # The number of tests launched at once is `nproc` / $LIT_NPROC_DIVISOR.
   LIT_NPROC_DIVISOR: 1
-  # Sometimes a build process gets stuck for a long time, and sometimes a test
-  # process does (usually OpenMP tests).  One hour of CPU time should be plenty
-  # for any process.  The goal is simply not to let them stick around forever.
-  ULIMIT_T: 3600
   # TODO: These tests expect runtime diagnostics that certain OMPT callbacks
   # cannot be registered.  That's true upstream, but Clacc enables those
   # callbacks, so the tests currently fail under Clacc.  For other offload
@@ -352,14 +348,6 @@ stages:
     - pwd
     - echo $BUILD_DIR
     - cd $BUILD_DIR/build
-    - if test x"$ULIMIT_T_DIV_NPROC" != x; then
-        echo "$ULIMIT_T_DIV_NPROC" &&
-        NPROC=`nproc` &&
-        echo "$NPROC" &&
-        ULIMIT_T=`expr $ULIMIT_T_DIV_NPROC \* $NPROC`;
-      fi
-    - echo "$ULIMIT_T"
-    - ulimit -t $ULIMIT_T;
     - echo -e "\e[0Ksection_end:`date +%s`:prepare_for_job\r\e[0K"
   after_script:
     - echo -e "\e[0Ksection_start:`date +%s`:show_stats[collapsed=true]\r\e[0KShow ccache and build statistics"
@@ -855,9 +843,12 @@ debug (build):
     # we don't overwhelm the accelerators (leconte GPUs, in particular),
     # producing OpenMP offload test failures.
     #
-    # ulimit -t does not terminate processes that are hung and not using CPUs,
-    # but hopefully lit's --timeout will.  40 mins ought to be long enough for
-    # any regression test.
+    # Hung tests should be killed when the CI job times out, but there's no
+    # reason to wait hours for that, so we use lit's --timeout option.
+    # Moreover, that permits lit to retry a hung test that has the
+    # ALLOW_RETRIES directive.  40 mins should be long enough for any test and
+    # is hopefully short enough that retries have a chance to succeed before the
+    # CI job times out.
     #
     # In case check-all runs multiple lit invocations (e.g., a separate
     # invocation for openmp because it's in LLVM_ENABLE_RUNTIMES), use lit's
@@ -1432,32 +1423,20 @@ explorer-assert (kokkos):
     - job: explorer-assert (build)
       artifacts: false
 
-# On systems without a GPU, the kokkos examples use CPU parallelism, which
-# effectively divides the time limit imposed by our default ulimit -t (1 hour)
-# by the number of CPU threads (e.g., 128, from nproc), but the result (e.g., 28
-# seconds) is not enough time for some of our Kokkos examples, so we increase it
-# to 5 minutes for those cases.
-
 milan (kokkos):
   extends: [.milan, .kokkos]
-  variables:
-    ULIMIT_T_DIV_NPROC: 300
   needs:
     - job: milan (build)
       artifacts: false
 
 milan-assert (kokkos):
   extends: [.milan-assert, .kokkos]
-  variables:
-    ULIMIT_T_DIV_NPROC: 300
   needs:
     - job: milan-assert (build)
       artifacts: false
 
 debug (kokkos):
   extends: [.debug, .kokkos]
-  variables:
-    ULIMIT_T_DIV_NPROC: 300
   needs:
     - job: debug (build)
       artifacts: false
