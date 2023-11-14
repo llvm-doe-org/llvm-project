@@ -882,7 +882,7 @@ debug (build):
       LIT_OPTS="
         --timeout 2400 -j `expr $NPROC / $LIT_NPROC_DIVISOR`
         --ignore-fail --xunit-xml-output $CI_PROJECT_DIR/check-all.xml
-        --show-xfail --show-excluded --show-skipped
+        --show-xfail --show-excluded --show-skipped --show-flakypass
       "
       $NINJA -l `nproc` $CHECK_TARGETS
       |& tee $CI_PROJECT_DIR/check-all-log.txt
