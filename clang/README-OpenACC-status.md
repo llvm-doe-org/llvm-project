@@ -351,8 +351,10 @@ Run-Time Environment Variables
       be removed.
     * Due to a nondeterminism apparently inherited from upstream Clang's OpenMP
       implementation, concurrent execution of activity queues is not guaranteed.
-      Moreover, there are occasional runtime assertion failures when targeting
-      the host.  We need to investigate these issues further.
+      Moreover, Clacc's tests reveal that there are occasional runtime assertion
+      failures when targeting the host and that there are other occasional
+      failures at run time (e.g., segmentation faults) when offloading.  We
+      need to investigate these issues further.
 
 `loop` Directive
 ----------------

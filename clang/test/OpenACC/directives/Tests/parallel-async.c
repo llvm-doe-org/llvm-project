@@ -9,6 +9,12 @@
 // REDEFINE: %{exe:fc:args} = -strict-whitespace -match-full-lines \
 // REDEFINE:                  -implicit-check-not='{{.}}'
 //
+// FIXME: It's unclear why, but this test occasionally fails with SIGSEGV,
+// SIGABRT, or something like "Libomptarget error: Device -4294967297 is not
+// ready" when offloading to x86_64, ppc64le, or nvptx64.
+//
+// ALLOW_RETRIES: 5
+//
 // FIXME: Skip execution checks when not offloading because we occasionally see
 // the following runtime error in that case:
 //
