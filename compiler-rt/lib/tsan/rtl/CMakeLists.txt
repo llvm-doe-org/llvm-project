@@ -237,6 +237,17 @@ else()
     else()
       set(TSAN_ASM_SOURCES)
     endif()
+    add_compiler_rt_object_libraries(RTTSanAVX2
+        ARCHS ${arch}
+        SOURCES tsan_interface_avx2.cpp
+        ADDITIONAL_HEADERS tsan_interface_avx2.h 
+        #CFLAGS ${TSAN_RTL_CFLAGS} $<IF:"$COMPILER_RT_HAS_MAVX2_FLAG","-mavx2","">)
+        CFLAGS ${TSAN_RTL_CFLAGS} $<IF:$<BOOL:${COMPILER_RT_HAS_MAVX2_FLAG}>,-mavx2,"">)
+    add_compiler_rt_object_libraries(RTTSanAVX512
+        ARCHS ${arch}
+        SOURCES tsan_interface_avx512.cpp
+        ADDITIONAL_HEADERS tsan_interface_avx512.h 
+        CFLAGS ${TSAN_RTL_CFLAGS} $<IF:$<BOOL:${COMPILER_RT_HAS_MAVX512F_FLAG}>,-mavx512f,"">)
     add_compiler_rt_runtime(clang_rt.tsan
       STATIC
       ARCHS ${arch}
@@ -247,6 +258,8 @@ else()
               $<TARGET_OBJECTS:RTSanitizerCommonCoverage.${arch}>
               $<TARGET_OBJECTS:RTSanitizerCommonSymbolizer.${arch}>
               $<TARGET_OBJECTS:RTUbsan.${arch}>
+              $<TARGET_OBJECTS:RTTSanAVX2.${arch}>
+              $<TARGET_OBJECTS:RTTSanAVX512.${arch}>
       ADDITIONAL_HEADERS ${TSAN_HEADERS}
       CFLAGS ${TSAN_RTL_CFLAGS}
       PARENT_TARGET tsan)
@@ -270,6 +283,8 @@ else()
               $<TARGET_OBJECTS:RTSanitizerCommonCoverage.${arch}>
               $<TARGET_OBJECTS:RTSanitizerCommonSymbolizer.${arch}>
               $<TARGET_OBJECTS:RTUbsan.${arch}>
+              $<TARGET_OBJECTS:RTTSanAVX2.${arch}>
+              $<TARGET_OBJECTS:RTTSanAVX512.${arch}>
       ADDITIONAL_HEADERS ${TSAN_HEADERS}
       CFLAGS ${TSAN_RTL_DYNAMIC_CFLAGS}
       DEFS SANITIZER_SHARED

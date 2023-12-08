@@ -56,8 +56,8 @@ namespace __tsan {
 
 #if !SANITIZER_GO
 struct MapUnmapCallback;
-#if defined(__mips64) || defined(__aarch64__) || defined(__loongarch__) || \
-    defined(__powerpc__)
+#  if defined(__mips64) || defined(__aarch64__) || defined(__loongarch__) || \
+      defined(__powerpc__)
 
 struct AP32 {
   static const uptr kSpaceBeg = 0;
@@ -182,6 +182,7 @@ struct ThreadState {
   // for better performance.
   int ignore_reads_and_writes;
   int suppress_reports;
+  int all_atomic;
   // Go does not support ignores.
 #if !SANITIZER_GO
   IgnoreSet mop_ignore_set;
@@ -550,6 +551,8 @@ void MemoryRangeImitateWrite(ThreadState *thr, uptr pc, uptr addr, uptr size);
 void MemoryRangeImitateWriteOrResetRange(ThreadState *thr, uptr pc, uptr addr,
                                          uptr size);
 
+void ThreadAtomicBegin(ThreadState *thr, uptr pc);
+void ThreadAtomicEnd(ThreadState *thr);
 void ThreadIgnoreBegin(ThreadState *thr, uptr pc);
 void ThreadIgnoreEnd(ThreadState *thr);
 void ThreadIgnoreSyncBegin(ThreadState *thr, uptr pc);
@@ -801,6 +804,7 @@ void FuncExit(ThreadState *thr) {
 #if !SANITIZER_GO
   DCHECK_LT(thr->shadow_stack_pos, thr->shadow_stack_end);
 #endif
+  CHECK_GT(thr->shadow_stack_pos, thr->shadow_stack);
   thr->shadow_stack_pos--;
 }
 
