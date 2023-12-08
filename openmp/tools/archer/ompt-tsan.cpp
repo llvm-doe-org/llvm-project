@@ -65,6 +65,7 @@ public:
   int ignore_serial{0};
   std::atomic<int> all_memory{0};
   int tasking{0};
+  int dispatch_fibers{0};
   int stack_size{1024};
   std::atomic<int> untieds{0};
 
@@ -102,6 +103,8 @@ public:
         if (sscanf(token.c_str(), "enable=%d", &enabled))
           continue;
         if (sscanf(token.c_str(), "tasking=%d", &tasking))
+          continue;
+        if (sscanf(token.c_str(), "dispatch_fibers=%d", &dispatch_fibers))
           continue;
         if (sscanf(token.c_str(), "stack_size=%d", &stack_size))
           continue;
@@ -505,6 +508,31 @@ struct TaskData final : DataPoolEntry<TaskData> {
   size_t PrivateDataSize{0};
   void *PrivateDataAddr{nullptr};
 
+  std::vector<void *> DispatchFibers;
+  std::size_t DispatchFiberIdx{0};
+  void *DispatchOriginalFiber{nullptr};
+
+  void activateDispatchFibers(const std::size_t size, void *fiber = nullptr) {
+    DispatchFibers.resize(size);
+    DispatchOriginalFiber = fiber;
+    for (auto &RFiber : DispatchFibers)
+      RFiber = TsanCreateFiber(1);
+  }
+
+  void *switchDispatchFiber() {
+    void *Res = DispatchFibers.at(DispatchFiberIdx);
+    DispatchFiberIdx = (DispatchFiberIdx + 1) % DispatchFibers.size();
+    TsanSwitchToFiber(Res, 1);
+    return Res;
+  }
+
+  void deactivateDispatchFibers() {
+    if (DispatchOriginalFiber)
+      TsanSwitchToFiber(DispatchOriginalFiber, 1);
+    for (auto &Fiber : DispatchFibers)
+      TsanDestroyFiber(Fiber);
+  }
+
   const void *CodePtr{nullptr};
   /// Count how often this structure has been put into child tasks + 1.
   std::atomic_int RefCount{1};
@@ -662,7 +690,7 @@ static void ompt_tsan_thread_begin(ompt_thread_t thread_type,
   DependencyDataPool::ThreadDataPool = new DependencyDataPool;
   TsanNewMemory(DependencyDataPool::ThreadDataPool,
                 sizeof(DependencyDataPool::ThreadDataPool));
-  if (archer_flags->tasking) {
+  if (archer_flags->tasking || archer_flags->dispatch_fibers) {
     TsanGetCurrentFiber();
   }
 
@@ -710,6 +738,43 @@ static void ompt_tsan_parallel_end(ompt_data_t *parallel_data,
       __tsan_flush_memory();
   }
 #endif
+}
+
+static void ompt_tsan_dispatch(ompt_data_t *parallel_data,
+                               ompt_data_t *task_data, ompt_dispatch_t kind,
+                               ompt_data_t instance) {
+  auto *Data = ToTaskData(task_data);
+  switch (kind) {
+  case ompt_dispatch_section:
+  case ompt_dispatch_ws_loop_chunk:
+  case ompt_dispatch_distribute_chunk:
+    Data->switchDispatchFiber();
+    break;
+  case ompt_dispatch_taskloop_chunk:
+  case ompt_dispatch_iteration:
+    break;
+  }
+}
+
+static void ompt_tsan_work(ompt_work_t work_type,
+                           ompt_scope_endpoint_t endpoint,
+                           ompt_data_t *parallel_data, ompt_data_t *task_data,
+                           uint64_t count, const void *codeptr_ra) {
+  auto *Data = ToTaskData(task_data);
+  switch (endpoint) {
+  case ompt_scope_begin:
+    Data->activateDispatchFibers(std::min(archer_flags->dispatch_fibers == -1
+                                              ? static_cast<uint64_t>(13)
+                                              : count,
+                                          count),
+                                 TsanGetCurrentFiber());
+    break;
+  case ompt_scope_end:
+    Data->deactivateDispatchFibers();
+    break;
+  case ompt_scope_beginend:
+    break;
+  }
 }
 
 static void ompt_tsan_implicit_task(ompt_scope_endpoint_t endpoint,
@@ -1291,6 +1356,10 @@ static int ompt_tsan_initialize(ompt_function_lookup_t lookup, int device_num,
   SET_CALLBACK(implicit_task);
   SET_CALLBACK(sync_region);
   SET_CALLBACK(parallel_end);
+  if (__archer::archer_flags->dispatch_fibers) {
+    SET_CALLBACK(dispatch);
+    SET_CALLBACK(work);
+  }
 
   SET_CALLBACK(task_create);
   SET_CALLBACK(task_schedule);
