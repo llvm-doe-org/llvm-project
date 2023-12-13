@@ -1358,7 +1358,7 @@ static int ompt_tsan_initialize(ompt_function_lookup_t lookup, int device_num,
   if (!AnnotateReductionBegin) {
     AnnotateReductionBegin = AnnotateIgnoreWritesBegin;
     AnnotateReductionEnd = AnnotateIgnoreWritesEnd;
-    if (archer_flags->verbose)
+    if (__archer::archer_flags->verbose)
       std::cout << "Archer uses fallback solution for reductions: might miss some race" << std::endl;
   }
 
