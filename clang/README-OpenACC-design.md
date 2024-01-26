@@ -150,7 +150,7 @@ However, there are also some caveats to consider for `TreeTransform`:
   nodes in a translation unit after the parsing of that translation
   unit has completed, it might be necessary to transform the
   translation unit's entire AST in order to rebuild all of the
-  necessary transitory semantic metadata.
+  necessary transitory semantic data.
 * **Permanent semantic data**: As Clang parses source code, it permanently
   associates some semantic data with that code's AST subtree.  Extensions of
   `TreeTransform` must then sometimes copy and transform that semantic data
@@ -456,7 +456,7 @@ into Clang's codegen framework outside that switch.  This hook calls
 nodes looking for OpenMP target regions to emit in separate device functions.
 Thus, Clacc extends this scan to look for OpenACC AST nodes and, as before, to
 delegate the required codegen to their hidden OpenMP children.  Finally, Clacc
-extends the class `CheckVarsEscapingDeclContext` in `CGOpenMPRuntimeCPU.cpp`
+extends the class `CheckVarsEscapingDeclContext` in `CGOpenMPRuntimeGPU.cpp`
 with a visit member function for `ACCDirectiveStmt` that delegates to the hidden
 OpenMP child.
 
@@ -518,7 +518,7 @@ on `-ast-print`.  Each takes any of the following values:
   from which they were translated are ignored.
 * `acc-omp`: OpenACC directives are printed and the OpenMP directives
   to which they were translated are printed in neighboring comments.
-* `omp-acc`: OpenMP directives printed and the OpenACC directives from
+* `omp-acc`: OpenMP directives are printed and the OpenACC directives from
   which they were translated are printed in neighboring comments.
 
 In the last two cases, Clacc will avoid duplicating the code block
